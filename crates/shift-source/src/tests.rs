@@ -10299,6 +10299,8 @@ fn working_source_reports_source_layer_coverage() {
     assert_eq!(coverage[0].glyph_count, 2);
     assert_eq!(coverage[0].layer_count, 2);
     assert_eq!(coverage[0].missing_layer_count, 0);
+    assert_eq!(coverage[0].interpolation_reference_issue_count, 0);
+    assert_eq!(coverage[0].interpolation_mismatch_issue_count, 0);
     assert_eq!(coverage[0].interpolation_incompatible_glyph_count, 0);
     assert!(coverage[0].complete);
     assert!(coverage[0].interpolation_compatible);
@@ -10307,6 +10309,8 @@ fn working_source_reports_source_layer_coverage() {
     assert_eq!(coverage[1].glyph_count, 2);
     assert_eq!(coverage[1].layer_count, 1);
     assert_eq!(coverage[1].missing_layer_count, 1);
+    assert_eq!(coverage[1].interpolation_reference_issue_count, 0);
+    assert_eq!(coverage[1].interpolation_mismatch_issue_count, 0);
     assert_eq!(coverage[1].interpolation_incompatible_glyph_count, 0);
     assert!(!coverage[1].complete);
     assert!(coverage[1].interpolation_compatible);
@@ -10367,7 +10371,9 @@ fn working_source_reports_source_interpolation_issues() {
     assert_eq!(coverage[0].source_id, "source_Regular");
     assert!(!coverage[0].interpolation_compatible);
     assert_eq!(coverage[0].interpolation_issue_count, 2);
-    assert_eq!(coverage[0].interpolation_incompatible_glyph_count, 1);
+    assert_eq!(coverage[0].interpolation_reference_issue_count, 2);
+    assert_eq!(coverage[0].interpolation_mismatch_issue_count, 0);
+    assert_eq!(coverage[0].interpolation_incompatible_glyph_count, 0);
     assert_eq!(
         coverage[0].interpolation_issue_kind_counts,
         vec![
@@ -10397,6 +10403,8 @@ fn working_source_reports_source_interpolation_issues() {
     assert_eq!(coverage[1].source_id, "source_Bold");
     assert!(!coverage[1].interpolation_compatible);
     assert_eq!(coverage[1].interpolation_issue_count, 2);
+    assert_eq!(coverage[1].interpolation_reference_issue_count, 0);
+    assert_eq!(coverage[1].interpolation_mismatch_issue_count, 2);
     assert_eq!(coverage[1].interpolation_incompatible_glyph_count, 1);
     assert_eq!(
         coverage[1].interpolation_issue_kind_counts,
