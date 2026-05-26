@@ -770,6 +770,8 @@ pub struct ShiftStaticComponentExportPreview {
     pub unsupported_glyph_count: usize,
     pub fallback_capabilities: Vec<ShiftComponentLoweringCapability>,
     pub fallback_capability_counts: Vec<ShiftComponentLoweringCapabilityCount>,
+    pub unsupported_reason_kinds: Vec<ShiftComponentVariationUnsupportedReasonKind>,
+    pub unsupported_reason_kind_counts: Vec<ShiftComponentVariationUnsupportedReasonKindCount>,
     pub unsupported_reasons: Vec<ShiftComponentVariationUnsupportedReason>,
     pub unsupported_reason_counts: Vec<ShiftComponentVariationUnsupportedReasonCount>,
     pub components: Vec<ShiftStaticComponentExportComponent>,
@@ -819,6 +821,7 @@ struct ShiftStaticComponentExportPreviewBuilder {
     skipped_inactive_glyph_ids: BTreeSet<String>,
     unsupported_glyph_ids: BTreeSet<String>,
     fallback_capability_counts: BTreeMap<ShiftComponentLoweringCapability, usize>,
+    unsupported_reason_kind_counts: BTreeMap<ShiftComponentVariationUnsupportedReasonKind, usize>,
     unsupported_reason_counts: BTreeMap<ShiftComponentVariationUnsupportedReason, usize>,
     components: Vec<ShiftStaticComponentExportComponent>,
 }
@@ -988,6 +991,27 @@ pub enum ShiftComponentVariationUnsupportedReason {
     ModelError { message: String },
 }
 
+impl ShiftComponentVariationUnsupportedReason {
+    fn kind(&self) -> ShiftComponentVariationUnsupportedReasonKind {
+        match self {
+            Self::ModelError { .. } => ShiftComponentVariationUnsupportedReasonKind::ModelError,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentVariationUnsupportedReasonKind {
+    ModelError,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentVariationUnsupportedReasonKindCount {
+    pub kind: ShiftComponentVariationUnsupportedReasonKind,
+    pub component_count: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentVariationUnsupportedReasonCount {
@@ -1121,6 +1145,7 @@ impl ShiftStaticComponentExportPreviewBuilder {
             skipped_inactive_glyph_ids: BTreeSet::new(),
             unsupported_glyph_ids: BTreeSet::new(),
             fallback_capability_counts: BTreeMap::new(),
+            unsupported_reason_kind_counts: BTreeMap::new(),
             unsupported_reason_counts: BTreeMap::new(),
             components: Vec::with_capacity(component_capacity),
         }
@@ -1155,6 +1180,10 @@ impl ShiftStaticComponentExportPreviewBuilder {
                 self.unsupported_glyph_ids
                     .insert(component.glyph_id.clone());
                 *self
+                    .unsupported_reason_kind_counts
+                    .entry(reason.kind())
+                    .or_default() += 1;
+                *self
                     .unsupported_reason_counts
                     .entry(reason.clone())
                     .or_default() += 1;
@@ -1175,6 +1204,21 @@ impl ShiftStaticComponentExportPreviewBuilder {
             .map(
                 |(capability, component_count)| ShiftComponentLoweringCapabilityCount {
                     capability,
+                    component_count,
+                },
+            )
+            .collect::<Vec<_>>();
+        let unsupported_reason_kinds = self
+            .unsupported_reason_kind_counts
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let unsupported_reason_kind_counts = self
+            .unsupported_reason_kind_counts
+            .into_iter()
+            .map(
+                |(kind, component_count)| ShiftComponentVariationUnsupportedReasonKindCount {
+                    kind,
                     component_count,
                 },
             )
@@ -1207,6 +1251,8 @@ impl ShiftStaticComponentExportPreviewBuilder {
             unsupported_glyph_count: self.unsupported_glyph_ids.len(),
             fallback_capabilities,
             fallback_capability_counts,
+            unsupported_reason_kinds,
+            unsupported_reason_kind_counts,
             unsupported_reasons,
             unsupported_reason_counts,
             components: self.components,
@@ -5252,32 +5298,55 @@ mod tests {
 
     #[test]
     fn static_export_preview_builder_summarizes_unsupported_reasons() {
-        let reason = ShiftComponentVariationUnsupportedReason::ModelError {
+        let first_reason = ShiftComponentVariationUnsupportedReason::ModelError {
             message: "variation model cannot solve component sources".to_string(),
+        };
+        let second_reason = ShiftComponentVariationUnsupportedReason::ModelError {
+            message: "variation model source set is underconstrained".to_string(),
         };
         let mut builder = ShiftStaticComponentExportPreviewBuilder::new(2);
         builder.push(unsupported_static_export_component(
             "glyph_A",
             "component_A_top",
-            reason.clone(),
+            first_reason.clone(),
         ));
         builder.push(unsupported_static_export_component(
             "glyph_A",
             "component_A_bottom",
-            reason.clone(),
+            second_reason.clone(),
         ));
 
         let preview = builder.finish();
 
         assert_eq!(preview.unsupported_component_count, 2);
         assert_eq!(preview.unsupported_glyph_count, 1);
-        assert_eq!(preview.unsupported_reasons, vec![reason.clone()]);
         assert_eq!(
-            preview.unsupported_reason_counts,
-            vec![ShiftComponentVariationUnsupportedReasonCount {
-                reason,
+            preview.unsupported_reason_kinds,
+            vec![ShiftComponentVariationUnsupportedReasonKind::ModelError]
+        );
+        assert_eq!(
+            preview.unsupported_reason_kind_counts,
+            vec![ShiftComponentVariationUnsupportedReasonKindCount {
+                kind: ShiftComponentVariationUnsupportedReasonKind::ModelError,
                 component_count: 2,
             }]
+        );
+        assert_eq!(
+            preview.unsupported_reasons,
+            vec![first_reason.clone(), second_reason.clone()]
+        );
+        assert_eq!(
+            preview.unsupported_reason_counts,
+            vec![
+                ShiftComponentVariationUnsupportedReasonCount {
+                    reason: first_reason,
+                    component_count: 1,
+                },
+                ShiftComponentVariationUnsupportedReasonCount {
+                    reason: second_reason,
+                    component_count: 1,
+                },
+            ]
         );
     }
 
