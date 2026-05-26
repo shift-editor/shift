@@ -12,7 +12,7 @@ use crate::{
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
     ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphInterpolationCompatibilitySummary,
+    ShiftCreateSource, ShiftGlyphDependenciesSummary, ShiftGlyphInterpolationCompatibilitySummary,
     ShiftGlyphRelinkReplacementBlocker, ShiftGlyphRelinkReplacementCandidateSummary,
     ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
     ShiftGlyphVariationSourceLocationSummary, ShiftGlyphVariationSourceUpdate,
@@ -2751,6 +2751,27 @@ fn dependency_index_tracks_variable_component_bases_by_stable_id() {
 
     let working_source =
         ShiftWorkingSource::new(package).expect("working source should initialize");
+    let dependency_report = working_source
+        .glyph_dependencies_report("glyph_stem")
+        .expect("dependency report should use component dependency index");
+    assert_eq!(dependency_report.revision, 0);
+    assert_eq!(
+        dependency_report.summary,
+        ShiftGlyphDependenciesSummary {
+            component_dependency_count: 0,
+            component_dependent_count: 1,
+            has_component_dependencies: false,
+            has_component_dependents: true,
+        }
+    );
+    assert_eq!(
+        dependency_report.dependencies,
+        index
+            .glyphs
+            .get("glyph_stem")
+            .expect("base glyph should be indexed")
+            .clone()
+    );
     let preview = working_source
         .preview_delete_glyph("glyph_stem")
         .expect("delete preview should use component dependency index");

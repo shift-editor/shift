@@ -90,7 +90,7 @@ cannot accidentally apply a stale confirmation after another edit.
 Good renderer-facing queries:
 
 ```text
-getGlyphDependents(glyphId)
+getGlyphDependenciesReport(glyphId)
 getGlyphInterpolationCompatibilityReport(glyphId)
 getSourceLocations()
 getSourceLayerCoverageReport()
@@ -381,6 +381,10 @@ format exploration:
   canonical graph. This file is disposable and regenerated from glyph files.
   Component dependencies are tracked by stable base glyph ID, including variable
   components that carry local-axis overrides, variation sources, or conditions.
+  The glyph dependency report wraps one derived dependency record with the
+  working-source revision and compact dependency/dependent counts, so sidebars
+  and delete dialogs can render badges and discard stale async results without
+  scanning the package-level dependency index in TypeScript.
 - **Interpolation diagnostics are derived:** saving writes
   `derived/interpolation-compatibility.json` so the app can show variable-font
   compatibility badges without recomputing every glyph on each render. The

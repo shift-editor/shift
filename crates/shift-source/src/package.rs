@@ -241,7 +241,7 @@ pub struct ShiftDependencyIndex {
     pub glyphs: BTreeMap<String, ShiftGlyphDependencies>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphDependencies {
     pub glyph_id: String,

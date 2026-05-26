@@ -308,6 +308,23 @@ pub struct ShiftSourceInterpolationIssue {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphDependenciesReport {
+    pub revision: u64,
+    pub summary: ShiftGlyphDependenciesSummary,
+    pub dependencies: ShiftGlyphDependencies,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphDependenciesSummary {
+    pub component_dependency_count: usize,
+    pub component_dependent_count: usize,
+    pub has_component_dependencies: bool,
+    pub has_component_dependents: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphInterpolationCompatibilityReport {
     pub revision: u64,
     pub summary: ShiftGlyphInterpolationCompatibilitySummary,
@@ -2209,6 +2226,18 @@ impl ShiftWorkingSource {
             .ok_or_else(|| ShiftSourceError::MissingGlyph {
                 glyph_id: glyph_id.to_string(),
             })
+    }
+
+    pub fn glyph_dependencies_report(
+        &self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<ShiftGlyphDependenciesReport> {
+        let dependencies = self.glyph_dependencies(glyph_id)?.clone();
+        Ok(ShiftGlyphDependenciesReport {
+            revision: self.revision,
+            summary: glyph_dependencies_summary(&dependencies),
+            dependencies,
+        })
     }
 
     pub fn glyph_interpolation_compatibility(
@@ -5932,6 +5961,17 @@ fn glyph_relink_replacement_candidate_summary(
         cycle_blocked_candidate_count,
         missing_base_local_axes_candidate_count,
         base_local_axis_out_of_range_candidate_count,
+    }
+}
+
+fn glyph_dependencies_summary(
+    dependencies: &ShiftGlyphDependencies,
+) -> ShiftGlyphDependenciesSummary {
+    ShiftGlyphDependenciesSummary {
+        component_dependency_count: dependencies.component_dependencies.len(),
+        component_dependent_count: dependencies.component_dependents.len(),
+        has_component_dependencies: !dependencies.component_dependencies.is_empty(),
+        has_component_dependents: !dependencies.component_dependents.is_empty(),
     }
 }
 
