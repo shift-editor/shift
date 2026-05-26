@@ -540,6 +540,12 @@ format exploration:
   work from component relinking or component-count fixes directly in the source
   list. This makes "new master added but not populated yet" a first-class state
   instead of a validation failure or a TypeScript-side scan.
+- **Coverage-affecting mutation reports:** source create/update/delete, glyph
+  create/delete, and glyph source layer create/delete reports include the same
+  source coverage report after the mutation. A source sidebar or export-readiness
+  badge can therefore update from the command response that changed the graph,
+  instead of issuing a follow-up query or predicting coverage changes in
+  TypeScript.
 - **Source deletion preflight:** source deletes use the same preview data as the
   UI before constructing a candidate package. Default sources and referenced
   sources return semantic errors with reference counts, so the app can show a

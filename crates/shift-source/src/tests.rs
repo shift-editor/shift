@@ -6920,6 +6920,10 @@ fn working_source_deletes_leaf_glyph_with_narrow_impact() {
 
     assert_eq!(report.glyph_name, "Aacute");
     assert_eq!(report.revision, 1);
+    assert_eq!(report.source_coverage.summary.glyph_count, 1);
+    assert_eq!(report.source_coverage.summary.expected_layer_count, 1);
+    assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
+    assert!(!report.source_coverage.summary.ready);
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -6989,6 +6993,8 @@ fn working_source_deletes_glyph_and_removes_component_references() {
     assert_eq!(report.glyph_name, "A");
     assert_eq!(report.revision, 1);
     assert_eq!(report.removed_component_recipes.len(), 1);
+    assert_eq!(report.source_coverage.summary.glyph_count, 1);
+    assert!(report.source_coverage.summary.ready);
     let removed_recipe = &report.removed_component_recipes[0];
     assert_eq!(removed_recipe.glyph_id, "glyph_Aacute");
     assert_eq!(removed_recipe.glyph_name, "Aacute");
@@ -7163,6 +7169,9 @@ fn working_source_deletes_glyph_and_relinks_component_references() {
     assert_eq!(report.replacement_glyph_name, "B");
     assert_eq!(report.revision, 1);
     assert_eq!(report.relinked_component_recipes.len(), 1);
+    assert_eq!(report.source_coverage.summary.glyph_count, 2);
+    assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
+    assert!(!report.source_coverage.summary.ready);
     let relinked_recipe = &report.relinked_component_recipes[0];
     assert_eq!(relinked_recipe.glyph_id, "glyph_Aacute");
     assert_eq!(relinked_recipe.component_id, "component_25");
@@ -10595,6 +10604,9 @@ fn working_source_creates_glyph_with_generated_name_id_and_default_layer() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.glyph_id, "glyph_newGlyph_1");
     assert_eq!(report.glyph_name, "newGlyph.1");
+    assert_eq!(report.source_coverage.summary.glyph_count, 2);
+    assert_eq!(report.source_coverage.summary.source_count, 1);
+    assert!(report.source_coverage.summary.ready);
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -10788,6 +10800,9 @@ fn working_source_creates_glyph_source_layer_and_rebuilds_coverage() {
     assert_eq!(report.glyph_name, "A");
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source_name, "Bold");
+    assert_eq!(report.source_coverage.summary.missing_layer_count, 0);
+    assert!(report.source_coverage.summary.complete);
+    assert!(report.source_coverage.summary.ready);
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -10956,6 +10971,10 @@ fn working_source_deletes_glyph_source_layer_with_narrow_impact() {
     assert_eq!(report.glyph_name, "A");
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source_name, "Bold");
+    assert_eq!(report.source_coverage.summary.glyph_count, 1);
+    assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
+    assert!(!report.source_coverage.summary.complete);
+    assert!(!report.source_coverage.summary.ready);
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -11082,6 +11101,8 @@ fn working_source_creates_source_with_generated_id_and_completed_location() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source.source_name, "Bold");
+    assert_eq!(report.source_coverage.summary.source_count, 2);
+    assert!(report.source_coverage.summary.ready);
     assert_eq!(
         report.source.values.get("axis_wght"),
         Some(&ShiftSourceAxisValue {
@@ -11128,6 +11149,8 @@ fn working_source_create_source_uses_new_source_for_blank_names() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_New_Source_1");
     assert_eq!(report.source.source_name, "New Source.1");
+    assert_eq!(report.source_coverage.summary.source_count, 3);
+    assert!(report.source_coverage.summary.ready);
 }
 
 #[test]
@@ -11153,6 +11176,8 @@ fn working_source_updates_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source.source_name, "Black");
+    assert_eq!(report.source_coverage.summary.source_count, 2);
+    assert!(report.source_coverage.summary.ready);
     assert_eq!(
         report.source.values.get("axis_wght"),
         Some(&ShiftSourceAxisValue {
@@ -11249,6 +11274,8 @@ fn working_source_deletes_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source_name, "Bold");
+    assert_eq!(report.source_coverage.summary.source_count, 1);
+    assert!(report.source_coverage.summary.ready);
     assert_eq!(
         report.diff,
         ShiftPackageDiff {

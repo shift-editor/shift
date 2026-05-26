@@ -80,6 +80,7 @@ pub struct ShiftDeleteGlyphPreview {
 pub struct ShiftDeleteGlyphReport {
     pub glyph_id: String,
     pub glyph_name: String,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -100,6 +101,7 @@ pub struct ShiftDeleteGlyphAndRemoveComponentsReport {
     pub glyph_id: String,
     pub glyph_name: String,
     pub removed_component_recipes: Vec<ShiftComponentRecipeSummary>,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -124,6 +126,7 @@ pub struct ShiftDeleteGlyphAndRelinkComponentsReport {
     pub replacement_glyph_id: String,
     pub replacement_glyph_name: String,
     pub relinked_component_recipes: Vec<ShiftComponentRecipeSummary>,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -222,6 +225,7 @@ pub struct ShiftSourceUpdate {
 pub struct ShiftCreateSourceReport {
     pub source_id: String,
     pub source: ShiftSourceLocation,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -231,6 +235,7 @@ pub struct ShiftCreateSourceReport {
 pub struct ShiftUpdateSourceReport {
     pub source_id: String,
     pub source: ShiftSourceLocation,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -240,6 +245,7 @@ pub struct ShiftUpdateSourceReport {
 pub struct ShiftDeleteSourceReport {
     pub source_id: String,
     pub source_name: String,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -380,6 +386,7 @@ pub struct ShiftCreateGlyph {
 pub struct ShiftCreateGlyphReport {
     pub glyph_id: String,
     pub glyph_name: String,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -397,6 +404,7 @@ pub struct ShiftCreateGlyphSourceLayerReport {
     pub glyph_name: String,
     pub source_id: String,
     pub source_name: String,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -419,6 +427,7 @@ pub struct ShiftDeleteGlyphSourceLayerReport {
     pub glyph_name: String,
     pub source_id: String,
     pub source_name: String,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -3071,6 +3080,7 @@ impl ShiftWorkingSource {
         Ok(ShiftCreateSourceReport {
             source_id,
             source,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3104,6 +3114,7 @@ impl ShiftWorkingSource {
         Ok(ShiftUpdateSourceReport {
             source_id: source_id.to_string(),
             source,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3145,6 +3156,7 @@ impl ShiftWorkingSource {
         Ok(ShiftDeleteSourceReport {
             source_id: preview.source_id,
             source_name: source.name,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3197,6 +3209,7 @@ impl ShiftWorkingSource {
         Ok(ShiftCreateGlyphReport {
             glyph_id,
             glyph_name,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3246,6 +3259,7 @@ impl ShiftWorkingSource {
             glyph_name,
             source_id: source_id.to_string(),
             source_name,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3288,6 +3302,7 @@ impl ShiftWorkingSource {
             glyph_name: preview.glyph_name,
             source_id: preview.source_id,
             source_name: preview.source_name,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3721,6 +3736,7 @@ impl ShiftWorkingSource {
         Ok(ShiftDeleteGlyphReport {
             glyph_id: preview.glyph_id,
             glyph_name: preview.glyph_name,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3741,6 +3757,7 @@ impl ShiftWorkingSource {
             glyph_id: preview.glyph_id,
             glyph_name: preview.glyph_name,
             removed_component_recipes: preview.removed_component_recipes,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -3764,6 +3781,7 @@ impl ShiftWorkingSource {
             replacement_glyph_id: preview.replacement_glyph_id,
             replacement_glyph_name: preview.replacement_glyph_name,
             relinked_component_recipes: preview.relinked_component_recipes,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
