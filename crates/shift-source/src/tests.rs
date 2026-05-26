@@ -5,17 +5,17 @@ use crate::{
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
     ShiftComponentRecipeKind, ShiftComponentRecipeSummary, ShiftComponentResolveContext,
-    ShiftComponentTransformField, ShiftComponentVariationParentAxisValue,
-    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
-    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
-    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
-    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMissingSourceLayer, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
-    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftComponentResolvedStateSummary, ShiftComponentTransformField,
+    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
+    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
+    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
+    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
+    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
     ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
@@ -6992,6 +6992,29 @@ fn working_source_interpolates_component_variation_state_with_variation_model() 
             value: 56.0,
             source: ShiftResolvedAxisValueSource::ComponentVariationSource,
         })
+    );
+
+    let mid_state_report = working_source
+        .component_resolved_states_report(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 650.0)]),
+        )
+        .expect("interpolated component state report should resolve");
+    assert_eq!(mid_state_report.revision, 0);
+    assert_eq!(mid_state_report.states, mid_state);
+    assert_eq!(
+        mid_state_report.summary,
+        ShiftComponentResolvedStateSummary {
+            total_component_count: 1,
+            active_component_count: 1,
+            inactive_component_count: 0,
+            base_component_count: 0,
+            exact_source_component_count: 0,
+            interpolated_component_count: 1,
+            unsupported_component_count: 0,
+            unsupported_reason_kind_counts: Vec::new(),
+        }
     );
 }
 

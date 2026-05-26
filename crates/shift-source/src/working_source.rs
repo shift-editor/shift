@@ -1209,6 +1209,27 @@ pub struct ShiftComponentResolvedState {
     pub variation_source: Option<ShiftComponentResolvedVariationSource>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentResolvedStateReport {
+    pub revision: u64,
+    pub summary: ShiftComponentResolvedStateSummary,
+    pub states: Vec<ShiftComponentResolvedState>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentResolvedStateSummary {
+    pub total_component_count: usize,
+    pub active_component_count: usize,
+    pub inactive_component_count: usize,
+    pub base_component_count: usize,
+    pub exact_source_component_count: usize,
+    pub interpolated_component_count: usize,
+    pub unsupported_component_count: usize,
+    pub unsupported_reason_kind_counts: Vec<ShiftComponentVariationUnsupportedReasonKindCount>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentResolvedVariationSource {
@@ -3046,6 +3067,30 @@ impl ShiftWorkingSource {
     ) -> ShiftSourceResult<Vec<ShiftComponentResolvedState>> {
         let context = ShiftComponentResolveContext::from_font_location(location.clone());
         self.component_resolved_states_with_context(glyph_id, layer_id, &context)
+    }
+
+    pub fn component_resolved_states_report(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<ShiftComponentResolvedStateReport> {
+        let context = ShiftComponentResolveContext::from_font_location(location.clone());
+        self.component_resolved_states_report_with_context(glyph_id, layer_id, &context)
+    }
+
+    pub fn component_resolved_states_report_with_context(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        context: &ShiftComponentResolveContext,
+    ) -> ShiftSourceResult<ShiftComponentResolvedStateReport> {
+        let states = self.component_resolved_states_with_context(glyph_id, layer_id, context)?;
+        Ok(ShiftComponentResolvedStateReport {
+            revision: self.revision,
+            summary: component_resolved_state_summary(&states),
+            states,
+        })
     }
 
     pub fn component_resolved_states_with_context(
@@ -5488,6 +5533,64 @@ fn variable_font_export_summary(
         unsupported_component_glyph_count: component_preflight.affected_glyph_count,
         skipped_inactive_component_count: component_preflight.skipped_inactive_component_count,
         missing_component_capability_count: component_preflight.missing_capabilities.len(),
+    }
+}
+
+fn component_resolved_state_summary(
+    states: &[ShiftComponentResolvedState],
+) -> ShiftComponentResolvedStateSummary {
+    let mut active_component_count = 0;
+    let mut inactive_component_count = 0;
+    let mut base_component_count = 0;
+    let mut exact_source_component_count = 0;
+    let mut interpolated_component_count = 0;
+    let mut unsupported_reason_kind_counts =
+        BTreeMap::<ShiftComponentVariationUnsupportedReasonKind, usize>::new();
+
+    for state in states {
+        if state.active {
+            active_component_count += 1;
+        } else {
+            inactive_component_count += 1;
+        }
+
+        match &state.variation_resolution {
+            ShiftComponentVariationResolution::Inactive => {}
+            ShiftComponentVariationResolution::Base => base_component_count += 1,
+            ShiftComponentVariationResolution::ExactSource { .. } => {
+                exact_source_component_count += 1;
+            }
+            ShiftComponentVariationResolution::Interpolated { .. } => {
+                interpolated_component_count += 1;
+            }
+            ShiftComponentVariationResolution::Unsupported { reason } => {
+                *unsupported_reason_kind_counts
+                    .entry(reason.kind())
+                    .or_default() += 1;
+            }
+        }
+    }
+
+    let unsupported_component_count = unsupported_reason_kind_counts.values().sum();
+    let unsupported_reason_kind_counts = unsupported_reason_kind_counts
+        .into_iter()
+        .map(
+            |(kind, component_count)| ShiftComponentVariationUnsupportedReasonKindCount {
+                kind,
+                component_count,
+            },
+        )
+        .collect();
+
+    ShiftComponentResolvedStateSummary {
+        total_component_count: states.len(),
+        active_component_count,
+        inactive_component_count,
+        base_component_count,
+        exact_source_component_count,
+        interpolated_component_count,
+        unsupported_component_count,
+        unsupported_reason_kind_counts,
     }
 }
 

@@ -538,6 +538,10 @@ format exploration:
   transform recipes reuse a full `fontdrasil` model; query-dependent recipes
   such as inherited global-axis overrides reuse a `NormalizedF64VariationSpace`
   so they can rebuild per-query deltas without rebuilding variation regions.
+  The resolved-state report wraps the per-component rows with the working-source
+  revision and compact counts for active, inactive, base, exact-source,
+  interpolated, and unsupported components, so inspectors can render badges and
+  ignore stale async previews without scanning every row.
 - **Authored component variation source completion:** inspectors can ask for the
   component variation source rows on a selected component and receive completed
   parent locations, resolved component-axis values, transform provenance, and
