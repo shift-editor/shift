@@ -388,7 +388,11 @@ format exploration:
   components that carry local-axis overrides, variation sources, or conditions.
   The dependency index report wraps the package-level derived graph with the
   working-source revision and aggregate edge/glyph counts, so grid and sidebar
-  badges can update without TypeScript scanning every dependency row.
+  badges can update without TypeScript scanning every dependency row. Glyph
+  create, rename, delete, remove-component delete, and relink-delete reports
+  return this refreshed dependency index as well, so the command response that
+  changed the component graph or labels can refresh dependency badges and delete
+  affordances directly.
   The glyph dependency report wraps one derived dependency record with the
   working-source revision and compact dependency/dependent counts, so sidebars
   and delete dialogs can render badges and discard stale async results without

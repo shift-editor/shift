@@ -2820,6 +2820,23 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
     assert_eq!(report.old_name, "A");
     assert_eq!(report.new_name, "RenamedBase");
     assert_eq!(report.revision, 1);
+    assert_eq!(report.dependency_index.revision, 1);
+    assert_eq!(report.dependency_index.summary.glyph_count, 2);
+    assert_eq!(
+        report.dependency_index.summary.component_dependency_count,
+        1
+    );
+    assert_eq!(report.dependency_index.summary.component_dependent_count, 1);
+    assert_eq!(
+        report
+            .dependency_index
+            .index
+            .glyphs
+            .get("glyph_A")
+            .expect("renamed glyph should be indexed")
+            .glyph_name,
+        "RenamedBase"
+    );
     assert_eq!(report.source_coverage.revision, 1);
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(
@@ -2892,6 +2909,17 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
     let layered_rename_report = working_source
         .rename_glyph("glyph_Aacute", "RenamedComposite")
         .expect("layered glyph rename should succeed");
+    assert_eq!(layered_rename_report.dependency_index.revision, 2);
+    assert_eq!(
+        layered_rename_report
+            .dependency_index
+            .index
+            .glyphs
+            .get("glyph_Aacute")
+            .expect("layered glyph should stay indexed")
+            .glyph_name,
+        "RenamedComposite"
+    );
     assert_eq!(layered_rename_report.source_coverage.revision, 2);
     assert_eq!(
         layered_rename_report
@@ -7658,6 +7686,13 @@ fn working_source_deletes_leaf_glyph_with_narrow_impact() {
 
     assert_eq!(report.glyph_name, "Aacute");
     assert_eq!(report.revision, 1);
+    assert_eq!(report.dependency_index.revision, 1);
+    assert_eq!(report.dependency_index.summary.glyph_count, 1);
+    assert_eq!(
+        report.dependency_index.summary.component_dependency_count,
+        0
+    );
+    assert_eq!(report.dependency_index.summary.component_dependent_count, 0);
     assert_eq!(report.source_coverage.summary.glyph_count, 1);
     assert_eq!(report.source_coverage.summary.expected_layer_count, 1);
     assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
@@ -7735,6 +7770,13 @@ fn working_source_deletes_glyph_and_removes_component_references() {
     assert_eq!(report.glyph_name, "A");
     assert_eq!(report.revision, 1);
     assert_eq!(report.removed_component_recipes.len(), 1);
+    assert_eq!(report.dependency_index.revision, 1);
+    assert_eq!(report.dependency_index.summary.glyph_count, 1);
+    assert_eq!(
+        report.dependency_index.summary.component_dependency_count,
+        0
+    );
+    assert_eq!(report.dependency_index.summary.component_dependent_count, 0);
     assert_eq!(report.source_coverage.summary.glyph_count, 1);
     assert!(report.source_coverage.summary.ready);
     assert_eq!(
@@ -7916,6 +7958,13 @@ fn working_source_deletes_glyph_and_relinks_component_references() {
     assert_eq!(report.replacement_glyph_name, "B");
     assert_eq!(report.revision, 1);
     assert_eq!(report.relinked_component_recipes.len(), 1);
+    assert_eq!(report.dependency_index.revision, 1);
+    assert_eq!(report.dependency_index.summary.glyph_count, 2);
+    assert_eq!(
+        report.dependency_index.summary.component_dependency_count,
+        1
+    );
+    assert_eq!(report.dependency_index.summary.component_dependent_count, 1);
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
     assert!(!report.source_coverage.summary.ready);
@@ -7929,6 +7978,21 @@ fn working_source_deletes_glyph_and_relinks_component_references() {
     assert_eq!(relinked_recipe.base_glyph_id, "glyph_B");
     assert_eq!(relinked_recipe.base_glyph_name, "B");
     assert_eq!(relinked_recipe.kind, ShiftComponentRecipeKind::Static);
+    assert_eq!(
+        report
+            .dependency_index
+            .index
+            .glyphs
+            .get("glyph_B")
+            .expect("replacement glyph should be indexed")
+            .component_dependents,
+        vec![ShiftComponentUse {
+            glyph_id: "glyph_Aacute".to_string(),
+            glyph_name: "Aacute".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_25".to_string(),
+        }]
+    );
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -12028,6 +12092,13 @@ fn working_source_creates_glyph_with_generated_name_id_and_default_layer() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.glyph_id, "glyph_newGlyph_1");
     assert_eq!(report.glyph_name, "newGlyph.1");
+    assert_eq!(report.dependency_index.revision, 1);
+    assert_eq!(report.dependency_index.summary.glyph_count, 2);
+    assert!(report
+        .dependency_index
+        .index
+        .glyphs
+        .contains_key("glyph_newGlyph_1"));
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(report.source_coverage.summary.source_count, 1);
     assert!(report.source_coverage.summary.ready);
