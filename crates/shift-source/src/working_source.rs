@@ -909,6 +909,38 @@ pub struct ShiftSourceLocationSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftSourceMappedLocationReport {
+    pub revision: u64,
+    pub summary: ShiftSourceMappedLocationSummary,
+    pub sources: Vec<ShiftSourceMappedLocation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceMappedLocationSummary {
+    pub source_count: usize,
+    pub mapped_axis_value_count: usize,
+    pub input_location_value_count: usize,
+    pub axis_default_value_count: usize,
+    pub axis_mapping_value_count: usize,
+    pub applied_mapping_count: usize,
+    pub diagnostic_count: usize,
+    pub diagnostic_source_count: usize,
+    pub diagnostic_mapping_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceMappedLocation {
+    pub source_id: String,
+    pub source_name: String,
+    pub source_location: ShiftSourceLocation,
+    pub mapped_location: ShiftMappedLocation,
+    pub summary: ShiftMappedLocationSummary,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftSourceAxisValue {
     pub value: f64,
     pub source: ShiftSourceAxisValueSource,
@@ -1935,6 +1967,34 @@ impl ShiftWorkingSource {
             summary: source_location_summary(&sources),
             sources,
         }
+    }
+
+    pub fn source_mapped_locations_report(
+        &self,
+    ) -> ShiftSourceResult<ShiftSourceMappedLocationReport> {
+        let mut sources = Vec::with_capacity(self.package.sources.len());
+        for source in &self.package.sources {
+            let source_location = ShiftSourceLocation {
+                source_id: source.id.clone(),
+                source_name: source.name.clone(),
+                values: self.complete_source_location(&source.location),
+            };
+            let mapped_location = self.mapped_location(&source.location)?;
+            let summary = mapped_location_summary(&mapped_location);
+            sources.push(ShiftSourceMappedLocation {
+                source_id: source.id.clone(),
+                source_name: source.name.clone(),
+                source_location,
+                mapped_location,
+                summary,
+            });
+        }
+
+        Ok(ShiftSourceMappedLocationReport {
+            revision: self.revision,
+            summary: source_mapped_location_summary(&sources),
+            sources,
+        })
     }
 
     pub fn axis_mappings_report(&self) -> ShiftAxisMappingReport {
@@ -6230,6 +6290,44 @@ fn source_location_summary(sources: &[ShiftSourceLocation]) -> ShiftSourceLocati
         resolved_axis_value_count,
         source_location_value_count,
         axis_default_value_count,
+    }
+}
+
+fn source_mapped_location_summary(
+    sources: &[ShiftSourceMappedLocation],
+) -> ShiftSourceMappedLocationSummary {
+    let mut mapped_axis_value_count = 0;
+    let mut input_location_value_count = 0;
+    let mut axis_default_value_count = 0;
+    let mut axis_mapping_value_count = 0;
+    let mut applied_mapping_count = 0;
+    let mut diagnostic_count = 0;
+    let mut diagnostic_source_count = 0;
+    let mut diagnostic_mapping_count = 0;
+
+    for source in sources {
+        mapped_axis_value_count += source.summary.mapped_axis_value_count;
+        input_location_value_count += source.summary.input_location_value_count;
+        axis_default_value_count += source.summary.axis_default_value_count;
+        axis_mapping_value_count += source.summary.axis_mapping_value_count;
+        applied_mapping_count += source.summary.applied_mapping_count;
+        diagnostic_count += source.summary.diagnostic_count;
+        diagnostic_mapping_count += source.summary.diagnostic_mapping_count;
+        if source.summary.diagnostic_count > 0 {
+            diagnostic_source_count += 1;
+        }
+    }
+
+    ShiftSourceMappedLocationSummary {
+        source_count: sources.len(),
+        mapped_axis_value_count,
+        input_location_value_count,
+        axis_default_value_count,
+        axis_mapping_value_count,
+        applied_mapping_count,
+        diagnostic_count,
+        diagnostic_source_count,
+        diagnostic_mapping_count,
     }
 }
 

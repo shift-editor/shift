@@ -93,6 +93,7 @@ Good renderer-facing queries:
 getGlyphDependenciesReport(glyphId)
 getGlyphInterpolationCompatibilityReport(glyphId)
 getSourceLocations()
+getSourceMappedLocationsReport()
 getSourceLayerCoverageReport()
 getSourceLayerCoverageSummary()
 getSourceLayerCoverage()
@@ -696,6 +697,11 @@ format exploration:
   `axis-mappings.json` or rebuilding mapping metadata in TypeScript. Axis
   mapping create/update/delete reports include this refreshed mapping report, so
   app panels can update from the command response that changed the mapping graph.
+  Source mapped-location reports apply the same mapping resolvers to each
+  declared source location and return both authored source coordinates and
+  mapped construction coordinates with aggregate diagnostic counts. Source
+  panels can therefore show whether a master is outside an authored mapping
+  range before export, without querying every source location one at a time.
   The mapped-location report wraps resolved axis values and mapping diagnostics
   with the working-source revision plus compact counts for input, default,
   mapped, applied-mapping, and diagnostic states. Variable sliders and export

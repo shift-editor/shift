@@ -23,12 +23,12 @@ use crate::{
     ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
     ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
-    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
-    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
-    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
-    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
-    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
-    ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftSourceMappedLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
+    ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
+    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
+    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -3550,6 +3550,69 @@ fn working_source_mapping_uses_defaults_and_reports_outside_sample_range() {
             applied_mapping_count: 0,
             diagnostic_count: 1,
             diagnostic_mapping_count: 1,
+        }
+    );
+}
+
+#[test]
+fn working_source_reports_source_mapped_locations_with_diagnostics() {
+    let mut package = package_with_weight_to_stem_mapping();
+    package.sources.push(ShiftSource {
+        id: "source_Black".to_string(),
+        name: "Black".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    package.axis_mappings[0].samples = vec![
+        ShiftAxisMappingSample {
+            input_location: BTreeMap::from([("axis_wght".to_string(), 500.0)]),
+            output_location: BTreeMap::from([("axis_stem".to_string(), 0.25)]),
+        },
+        ShiftAxisMappingSample {
+            input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+            output_location: BTreeMap::from([("axis_stem".to_string(), 1.0)]),
+        },
+    ];
+    let working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .source_mapped_locations_report()
+        .expect("source mapped locations should build");
+
+    assert_eq!(report.revision, 0);
+    assert_eq!(
+        report.summary,
+        ShiftSourceMappedLocationSummary {
+            source_count: 2,
+            mapped_axis_value_count: 4,
+            input_location_value_count: 1,
+            axis_default_value_count: 2,
+            axis_mapping_value_count: 1,
+            applied_mapping_count: 1,
+            diagnostic_count: 1,
+            diagnostic_source_count: 1,
+            diagnostic_mapping_count: 1,
+        }
+    );
+    assert_eq!(report.sources[0].source_id, "source_Regular");
+    assert_eq!(report.sources[0].summary.diagnostic_count, 1);
+    assert_eq!(
+        report.sources[0].mapped_location.diagnostics,
+        vec![ShiftAxisMappingDiagnostic {
+            mapping_id: "mapping_weight_to_stem".to_string(),
+            kind: ShiftAxisMappingDiagnosticKind::OutsideSampleRange {
+                axis_id: "axis_wght".to_string(),
+                value: 400.0,
+            },
+        }]
+    );
+    assert_eq!(report.sources[1].source_id, "source_Black");
+    assert_eq!(report.sources[1].summary.diagnostic_count, 0);
+    assert_eq!(
+        report.sources[1].mapped_location.values["axis_stem"],
+        ShiftMappedAxisValue {
+            value: 1.0,
+            source: ShiftMappedAxisValueSource::AxisMapping,
+            mapping_id: Some("mapping_weight_to_stem".to_string()),
         }
     );
 }
