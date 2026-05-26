@@ -108,7 +108,7 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
         DecomposedTransform::identity(),
     );
     component.set_location_axis(axis_id.clone(), 700.0);
-    component.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToDefault);
+    component.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToFont);
     component.set_condition(Some(ComponentCondition::AxisRange {
         axis_id: axis_id.clone(),
         min: Some(600.0),
@@ -184,7 +184,7 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
     assert_eq!(loaded_component.location().get(&axis_id), Some(700.0));
     assert_eq!(
         loaded_component.axis_inheritance(),
-        AxisInheritance::ResetUnspecifiedToDefault
+        AxisInheritance::ResetUnspecifiedToFont
     );
     assert!(matches!(
         loaded_component.condition(),
@@ -5999,7 +5999,7 @@ fn source_package_keeps_component_variation_sources_separate_from_ir_projection(
     );
     assert_eq!(
         projected_component.axis_inheritance(),
-        AxisInheritance::ResetUnspecifiedToDefault
+        AxisInheritance::ResetUnspecifiedToFont
     );
     assert_eq!(
         projected_component

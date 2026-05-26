@@ -23,7 +23,7 @@ pub struct Component {
 pub enum AxisInheritance {
     #[default]
     InheritParent,
-    ResetUnspecifiedToDefault,
+    ResetUnspecifiedToFont,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -484,12 +484,12 @@ mod tests {
         let axis_id = AxisId::from_stable("axis_weight").unwrap();
 
         c.set_location_axis(axis_id.clone(), 700.0);
-        c.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToDefault);
+        c.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToFont);
 
         assert_eq!(c.location().get(&axis_id), Some(700.0));
         assert_eq!(
             c.axis_inheritance(),
-            AxisInheritance::ResetUnspecifiedToDefault
+            AxisInheritance::ResetUnspecifiedToFont
         );
     }
 

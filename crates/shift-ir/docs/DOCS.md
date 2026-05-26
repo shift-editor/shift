@@ -155,9 +155,15 @@ ComponentLocation {
 
 AxisInheritance {
     InheritParent,
-    ResetUnspecifiedToDefault,
+    ResetUnspecifiedToFont,
 }
 ```
+
+`ResetUnspecifiedToFont` means unresolved global axes restart from the root font
+location instead of the current parent component location. If the root font
+location omits an axis, that axis falls back to its default. This mirrors the
+`VARC` reset-unspecified-axes behavior and avoids describing reset as if it
+always meant "use defaults."
 
 Candidate editor/domain commands:
 
@@ -166,7 +172,7 @@ set_component_base(component_id, glyph_id)
 set_component_transform(component_id, transform)
 set_component_location(component_id, axis_id, value)
 clear_component_location_axis(component_id, axis_id)
-set_component_axis_inheritance(component_id, AxisInheritance::ResetUnspecifiedToDefault)
+set_component_axis_inheritance(component_id, AxisInheritance::ResetUnspecifiedToFont)
 set_component_condition(component_id, condition)
 add_component_variation_source(component_id, parent_location)
 set_component_variation_source_location(component_source_id, axis_id, value)

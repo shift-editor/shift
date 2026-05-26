@@ -148,14 +148,14 @@ impl ShiftAxisInheritance {
     fn into_ir(self) -> AxisInheritance {
         match self {
             Self::InheritParent => AxisInheritance::InheritParent,
-            Self::ResetUnspecifiedToFont => AxisInheritance::ResetUnspecifiedToDefault,
+            Self::ResetUnspecifiedToFont => AxisInheritance::ResetUnspecifiedToFont,
         }
     }
 
     fn from_ir(axis_inheritance: AxisInheritance) -> Self {
         match axis_inheritance {
             AxisInheritance::InheritParent => Self::InheritParent,
-            AxisInheritance::ResetUnspecifiedToDefault => Self::ResetUnspecifiedToFont,
+            AxisInheritance::ResetUnspecifiedToFont => Self::ResetUnspecifiedToFont,
         }
     }
 }
