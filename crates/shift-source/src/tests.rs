@@ -18,10 +18,11 @@ use crate::{
     ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
-    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
-    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
-    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
+    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
+    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -10939,6 +10940,10 @@ fn working_source_reports_variable_font_export_preflight() {
         ShiftVariableFontExportReadiness::SingleSource
     );
     assert_eq!(
+        single_source_preflight.primary_action,
+        ShiftVariableFontExportPrimaryAction::AddSource
+    );
+    assert_eq!(
         single_source_preflight.variable_readiness,
         ShiftVariableFontReadiness::SingleSource
     );
@@ -10968,6 +10973,10 @@ fn working_source_reports_variable_font_export_preflight() {
     assert_eq!(
         ready_preflight.readiness,
         ShiftVariableFontExportReadiness::Ready
+    );
+    assert_eq!(
+        ready_preflight.primary_action,
+        ShiftVariableFontExportPrimaryAction::ExportVariableFont
     );
     assert_eq!(
         ready_preflight.variable_readiness,
@@ -11004,6 +11013,10 @@ fn working_source_reports_variable_font_export_preflight() {
     assert_eq!(
         source_blocked_preflight.readiness,
         ShiftVariableFontExportReadiness::BlockedBySourceReadiness
+    );
+    assert_eq!(
+        source_blocked_preflight.primary_action,
+        ShiftVariableFontExportPrimaryAction::ResolveSourceReadiness
     );
     assert_eq!(
         source_blocked_preflight.variable_readiness,
@@ -11080,6 +11093,10 @@ fn working_source_reports_variable_font_export_preflight() {
         ShiftVariableFontExportReadiness::BlockedByUnsupportedComponents
     );
     assert_eq!(
+        component_blocked_preflight.primary_action,
+        ShiftVariableFontExportPrimaryAction::ResolveComponentLowering
+    );
+    assert_eq!(
         component_blocked_preflight.variable_readiness,
         ShiftVariableFontReadiness::Ready
     );
@@ -11107,6 +11124,10 @@ fn working_source_reports_variable_font_export_preflight() {
     assert_eq!(
         combined_blocked_preflight.readiness,
         ShiftVariableFontExportReadiness::BlockedBySourceReadinessAndUnsupportedComponents
+    );
+    assert_eq!(
+        combined_blocked_preflight.primary_action,
+        ShiftVariableFontExportPrimaryAction::ResolveSourceReadinessAndComponentLowering
     );
     assert_eq!(
         combined_blocked_preflight.variable_readiness,

@@ -402,6 +402,7 @@ pub enum ShiftVariableFontReadiness {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftVariableFontExportPreflight {
     pub readiness: ShiftVariableFontExportReadiness,
+    pub primary_action: ShiftVariableFontExportPrimaryAction,
     pub variable_readiness: ShiftVariableFontReadiness,
     pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
     pub source_coverage_worklist: ShiftSourceLayerCoverageWorklist,
@@ -416,6 +417,16 @@ pub enum ShiftVariableFontExportReadiness {
     BlockedBySourceReadiness,
     BlockedByUnsupportedComponents,
     BlockedBySourceReadinessAndUnsupportedComponents,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftVariableFontExportPrimaryAction {
+    ExportVariableFont,
+    AddSource,
+    ResolveSourceReadiness,
+    ResolveComponentLowering,
+    ResolveSourceReadinessAndComponentLowering,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1672,9 +1683,27 @@ impl ShiftWorkingSource {
             (_, false, true) => ShiftVariableFontExportReadiness::BlockedByUnsupportedComponents,
             (_, false, false) => ShiftVariableFontExportReadiness::Ready,
         };
+        let primary_action = match readiness {
+            ShiftVariableFontExportReadiness::Ready => {
+                ShiftVariableFontExportPrimaryAction::ExportVariableFont
+            }
+            ShiftVariableFontExportReadiness::SingleSource => {
+                ShiftVariableFontExportPrimaryAction::AddSource
+            }
+            ShiftVariableFontExportReadiness::BlockedBySourceReadiness => {
+                ShiftVariableFontExportPrimaryAction::ResolveSourceReadiness
+            }
+            ShiftVariableFontExportReadiness::BlockedByUnsupportedComponents => {
+                ShiftVariableFontExportPrimaryAction::ResolveComponentLowering
+            }
+            ShiftVariableFontExportReadiness::BlockedBySourceReadinessAndUnsupportedComponents => {
+                ShiftVariableFontExportPrimaryAction::ResolveSourceReadinessAndComponentLowering
+            }
+        };
 
         ShiftVariableFontExportPreflight {
             readiness,
+            primary_action,
             variable_readiness: self.variable_font_readiness,
             source_coverage_summary: self.source_layer_coverage_summary.clone(),
             source_coverage_worklist: self.source_layer_coverage_worklist(),

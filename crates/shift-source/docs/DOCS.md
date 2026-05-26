@@ -91,7 +91,7 @@ getSourceLayerCoverageSummary()
 getSourceLayerCoverage()
 getSourceLayerCoverageWorklist()
 getVariableFontReadinessReport()
-getVariableFontExportPreflight(target)
+getVariableFontExportPreflight(target) -> readiness + primaryAction + source/component blockers
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
 getComponentRecipe(glyphId, layerId, componentId)
@@ -145,10 +145,12 @@ evidence; the export backend owns the artifact-specific fallback choice.
 For variable export UI, `variableFontExportPreflight(target)` combines source
 coverage/interpolation readiness with component capability preflight into one
 app-facing readiness state: single-source, ready, source-blocked,
-component-blocked, or blocked by both. The renderer can drive menu items,
-export panels, and warnings from that single state while still showing the
-source coverage summary, source coverage worklist, and exact component
-diagnostics as detail.
+component-blocked, or blocked by both. It also returns a `primaryAction`:
+`exportVariableFont`, `addSource`, `resolveSourceReadiness`,
+`resolveComponentLowering`, or `resolveSourceReadinessAndComponentLowering`.
+The renderer can drive menu items, export panels, and warnings from that action
+while still showing the source coverage summary, source coverage worklist, and
+exact component diagnostics as detail.
 
 The intended flow is:
 
@@ -590,9 +592,9 @@ format exploration:
   readiness directly, so mutation reports that already return coverage can
   refresh variable-operation affordances without a follow-up query or
   TypeScript-side status derivation. Variable-font export preflight also carries
-  the compact source worklist next to component preflight diagnostics, so a
-  blocked export panel can explain source blockers and component blockers from
-  one Rust-owned response.
+  a primary action and the compact source worklist next to component preflight
+  diagnostics, so a blocked export panel can choose the next step and explain
+  source blockers and component blockers from one Rust-owned response.
 - **Coverage-affecting mutation reports:** source create/update/delete, glyph
   create/delete, and glyph source layer create/delete reports include the same
   source coverage report after the mutation. A source sidebar or export-readiness
