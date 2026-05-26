@@ -518,7 +518,11 @@ format exploration:
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a
-  glyph-local default, or an explicit variation-source override.
+  glyph-local default, or an explicit variation-source override. Glyph variation
+  source create/update/delete reports include the post-mutation completed source
+  list, so a glyph-source inspector can update from the command response instead
+  of issuing a follow-up query or rebuilding sparse/default provenance in
+  TypeScript.
 - **Source location completion:** source panels and export preflight can ask for
   every source's completed global location and see whether each coordinate was
   explicit or inherited from an axis default. The same surface backs source

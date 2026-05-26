@@ -9109,6 +9109,15 @@ fn working_source_creates_glyph_variation_source_with_generated_id_and_narrow_im
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "glyphSource_Black_1");
     assert_eq!(report.source.source_name, "Black.1");
+    assert_eq!(report.glyph_variation_sources.len(), 2);
+    assert_eq!(
+        report.glyph_variation_sources[0].source_id,
+        "glyphSource_Black"
+    );
+    assert_eq!(
+        report.glyph_variation_sources[1].source_id,
+        "glyphSource_Black_1"
+    );
     assert_eq!(
         report.source.values.get("axis_stemWidth"),
         Some(&ShiftGlyphVariationAxisValue {
@@ -9178,6 +9187,11 @@ fn working_source_create_glyph_variation_source_uses_fallback_for_blank_names() 
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "glyphSource_New_Variation_Source");
     assert_eq!(report.source.source_name, "New Variation Source");
+    assert_eq!(report.glyph_variation_sources.len(), 1);
+    assert_eq!(
+        report.glyph_variation_sources[0].source_id,
+        "glyphSource_New_Variation_Source"
+    );
 }
 
 #[test]
@@ -9286,6 +9300,7 @@ fn working_source_deletes_glyph_variation_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "glyphSource_bold");
     assert_eq!(report.source_name, "Bold");
+    assert!(report.glyph_variation_sources.is_empty());
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -9404,6 +9419,8 @@ fn working_source_updates_glyph_variation_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source.source_name, "Black");
     assert_eq!(report.source.layer_id, "source_Bold");
+    assert_eq!(report.glyph_variation_sources.len(), 1);
+    assert_eq!(report.glyph_variation_sources[0].source_name, "Black");
     assert_eq!(
         report.source.values.get("axis_stemWidth"),
         Some(&ShiftGlyphVariationAxisValue {

@@ -449,6 +449,7 @@ pub struct ShiftCreateGlyphVariationSourceReport {
     pub glyph_name: String,
     pub source_id: String,
     pub source: ShiftGlyphVariationSourceLocation,
+    pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -468,6 +469,7 @@ pub struct ShiftUpdateGlyphVariationSourceReport {
     pub glyph_name: String,
     pub source_id: String,
     pub source: ShiftGlyphVariationSourceLocation,
+    pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -479,6 +481,7 @@ pub struct ShiftDeleteGlyphVariationSourceReport {
     pub glyph_name: String,
     pub source_id: String,
     pub source_name: String,
+    pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -3393,10 +3396,11 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
 
-        let source = self
-            .glyph_variation_source_locations(glyph_id)?
-            .into_iter()
+        let glyph_variation_sources = self.glyph_variation_source_locations(glyph_id)?;
+        let source = glyph_variation_sources
+            .iter()
             .find(|source| source.source_id == source_id)
+            .cloned()
             .ok_or_else(|| ShiftSourceError::MissingGlyphVariationSource {
                 glyph_id: glyph_id.to_string(),
                 source_id: source_id.clone(),
@@ -3407,6 +3411,7 @@ impl ShiftWorkingSource {
             glyph_name,
             source_id,
             source,
+            glyph_variation_sources,
             diff,
             revision: self.revision,
         })
@@ -3447,10 +3452,11 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
 
-        let source = self
-            .glyph_variation_source_locations(glyph_id)?
-            .into_iter()
+        let glyph_variation_sources = self.glyph_variation_source_locations(glyph_id)?;
+        let source = glyph_variation_sources
+            .iter()
             .find(|source| source.source_id == source_id)
+            .cloned()
             .ok_or_else(|| ShiftSourceError::MissingGlyphVariationSource {
                 glyph_id: glyph_id.to_string(),
                 source_id: source_id.to_string(),
@@ -3461,6 +3467,7 @@ impl ShiftWorkingSource {
             glyph_name,
             source_id: source_id.to_string(),
             source,
+            glyph_variation_sources,
             diff,
             revision: self.revision,
         })
@@ -3497,12 +3504,14 @@ impl ShiftWorkingSource {
         if !diff.changes.is_empty() {
             self.revision += 1;
         }
+        let glyph_variation_sources = self.glyph_variation_source_locations(glyph_id)?;
 
         Ok(ShiftDeleteGlyphVariationSourceReport {
             glyph_id: glyph_id.to_string(),
             glyph_name,
             source_id: source.id,
             source_name: source.name,
+            glyph_variation_sources,
             diff,
             revision: self.revision,
         })
