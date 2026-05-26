@@ -228,9 +228,10 @@ Current writer behavior:
   It also reports `blockedByStagedCommit` with staged recovery plans when
   `.shift-txn` contains active transaction metadata, so the app resolves or
   cleans recovery state before allowing a new save. Staged recovery summaries
-  are grouped by action, so app chrome can distinguish resumable saves,
-  cleanup-only transactions, live-conflict blockers, and unrecoverable staged
-  metadata without scanning every recovery plan.
+  are grouped by action and by observed live state, so app chrome can
+  distinguish resumable saves, cleanup-only transactions, live-conflict
+  blockers, unrecoverable staged metadata, pending files, partially applied
+  files, applied files, and diverged files without scanning every recovery plan.
 - `ShiftWorkingSource::save()` is the app-facing happy path for a document save:
   it prepares, stages, applies, and marks the working source saved only after
   the staged commit has succeeded.
@@ -844,7 +845,9 @@ keeps save buttons, dirty badges, and data-loss warnings from treating a cache
 rewrite the same as a canonical source edit. `conflictKindCounts` and
 `conflictPathClassCounts` provide the same compact grouping for external
 changes detected during save preview. `stagedRecoveryActionCounts` similarly
-summarizes pending staged transactions by recovery action.
+summarizes pending staged transactions by recovery action, while
+`stagedRecoveryLiveStateCounts` summarizes the on-disk state those policies are
+responding to.
 
 Examples:
 
