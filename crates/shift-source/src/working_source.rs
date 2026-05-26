@@ -10,8 +10,8 @@ use crate::package::{
     ShiftFingerprintConflictKind, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
     ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
-    ShiftInterpolationCompatibilityIssueKindCount, ShiftPackage, ShiftPackageDiff,
-    ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
+    ShiftInterpolationCompatibilityIssueKindCount, ShiftPackage, ShiftPackageChange,
+    ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
     ShiftStagedCommitLiveState, ShiftStagedCommitRecoveryAction, ShiftStagedCommitRecoveryPlan,
 };
 use serde::{Deserialize, Serialize};
@@ -72,6 +72,7 @@ pub struct ShiftRenameGlyphReport {
     pub new_name: String,
     pub component_dependents: Vec<ShiftComponentUse>,
     pub dependency_index: ShiftDependencyIndexReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -94,6 +95,7 @@ pub struct ShiftDeleteGlyphReport {
     pub glyph_id: String,
     pub glyph_name: String,
     pub dependency_index: ShiftDependencyIndexReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -117,6 +119,7 @@ pub struct ShiftDeleteGlyphAndRemoveComponentsReport {
     pub glyph_name: String,
     pub removed_component_recipes: Vec<ShiftComponentRecipeSummary>,
     pub dependency_index: ShiftDependencyIndexReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -144,6 +147,7 @@ pub struct ShiftDeleteGlyphAndRelinkComponentsReport {
     pub replacement_glyph_name: String,
     pub relinked_component_recipes: Vec<ShiftComponentRecipeSummary>,
     pub dependency_index: ShiftDependencyIndexReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -438,6 +442,15 @@ pub struct ShiftInterpolationCompatibilityIndexSummary {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftInterpolationCompatibilityUpdateReport {
+    pub revision: u64,
+    pub summary: ShiftInterpolationCompatibilityIndexSummary,
+    pub affected_glyphs: Vec<ShiftGlyphInterpolationCompatibility>,
+    pub removed_glyph_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftSourceLayerCoverage {
     pub source_id: String,
     pub source_name: String,
@@ -643,6 +656,7 @@ pub struct ShiftCreateGlyphReport {
     pub glyph_id: String,
     pub glyph_name: String,
     pub dependency_index: ShiftDependencyIndexReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -661,6 +675,7 @@ pub struct ShiftCreateGlyphSourceLayerReport {
     pub glyph_name: String,
     pub source_id: String,
     pub source_name: String,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -685,6 +700,7 @@ pub struct ShiftDeleteGlyphSourceLayerReport {
     pub glyph_name: String,
     pub source_id: String,
     pub source_name: String,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -708,6 +724,7 @@ pub struct ShiftCreateGlyphVariationSourceReport {
     pub source_id: String,
     pub source: ShiftGlyphVariationSourceLocation,
     pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -729,6 +746,7 @@ pub struct ShiftUpdateGlyphVariationSourceReport {
     pub source_id: String,
     pub source: ShiftGlyphVariationSourceLocation,
     pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -742,6 +760,7 @@ pub struct ShiftDeleteGlyphVariationSourceReport {
     pub source_id: String,
     pub source_name: String,
     pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -770,6 +789,7 @@ pub struct ShiftCreateComponentVariationSourceReport {
     pub source: ShiftComponentVariationSourceLocation,
     pub component_variation_sources: Vec<ShiftComponentVariationSourceLocation>,
     pub component_recipe: ShiftComponentRecipeSummary,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -795,6 +815,7 @@ pub struct ShiftUpdateComponentVariationSourceReport {
     pub source: ShiftComponentVariationSourceLocation,
     pub component_variation_sources: Vec<ShiftComponentVariationSourceLocation>,
     pub component_recipe: ShiftComponentRecipeSummary,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -810,6 +831,7 @@ pub struct ShiftDeleteComponentVariationSourceReport {
     pub source_name: String,
     pub component_variation_sources: Vec<ShiftComponentVariationSourceLocation>,
     pub component_recipe: ShiftComponentRecipeSummary,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -1978,6 +2000,53 @@ impl ShiftWorkingSource {
                 &self.interpolation_compatibility_index,
             ),
             index: self.interpolation_compatibility_index.clone(),
+        }
+    }
+
+    fn interpolation_compatibility_update_report(
+        &self,
+        diff: &ShiftPackageDiff,
+    ) -> ShiftInterpolationCompatibilityUpdateReport {
+        let mut affected_glyph_ids = BTreeSet::new();
+        let mut removed_glyph_ids = BTreeSet::new();
+
+        for change in &diff.changes {
+            match change {
+                ShiftPackageChange::CreateGlyph { glyph_id }
+                | ShiftPackageChange::UpdateGlyph { glyph_id }
+                | ShiftPackageChange::RenameGlyph { glyph_id } => {
+                    affected_glyph_ids.insert(glyph_id.clone());
+                }
+                ShiftPackageChange::DeleteGlyph { glyph_id } => {
+                    removed_glyph_ids.insert(glyph_id.clone());
+                }
+                ShiftPackageChange::UpdateManifest
+                | ShiftPackageChange::UpdateFontInfo
+                | ShiftPackageChange::UpdateAxes
+                | ShiftPackageChange::UpdateSources
+                | ShiftPackageChange::UpdateAxisMappings
+                | ShiftPackageChange::UpdateGlyphLabels { .. }
+                | ShiftPackageChange::RebuildDerivedIndexes => {}
+            }
+        }
+
+        let affected_glyphs = affected_glyph_ids
+            .into_iter()
+            .filter_map(|glyph_id| {
+                self.interpolation_compatibility_index
+                    .glyphs
+                    .get(&glyph_id)
+                    .cloned()
+            })
+            .collect();
+
+        ShiftInterpolationCompatibilityUpdateReport {
+            revision: self.revision,
+            summary: interpolation_compatibility_index_summary(
+                &self.interpolation_compatibility_index,
+            ),
+            affected_glyphs,
+            removed_glyph_ids: removed_glyph_ids.into_iter().collect(),
         }
     }
 
@@ -4224,6 +4293,7 @@ impl ShiftWorkingSource {
             glyph_id,
             glyph_name,
             dependency_index: self.dependency_index_report(),
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4274,6 +4344,7 @@ impl ShiftWorkingSource {
             glyph_name,
             source_id: source_id.to_string(),
             source_name,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4317,6 +4388,7 @@ impl ShiftWorkingSource {
             glyph_name: preview.glyph_name,
             source_id: preview.source_id,
             source_name: preview.source_name,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4386,6 +4458,7 @@ impl ShiftWorkingSource {
             source_id,
             source,
             glyph_variation_sources,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4443,6 +4516,7 @@ impl ShiftWorkingSource {
             source_id: source_id.to_string(),
             source,
             glyph_variation_sources,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4488,6 +4562,7 @@ impl ShiftWorkingSource {
             source_id: source.id,
             source_name: source.name,
             glyph_variation_sources,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4586,6 +4661,7 @@ impl ShiftWorkingSource {
             source,
             component_variation_sources,
             component_recipe,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             diff,
             revision: self.revision,
         })
@@ -4671,6 +4747,7 @@ impl ShiftWorkingSource {
             source,
             component_variation_sources,
             component_recipe,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             diff,
             revision: self.revision,
         })
@@ -4741,6 +4818,7 @@ impl ShiftWorkingSource {
             source_name: source.name,
             component_variation_sources,
             component_recipe,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             diff,
             revision: self.revision,
         })
@@ -4776,6 +4854,7 @@ impl ShiftWorkingSource {
             glyph_id: preview.glyph_id,
             glyph_name: preview.glyph_name,
             dependency_index: self.dependency_index_report(),
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4798,6 +4877,7 @@ impl ShiftWorkingSource {
             glyph_name: preview.glyph_name,
             removed_component_recipes: preview.removed_component_recipes,
             dependency_index: self.dependency_index_report(),
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4823,6 +4903,7 @@ impl ShiftWorkingSource {
             replacement_glyph_name: preview.replacement_glyph_name,
             relinked_component_recipes: preview.relinked_component_recipes,
             dependency_index: self.dependency_index_report(),
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4862,6 +4943,7 @@ impl ShiftWorkingSource {
             new_name: preview.new_name,
             component_dependents: preview.component_dependents,
             dependency_index: self.dependency_index_report(),
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,

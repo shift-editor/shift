@@ -2903,6 +2903,21 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
             .glyph_name,
         "RenamedBase"
     );
+    assert_eq!(report.interpolation_compatibility.revision, 1);
+    assert_eq!(report.interpolation_compatibility.summary.glyph_count, 2);
+    assert_eq!(
+        report
+            .interpolation_compatibility
+            .affected_glyphs
+            .iter()
+            .map(|glyph| (glyph.glyph_id.as_str(), glyph.glyph_name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("glyph_A", "RenamedBase")]
+    );
+    assert!(report
+        .interpolation_compatibility
+        .removed_glyph_ids
+        .is_empty());
     assert_eq!(report.source_coverage.revision, 1);
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(
@@ -7766,6 +7781,16 @@ fn working_source_deletes_leaf_glyph_with_narrow_impact() {
         0
     );
     assert_eq!(report.dependency_index.summary.component_dependent_count, 0);
+    assert_eq!(report.interpolation_compatibility.revision, 1);
+    assert_eq!(report.interpolation_compatibility.summary.glyph_count, 1);
+    assert!(report
+        .interpolation_compatibility
+        .affected_glyphs
+        .is_empty());
+    assert_eq!(
+        report.interpolation_compatibility.removed_glyph_ids,
+        vec!["glyph_Aacute".to_string()]
+    );
     assert_eq!(report.source_coverage.summary.glyph_count, 1);
     assert_eq!(report.source_coverage.summary.expected_layer_count, 1);
     assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
@@ -8038,6 +8063,21 @@ fn working_source_deletes_glyph_and_relinks_component_references() {
         1
     );
     assert_eq!(report.dependency_index.summary.component_dependent_count, 1);
+    assert_eq!(report.interpolation_compatibility.revision, 1);
+    assert_eq!(report.interpolation_compatibility.summary.glyph_count, 2);
+    assert_eq!(
+        report
+            .interpolation_compatibility
+            .affected_glyphs
+            .iter()
+            .map(|glyph| glyph.glyph_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["glyph_Aacute"]
+    );
+    assert_eq!(
+        report.interpolation_compatibility.removed_glyph_ids,
+        vec!["glyph_A".to_string()]
+    );
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
     assert!(!report.source_coverage.summary.ready);
@@ -12172,6 +12212,21 @@ fn working_source_creates_glyph_with_generated_name_id_and_default_layer() {
         .index
         .glyphs
         .contains_key("glyph_newGlyph_1"));
+    assert_eq!(report.interpolation_compatibility.revision, 1);
+    assert_eq!(report.interpolation_compatibility.summary.glyph_count, 2);
+    assert_eq!(
+        report
+            .interpolation_compatibility
+            .affected_glyphs
+            .iter()
+            .map(|glyph| glyph.glyph_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["glyph_newGlyph_1"]
+    );
+    assert!(report
+        .interpolation_compatibility
+        .removed_glyph_ids
+        .is_empty());
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(report.source_coverage.summary.source_count, 1);
     assert!(report.source_coverage.summary.ready);

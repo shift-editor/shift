@@ -629,6 +629,15 @@ format exploration:
   counts, and the detailed compatibility record. The app can therefore show
   variable-font warnings for a selected glyph and discard stale async results
   without scanning the package-level compatibility index in TypeScript.
+- **Compatibility mutation updates:** glyph create/rename/delete, glyph source
+  layer create/delete, glyph variation-source create/update/delete, and
+  component variation-source create/update/delete reports include a compact
+  interpolation-compatibility update. It carries the working-source revision,
+  the package-level compatibility summary, affected glyph compatibility rows,
+  and removed glyph IDs. The app can patch grid badges, inspector warnings, and
+  export preflight counts from the mutation response without shipping the full
+  package-wide compatibility index or keeping stale variable-font state until a
+  follow-up query completes.
 - **Source layer coverage:** source panels can ask which glyphs have a layer for
   each family source, which glyphs are missing that layer, and which
   interpolation compatibility issues involve that source. Coverage rows include
@@ -1105,10 +1114,10 @@ new glyph_Aacute.width = 620
 ```
 
 This matters for app behavior. A rename can show a cheap dependency-label
-refresh that keeps package files readable without marking interpolation
-compatibility stale. A component or outline edit can mark interpolation
-compatibility and dependency views stale. The save path does not need to guess
-from raw files.
+refresh that keeps package files readable while refreshing the compact
+interpolation-compatibility rows that carry app-facing glyph labels. A component
+or outline edit can mark interpolation compatibility and dependency views stale.
+The save path does not need to guess from raw files.
 
 The staged writer turns this impact plan into verified payloads, backups,
 validation, and recovery markers. The package model gives that writer the
