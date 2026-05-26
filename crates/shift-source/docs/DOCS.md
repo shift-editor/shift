@@ -944,8 +944,9 @@ resolution, source worklists, and export preflight.
 What is not yet proven is the app boundary for several of those operations. The
 bridge must still prove:
 
-- opening a source package with recovery/blocker states before editable data is
-  exposed
+- opening a source package with full recovery states before editable data is
+  exposed; the bridge currently covers clean open and unrecoverable blockers,
+  but still needs a recoverable partial-staged-commit flow
 - axis and axis-mapping authoring without TypeScript-side interpolation
 - source-panel worklists scoped to visible source/glyph rows
 - glyph delete previews and selected strategies through stable IDs

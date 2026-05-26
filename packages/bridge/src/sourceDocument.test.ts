@@ -1,8 +1,10 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   asGlyphId,
   asSourceId,
+  type OpenAction,
+  type OpenPreviewStatus,
   type SaveAction,
   type SavePreviewStatus,
   type SaveStatus,
@@ -13,6 +15,10 @@ import { createPackageFixture, type PackageFixture } from "./testing/sourcePacka
 
 const singleSource = "singleSource" satisfies SourceReadiness;
 const missingSourceLayers = "missingSourceLayers" satisfies SourceReadiness;
+const readyToOpen = "ready" satisfies OpenPreviewStatus;
+const load = "load" satisfies OpenAction;
+const blockedByRecovery = "blockedByRecovery" satisfies OpenPreviewStatus;
+const block = "block" satisfies OpenAction;
 const saved = "saved" satisfies SaveStatus;
 const blockedByExternalChanges = "blockedByExternalChanges" satisfies SavePreviewStatus;
 const resolveExternalChanges = "resolveExternalChanges" satisfies SaveAction;
@@ -37,6 +43,35 @@ describe("source document persistence", () => {
       familyName: "Test Sans Text",
       unitsPerEm: 2048,
     });
+  });
+
+  it("previews clean packages before opening editable data", () => {
+    expect(pkg.document.previewOpen(pkg.path)).toMatchObject({
+      status: readyToOpen,
+      primaryAction: load,
+      stagedRecoveryCount: 0,
+    });
+
+    expect(pkg.document.recoverAndOpen(pkg.path)).toMatchObject({
+      recoveredTransactionCount: 0,
+      glyphCount: 2,
+      sourceCount: 1,
+    });
+  });
+
+  it("blocks packages with unresolved staged transactions before opening", () => {
+    mkdirSync(join(pkg.path, ".shift-txn", "broken-transaction"), {
+      recursive: true,
+    });
+
+    expect(pkg.document.previewOpen(pkg.path)).toMatchObject({
+      status: blockedByRecovery,
+      primaryAction: block,
+      stagedRecoveryCount: 1,
+      unrecoverableRecoveryCount: 1,
+      issueCount: 1,
+    });
+    expect(() => pkg.reopen()).toThrow();
   });
 
   it("renames component bases by stable glyph id", () => {

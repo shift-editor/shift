@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRequire } from "module";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -44,6 +44,38 @@ describe("source document persistence", () => {
     });
   });
 
+  it("previews clean packages before opening editable data", () => {
+    expect(document.previewOpen(packagePath)).toMatchObject({
+      status: "ready",
+      primaryAction: "load",
+      stagedRecoveryCount: 0,
+    });
+
+    expect(document.recoverAndOpen(packagePath)).toMatchObject({
+      recoveredTransactionCount: 0,
+      glyphCount: 2,
+      sourceCount: 1,
+    });
+  });
+
+  it("blocks packages with unresolved staged transactions before opening", () => {
+    mkdirSync(join(packagePath, ".shift-txn", "broken-transaction"), {
+      recursive: true,
+    });
+
+    expect(document.previewOpen(packagePath)).toMatchObject({
+      status: "blockedByRecovery",
+      primaryAction: "block",
+      stagedRecoveryCount: 1,
+      unrecoverableRecoveryCount: 1,
+      issueCount: 1,
+    });
+    expect(() => {
+      const reopened = new ShiftSourceDocument();
+      reopened.open(packagePath);
+    }).toThrow();
+  });
+
   it("creates glyphs with narrow source-file impact", () => {
     const report = document.createGlyph("newGlyph", "0042", 500);
 
@@ -53,9 +85,7 @@ describe("source document persistence", () => {
       variableReadiness: "singleSource",
       missingLayerCount: 0,
     });
-    expect(report.impact.canonicalPaths).toEqual([
-      "glyphs/glyph_newGlyph.json",
-    ]);
+    expect(report.impact.canonicalPaths).toEqual(["glyphs/glyph_newGlyph.json"]);
   });
 
   it("renames component bases by stable glyph id", () => {
@@ -88,10 +118,7 @@ describe("source document persistence", () => {
 
   it("blocks save when a canonical file changed outside the document", () => {
     document.renameGlyph("glyph_A", "A.base");
-    writeFileSync(
-      join(packagePath, "glyphs", "glyph_A.json"),
-      '{"externally":"modified"}\n',
-    );
+    writeFileSync(join(packagePath, "glyphs", "glyph_A.json"), '{"externally":"modified"}\n');
 
     expect(document.previewSave(packagePath)).toMatchObject({
       status: "blockedByExternalChanges",

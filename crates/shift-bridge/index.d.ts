@@ -19,6 +19,18 @@ export type SourceReadiness =
   | "interpolationIncompatible"
   | "missingSourceLayersAndInterpolationIncompatible";
 
+export type OpenPreviewStatus =
+  | "ready"
+  | "readyWithCleanup"
+  | "recoveryRequired"
+  | "blockedByRecovery";
+
+export type OpenAction =
+  | "load"
+  | "cleanupThenLoad"
+  | "recoverThenLoad"
+  | "block";
+
 export type SavePreviewStatus =
   | "unchanged"
   | "ready"
@@ -79,6 +91,8 @@ export declare class Bridge {
 export declare class ShiftSourceDocument {
   constructor()
   initializeSaved(path: string): void
+  previewOpen(path: string): OpenPreview
+  recoverAndOpen(path: string): OpenResult
   open(path: string): void
   fontInfo(): FontInfo
   glyphs(): Array<GlyphEntry>
@@ -304,6 +318,26 @@ export interface NapiSource {
   location: NapiLocation
   layerId: LayerId
   filename?: string
+}
+
+export interface OpenPreview {
+  status: OpenPreviewStatus
+  primaryAction: OpenAction
+  stagedRecoveryCount: number
+  resumeRecoveryCount: number
+  cleanupRecoveryCount: number
+  blockedRecoveryCount: number
+  unrecoverableRecoveryCount: number
+  pendingPathCount: number
+  appliedPathCount: number
+  divergedPathCount: number
+  issueCount: number
+}
+
+export interface OpenResult {
+  recoveredTransactionCount: number
+  glyphCount: number
+  sourceCount: number
 }
 
 export interface SavePreview {

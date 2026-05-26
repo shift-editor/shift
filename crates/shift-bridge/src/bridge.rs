@@ -18,14 +18,15 @@ use shift_edit::{
   BooleanOp, ContourId, Font, Glyph, GlyphLayer, GlyphName, LayerId, PointId, SourceId,
 };
 use shift_source::{
-  load_package as load_shift_package, save_package as save_shift_package, ShiftAxis as PackageAxis,
-  ShiftAxisRole as PackageAxisRole, ShiftComponent as PackageComponent,
-  ShiftContour as PackageContour, ShiftCreateGlyph as CreateGlyph,
-  ShiftCreateGlyphSourceLayer as CreateGlyphLayer, ShiftCreateSource as CreateSource,
-  ShiftFontInfo as PackageFont, ShiftFontInfoUpdate as FontUpdate, ShiftGlyph as PackageGlyph,
-  ShiftGlyphLayer as PackageLayer, ShiftManifest as PackageManifest, ShiftPackage as Package,
-  ShiftPackageDiff as PackageDiff, ShiftPoint as PackagePoint, ShiftPointType as PackagePointType,
-  ShiftSource as PackageSource, ShiftSourceError,
+  load_package as load_shift_package, preview_package_load, recover_staged_commits,
+  save_package as save_shift_package, ShiftAxis as PackageAxis, ShiftAxisRole as PackageAxisRole,
+  ShiftComponent as PackageComponent, ShiftContour as PackageContour,
+  ShiftCreateGlyph as CreateGlyph, ShiftCreateGlyphSourceLayer as CreateGlyphLayer,
+  ShiftCreateSource as CreateSource, ShiftFontInfo as PackageFont,
+  ShiftFontInfoUpdate as FontUpdate, ShiftGlyph as PackageGlyph, ShiftGlyphLayer as PackageLayer,
+  ShiftManifest as PackageManifest, ShiftPackage as Package, ShiftPackageDiff as PackageDiff,
+  ShiftPackageLoadPreviewStatus, ShiftPackageLoadPrimaryAction, ShiftPoint as PackagePoint,
+  ShiftPointType as PackagePointType, ShiftSource as PackageSource, ShiftSourceError,
   ShiftVariableFontReadiness as VariableFontReadiness, ShiftWorkingSource,
   ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
   ShiftWorkingSourceSaveStatus, SHIFT_SOURCE_FORMAT, SHIFT_SOURCE_VERSION,
@@ -171,6 +172,30 @@ pub struct FontSourceEdit {
   #[napi(ts_type = "SourceReadiness")]
   pub variable_readiness: String,
   pub missing_layer_count: u32,
+}
+
+#[napi(object)]
+pub struct OpenPreview {
+  #[napi(ts_type = "OpenPreviewStatus")]
+  pub status: String,
+  #[napi(ts_type = "OpenAction")]
+  pub primary_action: String,
+  pub staged_recovery_count: u32,
+  pub resume_recovery_count: u32,
+  pub cleanup_recovery_count: u32,
+  pub blocked_recovery_count: u32,
+  pub unrecoverable_recovery_count: u32,
+  pub pending_path_count: u32,
+  pub applied_path_count: u32,
+  pub diverged_path_count: u32,
+  pub issue_count: u32,
+}
+
+#[napi(object)]
+pub struct OpenResult {
+  pub recovered_transaction_count: u32,
+  pub glyph_count: u32,
+  pub source_count: u32,
 }
 
 #[napi(object)]
@@ -495,6 +520,26 @@ fn source_variable_readiness(readiness: VariableFontReadiness) -> String {
   .to_string()
 }
 
+fn source_open_preview_status(status: ShiftPackageLoadPreviewStatus) -> String {
+  match status {
+    ShiftPackageLoadPreviewStatus::Ready => "ready",
+    ShiftPackageLoadPreviewStatus::ReadyWithCleanup => "readyWithCleanup",
+    ShiftPackageLoadPreviewStatus::RecoveryRequired => "recoveryRequired",
+    ShiftPackageLoadPreviewStatus::BlockedByRecovery => "blockedByRecovery",
+  }
+  .to_string()
+}
+
+fn source_open_primary_action(action: ShiftPackageLoadPrimaryAction) -> String {
+  match action {
+    ShiftPackageLoadPrimaryAction::Load => "load",
+    ShiftPackageLoadPrimaryAction::CleanupThenLoad => "cleanupThenLoad",
+    ShiftPackageLoadPrimaryAction::RecoverThenLoad => "recoverThenLoad",
+    ShiftPackageLoadPrimaryAction::Block => "block",
+  }
+  .to_string()
+}
+
 fn source_save_preview_status(status: ShiftWorkingSourceSavePreviewStatus) -> String {
   match status {
     ShiftWorkingSourceSavePreviewStatus::Unchanged => "unchanged",
@@ -648,6 +693,39 @@ impl ShiftSourceDocument {
     self.working_source =
       ShiftWorkingSource::open_saved(&path, package).map_err(map_source_error)?;
     Ok(())
+  }
+
+  #[napi]
+  pub fn preview_open(&self, path: String) -> Result<OpenPreview> {
+    let preview = preview_package_load(&path).map_err(map_source_error)?;
+    Ok(OpenPreview {
+      status: source_open_preview_status(preview.status),
+      primary_action: source_open_primary_action(preview.primary_action),
+      staged_recovery_count: preview.summary.staged_recovery_count as u32,
+      resume_recovery_count: preview.summary.resume_recovery_count as u32,
+      cleanup_recovery_count: preview.summary.cleanup_recovery_count as u32,
+      blocked_recovery_count: preview.summary.blocked_recovery_count as u32,
+      unrecoverable_recovery_count: preview.summary.unrecoverable_recovery_count as u32,
+      pending_path_count: preview.summary.pending_path_count as u32,
+      applied_path_count: preview.summary.applied_path_count as u32,
+      diverged_path_count: preview.summary.diverged_path_count as u32,
+      issue_count: preview.summary.issue_count as u32,
+    })
+  }
+
+  #[napi]
+  pub fn recover_and_open(&mut self, path: String) -> Result<OpenResult> {
+    let recovery = recover_staged_commits(&path).map_err(map_source_error)?;
+    let package = load_shift_package(&path).map_err(map_source_error)?;
+    let glyph_count = package.glyphs.len() as u32;
+    let source_count = package.sources.len() as u32;
+    self.working_source =
+      ShiftWorkingSource::open_saved(&path, package).map_err(map_source_error)?;
+    Ok(OpenResult {
+      recovered_transaction_count: recovery.outcomes.len() as u32,
+      glyph_count,
+      source_count,
+    })
   }
 
   #[napi]

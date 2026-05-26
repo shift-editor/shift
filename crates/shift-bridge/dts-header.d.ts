@@ -19,6 +19,18 @@ export type SourceReadiness =
   | "interpolationIncompatible"
   | "missingSourceLayersAndInterpolationIncompatible";
 
+export type OpenPreviewStatus =
+  | "ready"
+  | "readyWithCleanup"
+  | "recoveryRequired"
+  | "blockedByRecovery";
+
+export type OpenAction =
+  | "load"
+  | "cleanupThenLoad"
+  | "recoverThenLoad"
+  | "block";
+
 export type SavePreviewStatus =
   | "unchanged"
   | "ready"

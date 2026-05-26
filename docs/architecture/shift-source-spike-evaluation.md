@@ -137,7 +137,7 @@ headless app-facing test crosses N-API/TS and proves the renderer boundary shape
 
 | Operation group | Current evidence | Gap before alpha decision |
 | --- | --- | --- |
-| Package trust | Rust tests cover pending, partial, applied, diverged, invalid, and cleanup-only staged commits plus recovery plans. | Bridge/app open path still needs typed recovery actions and a headless test that refuses uncertain staged state before exposing editable data. |
+| Package trust | Rust tests cover pending, partial, applied, diverged, invalid, and cleanup-only staged commits plus recovery plans. Bridge tests cover clean open preview and unresolved staged-transaction blocking before editable data loads. | Bridge/app open path still needs a recoverable staged-transaction test, not only an unrecoverable blocker. |
 | Font identity | Rust tests cover narrow font-info impact, no-op revisions, invalid values, staged payloads, save/reopen. Bridge tests cover edit/save/reopen. | Expand bridge operation beyond family name/UPM to the actual font-info fields used by the dialog. |
 | Axis authoring | Rust tests cover create/update/delete, app projections, referenced-axis delete previews, invalid updates. | No bridge/app evidence. Need semantic axis commands named around user/construction axes and tests for deleting axes used by sources/mappings/components. |
 | Axis mapping authoring | Rust tests cover first-class file roundtrip, one/multi-axis mapping, duplicate samples, implicit-chain rejection, mapped-source diagnostics. | No bridge/app evidence. Need a headless “edit mapping -> mapped source rows change” test, with TS doing no interpolation. |
@@ -192,8 +192,8 @@ headless app-facing test crosses N-API/TS and proves the renderer boundary shape
 The next code should follow this order because each item unlocks a real editor
 journey while protecting the source graph:
 
-1. **Bridge load/recovery contract:** expose clean/recovered/blocked open results
-   from the source package, with headless tests for partial staged commits.
+1. **Bridge load/recovery contract:** extend clean/blocked open preview evidence
+   with a recoverable partial staged commit test that opens only after recovery.
 2. **Glyph delete strategy bridge flow:** preview base glyph delete, choose
    remove/relink strategy, and assert dependent components change by stable ID.
 3. **Source panel worklist bridge flow:** add a source, fetch scoped missing-layer
