@@ -6190,6 +6190,18 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(full_preflight.missing_capabilities, Vec::new());
     assert_eq!(full_preflight.diagnostics, Vec::new());
 
+    let varc_target = ShiftComponentLoweringTarget::varc_components();
+    assert_eq!(varc_target, full_target);
+    let varc_preflight = working_source.component_lowering_preflight(&varc_target);
+    assert_eq!(
+        varc_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::Ready
+    );
+    assert_eq!(varc_preflight.supported_component_count, 4);
+    assert_eq!(varc_preflight.unsupported_component_count, 0);
+    assert_eq!(varc_preflight.missing_capabilities, Vec::new());
+    assert_eq!(varc_preflight.diagnostics, Vec::new());
+
     let static_location_preflight = working_source
         .component_lowering_preflight_at_location(
             &ShiftComponentLoweringTarget::plain_components(),

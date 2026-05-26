@@ -1225,6 +1225,15 @@ impl ShiftComponentLoweringTarget {
         Self::new(Vec::new())
     }
 
+    /// A target that can preserve VARC-style variable component semantics.
+    ///
+    /// This is currently the same capability set as Shift's full authored
+    /// component semantics: conditions, sparse variable locations, variable
+    /// decomposed transforms, and reset-vs-inherit axis behavior.
+    pub fn varc_components() -> Self {
+        Self::all_shift_component_semantics()
+    }
+
     /// A backend target that can preserve every Shift component authoring
     /// semantic represented by `ShiftComponentLoweringCapability`.
     pub fn all_shift_component_semantics() -> Self {

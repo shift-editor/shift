@@ -599,6 +599,11 @@ format exploration:
   solve variable components." A static export path can still choose to lower
   active variable or conditional recipes first, then hand the lowered static
   result to a plain-component target.
+  `ShiftComponentLoweringTarget::varc_components()` is the named target for
+  preserving VARC-style component semantics: conditions, sparse component axis
+  locations, variable decomposed transforms, and reset-vs-inherit axis behavior.
+  This keeps the app/export code from manually assembling the capability set
+  every time it asks whether authored variable components can be preserved.
   Static-instance preflight can pass a concrete location; active conditions are
   resolved away before capability comparison, while inactive conditional
   components are skipped and counted separately with stable IDs, required
