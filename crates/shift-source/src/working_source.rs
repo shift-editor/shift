@@ -277,6 +277,7 @@ pub struct ShiftSourceLayerCoverage {
     pub layer_count: usize,
     pub missing_layer_count: usize,
     pub interpolation_issue_count: usize,
+    pub interpolation_incompatible_glyph_count: usize,
     pub interpolation_issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
     pub complete: bool,
     pub interpolation_compatible: bool,
@@ -1427,6 +1428,11 @@ impl ShiftWorkingSource {
                 let interpolation_issue_kind_counts = interpolation_issue_kind_counts(
                     interpolation_issues.iter().map(|issue| issue.issue.kind),
                 );
+                let interpolation_incompatible_glyph_count = interpolation_issues
+                    .iter()
+                    .map(|issue| issue.glyph_id.as_str())
+                    .collect::<BTreeSet<_>>()
+                    .len();
 
                 ShiftSourceLayerCoverage {
                     source_id: source.id.clone(),
@@ -1435,6 +1441,7 @@ impl ShiftWorkingSource {
                     layer_count: present_layers.len(),
                     missing_layer_count: missing_layers.len(),
                     interpolation_issue_count: interpolation_issues.len(),
+                    interpolation_incompatible_glyph_count,
                     interpolation_issue_kind_counts,
                     complete: missing_layers.is_empty(),
                     interpolation_compatible: interpolation_issues.is_empty(),

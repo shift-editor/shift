@@ -10299,6 +10299,7 @@ fn working_source_reports_source_layer_coverage() {
     assert_eq!(coverage[0].glyph_count, 2);
     assert_eq!(coverage[0].layer_count, 2);
     assert_eq!(coverage[0].missing_layer_count, 0);
+    assert_eq!(coverage[0].interpolation_incompatible_glyph_count, 0);
     assert!(coverage[0].complete);
     assert!(coverage[0].interpolation_compatible);
     assert_eq!(coverage[1].source_id, "source_Bold");
@@ -10306,6 +10307,7 @@ fn working_source_reports_source_layer_coverage() {
     assert_eq!(coverage[1].glyph_count, 2);
     assert_eq!(coverage[1].layer_count, 1);
     assert_eq!(coverage[1].missing_layer_count, 1);
+    assert_eq!(coverage[1].interpolation_incompatible_glyph_count, 0);
     assert!(!coverage[1].complete);
     assert!(coverage[1].interpolation_compatible);
     assert_eq!(coverage[1].present_layers[0].glyph_id, "glyph_B");
@@ -10318,19 +10320,40 @@ fn working_source_reports_source_layer_coverage() {
 
 #[test]
 fn working_source_reports_source_interpolation_issues() {
+    let mut regular_layer = layer_with_line_contour(600.0);
+    regular_layer.components.push(ShiftComponent {
+        id: "component_stem".to_string(),
+        base_glyph_id: "glyph_stem".to_string(),
+        base_glyph_name: "stem".to_string(),
+        transform: DecomposedTransform::identity(),
+        location: BTreeMap::new(),
+        axis_inheritance: ShiftAxisInheritance::InheritParent,
+        variation_sources: Vec::new(),
+        condition: None,
+    });
     let mut package = package_with_axes(
         vec![weight_axis()],
-        vec![ShiftGlyph {
-            id: "glyph_A".to_string(),
-            name: "A".to_string(),
-            unicodes: Vec::new(),
-            local_axes: Vec::new(),
-            variation_sources: Vec::new(),
-            layers: BTreeMap::from([
-                ("source_Regular".to_string(), layer_with_line_contour(600.0)),
-                ("source_Bold".to_string(), empty_layer(700.0)),
-            ]),
-        }],
+        vec![
+            ShiftGlyph {
+                id: "glyph_A".to_string(),
+                name: "A".to_string(),
+                unicodes: Vec::new(),
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::from([
+                    ("source_Regular".to_string(), regular_layer),
+                    ("source_Bold".to_string(), empty_layer(700.0)),
+                ]),
+            },
+            ShiftGlyph {
+                id: "glyph_stem".to_string(),
+                name: "stem".to_string(),
+                unicodes: Vec::new(),
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::new(),
+            },
+        ],
     );
     package.sources.push(ShiftSource {
         id: "source_Bold".to_string(),
@@ -10343,13 +10366,20 @@ fn working_source_reports_source_interpolation_issues() {
 
     assert_eq!(coverage[0].source_id, "source_Regular");
     assert!(!coverage[0].interpolation_compatible);
-    assert_eq!(coverage[0].interpolation_issue_count, 1);
+    assert_eq!(coverage[0].interpolation_issue_count, 2);
+    assert_eq!(coverage[0].interpolation_incompatible_glyph_count, 1);
     assert_eq!(
         coverage[0].interpolation_issue_kind_counts,
-        vec![ShiftInterpolationCompatibilityIssueKindCount {
-            kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
-            issue_count: 1,
-        }]
+        vec![
+            ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
+                issue_count: 1,
+            },
+            ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ComponentCountMismatch,
+                issue_count: 1,
+            },
+        ]
     );
     assert_eq!(coverage[0].interpolation_issues[0].glyph_id, "glyph_A");
     assert_eq!(
@@ -10366,13 +10396,20 @@ fn working_source_reports_source_interpolation_issues() {
     );
     assert_eq!(coverage[1].source_id, "source_Bold");
     assert!(!coverage[1].interpolation_compatible);
-    assert_eq!(coverage[1].interpolation_issue_count, 1);
+    assert_eq!(coverage[1].interpolation_issue_count, 2);
+    assert_eq!(coverage[1].interpolation_incompatible_glyph_count, 1);
     assert_eq!(
         coverage[1].interpolation_issue_kind_counts,
-        vec![ShiftInterpolationCompatibilityIssueKindCount {
-            kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
-            issue_count: 1,
-        }]
+        vec![
+            ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
+                issue_count: 1,
+            },
+            ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ComponentCountMismatch,
+                issue_count: 1,
+            },
+        ]
     );
     assert_eq!(coverage[1].interpolation_issues[0].glyph_name, "A");
     assert_eq!(

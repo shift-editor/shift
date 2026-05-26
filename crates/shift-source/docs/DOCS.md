@@ -521,10 +521,11 @@ format exploration:
 - **Source layer coverage:** source panels can ask which glyphs have a layer for
   each family source, which glyphs are missing that layer, and which
   interpolation compatibility issues involve that source. Coverage rows include
-  issue-kind counts, so the app can distinguish contour topology work from
-  component relinking or component-count fixes directly in the source list. This
-  makes "new master added but not populated yet" a first-class state instead of
-  a validation failure or a TypeScript-side scan.
+  affected-glyph counts and issue-kind counts, so the app can distinguish "one
+  glyph has several fixes" from "several glyphs are broken" and separate contour
+  topology work from component relinking or component-count fixes directly in
+  the source list. This makes "new master added but not populated yet" a
+  first-class state instead of a validation failure or a TypeScript-side scan.
 - **Source deletion preflight:** source deletes use the same preview data as the
   UI before constructing a candidate package. Default sources and referenced
   sources return semantic errors with reference counts, so the app can show a
