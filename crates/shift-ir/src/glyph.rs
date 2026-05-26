@@ -281,12 +281,25 @@ impl Glyph {
         &self.local_axes
     }
 
+    pub fn local_axis(&self, id: &AxisId) -> Option<&GlyphAxis> {
+        self.local_axes.iter().find(|axis| axis.id() == id)
+    }
+
+    pub fn local_axis_mut(&mut self, id: &AxisId) -> Option<&mut GlyphAxis> {
+        self.local_axes.iter_mut().find(|axis| axis.id() == id)
+    }
+
     pub fn set_local_axes(&mut self, local_axes: Vec<GlyphAxis>) {
         self.local_axes = local_axes;
     }
 
     pub fn add_local_axis(&mut self, axis: GlyphAxis) {
         self.local_axes.push(axis);
+    }
+
+    pub fn remove_local_axis(&mut self, id: &AxisId) -> Option<GlyphAxis> {
+        let index = self.local_axes.iter().position(|axis| axis.id() == id)?;
+        Some(self.local_axes.remove(index))
     }
 
     pub fn layers(&self) -> &HashMap<LayerId, Arc<GlyphLayer>> {
@@ -341,6 +354,10 @@ impl GlyphAxis {
         &self.name
     }
 
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
     pub fn minimum(&self) -> f64 {
         self.minimum
     }
@@ -372,17 +389,27 @@ mod tests {
     #[test]
     fn glyph_local_axes_are_editable() {
         let mut g = Glyph::new("stem");
-        let axis = GlyphAxis::new(
-            AxisId::from_stable("axis_stemWidth").unwrap(),
-            "Stem Width".to_string(),
-            20.0,
-            40.0,
-            80.0,
-        );
+        let axis_id = AxisId::from_stable("axis_stemWidth").unwrap();
+        let axis = GlyphAxis::new(axis_id.clone(), "Stem Width".to_string(), 20.0, 40.0, 80.0);
 
         g.add_local_axis(axis.clone());
 
         assert_eq!(g.local_axes(), &[axis]);
+        assert_eq!(g.local_axis(&axis_id).map(GlyphAxis::default), Some(40.0));
+
+        g.local_axis_mut(&axis_id)
+            .expect("local axis should be mutable")
+            .set_name("Stem Thickness".to_string());
+
+        assert_eq!(
+            g.local_axis(&axis_id).map(GlyphAxis::name),
+            Some("Stem Thickness")
+        );
+        assert_eq!(
+            g.remove_local_axis(&axis_id).map(|axis| axis.id),
+            Some(axis_id)
+        );
+        assert!(g.local_axes().is_empty());
     }
 
     #[test]
