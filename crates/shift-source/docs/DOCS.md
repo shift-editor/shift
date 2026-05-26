@@ -443,6 +443,13 @@ format exploration:
   resolved away before capability comparison, while inactive conditional
   components are skipped and counted separately with stable IDs, required
   capabilities, and the evaluated condition tree that made them inactive.
+  `component_static_export_preview()` turns the same concrete-location evidence
+  into app-facing dispositions: preserve an ordinary reference, skip an inactive
+  component, require Shift-side fallback before `fontc`, or block on an
+  unsupported variation resolver. Components that require fallback carry their
+  resolved axis values, resolved transform, variation source/resolution, and
+  missing authoring capabilities so the backend can choose decomposition,
+  materialized helper glyphs, or a future variable-component export path.
   Context-aware preflight can pass separate root font and current parent
   locations for recursive component checks. Conditions use the font location,
   matching component preview and keeping export capability diagnostics from
@@ -758,6 +765,10 @@ The format should make these app behaviors straightforward:
 - Static-instance export preflight that uses the same condition evaluation as
   preview, so unsupported inactive recipes do not block a concrete instance but
   are still counted as skipped for explainability.
+- Static export previews that let export UI distinguish "this component can stay
+  a normal reference" from "this component is visually resolvable but needs
+  backend fallback before `fontc`" from "this component cannot be resolved
+  without fixing the source graph or interpolation model."
 - Current-location previews that use the same condition evaluation rules as
   save/export preflight, with the same query-location validation as export
   preflight and axis-mapping previews.

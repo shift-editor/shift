@@ -743,6 +743,50 @@ pub struct ShiftComponentLoweringCapabilityCount {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftStaticComponentExportPreview {
+    pub total_component_count: usize,
+    pub preserve_reference_count: usize,
+    pub fallback_component_count: usize,
+    pub skipped_inactive_component_count: usize,
+    pub unsupported_component_count: usize,
+    pub components: Vec<ShiftStaticComponentExportComponent>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftStaticComponentExportComponent {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+    pub component_id: String,
+    pub base_glyph_id: String,
+    pub base_glyph_name: String,
+    pub disposition: ShiftStaticComponentExportDisposition,
+    pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<ShiftConditionEvaluation>,
+    pub values: BTreeMap<String, ShiftResolvedAxisValue>,
+    pub transform: DecomposedTransform,
+    pub variation_resolution: ShiftComponentVariationResolution,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variation_source: Option<ShiftComponentResolvedVariationSource>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ShiftStaticComponentExportDisposition {
+    PreserveReference,
+    RequiresFallback {
+        missing_capabilities: Vec<ShiftComponentLoweringCapability>,
+    },
+    SkipInactive,
+    Unsupported {
+        reason: ShiftComponentVariationUnsupportedReason,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftComponentResolvedLocation {
     pub glyph_id: String,
     pub glyph_name: String,
@@ -1959,6 +2003,125 @@ impl ShiftWorkingSource {
             missing_capabilities,
             missing_capability_counts,
             diagnostics,
+        })
+    }
+
+    pub fn component_static_export_preview(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<ShiftStaticComponentExportPreview> {
+        let context = ShiftComponentResolveContext::from_font_location(location.clone());
+        self.component_static_export_preview_with_context(glyph_id, layer_id, &context)
+    }
+
+    pub fn component_static_export_preview_with_context(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        context: &ShiftComponentResolveContext,
+    ) -> ShiftSourceResult<ShiftStaticComponentExportPreview> {
+        let glyph = self.glyph(glyph_id)?;
+        let layer =
+            glyph
+                .layers
+                .get(layer_id)
+                .ok_or_else(|| ShiftSourceError::MissingGlyphLayer {
+                    glyph_id: glyph_id.to_string(),
+                    layer_id: layer_id.to_string(),
+                })?;
+        self.validate_component_resolve_context("component static export preview", context)?;
+
+        let mut preserve_reference_count = 0;
+        let mut fallback_component_count = 0;
+        let mut skipped_inactive_component_count = 0;
+        let mut unsupported_component_count = 0;
+        let mut components = Vec::with_capacity(layer.components.len());
+
+        for component in &layer.components {
+            let condition = component
+                .condition
+                .as_ref()
+                .map(|condition| {
+                    self.evaluate_condition(&glyph.name, condition, &context.font_location)
+                })
+                .transpose()?;
+            let active = condition
+                .as_ref()
+                .map(ShiftConditionEvaluation::active)
+                .unwrap_or(true);
+            let base_glyph = self.glyph(&component.base_glyph_id)?;
+            let summary =
+                component_recipe_summary(&self.package, glyph, layer_id, component, base_glyph);
+            let required_capabilities = if active {
+                lowered_component_required_capabilities(&summary, condition.as_ref())
+            } else {
+                summary.required_capabilities.clone()
+            };
+            let base_values = self.resolve_component_axis_values(component, base_glyph, context);
+            let resolved = if active {
+                self.resolve_component_variation_state(
+                    &glyph.id,
+                    layer_id,
+                    component,
+                    base_values,
+                    component.transform,
+                    &context.parent_location,
+                )
+            } else {
+                ResolvedComponentVariationState {
+                    values: base_values,
+                    transform: component.transform,
+                    resolution: ShiftComponentVariationResolution::Inactive,
+                    source: None,
+                }
+            };
+
+            let disposition = if !active {
+                skipped_inactive_component_count += 1;
+                ShiftStaticComponentExportDisposition::SkipInactive
+            } else if let ShiftComponentVariationResolution::Unsupported { reason } =
+                &resolved.resolution
+            {
+                unsupported_component_count += 1;
+                ShiftStaticComponentExportDisposition::Unsupported {
+                    reason: reason.clone(),
+                }
+            } else if required_capabilities.is_empty() {
+                preserve_reference_count += 1;
+                ShiftStaticComponentExportDisposition::PreserveReference
+            } else {
+                fallback_component_count += 1;
+                ShiftStaticComponentExportDisposition::RequiresFallback {
+                    missing_capabilities: required_capabilities.clone(),
+                }
+            };
+
+            components.push(ShiftStaticComponentExportComponent {
+                glyph_id: glyph.id.clone(),
+                glyph_name: glyph.name.clone(),
+                layer_id: layer_id.to_string(),
+                component_id: component.id.clone(),
+                base_glyph_id: component.base_glyph_id.clone(),
+                base_glyph_name: base_glyph.name.clone(),
+                disposition,
+                required_capabilities,
+                condition,
+                values: resolved.values,
+                transform: resolved.transform,
+                variation_resolution: resolved.resolution,
+                variation_source: resolved.source,
+            });
+        }
+
+        Ok(ShiftStaticComponentExportPreview {
+            total_component_count: components.len(),
+            preserve_reference_count,
+            fallback_component_count,
+            skipped_inactive_component_count,
+            unsupported_component_count,
+            components,
         })
     }
 

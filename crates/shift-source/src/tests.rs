@@ -13,8 +13,9 @@ use crate::{
     ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
     ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate, ShiftWorkingSource,
-    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStatus,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
+    ShiftStaticComponentExportDisposition, ShiftWorkingSource, ShiftWorkingSourceSavePreviewStatus,
+    ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -5140,6 +5141,88 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         })
     );
 
+    let static_export_preview = working_source
+        .component_static_export_preview("glyph_A", "source_Regular", &BTreeMap::new())
+        .expect("static export preview should evaluate default component state");
+    assert_eq!(static_export_preview.total_component_count, 4);
+    assert_eq!(static_export_preview.preserve_reference_count, 1);
+    assert_eq!(static_export_preview.fallback_component_count, 2);
+    assert_eq!(static_export_preview.skipped_inactive_component_count, 1);
+    assert_eq!(static_export_preview.unsupported_component_count, 0);
+    assert_eq!(
+        static_export_preview
+            .components
+            .iter()
+            .map(|component| (
+                component.component_id.as_str(),
+                &component.disposition,
+                component.required_capabilities.as_slice()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                "component_plain",
+                &ShiftStaticComponentExportDisposition::PreserveReference,
+                &[][..],
+            ),
+            (
+                "component_conditional",
+                &ShiftStaticComponentExportDisposition::SkipInactive,
+                &[ShiftComponentLoweringCapability::Condition][..],
+            ),
+            (
+                "component_variable",
+                &ShiftStaticComponentExportDisposition::RequiresFallback {
+                    missing_capabilities: vec![ShiftComponentLoweringCapability::VariableLocation],
+                },
+                &[ShiftComponentLoweringCapability::VariableLocation][..],
+            ),
+            (
+                "component_variable_conditional",
+                &ShiftStaticComponentExportDisposition::RequiresFallback {
+                    missing_capabilities: vec![
+                        ShiftComponentLoweringCapability::VariableLocation,
+                        ShiftComponentLoweringCapability::VariableTransform,
+                        ShiftComponentLoweringCapability::AxisReset,
+                    ],
+                },
+                &[
+                    ShiftComponentLoweringCapability::VariableLocation,
+                    ShiftComponentLoweringCapability::VariableTransform,
+                    ShiftComponentLoweringCapability::AxisReset,
+                ][..],
+            ),
+        ]
+    );
+    assert_eq!(
+        static_export_preview.components[3].transform.translate_x,
+        0.0
+    );
+
+    let black_export_preview = working_source
+        .component_static_export_preview(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([
+                ("axis_wght".to_string(), 900.0),
+                ("axis_wdth".to_string(), 100.0),
+            ]),
+        )
+        .expect("static export preview should resolve exact component source");
+    assert_eq!(
+        black_export_preview.components[3].transform.translate_x,
+        12.0
+    );
+    assert_eq!(
+        black_export_preview.components[3].variation_resolution,
+        ShiftComponentVariationResolution::ExactSource {
+            source: crate::ShiftComponentResolvedVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+            },
+        }
+    );
+
     let narrow_location_preflight = working_source
         .component_lowering_preflight_at_location(
             &ShiftComponentLoweringTarget::plain_components(),
@@ -5193,6 +5276,29 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     );
     assert_eq!(narrow_location_preflight.diagnostics[0].condition, None);
 
+    let narrow_export_preview = working_source
+        .component_static_export_preview(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([
+                ("axis_wght".to_string(), 800.0),
+                ("axis_wdth".to_string(), 50.0),
+            ]),
+        )
+        .expect("static export preview should evaluate explicit component state");
+    assert_eq!(narrow_export_preview.preserve_reference_count, 2);
+    assert_eq!(narrow_export_preview.fallback_component_count, 1);
+    assert_eq!(narrow_export_preview.skipped_inactive_component_count, 1);
+    assert_eq!(narrow_export_preview.unsupported_component_count, 0);
+    assert_eq!(
+        narrow_export_preview.components[1].disposition,
+        ShiftStaticComponentExportDisposition::PreserveReference
+    );
+    assert_eq!(
+        narrow_export_preview.components[3].disposition,
+        ShiftStaticComponentExportDisposition::SkipInactive
+    );
+
     let contextual_preflight = working_source
         .component_lowering_preflight_with_context(
             &ShiftComponentLoweringTarget::plain_components(),
@@ -5235,6 +5341,19 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         missing_axis_err,
         ShiftSourceError::MissingQueryLocationAxis { context, axis_id }
             if context == "component lowering preflight" && axis_id == "axis_missing"
+    ));
+    let preview_missing_axis_err = working_source
+        .component_static_export_preview(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_missing".to_string(), 1.0)]),
+        )
+        .expect_err("static export preview should reject missing axes");
+    assert!(matches!(
+        preview_missing_axis_err,
+        ShiftSourceError::MissingQueryLocationAxis { context, axis_id }
+            if context == "component static export preview font location"
+                && axis_id == "axis_missing"
     ));
 
     let out_of_range_err = working_source
