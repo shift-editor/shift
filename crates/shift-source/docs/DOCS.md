@@ -532,6 +532,12 @@ format exploration:
   resolved axis-value provenance. Component inspectors can render inherit,
   reset, default, local-default, and override badges without scanning every axis
   value in TypeScript, and can drop stale async query results after a newer edit.
+- **Component activity reports:** renderers, inspectors, and scrub previews can
+  ask the cheaper "which components participate at this location?" question
+  without resolving every variable component source. The report wraps evaluated
+  condition rows with the working-source revision and compact active, inactive,
+  conditional, and unconditional counts, so the app can update badges and reject
+  stale async results without duplicating condition evaluation in TypeScript.
 - **Component recipe reports:** inspectors, delete dialogs, and export panels
   can ask for location-independent component recipe rows plus compact counts for
   static, conditional, variable, conditional-variable, capability, variation

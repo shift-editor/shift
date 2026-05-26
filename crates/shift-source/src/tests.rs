@@ -1,7 +1,7 @@
 use crate::package::*;
 use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingUpdate,
-    ShiftComponentActivity, ShiftComponentLoweringCapability,
+    ShiftComponentActivity, ShiftComponentActivitySummary, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
     ShiftComponentRecipeKind, ShiftComponentRecipeReportSummary, ShiftComponentRecipeSummary,
@@ -3267,6 +3267,25 @@ fn working_source_component_activity_supports_boolean_condition_trees() {
 
     assert!(medium[0].active);
     assert!(!black[0].active);
+    let medium_report = working_source
+        .component_activity_report(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 700.0)]),
+        )
+        .expect("component activity report should evaluate boolean condition");
+    assert_eq!(medium_report.revision, 0);
+    assert_eq!(medium_report.components, medium);
+    assert_eq!(
+        medium_report.summary,
+        ShiftComponentActivitySummary {
+            total_component_count: 1,
+            active_component_count: 1,
+            inactive_component_count: 0,
+            conditional_component_count: 1,
+            unconditional_component_count: 0,
+        }
+    );
     assert_eq!(
         black[0].condition,
         Some(ShiftConditionEvaluation::And {

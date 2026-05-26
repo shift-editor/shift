@@ -806,6 +806,24 @@ pub struct ShiftComponentActivity {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentActivityReport {
+    pub revision: u64,
+    pub summary: ShiftComponentActivitySummary,
+    pub components: Vec<ShiftComponentActivity>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentActivitySummary {
+    pub total_component_count: usize,
+    pub active_component_count: usize,
+    pub inactive_component_count: usize,
+    pub conditional_component_count: usize,
+    pub unconditional_component_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ShiftConditionEvaluation {
     AxisRange {
@@ -2483,6 +2501,20 @@ impl ShiftWorkingSource {
                 })
             })
             .collect()
+    }
+
+    pub fn component_activity_report(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<ShiftComponentActivityReport> {
+        let components = self.component_activity(glyph_id, layer_id, location)?;
+        Ok(ShiftComponentActivityReport {
+            revision: self.revision,
+            summary: component_activity_summary(&components),
+            components,
+        })
     }
 
     pub fn component_recipes(
@@ -5748,6 +5780,34 @@ fn variable_font_export_summary(
         unsupported_component_glyph_count: component_preflight.affected_glyph_count,
         skipped_inactive_component_count: component_preflight.skipped_inactive_component_count,
         missing_component_capability_count: component_preflight.missing_capabilities.len(),
+    }
+}
+
+fn component_activity_summary(
+    components: &[ShiftComponentActivity],
+) -> ShiftComponentActivitySummary {
+    let mut active_component_count = 0;
+    let mut inactive_component_count = 0;
+    let mut conditional_component_count = 0;
+
+    for component in components {
+        if component.active {
+            active_component_count += 1;
+        } else {
+            inactive_component_count += 1;
+        }
+
+        if component.condition.is_some() {
+            conditional_component_count += 1;
+        }
+    }
+
+    ShiftComponentActivitySummary {
+        total_component_count: components.len(),
+        active_component_count,
+        inactive_component_count,
+        conditional_component_count,
+        unconditional_component_count: components.len() - conditional_component_count,
     }
 }
 
