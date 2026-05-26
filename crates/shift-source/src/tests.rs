@@ -6553,6 +6553,15 @@ fn working_source_creates_component_variation_source_with_generated_id_and_narro
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "componentSource_Black_component_1");
     assert_eq!(report.source.source_name, "Black component.1");
+    assert_eq!(report.component_variation_sources.len(), 2);
+    assert_eq!(
+        report.component_variation_sources[0].source_id,
+        "componentSource_Black_component"
+    );
+    assert_eq!(
+        report.component_variation_sources[1].source_id,
+        "componentSource_Black_component_1"
+    );
     assert_eq!(report.component_recipe.glyph_id, "glyph_A");
     assert_eq!(report.component_recipe.component_id, "component_7_create");
     assert_eq!(report.component_recipe.variation_source_count, 2);
@@ -6643,6 +6652,11 @@ fn working_source_create_component_variation_source_uses_fallback_for_blank_name
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "componentSource_New_Component_Source");
     assert_eq!(report.source.source_name, "New Component Source");
+    assert_eq!(report.component_variation_sources.len(), 1);
+    assert_eq!(
+        report.component_variation_sources[0].source_id,
+        "componentSource_New_Component_Source"
+    );
 }
 
 #[test]
@@ -6750,6 +6764,7 @@ fn working_source_deletes_component_variation_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "componentSource_black");
     assert_eq!(report.source_name, "Black component");
+    assert!(report.component_variation_sources.is_empty());
     assert_eq!(report.component_recipe.glyph_id, "glyph_A");
     assert_eq!(report.component_recipe.component_id, "component_7_delete");
     assert_eq!(report.component_recipe.variation_source_count, 0);
@@ -6906,6 +6921,11 @@ fn working_source_updates_component_variation_source_with_narrow_impact() {
 
     assert_eq!(report.revision, 1);
     assert_eq!(report.source.source_name, "Bold component");
+    assert_eq!(report.component_variation_sources.len(), 1);
+    assert_eq!(
+        report.component_variation_sources[0].source_name,
+        "Bold component"
+    );
     assert_eq!(report.component_recipe.glyph_id, "glyph_A");
     assert_eq!(report.component_recipe.component_id, "component_7_update");
     assert_eq!(report.component_recipe.variation_source_count, 1);
@@ -7023,6 +7043,11 @@ fn working_source_component_variation_source_no_op_does_not_advance_revision() {
         .expect("unchanged component variation source update should succeed");
 
     assert_eq!(report.revision, 0);
+    assert_eq!(report.component_variation_sources.len(), 1);
+    assert_eq!(
+        report.component_variation_sources[0].source_name,
+        "Black component"
+    );
     assert!(report.diff.changes.is_empty());
     assert!(report.diff.impact.package_relative_paths().is_empty());
     assert_eq!(working_source.revision(), 0);

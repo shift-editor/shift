@@ -751,6 +751,7 @@ pub struct ShiftCreateComponentVariationSourceReport {
     pub component_id: String,
     pub source_id: String,
     pub source: ShiftComponentVariationSourceLocation,
+    pub component_variation_sources: Vec<ShiftComponentVariationSourceLocation>,
     pub component_recipe: ShiftComponentRecipeSummary,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -775,6 +776,7 @@ pub struct ShiftUpdateComponentVariationSourceReport {
     pub component_id: String,
     pub source_id: String,
     pub source: ShiftComponentVariationSourceLocation,
+    pub component_variation_sources: Vec<ShiftComponentVariationSourceLocation>,
     pub component_recipe: ShiftComponentRecipeSummary,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -789,6 +791,7 @@ pub struct ShiftDeleteComponentVariationSourceReport {
     pub component_id: String,
     pub source_id: String,
     pub source_name: String,
+    pub component_variation_sources: Vec<ShiftComponentVariationSourceLocation>,
     pub component_recipe: ShiftComponentRecipeSummary,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -4539,10 +4542,12 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
 
-        let source = self
-            .component_variation_source_locations(glyph_id, layer_id, component_id)?
-            .into_iter()
+        let component_variation_sources =
+            self.component_variation_source_locations(glyph_id, layer_id, component_id)?;
+        let source = component_variation_sources
+            .iter()
             .find(|source| source.source_id == source_id)
+            .cloned()
             .ok_or_else(|| ShiftSourceError::MissingComponentVariationSource {
                 glyph_id: glyph_id.to_string(),
                 layer_id: layer_id.to_string(),
@@ -4558,6 +4563,7 @@ impl ShiftWorkingSource {
             component_id: component_id.to_string(),
             source_id,
             source,
+            component_variation_sources,
             component_recipe,
             diff,
             revision: self.revision,
@@ -4621,10 +4627,12 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
 
-        let source = self
-            .component_variation_source_locations(glyph_id, layer_id, component_id)?
-            .into_iter()
+        let component_variation_sources =
+            self.component_variation_source_locations(glyph_id, layer_id, component_id)?;
+        let source = component_variation_sources
+            .iter()
             .find(|source| source.source_id == source_id)
+            .cloned()
             .ok_or_else(|| ShiftSourceError::MissingComponentVariationSource {
                 glyph_id: glyph_id.to_string(),
                 layer_id: layer_id.to_string(),
@@ -4640,6 +4648,7 @@ impl ShiftWorkingSource {
             component_id: component_id.to_string(),
             source_id: source_id.to_string(),
             source,
+            component_variation_sources,
             component_recipe,
             diff,
             revision: self.revision,
@@ -4698,6 +4707,8 @@ impl ShiftWorkingSource {
         if !diff.changes.is_empty() {
             self.revision += 1;
         }
+        let component_variation_sources =
+            self.component_variation_source_locations(glyph_id, layer_id, component_id)?;
         let component_recipe = self.component_recipe(glyph_id, layer_id, component_id)?;
 
         Ok(ShiftDeleteComponentVariationSourceReport {
@@ -4707,6 +4718,7 @@ impl ShiftWorkingSource {
             component_id: component_id.to_string(),
             source_id: source.id,
             source_name: source.name,
+            component_variation_sources,
             component_recipe,
             diff,
             revision: self.revision,

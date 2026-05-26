@@ -586,10 +586,11 @@ format exploration:
   parent locations, resolved component-axis values, transform provenance, and
   stable source IDs. This keeps source editing UI out of package JSON while
   still showing exactly what will be saved in the owner glyph file. Component
-  variation source create/update/delete reports return the updated component
-  recipe summary as well, so component inspectors and export-capability badges
-  can update from the command response without re-parsing the glyph or making a
-  second recipe query. The component variation source location report includes
+  variation source create/update/delete reports return the updated completed
+  source list and component recipe summary as well, so component inspectors and
+  export-capability badges can update from the command response without
+  re-parsing the glyph or making second source-list or recipe queries. The
+  component variation source location report includes
   the working-source revision and compact counts for parent-location
   provenance, resolved component-axis provenance, and base-vs-source transform
   provenance, so component inspectors can render status badges and ignore stale
