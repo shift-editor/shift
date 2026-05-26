@@ -306,7 +306,9 @@ Current writer behavior:
   semantic source changes by stable ID.
 - `plan_write_impact()` maps semantic package changes to relative canonical and
   derived paths. This is the bridge from source-format semantics to a future
-  crash-safe staged writer.
+  crash-safe staged writer. For example, font metadata/global metric edits
+  produce `UpdateFontInfo` and touch only `font.json`; they do not invalidate
+  glyph dependency, interpolation compatibility, or source coverage caches.
 - `fingerprint_package()` and `fingerprint_relative_paths()` provide stable
   file fingerprints for conflict checks, stale-cache checks, and save
   diagnostics.
@@ -1220,7 +1222,10 @@ The save path does not need to guess from raw files.
 The staged writer turns this impact plan into verified payloads, backups,
 validation, and recovery markers. The package model gives that writer the
 narrow write set and a prepared commit object, so save can be incremental
-without inferring intent from raw files.
+without inferring intent from raw files. Font-info edits are deliberately tested
+at both levels: staging writes only a verified `font.json` payload without
+mutating live files, and `ShiftWorkingSource::save()` persists that same narrow
+payload before marking the in-memory working source clean.
 
 ## Prepared Commits
 

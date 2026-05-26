@@ -1531,6 +1531,67 @@ fn staged_manifest_default_source_change_refreshes_compatibility_payload() {
 }
 
 #[test]
+fn staged_font_info_edit_writes_only_font_payload_without_live_mutation() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+    let live_before =
+        fs::read_to_string(package_path.join("font.json")).expect("font info should be readable");
+
+    let mut after = before.clone();
+    after.font = ShiftFontInfo {
+        metadata: FontMetadata::with_names("Edited Sans".to_string(), "Text".to_string()),
+        metrics: FontMetrics {
+            units_per_em: 2048.0,
+            ascender: 1536.0,
+            descender: -512.0,
+            ..FontMetrics::default()
+        },
+    };
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+
+    assert_eq!(
+        diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateFontInfo],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["font.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: Vec::new(),
+            },
+        }
+    );
+
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+
+    assert_eq!(prepared.impacted_paths, vec!["font.json".to_string()]);
+    assert_eq!(staged.payload_paths, vec!["font.json".to_string()]);
+
+    let staged_font_json = fs::read_to_string(staged.transaction_path.join("payloads/font.json"))
+        .expect("staged font info should be readable");
+    let staged_font: ShiftFontInfo =
+        serde_json::from_str(&staged_font_json).expect("staged font info should deserialize");
+    let live_after =
+        fs::read_to_string(package_path.join("font.json")).expect("font info should be readable");
+
+    assert_eq!(
+        staged_font.metadata.family_name.as_deref(),
+        Some("Edited Sans")
+    );
+    assert_eq!(staged_font.metadata.style_name.as_deref(), Some("Text"));
+    assert_eq!(staged_font.metrics.units_per_em, 2048.0);
+    assert_eq!(staged_font.metrics.ascender, 1536.0);
+    assert_eq!(staged_font.metrics.descender, -512.0);
+    assert_eq!(live_after, live_before);
+}
+
+#[test]
 fn staged_commit_rewrites_payloads_and_marker_through_temp_siblings() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
@@ -4584,6 +4645,63 @@ fn working_source_save_stages_applies_and_marks_saved() {
             .map(|glyph| glyph.name.as_str()),
         Some("RenamedBase")
     );
+    assert!(
+        inspect_staged_commits(&package_path)
+            .expect("staged commits should inspect")
+            .is_empty(),
+        "successful save should not leave an unresolved transaction"
+    );
+}
+
+#[test]
+fn working_source_save_persists_font_info_with_narrow_summary() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    let update = ShiftFontInfo {
+        metadata: FontMetadata::with_names("Edited Sans".to_string(), "Text".to_string()),
+        metrics: FontMetrics {
+            units_per_em: 2048.0,
+            ascender: 1536.0,
+            descender: -512.0,
+            ..FontMetrics::default()
+        },
+    };
+    working_source
+        .update_font_info(ShiftFontInfoUpdate {
+            font: update.clone(),
+        })
+        .expect("font info update should succeed");
+
+    let report = working_source
+        .save(&package_path)
+        .expect("working source should save");
+    let loaded = load_package(&package_path).expect("saved package should load");
+
+    assert_eq!(report.status, ShiftWorkingSourceSaveStatus::Saved);
+    assert_eq!(report.summary.change_count, 1);
+    assert_eq!(report.summary.impacted_path_count, 1);
+    assert_eq!(report.summary.canonical_path_count, 1);
+    assert_eq!(report.summary.removed_canonical_path_count, 0);
+    assert_eq!(report.summary.derived_path_count, 0);
+    assert_eq!(report.summary.conflict_count, 0);
+    assert_eq!(report.summary.staged_recovery_count, 0);
+    assert_eq!(report.summary.write_file_count, 1);
+    assert_eq!(
+        report
+            .staged
+            .as_ref()
+            .expect("font info save should stage")
+            .payload_paths,
+        vec!["font.json".to_string()]
+    );
+    assert_eq!(report.revision, 0);
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(loaded.font, update);
     assert!(
         inspect_staged_commits(&package_path)
             .expect("staged commits should inspect")
