@@ -563,7 +563,10 @@ format exploration:
   `missingSourceLayersAndInterpolationIncompatible`. The report reuses the
   source coverage summary as evidence, so the UI can enable variable operations
   from a stable Rust-owned status while drilling into the existing source rows
-  and interpolation issues for details.
+  and interpolation issues for details. Source coverage reports include this
+  readiness directly, so mutation reports that already return coverage can
+  refresh variable-operation affordances without a follow-up query or
+  TypeScript-side status derivation.
 - **Coverage-affecting mutation reports:** source create/update/delete, glyph
   create/delete, and glyph source layer create/delete reports include the same
   source coverage report after the mutation. A source sidebar or export-readiness

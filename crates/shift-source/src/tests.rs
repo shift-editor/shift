@@ -7080,6 +7080,10 @@ fn working_source_deletes_leaf_glyph_with_narrow_impact() {
     assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
     assert!(!report.source_coverage.summary.ready);
     assert_eq!(
+        report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::SingleSource
+    );
+    assert_eq!(
         report.diff,
         ShiftPackageDiff {
             changes: vec![ShiftPackageChange::DeleteGlyph {
@@ -7150,6 +7154,10 @@ fn working_source_deletes_glyph_and_removes_component_references() {
     assert_eq!(report.removed_component_recipes.len(), 1);
     assert_eq!(report.source_coverage.summary.glyph_count, 1);
     assert!(report.source_coverage.summary.ready);
+    assert_eq!(
+        report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::SingleSource
+    );
     let removed_recipe = &report.removed_component_recipes[0];
     assert_eq!(removed_recipe.glyph_id, "glyph_Aacute");
     assert_eq!(removed_recipe.glyph_name, "Aacute");
@@ -7327,6 +7335,10 @@ fn working_source_deletes_glyph_and_relinks_component_references() {
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(report.source_coverage.summary.missing_layer_count, 1);
     assert!(!report.source_coverage.summary.ready);
+    assert_eq!(
+        report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::SingleSource
+    );
     let relinked_recipe = &report.relinked_component_recipes[0];
     assert_eq!(relinked_recipe.glyph_id, "glyph_Aacute");
     assert_eq!(relinked_recipe.component_id, "component_25");
@@ -10561,6 +10573,10 @@ fn working_source_reports_source_layer_coverage() {
     let report = working_source.source_layer_coverage_report();
     assert_eq!(report.sources, coverage);
     assert_eq!(report.summary, summary);
+    assert_eq!(
+        report.variable_readiness,
+        ShiftVariableFontReadiness::MissingSourceLayers
+    );
 
     let variable_readiness = working_source.variable_font_readiness_report();
     assert_eq!(
@@ -10756,6 +10772,10 @@ fn working_source_reports_source_interpolation_issues() {
     let report = working_source.source_layer_coverage_report();
     assert_eq!(report.sources, coverage);
     assert_eq!(report.summary, summary);
+    assert_eq!(
+        report.variable_readiness,
+        ShiftVariableFontReadiness::InterpolationIncompatible
+    );
 
     let variable_readiness = working_source.variable_font_readiness_report();
     assert_eq!(
@@ -10835,6 +10855,10 @@ fn working_source_creates_glyph_with_generated_name_id_and_default_layer() {
     assert_eq!(report.source_coverage.summary.glyph_count, 2);
     assert_eq!(report.source_coverage.summary.source_count, 1);
     assert!(report.source_coverage.summary.ready);
+    assert_eq!(
+        report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::SingleSource
+    );
     assert_eq!(
         report.diff,
         ShiftPackageDiff {

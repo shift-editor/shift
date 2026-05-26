@@ -346,6 +346,7 @@ pub struct ShiftSourceLayerCoverageSummary {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSourceLayerCoverageReport {
     pub summary: ShiftSourceLayerCoverageSummary,
+    pub variable_readiness: ShiftVariableFontReadiness,
     pub sources: Vec<ShiftSourceLayerCoverage>,
 }
 
@@ -1517,12 +1518,29 @@ impl ShiftWorkingSource {
     pub fn source_layer_coverage_report(&self) -> ShiftSourceLayerCoverageReport {
         let sources = self.build_source_layer_coverage();
         let summary = Self::summarize_source_layer_coverage(&sources);
-        ShiftSourceLayerCoverageReport { summary, sources }
+        let variable_readiness = Self::variable_font_readiness_from_coverage_summary(&summary);
+        ShiftSourceLayerCoverageReport {
+            summary,
+            variable_readiness,
+            sources,
+        }
     }
 
     pub fn variable_font_readiness_report(&self) -> ShiftVariableFontReadinessReport {
         let source_coverage_summary = self.source_layer_coverage_summary();
-        let readiness = if source_coverage_summary.source_count < 2 {
+        let readiness =
+            Self::variable_font_readiness_from_coverage_summary(&source_coverage_summary);
+
+        ShiftVariableFontReadinessReport {
+            readiness,
+            source_coverage_summary,
+        }
+    }
+
+    fn variable_font_readiness_from_coverage_summary(
+        source_coverage_summary: &ShiftSourceLayerCoverageSummary,
+    ) -> ShiftVariableFontReadiness {
+        if source_coverage_summary.source_count < 2 {
             ShiftVariableFontReadiness::SingleSource
         } else {
             match (
@@ -1536,11 +1554,6 @@ impl ShiftWorkingSource {
                     ShiftVariableFontReadiness::MissingSourceLayersAndInterpolationIncompatible
                 }
             }
-        };
-
-        ShiftVariableFontReadinessReport {
-            readiness,
-            source_coverage_summary,
         }
     }
 
