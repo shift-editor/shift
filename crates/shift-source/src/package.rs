@@ -999,6 +999,11 @@ impl ShiftPackage {
             .collect();
         for glyph in &self.glyphs {
             validate_identifier(format!("glyph '{}'", glyph.name), &glyph.id)?;
+            if glyph.name.trim().is_empty() {
+                return Err(ShiftSourceError::InvalidGlyphName {
+                    glyph_name: glyph.name.clone(),
+                });
+            }
             if !glyph_ids.insert(glyph.id.as_str()) {
                 return Err(ShiftSourceError::DuplicateGlyphId {
                     glyph_id: glyph.id.clone(),

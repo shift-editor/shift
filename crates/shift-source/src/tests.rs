@@ -2784,6 +2784,32 @@ fn working_source_preview_rename_rejects_duplicate_and_missing_without_mutating(
 }
 
 #[test]
+fn working_source_rejects_blank_glyph_rename_without_mutating() {
+    let mut working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let error = working_source
+        .rename_glyph("glyph_A", "   ")
+        .expect_err("blank rename should fail validation");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidGlyphName { glyph_name } if glyph_name.is_empty()
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .expect("glyph should still exist")
+            .name,
+        "A"
+    );
+}
+
+#[test]
 fn working_source_component_queries_use_current_base_glyph_name_after_rename() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,
@@ -5728,6 +5754,27 @@ fn package_rejects_invalid_unicode_values() {
         error,
         ShiftSourceError::InvalidUnicode { glyph_name, value }
             if glyph_name == "A" && value == "not-hex"
+    ));
+}
+
+#[test]
+fn package_rejects_blank_glyph_names_before_ir_projection() {
+    let package = package_with_single_source(vec![ShiftGlyph {
+        id: "glyph_blank".to_string(),
+        name: "   ".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    }]);
+
+    let error = package
+        .validate()
+        .expect_err("blank glyph names should fail before IR conversion can panic");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidGlyphName { glyph_name } if glyph_name == "   "
     ));
 }
 

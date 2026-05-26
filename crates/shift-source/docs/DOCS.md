@@ -254,6 +254,10 @@ format exploration:
   stable IDs, can attach an initial default-source layer, validate the candidate
   package before swapping live state, and report a narrow `CreateGlyph` write
   impact.
+- **Glyph labels are app-safe:** glyph names are editable labels, but they must
+  not be blank after trimming. Semantic create/rename commands normalize UI
+  whitespace before validation so a direct grid edit cannot save source data
+  that later panics during IR projection.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any

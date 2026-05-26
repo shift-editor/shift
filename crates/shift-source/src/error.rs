@@ -199,6 +199,9 @@ pub enum ShiftSourceError {
     #[error("glyph '{glyph_name}' has invalid unicode value '{value}'")]
     InvalidUnicode { glyph_name: String, value: String },
 
+    #[error("invalid Shift glyph name '{glyph_name}'")]
+    InvalidGlyphName { glyph_name: String },
+
     #[error("duplicate Shift glyph id '{glyph_id}'")]
     DuplicateGlyphId { glyph_id: String },
 

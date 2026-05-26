@@ -1070,7 +1070,7 @@ impl ShiftWorkingSource {
         glyph_id: &str,
         new_name: impl Into<String>,
     ) -> ShiftSourceResult<ShiftRenameGlyphPreview> {
-        let new_name = new_name.into();
+        let new_name = new_name.into().trim().to_string();
         let glyph = self.glyph(glyph_id)?;
         if self
             .package
