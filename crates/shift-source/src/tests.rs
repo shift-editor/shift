@@ -7892,7 +7892,12 @@ fn working_source_rejects_referenced_source_delete_without_mutating() {
             name: "A".to_string(),
             unicodes: Vec::new(),
             local_axes: Vec::new(),
-            variation_sources: Vec::new(),
+            variation_sources: vec![ShiftGlyphSource {
+                id: "glyphSource_Bold".to_string(),
+                name: "Bold correction".to_string(),
+                layer_id: "source_Bold".to_string(),
+                location: BTreeMap::new(),
+            }],
             layers: BTreeMap::from([
                 ("source_Regular".to_string(), empty_layer(600.0)),
                 ("source_Bold".to_string(), empty_layer(700.0)),
@@ -7912,16 +7917,37 @@ fn working_source_rejects_referenced_source_delete_without_mutating() {
 
     assert!(matches!(
         error,
-        ShiftSourceError::MissingSourceLayer {
-            glyph_name,
+        ShiftSourceError::SourceHasReferences {
             source_id,
-        } if glyph_name == "A" && source_id == "source_Bold"
+            layer_use_count,
+            glyph_variation_source_use_count,
+        } if source_id == "source_Bold"
+            && layer_use_count == 1
+            && glyph_variation_source_use_count == 1
     ));
     assert_eq!(working_source.revision(), 0);
     assert!(working_source
         .source_locations()
         .iter()
         .any(|source| source.source_id == "source_Bold"));
+}
+
+#[test]
+fn working_source_rejects_default_source_delete_without_mutating() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let error = working_source
+        .delete_source("source_Regular")
+        .expect_err("default source delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::CannotDeleteDefaultSource { source_id } if source_id == "source_Regular"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(working_source.source_locations().len(), 1);
 }
 
 #[test]

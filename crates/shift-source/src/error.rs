@@ -162,6 +162,16 @@ pub enum ShiftSourceError {
     #[error("missing Shift source id '{source_id}'")]
     MissingSource { source_id: String },
 
+    #[error("cannot delete default Shift source id '{source_id}'")]
+    CannotDeleteDefaultSource { source_id: String },
+
+    #[error("cannot delete Shift source id '{source_id}' because {layer_use_count} glyph layers and {glyph_variation_source_use_count} glyph variation sources still reference it")]
+    SourceHasReferences {
+        source_id: String,
+        layer_use_count: usize,
+        glyph_variation_source_use_count: usize,
+    },
+
     #[error("Shift package must define at least one source")]
     EmptySources,
 

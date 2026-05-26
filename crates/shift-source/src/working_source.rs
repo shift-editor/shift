@@ -1719,6 +1719,20 @@ impl ShiftWorkingSource {
     }
 
     pub fn delete_source(&mut self, source_id: &str) -> ShiftSourceResult<ShiftDeleteSourceReport> {
+        let preview = self.preview_delete_source(source_id)?;
+        if preview.is_default_source {
+            return Err(ShiftSourceError::CannotDeleteDefaultSource {
+                source_id: source_id.to_string(),
+            });
+        }
+        if !preview.can_delete_without_cascade {
+            return Err(ShiftSourceError::SourceHasReferences {
+                source_id: source_id.to_string(),
+                layer_use_count: preview.layer_uses.len(),
+                glyph_variation_source_use_count: preview.glyph_variation_source_uses.len(),
+            });
+        }
+
         let before = self.package.clone();
         let mut next = before.clone();
         let source_index = next
@@ -1738,7 +1752,7 @@ impl ShiftWorkingSource {
         }
 
         Ok(ShiftDeleteSourceReport {
-            source_id: source.id,
+            source_id: preview.source_id,
             source_name: source.name,
             diff,
             revision: self.revision,

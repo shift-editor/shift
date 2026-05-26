@@ -398,6 +398,10 @@ format exploration:
   interpolation compatibility issues involve that source. This makes "new
   master added but not populated yet" a first-class state instead of a
   validation failure or a TypeScript-side scan.
+- **Source deletion preflight:** source deletes use the same preview data as the
+  UI before constructing a candidate package. Default sources and referenced
+  sources return semantic errors with reference counts, so the app can show a
+  stable warning instead of interpreting lower-level validation failures.
 - **Glyph source layer creation:** source panels can add a missing glyph layer
   for a declared source through a semantic command. The command refuses to
   overwrite an existing layer, validates the candidate package before swapping
@@ -591,7 +595,7 @@ The format should make these app behaviors straightforward:
 - Delete dialogs that can offer remove, decompose, or relink based on exact
   dependents.
 - Conservative delete commands that fail before mutation when component
-  dependents still exist.
+  dependents, source layers, or source-owned variation rows still exist.
 - Sidebars and badges backed by derived indexes instead of repeated full scans.
 - Variable component inspectors that show inherited values, explicit overrides,
   local axes, and active/inactive conditions with the condition subtree that
