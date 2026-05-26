@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   asGlyphId,
@@ -38,6 +38,88 @@ describe("source document persistence", () => {
     pkg.dispose();
   });
 
+  function fnv64Hex(bytes: Uint8Array): string {
+    let hash = 0xcbf29ce484222325n;
+    for (const byte of bytes) {
+      hash ^= BigInt(byte);
+      hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+    }
+    return hash.toString(16).padStart(16, "0");
+  }
+
+  function jsonBytes(value: unknown): Buffer {
+    return Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+  }
+
+  function fingerprint(relativePath: string): {
+    exists: true;
+    size: number;
+    hash: string;
+  } {
+    const bytes = readFileSync(join(pkg.path, relativePath));
+    return {
+      exists: true,
+      size: bytes.byteLength,
+      hash: fnv64Hex(bytes),
+    };
+  }
+
+  function writeStagedGlyphRename(newName: string): { payloadRoot: string } {
+    const paths = ["glyphs/glyph_A.json", "glyphs/glyph_Aacute.json"];
+    const glyphA = JSON.parse(readFileSync(join(pkg.path, paths[0]), "utf8"));
+    const glyphAacute = JSON.parse(readFileSync(join(pkg.path, paths[1]), "utf8"));
+    glyphA.name = newName;
+    glyphAacute.layers.source_Regular.components[0].baseGlyphName = newName;
+
+    const payloads = new Map<string, Buffer>([
+      [paths[0], jsonBytes(glyphA)],
+      [paths[1], jsonBytes(glyphAacute)],
+    ]);
+    const files = Object.fromEntries(paths.map((path) => [path, fingerprint(path)]));
+    const prepared = {
+      diff: {
+        changes: [
+          { kind: "renameGlyph", glyph_id: "glyph_A" },
+          { kind: "updateGlyphLabels", glyph_id: "glyph_Aacute" },
+        ],
+        impact: {
+          canonicalPaths: paths,
+          removedCanonicalPaths: [],
+          derivedPaths: [],
+        },
+      },
+      impactedPaths: paths,
+      expectedFingerprint: { files },
+      currentFingerprint: { files },
+      conflicts: [],
+      operations: paths.map((path) => {
+        const bytes = payloads.get(path);
+        if (!bytes) {
+          throw new Error(`missing staged payload for ${path}`);
+        }
+        return {
+          kind: "writeFile",
+          path,
+          purpose: "canonical",
+          size: bytes.byteLength,
+          hash: fnv64Hex(bytes),
+        };
+      }),
+    };
+    const marker = jsonBytes(prepared);
+    const transactionId = fnv64Hex(marker);
+    const transactionPath = join(pkg.path, ".shift-txn", transactionId);
+    const payloadRoot = join(transactionPath, "payloads");
+    mkdirSync(payloadRoot, { recursive: true });
+    for (const [path, bytes] of payloads) {
+      const payloadPath = join(payloadRoot, path);
+      mkdirSync(join(payloadPath, ".."), { recursive: true });
+      writeFileSync(payloadPath, bytes);
+    }
+    writeFileSync(join(transactionPath, "commit.json"), marker);
+    return { payloadRoot };
+  }
+
   it("persists metadata edits and reopens the saved values", () => {
     const report = pkg.document.updateFontInfo("Test Sans Text", 2048);
     expect(report).toMatchObject({ revision: 1, changeCount: 1 });
@@ -76,6 +158,34 @@ describe("source document persistence", () => {
       issueCount: 1,
     });
     expect(() => pkg.reopen()).toThrow();
+  });
+
+  it("recovers partially applied staged transactions before opening editable data", () => {
+    const staged = writeStagedGlyphRename("RecoveredBase");
+    copyFileSync(
+      join(staged.payloadRoot, "glyphs", "glyph_A.json"),
+      join(pkg.path, "glyphs", "glyph_A.json"),
+    );
+
+    expect(pkg.document.previewOpen(pkg.path)).toMatchObject({
+      status: "recoveryRequired" satisfies OpenPreviewStatus,
+      primaryAction: "recoverThenLoad" satisfies OpenAction,
+      stagedRecoveryCount: 1,
+      resumeRecoveryCount: 1,
+      appliedPathCount: 1,
+      pendingPathCount: 1,
+    });
+    expect(() => pkg.reopen()).toThrow();
+
+    expect(pkg.document.recoverAndOpen(pkg.path)).toMatchObject({
+      recoveredTransactionCount: 1,
+      glyphCount: 2,
+      sourceCount: 1,
+    });
+    expect(pkg.glyph("glyph_A")).toMatchObject({ name: "RecoveredBase" });
+    expect(pkg.glyph("glyph_Aacute")).toMatchObject({
+      componentBaseGlyphNames: ["RecoveredBase"],
+    });
   });
 
   it("renames component bases by stable glyph id", () => {

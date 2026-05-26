@@ -950,9 +950,9 @@ resolution, source worklists, and export preflight.
 What is not yet proven is the app boundary for several of those operations. The
 bridge must still prove:
 
-- opening a source package with full recovery states before editable data is
-  exposed; the bridge currently covers clean open and unrecoverable blockers,
-  but still needs a recoverable partial-staged-commit flow
+- malformed-manifest and cleanup-only open states at the bridge boundary; clean
+  open, unrecoverable blockers, and recoverable partially-applied staged
+  transactions are already covered before editable data is exposed
 - axis and axis-mapping authoring without TypeScript-side interpolation
 - edit/delete source flows and interpolation-mismatch worklist rows scoped to
   visible source/glyph rows; missing-layer rows are already covered through

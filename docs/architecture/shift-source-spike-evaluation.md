@@ -142,7 +142,7 @@ headless app-facing test crosses N-API/TS and proves the renderer boundary shape
 
 | Operation group | Current evidence | Gap before alpha decision |
 | --- | --- | --- |
-| Package trust | Rust tests cover pending, partial, applied, diverged, invalid, and cleanup-only staged commits plus recovery plans. Bridge tests cover clean open preview and unresolved staged-transaction blocking before editable data loads. | Bridge/app open path still needs a recoverable staged-transaction test, not only an unrecoverable blocker. |
+| Package trust | Rust tests cover pending, partial, applied, diverged, invalid, and cleanup-only staged commits plus recovery plans. Bridge tests cover clean open preview, unresolved staged-transaction blocking, and recoverable partially-applied staged transactions before editable data loads. | Need malformed-manifest and cleanup-only bridge/app open evidence. |
 | Font identity | Rust tests cover narrow font-info impact, no-op revisions, invalid values, staged payloads, save/reopen. Bridge tests cover edit/save/reopen. | Expand bridge operation beyond family name/UPM to the actual font-info fields used by the dialog. |
 | Axis authoring | Rust tests cover create/update/delete, app projections, referenced-axis delete previews, invalid updates. | No bridge/app evidence. Need semantic axis commands named around user/construction axes and tests for deleting axes used by sources/mappings/components. |
 | Axis mapping authoring | Rust tests cover first-class file roundtrip, one/multi-axis mapping, duplicate samples, implicit-chain rejection, mapped-source diagnostics. | No bridge/app evidence. Need a headless “edit mapping -> mapped source rows change” test, with TS doing no interpolation. |
@@ -152,7 +152,7 @@ headless app-facing test crosses N-API/TS and proves the renderer boundary shape
 | Glyph layer authoring | Rust tests cover source-layer create/delete, overwrite rejection, referenced-layer blockers, narrow impact. | No bridge/app evidence beyond create layer. Need add/edit/delete layer flows scoped to one glyph/source. |
 | Component authoring | Rust tests cover component activity, recipes, variation sources, condition validation, local-axis validation, reset/inherit resolution. | No bridge/app evidence. Need app-shaped component inspector DTO before exposing broad package component data. |
 | Variable component preview | Rust tests cover inactive conditions, interpolation of component variation state, inherited dynamic global values, recursive recipe reports. | Missing scrub-oriented bridge/API. Need cached Rust query returning small resolved state/delta for one visible glyph/component. |
-| Safe save | Rust tests cover staged commit preparation, conflict blocking, mark-saved semantic equality, save preview states. Bridge tests cover external conflict and staged cleanup after save. | Need bridge load/recovery test for partially applied staged transaction; current bridge starts from clean fixture only. |
+| Safe save | Rust tests cover staged commit preparation, conflict blocking, mark-saved semantic equality, save preview states. Bridge tests cover external conflict, staged cleanup after save, and partial staged transaction recovery on open. | Need fault-injection coverage around write interruption from the app harness, not only handcrafted staged fixtures. |
 | Fontc export handoff | Rust has export preflight and component lowering diagnostics. | Still not a real fontc handoff. Keep export as separate preflight; do not let editor worklists become export readiness. |
 
 ## Edge Cases To Force Into Tests
@@ -197,14 +197,12 @@ headless app-facing test crosses N-API/TS and proves the renderer boundary shape
 The next code should follow this order because each item unlocks a real editor
 journey while protecting the source graph:
 
-1. **Bridge load/recovery contract:** extend clean/blocked open preview evidence
-   with a recoverable partial staged commit test that opens only after recovery.
-2. **Glyph delete strategy expansion:** add direct delete, relink/decompose,
+1. **Glyph delete strategy expansion:** add direct delete, relink/decompose,
    stale-confirmation, and cycle/local-axis blocker coverage through semantic
    bridge APIs.
-3. **Axis mapping bridge flow:** create/edit a mapping and assert mapped source
+2. **Axis mapping bridge flow:** create/edit a mapping and assert mapped source
    rows/diagnostics update from Rust.
-4. **Variable component preview flow:** one visible component, one preview
+3. **Variable component preview flow:** one visible component, one preview
    location, Rust returns condition result, reset/inherit provenance, varied
    transform fields, and no package-sized DTO.
 
