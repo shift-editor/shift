@@ -3408,6 +3408,11 @@ fn working_source_previews_save_ready_without_staging() {
 
     assert_eq!(preview.status, ShiftWorkingSourceSavePreviewStatus::Ready);
     assert_eq!(preview.revision, 1);
+    assert_eq!(preview.summary.change_count, 2);
+    assert_eq!(preview.summary.impacted_path_count, 3);
+    assert_eq!(preview.summary.conflict_count, 0);
+    assert_eq!(preview.summary.staged_recovery_count, 0);
+    assert_eq!(preview.summary.write_file_count, 3);
     assert!(preview.prepared.conflicts.is_empty());
     assert_eq!(
         preview.prepared.diff.changes,
@@ -3448,6 +3453,9 @@ fn working_source_previews_save_blocked_by_active_staged_commit() {
         ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit
     );
     assert_eq!(preview.revision, 1);
+    assert_eq!(preview.summary.change_count, 2);
+    assert_eq!(preview.summary.conflict_count, 0);
+    assert_eq!(preview.summary.staged_recovery_count, 1);
     assert_eq!(preview.staged_recovery_plans.len(), 1);
     assert_eq!(
         preview.staged_recovery_plans[0].transaction_id,
@@ -3488,6 +3496,11 @@ fn working_source_previews_save_unchanged_without_refreshing_baseline() {
         ShiftWorkingSourceSavePreviewStatus::Unchanged
     );
     assert_eq!(preview.revision, 0);
+    assert_eq!(preview.summary.change_count, 0);
+    assert_eq!(preview.summary.impacted_path_count, 0);
+    assert_eq!(preview.summary.conflict_count, 0);
+    assert_eq!(preview.summary.staged_recovery_count, 0);
+    assert_eq!(preview.summary.write_file_count, 0);
     assert_eq!(
         preview.prepared.diff.changes,
         Vec::<ShiftPackageChange>::new()
@@ -3522,6 +3535,9 @@ fn working_source_previews_unchanged_save_blocked_by_external_changes() {
         ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
     );
     assert_eq!(preview.revision, 0);
+    assert_eq!(preview.summary.change_count, 0);
+    assert_eq!(preview.summary.conflict_count, 1);
+    assert_eq!(preview.summary.staged_recovery_count, 0);
     assert_eq!(
         preview
             .prepared
@@ -3563,6 +3579,9 @@ fn working_source_previews_save_blocked_by_external_changes() {
         ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
     );
     assert_eq!(preview.revision, 1);
+    assert_eq!(preview.summary.change_count, 2);
+    assert_eq!(preview.summary.conflict_count, 1);
+    assert_eq!(preview.summary.staged_recovery_count, 0);
     assert_eq!(
         preview
             .prepared
@@ -3814,6 +3833,11 @@ fn working_source_save_stages_applies_and_marks_saved() {
     let loaded = load_package(&package_path).expect("saved package should load");
 
     assert_eq!(report.status, ShiftWorkingSourceSaveStatus::Saved);
+    assert_eq!(report.summary.change_count, 2);
+    assert_eq!(report.summary.impacted_path_count, 3);
+    assert_eq!(report.summary.conflict_count, 0);
+    assert_eq!(report.summary.staged_recovery_count, 0);
+    assert_eq!(report.summary.write_file_count, 3);
     assert!(report.staged.is_some());
     assert!(report.applied.is_some());
     assert_eq!(report.revision, 0);
@@ -3856,6 +3880,11 @@ fn working_source_save_without_changes_refreshes_baseline_without_staging() {
         .expect("unchanged working source should save as a no-op");
 
     assert_eq!(report.status, ShiftWorkingSourceSaveStatus::Unchanged);
+    assert_eq!(report.summary.change_count, 0);
+    assert_eq!(report.summary.impacted_path_count, 0);
+    assert_eq!(report.summary.conflict_count, 0);
+    assert_eq!(report.summary.staged_recovery_count, 0);
+    assert_eq!(report.summary.write_file_count, 0);
     assert!(report.staged.is_none());
     assert!(report.applied.is_none());
     assert_eq!(

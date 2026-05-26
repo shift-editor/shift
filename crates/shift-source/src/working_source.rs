@@ -4,8 +4,8 @@ use crate::package::{
     compare_fingerprints, diff_packages, fingerprint_package, fingerprint_relative_paths,
     load_package, parse_unicode_scalar, plan_staged_commit_recovery, prepare_package_commit,
     stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
-    ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition,
-    ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
+    ShiftCommitOperation, ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource,
+    ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
     ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue, ShiftPackage,
     ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
@@ -479,6 +479,7 @@ pub struct ShiftDeleteComponentVariationSourceReport {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftWorkingSourceSaveReport {
     pub status: ShiftWorkingSourceSaveStatus,
+    pub summary: ShiftWorkingSourceSaveSummary,
     pub prepared: ShiftPreparedCommit,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staged: Option<ShiftStagedCommit>,
@@ -498,6 +499,7 @@ pub enum ShiftWorkingSourceSaveStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftWorkingSourceSavePreview {
     pub status: ShiftWorkingSourceSavePreviewStatus,
+    pub summary: ShiftWorkingSourceSaveSummary,
     pub prepared: ShiftPreparedCommit,
     pub staged_recovery_plans: Vec<ShiftStagedCommitRecoveryPlan>,
     pub revision: u64,
@@ -510,6 +512,18 @@ pub enum ShiftWorkingSourceSavePreviewStatus {
     Ready,
     BlockedByExternalChanges,
     BlockedByStagedCommit,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftWorkingSourceSaveSummary {
+    pub change_count: usize,
+    pub impacted_path_count: usize,
+    pub conflict_count: usize,
+    pub staged_recovery_count: usize,
+    pub write_file_count: usize,
+    pub remove_file_count: usize,
+    pub invalidate_derived_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2055,6 +2069,7 @@ impl ShiftWorkingSource {
 
         Ok(ShiftWorkingSourceSavePreview {
             status,
+            summary: save_summary(&prepared, &staged_recovery_plans),
             prepared,
             staged_recovery_plans,
             revision: self.revision,
@@ -2109,6 +2124,7 @@ impl ShiftWorkingSource {
             self.mark_saved(root)?;
             return Ok(ShiftWorkingSourceSaveReport {
                 status: ShiftWorkingSourceSaveStatus::Unchanged,
+                summary: save_summary(&prepared, &[]),
                 prepared,
                 staged: None,
                 applied: None,
@@ -2122,6 +2138,7 @@ impl ShiftWorkingSource {
 
         Ok(ShiftWorkingSourceSaveReport {
             status: ShiftWorkingSourceSaveStatus::Saved,
+            summary: save_summary(&prepared, &[]),
             prepared,
             staged: Some(staged),
             applied: Some(applied),
@@ -3414,6 +3431,31 @@ fn fingerprint_subset(
             })
             .collect(),
     }
+}
+
+fn save_summary(
+    prepared: &ShiftPreparedCommit,
+    staged_recovery_plans: &[ShiftStagedCommitRecoveryPlan],
+) -> ShiftWorkingSourceSaveSummary {
+    let mut summary = ShiftWorkingSourceSaveSummary {
+        change_count: prepared.diff.changes.len(),
+        impacted_path_count: prepared.impacted_paths.len(),
+        conflict_count: prepared.conflicts.len(),
+        staged_recovery_count: staged_recovery_plans.len(),
+        ..Default::default()
+    };
+
+    for operation in &prepared.operations {
+        match operation {
+            ShiftCommitOperation::WriteFile { .. } => summary.write_file_count += 1,
+            ShiftCommitOperation::RemoveFile { .. } => summary.remove_file_count += 1,
+            ShiftCommitOperation::InvalidateDerived { .. } => {
+                summary.invalidate_derived_count += 1;
+            }
+        }
+    }
+
+    summary
 }
 
 fn condition_axis_ids(condition: &ShiftCondition) -> Vec<String> {

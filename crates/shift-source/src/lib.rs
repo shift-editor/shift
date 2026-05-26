@@ -62,5 +62,5 @@ pub use working_source::{
     ShiftUpdateComponentVariationSourceReport, ShiftUpdateGlyphVariationSourceReport,
     ShiftUpdateSourceReport, ShiftWorkingSource, ShiftWorkingSourceSavePreview,
     ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveReport,
-    ShiftWorkingSourceSaveStatus,
+    ShiftWorkingSourceSaveStatus, ShiftWorkingSourceSaveSummary,
 };

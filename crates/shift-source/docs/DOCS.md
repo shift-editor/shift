@@ -202,8 +202,9 @@ Current writer behavior:
   file changes before the writer touches live package files.
 - `ShiftWorkingSource::preview_save()` is the non-mutating app query for save
   readiness. It returns `unchanged`, `ready`, or `blockedByExternalChanges`
-  along with the prepared commit evidence, so save buttons, conflict banners,
-  and dirty-state projections do not infer status from raw diff/conflict lists.
+  along with a compact summary and the prepared commit evidence, so save
+  buttons, conflict banners, and dirty-state projections do not infer status
+  from raw diff/conflict lists.
   Even an unchanged working source compares the full saved package fingerprint
   against disk before reporting `unchanged`, so external edits cannot be
   accidentally accepted as the new clean baseline.
@@ -936,7 +937,7 @@ open package
 edit through working-source semantic operations
   -> previewSave(root)
   -> render unchanged/ready/blockedByExternalChanges/blockedByStagedCommit
-     from prepared and recovery evidence
+     from summary, prepared, and recovery evidence
 save
   -> ShiftWorkingSource::save(root)
        prepares, stages, applies, then markSaved(root)
