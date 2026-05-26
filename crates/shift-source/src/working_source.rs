@@ -42,6 +42,16 @@ struct ShiftWorkingSourceViews {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftRenameGlyphPreview {
+    pub glyph_id: String,
+    pub old_name: String,
+    pub new_name: String,
+    pub component_dependents: Vec<ShiftComponentUse>,
+    pub diff: ShiftPackageDiff,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftRenameGlyphReport {
     pub glyph_id: String,
     pub old_name: String,
@@ -1031,6 +1041,46 @@ impl ShiftWorkingSource {
             glyph_name: dependencies.glyph_name.clone(),
             component_dependents: dependencies.component_dependents.clone(),
             can_remove_without_decomposing: dependencies.component_dependents.is_empty(),
+        })
+    }
+
+    pub fn preview_rename_glyph(
+        &self,
+        glyph_id: &str,
+        new_name: impl Into<String>,
+    ) -> ShiftSourceResult<ShiftRenameGlyphPreview> {
+        let new_name = new_name.into();
+        let glyph = self.glyph(glyph_id)?;
+        if self
+            .package
+            .glyphs
+            .iter()
+            .any(|glyph| glyph.id != glyph_id && glyph.name == new_name)
+        {
+            return Err(ShiftSourceError::DuplicateGlyphName {
+                glyph_name: new_name,
+            });
+        }
+
+        let mut next = self.package.clone();
+        next.glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .expect("glyph was found above")
+            .name = new_name.clone();
+        next.validate()?;
+        let diff = diff_packages(&self.package, &next)?;
+        let component_dependents = self
+            .glyph_dependencies(glyph_id)?
+            .component_dependents
+            .clone();
+
+        Ok(ShiftRenameGlyphPreview {
+            glyph_id: glyph_id.to_string(),
+            old_name: glyph.name.clone(),
+            new_name,
+            component_dependents,
+            diff,
         })
     }
 
@@ -2349,17 +2399,7 @@ impl ShiftWorkingSource {
         glyph_id: &str,
         new_name: impl Into<String>,
     ) -> ShiftSourceResult<ShiftRenameGlyphReport> {
-        let new_name = new_name.into();
-        if self
-            .package
-            .glyphs
-            .iter()
-            .any(|glyph| glyph.id != glyph_id && glyph.name == new_name)
-        {
-            return Err(ShiftSourceError::DuplicateGlyphName {
-                glyph_name: new_name,
-            });
-        }
+        let preview = self.preview_rename_glyph(glyph_id, new_name)?;
 
         let before = self.package.clone();
         let mut next = before.clone();
@@ -2372,7 +2412,7 @@ impl ShiftWorkingSource {
             })?;
 
         let old_name = glyph.name.clone();
-        glyph.name = new_name.clone();
+        glyph.name = preview.new_name.clone();
         self.replace_package(next)?;
 
         let diff = diff_packages(&before, &self.package)?;
@@ -2380,16 +2420,11 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
 
-        let component_dependents = self
-            .glyph_dependencies(glyph_id)?
-            .component_dependents
-            .clone();
-
         Ok(ShiftRenameGlyphReport {
-            glyph_id: glyph_id.to_string(),
+            glyph_id: preview.glyph_id,
             old_name,
-            new_name,
-            component_dependents,
+            new_name: preview.new_name,
+            component_dependents: preview.component_dependents,
             diff,
             revision: self.revision,
         })

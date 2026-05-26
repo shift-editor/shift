@@ -88,6 +88,7 @@ getComponentVariationSourceLocations(glyphId, layerId, componentId)
 getGlyphVariationSourceLocations(glyphId)
 getMappedLocation(location)
 prepareCommit()
+previewRenameGlyph(glyphId, newName)
 renameGlyph(glyphId, newName)
 previewDeleteSource(sourceId)
 createAxisMapping(create)
@@ -243,6 +244,10 @@ format exploration:
 
 - **Rename without relinking:** a glyph's file path and inbound component
   references are based on stable glyph ID, not the editable glyph name.
+- **Rename preview:** the app can ask for a prospective rename's old/new name,
+  component dependents, and narrow write impact before mutating the working
+  source. Duplicate names and stale selections use the same semantic errors as
+  the command path.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any

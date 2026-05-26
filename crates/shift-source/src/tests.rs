@@ -2714,6 +2714,76 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
 }
 
 #[test]
+fn working_source_previews_glyph_rename_without_mutating() {
+    let working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let preview = working_source
+        .preview_rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename preview should succeed");
+
+    assert_eq!(preview.glyph_id, "glyph_A");
+    assert_eq!(preview.old_name, "A");
+    assert_eq!(preview.new_name, "RenamedBase");
+    assert_eq!(
+        preview.component_dependents,
+        vec![ShiftComponentUse {
+            glyph_id: "glyph_Aacute".to_string(),
+            glyph_name: "Aacute".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_25".to_string(),
+        }]
+    );
+    assert_eq!(
+        preview.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::RenameGlyph {
+                glyph_id: "glyph_A".to_string(),
+            }],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .expect("glyph should still exist")
+            .name,
+        "A"
+    );
+}
+
+#[test]
+fn working_source_preview_rename_rejects_duplicate_and_missing_without_mutating() {
+    let working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let error = working_source
+        .preview_rename_glyph("glyph_A", "Aacute")
+        .expect_err("duplicate glyph names should be rejected");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateGlyphName { glyph_name } if glyph_name == "Aacute"
+    ));
+
+    let error = working_source
+        .preview_rename_glyph("glyph_missing", "Aacute")
+        .expect_err("missing glyph should be reported before duplicate-name checks");
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingGlyph { glyph_id } if glyph_id == "glyph_missing"
+    ));
+    assert_eq!(working_source.revision(), 0);
+}
+
+#[test]
 fn working_source_component_queries_use_current_base_glyph_name_after_rename() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,
