@@ -457,8 +457,9 @@ format exploration:
   capabilities, and the exact transform fields that vary, so the backend can
   choose decomposition, materialized helper glyphs, or a future
   variable-component export path. The preview also aggregates glyph counts by
-  disposition, fallback capabilities, and per-capability component counts, so
-  export UI can show the reason summary without walking every component row.
+  disposition, fallback capabilities, per-capability component counts, and
+  unsupported-reason counts, so export UI can show the reason summary without
+  walking every component row.
   Context-aware preflight can pass separate root font and current parent
   locations for recursive component checks. Conditions use the font location,
   matching component preview and keeping export capability diagnostics from
@@ -778,7 +779,8 @@ The format should make these app behaviors straightforward:
   components can stay normal references" from "these components are visually
   resolvable but need backend fallback before `fontc`" from "these components
   cannot be resolved without fixing the source graph or interpolation model,"
-  with affected glyph counts and fallback reason counts for compact banners.
+  with affected glyph counts, fallback reason counts, and unsupported reason
+  counts for compact banners.
 - Current-location previews that use the same condition evaluation rules as
   save/export preflight, with the same query-location validation as export
   preflight and axis-mapping previews.
