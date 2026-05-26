@@ -369,6 +369,38 @@ impl GlyphAxis {
     pub fn maximum(&self) -> f64 {
         self.maximum
     }
+
+    pub fn contains(&self, value: f64) -> bool {
+        self.minimum <= value && value <= self.maximum
+    }
+
+    pub fn normalize(&self, value: f64) -> f64 {
+        if value < self.default {
+            if (self.default - self.minimum).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (value - self.default) / (self.default - self.minimum)
+            }
+        } else if value > self.default {
+            if (self.maximum - self.default).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (value - self.default) / (self.maximum - self.default)
+            }
+        } else {
+            0.0
+        }
+    }
+
+    pub fn denormalize(&self, value: f64) -> f64 {
+        if value < 0.0 {
+            self.default + value * (self.default - self.minimum)
+        } else if value > 0.0 {
+            self.default + value * (self.maximum - self.default)
+        } else {
+            self.default
+        }
+    }
 }
 
 #[cfg(test)]
@@ -396,6 +428,22 @@ mod tests {
 
         assert_eq!(g.local_axes(), &[axis]);
         assert_eq!(g.local_axis(&axis_id).map(GlyphAxis::default), Some(40.0));
+        assert!(g
+            .local_axis(&axis_id)
+            .expect("local axis should exist")
+            .contains(72.0));
+        assert_eq!(
+            g.local_axis(&axis_id)
+                .expect("local axis should exist")
+                .normalize(60.0),
+            0.5
+        );
+        assert_eq!(
+            g.local_axis(&axis_id)
+                .expect("local axis should exist")
+                .denormalize(-0.5),
+            30.0
+        );
 
         g.local_axis_mut(&axis_id)
             .expect("local axis should be mutable")

@@ -126,11 +126,12 @@ Component {
 
 That is enough for simple composites, stable component relationships,
 ID-keyed sparse variable component placement across global and glyph-local
-axes, local-axis inspector lookup by stable `AxisId`, and active/inactive
-condition evaluation in the editor loop. Component and glyph variation source
-records still live in source/package services until the editor exposes
-first-class controls for those recipes. If component recipes become a
-first-class editor feature, IR should grow toward this shape:
+axes, local-axis inspector lookup by stable `AxisId`, shared range math for
+global and glyph-local sliders, and active/inactive condition evaluation in the
+editor loop. Component and glyph variation source records still live in
+source/package services until the editor exposes first-class controls for those
+recipes. If component recipes become a first-class editor feature, IR should
+grow toward this shape:
 
 ```rust
 Component {
