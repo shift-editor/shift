@@ -617,7 +617,7 @@ fn interpolation_compatibility_index_reports_component_identity_mismatch() {
 }
 
 #[test]
-fn write_impact_keeps_rename_narrow_and_updates_dependency_labels() {
+fn write_impact_for_rename_updates_dependency_labels() {
     let impact = plan_write_impact(&[ShiftPackageChange::RenameGlyph {
         glyph_id: "glyph_A".to_string(),
     }]);
@@ -626,6 +626,22 @@ fn write_impact_keeps_rename_narrow_and_updates_dependency_labels() {
         impact,
         ShiftWriteImpact {
             canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+            removed_canonical_paths: Vec::new(),
+            derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
+        }
+    );
+}
+
+#[test]
+fn write_impact_for_component_label_cache_update_skips_interpolation_cache() {
+    let impact = plan_write_impact(&[ShiftPackageChange::UpdateGlyphLabels {
+        glyph_id: "glyph_Aacute".to_string(),
+    }]);
+
+    assert_eq!(
+        impact,
+        ShiftWriteImpact {
+            canonical_paths: vec!["glyphs/glyph_Aacute.json".to_string()],
             removed_canonical_paths: Vec::new(),
             derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
         }
@@ -669,23 +685,26 @@ fn write_impact_for_axis_mapping_keeps_export_mapping_explicit() {
 fn package_diff_classifies_rename_as_label_only_change() {
     let before = package_with_component_dependency();
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
 
     let diff = diff_packages(&before, &after).expect("package diff should build");
 
     assert_eq!(
         diff,
         ShiftPackageDiff {
-            changes: vec![ShiftPackageChange::RenameGlyph {
-                glyph_id: "glyph_A".to_string(),
-            }],
+            changes: vec![
+                ShiftPackageChange::RenameGlyph {
+                    glyph_id: "glyph_A".to_string(),
+                },
+                ShiftPackageChange::UpdateGlyphLabels {
+                    glyph_id: "glyph_Aacute".to_string(),
+                },
+            ],
             impact: ShiftWriteImpact {
-                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                canonical_paths: vec![
+                    "glyphs/glyph_A.json".to_string(),
+                    "glyphs/glyph_Aacute.json".to_string(),
+                ],
                 removed_canonical_paths: Vec::new(),
                 derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
             },
@@ -1118,12 +1137,7 @@ fn prepared_commit_records_write_set_fingerprints_and_operations() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1137,6 +1151,7 @@ fn prepared_commit_records_write_set_fingerprints_and_operations() {
         vec![
             DEPENDENCY_INDEX_PATH.to_string(),
             "glyphs/glyph_A.json".to_string(),
+            "glyphs/glyph_Aacute.json".to_string(),
         ]
     );
     assert_eq!(
@@ -1162,6 +1177,11 @@ fn prepared_commit_records_write_set_fingerprints_and_operations() {
         vec![
             (
                 "glyphs/glyph_A.json",
+                "write",
+                ShiftCommitOperationPurpose::Canonical,
+            ),
+            (
+                "glyphs/glyph_Aacute.json",
                 "write",
                 ShiftCommitOperationPurpose::Canonical,
             ),
@@ -1192,12 +1212,7 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
         fs::read_to_string(package_path.join("glyphs/glyph_A.json")).expect("glyph is readable");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1212,12 +1227,17 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
         staged.payload_paths,
         vec![
             "glyphs/glyph_A.json".to_string(),
+            "glyphs/glyph_Aacute.json".to_string(),
             DEPENDENCY_INDEX_PATH.to_string(),
         ]
     );
     assert!(staged
         .transaction_path
         .join("payloads/glyphs/glyph_A.json")
+        .exists());
+    assert!(staged
+        .transaction_path
+        .join("payloads/glyphs/glyph_Aacute.json")
         .exists());
     assert!(staged
         .transaction_path
@@ -1242,12 +1262,17 @@ fn staged_commit_rewrites_payloads_and_marker_through_temp_siblings() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     after
         .glyphs
         .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+        .find(|glyph| glyph.id == "glyph_Aacute")
+        .expect("dependent glyph should exist")
+        .layers
+        .get_mut("source_Regular")
+        .expect("dependent layer should exist")
+        .components[0]
+        .base_glyph_name = "RenamedBase".to_string();
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1288,12 +1313,7 @@ fn stage_base_glyph_rename(
     let before = package_with_component_dependency();
     save_package(&before, package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = new_name.to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, new_name);
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1303,6 +1323,20 @@ fn stage_base_glyph_rename(
         stage_prepared_commit(package_path, &after, &prepared).expect("commit should stage");
 
     (after, staged)
+}
+
+fn copy_staged_payload_to_live(package_path: &Path, staged: &ShiftStagedCommit, path: &str) {
+    fs::copy(
+        staged.transaction_path.join("payloads").join(path),
+        package_path.join(path),
+    )
+    .expect("staged payload should be copied to live file");
+}
+
+fn copy_staged_base_rename_payloads_to_live(package_path: &Path, staged: &ShiftStagedCommit) {
+    copy_staged_payload_to_live(package_path, staged, "glyphs/glyph_A.json");
+    copy_staged_payload_to_live(package_path, staged, "glyphs/glyph_Aacute.json");
+    copy_staged_payload_to_live(package_path, staged, DEPENDENCY_INDEX_PATH);
 }
 
 #[test]
@@ -1340,9 +1374,13 @@ fn recover_staged_commits_resumes_pending_transaction_then_package_loads() {
             action: ShiftStagedCommitRecoveryAction::Resume,
             applied_paths: vec![
                 "glyphs/glyph_A.json".to_string(),
+                "glyphs/glyph_Aacute.json".to_string(),
                 DEPENDENCY_INDEX_PATH.to_string(),
             ],
-            backup_paths: vec!["glyphs/glyph_A.json".to_string()],
+            backup_paths: vec![
+                "glyphs/glyph_A.json".to_string(),
+                "glyphs/glyph_Aacute.json".to_string(),
+            ],
         }]
     );
     assert_eq!(
@@ -1403,11 +1441,13 @@ fn recover_staged_commits_resumes_partially_applied_transaction_then_package_loa
         recovery.outcomes[0].applied_paths,
         vec![
             "glyphs/glyph_A.json".to_string(),
+            "glyphs/glyph_Aacute.json".to_string(),
             DEPENDENCY_INDEX_PATH.to_string(),
         ]
     );
-    assert!(
-        recovery.outcomes[0].backup_paths.is_empty(),
+    assert_eq!(
+        recovery.outcomes[0].backup_paths,
+        vec!["glyphs/glyph_Aacute.json".to_string()],
         "already-promoted canonical files should not be backed up again"
     );
     assert_eq!(
@@ -1519,18 +1559,7 @@ fn load_package_allows_cleanup_only_staged_commit() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
     let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
-    fs::copy(
-        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
-        package_path.join("glyphs/glyph_A.json"),
-    )
-    .expect("staged payload should be copied to live file");
-    fs::copy(
-        staged
-            .transaction_path
-            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
-        package_path.join(DEPENDENCY_INDEX_PATH),
-    )
-    .expect("staged derived payload should be copied to live file");
+    copy_staged_base_rename_payloads_to_live(&package_path, &staged);
 
     let package = load_package(&package_path).expect("applied staged commit should not block load");
 
@@ -1549,18 +1578,7 @@ fn recover_staged_commits_cleans_applied_transaction() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
     let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
-    fs::copy(
-        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
-        package_path.join("glyphs/glyph_A.json"),
-    )
-    .expect("staged payload should be copied to live file");
-    fs::copy(
-        staged
-            .transaction_path
-            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
-        package_path.join(DEPENDENCY_INDEX_PATH),
-    )
-    .expect("staged derived payload should be copied to live file");
+    copy_staged_base_rename_payloads_to_live(&package_path, &staged);
 
     let recovery =
         recover_staged_commits(&package_path).expect("applied transaction should clean up");
@@ -1594,12 +1612,7 @@ fn staged_commit_can_be_recreated_for_the_same_transaction_id() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1631,12 +1644,7 @@ fn staged_commit_refuses_distinct_active_transaction() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut first_after = before.clone();
-    first_after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut first_after, "RenamedBase");
     let first_diff = diff_packages(&before, &first_after).expect("package diff should build");
     let first_expected =
         fingerprint_relative_paths(&package_path, &first_diff.impact.package_relative_paths())
@@ -1648,12 +1656,7 @@ fn staged_commit_refuses_distinct_active_transaction() {
         .expect("first commit should stage");
 
     let mut second_after = before.clone();
-    second_after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "AnotherName".to_string();
+    rename_base_glyph_and_component_label_cache(&mut second_after, "AnotherName");
     let second_diff = diff_packages(&before, &second_after).expect("package diff should build");
     let second_expected =
         fingerprint_relative_paths(&package_path, &second_diff.impact.package_relative_paths())
@@ -1686,12 +1689,7 @@ fn staged_commit_refuses_unresolved_conflicts() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1720,12 +1718,7 @@ fn inspect_staged_commits_reports_complete_transaction() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1757,12 +1750,7 @@ fn staged_recovery_plan_marks_pending_transaction_as_resumable() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1779,7 +1767,7 @@ fn staged_recovery_plan_marks_pending_transaction_as_resumable() {
             transaction_id: staged.transaction_id,
             action: ShiftStagedCommitRecoveryAction::Resume,
             live_state: ShiftStagedCommitLiveState::Pending,
-            pending_path_count: 2,
+            pending_path_count: 3,
             applied_path_count: 0,
             diverged_path_count: 0,
             issue_count: 0,
@@ -1794,12 +1782,7 @@ fn inspect_staged_commits_reports_applied_and_diverged_live_state() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1808,18 +1791,7 @@ fn inspect_staged_commits_reports_applied_and_diverged_live_state() {
     let staged =
         stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
 
-    fs::copy(
-        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
-        package_path.join("glyphs/glyph_A.json"),
-    )
-    .expect("staged payload should be copied to live file");
-    fs::copy(
-        staged
-            .transaction_path
-            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
-        package_path.join(DEPENDENCY_INDEX_PATH),
-    )
-    .expect("staged derived payload should be copied to live file");
+    copy_staged_base_rename_payloads_to_live(&package_path, &staged);
 
     let applied = inspect_staged_commits(&package_path).expect("staged commits should inspect");
     assert_eq!(applied[0].live_state, ShiftStagedCommitLiveState::Applied);
@@ -1845,6 +1817,10 @@ fn inspect_staged_commits_reports_applied_and_diverged_live_state() {
         vec![
             (DEPENDENCY_INDEX_PATH, ShiftStagedCommitLiveState::Applied),
             ("glyphs/glyph_A.json", ShiftStagedCommitLiveState::Diverged),
+            (
+                "glyphs/glyph_Aacute.json",
+                ShiftStagedCommitLiveState::Applied,
+            ),
         ]
     );
 }
@@ -1856,12 +1832,7 @@ fn staged_recovery_plan_marks_partially_applied_transaction_as_resumable() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1890,7 +1861,7 @@ fn staged_recovery_plan_marks_partially_applied_transaction_as_resumable() {
             transaction_id: staged.transaction_id,
             action: ShiftStagedCommitRecoveryAction::Resume,
             live_state: ShiftStagedCommitLiveState::PartiallyApplied,
-            pending_path_count: 1,
+            pending_path_count: 2,
             applied_path_count: 1,
             diverged_path_count: 0,
             issue_count: 0,
@@ -1905,12 +1876,7 @@ fn staged_recovery_plan_marks_applied_transaction_for_cleanup() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1919,18 +1885,7 @@ fn staged_recovery_plan_marks_applied_transaction_for_cleanup() {
     let staged =
         stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
 
-    fs::copy(
-        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
-        package_path.join("glyphs/glyph_A.json"),
-    )
-    .expect("staged payload should be copied to live file");
-    fs::copy(
-        staged
-            .transaction_path
-            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
-        package_path.join(DEPENDENCY_INDEX_PATH),
-    )
-    .expect("staged derived payload should be copied to live file");
+    copy_staged_base_rename_payloads_to_live(&package_path, &staged);
 
     let plans = plan_staged_commit_recovery(&package_path).expect("applied recovery should plan");
 
@@ -1941,7 +1896,7 @@ fn staged_recovery_plan_marks_applied_transaction_for_cleanup() {
             action: ShiftStagedCommitRecoveryAction::Cleanup,
             live_state: ShiftStagedCommitLiveState::Applied,
             pending_path_count: 0,
-            applied_path_count: 2,
+            applied_path_count: 3,
             diverged_path_count: 0,
             issue_count: 0,
         }]
@@ -1955,12 +1910,7 @@ fn staged_recovery_plan_marks_diverged_transaction_as_blocked() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -1982,7 +1932,7 @@ fn staged_recovery_plan_marks_diverged_transaction_as_blocked() {
             transaction_id: staged.transaction_id,
             action: ShiftStagedCommitRecoveryAction::BlockedByLiveConflict,
             live_state: ShiftStagedCommitLiveState::Diverged,
-            pending_path_count: 1,
+            pending_path_count: 2,
             applied_path_count: 0,
             diverged_path_count: 1,
             issue_count: 0,
@@ -1997,12 +1947,7 @@ fn cleanup_applied_staged_commit_removes_only_applied_transaction() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -2011,18 +1956,7 @@ fn cleanup_applied_staged_commit_removes_only_applied_transaction() {
     let staged =
         stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
 
-    fs::copy(
-        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
-        package_path.join("glyphs/glyph_A.json"),
-    )
-    .expect("staged payload should be copied to live file");
-    fs::copy(
-        staged
-            .transaction_path
-            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
-        package_path.join(DEPENDENCY_INDEX_PATH),
-    )
-    .expect("staged derived payload should be copied to live file");
+    copy_staged_base_rename_payloads_to_live(&package_path, &staged);
 
     let cleaned = cleanup_applied_staged_commit(&package_path, &staged.transaction_id)
         .expect("applied staged commit should clean up");
@@ -2039,12 +1973,7 @@ fn cleanup_applied_staged_commit_refuses_pending_transaction() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -2073,12 +2002,7 @@ fn inspect_staged_commits_reports_missing_marker_and_payload() {
     let before = package_with_component_dependency();
     save_package(&before, &package_path).expect("package should save");
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -2136,12 +2060,7 @@ fn apply_staged_commit_promotes_payloads_and_backs_up_canonical_files() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -2167,7 +2086,10 @@ fn apply_staged_commit_promotes_payloads_and_backs_up_canonical_files() {
     assert!(backup_glyph.contains("\"name\": \"A\""));
     assert_eq!(
         applied.backup_paths,
-        vec!["glyphs/glyph_A.json".to_string()]
+        vec![
+            "glyphs/glyph_A.json".to_string(),
+            "glyphs/glyph_Aacute.json".to_string(),
+        ]
     );
     assert!(!staged.transaction_path.exists());
 }
@@ -2234,12 +2156,7 @@ fn apply_staged_commit_resumes_partially_promoted_transaction() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -2265,6 +2182,10 @@ fn apply_staged_commit_resumes_partially_promoted_transaction() {
         vec![
             (DEPENDENCY_INDEX_PATH, ShiftStagedCommitLiveState::Pending),
             ("glyphs/glyph_A.json", ShiftStagedCommitLiveState::Applied),
+            (
+                "glyphs/glyph_Aacute.json",
+                ShiftStagedCommitLiveState::Pending
+            ),
         ]
     );
     assert_eq!(
@@ -2283,6 +2204,7 @@ fn apply_staged_commit_resumes_partially_promoted_transaction() {
         applied.applied_paths,
         vec![
             "glyphs/glyph_A.json".to_string(),
+            "glyphs/glyph_Aacute.json".to_string(),
             DEPENDENCY_INDEX_PATH.to_string(),
         ]
     );
@@ -2297,12 +2219,7 @@ fn apply_staged_commit_refuses_live_changes_since_staging() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -2452,12 +2369,7 @@ fn prepared_commit_reports_conflicts_before_live_writes() {
     save_package(&before, &package_path).expect("package should save");
 
     let mut after = before.clone();
-    after
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut after, "RenamedBase");
     let diff = diff_packages(&before, &after).expect("package diff should build");
     let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
         .expect("baseline fingerprint should build");
@@ -2551,12 +2463,7 @@ fn dependency_index_supports_delete_and_rename_previews_by_stable_id() {
         }]
     );
 
-    package
-        .glyphs
-        .iter_mut()
-        .find(|glyph| glyph.id == "glyph_A")
-        .expect("base glyph should exist")
-        .name = "RenamedBase".to_string();
+    rename_base_glyph_and_component_label_cache(&mut package, "RenamedBase");
 
     let after = build_dependency_index(&package).expect("dependency index should rebuild");
     let base_dependencies = after
@@ -2666,11 +2573,19 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
-            changes: vec![ShiftPackageChange::RenameGlyph {
-                glyph_id: "glyph_A".to_string(),
-            }],
+            changes: vec![
+                ShiftPackageChange::RenameGlyph {
+                    glyph_id: "glyph_A".to_string(),
+                },
+                ShiftPackageChange::UpdateGlyphLabels {
+                    glyph_id: "glyph_Aacute".to_string(),
+                },
+            ],
             impact: ShiftWriteImpact {
-                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                canonical_paths: vec![
+                    "glyphs/glyph_A.json".to_string(),
+                    "glyphs/glyph_Aacute.json".to_string(),
+                ],
                 removed_canonical_paths: Vec::new(),
                 derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
             },
@@ -2705,7 +2620,7 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
         .expect("dependent layer should still exist")
         .components[0];
     assert_eq!(component.base_glyph_id, "glyph_A");
-    assert_eq!(component.base_glyph_name, "A");
+    assert_eq!(component.base_glyph_name, "RenamedBase");
 
     let dependencies = working_source
         .glyph_dependencies("glyph_A")
@@ -2737,11 +2652,19 @@ fn working_source_previews_glyph_rename_without_mutating() {
     assert_eq!(
         preview.diff,
         ShiftPackageDiff {
-            changes: vec![ShiftPackageChange::RenameGlyph {
-                glyph_id: "glyph_A".to_string(),
-            }],
+            changes: vec![
+                ShiftPackageChange::RenameGlyph {
+                    glyph_id: "glyph_A".to_string(),
+                },
+                ShiftPackageChange::UpdateGlyphLabels {
+                    glyph_id: "glyph_Aacute".to_string(),
+                },
+            ],
             impact: ShiftWriteImpact {
-                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                canonical_paths: vec![
+                    "glyphs/glyph_A.json".to_string(),
+                    "glyphs/glyph_Aacute.json".to_string(),
+                ],
                 removed_canonical_paths: Vec::new(),
                 derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
             },
@@ -2873,8 +2796,8 @@ fn working_source_component_queries_use_current_base_glyph_name_after_rename() {
         .components[0];
     assert_eq!(stored_component.base_glyph_id, "glyph_A");
     assert_eq!(
-        stored_component.base_glyph_name, "A",
-        "package keeps the imported label cache; queries derive the current label"
+        stored_component.base_glyph_name, "RenamedBase",
+        "rename refreshes the inspectable label cache without changing identity"
     );
 
     let location = BTreeMap::from([("axis_wght".to_string(), 900.0)]);
@@ -3333,15 +3256,21 @@ fn working_source_prepares_commit_from_saved_baseline() {
     assert!(prepared.conflicts.is_empty());
     assert_eq!(
         prepared.diff.changes,
-        vec![ShiftPackageChange::RenameGlyph {
-            glyph_id: "glyph_A".to_string(),
-        }]
+        vec![
+            ShiftPackageChange::RenameGlyph {
+                glyph_id: "glyph_A".to_string(),
+            },
+            ShiftPackageChange::UpdateGlyphLabels {
+                glyph_id: "glyph_Aacute".to_string(),
+            },
+        ]
     );
     assert_eq!(
         prepared.impacted_paths,
         vec![
             DEPENDENCY_INDEX_PATH.to_string(),
             "glyphs/glyph_A.json".to_string(),
+            "glyphs/glyph_Aacute.json".to_string(),
         ]
     );
 }
@@ -5736,7 +5665,7 @@ fn glyph_name_can_change_without_changing_component_target_id() {
         components: vec![ShiftComponent {
             id: "component_10".to_string(),
             base_glyph_id: "glyph_A".to_string(),
-            base_glyph_name: "A".to_string(),
+            base_glyph_name: "RenamedBase".to_string(),
             transform: DecomposedTransform::identity(),
             location: BTreeMap::new(),
             axis_inheritance: ShiftAxisInheritance::InheritParent,
@@ -5796,6 +5725,34 @@ fn glyph_name_can_change_without_changing_component_target_id() {
         .map(|component| component.base_glyph().to_string());
 
     assert_eq!(component_base.as_deref(), Some("RenamedBase"));
+}
+
+#[test]
+fn package_rejects_stale_component_base_glyph_name_cache() {
+    let mut package = package_with_component_dependency();
+    package
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+
+    let error = package
+        .validate()
+        .expect_err("stale component base glyph name cache should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::ComponentBaseNameMismatch {
+            glyph_name,
+            base_glyph_id,
+            expected_base_glyph_name,
+            actual_base_glyph_name,
+        } if glyph_name == "Aacute"
+            && base_glyph_id == "glyph_A"
+            && expected_base_glyph_name == "RenamedBase"
+            && actual_base_glyph_name == "A"
+    ));
 }
 
 #[test]
@@ -9248,6 +9205,25 @@ fn package_with_component_dependency() -> ShiftPackage {
             layers: BTreeMap::from([("source_Regular".to_string(), layer)]),
         },
     ])
+}
+
+fn rename_base_glyph_and_component_label_cache(package: &mut ShiftPackage, new_name: &str) {
+    package
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = new_name.to_string();
+    package
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_Aacute")
+        .expect("dependent glyph should exist")
+        .layers
+        .get_mut("source_Regular")
+        .expect("dependent layer should exist")
+        .components[0]
+        .base_glyph_name = new_name.to_string();
 }
 
 fn package_with_compatible_two_layer_glyph() -> ShiftPackage {

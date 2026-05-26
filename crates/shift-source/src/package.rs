@@ -320,6 +320,7 @@ pub enum ShiftPackageChange {
     UpdateSources,
     UpdateAxisMappings,
     CreateGlyph { glyph_id: String },
+    UpdateGlyphLabels { glyph_id: String },
     UpdateGlyph { glyph_id: String },
     RenameGlyph { glyph_id: String },
     DeleteGlyph { glyph_id: String },
@@ -1001,8 +1002,11 @@ impl ShiftPackage {
         let mut glyph_ids = HashSet::new();
         let mut glyph_names = HashSet::new();
         let mut unicode_owners = HashMap::new();
-        let declared_glyph_ids: HashSet<_> =
-            self.glyphs.iter().map(|glyph| glyph.id.as_str()).collect();
+        let declared_glyph_names_by_id: HashMap<_, _> = self
+            .glyphs
+            .iter()
+            .map(|glyph| (glyph.id.as_str(), glyph.name.as_str()))
+            .collect();
         let local_axes_by_glyph_id: HashMap<_, _> = self
             .glyphs
             .iter()
@@ -1204,10 +1208,21 @@ impl ShiftPackage {
                             component_id: component.id.clone(),
                         });
                     }
-                    if !declared_glyph_ids.contains(component.base_glyph_id.as_str()) {
+                    let Some(expected_base_glyph_name) = declared_glyph_names_by_id
+                        .get(component.base_glyph_id.as_str())
+                        .copied()
+                    else {
                         return Err(ShiftSourceError::MissingComponentBase {
                             glyph_name: glyph.name.clone(),
                             base_glyph_id: component.base_glyph_id.clone(),
+                        });
+                    };
+                    if component.base_glyph_name != expected_base_glyph_name {
+                        return Err(ShiftSourceError::ComponentBaseNameMismatch {
+                            glyph_name: glyph.name.clone(),
+                            base_glyph_id: component.base_glyph_id.clone(),
+                            expected_base_glyph_name: expected_base_glyph_name.to_string(),
+                            actual_base_glyph_name: component.base_glyph_name.clone(),
                         });
                     }
                     let base_local_axes = local_axes_by_glyph_id
@@ -1808,6 +1823,10 @@ pub fn plan_write_impact(changes: &[ShiftPackageChange]) -> ShiftWriteImpact {
                 canonical_paths.insert("axis-mappings.json".to_string());
                 derived_paths.insert(INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string());
             }
+            ShiftPackageChange::UpdateGlyphLabels { glyph_id } => {
+                canonical_paths.insert(glyph_file_path(glyph_id));
+                derived_paths.insert(DEPENDENCY_INDEX_PATH.to_string());
+            }
             ShiftPackageChange::CreateGlyph { glyph_id }
             | ShiftPackageChange::UpdateGlyph { glyph_id } => {
                 canonical_paths.insert(glyph_file_path(glyph_id));
@@ -1899,6 +1918,10 @@ pub fn diff_packages(
 
         if glyph_change_is_rename_only(before_glyph, after_glyph)? {
             changes.push(ShiftPackageChange::RenameGlyph {
+                glyph_id: (*glyph_id).to_string(),
+            });
+        } else if glyph_change_is_component_label_only(before_glyph, after_glyph)? {
+            changes.push(ShiftPackageChange::UpdateGlyphLabels {
                 glyph_id: (*glyph_id).to_string(),
             });
         } else {
@@ -3316,6 +3339,34 @@ fn glyph_change_is_rename_only(before: &ShiftGlyph, after: &ShiftGlyph) -> Shift
     json_equal(
         format!("glyph {}", before.id).as_str(),
         &renamed_before,
+        after,
+    )
+}
+
+fn glyph_change_is_component_label_only(
+    before: &ShiftGlyph,
+    after: &ShiftGlyph,
+) -> ShiftSourceResult<bool> {
+    let mut relabeled_before = before.clone();
+    for (source_id, before_layer) in &mut relabeled_before.layers {
+        let Some(after_layer) = after.layers.get(source_id) else {
+            return Ok(false);
+        };
+        if before_layer.components.len() != after_layer.components.len() {
+            return Ok(false);
+        }
+        for (before_component, after_component) in before_layer
+            .components
+            .iter_mut()
+            .zip(after_layer.components.iter())
+        {
+            before_component.base_glyph_name = after_component.base_glyph_name.clone();
+        }
+    }
+
+    json_equal(
+        format!("glyph {}", before.id).as_str(),
+        &relabeled_before,
         after,
     )
 }

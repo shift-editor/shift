@@ -1089,6 +1089,7 @@ impl ShiftWorkingSource {
             .find(|glyph| glyph.id == glyph_id)
             .expect("glyph was found above")
             .name = new_name.clone();
+        refresh_component_base_glyph_names(&mut next, glyph_id, &new_name);
         next.validate()?;
         let diff = diff_packages(&self.package, &next)?;
         let component_dependents = self
@@ -2514,6 +2515,7 @@ impl ShiftWorkingSource {
 
         let old_name = glyph.name.clone();
         glyph.name = preview.new_name.clone();
+        refresh_component_base_glyph_names(&mut next, glyph_id, &preview.new_name);
         self.replace_package(next)?;
 
         let diff = diff_packages(&before, &self.package)?;
@@ -3495,6 +3497,22 @@ fn build_working_source_views(
         axis_mapping_resolvers,
         component_variation_resolvers,
     })
+}
+
+fn refresh_component_base_glyph_names(
+    package: &mut ShiftPackage,
+    base_glyph_id: &str,
+    base_glyph_name: &str,
+) {
+    for glyph in &mut package.glyphs {
+        for layer in glyph.layers.values_mut() {
+            for component in &mut layer.components {
+                if component.base_glyph_id == base_glyph_id {
+                    component.base_glyph_name = base_glyph_name.to_string();
+                }
+            }
+        }
+    }
 }
 
 fn unique_member_id<'a>(

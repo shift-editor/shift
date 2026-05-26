@@ -212,8 +212,9 @@ Design rules for the spike:
   axis defaults, and variable packages may not contain two sources at the same
   completed global location.
 - Glyph files are addressed by stable glyph ID, not glyph name.
-- Components reference base glyphs by glyph ID. A readable base glyph name is
-  stored only as a label to make files inspectable.
+- Components reference base glyphs by glyph ID. A readable base glyph name is a
+  canonical label cache: it is not the target identity, but it must match the
+  current base glyph name so package files remain inspectable after rename.
 - Components have stable component IDs. Public dependency and working-source
   queries name components by ID, not by array index.
 - Components may carry sparse designspace locations keyed by stable axis ID,
@@ -244,7 +245,9 @@ The first tests encode the persistence problems that pushed us toward this
 format exploration:
 
 - **Rename without relinking:** a glyph's file path and inbound component
-  references are based on stable glyph ID, not the editable glyph name.
+  references are based on stable glyph ID, not the editable glyph name. Rename
+  commands refresh dependent component label caches without changing component
+  targets.
 - **Rename preview:** the app can ask for a prospective rename's old/new name,
   component dependents, and narrow write impact before mutating the working
   source. Duplicate names and stale selections use the same semantic errors as
@@ -733,11 +736,11 @@ UpdateAxisMappings
   derived:   derived/interpolation-compatibility.json
 ```
 
-The important behavior is that a glyph rename does not rewrite dependents.
+The important behavior is that a glyph rename does not relink dependents.
 Components target `baseGlyphId`, so the rename changes the renamed glyph file
-and the dependency label cache. A component edit is different: it changes the
-owner glyph file and invalidates the dependency index because the graph may have
-changed.
+and refreshes dependent component `baseGlyphName` label caches. A component edit
+is different: it changes the owner glyph's semantic component recipe and
+invalidates interpolation compatibility because the graph may have changed.
 
 The diff API preserves that distinction:
 
@@ -745,6 +748,7 @@ The diff API preserves that distinction:
 old glyph_A.name = "A"
 new glyph_A.name = "A.alt"
   -> RenameGlyph(glyph_A)
+  -> UpdateGlyphLabels(glyph_Aacute)
 
 old glyph_Aacute.width = 600
 new glyph_Aacute.width = 620
@@ -752,8 +756,10 @@ new glyph_Aacute.width = 620
 ```
 
 This matters for app behavior. A rename can show a cheap dependency-label
-refresh; a component or outline edit can mark interpolation compatibility and
-dependency views stale. The save path does not need to guess from raw files.
+refresh that keeps package files readable without marking interpolation
+compatibility stale. A component or outline edit can mark interpolation
+compatibility and dependency views stale. The save path does not need to guess
+from raw files.
 
 The staged writer turns this impact plan into verified payloads, backups,
 validation, and recovery markers. The package model gives that writer the
@@ -1098,10 +1104,10 @@ derived indexes must be safe to delete
   semantic commit, write verified payloads under `.shift-txn`, promote payloads
   through temp-file rename, and recover or resume from the transaction marker.
 - Component references are ID-based in the package and IR. The readable
-  `baseGlyphName` is a label/cache for UI and compatibility, not the canonical
-  target. Working-source component queries resolve the current base glyph name
-  from `baseGlyphId`, so app surfaces stay correct after a rename without
-  rewriting every dependent glyph file.
+  `baseGlyphName` is a canonical label cache, not the component target.
+  Working-source rename commands refresh dependent component labels through
+  narrow `UpdateGlyphLabels` writes, so app surfaces and package files stay
+  readable after a rename without relinking component identity.
 - Variable component locations, axis inheritance, and conditions now project
   into `shift-ir`. Component locations stay ID-keyed because they can reference
   glyph-local axes as well as global axes. Glyph-local axis definitions and

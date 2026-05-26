@@ -153,6 +153,14 @@ pub enum ShiftSourceError {
         base_glyph_id: String,
     },
 
+    #[error("glyph component in '{glyph_name}' stores base glyph name '{actual_base_glyph_name}' for base glyph id '{base_glyph_id}', expected '{expected_base_glyph_name}'")]
+    ComponentBaseNameMismatch {
+        glyph_name: String,
+        base_glyph_id: String,
+        expected_base_glyph_name: String,
+        actual_base_glyph_name: String,
+    },
+
     #[error("duplicate component id '{component_id}' in glyph '{glyph_name}' layer '{layer_id}'")]
     DuplicateComponentId {
         glyph_name: String,
