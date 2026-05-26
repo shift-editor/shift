@@ -2714,6 +2714,105 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
 }
 
 #[test]
+fn working_source_component_queries_use_current_base_glyph_name_after_rename() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_renamed_base".to_string(),
+            base_glyph_id: "glyph_A".to_string(),
+            base_glyph_name: "A".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::new(),
+            axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_bold".to_string(),
+                name: "Bold component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::new(),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        vec![
+            ShiftGlyph {
+                id: "glyph_A".to_string(),
+                name: "A".to_string(),
+                unicodes: vec!["0041".to_string()],
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::new(),
+            },
+            ShiftGlyph {
+                id: "glyph_Aacute".to_string(),
+                name: "Aacute".to_string(),
+                unicodes: vec!["00C1".to_string()],
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::from([("source_Regular".to_string(), component_layer)]),
+            },
+        ],
+    ))
+    .expect("working source should initialize");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+
+    let stored_component = &working_source
+        .package()
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.id == "glyph_Aacute")
+        .expect("dependent glyph should exist")
+        .layers
+        .get("source_Regular")
+        .expect("dependent layer should exist")
+        .components[0];
+    assert_eq!(stored_component.base_glyph_id, "glyph_A");
+    assert_eq!(
+        stored_component.base_glyph_name, "A",
+        "package keeps the imported label cache; queries derive the current label"
+    );
+
+    let location = BTreeMap::from([("axis_wght".to_string(), 900.0)]);
+    let activity = working_source
+        .component_activity("glyph_Aacute", "source_Regular", &location)
+        .expect("component activity should resolve");
+    let recipes = working_source
+        .component_recipes("glyph_Aacute", "source_Regular")
+        .expect("component recipes should resolve");
+    let variation_sources = working_source
+        .component_variation_source_locations(
+            "glyph_Aacute",
+            "source_Regular",
+            "component_renamed_base",
+        )
+        .expect("component variation sources should resolve");
+    let resolved_locations = working_source
+        .component_resolved_locations("glyph_Aacute", "source_Regular", &location)
+        .expect("component locations should resolve");
+    let resolved_states = working_source
+        .component_resolved_states("glyph_Aacute", "source_Regular", &location)
+        .expect("component states should resolve");
+    let lowering = working_source
+        .component_lowering_preflight(&ShiftComponentLoweringTarget::plain_components());
+
+    assert_eq!(activity[0].base_glyph_name, "RenamedBase");
+    assert_eq!(recipes[0].base_glyph_name, "RenamedBase");
+    assert_eq!(variation_sources[0].base_glyph_name, "RenamedBase");
+    assert_eq!(resolved_locations[0].base_glyph_name, "RenamedBase");
+    assert_eq!(resolved_states[0].base_glyph_name, "RenamedBase");
+    assert_eq!(lowering.diagnostics[0].base_glyph_name, "RenamedBase");
+}
+
+#[test]
 fn working_source_rejects_duplicate_rename_without_mutating() {
     let mut working_source = ShiftWorkingSource::new(package_with_component_dependency())
         .expect("working source should initialize");

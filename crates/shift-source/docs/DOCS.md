@@ -1054,7 +1054,9 @@ derived indexes must be safe to delete
   through temp-file rename, and recover or resume from the transaction marker.
 - Component references are ID-based in the package and IR. The readable
   `baseGlyphName` is a label/cache for UI and compatibility, not the canonical
-  target.
+  target. Working-source component queries resolve the current base glyph name
+  from `baseGlyphId`, so app surfaces stay correct after a rename without
+  rewriting every dependent glyph file.
 - Variable component locations, axis inheritance, and conditions now project
   into `shift-ir`. Component locations stay ID-keyed because they can reference
   glyph-local axes as well as global axes. Glyph-local axis definitions and

@@ -1095,6 +1095,7 @@ impl ShiftWorkingSource {
             .components
             .iter()
             .map(|component| {
+                let base_glyph = self.glyph(&component.base_glyph_id)?;
                 let condition = component
                     .condition
                     .as_ref()
@@ -1111,7 +1112,7 @@ impl ShiftWorkingSource {
                     layer_id: layer_id.to_string(),
                     component_id: component.id.clone(),
                     base_glyph_id: component.base_glyph_id.clone(),
-                    base_glyph_name: component.base_glyph_name.clone(),
+                    base_glyph_name: base_glyph.name.clone(),
                     active,
                     condition,
                 })
@@ -1134,11 +1135,19 @@ impl ShiftWorkingSource {
                     layer_id: layer_id.to_string(),
                 })?;
 
-        Ok(layer
+        layer
             .components
             .iter()
-            .map(|component| component_recipe_summary(glyph, layer_id, component))
-            .collect())
+            .map(|component| {
+                let base_glyph = self.glyph(&component.base_glyph_id)?;
+                Ok(component_recipe_summary(
+                    glyph,
+                    layer_id,
+                    component,
+                    &base_glyph.name,
+                ))
+            })
+            .collect()
     }
 
     pub fn component_variation_source_locations(
@@ -1205,7 +1214,7 @@ impl ShiftWorkingSource {
                     layer_id: layer_id.to_string(),
                     component_id: component.id.clone(),
                     base_glyph_id: component.base_glyph_id.clone(),
-                    base_glyph_name: component.base_glyph_name.clone(),
+                    base_glyph_name: base_glyph.name.clone(),
                     source_id: source.id.clone(),
                     source_name: source.name.clone(),
                     parent_values,
@@ -1277,7 +1286,9 @@ impl ShiftWorkingSource {
                         }
                     }
 
-                    let summary = component_recipe_summary(glyph, layer_id, component);
+                    let base_glyph = self.glyph(&component.base_glyph_id)?;
+                    let summary =
+                        component_recipe_summary(glyph, layer_id, component, &base_glyph.name);
                     let missing_capabilities = summary
                         .required_capabilities
                         .iter()
@@ -1377,7 +1388,7 @@ impl ShiftWorkingSource {
                     layer_id: layer_id.to_string(),
                     component_id: component.id.clone(),
                     base_glyph_id: component.base_glyph_id.clone(),
-                    base_glyph_name: component.base_glyph_name.clone(),
+                    base_glyph_name: base_glyph.name.clone(),
                     active,
                     axis_inheritance: component.axis_inheritance,
                     condition,
@@ -1444,7 +1455,7 @@ impl ShiftWorkingSource {
                     layer_id: layer_id.to_string(),
                     component_id: component.id.clone(),
                     base_glyph_id: component.base_glyph_id.clone(),
-                    base_glyph_name: component.base_glyph_name.clone(),
+                    base_glyph_name: base_glyph.name.clone(),
                     active,
                     axis_inheritance: component.axis_inheritance,
                     condition,
@@ -2730,6 +2741,7 @@ fn component_recipe_summary(
     glyph: &ShiftGlyph,
     layer_id: &str,
     component: &ShiftComponent,
+    base_glyph_name: &str,
 ) -> ShiftComponentRecipeSummary {
     let condition_axis_ids = component
         .condition
@@ -2789,7 +2801,7 @@ fn component_recipe_summary(
         layer_id: layer_id.to_string(),
         component_id: component.id.clone(),
         base_glyph_id: component.base_glyph_id.clone(),
-        base_glyph_name: component.base_glyph_name.clone(),
+        base_glyph_name: base_glyph_name.to_string(),
         kind,
         axis_inheritance: component.axis_inheritance,
         condition_axis_ids,
