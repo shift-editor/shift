@@ -103,6 +103,8 @@ getVariableFontExportPreflight(target) -> readiness + primaryAction + source/com
 getAxesReport()
 createAxis(create)
 updateAxis(axisId, update)
+previewDeleteAxis(axisId)
+deleteAxis(axisId)
 getAxisMappingsReport()
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
@@ -796,14 +798,17 @@ format exploration:
   UI before constructing a candidate package. Default sources and referenced
   sources return semantic errors with reference counts, so the app can show a
   stable warning instead of interpreting lower-level validation failures.
-- **Axis authoring:** variable-axis panels should create or edit global axes
+- **Axis authoring:** variable-axis panels should create, edit, or delete global axes
   through `ShiftWorkingSource`, not by replacing `axes.json` directly. Axis
   create/update commands validate the whole candidate graph before swapping live
   state, then return the updated axis list, completed source locations, mapped
   source locations, source coverage, and compatibility invalidation. This lets
   the app refresh sliders, master coordinates, mapping diagnostics, variable
   readiness, and export status from one Rust-owned response while preserving the
-  same staged-save guarantees as other source mutations.
+  same staged-save guarantees as other source mutations. Axis deletion has a
+  preview/blocker path because axes can be referenced by source locations, axis
+  mappings, glyph variation sources, component locations, component variation
+  parent locations, component variation locations, and conditions.
 - **Glyph source layer creation:** source panels can add a missing glyph layer
   for a declared source through a semantic command. The command refuses to
   overwrite an existing layer, validates the candidate package before swapping

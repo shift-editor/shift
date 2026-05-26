@@ -1,8 +1,9 @@
 use crate::package::*;
 use crate::{
-    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingKind,
-    ShiftAxisMappingSummary, ShiftAxisMappingUpdate, ShiftAxisUpdate, ShiftComponentActivity,
-    ShiftComponentActivitySummary, ShiftComponentLoweringCapability,
+    ShiftAxisMappingAxisRole, ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind,
+    ShiftAxisMappingKind, ShiftAxisMappingSummary, ShiftAxisMappingUpdate, ShiftAxisMappingUse,
+    ShiftAxisSourceLocationUse, ShiftAxisUpdate, ShiftComponentActivity,
+    ShiftComponentActivitySummary, ShiftComponentAxisUseKind, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
     ShiftComponentRecipeKind, ShiftComponentRecipeReportSummary, ShiftComponentRecipeSummary,
@@ -13243,6 +13244,119 @@ fn working_source_rejects_invalid_axis_update_without_mutating() {
 }
 
 #[test]
+fn working_source_previews_axis_delete_references() {
+    let working_source =
+        ShiftWorkingSource::new(package_with_width_axis_references()).expect("package is valid");
+
+    let preview = working_source
+        .preview_delete_axis("axis_wdth")
+        .expect("axis delete preview should succeed");
+
+    assert_eq!(preview.revision, 0);
+    assert_eq!(preview.axis_id, "axis_wdth");
+    assert_eq!(preview.axis_name, "Width");
+    assert!(!preview.can_delete_without_cascade);
+    assert_eq!(
+        preview.source_location_uses,
+        vec![ShiftAxisSourceLocationUse {
+            source_id: "source_Bold".to_string(),
+            source_name: "Bold".to_string(),
+        }]
+    );
+    assert_eq!(
+        preview.axis_mapping_uses,
+        vec![ShiftAxisMappingUse {
+            mapping_id: "mapping_width_to_stem".to_string(),
+            mapping_name: "Width drives stem".to_string(),
+            roles: vec![
+                ShiftAxisMappingAxisRole::InputAxis,
+                ShiftAxisMappingAxisRole::SampleInput,
+            ],
+        }]
+    );
+    assert_eq!(preview.glyph_variation_source_uses.len(), 1);
+    assert_eq!(
+        preview.glyph_variation_source_uses[0].source_id,
+        "glyph_source_wide"
+    );
+    assert_eq!(
+        preview
+            .component_axis_uses
+            .iter()
+            .map(|axis_use| axis_use.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ShiftComponentAxisUseKind::ComponentLocation,
+            ShiftComponentAxisUseKind::ComponentVariationParentLocation,
+            ShiftComponentAxisUseKind::ComponentVariationLocation,
+            ShiftComponentAxisUseKind::ComponentCondition,
+        ]
+    );
+}
+
+#[test]
+fn working_source_deletes_unreferenced_axis_with_app_projections() {
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis(), width_axis()],
+        Vec::new(),
+    ))
+    .expect("package is valid");
+
+    let report = working_source
+        .delete_axis("axis_wdth")
+        .expect("unreferenced axis delete should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.axis_id, "axis_wdth");
+    assert_eq!(report.axis_name, "Width");
+    assert_eq!(report.axes.summary.axis_count, 1);
+    assert_eq!(report.axes.axes[0].id, "axis_wght");
+    assert_eq!(report.source_locations.summary.source_count, 1);
+    assert!(!report.source_locations.sources[0]
+        .values
+        .contains_key("axis_wdth"));
+    assert!(report.interpolation_compatibility.invalidates_all_glyphs);
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateAxes],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["axes.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+}
+
+#[test]
+fn working_source_rejects_referenced_axis_delete_without_mutating() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_width_axis_references()).expect("package is valid");
+
+    let error = working_source
+        .delete_axis("axis_wdth")
+        .expect_err("referenced axis delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::AxisHasReferences {
+            axis_id,
+            source_location_use_count: 1,
+            axis_mapping_use_count: 1,
+            glyph_variation_source_use_count: 1,
+            component_axis_use_count: 4,
+        } if axis_id == "axis_wdth"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .package()
+        .axes
+        .iter()
+        .any(|axis| axis.id == "axis_wdth"));
+}
+
+#[test]
 fn working_source_creates_source_with_generated_id_and_completed_location() {
     let mut working_source =
         ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
@@ -13914,6 +14028,88 @@ fn package_with_weight_to_stem_mapping() -> ShiftPackage {
             },
             ShiftAxisMappingSample {
                 input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 1.0)]),
+            },
+        ],
+    }];
+    package
+}
+
+fn package_with_width_axis_references() -> ShiftPackage {
+    let component = ShiftComponent {
+        id: "component_26".to_string(),
+        base_glyph_id: "glyph_A".to_string(),
+        base_glyph_name: "A".to_string(),
+        transform: DecomposedTransform::identity(),
+        location: BTreeMap::from([("axis_wdth".to_string(), 150.0)]),
+        axis_inheritance: ShiftAxisInheritance::InheritParent,
+        variation_sources: vec![ShiftComponentVariationSource {
+            id: "component_source_wide".to_string(),
+            name: "Wide component".to_string(),
+            parent_location: BTreeMap::from([("axis_wdth".to_string(), 150.0)]),
+            location: BTreeMap::from([("axis_wdth".to_string(), 125.0)]),
+            transform: None,
+        }],
+        condition: Some(ShiftCondition::AxisRange {
+            axis_id: "axis_wdth".to_string(),
+            min: Some(120.0),
+            max: None,
+        }),
+    };
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![component],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut package = package_with_axes(
+        vec![weight_axis(), width_axis(), internal_stem_axis()],
+        vec![
+            ShiftGlyph {
+                id: "glyph_A".to_string(),
+                name: "A".to_string(),
+                unicodes: vec!["0041".to_string()],
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+            },
+            ShiftGlyph {
+                id: "glyph_Aacute".to_string(),
+                name: "Aacute".to_string(),
+                unicodes: vec!["00C1".to_string()],
+                local_axes: Vec::new(),
+                variation_sources: vec![ShiftGlyphSource {
+                    id: "glyph_source_wide".to_string(),
+                    name: "Wide".to_string(),
+                    location: BTreeMap::from([("axis_wdth".to_string(), 140.0)]),
+                    layer_id: "source_Regular".to_string(),
+                }],
+                layers: BTreeMap::from([("source_Regular".to_string(), component_layer)]),
+            },
+        ],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([
+            ("axis_wght".to_string(), 900.0),
+            ("axis_wdth".to_string(), 150.0),
+        ]),
+    });
+    package.axis_mappings = vec![ShiftAxisMapping {
+        id: "mapping_width_to_stem".to_string(),
+        name: "Width drives stem".to_string(),
+        input_axes: vec!["axis_wdth".to_string()],
+        output_axes: vec!["axis_stem".to_string()],
+        samples: vec![
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([("axis_wdth".to_string(), 50.0)]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+            },
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([("axis_wdth".to_string(), 200.0)]),
                 output_location: BTreeMap::from([("axis_stem".to_string(), 1.0)]),
             },
         ],

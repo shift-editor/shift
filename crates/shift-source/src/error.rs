@@ -266,6 +266,15 @@ pub enum ShiftSourceError {
     #[error("missing Shift axis id '{axis_id}'")]
     MissingAxis { axis_id: String },
 
+    #[error("cannot delete Shift axis id '{axis_id}' because {source_location_use_count} source locations, {axis_mapping_use_count} axis mappings, {glyph_variation_source_use_count} glyph variation sources, and {component_axis_use_count} component references still use it")]
+    AxisHasReferences {
+        axis_id: String,
+        source_location_use_count: usize,
+        axis_mapping_use_count: usize,
+        glyph_variation_source_use_count: usize,
+        component_axis_use_count: usize,
+    },
+
     #[error("invalid Shift axis tag '{axis_tag}'")]
     InvalidAxisTag { axis_tag: String },
 
