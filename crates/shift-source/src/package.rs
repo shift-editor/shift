@@ -234,7 +234,7 @@ pub struct ShiftPackage {
     pub glyphs: Vec<ShiftGlyph>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftDependencyIndex {
     pub version: u32,

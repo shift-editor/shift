@@ -325,6 +325,24 @@ pub struct ShiftGlyphDependenciesSummary {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftDependencyIndexReport {
+    pub revision: u64,
+    pub summary: ShiftDependencyIndexSummary,
+    pub index: ShiftDependencyIndex,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDependencyIndexSummary {
+    pub glyph_count: usize,
+    pub glyph_with_component_dependencies_count: usize,
+    pub glyph_with_component_dependents_count: usize,
+    pub component_dependency_count: usize,
+    pub component_dependent_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphInterpolationCompatibilityReport {
     pub revision: u64,
     pub summary: ShiftGlyphInterpolationCompatibilitySummary,
@@ -1817,6 +1835,14 @@ impl ShiftWorkingSource {
 
     pub fn dependency_index(&self) -> &ShiftDependencyIndex {
         &self.dependency_index
+    }
+
+    pub fn dependency_index_report(&self) -> ShiftDependencyIndexReport {
+        ShiftDependencyIndexReport {
+            revision: self.revision,
+            summary: dependency_index_summary(&self.dependency_index),
+            index: self.dependency_index.clone(),
+        }
     }
 
     pub fn interpolation_compatibility_index(&self) -> &ShiftInterpolationCompatibilityIndex {
@@ -5992,6 +6018,32 @@ fn glyph_dependencies_summary(
         component_dependent_count: dependencies.component_dependents.len(),
         has_component_dependencies: !dependencies.component_dependencies.is_empty(),
         has_component_dependents: !dependencies.component_dependents.is_empty(),
+    }
+}
+
+fn dependency_index_summary(index: &ShiftDependencyIndex) -> ShiftDependencyIndexSummary {
+    let mut glyph_with_component_dependencies_count = 0;
+    let mut glyph_with_component_dependents_count = 0;
+    let mut component_dependency_count = 0;
+    let mut component_dependent_count = 0;
+
+    for dependencies in index.glyphs.values() {
+        if !dependencies.component_dependencies.is_empty() {
+            glyph_with_component_dependencies_count += 1;
+        }
+        if !dependencies.component_dependents.is_empty() {
+            glyph_with_component_dependents_count += 1;
+        }
+        component_dependency_count += dependencies.component_dependencies.len();
+        component_dependent_count += dependencies.component_dependents.len();
+    }
+
+    ShiftDependencyIndexSummary {
+        glyph_count: index.glyphs.len(),
+        glyph_with_component_dependencies_count,
+        glyph_with_component_dependents_count,
+        component_dependency_count,
+        component_dependent_count,
     }
 }
 

@@ -12,21 +12,21 @@ use crate::{
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
     ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphDependenciesSummary, ShiftGlyphInterpolationCompatibilitySummary,
-    ShiftGlyphRelinkReplacementBlocker, ShiftGlyphRelinkReplacementCandidateSummary,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceLocationSummary, ShiftGlyphVariationSourceUpdate,
-    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
-    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
-    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
-    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
-    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
-    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
-    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
-    ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftCreateSource, ShiftDependencyIndexSummary, ShiftGlyphDependenciesSummary,
+    ShiftGlyphInterpolationCompatibilitySummary, ShiftGlyphRelinkReplacementBlocker,
+    ShiftGlyphRelinkReplacementCandidateSummary, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftMappedLocationSummary, ShiftMissingSourceLayer,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
+    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse,
+    ShiftSourceLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
+    ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
+    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
+    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -2751,6 +2751,19 @@ fn dependency_index_tracks_variable_component_bases_by_stable_id() {
 
     let working_source =
         ShiftWorkingSource::new(package).expect("working source should initialize");
+    let dependency_index_report = working_source.dependency_index_report();
+    assert_eq!(dependency_index_report.revision, 0);
+    assert_eq!(dependency_index_report.index, index);
+    assert_eq!(
+        dependency_index_report.summary,
+        ShiftDependencyIndexSummary {
+            glyph_count: 2,
+            glyph_with_component_dependencies_count: 1,
+            glyph_with_component_dependents_count: 1,
+            component_dependency_count: 1,
+            component_dependent_count: 1,
+        }
+    );
     let dependency_report = working_source
         .glyph_dependencies_report("glyph_stem")
         .expect("dependency report should use component dependency index");

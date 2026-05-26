@@ -381,6 +381,9 @@ format exploration:
   canonical graph. This file is disposable and regenerated from glyph files.
   Component dependencies are tracked by stable base glyph ID, including variable
   components that carry local-axis overrides, variation sources, or conditions.
+  The dependency index report wraps the package-level derived graph with the
+  working-source revision and aggregate edge/glyph counts, so grid and sidebar
+  badges can update without TypeScript scanning every dependency row.
   The glyph dependency report wraps one derived dependency record with the
   working-source revision and compact dependency/dependent counts, so sidebars
   and delete dialogs can render badges and discard stale async results without
