@@ -7,8 +7,8 @@ use crate::{
     ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource, ShiftCreateSource,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
+    ShiftCreateSource, ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
     ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
     ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
     ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
@@ -7633,6 +7633,143 @@ fn working_source_reports_source_interpolation_issues() {
         coverage[1].interpolation_issues[0].issue.layer_id,
         "source_Regular"
     );
+}
+
+#[test]
+fn working_source_creates_glyph_with_generated_name_id_and_default_layer() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_single_source(vec![ShiftGlyph {
+            id: "glyph_newGlyph".to_string(),
+            name: "newGlyph".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+        }]))
+        .expect("package is valid");
+
+    let report = working_source
+        .create_glyph(ShiftCreateGlyph {
+            glyph_id: None,
+            name: "newGlyph".to_string(),
+            unicodes: vec!["0041".to_string()],
+            default_layer: Some(empty_layer(500.0)),
+        })
+        .expect("glyph creation should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.glyph_id, "glyph_newGlyph_1");
+    assert_eq!(report.glyph_name, "newGlyph.1");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::CreateGlyph {
+                glyph_id: "glyph_newGlyph_1".to_string(),
+            }],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_newGlyph_1.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+
+    let glyph = working_source
+        .package()
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.id == "glyph_newGlyph_1")
+        .expect("created glyph should exist");
+    assert_eq!(glyph.name, "newGlyph.1");
+    assert_eq!(glyph.unicodes, vec!["0041".to_string()]);
+    assert_eq!(
+        glyph
+            .layers
+            .get("source_Regular")
+            .expect("default source layer should be created")
+            .advance_width,
+        500.0
+    );
+    assert!(working_source
+        .glyph_dependencies("glyph_newGlyph_1")
+        .expect("dependency index should include created glyph")
+        .component_dependents
+        .is_empty());
+}
+
+#[test]
+fn working_source_create_glyph_uses_new_glyph_for_blank_names() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_single_source(Vec::new())).expect("package is valid");
+
+    let report = working_source
+        .create_glyph(ShiftCreateGlyph {
+            glyph_id: None,
+            name: "   ".to_string(),
+            unicodes: Vec::new(),
+            default_layer: None,
+        })
+        .expect("blank glyph name should use fallback");
+
+    assert_eq!(report.glyph_id, "glyph_newGlyph");
+    assert_eq!(report.glyph_name, "newGlyph");
+    assert_eq!(working_source.revision(), 1);
+}
+
+#[test]
+fn working_source_rejects_invalid_glyph_create_without_mutating() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_single_source(vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::new(),
+        }]))
+        .expect("package is valid");
+
+    let error = working_source
+        .create_glyph(ShiftCreateGlyph {
+            glyph_id: Some("glyph_A".to_string()),
+            name: "B".to_string(),
+            unicodes: Vec::new(),
+            default_layer: None,
+        })
+        .expect_err("duplicate explicit glyph id should fail");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateGlyphId { glyph_id } if glyph_id == "glyph_A"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .all(|glyph| glyph.name != "B"));
+
+    let error = working_source
+        .create_glyph(ShiftCreateGlyph {
+            glyph_id: None,
+            name: "B".to_string(),
+            unicodes: vec!["not_hex".to_string()],
+            default_layer: None,
+        })
+        .expect_err("invalid unicode should fail");
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidUnicode { glyph_name, value }
+            if glyph_name == "B" && value == "not_hex"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .all(|glyph| glyph.name != "B"));
 }
 
 #[test]

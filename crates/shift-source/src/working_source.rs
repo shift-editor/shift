@@ -232,6 +232,27 @@ pub struct ShiftDeleteSourcePreview {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftCreateGlyph {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glyph_id: Option<String>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unicodes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_layer: Option<ShiftGlyphLayer>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateGlyphReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftCreateGlyphSourceLayer {
     pub layer: ShiftGlyphLayer,
 }
@@ -1886,6 +1907,57 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn create_glyph(
+        &mut self,
+        create: ShiftCreateGlyph,
+    ) -> ShiftSourceResult<ShiftCreateGlyphReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let glyph_name = unique_member_name(
+            create.name.trim(),
+            next.glyphs.iter().map(|glyph| glyph.name.as_str()),
+        );
+        let glyph_id = create.glyph_id.unwrap_or_else(|| {
+            unique_member_id(
+                "glyph",
+                &glyph_name,
+                next.glyphs.iter().map(|glyph| glyph.id.as_str()),
+            )
+        });
+        let mut layers = BTreeMap::new();
+        if let Some(default_layer) = create.default_layer {
+            let default_source_id = next
+                .manifest
+                .default_source_id
+                .clone()
+                .ok_or(ShiftSourceError::MissingDefaultSourceId)?;
+            layers.insert(default_source_id, default_layer);
+        }
+
+        next.glyphs.push(ShiftGlyph {
+            id: glyph_id.clone(),
+            name: glyph_name.clone(),
+            unicodes: create.unicodes,
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers,
+        });
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftCreateGlyphReport {
+            glyph_id,
+            glyph_name,
+            diff,
+            revision: self.revision,
+        })
+    }
+
     pub fn create_glyph_source_layer(
         &mut self,
         glyph_id: &str,
@@ -3415,6 +3487,26 @@ fn unique_member_id<'a>(
     }
 
     unreachable!("unbounded suffix search should always find an unused stable id")
+}
+
+fn unique_member_name<'a>(
+    label: &str,
+    existing_names: impl IntoIterator<Item = &'a str>,
+) -> String {
+    let existing_names = existing_names.into_iter().collect::<BTreeSet<_>>();
+    let base_name = if label.is_empty() { "newGlyph" } else { label };
+    if !existing_names.contains(base_name) {
+        return base_name.to_string();
+    }
+
+    for suffix in 1.. {
+        let candidate = format!("{base_name}.{suffix}");
+        if !existing_names.contains(candidate.as_str()) {
+            return candidate;
+        }
+    }
+
+    unreachable!("unbounded suffix search should always find an unused glyph name")
 }
 
 fn readable_member_id(prefix: &str, label: &str) -> String {

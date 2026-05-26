@@ -97,6 +97,7 @@ deleteAxisMapping(mappingId)
 createSource(create)
 updateSource(sourceId, update)
 deleteSource(sourceId)
+createGlyph(create)
 createGlyphSourceLayer(glyphId, sourceId, create)
 previewDeleteGlyphSourceLayer(glyphId, sourceId)
 deleteGlyphSourceLayer(glyphId, sourceId)
@@ -248,6 +249,11 @@ format exploration:
   component dependents, and narrow write impact before mutating the working
   source. Duplicate names and stale selections use the same semantic errors as
   the command path.
+- **Glyph creation:** quick-add and catalog flows can create a glyph through a
+  semantic command. App-authored creates allocate collision-safe names and
+  stable IDs, can attach an initial default-source layer, validate the candidate
+  package before swapping live state, and report a narrow `CreateGlyph` write
+  impact.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any
