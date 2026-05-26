@@ -5,17 +5,18 @@ use crate::{
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
     ShiftComponentRecipeKind, ShiftComponentRecipeSummary, ShiftComponentResolveContext,
-    ShiftComponentResolvedStateSummary, ShiftComponentTransformField,
-    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
-    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
-    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
-    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
-    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftComponentResolvedLocationSummary, ShiftComponentResolvedStateSummary,
+    ShiftComponentTransformField, ShiftComponentVariationParentAxisValue,
+    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
+    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
+    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
+    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
+    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
+    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftMissingSourceLayer, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
+    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
     ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
@@ -4309,6 +4310,31 @@ fn working_source_resolves_component_location_with_parent_and_local_axes() {
         })
     );
 
+    let report = working_source
+        .component_resolved_locations_report(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 700.0)]),
+        )
+        .expect("component location report should resolve");
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.locations, resolved);
+    assert_eq!(
+        report.summary,
+        ShiftComponentResolvedLocationSummary {
+            total_component_count: 1,
+            active_component_count: 1,
+            inactive_component_count: 0,
+            resolved_axis_value_count: 2,
+            parent_location_value_count: 1,
+            font_location_value_count: 0,
+            font_default_value_count: 0,
+            base_local_default_value_count: 0,
+            component_override_value_count: 1,
+            component_variation_source_value_count: 0,
+        }
+    );
+
     let err = working_source
         .component_resolved_locations(
             "glyph_A",
@@ -4434,6 +4460,34 @@ fn working_source_resolves_components_with_distinct_font_and_parent_locations() 
             },
         )
         .expect("component locations should resolve");
+
+    let report = working_source
+        .component_resolved_locations_report_with_context(
+            "glyph_A",
+            "source_Regular",
+            &ShiftComponentResolveContext {
+                font_location: BTreeMap::from([("axis_wght".to_string(), 700.0)]),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 250.0)]),
+            },
+        )
+        .expect("component location report should resolve");
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.locations, resolved);
+    assert_eq!(
+        report.summary,
+        ShiftComponentResolvedLocationSummary {
+            total_component_count: 2,
+            active_component_count: 2,
+            inactive_component_count: 0,
+            resolved_axis_value_count: 4,
+            parent_location_value_count: 1,
+            font_location_value_count: 1,
+            font_default_value_count: 0,
+            base_local_default_value_count: 2,
+            component_override_value_count: 0,
+            component_variation_source_value_count: 0,
+        }
+    );
 
     assert_eq!(
         resolved[0].condition,

@@ -527,6 +527,11 @@ format exploration:
   previews model `VARC`-style behavior where conditions and reset axes use the
   font location while inherited axes and component variation interpolation use
   the current parent location.
+  The resolved-location report wraps the per-component rows with the
+  working-source revision and compact counts for active/inactive components and
+  resolved axis-value provenance. Component inspectors can render inherit,
+  reset, default, local-default, and override badges without scanning every axis
+  value in TypeScript, and can drop stale async query results after a newer edit.
 - **Component variation source resolution:** inspectors and export preflight can
   ask which authored component source applies at an exact parent location, or
   ask for an interpolated component location/transform at an in-between parent

@@ -1091,6 +1091,29 @@ pub struct ShiftComponentResolvedLocation {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftComponentResolvedLocationReport {
+    pub revision: u64,
+    pub summary: ShiftComponentResolvedLocationSummary,
+    pub locations: Vec<ShiftComponentResolvedLocation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentResolvedLocationSummary {
+    pub total_component_count: usize,
+    pub active_component_count: usize,
+    pub inactive_component_count: usize,
+    pub resolved_axis_value_count: usize,
+    pub parent_location_value_count: usize,
+    pub font_location_value_count: usize,
+    pub font_default_value_count: usize,
+    pub base_local_default_value_count: usize,
+    pub component_override_value_count: usize,
+    pub component_variation_source_value_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftResolvedAxisValue {
     pub value: f64,
     pub source: ShiftResolvedAxisValueSource,
@@ -3006,6 +3029,31 @@ impl ShiftWorkingSource {
     ) -> ShiftSourceResult<Vec<ShiftComponentResolvedLocation>> {
         let context = ShiftComponentResolveContext::from_font_location(location.clone());
         self.component_resolved_locations_with_context(glyph_id, layer_id, &context)
+    }
+
+    pub fn component_resolved_locations_report(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<ShiftComponentResolvedLocationReport> {
+        let context = ShiftComponentResolveContext::from_font_location(location.clone());
+        self.component_resolved_locations_report_with_context(glyph_id, layer_id, &context)
+    }
+
+    pub fn component_resolved_locations_report_with_context(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        context: &ShiftComponentResolveContext,
+    ) -> ShiftSourceResult<ShiftComponentResolvedLocationReport> {
+        let locations =
+            self.component_resolved_locations_with_context(glyph_id, layer_id, context)?;
+        Ok(ShiftComponentResolvedLocationReport {
+            revision: self.revision,
+            summary: component_resolved_location_summary(&locations),
+            locations,
+        })
     }
 
     pub fn component_resolved_locations_with_context(
@@ -5533,6 +5581,59 @@ fn variable_font_export_summary(
         unsupported_component_glyph_count: component_preflight.affected_glyph_count,
         skipped_inactive_component_count: component_preflight.skipped_inactive_component_count,
         missing_component_capability_count: component_preflight.missing_capabilities.len(),
+    }
+}
+
+fn component_resolved_location_summary(
+    locations: &[ShiftComponentResolvedLocation],
+) -> ShiftComponentResolvedLocationSummary {
+    let mut active_component_count = 0;
+    let mut inactive_component_count = 0;
+    let mut resolved_axis_value_count = 0;
+    let mut parent_location_value_count = 0;
+    let mut font_location_value_count = 0;
+    let mut font_default_value_count = 0;
+    let mut base_local_default_value_count = 0;
+    let mut component_override_value_count = 0;
+    let mut component_variation_source_value_count = 0;
+
+    for location in locations {
+        if location.active {
+            active_component_count += 1;
+        } else {
+            inactive_component_count += 1;
+        }
+
+        for value in location.values.values() {
+            resolved_axis_value_count += 1;
+            match value.source {
+                ShiftResolvedAxisValueSource::ParentLocation => parent_location_value_count += 1,
+                ShiftResolvedAxisValueSource::FontLocation => font_location_value_count += 1,
+                ShiftResolvedAxisValueSource::FontDefault => font_default_value_count += 1,
+                ShiftResolvedAxisValueSource::BaseLocalDefault => {
+                    base_local_default_value_count += 1;
+                }
+                ShiftResolvedAxisValueSource::ComponentOverride => {
+                    component_override_value_count += 1;
+                }
+                ShiftResolvedAxisValueSource::ComponentVariationSource => {
+                    component_variation_source_value_count += 1;
+                }
+            }
+        }
+    }
+
+    ShiftComponentResolvedLocationSummary {
+        total_component_count: locations.len(),
+        active_component_count,
+        inactive_component_count,
+        resolved_axis_value_count,
+        parent_location_value_count,
+        font_location_value_count,
+        font_default_value_count,
+        base_local_default_value_count,
+        component_override_value_count,
+        component_variation_source_value_count,
     }
 }
 
