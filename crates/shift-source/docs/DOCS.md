@@ -393,7 +393,9 @@ format exploration:
   compatibility badges without recomputing every glyph on each render. The
   index carries package-wide, per-glyph, and per-issue-kind counts so source
   panels, export preflights, and warning badges can summarize health without
-  scanning every detailed issue row.
+  scanning every detailed issue row. The compatibility index report wraps that
+  derived index with the working-source revision, so package-wide compatibility
+  badges can reject stale async results.
 - **Fail loudly on broken references:** missing component bases and missing
   source layers are validation errors, not silently dropped data.
 - **Reject ambiguous component identity:** component IDs must be valid stable

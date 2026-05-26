@@ -16,17 +16,18 @@ use crate::{
     ShiftGlyphInterpolationCompatibilitySummary, ShiftGlyphRelinkReplacementBlocker,
     ShiftGlyphRelinkReplacementCandidateSummary, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftMappedLocationSummary, ShiftMissingSourceLayer,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
-    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse,
-    ShiftSourceLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
-    ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
-    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
-    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
-    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse,
+    ShiftInterpolationCompatibilityIndexReport, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
+    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
+    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
+    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
+    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -507,6 +508,12 @@ fn interpolation_compatibility_index_accepts_matching_layer_topology() {
     assert!(glyph.issue_kind_counts.is_empty());
     assert!(glyph.issues.is_empty());
     assert_eq!(glyph.layer_signatures.len(), 2);
+
+    let working_source = ShiftWorkingSource::new(package).expect("working source should build");
+    assert_eq!(
+        working_source.interpolation_compatibility_index_report(),
+        ShiftInterpolationCompatibilityIndexReport { revision: 0, index }
+    );
 }
 
 #[test]

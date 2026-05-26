@@ -360,6 +360,13 @@ pub struct ShiftGlyphInterpolationCompatibilitySummary {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftInterpolationCompatibilityIndexReport {
+    pub revision: u64,
+    pub index: ShiftInterpolationCompatibilityIndex,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftSourceLayerCoverage {
     pub source_id: String,
     pub source_name: String,
@@ -1847,6 +1854,15 @@ impl ShiftWorkingSource {
 
     pub fn interpolation_compatibility_index(&self) -> &ShiftInterpolationCompatibilityIndex {
         &self.interpolation_compatibility_index
+    }
+
+    pub fn interpolation_compatibility_index_report(
+        &self,
+    ) -> ShiftInterpolationCompatibilityIndexReport {
+        ShiftInterpolationCompatibilityIndexReport {
+            revision: self.revision,
+            index: self.interpolation_compatibility_index.clone(),
+        }
     }
 
     #[cfg(test)]

@@ -250,7 +250,7 @@ pub struct ShiftGlyphDependencies {
     pub component_dependents: Vec<ShiftComponentUse>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftInterpolationCompatibilityIndex {
     pub version: u32,
