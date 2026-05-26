@@ -14,10 +14,11 @@ use crate::{
     ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
     ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
     ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
-    ShiftSourceLayerCoverageReadiness, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
-    ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
-    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
-    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount, ShiftSourceUpdate,
+    ShiftStaticComponentExportDisposition, ShiftWorkingSource,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -10342,6 +10343,39 @@ fn working_source_reports_source_layer_coverage() {
         coverage[1].missing_layers[0].expected_layer_id,
         "source_Bold"
     );
+
+    let summary = working_source.source_layer_coverage_summary();
+    assert_eq!(summary.source_count, 2);
+    assert_eq!(summary.glyph_count, 2);
+    assert_eq!(summary.expected_layer_count, 4);
+    assert_eq!(summary.present_layer_count, 3);
+    assert_eq!(summary.missing_layer_count, 1);
+    assert_eq!(summary.ready_source_count, 1);
+    assert_eq!(summary.source_needing_work_count, 1);
+    assert_eq!(summary.source_with_missing_layers_count, 1);
+    assert_eq!(summary.source_with_interpolation_mismatches_count, 0);
+    assert_eq!(summary.interpolation_issue_count, 0);
+    assert_eq!(summary.interpolation_reference_issue_count, 0);
+    assert_eq!(summary.interpolation_mismatch_issue_count, 0);
+    assert_eq!(summary.interpolation_incompatible_glyph_count, 0);
+    assert!(summary.interpolation_issue_kind_counts.is_empty());
+    assert!(summary.interpolation_reference_issue_kind_counts.is_empty());
+    assert!(summary.interpolation_mismatch_issue_kind_counts.is_empty());
+    assert_eq!(
+        summary.readiness_counts,
+        vec![
+            ShiftSourceLayerCoverageReadinessCount {
+                readiness: ShiftSourceLayerCoverageReadiness::Ready,
+                source_count: 1,
+            },
+            ShiftSourceLayerCoverageReadinessCount {
+                readiness: ShiftSourceLayerCoverageReadiness::MissingLayers,
+                source_count: 1,
+            },
+        ]
+    );
+    assert!(!summary.complete);
+    assert!(!summary.ready);
 }
 
 #[test]
@@ -10475,6 +10509,57 @@ fn working_source_reports_source_interpolation_issues() {
         coverage[1].interpolation_issues[0].issue.layer_id,
         "source_Bold"
     );
+
+    let summary = working_source.source_layer_coverage_summary();
+    assert_eq!(summary.source_count, 2);
+    assert_eq!(summary.glyph_count, 2);
+    assert_eq!(summary.expected_layer_count, 4);
+    assert_eq!(summary.present_layer_count, 4);
+    assert_eq!(summary.missing_layer_count, 0);
+    assert_eq!(summary.ready_source_count, 1);
+    assert_eq!(summary.source_needing_work_count, 1);
+    assert_eq!(summary.source_with_missing_layers_count, 0);
+    assert_eq!(summary.source_with_interpolation_mismatches_count, 1);
+    assert_eq!(summary.interpolation_issue_count, 2);
+    assert_eq!(summary.interpolation_reference_issue_count, 2);
+    assert_eq!(summary.interpolation_mismatch_issue_count, 2);
+    assert_eq!(summary.interpolation_incompatible_glyph_count, 1);
+    assert_eq!(
+        summary.interpolation_issue_kind_counts,
+        vec![
+            ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
+                issue_count: 1,
+            },
+            ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ComponentCountMismatch,
+                issue_count: 1,
+            },
+        ]
+    );
+    assert_eq!(
+        summary.interpolation_reference_issue_kind_counts,
+        summary.interpolation_issue_kind_counts
+    );
+    assert_eq!(
+        summary.interpolation_mismatch_issue_kind_counts,
+        summary.interpolation_issue_kind_counts
+    );
+    assert_eq!(
+        summary.readiness_counts,
+        vec![
+            ShiftSourceLayerCoverageReadinessCount {
+                readiness: ShiftSourceLayerCoverageReadiness::Ready,
+                source_count: 1,
+            },
+            ShiftSourceLayerCoverageReadinessCount {
+                readiness: ShiftSourceLayerCoverageReadiness::HasInterpolationMismatches,
+                source_count: 1,
+            },
+        ]
+    );
+    assert!(summary.complete);
+    assert!(!summary.ready);
 }
 
 #[test]

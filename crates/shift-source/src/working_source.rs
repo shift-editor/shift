@@ -293,13 +293,46 @@ pub struct ShiftSourceLayerCoverage {
     pub interpolation_issues: Vec<ShiftSourceInterpolationIssue>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ShiftSourceLayerCoverageReadiness {
     Ready,
     MissingLayers,
     HasInterpolationMismatches,
     MissingLayersAndInterpolationMismatches,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLayerCoverageReadinessCount {
+    pub readiness: ShiftSourceLayerCoverageReadiness,
+    pub source_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLayerCoverageSummary {
+    pub source_count: usize,
+    pub glyph_count: usize,
+    pub expected_layer_count: usize,
+    pub present_layer_count: usize,
+    pub missing_layer_count: usize,
+    pub ready_source_count: usize,
+    pub source_needing_work_count: usize,
+    pub source_with_missing_layers_count: usize,
+    pub source_with_interpolation_mismatches_count: usize,
+    pub interpolation_issue_count: usize,
+    pub interpolation_reference_issue_count: usize,
+    pub interpolation_mismatch_issue_count: usize,
+    pub interpolation_incompatible_glyph_count: usize,
+    pub interpolation_issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
+    pub interpolation_reference_issue_kind_counts:
+        Vec<ShiftInterpolationCompatibilityIssueKindCount>,
+    pub interpolation_mismatch_issue_kind_counts:
+        Vec<ShiftInterpolationCompatibilityIssueKindCount>,
+    pub readiness_counts: Vec<ShiftSourceLayerCoverageReadinessCount>,
+    pub complete: bool,
+    pub ready: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1497,6 +1530,95 @@ impl ShiftWorkingSource {
                 }
             })
             .collect()
+    }
+
+    pub fn source_layer_coverage_summary(&self) -> ShiftSourceLayerCoverageSummary {
+        Self::summarize_source_layer_coverage(&self.source_layer_coverage())
+    }
+
+    fn summarize_source_layer_coverage(
+        coverage: &[ShiftSourceLayerCoverage],
+    ) -> ShiftSourceLayerCoverageSummary {
+        let mut readiness_counts = BTreeMap::new();
+        let mut interpolation_incompatible_glyph_ids = BTreeSet::new();
+        let mut interpolation_reference_issue_kinds = Vec::new();
+        let mut interpolation_mismatch_issue_kinds = Vec::new();
+
+        for source in coverage {
+            *readiness_counts.entry(source.readiness).or_default() += 1;
+            for issue in &source.interpolation_issues {
+                if issue.issue.reference_layer_id == source.source_id {
+                    interpolation_reference_issue_kinds.push(issue.issue.kind);
+                }
+                if issue.issue.layer_id == source.source_id {
+                    interpolation_incompatible_glyph_ids.insert(issue.glyph_id.as_str());
+                    interpolation_mismatch_issue_kinds.push(issue.issue.kind);
+                }
+            }
+        }
+
+        let source_count = coverage.len();
+        let glyph_count = coverage
+            .first()
+            .map(|source| source.glyph_count)
+            .unwrap_or_default();
+        let missing_layer_count = coverage
+            .iter()
+            .map(|source| source.missing_layer_count)
+            .sum();
+        let interpolation_mismatch_issue_count = coverage
+            .iter()
+            .map(|source| source.interpolation_mismatch_issue_count)
+            .sum();
+        let source_needing_work_count = coverage
+            .iter()
+            .filter(|source| source.readiness != ShiftSourceLayerCoverageReadiness::Ready)
+            .count();
+
+        ShiftSourceLayerCoverageSummary {
+            source_count,
+            glyph_count,
+            expected_layer_count: coverage.iter().map(|source| source.glyph_count).sum(),
+            present_layer_count: coverage.iter().map(|source| source.layer_count).sum(),
+            missing_layer_count,
+            ready_source_count: source_count - source_needing_work_count,
+            source_needing_work_count,
+            source_with_missing_layers_count: coverage
+                .iter()
+                .filter(|source| source.missing_layer_count > 0)
+                .count(),
+            source_with_interpolation_mismatches_count: coverage
+                .iter()
+                .filter(|source| source.interpolation_mismatch_issue_count > 0)
+                .count(),
+            interpolation_issue_count: interpolation_mismatch_issue_count,
+            interpolation_reference_issue_count: coverage
+                .iter()
+                .map(|source| source.interpolation_reference_issue_count)
+                .sum(),
+            interpolation_mismatch_issue_count,
+            interpolation_incompatible_glyph_count: interpolation_incompatible_glyph_ids.len(),
+            interpolation_issue_kind_counts: interpolation_issue_kind_counts(
+                interpolation_mismatch_issue_kinds.iter().copied(),
+            ),
+            interpolation_reference_issue_kind_counts: interpolation_issue_kind_counts(
+                interpolation_reference_issue_kinds.iter().copied(),
+            ),
+            interpolation_mismatch_issue_kind_counts: interpolation_issue_kind_counts(
+                interpolation_mismatch_issue_kinds.iter().copied(),
+            ),
+            readiness_counts: readiness_counts
+                .into_iter()
+                .map(
+                    |(readiness, source_count)| ShiftSourceLayerCoverageReadinessCount {
+                        readiness,
+                        source_count,
+                    },
+                )
+                .collect(),
+            complete: missing_layer_count == 0,
+            ready: source_needing_work_count == 0,
+        }
     }
 
     fn source_layer_coverage_readiness(
