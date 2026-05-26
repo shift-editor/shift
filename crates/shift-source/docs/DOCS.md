@@ -126,6 +126,14 @@ compiler, should decide how that intent lowers into designspace, UFO, static or
 variable binaries, `avar`/`avar2`, `VARC`, fallback decomposition, and
 artifact-specific diagnostics.
 
+`fontc` should be treated as the compiler for generated inputs, not as the
+policy engine for Shift authoring semantics. Before a backend hands generated
+UFO/designspace data to `fontc`, it should use source queries to decide whether
+components can be preserved as plain static references, resolved at a concrete
+instance, decomposed into outlines, materialized as generated helper glyphs, or
+rejected with a typed diagnostic. The source package provides the semantic
+evidence; the export backend owns the artifact-specific fallback choice.
+
 The intended flow is:
 
 ```text
@@ -426,6 +434,11 @@ format exploration:
   total/supported/unsupported component counts, affected glyph count, and counts
   per missing capability so export UI can make a fast proceed/fallback/fail
   decision without re-walking every diagnostic.
+  `ShiftComponentLoweringTarget::plain_components()` means the target can only
+  preserve ordinary static component references. It does not mean "fontc will
+  solve variable components." A static export path can still choose to lower
+  active variable or conditional recipes first, then hand the lowered static
+  result to a plain-component target.
   Static-instance preflight can pass a concrete location; active conditions are
   resolved away before capability comparison, while inactive conditional
   components are skipped and counted separately with stable IDs, required

@@ -648,6 +648,12 @@ pub enum ShiftComponentLoweringHint {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentLoweringTarget {
+    /// Component semantics that the target can preserve as authored.
+    ///
+    /// This is deliberately not a static-export fallback policy. A compiler
+    /// path can still export unsupported source semantics if the backend first
+    /// resolves, decomposes, materializes, or otherwise lowers them into a form
+    /// represented by this target.
     pub supported_capabilities: Vec<ShiftComponentLoweringCapability>,
 }
 
@@ -663,7 +669,11 @@ impl ShiftComponentLoweringTarget {
         }
     }
 
-    /// A backend target that accepts only ordinary static component references.
+    /// A target that accepts only ordinary static component references.
+    ///
+    /// For a generated UFO/designspace/TTF path, this should describe the
+    /// generated input after any Shift-side semantic fallback has already run,
+    /// not the full authoring graph before fallback.
     pub fn plain_components() -> Self {
         Self::new(Vec::new())
     }
