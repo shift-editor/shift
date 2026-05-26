@@ -236,6 +236,39 @@ rebuilds are too expensive, the fix is to update Rust indexes incrementally from
 `ShiftPackageChange`, not to make the renderer scan package JSON or issue many
 small N-API calls.
 
+Scrubbing and hot edit sessions follow the same rule. Moving a variation slider
+should update a TypeScript cell for the current location and render from the
+already-loaded editor projection. It should not call Rust once per glyph on
+every frame. Rust owns the source graph, axis maps, local axes, component
+recipes, and compatibility evidence; the editor runtime owns the current
+location, hover state, selection state, viewport, active tool, and draft contour
+overlay while the user is dragging.
+
+The cache keys should make this explicit:
+
+```text
+documentRevision
+glyphId
+layerOrSourceId
+normalizedLocation
+editSessionVersion
+```
+
+A committed source edit bumps the working-source revision and returns compact
+invalidations for the cache namespaces it touched. A glyph rename invalidates
+labels and dependency rows. A contour commit invalidates geometry for that glyph
+and layer/source. Axis-map and component-recipe edits invalidate normalized
+location or component-resolution caches. During an active contour drag, the
+renderer can draw a local overlay at pointer speed and send one semantic command
+when the gesture or transaction commits.
+
+This means `shift-source` helps the app by making the slow questions explicit:
+load and validate this package, resolve this location, tell me which glyphs are
+compatible, tell me which sources are complete, and prepare this save. It does
+not replace the editor loop. The editor loop should keep its own signals, IR
+projection, render caches, and transient interaction state, all keyed by the
+Rust revision so stale responses can be ignored.
+
 The JSON files in `derived/` are persistence, reload, diagnostics, and recovery
 artifacts. In memory, Rust can rebuild and serve the same query views directly
 from `ShiftPackage`.
