@@ -415,10 +415,11 @@ format exploration:
 - **Component lowering diagnostics:** export preflight can compare component
   recipes with a target capability profile before invoking a backend. This keeps
   source format semantics separate from backend policy while still letting the
-  app show exact unsupported capabilities per glyph, layer, and component. A
-  summary query also returns total/supported/unsupported component counts,
-  affected glyph count, and counts per missing capability so export UI can make
-  a fast proceed/fallback/fail decision without re-walking every diagnostic.
+  app show exact unsupported capabilities per glyph, layer, component, and
+  evaluated condition when a concrete context is provided. A summary query also
+  returns total/supported/unsupported component counts, affected glyph count,
+  and counts per missing capability so export UI can make a fast
+  proceed/fallback/fail decision without re-walking every diagnostic.
   Static-instance preflight can pass a concrete location; inactive conditional
   components are skipped and counted separately with stable IDs, required
   capabilities, and the evaluated condition tree that made them inactive.

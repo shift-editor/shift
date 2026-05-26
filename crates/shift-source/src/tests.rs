@@ -4894,6 +4894,17 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             .collect::<Vec<_>>(),
         vec!["component_conditional", "component_variable"]
     );
+    assert_eq!(
+        narrow_location_preflight.diagnostics[0].condition,
+        Some(ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wght".to_string(),
+            value: 800.0,
+            min: Some(700.0),
+            max: None,
+            active: true,
+        })
+    );
+    assert_eq!(narrow_location_preflight.diagnostics[1].condition, None);
 
     let contextual_preflight = working_source
         .component_lowering_preflight_with_context(
@@ -4925,6 +4936,16 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             .map(|diagnostic| diagnostic.component_id.as_str())
             .collect::<Vec<_>>(),
         vec!["component_conditional", "component_variable"]
+    );
+    assert_eq!(
+        contextual_preflight.diagnostics[0].condition,
+        Some(ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wght".to_string(),
+            value: 800.0,
+            min: Some(700.0),
+            max: None,
+            active: true,
+        })
     );
 
     let missing_axis_err = working_source

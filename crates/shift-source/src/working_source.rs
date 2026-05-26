@@ -663,7 +663,7 @@ impl ShiftComponentLoweringTarget {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentLoweringDiagnostic {
     pub glyph_id: String,
@@ -675,6 +675,8 @@ pub struct ShiftComponentLoweringDiagnostic {
     pub lowering_hint: ShiftComponentLoweringHint,
     pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
     pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<ShiftConditionEvaluation>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1819,8 +1821,9 @@ impl ShiftWorkingSource {
             for (layer_id, layer) in &glyph.layers {
                 for component in &layer.components {
                     total_component_count += 1;
+                    let mut condition = None;
                     if let Some(context) = context {
-                        let condition = component
+                        condition = component
                             .condition
                             .as_ref()
                             .map(|condition| {
@@ -1831,7 +1834,7 @@ impl ShiftWorkingSource {
                                 )
                             })
                             .transpose()?;
-                        if let Some(condition) = condition {
+                        if let Some(condition) = &condition {
                             if !condition.active() {
                                 let base_glyph = self.glyph(&component.base_glyph_id)?;
                                 let summary = component_recipe_summary(
@@ -1851,7 +1854,7 @@ impl ShiftWorkingSource {
                                         base_glyph_name: summary.base_glyph_name,
                                         lowering_hint: summary.lowering_hint,
                                         required_capabilities: summary.required_capabilities,
-                                        condition,
+                                        condition: condition.clone(),
                                     },
                                 );
                                 continue;
@@ -1888,6 +1891,7 @@ impl ShiftWorkingSource {
                         lowering_hint: summary.lowering_hint,
                         required_capabilities: summary.required_capabilities,
                         missing_capabilities,
+                        condition,
                     });
                 }
             }
