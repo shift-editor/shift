@@ -91,7 +91,7 @@ Good renderer-facing queries:
 
 ```text
 getGlyphDependents(glyphId)
-getInterpolationCompatibility(glyphId)
+getGlyphInterpolationCompatibilityReport(glyphId)
 getSourceLocations()
 getSourceLayerCoverageReport()
 getSourceLayerCoverageSummary()
@@ -599,6 +599,12 @@ format exploration:
   source coordinates versus axis-default coordinates, so source editors can
   render summary badges and discard stale async results without scanning every
   source row in TypeScript.
+- **Glyph interpolation compatibility reports:** glyph grids, inspectors, and
+  export panels can ask for one glyph's derived interpolation compatibility with
+  the working-source revision, compact compatible/layer/issue counts, issue-kind
+  counts, and the detailed compatibility record. The app can therefore show
+  variable-font warnings for a selected glyph and discard stale async results
+  without scanning the package-level compatibility index in TypeScript.
 - **Source layer coverage:** source panels can ask which glyphs have a layer for
   each family source, which glyphs are missing that layer, and which
   interpolation compatibility issues involve that source. Coverage rows include

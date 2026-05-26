@@ -62,6 +62,7 @@ pub use working_source::{
     ShiftDeleteGlyphAndRemoveComponentsReport, ShiftDeleteGlyphPreview, ShiftDeleteGlyphReport,
     ShiftDeleteGlyphSourceLayerPreview, ShiftDeleteGlyphSourceLayerReport,
     ShiftDeleteGlyphVariationSourceReport, ShiftDeleteSourcePreview, ShiftDeleteSourceReport,
+    ShiftGlyphInterpolationCompatibilityReport, ShiftGlyphInterpolationCompatibilitySummary,
     ShiftGlyphRelinkReplacementBlocker, ShiftGlyphRelinkReplacementCandidate,
     ShiftGlyphRelinkReplacementCandidateReport, ShiftGlyphRelinkReplacementCandidateSummary,
     ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,

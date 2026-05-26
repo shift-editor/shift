@@ -12,20 +12,21 @@ use crate::{
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
     ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
-    ShiftGlyphRelinkReplacementCandidateSummary, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftMappedLocationSummary, ShiftMissingSourceLayer,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
-    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse,
-    ShiftSourceLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
-    ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
-    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
-    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
-    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftCreateSource, ShiftGlyphInterpolationCompatibilitySummary,
+    ShiftGlyphRelinkReplacementBlocker, ShiftGlyphRelinkReplacementCandidateSummary,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceLocationSummary, ShiftGlyphVariationSourceUpdate,
+    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
+    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
+    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
+    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
+    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -565,6 +566,25 @@ fn interpolation_compatibility_index_reports_contour_topology_mismatch() {
             expected: "on-on:closed".to_string(),
             actual: "on-on-off:closed".to_string(),
         }]
+    );
+
+    let working_source = ShiftWorkingSource::new(package).expect("working source should build");
+    let report = working_source
+        .glyph_interpolation_compatibility_report("glyph_A")
+        .expect("glyph compatibility report should build");
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.compatibility, glyph.clone());
+    assert_eq!(
+        report.summary,
+        ShiftGlyphInterpolationCompatibilitySummary {
+            compatible: false,
+            layer_count: 2,
+            issue_count: 1,
+            issue_kind_counts: vec![ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ContourTopologyMismatch,
+                issue_count: 1,
+            }],
+        }
     );
 }
 

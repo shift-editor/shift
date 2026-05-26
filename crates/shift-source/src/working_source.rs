@@ -308,6 +308,23 @@ pub struct ShiftSourceInterpolationIssue {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphInterpolationCompatibilityReport {
+    pub revision: u64,
+    pub summary: ShiftGlyphInterpolationCompatibilitySummary,
+    pub compatibility: ShiftGlyphInterpolationCompatibility,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphInterpolationCompatibilitySummary {
+    pub compatible: bool,
+    pub layer_count: usize,
+    pub issue_count: usize,
+    pub issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftSourceLayerCoverage {
     pub source_id: String,
     pub source_name: String,
@@ -2204,6 +2221,18 @@ impl ShiftWorkingSource {
             .ok_or_else(|| ShiftSourceError::MissingGlyph {
                 glyph_id: glyph_id.to_string(),
             })
+    }
+
+    pub fn glyph_interpolation_compatibility_report(
+        &self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<ShiftGlyphInterpolationCompatibilityReport> {
+        let compatibility = self.glyph_interpolation_compatibility(glyph_id)?.clone();
+        Ok(ShiftGlyphInterpolationCompatibilityReport {
+            revision: self.revision,
+            summary: glyph_interpolation_compatibility_summary(&compatibility),
+            compatibility,
+        })
     }
 
     pub fn glyph_variation_source_locations(
@@ -5903,6 +5932,17 @@ fn glyph_relink_replacement_candidate_summary(
         cycle_blocked_candidate_count,
         missing_base_local_axes_candidate_count,
         base_local_axis_out_of_range_candidate_count,
+    }
+}
+
+fn glyph_interpolation_compatibility_summary(
+    compatibility: &ShiftGlyphInterpolationCompatibility,
+) -> ShiftGlyphInterpolationCompatibilitySummary {
+    ShiftGlyphInterpolationCompatibilitySummary {
+        compatible: compatibility.compatible,
+        layer_count: compatibility.layer_signatures.len(),
+        issue_count: compatibility.issue_count,
+        issue_kind_counts: compatibility.issue_kind_counts.clone(),
     }
 }
 

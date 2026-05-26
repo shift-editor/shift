@@ -262,7 +262,7 @@ pub struct ShiftInterpolationCompatibilityIndex {
     pub glyphs: BTreeMap<String, ShiftGlyphInterpolationCompatibility>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphInterpolationCompatibility {
     pub glyph_id: String,
