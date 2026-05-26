@@ -367,6 +367,25 @@ pub enum ShiftVariableFontReadiness {
     MissingSourceLayersAndInterpolationIncompatible,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftVariableFontExportPreflight {
+    pub readiness: ShiftVariableFontExportReadiness,
+    pub variable_readiness: ShiftVariableFontReadiness,
+    pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
+    pub component_preflight: ShiftComponentLoweringPreflight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftVariableFontExportReadiness {
+    Ready,
+    SingleSource,
+    BlockedBySourceReadiness,
+    BlockedByUnsupportedComponents,
+    BlockedBySourceReadinessAndUnsupportedComponents,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphVariationSourceUse {
@@ -1534,6 +1553,37 @@ impl ShiftWorkingSource {
         ShiftVariableFontReadinessReport {
             readiness,
             source_coverage_summary,
+        }
+    }
+
+    pub fn variable_font_export_preflight(
+        &self,
+        target: &ShiftComponentLoweringTarget,
+    ) -> ShiftVariableFontExportPreflight {
+        let source_coverage_summary = self.source_layer_coverage_summary();
+        let variable_readiness =
+            Self::variable_font_readiness_from_coverage_summary(&source_coverage_summary);
+        let component_preflight = self.component_lowering_preflight(target);
+        let source_blocked = variable_readiness != ShiftVariableFontReadiness::Ready;
+        let component_blocked = component_preflight.readiness
+            == ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents;
+        let readiness = match (variable_readiness, source_blocked, component_blocked) {
+            (ShiftVariableFontReadiness::SingleSource, _, _) => {
+                ShiftVariableFontExportReadiness::SingleSource
+            }
+            (_, true, true) => {
+                ShiftVariableFontExportReadiness::BlockedBySourceReadinessAndUnsupportedComponents
+            }
+            (_, true, false) => ShiftVariableFontExportReadiness::BlockedBySourceReadiness,
+            (_, false, true) => ShiftVariableFontExportReadiness::BlockedByUnsupportedComponents,
+            (_, false, false) => ShiftVariableFontExportReadiness::Ready,
+        };
+
+        ShiftVariableFontExportPreflight {
+            readiness,
+            variable_readiness,
+            source_coverage_summary,
+            component_preflight,
         }
     }
 

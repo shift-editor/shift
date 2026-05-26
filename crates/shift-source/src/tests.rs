@@ -17,9 +17,10 @@ use crate::{
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
     ShiftSourceLayerCoverageReadinessCount, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
-    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
-    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
-    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -10825,6 +10826,184 @@ fn working_source_reports_variable_font_readiness() {
 
     assert_eq!(report.readiness, ShiftVariableFontReadiness::Ready);
     assert!(report.source_coverage_summary.ready);
+}
+
+#[test]
+fn working_source_reports_variable_font_export_preflight() {
+    let single_source = ShiftWorkingSource::new(package_with_single_source(vec![ShiftGlyph {
+        id: "glyph_A".to_string(),
+        name: "A".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+    }]))
+    .expect("single-source package should be valid");
+    let single_source_preflight = single_source
+        .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(
+        single_source_preflight.readiness,
+        ShiftVariableFontExportReadiness::SingleSource
+    );
+    assert_eq!(
+        single_source_preflight.variable_readiness,
+        ShiftVariableFontReadiness::SingleSource
+    );
+
+    let mut ready_package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), layer_with_line_contour(600.0)),
+                ("source_Bold".to_string(), layer_with_line_contour(700.0)),
+            ]),
+        }],
+    );
+    ready_package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let ready_source = ShiftWorkingSource::new(ready_package).expect("package is valid");
+    let ready_preflight = ready_source
+        .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(
+        ready_preflight.readiness,
+        ShiftVariableFontExportReadiness::Ready
+    );
+    assert_eq!(
+        ready_preflight.variable_readiness,
+        ShiftVariableFontReadiness::Ready
+    );
+    assert_eq!(
+        ready_preflight.component_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::Ready
+    );
+
+    let mut source_blocked_package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([(
+                "source_Regular".to_string(),
+                layer_with_line_contour(600.0),
+            )]),
+        }],
+    );
+    source_blocked_package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let source_blocked = ShiftWorkingSource::new(source_blocked_package).expect("package is valid");
+    let source_blocked_preflight = source_blocked.variable_font_export_preflight(
+        &ShiftComponentLoweringTarget::all_shift_component_semantics(),
+    );
+    assert_eq!(
+        source_blocked_preflight.readiness,
+        ShiftVariableFontExportReadiness::BlockedBySourceReadiness
+    );
+    assert_eq!(
+        source_blocked_preflight.variable_readiness,
+        ShiftVariableFontReadiness::MissingSourceLayers
+    );
+
+    let mut variable_component_layer = empty_layer(600.0);
+    variable_component_layer.components.push(ShiftComponent {
+        id: "component_variable_stem".to_string(),
+        base_glyph_id: "glyph_stem".to_string(),
+        base_glyph_name: "stem".to_string(),
+        transform: DecomposedTransform::identity(),
+        location: BTreeMap::from([("axis_wght".to_string(), 700.0)]),
+        axis_inheritance: ShiftAxisInheritance::InheritParent,
+        variation_sources: Vec::new(),
+        condition: None,
+    });
+    let mut component_blocked_package = package_with_axes(
+        vec![weight_axis()],
+        vec![
+            ShiftGlyph {
+                id: "glyph_A".to_string(),
+                name: "A".to_string(),
+                unicodes: Vec::new(),
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::from([
+                    (
+                        "source_Regular".to_string(),
+                        variable_component_layer.clone(),
+                    ),
+                    ("source_Bold".to_string(), variable_component_layer.clone()),
+                ]),
+            },
+            ShiftGlyph {
+                id: "glyph_stem".to_string(),
+                name: "stem".to_string(),
+                unicodes: Vec::new(),
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::from([
+                    ("source_Regular".to_string(), empty_layer(120.0)),
+                    ("source_Bold".to_string(), empty_layer(140.0)),
+                ]),
+            },
+        ],
+    );
+    component_blocked_package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let component_blocked =
+        ShiftWorkingSource::new(component_blocked_package).expect("package is valid");
+    let component_blocked_preflight = component_blocked
+        .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(
+        component_blocked_preflight.readiness,
+        ShiftVariableFontExportReadiness::BlockedByUnsupportedComponents
+    );
+    assert_eq!(
+        component_blocked_preflight.variable_readiness,
+        ShiftVariableFontReadiness::Ready
+    );
+    assert_eq!(
+        component_blocked_preflight.component_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
+
+    let mut combined_blocked_package = component_blocked.package().clone();
+    combined_blocked_package
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_stem")
+        .expect("stem glyph should exist")
+        .layers
+        .remove("source_Bold");
+    let combined_blocked =
+        ShiftWorkingSource::new(combined_blocked_package).expect("package is valid");
+    let combined_blocked_preflight = combined_blocked
+        .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(
+        combined_blocked_preflight.readiness,
+        ShiftVariableFontExportReadiness::BlockedBySourceReadinessAndUnsupportedComponents
+    );
+    assert_eq!(
+        combined_blocked_preflight.variable_readiness,
+        ShiftVariableFontReadiness::MissingSourceLayers
+    );
+    assert_eq!(
+        combined_blocked_preflight.component_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
 }
 
 #[test]

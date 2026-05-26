@@ -86,6 +86,8 @@ getSourceLocations()
 getSourceLayerCoverageReport()
 getSourceLayerCoverageSummary()
 getSourceLayerCoverage()
+getVariableFontReadinessReport()
+getVariableFontExportPreflight(target)
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
 getComponentRecipe(glyphId, layerId, componentId)
@@ -136,6 +138,12 @@ components can be preserved as plain static references, resolved at a concrete
 instance, decomposed into outlines, materialized as generated helper glyphs, or
 rejected with a typed diagnostic. The source package provides the semantic
 evidence; the export backend owns the artifact-specific fallback choice.
+For variable export UI, `variableFontExportPreflight(target)` combines source
+coverage/interpolation readiness with component capability preflight into one
+app-facing readiness state: single-source, ready, source-blocked,
+component-blocked, or blocked by both. The renderer can drive menu items,
+export panels, and warnings from that single state while still showing the
+source coverage summary and exact component diagnostics as detail.
 
 The intended flow is:
 
