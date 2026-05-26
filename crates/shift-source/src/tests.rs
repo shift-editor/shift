@@ -4,27 +4,27 @@ use crate::{
     ShiftComponentActivity, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
-    ShiftComponentRecipeKind, ShiftComponentRecipeSummary, ShiftComponentResolveContext,
-    ShiftComponentResolvedLocationSummary, ShiftComponentResolvedStateSummary,
-    ShiftComponentTransformField, ShiftComponentVariationParentAxisValue,
-    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
-    ShiftComponentVariationSourceLocationSummary, ShiftComponentVariationSourceUpdate,
-    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
-    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
-    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceLocationSummary, ShiftGlyphVariationSourceUpdate,
-    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
-    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
-    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
-    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
-    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
-    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
-    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
-    ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftComponentRecipeKind, ShiftComponentRecipeReportSummary, ShiftComponentRecipeSummary,
+    ShiftComponentResolveContext, ShiftComponentResolvedLocationSummary,
+    ShiftComponentResolvedStateSummary, ShiftComponentTransformField,
+    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
+    ShiftComponentVariationResolution, ShiftComponentVariationSourceLocationSummary,
+    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
+    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
+    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
+    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftMappedLocationSummary, ShiftMissingSourceLayer,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
+    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse,
+    ShiftSourceLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
+    ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
+    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
+    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -4667,8 +4667,29 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
     let recipes = working_source
         .component_recipes("glyph_A", "source_Regular")
         .expect("component recipes should summarize");
+    let report = working_source
+        .component_recipes_report("glyph_A", "source_Regular")
+        .expect("component recipe report should summarize");
 
     assert_eq!(recipes.len(), 4);
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.recipes, recipes);
+    assert_eq!(
+        report.summary,
+        ShiftComponentRecipeReportSummary {
+            total_component_count: 4,
+            static_component_count: 1,
+            conditional_component_count: 1,
+            variable_component_count: 1,
+            conditional_variable_component_count: 1,
+            condition_capability_component_count: 2,
+            variable_location_capability_component_count: 2,
+            variable_transform_capability_component_count: 1,
+            axis_reset_capability_component_count: 1,
+            variation_source_count: 1,
+            varying_transform_component_count: 1,
+        }
+    );
     assert_eq!(recipes[0].component_id, "component_plain");
     assert_eq!(recipes[0].kind, ShiftComponentRecipeKind::Static);
     assert_eq!(recipes[0].condition_axis_ids, Vec::<String>::new());

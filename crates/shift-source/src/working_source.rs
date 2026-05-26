@@ -862,6 +862,30 @@ pub struct ShiftComponentRecipeSummary {
     pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentRecipeReport {
+    pub revision: u64,
+    pub summary: ShiftComponentRecipeReportSummary,
+    pub recipes: Vec<ShiftComponentRecipeSummary>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentRecipeReportSummary {
+    pub total_component_count: usize,
+    pub static_component_count: usize,
+    pub conditional_component_count: usize,
+    pub variable_component_count: usize,
+    pub conditional_variable_component_count: usize,
+    pub condition_capability_component_count: usize,
+    pub variable_location_capability_component_count: usize,
+    pub variable_transform_capability_component_count: usize,
+    pub axis_reset_capability_component_count: usize,
+    pub variation_source_count: usize,
+    pub varying_transform_component_count: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ShiftComponentRecipeKind {
@@ -2490,6 +2514,19 @@ impl ShiftWorkingSource {
                 ))
             })
             .collect()
+    }
+
+    pub fn component_recipes_report(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+    ) -> ShiftSourceResult<ShiftComponentRecipeReport> {
+        let recipes = self.component_recipes(glyph_id, layer_id)?;
+        Ok(ShiftComponentRecipeReport {
+            revision: self.revision,
+            summary: component_recipe_report_summary(&recipes),
+            recipes,
+        })
     }
 
     pub fn component_recipe(
@@ -5711,6 +5748,76 @@ fn variable_font_export_summary(
         unsupported_component_glyph_count: component_preflight.affected_glyph_count,
         skipped_inactive_component_count: component_preflight.skipped_inactive_component_count,
         missing_component_capability_count: component_preflight.missing_capabilities.len(),
+    }
+}
+
+fn component_recipe_report_summary(
+    recipes: &[ShiftComponentRecipeSummary],
+) -> ShiftComponentRecipeReportSummary {
+    let mut static_component_count = 0;
+    let mut conditional_component_count = 0;
+    let mut variable_component_count = 0;
+    let mut conditional_variable_component_count = 0;
+    let mut condition_capability_component_count = 0;
+    let mut variable_location_capability_component_count = 0;
+    let mut variable_transform_capability_component_count = 0;
+    let mut axis_reset_capability_component_count = 0;
+    let mut variation_source_count = 0;
+    let mut varying_transform_component_count = 0;
+
+    for recipe in recipes {
+        match recipe.kind {
+            ShiftComponentRecipeKind::Static => static_component_count += 1,
+            ShiftComponentRecipeKind::Conditional => conditional_component_count += 1,
+            ShiftComponentRecipeKind::Variable => variable_component_count += 1,
+            ShiftComponentRecipeKind::ConditionalVariable => {
+                conditional_variable_component_count += 1;
+            }
+        }
+
+        if recipe
+            .required_capabilities
+            .contains(&ShiftComponentLoweringCapability::Condition)
+        {
+            condition_capability_component_count += 1;
+        }
+        if recipe
+            .required_capabilities
+            .contains(&ShiftComponentLoweringCapability::VariableLocation)
+        {
+            variable_location_capability_component_count += 1;
+        }
+        if recipe
+            .required_capabilities
+            .contains(&ShiftComponentLoweringCapability::VariableTransform)
+        {
+            variable_transform_capability_component_count += 1;
+        }
+        if recipe
+            .required_capabilities
+            .contains(&ShiftComponentLoweringCapability::AxisReset)
+        {
+            axis_reset_capability_component_count += 1;
+        }
+
+        variation_source_count += recipe.variation_source_count;
+        if recipe.varies_transform {
+            varying_transform_component_count += 1;
+        }
+    }
+
+    ShiftComponentRecipeReportSummary {
+        total_component_count: recipes.len(),
+        static_component_count,
+        conditional_component_count,
+        variable_component_count,
+        conditional_variable_component_count,
+        condition_capability_component_count,
+        variable_location_capability_component_count,
+        variable_transform_capability_component_count,
+        axis_reset_capability_component_count,
+        variation_source_count,
+        varying_transform_component_count,
     }
 }
 

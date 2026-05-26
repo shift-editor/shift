@@ -532,6 +532,12 @@ format exploration:
   resolved axis-value provenance. Component inspectors can render inherit,
   reset, default, local-default, and override badges without scanning every axis
   value in TypeScript, and can drop stale async query results after a newer edit.
+- **Component recipe reports:** inspectors, delete dialogs, and export panels
+  can ask for location-independent component recipe rows plus compact counts for
+  static, conditional, variable, conditional-variable, capability, variation
+  source, and varying-transform states. This keeps cheap component badges and
+  expensive resolved-location/state queries separate, while still letting the UI
+  ignore stale async recipe responses using the working-source revision.
 - **Component variation source resolution:** inspectors and export preflight can
   ask which authored component source applies at an exact parent location, or
   ask for an interpolated component location/transform at an in-between parent
