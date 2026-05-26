@@ -1067,7 +1067,8 @@ impl ShiftWorkingSource {
         glyph_id: &str,
     ) -> ShiftSourceResult<ShiftDeleteGlyphPreview> {
         let dependencies = self.glyph_dependencies(glyph_id)?;
-        let component_dependent_recipes = self.component_dependent_recipes(glyph_id)?;
+        let component_dependent_recipes =
+            self.component_dependent_recipes(glyph_id, &dependencies.component_dependents)?;
 
         Ok(ShiftDeleteGlyphPreview {
             glyph_id: dependencies.glyph_id.clone(),
@@ -1380,30 +1381,37 @@ impl ShiftWorkingSource {
     fn component_dependent_recipes(
         &self,
         base_glyph_id: &str,
+        component_dependents: &[ShiftComponentUse],
     ) -> ShiftSourceResult<Vec<ShiftComponentRecipeSummary>> {
         let base_glyph = self.glyph(base_glyph_id)?;
-        let mut summaries = Vec::new();
-        for glyph in &self.package.glyphs {
-            for (layer_id, layer) in &glyph.layers {
-                for component in &layer.components {
-                    if component.base_glyph_id == base_glyph_id {
-                        summaries.push(component_recipe_summary(
-                            glyph,
-                            layer_id,
-                            component,
-                            &base_glyph.name,
-                        ));
+        component_dependents
+            .iter()
+            .map(|component_use| {
+                let glyph = self.glyph(&component_use.glyph_id)?;
+                let layer = glyph.layers.get(&component_use.layer_id).ok_or_else(|| {
+                    ShiftSourceError::MissingGlyphLayer {
+                        glyph_id: component_use.glyph_id.clone(),
+                        layer_id: component_use.layer_id.clone(),
                     }
-                }
-            }
-        }
-        summaries.sort_by(|left, right| {
-            left.glyph_id
-                .cmp(&right.glyph_id)
-                .then_with(|| left.layer_id.cmp(&right.layer_id))
-                .then_with(|| left.component_id.cmp(&right.component_id))
-        });
-        Ok(summaries)
+                })?;
+                let component = layer
+                    .components
+                    .iter()
+                    .find(|component| component.id == component_use.component_id)
+                    .ok_or_else(|| ShiftSourceError::MissingComponent {
+                        glyph_id: component_use.glyph_id.clone(),
+                        layer_id: component_use.layer_id.clone(),
+                        component_id: component_use.component_id.clone(),
+                    })?;
+                debug_assert_eq!(component.base_glyph_id, base_glyph_id);
+                Ok(component_recipe_summary(
+                    glyph,
+                    &component_use.layer_id,
+                    component,
+                    &base_glyph.name,
+                ))
+            })
+            .collect()
     }
 
     pub fn component_lowering_diagnostics(

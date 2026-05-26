@@ -648,7 +648,9 @@ The format should make these app behaviors straightforward:
   dependents. Dependent previews include component recipe summaries, so the app
   can warn when a removal would discard conditional participation, variable
   locations, transform variation, reset/inherit behavior, or authored component
-  variation sources.
+  variation sources. These summaries are resolved from the dependency-index
+  dependent list, so preview cost scales with the affected components rather
+  than every component in the package.
 - Conservative delete commands that fail before mutation when component
   dependents, source layers, or source-owned variation rows still exist, plus an
   explicit component-removal delete command for the destructive "remove those
