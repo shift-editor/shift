@@ -400,6 +400,7 @@ pub struct ShiftVariableFontExportPreflight {
     pub readiness: ShiftVariableFontExportReadiness,
     pub variable_readiness: ShiftVariableFontReadiness,
     pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
+    pub source_coverage_worklist: ShiftSourceLayerCoverageWorklist,
     pub component_preflight: ShiftComponentLoweringPreflight,
 }
 
@@ -1636,6 +1637,7 @@ impl ShiftWorkingSource {
             readiness,
             variable_readiness: self.variable_font_readiness,
             source_coverage_summary: self.source_layer_coverage_summary.clone(),
+            source_coverage_worklist: self.source_layer_coverage_worklist(),
             component_preflight,
         }
     }

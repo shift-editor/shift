@@ -10954,6 +10954,21 @@ fn working_source_reports_variable_font_export_preflight() {
         source_blocked_preflight.variable_readiness,
         ShiftVariableFontReadiness::MissingSourceLayers
     );
+    assert_eq!(
+        source_blocked_preflight
+            .source_coverage_worklist
+            .items
+            .len(),
+        1
+    );
+    assert_eq!(
+        source_blocked_preflight.source_coverage_worklist.items[0].source_id,
+        "source_Bold"
+    );
+    assert_eq!(
+        source_blocked_preflight.source_coverage_worklist.items[0].readiness,
+        ShiftSourceLayerCoverageReadiness::MissingLayers
+    );
 
     let mut variable_component_layer = empty_layer(600.0);
     variable_component_layer.components.push(ShiftComponent {
@@ -11013,6 +11028,10 @@ fn working_source_reports_variable_font_export_preflight() {
         component_blocked_preflight.variable_readiness,
         ShiftVariableFontReadiness::Ready
     );
+    assert!(component_blocked_preflight
+        .source_coverage_worklist
+        .items
+        .is_empty());
     assert_eq!(
         component_blocked_preflight.component_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
@@ -11037,6 +11056,17 @@ fn working_source_reports_variable_font_export_preflight() {
     assert_eq!(
         combined_blocked_preflight.variable_readiness,
         ShiftVariableFontReadiness::MissingSourceLayers
+    );
+    assert_eq!(
+        combined_blocked_preflight
+            .source_coverage_worklist
+            .items
+            .len(),
+        1
+    );
+    assert_eq!(
+        combined_blocked_preflight.source_coverage_worklist.items[0].source_id,
+        "source_Bold"
     );
     assert_eq!(
         combined_blocked_preflight.component_preflight.readiness,

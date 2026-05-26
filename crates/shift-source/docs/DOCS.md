@@ -147,7 +147,8 @@ coverage/interpolation readiness with component capability preflight into one
 app-facing readiness state: single-source, ready, source-blocked,
 component-blocked, or blocked by both. The renderer can drive menu items,
 export panels, and warnings from that single state while still showing the
-source coverage summary and exact component diagnostics as detail.
+source coverage summary, source coverage worklist, and exact component
+diagnostics as detail.
 
 The intended flow is:
 
@@ -582,7 +583,10 @@ format exploration:
   and interpolation issues for details. Source coverage reports include this
   readiness directly, so mutation reports that already return coverage can
   refresh variable-operation affordances without a follow-up query or
-  TypeScript-side status derivation.
+  TypeScript-side status derivation. Variable-font export preflight also carries
+  the compact source worklist next to component preflight diagnostics, so a
+  blocked export panel can explain source blockers and component blockers from
+  one Rust-owned response.
 - **Coverage-affecting mutation reports:** source create/update/delete, glyph
   create/delete, and glyph source layer create/delete reports include the same
   source coverage report after the mutation. A source sidebar or export-readiness
