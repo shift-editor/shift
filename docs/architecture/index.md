@@ -59,6 +59,10 @@ These modules have stricter change rules. Changes affect multiple layers and req
 - **`@shift/types/bridge`** (`packages/types/src/bridge/`) — generated bridge DTO facade sourced from `crates/shift-bridge/index.d.ts`.
 - **`NativeBridge`** (`apps/desktop/src/renderer/src/bridge/`) — the single class wrapping NAPI bindings. All Rust access goes through NativeBridge.
 
+## Design Spikes
+
+- [`Shift Source Spike Dogfood Evaluation`](./shift-source-dogfood-evaluation.md) — exit criteria for judging whether the `shift-source` spike should become product architecture.
+
 ## Validation
 
 Run `python scripts/context-drift-check.py` from the repo root to check for broken links, stale docs, and missing documentation.
