@@ -3779,10 +3779,11 @@ fn component_recipe_summary(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let varies_transform = component
-        .variation_sources
-        .iter()
-        .any(|source| source.transform.is_some());
+    let varies_transform = component.variation_sources.iter().any(|source| {
+        source
+            .transform
+            .is_some_and(|transform| transform != component.transform)
+    });
     let has_condition = component.condition.is_some();
     let has_variable_location = !component.location.is_empty()
         || component

@@ -728,7 +728,9 @@ The format should make these app behaviors straightforward:
   Transform-only component variation reports `variableTransform` without
   incorrectly requiring `variableLocation`, so backend preflight can accept
   targets that preserve varying transforms but do not need component-axis-value
-  variation.
+  variation. A neutral authored component source whose transform equals the
+  base component transform remains visible as a variation source, but it does
+  not require `variableTransform` on its own.
 - Target capability diagnostics that tell export UI whether the chosen backend
   can preserve conditions, variable component locations, variable transforms,
   and reset-vs-inherit axis semantics before any compiler runs. The app can
