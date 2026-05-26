@@ -1319,6 +1319,26 @@ pub struct ShiftMappedLocation {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftMappedLocationReport {
+    pub revision: u64,
+    pub summary: ShiftMappedLocationSummary,
+    pub mapped_location: ShiftMappedLocation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftMappedLocationSummary {
+    pub mapped_axis_value_count: usize,
+    pub input_location_value_count: usize,
+    pub axis_default_value_count: usize,
+    pub axis_mapping_value_count: usize,
+    pub applied_mapping_count: usize,
+    pub diagnostic_count: usize,
+    pub diagnostic_mapping_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftMappedAxisValue {
     pub value: f64,
     pub source: ShiftMappedAxisValueSource,
@@ -3245,6 +3265,18 @@ impl ShiftWorkingSource {
         Ok(ShiftMappedLocation {
             values,
             diagnostics,
+        })
+    }
+
+    pub fn mapped_location_report(
+        &self,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<ShiftMappedLocationReport> {
+        let mapped_location = self.mapped_location(location)?;
+        Ok(ShiftMappedLocationReport {
+            revision: self.revision,
+            summary: mapped_location_summary(&mapped_location),
+            mapped_location,
         })
     }
 
@@ -5692,6 +5724,41 @@ fn component_resolved_state_summary(
         interpolated_component_count,
         unsupported_component_count,
         unsupported_reason_kind_counts,
+    }
+}
+
+fn mapped_location_summary(mapped_location: &ShiftMappedLocation) -> ShiftMappedLocationSummary {
+    let mut input_location_value_count = 0;
+    let mut axis_default_value_count = 0;
+    let mut axis_mapping_value_count = 0;
+    let mut applied_mapping_ids = BTreeSet::new();
+    let mut diagnostic_mapping_ids = BTreeSet::new();
+
+    for value in mapped_location.values.values() {
+        match value.source {
+            ShiftMappedAxisValueSource::InputLocation => input_location_value_count += 1,
+            ShiftMappedAxisValueSource::AxisDefault => axis_default_value_count += 1,
+            ShiftMappedAxisValueSource::AxisMapping => {
+                axis_mapping_value_count += 1;
+                if let Some(mapping_id) = &value.mapping_id {
+                    applied_mapping_ids.insert(mapping_id.clone());
+                }
+            }
+        }
+    }
+
+    for diagnostic in &mapped_location.diagnostics {
+        diagnostic_mapping_ids.insert(diagnostic.mapping_id.clone());
+    }
+
+    ShiftMappedLocationSummary {
+        mapped_axis_value_count: mapped_location.values.len(),
+        input_location_value_count,
+        axis_default_value_count,
+        axis_mapping_value_count,
+        applied_mapping_count: applied_mapping_ids.len(),
+        diagnostic_count: mapped_location.diagnostics.len(),
+        diagnostic_mapping_count: diagnostic_mapping_ids.len(),
     }
 }
 

@@ -14,9 +14,9 @@ use crate::{
     ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
     ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMissingSourceLayer, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
-    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
     ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
@@ -3355,6 +3355,24 @@ fn working_source_maps_user_location_to_internal_axes() {
             mapping_id: Some("mapping_weight_to_stem".to_string()),
         })
     );
+
+    let report = working_source
+        .mapped_location_report(&BTreeMap::from([("axis_wght".to_string(), 700.0)]))
+        .expect("mapped location report should build");
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.mapped_location, mapped);
+    assert_eq!(
+        report.summary,
+        ShiftMappedLocationSummary {
+            mapped_axis_value_count: 2,
+            input_location_value_count: 1,
+            axis_default_value_count: 0,
+            axis_mapping_value_count: 1,
+            applied_mapping_count: 1,
+            diagnostic_count: 0,
+            diagnostic_mapping_count: 0,
+        }
+    );
 }
 
 #[test]
@@ -3430,6 +3448,24 @@ fn working_source_mapping_uses_defaults_and_reports_outside_sample_range() {
             source: ShiftMappedAxisValueSource::AxisDefault,
             mapping_id: None,
         })
+    );
+
+    let report = working_source
+        .mapped_location_report(&BTreeMap::new())
+        .expect("mapped location report should build");
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.mapped_location, mapped);
+    assert_eq!(
+        report.summary,
+        ShiftMappedLocationSummary {
+            mapped_axis_value_count: 2,
+            input_location_value_count: 0,
+            axis_default_value_count: 2,
+            axis_mapping_value_count: 0,
+            applied_mapping_count: 0,
+            diagnostic_count: 1,
+            diagnostic_mapping_count: 1,
+        }
     );
 }
 
