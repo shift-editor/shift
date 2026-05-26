@@ -218,7 +218,10 @@ Current writer behavior:
   from raw diff/conflict lists. The summary separates canonical source writes,
   canonical source removals, and derived-cache impact, so UI can distinguish
   user-authored data changes from disposable cache regeneration without parsing
-  the full prepared commit.
+  the full prepared commit. Conflict summaries are also grouped by fingerprint
+  conflict kind and by path class (`canonicalSource` vs `derivedCache`), so
+  save banners can distinguish "source changed on disk" from "cache changed on
+  disk" without walking every conflict row.
   Even an unchanged working source compares the full saved package fingerprint
   against disk before reporting `unchanged`, so external edits cannot be
   accidentally accepted as the new clean baseline.
@@ -835,7 +838,9 @@ can drive:
 `canonicalPathCount` and `removedCanonicalPathCount` describe persisted source
 data, while `derivedPathCount` describes disposable cache/index impact. This
 keeps save buttons, dirty badges, and data-loss warnings from treating a cache
-rewrite the same as a canonical source edit.
+rewrite the same as a canonical source edit. `conflictKindCounts` and
+`conflictPathClassCounts` provide the same compact grouping for external
+changes detected during save preview.
 
 Examples:
 

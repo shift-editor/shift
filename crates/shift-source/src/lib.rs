@@ -66,6 +66,8 @@ pub use working_source::{
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportPreview,
     ShiftUpdateAxisMappingReport, ShiftUpdateComponentVariationSourceReport,
     ShiftUpdateGlyphVariationSourceReport, ShiftUpdateSourceReport, ShiftWorkingSource,
-    ShiftWorkingSourceSavePreview, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSaveReport, ShiftWorkingSourceSaveStatus, ShiftWorkingSourceSaveSummary,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreview,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveReport,
+    ShiftWorkingSourceSaveStatus, ShiftWorkingSourceSaveSummary,
 };

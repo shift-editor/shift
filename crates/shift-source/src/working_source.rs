@@ -5,11 +5,11 @@ use crate::package::{
     load_package, parse_unicode_scalar, plan_staged_commit_recovery, prepare_package_commit,
     stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
     ShiftCommitOperation, ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource,
-    ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
-    ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
-    ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue, ShiftPackage,
-    ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
-    ShiftStagedCommitRecoveryPlan,
+    ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint, ShiftFingerprintConflictKind,
+    ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer,
+    ShiftGlyphSource, ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
+    ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource,
+    ShiftStagedCommit, ShiftStagedCommitRecoveryPlan,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -523,10 +523,33 @@ pub struct ShiftWorkingSourceSaveSummary {
     pub removed_canonical_path_count: usize,
     pub derived_path_count: usize,
     pub conflict_count: usize,
+    pub conflict_kind_counts: Vec<ShiftWorkingSourceSaveConflictKindCount>,
+    pub conflict_path_class_counts: Vec<ShiftWorkingSourceSaveConflictPathClassCount>,
     pub staged_recovery_count: usize,
     pub write_file_count: usize,
     pub remove_file_count: usize,
     pub invalidate_derived_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftWorkingSourceSaveConflictKindCount {
+    pub kind: ShiftFingerprintConflictKind,
+    pub conflict_count: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftWorkingSourceSaveConflictPathClass {
+    CanonicalSource,
+    DerivedCache,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftWorkingSourceSaveConflictPathClassCount {
+    pub path_class: ShiftWorkingSourceSaveConflictPathClass,
+    pub conflict_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -3973,6 +3996,16 @@ fn save_summary(
     prepared: &ShiftPreparedCommit,
     staged_recovery_plans: &[ShiftStagedCommitRecoveryPlan],
 ) -> ShiftWorkingSourceSaveSummary {
+    let mut conflict_kind_counts = BTreeMap::<ShiftFingerprintConflictKind, usize>::new();
+    let mut conflict_path_class_counts =
+        BTreeMap::<ShiftWorkingSourceSaveConflictPathClass, usize>::new();
+    for conflict in &prepared.conflicts {
+        *conflict_kind_counts.entry(conflict.kind).or_default() += 1;
+        *conflict_path_class_counts
+            .entry(save_conflict_path_class(&conflict.path))
+            .or_default() += 1;
+    }
+
     let mut summary = ShiftWorkingSourceSaveSummary {
         change_count: prepared.diff.changes.len(),
         impacted_path_count: prepared.impacted_paths.len(),
@@ -3980,6 +4013,24 @@ fn save_summary(
         removed_canonical_path_count: prepared.diff.impact.removed_canonical_paths.len(),
         derived_path_count: prepared.diff.impact.derived_paths.len(),
         conflict_count: prepared.conflicts.len(),
+        conflict_kind_counts: conflict_kind_counts
+            .into_iter()
+            .map(
+                |(kind, conflict_count)| ShiftWorkingSourceSaveConflictKindCount {
+                    kind,
+                    conflict_count,
+                },
+            )
+            .collect(),
+        conflict_path_class_counts: conflict_path_class_counts
+            .into_iter()
+            .map(
+                |(path_class, conflict_count)| ShiftWorkingSourceSaveConflictPathClassCount {
+                    path_class,
+                    conflict_count,
+                },
+            )
+            .collect(),
         staged_recovery_count: staged_recovery_plans.len(),
         ..Default::default()
     };
@@ -3995,6 +4046,14 @@ fn save_summary(
     }
 
     summary
+}
+
+fn save_conflict_path_class(path: &str) -> ShiftWorkingSourceSaveConflictPathClass {
+    if path.starts_with("derived/") {
+        ShiftWorkingSourceSaveConflictPathClass::DerivedCache
+    } else {
+        ShiftWorkingSourceSaveConflictPathClass::CanonicalSource
+    }
 }
 
 fn condition_axis_ids(condition: &ShiftCondition) -> Vec<String> {

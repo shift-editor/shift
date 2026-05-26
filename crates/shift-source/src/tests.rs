@@ -14,7 +14,9 @@ use crate::{
     ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
     ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
     ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
-    ShiftStaticComponentExportDisposition, ShiftWorkingSource, ShiftWorkingSourceSavePreviewStatus,
+    ShiftStaticComponentExportDisposition, ShiftWorkingSource,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
     ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -3572,6 +3574,20 @@ fn working_source_previews_unchanged_save_blocked_by_external_changes() {
     assert_eq!(preview.revision, 0);
     assert_eq!(preview.summary.change_count, 0);
     assert_eq!(preview.summary.conflict_count, 1);
+    assert_eq!(
+        preview.summary.conflict_kind_counts,
+        vec![ShiftWorkingSourceSaveConflictKindCount {
+            kind: ShiftFingerprintConflictKind::Modified,
+            conflict_count: 1,
+        }]
+    );
+    assert_eq!(
+        preview.summary.conflict_path_class_counts,
+        vec![ShiftWorkingSourceSaveConflictPathClassCount {
+            path_class: ShiftWorkingSourceSaveConflictPathClass::CanonicalSource,
+            conflict_count: 1,
+        }]
+    );
     assert_eq!(preview.summary.staged_recovery_count, 0);
     assert_eq!(
         preview
@@ -3583,6 +3599,59 @@ fn working_source_previews_unchanged_save_blocked_by_external_changes() {
         vec![(
             "glyphs/glyph_A.json",
             ShiftFingerprintConflictKind::Modified,
+        )]
+    );
+}
+
+#[test]
+fn working_source_previews_derived_conflicts_separately_from_source_conflicts() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    fs::write(
+        package_path.join(DEPENDENCY_INDEX_PATH),
+        "{\"externally\":\"modified derived index\"}\n",
+    )
+    .expect("derived dependency index should be modified externally");
+
+    let preview = working_source
+        .preview_save(&package_path)
+        .expect("save preview should prepare with derived conflict diagnostics");
+
+    assert_eq!(
+        preview.status,
+        ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
+    );
+    assert_eq!(preview.summary.change_count, 0);
+    assert_eq!(preview.summary.conflict_count, 1);
+    assert_eq!(
+        preview.summary.conflict_kind_counts,
+        vec![ShiftWorkingSourceSaveConflictKindCount {
+            kind: ShiftFingerprintConflictKind::Modified,
+            conflict_count: 1,
+        }]
+    );
+    assert_eq!(
+        preview.summary.conflict_path_class_counts,
+        vec![ShiftWorkingSourceSaveConflictPathClassCount {
+            path_class: ShiftWorkingSourceSaveConflictPathClass::DerivedCache,
+            conflict_count: 1,
+        }]
+    );
+    assert_eq!(
+        preview
+            .prepared
+            .conflicts
+            .iter()
+            .map(|conflict| (conflict.path.as_str(), conflict.kind))
+            .collect::<Vec<_>>(),
+        vec![(
+            DEPENDENCY_INDEX_PATH,
+            ShiftFingerprintConflictKind::Modified
         )]
     );
 }
@@ -3616,6 +3685,20 @@ fn working_source_previews_save_blocked_by_external_changes() {
     assert_eq!(preview.revision, 1);
     assert_eq!(preview.summary.change_count, 2);
     assert_eq!(preview.summary.conflict_count, 1);
+    assert_eq!(
+        preview.summary.conflict_kind_counts,
+        vec![ShiftWorkingSourceSaveConflictKindCount {
+            kind: ShiftFingerprintConflictKind::Modified,
+            conflict_count: 1,
+        }]
+    );
+    assert_eq!(
+        preview.summary.conflict_path_class_counts,
+        vec![ShiftWorkingSourceSaveConflictPathClassCount {
+            path_class: ShiftWorkingSourceSaveConflictPathClass::CanonicalSource,
+            conflict_count: 1,
+        }]
+    );
     assert_eq!(preview.summary.staged_recovery_count, 0);
     assert_eq!(
         preview

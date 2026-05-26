@@ -418,7 +418,7 @@ pub struct ShiftFingerprintConflict {
     pub actual: Option<ShiftFileFingerprint>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ShiftFingerprintConflictKind {
     Created,
