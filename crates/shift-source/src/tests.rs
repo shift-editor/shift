@@ -10947,6 +10947,19 @@ fn working_source_reports_variable_font_export_preflight() {
         single_source_preflight.variable_readiness,
         ShiftVariableFontReadiness::SingleSource
     );
+    assert_eq!(single_source_preflight.summary.source_count, 1);
+    assert_eq!(
+        single_source_preflight.summary.source_needing_work_count,
+        single_source_preflight
+            .source_coverage_summary
+            .source_needing_work_count
+    );
+    assert_eq!(
+        single_source_preflight.summary.unsupported_component_count,
+        single_source_preflight
+            .component_preflight
+            .unsupported_component_count
+    );
 
     let mut ready_package = package_with_axes(
         vec![weight_axis()],
@@ -10986,6 +10999,17 @@ fn working_source_reports_variable_font_export_preflight() {
         ready_preflight.component_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::Ready
     );
+    assert_eq!(ready_preflight.summary.source_count, 2);
+    assert_eq!(ready_preflight.summary.source_needing_work_count, 0);
+    assert_eq!(ready_preflight.summary.missing_source_layer_count, 0);
+    assert_eq!(
+        ready_preflight
+            .summary
+            .interpolation_incompatible_glyph_count,
+        0
+    );
+    assert_eq!(ready_preflight.summary.unsupported_component_count, 0);
+    assert_eq!(ready_preflight.summary.unsupported_component_glyph_count, 0);
 
     let mut source_blocked_package = package_with_axes(
         vec![weight_axis()],
@@ -11021,6 +11045,19 @@ fn working_source_reports_variable_font_export_preflight() {
     assert_eq!(
         source_blocked_preflight.variable_readiness,
         ShiftVariableFontReadiness::MissingSourceLayers
+    );
+    assert_eq!(source_blocked_preflight.summary.source_count, 2);
+    assert_eq!(
+        source_blocked_preflight.summary.source_needing_work_count,
+        1
+    );
+    assert_eq!(
+        source_blocked_preflight.summary.missing_source_layer_count,
+        1
+    );
+    assert_eq!(
+        source_blocked_preflight.summary.unsupported_component_count,
+        0
     );
     assert_eq!(
         source_blocked_preflight
@@ -11108,6 +11145,38 @@ fn working_source_reports_variable_font_export_preflight() {
         component_blocked_preflight.component_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
     );
+    assert_eq!(component_blocked_preflight.summary.source_count, 2);
+    assert_eq!(
+        component_blocked_preflight
+            .summary
+            .source_needing_work_count,
+        0
+    );
+    assert_eq!(
+        component_blocked_preflight
+            .summary
+            .unsupported_component_count,
+        component_blocked_preflight
+            .component_preflight
+            .unsupported_component_count
+    );
+    assert_eq!(
+        component_blocked_preflight
+            .summary
+            .unsupported_component_glyph_count,
+        component_blocked_preflight
+            .component_preflight
+            .affected_glyph_count
+    );
+    assert_eq!(
+        component_blocked_preflight
+            .summary
+            .missing_component_capability_count,
+        component_blocked_preflight
+            .component_preflight
+            .missing_capabilities
+            .len()
+    );
 
     let mut combined_blocked_package = component_blocked.package().clone();
     combined_blocked_package
@@ -11147,6 +11216,25 @@ fn working_source_reports_variable_font_export_preflight() {
     assert_eq!(
         combined_blocked_preflight.component_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
+    assert_eq!(combined_blocked_preflight.summary.source_count, 2);
+    assert_eq!(
+        combined_blocked_preflight.summary.source_needing_work_count,
+        1
+    );
+    assert_eq!(
+        combined_blocked_preflight
+            .summary
+            .missing_source_layer_count,
+        1
+    );
+    assert_eq!(
+        combined_blocked_preflight
+            .summary
+            .unsupported_component_count,
+        combined_blocked_preflight
+            .component_preflight
+            .unsupported_component_count
     );
 }
 

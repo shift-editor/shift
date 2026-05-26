@@ -403,6 +403,7 @@ pub enum ShiftVariableFontReadiness {
 pub struct ShiftVariableFontExportPreflight {
     pub readiness: ShiftVariableFontExportReadiness,
     pub primary_action: ShiftVariableFontExportPrimaryAction,
+    pub summary: ShiftVariableFontExportSummary,
     pub variable_readiness: ShiftVariableFontReadiness,
     pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
     pub source_coverage_worklist: ShiftSourceLayerCoverageWorklist,
@@ -427,6 +428,19 @@ pub enum ShiftVariableFontExportPrimaryAction {
     ResolveSourceReadiness,
     ResolveComponentLowering,
     ResolveSourceReadinessAndComponentLowering,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftVariableFontExportSummary {
+    pub source_count: usize,
+    pub source_needing_work_count: usize,
+    pub missing_source_layer_count: usize,
+    pub interpolation_incompatible_glyph_count: usize,
+    pub unsupported_component_count: usize,
+    pub unsupported_component_glyph_count: usize,
+    pub skipped_inactive_component_count: usize,
+    pub missing_component_capability_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1704,6 +1718,10 @@ impl ShiftWorkingSource {
         ShiftVariableFontExportPreflight {
             readiness,
             primary_action,
+            summary: variable_font_export_summary(
+                &self.source_layer_coverage_summary,
+                &component_preflight,
+            ),
             variable_readiness: self.variable_font_readiness,
             source_coverage_summary: self.source_layer_coverage_summary.clone(),
             source_coverage_worklist: self.source_layer_coverage_worklist(),
@@ -5441,6 +5459,23 @@ impl CompiledAxisMapping {
         }
 
         Ok(output)
+    }
+}
+
+fn variable_font_export_summary(
+    source_coverage_summary: &ShiftSourceLayerCoverageSummary,
+    component_preflight: &ShiftComponentLoweringPreflight,
+) -> ShiftVariableFontExportSummary {
+    ShiftVariableFontExportSummary {
+        source_count: source_coverage_summary.source_count,
+        source_needing_work_count: source_coverage_summary.source_needing_work_count,
+        missing_source_layer_count: source_coverage_summary.missing_layer_count,
+        interpolation_incompatible_glyph_count: source_coverage_summary
+            .interpolation_incompatible_glyph_count,
+        unsupported_component_count: component_preflight.unsupported_component_count,
+        unsupported_component_glyph_count: component_preflight.affected_glyph_count,
+        skipped_inactive_component_count: component_preflight.skipped_inactive_component_count,
+        missing_component_capability_count: component_preflight.missing_capabilities.len(),
     }
 }
 
