@@ -200,6 +200,10 @@ Current writer behavior:
   observed at open time. `prepare_commit()` then compares that saved baseline
   with the current package and current files, so the app can surface external
   file changes before the writer touches live package files.
+- `ShiftWorkingSource::preview_save()` is the non-mutating app query for save
+  readiness. It returns `unchanged`, `ready`, or `blockedByExternalChanges`
+  along with the prepared commit evidence, so save buttons, conflict banners,
+  and dirty-state projections do not infer status from raw diff/conflict lists.
 - `ShiftWorkingSource::save()` is the app-facing happy path for a document save:
   it prepares, stages, applies, and marks the working source saved only after
   the staged commit has succeeded.
@@ -922,8 +926,8 @@ startup
 open package
   -> ShiftWorkingSource::open_saved(root, package)
 edit through working-source semantic operations
-  -> prepareCommit(root)
-  -> show conflicts
+  -> previewSave(root)
+  -> render unchanged/ready/blockedByExternalChanges from prepared evidence
 save
   -> ShiftWorkingSource::save(root)
        prepares, stages, applies, then markSaved(root)

@@ -13,7 +13,7 @@ use crate::{
     ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
     ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
     ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
-    ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
+    ShiftWorkingSource, ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -3388,6 +3388,117 @@ fn working_source_prepared_commit_reports_external_changes_since_open() {
             ShiftFingerprintConflictKind::Modified,
         )]
     );
+}
+
+#[test]
+fn working_source_previews_save_ready_without_staging() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    let preview = working_source
+        .preview_save(&package_path)
+        .expect("save preview should prepare");
+
+    assert_eq!(preview.status, ShiftWorkingSourceSavePreviewStatus::Ready);
+    assert_eq!(preview.revision, 1);
+    assert!(preview.prepared.conflicts.is_empty());
+    assert_eq!(
+        preview.prepared.diff.changes,
+        vec![
+            ShiftPackageChange::RenameGlyph {
+                glyph_id: "glyph_A".to_string(),
+            },
+            ShiftPackageChange::UpdateGlyphLabels {
+                glyph_id: "glyph_Aacute".to_string(),
+            },
+        ]
+    );
+    assert!(
+        !package_path.join(".shift-txn").exists(),
+        "previewing save should not stage a transaction"
+    );
+    assert_eq!(working_source.revision(), 1);
+}
+
+#[test]
+fn working_source_previews_save_unchanged_without_refreshing_baseline() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    let preview = working_source
+        .preview_save(&package_path)
+        .expect("save preview should prepare");
+
+    assert_eq!(
+        preview.status,
+        ShiftWorkingSourceSavePreviewStatus::Unchanged
+    );
+    assert_eq!(preview.revision, 0);
+    assert_eq!(
+        preview.prepared.diff.changes,
+        Vec::<ShiftPackageChange>::new()
+    );
+    assert!(
+        !package_path.join(".shift-txn").exists(),
+        "previewing unchanged save should not stage a transaction"
+    );
+}
+
+#[test]
+fn working_source_previews_save_blocked_by_external_changes() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    fs::write(
+        package_path.join("glyphs/glyph_A.json"),
+        "{\"externally\":\"modified\"}\n",
+    )
+    .expect("glyph file should be modified externally");
+
+    let preview = working_source
+        .preview_save(&package_path)
+        .expect("save preview should prepare with conflict diagnostics");
+
+    assert_eq!(
+        preview.status,
+        ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
+    );
+    assert_eq!(preview.revision, 1);
+    assert_eq!(
+        preview
+            .prepared
+            .conflicts
+            .iter()
+            .map(|conflict| (conflict.path.as_str(), conflict.kind))
+            .collect::<Vec<_>>(),
+        vec![(
+            "glyphs/glyph_A.json",
+            ShiftFingerprintConflictKind::Modified,
+        )]
+    );
+    assert!(
+        !package_path.join(".shift-txn").exists(),
+        "blocked preview should not stage a transaction"
+    );
+    assert_eq!(working_source.revision(), 1);
 }
 
 #[test]

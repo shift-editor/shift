@@ -492,6 +492,22 @@ pub enum ShiftWorkingSourceSaveStatus {
     Saved,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftWorkingSourceSavePreview {
+    pub status: ShiftWorkingSourceSavePreviewStatus,
+    pub prepared: ShiftPreparedCommit,
+    pub revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftWorkingSourceSavePreviewStatus {
+    Unchanged,
+    Ready,
+    BlockedByExternalChanges,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSourceLocation {
@@ -1991,6 +2007,26 @@ impl ShiftWorkingSource {
         )
     }
 
+    pub fn preview_save(
+        &self,
+        root: impl AsRef<Path>,
+    ) -> ShiftSourceResult<ShiftWorkingSourceSavePreview> {
+        let prepared = self.prepare_commit(root)?;
+        let status = if prepared.diff.changes.is_empty() {
+            ShiftWorkingSourceSavePreviewStatus::Unchanged
+        } else if prepared.conflicts.is_empty() {
+            ShiftWorkingSourceSavePreviewStatus::Ready
+        } else {
+            ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
+        };
+
+        Ok(ShiftWorkingSourceSavePreview {
+            status,
+            prepared,
+            revision: self.revision,
+        })
+    }
+
     pub fn mark_saved(&mut self, root: impl AsRef<Path>) -> ShiftSourceResult<()> {
         self.package.validate()?;
         let saved_fingerprint = fingerprint_package(root)?;
@@ -2005,8 +2041,16 @@ impl ShiftWorkingSource {
         root: impl AsRef<Path>,
     ) -> ShiftSourceResult<ShiftWorkingSourceSaveReport> {
         let root = root.as_ref();
-        let prepared = self.prepare_commit(root)?;
-        if prepared.diff.changes.is_empty() {
+        let preview = self.preview_save(root)?;
+        let prepared = preview.prepared;
+
+        if preview.status == ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges {
+            return Err(ShiftSourceError::PreparedCommitHasConflicts {
+                conflict_count: prepared.conflicts.len(),
+            });
+        }
+
+        if preview.status == ShiftWorkingSourceSavePreviewStatus::Unchanged {
             self.mark_saved(root)?;
             return Ok(ShiftWorkingSourceSaveReport {
                 status: ShiftWorkingSourceSaveStatus::Unchanged,

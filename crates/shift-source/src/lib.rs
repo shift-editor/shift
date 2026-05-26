@@ -60,6 +60,7 @@ pub use working_source::{
     ShiftSourceAxisValueSource, ShiftSourceInterpolationIssue, ShiftSourceLayerCoverage,
     ShiftSourceLayerUse, ShiftSourceLocation, ShiftSourceUpdate, ShiftUpdateAxisMappingReport,
     ShiftUpdateComponentVariationSourceReport, ShiftUpdateGlyphVariationSourceReport,
-    ShiftUpdateSourceReport, ShiftWorkingSource, ShiftWorkingSourceSaveReport,
+    ShiftUpdateSourceReport, ShiftWorkingSource, ShiftWorkingSourceSavePreview,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveReport,
     ShiftWorkingSourceSaveStatus,
 };
