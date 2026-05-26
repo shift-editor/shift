@@ -61,6 +61,7 @@ pub struct ShiftRenameGlyphPreview {
     pub new_name: String,
     pub component_dependents: Vec<ShiftComponentUse>,
     pub diff: ShiftPackageDiff,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,6 +83,7 @@ pub struct ShiftDeleteGlyphPreview {
     pub component_dependents: Vec<ShiftComponentUse>,
     pub component_dependent_recipes: Vec<ShiftComponentRecipeSummary>,
     pub can_remove_without_decomposing: bool,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +104,7 @@ pub struct ShiftDeleteGlyphAndRemoveComponentsPreview {
     pub component_dependents: Vec<ShiftComponentUse>,
     pub removed_component_recipes: Vec<ShiftComponentRecipeSummary>,
     pub diff: ShiftPackageDiff,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,6 +128,7 @@ pub struct ShiftDeleteGlyphAndRelinkComponentsPreview {
     pub component_dependents: Vec<ShiftComponentUse>,
     pub relinked_component_recipes: Vec<ShiftComponentRecipeSummary>,
     pub diff: ShiftPackageDiff,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -466,6 +470,7 @@ pub struct ShiftDeleteSourcePreview {
     pub layer_uses: Vec<ShiftSourceLayerUse>,
     pub glyph_variation_source_uses: Vec<ShiftGlyphVariationSourceUse>,
     pub can_delete_without_cascade: bool,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -517,6 +522,7 @@ pub struct ShiftDeleteGlyphSourceLayerPreview {
     pub source_name: String,
     pub glyph_variation_source_uses: Vec<ShiftGlyphVariationSourceUse>,
     pub can_delete_without_cascade: bool,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2238,6 +2244,7 @@ impl ShiftWorkingSource {
             component_dependents: dependencies.component_dependents.clone(),
             component_dependent_recipes,
             can_remove_without_decomposing: dependencies.component_dependents.is_empty(),
+            revision: self.revision,
         })
     }
 
@@ -2348,6 +2355,7 @@ impl ShiftWorkingSource {
             new_name,
             component_dependents,
             diff,
+            revision: self.revision,
         })
     }
 
@@ -2403,6 +2411,7 @@ impl ShiftWorkingSource {
                 && glyph_variation_source_uses.is_empty(),
             layer_uses,
             glyph_variation_source_uses,
+            revision: self.revision,
         })
     }
 
@@ -2447,6 +2456,7 @@ impl ShiftWorkingSource {
             source_name: source.name.clone(),
             can_delete_without_cascade: glyph_variation_source_uses.is_empty(),
             glyph_variation_source_uses,
+            revision: self.revision,
         })
     }
 
@@ -2819,6 +2829,7 @@ impl ShiftWorkingSource {
                 component_dependents: delete_preview.component_dependents,
                 removed_component_recipes: delete_preview.component_dependent_recipes,
                 diff,
+                revision: self.revision,
             },
             next,
         ))
@@ -2872,6 +2883,7 @@ impl ShiftWorkingSource {
                 component_dependents: delete_preview.component_dependents,
                 relinked_component_recipes,
                 diff,
+                revision: self.revision,
             },
             next,
         ))

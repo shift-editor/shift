@@ -79,10 +79,13 @@ and exposes semantic operations that the app can call without parsing package
 files or mutating IR directly. Semantic mutations rebuild these derived views
 before replacing live state, so renderer panels and export preflights read a
 consistent projection without repeating source/package scans on every query.
-App-facing report queries include the working-source `revision` when their
-answer can be used asynchronously by renderer panels. The renderer should
-ignore a returned coverage/readiness/component-preflight/export-preflight
-payload if its revision is older than the current document revision.
+App-facing report and preview queries include the working-source `revision` when
+their answer can be used asynchronously by renderer panels or confirmation
+dialogs. The renderer should ignore a returned coverage/readiness/component
+preflight/export-preflight/preview payload if its revision is older than the
+current document revision. Destructive dialogs should also re-check that preview
+revision before committing the command, so a rename/delete/source-layer action
+cannot accidentally apply a stale confirmation after another edit.
 
 Good renderer-facing queries:
 
@@ -324,7 +327,9 @@ format exploration:
 - **Rename preview:** the app can ask for a prospective rename's old/new name,
   component dependents, and narrow write impact before mutating the working
   source. Duplicate names and stale selections use the same semantic errors as
-  the command path.
+  the command path. The preview carries the current working-source revision so
+  the app can invalidate a stale confirmation if another edit lands before the
+  user commits the rename.
 - **Glyph creation:** quick-add and catalog flows can create a glyph through a
   semantic command. App-authored creates allocate collision-safe names and
   stable IDs, can attach an initial default-source layer, validate the candidate
@@ -873,6 +878,9 @@ The format should make these app behaviors straightforward:
   dependencies.
   Component-removal delete also has a dedicated preview, so the app can show the
   exact destructive write impact before removing dependent component recipes.
+  Rename, delete, source-delete, and glyph-source-layer-delete previews carry
+  the working-source revision, giving the app a uniform stale-confirmation guard
+  for every dialog that can lead to a destructive or identity-changing command.
 - Conservative delete commands that fail before mutation when component
   dependents, source layers, or source-owned variation rows still exist, plus an
   explicit component-removal delete command for the destructive "remove those

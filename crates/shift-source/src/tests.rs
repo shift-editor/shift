@@ -2827,6 +2827,7 @@ fn working_source_previews_glyph_rename_without_mutating() {
     assert_eq!(preview.glyph_id, "glyph_A");
     assert_eq!(preview.old_name, "A");
     assert_eq!(preview.new_name, "RenamedBase");
+    assert_eq!(preview.revision, 0);
     assert_eq!(
         preview.component_dependents,
         vec![ShiftComponentUse {
@@ -3050,6 +3051,7 @@ fn working_source_previews_delete_dependents() {
         .preview_delete_glyph("glyph_A")
         .expect("base glyph preview should build");
     assert_eq!(blocked.glyph_name, "A");
+    assert_eq!(blocked.revision, 0);
     assert!(!blocked.can_remove_without_decomposing);
     assert_eq!(
         blocked.component_dependents,
@@ -7457,6 +7459,7 @@ fn working_source_previews_component_removal_delete_without_mutating() {
 
     assert_eq!(preview.glyph_id, "glyph_A");
     assert_eq!(preview.glyph_name, "A");
+    assert_eq!(preview.revision, 0);
     assert_eq!(
         preview.component_dependents,
         vec![ShiftComponentUse {
@@ -7650,6 +7653,7 @@ fn working_source_previews_relink_delete_without_mutating() {
     assert_eq!(preview.glyph_name, "A");
     assert_eq!(preview.replacement_glyph_id, "glyph_B");
     assert_eq!(preview.replacement_glyph_name, "B");
+    assert_eq!(preview.revision, 0);
     assert_eq!(
         preview.component_dependents,
         vec![ShiftComponentUse {
@@ -11903,6 +11907,7 @@ fn working_source_previews_glyph_source_layer_delete_references() {
     assert_eq!(preview.glyph_name, "A");
     assert_eq!(preview.source_id, "source_Bold");
     assert_eq!(preview.source_name, "Bold");
+    assert_eq!(preview.revision, 0);
     assert!(!preview.can_delete_without_cascade);
     assert_eq!(
         preview.glyph_variation_source_uses,
@@ -12264,6 +12269,7 @@ fn working_source_previews_delete_source_default_blocker() {
 
     assert_eq!(preview.source_id, "source_Regular");
     assert_eq!(preview.source_name, "Regular");
+    assert_eq!(preview.revision, 0);
     assert!(preview.is_default_source);
     assert!(preview.layer_uses.is_empty());
     assert!(preview.glyph_variation_source_uses.is_empty());
@@ -12304,6 +12310,7 @@ fn working_source_previews_delete_source_references() {
 
     assert_eq!(preview.source_id, "source_Bold");
     assert_eq!(preview.source_name, "Bold");
+    assert_eq!(preview.revision, 0);
     assert!(!preview.is_default_source);
     assert!(!preview.can_delete_without_cascade);
     assert_eq!(preview.layer_uses.len(), 1);
