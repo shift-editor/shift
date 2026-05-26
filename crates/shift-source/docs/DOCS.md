@@ -214,6 +214,11 @@ Current writer behavior:
   observed at open time. `prepare_commit()` then compares that saved baseline
   with the current package and current files, so the app can surface external
   file changes before the writer touches live package files.
+- `preview_package_load()` is the non-mutating app query for startup/open
+  readiness. It returns `ready`, `readyWithCleanup`, `recoveryRequired`, or
+  `blockedByRecovery` with staged-transaction summaries and per-transaction
+  plans, so open UI can choose load, cleanup, resume, or warning states without
+  interpreting `.shift-txn` internals.
 - `ShiftWorkingSource::preview_save()` is the non-mutating app query for save
   readiness. It returns `unchanged`, `ready`, or `blockedByExternalChanges`
   along with a compact summary and the prepared commit evidence, so save
@@ -1072,7 +1077,7 @@ intended flow is:
 
 ```text
 startup
-  -> planStagedCommitRecovery(root)
+  -> previewPackageLoad(root)
   -> recoverStagedCommits(root) when every plan is resume/cleanup
   -> prompt when any plan is blockedByLiveConflict/cannotRecover
   -> loadPackage(root)

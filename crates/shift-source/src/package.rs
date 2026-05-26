@@ -500,6 +500,53 @@ pub struct ShiftStagedCommitRecoveryPlan {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftPackageLoadPreview {
+    pub status: ShiftPackageLoadPreviewStatus,
+    pub summary: ShiftStagedCommitRecoverySummary,
+    pub staged_recovery_plans: Vec<ShiftStagedCommitRecoveryPlan>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftPackageLoadPreviewStatus {
+    Ready,
+    ReadyWithCleanup,
+    RecoveryRequired,
+    BlockedByRecovery,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftStagedCommitRecoverySummary {
+    pub staged_recovery_count: usize,
+    pub resume_recovery_count: usize,
+    pub cleanup_recovery_count: usize,
+    pub blocked_recovery_count: usize,
+    pub unrecoverable_recovery_count: usize,
+    pub pending_path_count: usize,
+    pub applied_path_count: usize,
+    pub diverged_path_count: usize,
+    pub issue_count: usize,
+    pub action_counts: Vec<ShiftStagedCommitRecoveryActionCount>,
+    pub live_state_counts: Vec<ShiftStagedCommitRecoveryLiveStateCount>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftStagedCommitRecoveryActionCount {
+    pub action: ShiftStagedCommitRecoveryAction,
+    pub recovery_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftStagedCommitRecoveryLiveStateCount {
+    pub live_state: ShiftStagedCommitLiveState,
+    pub recovery_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftStagedCommitRecoveryRun {
     pub outcomes: Vec<ShiftStagedCommitRecoveryOutcome>,
 }
@@ -2216,6 +2263,78 @@ pub fn plan_staged_commit_recovery(
     })
 }
 
+pub fn summarize_staged_commit_recovery(
+    plans: &[ShiftStagedCommitRecoveryPlan],
+) -> ShiftStagedCommitRecoverySummary {
+    let mut action_counts = BTreeMap::<ShiftStagedCommitRecoveryAction, usize>::new();
+    let mut live_state_counts = BTreeMap::<ShiftStagedCommitLiveState, usize>::new();
+    let mut summary = ShiftStagedCommitRecoverySummary {
+        staged_recovery_count: plans.len(),
+        ..Default::default()
+    };
+
+    for plan in plans {
+        *action_counts.entry(plan.action).or_default() += 1;
+        *live_state_counts.entry(plan.live_state).or_default() += 1;
+        summary.pending_path_count += plan.pending_path_count;
+        summary.applied_path_count += plan.applied_path_count;
+        summary.diverged_path_count += plan.diverged_path_count;
+        summary.issue_count += plan.issue_count;
+
+        match plan.action {
+            ShiftStagedCommitRecoveryAction::Resume => summary.resume_recovery_count += 1,
+            ShiftStagedCommitRecoveryAction::Cleanup => summary.cleanup_recovery_count += 1,
+            ShiftStagedCommitRecoveryAction::BlockedByLiveConflict => {
+                summary.blocked_recovery_count += 1;
+            }
+            ShiftStagedCommitRecoveryAction::CannotRecover => {
+                summary.unrecoverable_recovery_count += 1;
+            }
+        }
+    }
+
+    summary.action_counts = action_counts
+        .into_iter()
+        .map(
+            |(action, recovery_count)| ShiftStagedCommitRecoveryActionCount {
+                action,
+                recovery_count,
+            },
+        )
+        .collect();
+    summary.live_state_counts = live_state_counts
+        .into_iter()
+        .map(
+            |(live_state, recovery_count)| ShiftStagedCommitRecoveryLiveStateCount {
+                live_state,
+                recovery_count,
+            },
+        )
+        .collect();
+
+    summary
+}
+
+pub fn preview_package_load(root: impl AsRef<Path>) -> ShiftSourceResult<ShiftPackageLoadPreview> {
+    let staged_recovery_plans = plan_staged_commit_recovery(root)?;
+    let summary = summarize_staged_commit_recovery(&staged_recovery_plans);
+    let status = if summary.blocked_recovery_count > 0 || summary.unrecoverable_recovery_count > 0 {
+        ShiftPackageLoadPreviewStatus::BlockedByRecovery
+    } else if summary.resume_recovery_count > 0 {
+        ShiftPackageLoadPreviewStatus::RecoveryRequired
+    } else if summary.cleanup_recovery_count > 0 {
+        ShiftPackageLoadPreviewStatus::ReadyWithCleanup
+    } else {
+        ShiftPackageLoadPreviewStatus::Ready
+    };
+
+    Ok(ShiftPackageLoadPreview {
+        status,
+        summary,
+        staged_recovery_plans,
+    })
+}
+
 pub fn recover_staged_commits(
     root: impl AsRef<Path>,
 ) -> ShiftSourceResult<ShiftStagedCommitRecoveryRun> {
@@ -3081,19 +3200,10 @@ pub fn load_package(path: impl AsRef<Path>) -> ShiftSourceResult<ShiftPackage> {
 }
 
 fn ensure_no_unresolved_staged_commits(root: &Path) -> ShiftSourceResult<()> {
-    let recovery_plans = plan_staged_commit_recovery(root)?;
-    let resume_count = recovery_plans
-        .iter()
-        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::Resume)
-        .count();
-    let blocked_count = recovery_plans
-        .iter()
-        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::BlockedByLiveConflict)
-        .count();
-    let invalid_count = recovery_plans
-        .iter()
-        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::CannotRecover)
-        .count();
+    let preview = preview_package_load(root)?;
+    let resume_count = preview.summary.resume_recovery_count;
+    let blocked_count = preview.summary.blocked_recovery_count;
+    let invalid_count = preview.summary.unrecoverable_recovery_count;
 
     if resume_count > 0 || blocked_count > 0 || invalid_count > 0 {
         return Err(ShiftSourceError::UnresolvedStagedCommits {

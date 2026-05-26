@@ -1451,10 +1451,46 @@ fn copy_staged_base_rename_payloads_to_live(package_path: &Path, staged: &ShiftS
 }
 
 #[test]
+fn preview_package_load_reports_ready_without_recovery() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    save_package(&package_with_component_dependency(), &package_path).expect("package should save");
+
+    let preview = preview_package_load(&package_path).expect("load preview should succeed");
+
+    assert_eq!(preview.status, ShiftPackageLoadPreviewStatus::Ready);
+    assert_eq!(preview.summary, ShiftStagedCommitRecoverySummary::default());
+    assert_eq!(preview.staged_recovery_plans, Vec::new());
+}
+
+#[test]
 fn load_package_refuses_pending_staged_commit_before_trusting_files() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
     let (_after, _staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+
+    let preview = preview_package_load(&package_path).expect("load preview should succeed");
+    assert_eq!(
+        preview.status,
+        ShiftPackageLoadPreviewStatus::RecoveryRequired
+    );
+    assert_eq!(preview.summary.staged_recovery_count, 1);
+    assert_eq!(preview.summary.resume_recovery_count, 1);
+    assert_eq!(preview.summary.pending_path_count, 3);
+    assert_eq!(
+        preview.summary.action_counts,
+        vec![ShiftStagedCommitRecoveryActionCount {
+            action: ShiftStagedCommitRecoveryAction::Resume,
+            recovery_count: 1,
+        }]
+    );
+    assert_eq!(
+        preview.summary.live_state_counts,
+        vec![ShiftStagedCommitRecoveryLiveStateCount {
+            live_state: ShiftStagedCommitLiveState::Pending,
+            recovery_count: 1,
+        }]
+    );
 
     let err = load_package(&package_path).expect_err("pending staged commit should block load");
 
@@ -1583,6 +1619,14 @@ fn load_package_refuses_diverged_staged_commit_before_trusting_files() {
     )
     .expect("live file should be modified");
 
+    let preview = preview_package_load(&package_path).expect("load preview should succeed");
+    assert_eq!(
+        preview.status,
+        ShiftPackageLoadPreviewStatus::BlockedByRecovery
+    );
+    assert_eq!(preview.summary.blocked_recovery_count, 1);
+    assert_eq!(preview.summary.diverged_path_count, 1);
+
     let err = load_package(&package_path).expect_err("diverged staged commit should block load");
 
     assert!(matches!(
@@ -1632,6 +1676,14 @@ fn load_package_refuses_invalid_staged_commit_before_trusting_files() {
     let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
     fs::remove_file(&staged.marker_path).expect("marker should be removable");
 
+    let preview = preview_package_load(&package_path).expect("load preview should succeed");
+    assert_eq!(
+        preview.status,
+        ShiftPackageLoadPreviewStatus::BlockedByRecovery
+    );
+    assert_eq!(preview.summary.unrecoverable_recovery_count, 1);
+    assert_eq!(preview.summary.issue_count, 1);
+
     let err = load_package(&package_path).expect_err("invalid staged commit should block load");
 
     assert!(matches!(
@@ -1671,6 +1723,14 @@ fn load_package_allows_cleanup_only_staged_commit() {
     let package_path = temp_dir.path().join("SpikeSans.shift");
     let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
     copy_staged_base_rename_payloads_to_live(&package_path, &staged);
+
+    let preview = preview_package_load(&package_path).expect("load preview should succeed");
+    assert_eq!(
+        preview.status,
+        ShiftPackageLoadPreviewStatus::ReadyWithCleanup
+    );
+    assert_eq!(preview.summary.cleanup_recovery_count, 1);
+    assert_eq!(preview.summary.applied_path_count, 3);
 
     let package = load_package(&package_path).expect("applied staged commit should not block load");
 

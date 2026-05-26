@@ -3,10 +3,11 @@ use crate::package::{
     apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
     compare_fingerprints, diff_packages, fingerprint_package, fingerprint_relative_paths,
     interpolation_issue_kind_counts, load_package, parse_unicode_scalar,
-    plan_staged_commit_recovery, prepare_package_commit, stage_prepared_commit, ShiftAppliedCommit,
-    ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample, ShiftCommitOperation, ShiftComponent,
-    ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition, ShiftDependencyIndex,
-    ShiftFileFingerprint, ShiftFingerprintConflictKind, ShiftGlyph, ShiftGlyphDependencies,
+    plan_staged_commit_recovery, prepare_package_commit, stage_prepared_commit,
+    summarize_staged_commit_recovery, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping,
+    ShiftAxisMappingSample, ShiftCommitOperation, ShiftComponent, ShiftComponentUse,
+    ShiftComponentVariationSource, ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint,
+    ShiftFingerprintConflictKind, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
     ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
     ShiftInterpolationCompatibilityIssueKindCount, ShiftPackage, ShiftPackageDiff,
@@ -4347,24 +4348,13 @@ fn save_summary(
     let mut conflict_kind_counts = BTreeMap::<ShiftFingerprintConflictKind, usize>::new();
     let mut conflict_path_class_counts =
         BTreeMap::<ShiftWorkingSourceSaveConflictPathClass, usize>::new();
-    let mut staged_recovery_action_counts =
-        BTreeMap::<ShiftStagedCommitRecoveryAction, usize>::new();
-    let mut staged_recovery_live_state_counts =
-        BTreeMap::<ShiftStagedCommitLiveState, usize>::new();
     for conflict in &prepared.conflicts {
         *conflict_kind_counts.entry(conflict.kind).or_default() += 1;
         *conflict_path_class_counts
             .entry(save_conflict_path_class(&conflict.path))
             .or_default() += 1;
     }
-    for plan in staged_recovery_plans {
-        *staged_recovery_action_counts
-            .entry(plan.action)
-            .or_default() += 1;
-        *staged_recovery_live_state_counts
-            .entry(plan.live_state)
-            .or_default() += 1;
-    }
+    let staged_recovery_summary = summarize_staged_commit_recovery(staged_recovery_plans);
 
     let mut summary = ShiftWorkingSourceSaveSummary {
         change_count: prepared.diff.changes.len(),
@@ -4391,23 +4381,21 @@ fn save_summary(
                 },
             )
             .collect(),
-        staged_recovery_count: staged_recovery_plans.len(),
-        staged_recovery_action_counts: staged_recovery_action_counts
+        staged_recovery_count: staged_recovery_summary.staged_recovery_count,
+        staged_recovery_action_counts: staged_recovery_summary
+            .action_counts
             .into_iter()
-            .map(
-                |(action, recovery_count)| ShiftWorkingSourceSaveStagedRecoveryActionCount {
-                    action,
-                    recovery_count,
-                },
-            )
+            .map(|count| ShiftWorkingSourceSaveStagedRecoveryActionCount {
+                action: count.action,
+                recovery_count: count.recovery_count,
+            })
             .collect(),
-        staged_recovery_live_state_counts: staged_recovery_live_state_counts
+        staged_recovery_live_state_counts: staged_recovery_summary
+            .live_state_counts
             .into_iter()
-            .map(|(live_state, recovery_count)| {
-                ShiftWorkingSourceSaveStagedRecoveryLiveStateCount {
-                    live_state,
-                    recovery_count,
-                }
+            .map(|count| ShiftWorkingSourceSaveStagedRecoveryLiveStateCount {
+                live_state: count.live_state,
+                recovery_count: count.recovery_count,
             })
             .collect(),
         ..Default::default()
