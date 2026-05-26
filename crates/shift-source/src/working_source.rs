@@ -644,6 +644,7 @@ pub enum ShiftWorkingSourceSaveStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftWorkingSourceSavePreview {
     pub status: ShiftWorkingSourceSavePreviewStatus,
+    pub primary_action: ShiftWorkingSourceSavePrimaryAction,
     pub summary: ShiftWorkingSourceSaveSummary,
     pub prepared: ShiftPreparedCommit,
     pub staged_recovery_plans: Vec<ShiftStagedCommitRecoveryPlan>,
@@ -657,6 +658,15 @@ pub enum ShiftWorkingSourceSavePreviewStatus {
     Ready,
     BlockedByExternalChanges,
     BlockedByStagedCommit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftWorkingSourceSavePrimaryAction {
+    NothingToSave,
+    Save,
+    ResolveExternalChanges,
+    ResolveStagedCommit,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -3144,9 +3154,22 @@ impl ShiftWorkingSource {
         } else {
             ShiftWorkingSourceSavePreviewStatus::Ready
         };
+        let primary_action = match status {
+            ShiftWorkingSourceSavePreviewStatus::Unchanged => {
+                ShiftWorkingSourceSavePrimaryAction::NothingToSave
+            }
+            ShiftWorkingSourceSavePreviewStatus::Ready => ShiftWorkingSourceSavePrimaryAction::Save,
+            ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges => {
+                ShiftWorkingSourceSavePrimaryAction::ResolveExternalChanges
+            }
+            ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit => {
+                ShiftWorkingSourceSavePrimaryAction::ResolveStagedCommit
+            }
+        };
 
         Ok(ShiftWorkingSourceSavePreview {
             status,
+            primary_action,
             summary: save_summary(&prepared, &staged_recovery_plans),
             prepared,
             staged_recovery_plans,

@@ -78,7 +78,8 @@ pub use working_source::{
     ShiftVariableFontReadinessReport, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
     ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
     ShiftWorkingSourceSavePreview, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSaveReport, ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveReport,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
     ShiftWorkingSourceSaveSummary,
 };

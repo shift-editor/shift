@@ -21,7 +21,7 @@ use crate::{
     ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
     ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
     ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -3591,6 +3591,10 @@ fn working_source_previews_save_ready_without_staging() {
         .expect("save preview should prepare");
 
     assert_eq!(preview.status, ShiftWorkingSourceSavePreviewStatus::Ready);
+    assert_eq!(
+        preview.primary_action,
+        ShiftWorkingSourceSavePrimaryAction::Save
+    );
     assert_eq!(preview.revision, 1);
     assert_eq!(preview.summary.change_count, 2);
     assert_eq!(preview.summary.impacted_path_count, 3);
@@ -3638,6 +3642,10 @@ fn working_source_previews_save_blocked_by_active_staged_commit() {
     assert_eq!(
         preview.status,
         ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit
+    );
+    assert_eq!(
+        preview.primary_action,
+        ShiftWorkingSourceSavePrimaryAction::ResolveStagedCommit
     );
     assert_eq!(preview.revision, 1);
     assert_eq!(preview.summary.change_count, 2);
@@ -3696,6 +3704,10 @@ fn working_source_previews_save_unchanged_without_refreshing_baseline() {
         preview.status,
         ShiftWorkingSourceSavePreviewStatus::Unchanged
     );
+    assert_eq!(
+        preview.primary_action,
+        ShiftWorkingSourceSavePrimaryAction::NothingToSave
+    );
     assert_eq!(preview.revision, 0);
     assert_eq!(preview.summary.change_count, 0);
     assert_eq!(preview.summary.impacted_path_count, 0);
@@ -3737,6 +3749,10 @@ fn working_source_previews_unchanged_save_blocked_by_external_changes() {
     assert_eq!(
         preview.status,
         ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
+    );
+    assert_eq!(
+        preview.primary_action,
+        ShiftWorkingSourceSavePrimaryAction::ResolveExternalChanges
     );
     assert_eq!(preview.revision, 0);
     assert_eq!(preview.summary.change_count, 0);
@@ -3793,6 +3809,10 @@ fn working_source_previews_derived_conflicts_separately_from_source_conflicts() 
         preview.status,
         ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
     );
+    assert_eq!(
+        preview.primary_action,
+        ShiftWorkingSourceSavePrimaryAction::ResolveExternalChanges
+    );
     assert_eq!(preview.summary.change_count, 0);
     assert_eq!(preview.summary.conflict_count, 1);
     assert_eq!(
@@ -3848,6 +3868,10 @@ fn working_source_previews_save_blocked_by_external_changes() {
     assert_eq!(
         preview.status,
         ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
+    );
+    assert_eq!(
+        preview.primary_action,
+        ShiftWorkingSourceSavePrimaryAction::ResolveExternalChanges
     );
     assert_eq!(preview.revision, 1);
     assert_eq!(preview.summary.change_count, 2);
@@ -3962,6 +3986,10 @@ fn working_source_save_refuses_active_staged_commit_without_marking_saved() {
     assert_eq!(
         preview.status,
         ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit
+    );
+    assert_eq!(
+        preview.primary_action,
+        ShiftWorkingSourceSavePrimaryAction::ResolveStagedCommit
     );
     assert_eq!(preview.revision, 1);
 }

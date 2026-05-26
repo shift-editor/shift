@@ -237,9 +237,11 @@ Current writer behavior:
   internals.
 - `ShiftWorkingSource::preview_save()` is the non-mutating app query for save
   readiness. It returns `unchanged`, `ready`, or `blockedByExternalChanges`
-  along with a compact summary and the prepared commit evidence, so save
-  buttons, conflict banners, and dirty-state projections do not infer status
-  from raw diff/conflict lists. The summary separates canonical source writes,
+  along with a compact summary, a `primaryAction` of `nothingToSave`, `save`,
+  `resolveExternalChanges`, or `resolveStagedCommit`, and the prepared commit
+  evidence. Save buttons, conflict banners, and dirty-state projections should
+  follow this app-level action instead of inferring status from raw
+  diff/conflict lists. The summary separates canonical source writes,
   canonical source removals, and derived-cache impact, so UI can distinguish
   user-authored data changes from disposable cache regeneration without parsing
   the full prepared commit. Conflict summaries are also grouped by fingerprint
