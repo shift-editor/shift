@@ -5632,6 +5632,99 @@ fn working_source_refuses_to_delete_glyph_with_component_dependents() {
 }
 
 #[test]
+fn working_source_deletes_glyph_and_removes_component_references() {
+    let mut working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let report = working_source
+        .delete_glyph_and_remove_component_references("glyph_A")
+        .expect("delete with component removal should succeed");
+
+    assert_eq!(report.glyph_id, "glyph_A");
+    assert_eq!(report.glyph_name, "A");
+    assert_eq!(report.revision, 1);
+    assert_eq!(
+        report.removed_component_references,
+        vec![ShiftComponentUse {
+            glyph_id: "glyph_Aacute".to_string(),
+            glyph_name: "Aacute".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_25".to_string(),
+        }]
+    );
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![
+                ShiftPackageChange::DeleteGlyph {
+                    glyph_id: "glyph_A".to_string(),
+                },
+                ShiftPackageChange::UpdateGlyph {
+                    glyph_id: "glyph_Aacute".to_string(),
+                },
+            ],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_Aacute.json".to_string()],
+                removed_canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+    assert!(!working_source
+        .package()
+        .glyphs
+        .iter()
+        .any(|glyph| glyph.id == "glyph_A"));
+    let dependent = working_source
+        .package()
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.id == "glyph_Aacute")
+        .expect("dependent glyph should remain");
+    assert!(dependent
+        .layers
+        .get("source_Regular")
+        .expect("dependent layer should remain")
+        .components
+        .is_empty());
+    assert_eq!(
+        working_source
+            .glyph_dependencies("glyph_Aacute")
+            .expect("dependent dependency index should rebuild")
+            .component_dependencies,
+        Vec::<ShiftComponentUse>::new()
+    );
+}
+
+#[test]
+fn working_source_delete_with_component_removal_allows_leaf_glyphs() {
+    let mut working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let report = working_source
+        .delete_glyph_and_remove_component_references("glyph_Aacute")
+        .expect("leaf delete through component-removal command should succeed");
+
+    assert_eq!(report.glyph_id, "glyph_Aacute");
+    assert_eq!(report.glyph_name, "Aacute");
+    assert!(report.removed_component_references.is_empty());
+    assert_eq!(
+        report.diff.changes,
+        vec![ShiftPackageChange::DeleteGlyph {
+            glyph_id: "glyph_Aacute".to_string(),
+        }]
+    );
+    assert!(!working_source
+        .package()
+        .glyphs
+        .iter()
+        .any(|glyph| glyph.id == "glyph_Aacute"));
+}
+
+#[test]
 fn stable_glyph_id_keeps_file_path_across_rename() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");

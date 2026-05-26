@@ -79,6 +79,16 @@ pub struct ShiftDeleteGlyphReport {
     pub revision: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteGlyphAndRemoveComponentsReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub removed_component_references: Vec<ShiftComponentUse>,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftCreateAxisMapping {
@@ -2496,6 +2506,39 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn delete_glyph_and_remove_component_references(
+        &mut self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteGlyphAndRemoveComponentsReport> {
+        let preview = self.preview_delete_glyph(glyph_id)?;
+
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let removed_component_references = remove_component_references_to_base(&mut next, glyph_id);
+        let index = next
+            .glyphs
+            .iter()
+            .position(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        next.glyphs.remove(index);
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftDeleteGlyphAndRemoveComponentsReport {
+            glyph_id: preview.glyph_id,
+            glyph_name: preview.glyph_name,
+            removed_component_references,
+            diff,
+            revision: self.revision,
+        })
+    }
+
     pub fn rename_glyph(
         &mut self,
         glyph_id: &str,
@@ -3513,6 +3556,39 @@ fn refresh_component_base_glyph_names(
             }
         }
     }
+}
+
+fn remove_component_references_to_base(
+    package: &mut ShiftPackage,
+    base_glyph_id: &str,
+) -> Vec<ShiftComponentUse> {
+    let mut removed = Vec::new();
+    for glyph in &mut package.glyphs {
+        for (layer_id, layer) in &mut glyph.layers {
+            let mut kept_components = Vec::with_capacity(layer.components.len());
+            for component in layer.components.drain(..) {
+                if component.base_glyph_id == base_glyph_id {
+                    removed.push(ShiftComponentUse {
+                        glyph_id: glyph.id.clone(),
+                        glyph_name: glyph.name.clone(),
+                        layer_id: layer_id.clone(),
+                        component_id: component.id,
+                    });
+                } else {
+                    kept_components.push(component);
+                }
+            }
+            layer.components = kept_components;
+        }
+    }
+
+    removed.sort_by(|left, right| {
+        left.glyph_id
+            .cmp(&right.glyph_id)
+            .then_with(|| left.layer_id.cmp(&right.layer_id))
+            .then_with(|| left.component_id.cmp(&right.component_id))
+    });
+    removed
 }
 
 fn unique_member_id<'a>(

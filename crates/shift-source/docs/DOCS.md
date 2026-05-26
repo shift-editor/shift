@@ -90,6 +90,9 @@ getMappedLocation(location)
 prepareCommit()
 previewRenameGlyph(glyphId, newName)
 renameGlyph(glyphId, newName)
+previewDeleteGlyph(glyphId)
+deleteGlyph(glyphId)
+deleteGlyphAndRemoveComponentReferences(glyphId)
 previewDeleteSource(sourceId)
 createAxisMapping(create)
 updateAxisMapping(mappingId, update)
@@ -364,8 +367,9 @@ format exploration:
   stable ID, preview delete dependents, refuse unsafe deletes, create/update/delete
   family sources by stable IDs, edit component and glyph variation sources by
   stable IDs, create glyph and component variation sources with collision-safe
-  generated IDs, delete variation sources by stable IDs, keep query indexes
-  warm, and report the exact package diff caused by the semantic edit. Source
+  generated IDs, delete variation sources by stable IDs, remove component
+  references before deleting a base glyph through an explicit command, keep query
+  indexes warm, and report the exact package diff caused by the semantic edit. Source
   edits validate the default-source invariant, source-location uniqueness, and
   all glyph layer references before replacing the live working graph, so adding
   a master is cheap while unsafe deletes or accidental default-source moves are
@@ -643,7 +647,9 @@ The format should make these app behaviors straightforward:
 - Delete dialogs that can offer remove, decompose, or relink based on exact
   dependents.
 - Conservative delete commands that fail before mutation when component
-  dependents, source layers, or source-owned variation rows still exist.
+  dependents, source layers, or source-owned variation rows still exist, plus an
+  explicit component-removal delete command for the destructive "remove those
+  uses too" path.
 - Sidebars and badges backed by derived indexes instead of repeated full scans.
 - Variable component inspectors that show inherited values, explicit overrides,
   local axes, and active/inactive conditions with the condition subtree that
