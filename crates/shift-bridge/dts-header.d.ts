@@ -48,3 +48,9 @@ export type SaveStatus = "unchanged" | "saved";
 export type GlyphRemovalStrategy =
   | "direct"
   | "removeComponentUses";
+
+export type MasterLayerWorkStatus =
+  | "ready"
+  | "missingLayers"
+  | "hasInterpolationMismatches"
+  | "missingLayersAndInterpolationMismatches";

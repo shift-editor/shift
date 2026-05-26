@@ -24,9 +24,11 @@ use shift_source::{
   ShiftCreateGlyph as CreateGlyph, ShiftCreateGlyphSourceLayer as CreateGlyphLayer,
   ShiftCreateSource as CreateSource, ShiftFontInfo as PackageFont,
   ShiftFontInfoUpdate as FontUpdate, ShiftGlyph as PackageGlyph, ShiftGlyphLayer as PackageLayer,
-  ShiftManifest as PackageManifest, ShiftPackage as Package, ShiftPackageDiff as PackageDiff,
-  ShiftPackageLoadPreviewStatus, ShiftPackageLoadPrimaryAction, ShiftPoint as PackagePoint,
-  ShiftPointType as PackagePointType, ShiftSource as PackageSource, ShiftSourceError,
+  ShiftManifest as PackageManifest, ShiftMissingSourceLayer, ShiftPackage as Package,
+  ShiftPackageDiff as PackageDiff, ShiftPackageLoadPreviewStatus, ShiftPackageLoadPrimaryAction,
+  ShiftPoint as PackagePoint, ShiftPointType as PackagePointType, ShiftSource as PackageSource,
+  ShiftSourceError, ShiftSourceLayerCoverageReadiness as SourceLayerCoverageReadiness,
+  ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerCoverageWorklist,
   ShiftVariableFontReadiness as VariableFontReadiness, ShiftWorkingSource,
   ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
   ShiftWorkingSourceSaveStatus, SHIFT_SOURCE_FORMAT, SHIFT_SOURCE_VERSION,
@@ -173,6 +175,43 @@ pub struct FontSourceEdit {
   #[napi(ts_type = "SourceReadiness")]
   pub variable_readiness: String,
   pub missing_layer_count: u32,
+}
+
+#[napi(object)]
+pub struct MissingMasterLayer {
+  #[napi(ts_type = "GlyphId")]
+  pub glyph_id: String,
+  #[napi(ts_type = "GlyphName")]
+  pub glyph_name: String,
+  #[napi(ts_type = "SourceId")]
+  pub source_id: String,
+}
+
+#[napi(object)]
+pub struct MasterLayerWorkItem {
+  #[napi(ts_type = "SourceId")]
+  pub source_id: String,
+  pub source_name: String,
+  pub is_default_source: bool,
+  #[napi(ts_type = "MasterLayerWorkStatus")]
+  pub status: String,
+  pub missing_layer_count: u32,
+  pub missing_glyph_layers: Vec<MissingMasterLayer>,
+  pub interpolation_mismatch_issue_count: u32,
+  pub interpolation_incompatible_glyph_count: u32,
+}
+
+#[napi(object)]
+pub struct MasterLayerWorklist {
+  pub revision: u32,
+  #[napi(ts_type = "SourceReadiness")]
+  pub variable_readiness: String,
+  pub source_count: u32,
+  pub glyph_count: u32,
+  pub source_needing_work_count: u32,
+  pub missing_layer_count: u32,
+  pub interpolation_mismatch_issue_count: u32,
+  pub items: Vec<MasterLayerWorkItem>,
 }
 
 #[napi(object)]
@@ -560,6 +599,60 @@ fn source_variable_readiness(readiness: VariableFontReadiness) -> String {
   .to_string()
 }
 
+fn master_layer_work_status(readiness: SourceLayerCoverageReadiness) -> String {
+  match readiness {
+    SourceLayerCoverageReadiness::Ready => "ready",
+    SourceLayerCoverageReadiness::MissingLayers => "missingLayers",
+    SourceLayerCoverageReadiness::HasInterpolationMismatches => "hasInterpolationMismatches",
+    SourceLayerCoverageReadiness::MissingLayersAndInterpolationMismatches => {
+      "missingLayersAndInterpolationMismatches"
+    }
+  }
+  .to_string()
+}
+
+fn missing_master_layer(layer: ShiftMissingSourceLayer) -> MissingMasterLayer {
+  MissingMasterLayer {
+    glyph_id: layer.glyph_id,
+    glyph_name: layer.glyph_name,
+    source_id: layer.expected_layer_id,
+  }
+}
+
+fn master_layer_work_item(item: ShiftSourceLayerCoverageWorkItem) -> MasterLayerWorkItem {
+  MasterLayerWorkItem {
+    source_id: item.source_id,
+    source_name: item.source_name,
+    is_default_source: item.is_default_source,
+    status: master_layer_work_status(item.readiness),
+    missing_layer_count: item.missing_layer_count as u32,
+    missing_glyph_layers: item
+      .missing_layer_samples
+      .into_iter()
+      .map(missing_master_layer)
+      .collect(),
+    interpolation_mismatch_issue_count: item.interpolation_mismatch_issue_count as u32,
+    interpolation_incompatible_glyph_count: item.interpolation_incompatible_glyph_count as u32,
+  }
+}
+
+fn master_layer_worklist(worklist: ShiftSourceLayerCoverageWorklist) -> MasterLayerWorklist {
+  MasterLayerWorklist {
+    revision: worklist.revision.min(u32::MAX as u64) as u32,
+    variable_readiness: source_variable_readiness(worklist.variable_readiness),
+    source_count: worklist.summary.source_count as u32,
+    glyph_count: worklist.summary.glyph_count as u32,
+    source_needing_work_count: worklist.summary.source_needing_work_count as u32,
+    missing_layer_count: worklist.summary.missing_layer_count as u32,
+    interpolation_mismatch_issue_count: worklist.summary.interpolation_mismatch_issue_count as u32,
+    items: worklist
+      .items
+      .into_iter()
+      .map(master_layer_work_item)
+      .collect(),
+  }
+}
+
 fn glyph_component_users(component_uses: &[ShiftComponentUse]) -> Vec<GlyphComponentUser> {
   let mut users = BTreeMap::<String, GlyphComponentUser>::new();
   for component_use in component_uses {
@@ -831,6 +924,11 @@ impl ShiftSourceDocument {
       .collect();
     records.sort_by(|a, b| a.id.cmp(&b.id));
     records
+  }
+
+  #[napi]
+  pub fn master_layer_worklist(&self) -> MasterLayerWorklist {
+    master_layer_worklist(self.working_source.source_layer_coverage_worklist())
   }
 
   #[napi]

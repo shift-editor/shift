@@ -954,8 +954,11 @@ bridge must still prove:
   exposed; the bridge currently covers clean open and unrecoverable blockers,
   but still needs a recoverable partial-staged-commit flow
 - axis and axis-mapping authoring without TypeScript-side interpolation
-- source-panel worklists scoped to visible source/glyph rows
-- glyph delete previews and selected strategies through stable IDs
+- edit/delete source flows and interpolation-mismatch worklist rows scoped to
+  visible source/glyph rows; missing-layer rows are already covered through
+  `masterLayerWorklist`
+- more glyph delete strategies through stable IDs; the base-glyph
+  remove-component-uses path is already covered through the bridge
 - component inspector and scrub previews with reset/inherit provenance
 - fontc handoff diagnostics separated from editor worklists
 

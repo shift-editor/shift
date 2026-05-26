@@ -107,12 +107,55 @@ describe("source document persistence", () => {
       variableReadiness: "missingSourceLayers",
     });
 
+    expect(document.masterLayerWorklist()).toMatchObject({
+      variableReadiness: "missingSourceLayers",
+      sourceCount: 2,
+      glyphCount: 2,
+      sourceNeedingWorkCount: 1,
+      missingLayerCount: 2,
+      items: [
+        {
+          sourceId: "source_Bold",
+          sourceName: "Bold",
+          status: "missingLayers",
+          missingLayerCount: 2,
+          missingGlyphLayers: [
+            {
+              glyphId: "glyph_A",
+              glyphName: "A",
+              sourceId: "source_Bold",
+            },
+            {
+              glyphId: "glyph_Aacute",
+              glyphName: "Aacute",
+              sourceId: "source_Bold",
+            },
+          ],
+        },
+      ],
+    });
+
     const layer = document.createGlyphSourceLayer("glyph_A", source.sourceId, 700);
     expect(layer).toMatchObject({
       glyphId: "glyph_A",
       variableReadiness: "missingSourceLayers",
     });
     expect(layer.missingLayerCount).toBeGreaterThan(0);
+    expect(document.masterLayerWorklist()).toMatchObject({
+      missingLayerCount: 1,
+      items: [
+        {
+          sourceId: "source_Bold",
+          missingLayerCount: 1,
+          missingGlyphLayers: [
+            {
+              glyphId: "glyph_Aacute",
+              glyphName: "Aacute",
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("removes a base glyph by applying the component-use strategy", () => {

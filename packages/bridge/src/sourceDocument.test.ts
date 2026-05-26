@@ -4,6 +4,7 @@ import {
   asGlyphId,
   asSourceId,
   type GlyphRemovalStrategy,
+  type MasterLayerWorkStatus,
   type OpenAction,
   type OpenPreviewStatus,
   type SaveAction,
@@ -17,6 +18,7 @@ import { createPackageFixture, type PackageFixture } from "./testing/sourcePacka
 const singleSource = "singleSource" satisfies SourceReadiness;
 const missingSourceLayers = "missingSourceLayers" satisfies SourceReadiness;
 const removeComponentUses = "removeComponentUses" satisfies GlyphRemovalStrategy;
+const missingLayers = "missingLayers" satisfies MasterLayerWorkStatus;
 const readyToOpen = "ready" satisfies OpenPreviewStatus;
 const load = "load" satisfies OpenAction;
 const blockedByRecovery = "blockedByRecovery" satisfies OpenPreviewStatus;
@@ -96,12 +98,55 @@ describe("source document persistence", () => {
       variableReadiness: missingSourceLayers,
     });
 
+    expect(pkg.document.masterLayerWorklist()).toMatchObject({
+      variableReadiness: missingSourceLayers,
+      sourceCount: 2,
+      glyphCount: 2,
+      sourceNeedingWorkCount: 1,
+      missingLayerCount: 2,
+      items: [
+        {
+          sourceId: asSourceId("source_Bold"),
+          sourceName: "Bold",
+          status: missingLayers,
+          missingLayerCount: 2,
+          missingGlyphLayers: [
+            {
+              glyphId: asGlyphId("glyph_A"),
+              glyphName: "A",
+              sourceId: asSourceId("source_Bold"),
+            },
+            {
+              glyphId: asGlyphId("glyph_Aacute"),
+              glyphName: "Aacute",
+              sourceId: asSourceId("source_Bold"),
+            },
+          ],
+        },
+      ],
+    });
+
     const layer = pkg.document.createGlyphSourceLayer(pkg.glyphId("glyph_A"), source.sourceId, 700);
     expect(layer).toMatchObject({
       glyphId: asGlyphId("glyph_A"),
       variableReadiness: missingSourceLayers,
     });
     expect(layer.missingLayerCount).toBeGreaterThan(0);
+    expect(pkg.document.masterLayerWorklist()).toMatchObject({
+      missingLayerCount: 1,
+      items: [
+        {
+          sourceId: asSourceId("source_Bold"),
+          missingLayerCount: 1,
+          missingGlyphLayers: [
+            {
+              glyphId: asGlyphId("glyph_Aacute"),
+              glyphName: "Aacute",
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("removes a base glyph by applying the component-use strategy", () => {

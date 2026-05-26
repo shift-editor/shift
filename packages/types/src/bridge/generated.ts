@@ -53,6 +53,12 @@ export type SaveStatus = "unchanged" | "saved";
 export type GlyphRemovalStrategy =
   | "direct"
   | "removeComponentUses";
+
+export type MasterLayerWorkStatus =
+  | "ready"
+  | "missingLayers"
+  | "hasInterpolationMismatches"
+  | "missingLayersAndInterpolationMismatches";
 export interface BridgeApi {
   createFont(): void
   loadFont(path: string): void
@@ -104,6 +110,7 @@ export declare class ShiftSourceDocument {
   open(path: string): void
   fontInfo(): FontInfo
   glyphs(): Array<GlyphEntry>
+  masterLayerWorklist(): MasterLayerWorklist
   updateFontInfo(familyName: string, unitsPerEm: number): EditImpact
   createGlyph(name: string, unicode: string | undefined | null, width: number): GlyphEdit
   renameGlyph(glyphId: GlyphId, name: GlyphName): GlyphEdit
@@ -182,6 +189,34 @@ export interface GlyphRemovalPreview {
   componentUserCount: number
   componentUsers: Array<GlyphComponentUser>
   validStrategies: Array<GlyphRemovalStrategy>
+}
+
+export interface MasterLayerWorkItem {
+  sourceId: SourceId
+  sourceName: string
+  isDefaultSource: boolean
+  status: MasterLayerWorkStatus
+  missingLayerCount: number
+  missingGlyphLayers: Array<MissingMasterLayer>
+  interpolationMismatchIssueCount: number
+  interpolationIncompatibleGlyphCount: number
+}
+
+export interface MasterLayerWorklist {
+  revision: number
+  variableReadiness: SourceReadiness
+  sourceCount: number
+  glyphCount: number
+  sourceNeedingWorkCount: number
+  missingLayerCount: number
+  interpolationMismatchIssueCount: number
+  items: Array<MasterLayerWorkItem>
+}
+
+export interface MissingMasterLayer {
+  glyphId: GlyphId
+  glyphName: GlyphName
+  sourceId: SourceId
 }
 
 export interface AnchorData {

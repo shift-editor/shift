@@ -146,7 +146,7 @@ headless app-facing test crosses N-API/TS and proves the renderer boundary shape
 | Font identity | Rust tests cover narrow font-info impact, no-op revisions, invalid values, staged payloads, save/reopen. Bridge tests cover edit/save/reopen. | Expand bridge operation beyond family name/UPM to the actual font-info fields used by the dialog. |
 | Axis authoring | Rust tests cover create/update/delete, app projections, referenced-axis delete previews, invalid updates. | No bridge/app evidence. Need semantic axis commands named around user/construction axes and tests for deleting axes used by sources/mappings/components. |
 | Axis mapping authoring | Rust tests cover first-class file roundtrip, one/multi-axis mapping, duplicate samples, implicit-chain rejection, mapped-source diagnostics. | No bridge/app evidence. Need a headless “edit mapping -> mapped source rows change” test, with TS doing no interpolation. |
-| Source authoring | Rust tests cover add/update/delete source, default-source blockers, referenced-source blockers, completed sparse locations, source worklists. Bridge tests cover add source and add glyph layer. | Bridge currently exposes too little source row/worklist detail for a real Sources panel. Add only journey-scoped queries, not a generic readiness flag. |
+| Source authoring | Rust tests cover add/update/delete source, default-source blockers, referenced-source blockers, completed sparse locations, source worklists. Bridge tests cover add source, `masterLayerWorklist`, and add glyph layer; they assert the missing-layer row changes without TS scanning glyph package data. | Need bridge/app evidence for edit source location, delete unused source, default/referenced-source blockers, and interpolation-mismatch worklist rows. |
 | Glyph identity | Rust tests cover create, rename by ID, duplicate/missing preview rejection, dependent component label refresh. Bridge tests cover create/rename and component label refresh. | Need stale expected-revision tests and app-shaped grid row response. |
 | Glyph deletion strategies | Rust tests cover direct delete, blocked delete, remove-component delete, relink delete, previews, cycle blockers, local-axis relink blockers, variable component recipe preservation. Bridge tests cover base-glyph removal preview and the remove-component-uses strategy, asserting component users and dependent composite state without file-path assertions. | Need bridge/app evidence for direct delete, relink, decompose, stale confirmations, cycle/local-axis blockers. |
 | Glyph layer authoring | Rust tests cover source-layer create/delete, overwrite rejection, referenced-layer blockers, narrow impact. | No bridge/app evidence beyond create layer. Need add/edit/delete layer flows scoped to one glyph/source. |
@@ -199,15 +199,12 @@ journey while protecting the source graph:
 
 1. **Bridge load/recovery contract:** extend clean/blocked open preview evidence
    with a recoverable partial staged commit test that opens only after recovery.
-2. **Source panel worklist bridge flow:** add a source, fetch scoped missing-layer
-   rows for that source, fill a layer, and assert the row disappears without TS
-   scanning glyphs.
-3. **Glyph delete strategy expansion:** add direct delete, relink/decompose,
+2. **Glyph delete strategy expansion:** add direct delete, relink/decompose,
    stale-confirmation, and cycle/local-axis blocker coverage through semantic
    bridge APIs.
-4. **Axis mapping bridge flow:** create/edit a mapping and assert mapped source
+3. **Axis mapping bridge flow:** create/edit a mapping and assert mapped source
    rows/diagnostics update from Rust.
-5. **Variable component preview flow:** one visible component, one preview
+4. **Variable component preview flow:** one visible component, one preview
    location, Rust returns condition result, reset/inherit provenance, varied
    transform fields, and no package-sized DTO.
 
@@ -460,18 +457,18 @@ Current evidence:
 
 Still unproven:
 
-- Whether the sources/masters UI can render missing layers and readiness from one report instead of per-glyph bridge queries.
 - Whether sparse source locations and completed/defaulted coordinates are expressed clearly enough for inspector UI.
 - Whether compatibility invalidation is granular enough for interactive editing, especially on large families.
+- Whether edit/delete source flows and interpolation-mismatch rows have the same app-shaped bridge coverage as missing-layer rows.
 
 Next evaluation step:
 
-- Exercise add source -> inspect coverage -> add missing glyph layer -> save. Record whether UI badges, source table rows, and compatibility warnings are all driven from Rust reports.
+- Exercise edit source location, source deletion blockers, and interpolation mismatch rows through the same semantic bridge boundary. Record whether UI badges, source table rows, and compatibility warnings are all driven from Rust reports.
 
 Headless evidence:
 
-- `ShiftSourceDocument` exposes source creation and glyph source-layer creation through N-API.
-- `packages/bridge/src/sourceDocument.test.ts` creates a `Bold` source, verifies missing-layer readiness, fills one glyph source layer, and confirms save/reopen behavior.
+- `ShiftSourceDocument` exposes source creation, `masterLayerWorklist`, and glyph source-layer creation through N-API.
+- `packages/bridge/src/sourceDocument.test.ts` creates a `Bold` source, reads missing glyph-layer rows from Rust, fills one glyph source layer, and verifies the row changes without package/file-path assertions.
 
 ### 4. Variable Component Inspect And Resolve
 
