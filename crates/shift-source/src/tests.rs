@@ -5889,6 +5889,80 @@ fn working_source_deletes_glyph_and_relinks_component_references() {
 }
 
 #[test]
+fn working_source_previews_relink_delete_without_mutating() {
+    let mut package = package_with_component_dependency();
+    package.glyphs.push(ShiftGlyph {
+        id: "glyph_B".to_string(),
+        name: "B".to_string(),
+        unicodes: vec!["0042".to_string()],
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let working_source =
+        ShiftWorkingSource::new(package).expect("working source should initialize");
+
+    let preview = working_source
+        .preview_delete_glyph_relink_component_references("glyph_A", "glyph_B")
+        .expect("relink delete preview should succeed");
+
+    assert_eq!(preview.glyph_id, "glyph_A");
+    assert_eq!(preview.glyph_name, "A");
+    assert_eq!(preview.replacement_glyph_id, "glyph_B");
+    assert_eq!(preview.replacement_glyph_name, "B");
+    assert_eq!(
+        preview.component_dependents,
+        vec![ShiftComponentUse {
+            glyph_id: "glyph_Aacute".to_string(),
+            glyph_name: "Aacute".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_25".to_string(),
+        }]
+    );
+    assert_eq!(preview.relinked_component_recipes.len(), 1);
+    assert_eq!(
+        preview.relinked_component_recipes[0].base_glyph_id,
+        "glyph_B"
+    );
+    assert_eq!(
+        preview.diff,
+        ShiftPackageDiff {
+            changes: vec![
+                ShiftPackageChange::DeleteGlyph {
+                    glyph_id: "glyph_A".to_string(),
+                },
+                ShiftPackageChange::UpdateGlyph {
+                    glyph_id: "glyph_Aacute".to_string(),
+                },
+            ],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_Aacute.json".to_string()],
+                removed_canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_Aacute")
+            .expect("dependent glyph should remain")
+            .layers
+            .get("source_Regular")
+            .expect("dependent layer should remain")
+            .components[0]
+            .base_glyph_id,
+        "glyph_A"
+    );
+}
+
+#[test]
 fn working_source_relink_delete_preserves_variable_component_recipe() {
     let layer = ShiftGlyphLayer {
         advance_width: 600.0,

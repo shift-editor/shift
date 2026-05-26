@@ -93,6 +93,7 @@ renameGlyph(glyphId, newName)
 previewDeleteGlyph(glyphId)
 deleteGlyph(glyphId)
 deleteGlyphAndRemoveComponentReferences(glyphId)
+previewDeleteGlyphRelinkComponentReferences(glyphId, replacementGlyphId)
 deleteGlyphAndRelinkComponentReferences(glyphId, replacementGlyphId)
 previewDeleteSource(sourceId)
 createAxisMapping(create)
@@ -651,7 +652,9 @@ The format should make these app behaviors straightforward:
   locations, transform variation, reset/inherit behavior, or authored component
   variation sources. These summaries are resolved from the dependency-index
   dependent list, so preview cost scales with the affected components rather
-  than every component in the package.
+  than every component in the package. Relink options can also be previewed
+  against a candidate replacement before commit, returning the prospective diff
+  and relinked recipe summaries without mutating the working source.
 - Conservative delete commands that fail before mutation when component
   dependents, source layers, or source-owned variation rows still exist, plus an
   explicit component-removal delete command for the destructive "remove those
