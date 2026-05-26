@@ -268,6 +268,8 @@ pub struct ShiftGlyphInterpolationCompatibility {
     pub glyph_id: String,
     pub glyph_name: String,
     pub compatible: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_layer_id: Option<String>,
     pub issue_count: usize,
     pub issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
     pub layer_signatures: BTreeMap<String, ShiftLayerCompatibilitySignature>,
@@ -3504,11 +3506,11 @@ fn glyph_interpolation_compatibility(
         .iter()
         .map(|(layer_id, layer)| (layer_id.clone(), layer_compatibility_signature(layer)))
         .collect();
+    let reference_layer = interpolation_reference_layer(&layer_signatures, default_source_id);
+    let reference_layer_id = reference_layer.map(|(layer_id, _)| layer_id.to_string());
     let mut issues = Vec::new();
 
-    if let Some((reference_layer_id, reference_signature)) =
-        interpolation_reference_layer(&layer_signatures, default_source_id)
-    {
+    if let Some((reference_layer_id, reference_signature)) = reference_layer {
         for (layer_id, signature) in &layer_signatures {
             if layer_id == reference_layer_id {
                 continue;
@@ -3530,6 +3532,7 @@ fn glyph_interpolation_compatibility(
         glyph_id: glyph.id.clone(),
         glyph_name: glyph.name.clone(),
         compatible: issue_count == 0,
+        reference_layer_id,
         issue_count,
         issue_kind_counts,
         layer_signatures,

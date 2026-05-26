@@ -1209,6 +1209,7 @@ Current shape:
       "glyphId": "glyph_A",
       "glyphName": "A",
       "compatible": false,
+      "referenceLayerId": "source_Regular",
       "issueCount": 1,
       "issueKindCounts": [
         {
@@ -1254,6 +1255,9 @@ Diagnostics use the package default source as the reference layer whenever the
 glyph has that layer. Partial glyphs that do not yet have the default layer fall
 back to deterministic layer order. This keeps source panels and export preflight
 warnings anchored to the canonical master instead of depending on map ordering.
+Each glyph compatibility record stores the selected `referenceLayerId`, so
+compatible glyphs and glyphs with only summary badges still expose the same
+diagnostic anchor without forcing the app to inspect issue rows.
 
 This index intentionally stores signatures rather than rendered geometry. It is
 a product diagnostic and invalidation target, not canonical outline data.

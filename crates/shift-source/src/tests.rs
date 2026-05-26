@@ -493,6 +493,7 @@ fn interpolation_compatibility_index_accepts_matching_layer_topology() {
     assert_eq!(index.issue_count, 0);
     assert!(index.issue_kind_counts.is_empty());
     assert!(glyph.compatible);
+    assert_eq!(glyph.reference_layer_id.as_deref(), Some("source_Regular"));
     assert_eq!(glyph.issue_count, 0);
     assert!(glyph.issue_kind_counts.is_empty());
     assert!(glyph.issues.is_empty());
@@ -538,6 +539,7 @@ fn interpolation_compatibility_index_reports_contour_topology_mismatch() {
         }]
     );
     assert!(!glyph.compatible);
+    assert_eq!(glyph.reference_layer_id.as_deref(), Some("source_Regular"));
     assert_eq!(glyph.issue_count, 1);
     assert_eq!(
         glyph.issue_kind_counts,
@@ -594,6 +596,7 @@ fn interpolation_compatibility_index_falls_back_when_default_layer_is_missing() 
         .get("glyph_A")
         .expect("glyph should be indexed");
 
+    assert_eq!(glyph.reference_layer_id.as_deref(), Some("source_Bold"));
     assert_eq!(
         glyph.issues,
         vec![ShiftInterpolationCompatibilityIssue {
