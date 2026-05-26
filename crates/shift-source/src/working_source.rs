@@ -353,6 +353,7 @@ pub struct ShiftSourceLayerCoverageSummary {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSourceLayerCoverageReport {
+    pub revision: u64,
     pub summary: ShiftSourceLayerCoverageSummary,
     pub variable_readiness: ShiftVariableFontReadiness,
     pub sources: Vec<ShiftSourceLayerCoverage>,
@@ -361,6 +362,7 @@ pub struct ShiftSourceLayerCoverageReport {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSourceLayerCoverageWorklist {
+    pub revision: u64,
     pub summary: ShiftSourceLayerCoverageSummary,
     pub variable_readiness: ShiftVariableFontReadiness,
     pub items: Vec<ShiftSourceLayerCoverageWorkItem>,
@@ -384,6 +386,7 @@ pub struct ShiftSourceLayerCoverageWorkItem {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftVariableFontReadinessReport {
+    pub revision: u64,
     pub readiness: ShiftVariableFontReadiness,
     pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
 }
@@ -401,6 +404,7 @@ pub enum ShiftVariableFontReadiness {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftVariableFontExportPreflight {
+    pub revision: u64,
     pub readiness: ShiftVariableFontExportReadiness,
     pub primary_action: ShiftVariableFontExportPrimaryAction,
     pub summary: ShiftVariableFontExportSummary,
@@ -1609,6 +1613,7 @@ impl ShiftWorkingSource {
 
     pub fn source_layer_coverage_report(&self) -> ShiftSourceLayerCoverageReport {
         ShiftSourceLayerCoverageReport {
+            revision: self.revision,
             summary: self.source_layer_coverage_summary.clone(),
             variable_readiness: self.variable_font_readiness,
             sources: self.source_layer_coverage.clone(),
@@ -1661,6 +1666,7 @@ impl ShiftWorkingSource {
             .collect();
 
         ShiftSourceLayerCoverageWorklist {
+            revision: self.revision,
             summary: self.source_layer_coverage_summary.clone(),
             variable_readiness: self.variable_font_readiness,
             items,
@@ -1669,6 +1675,7 @@ impl ShiftWorkingSource {
 
     pub fn variable_font_readiness_report(&self) -> ShiftVariableFontReadinessReport {
         ShiftVariableFontReadinessReport {
+            revision: self.revision,
             readiness: self.variable_font_readiness,
             source_coverage_summary: self.source_layer_coverage_summary.clone(),
         }
@@ -1716,6 +1723,7 @@ impl ShiftWorkingSource {
         };
 
         ShiftVariableFontExportPreflight {
+            revision: self.revision,
             readiness,
             primary_action,
             summary: variable_font_export_summary(

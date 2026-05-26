@@ -10613,6 +10613,7 @@ fn working_source_reports_source_layer_coverage() {
     assert!(!summary.ready);
 
     let report = working_source.source_layer_coverage_report();
+    assert_eq!(report.revision, 0);
     assert_eq!(report.sources, coverage);
     assert_eq!(report.summary, summary);
     assert_eq!(
@@ -10621,6 +10622,7 @@ fn working_source_reports_source_layer_coverage() {
     );
 
     let worklist = working_source.source_layer_coverage_worklist();
+    assert_eq!(worklist.revision, 0);
     assert_eq!(worklist.summary, summary);
     assert_eq!(
         worklist.variable_readiness,
@@ -10646,6 +10648,7 @@ fn working_source_reports_source_layer_coverage() {
     );
 
     let variable_readiness = working_source.variable_font_readiness_report();
+    assert_eq!(variable_readiness.revision, 0);
     assert_eq!(
         variable_readiness.readiness,
         ShiftVariableFontReadiness::MissingSourceLayers
@@ -10837,6 +10840,7 @@ fn working_source_reports_source_interpolation_issues() {
     assert!(!summary.ready);
 
     let report = working_source.source_layer_coverage_report();
+    assert_eq!(report.revision, 0);
     assert_eq!(report.sources, coverage);
     assert_eq!(report.summary, summary);
     assert_eq!(
@@ -10845,6 +10849,7 @@ fn working_source_reports_source_interpolation_issues() {
     );
 
     let worklist = working_source.source_layer_coverage_worklist();
+    assert_eq!(worklist.revision, 0);
     assert_eq!(
         worklist.variable_readiness,
         ShiftVariableFontReadiness::InterpolationIncompatible
@@ -10873,6 +10878,7 @@ fn working_source_reports_source_interpolation_issues() {
     );
 
     let variable_readiness = working_source.variable_font_readiness_report();
+    assert_eq!(variable_readiness.revision, 0);
     assert_eq!(
         variable_readiness.readiness,
         ShiftVariableFontReadiness::InterpolationIncompatible
@@ -10918,6 +10924,7 @@ fn working_source_reports_variable_font_readiness() {
     let variable_source = ShiftWorkingSource::new(package).expect("variable package is valid");
     let report = variable_source.variable_font_readiness_report();
 
+    assert_eq!(report.revision, 0);
     assert_eq!(report.readiness, ShiftVariableFontReadiness::Ready);
     assert!(report.source_coverage_summary.ready);
 }
@@ -10935,6 +10942,7 @@ fn working_source_reports_variable_font_export_preflight() {
     .expect("single-source package should be valid");
     let single_source_preflight = single_source
         .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(single_source_preflight.revision, 0);
     assert_eq!(
         single_source_preflight.readiness,
         ShiftVariableFontExportReadiness::SingleSource
@@ -10983,6 +10991,7 @@ fn working_source_reports_variable_font_export_preflight() {
     let ready_source = ShiftWorkingSource::new(ready_package).expect("package is valid");
     let ready_preflight = ready_source
         .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(ready_preflight.revision, 0);
     assert_eq!(
         ready_preflight.readiness,
         ShiftVariableFontExportReadiness::Ready
@@ -11034,6 +11043,7 @@ fn working_source_reports_variable_font_export_preflight() {
     let source_blocked_preflight = source_blocked.variable_font_export_preflight(
         &ShiftComponentLoweringTarget::all_shift_component_semantics(),
     );
+    assert_eq!(source_blocked_preflight.revision, 0);
     assert_eq!(
         source_blocked_preflight.readiness,
         ShiftVariableFontExportReadiness::BlockedBySourceReadiness
@@ -11125,6 +11135,7 @@ fn working_source_reports_variable_font_export_preflight() {
         ShiftWorkingSource::new(component_blocked_package).expect("package is valid");
     let component_blocked_preflight = component_blocked
         .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(component_blocked_preflight.revision, 0);
     assert_eq!(
         component_blocked_preflight.readiness,
         ShiftVariableFontExportReadiness::BlockedByUnsupportedComponents
@@ -11190,6 +11201,7 @@ fn working_source_reports_variable_font_export_preflight() {
         ShiftWorkingSource::new(combined_blocked_package).expect("package is valid");
     let combined_blocked_preflight = combined_blocked
         .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(combined_blocked_preflight.revision, 0);
     assert_eq!(
         combined_blocked_preflight.readiness,
         ShiftVariableFontExportReadiness::BlockedBySourceReadinessAndUnsupportedComponents
@@ -11270,6 +11282,7 @@ fn working_source_refreshes_cached_export_preflight_after_source_mutations() {
             location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
         })
         .expect("source creation should succeed");
+    assert_eq!(create_source_report.source_coverage.revision, 1);
     assert_eq!(
         create_source_report.source_coverage.variable_readiness,
         ShiftVariableFontReadiness::MissingSourceLayers
@@ -11290,12 +11303,14 @@ fn working_source_refreshes_cached_export_preflight_after_source_mutations() {
             },
         )
         .expect("glyph source layer creation should succeed");
+    assert_eq!(create_layer_report.source_coverage.revision, 2);
     assert_eq!(
         create_layer_report.source_coverage.variable_readiness,
         ShiftVariableFontReadiness::Ready
     );
     let preflight = working_source
         .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(preflight.revision, 2);
     assert_eq!(preflight.readiness, ShiftVariableFontExportReadiness::Ready);
     assert!(preflight.source_coverage_summary.ready);
 }
