@@ -422,7 +422,18 @@ pub struct ShiftGlyphInterpolationCompatibilitySummary {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftInterpolationCompatibilityIndexReport {
     pub revision: u64,
+    pub summary: ShiftInterpolationCompatibilityIndexSummary,
     pub index: ShiftInterpolationCompatibilityIndex,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftInterpolationCompatibilityIndexSummary {
+    pub glyph_count: usize,
+    pub compatible_glyph_count: usize,
+    pub incompatible_glyph_count: usize,
+    pub issue_count: usize,
+    pub issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1963,6 +1974,9 @@ impl ShiftWorkingSource {
     ) -> ShiftInterpolationCompatibilityIndexReport {
         ShiftInterpolationCompatibilityIndexReport {
             revision: self.revision,
+            summary: interpolation_compatibility_index_summary(
+                &self.interpolation_compatibility_index,
+            ),
             index: self.interpolation_compatibility_index.clone(),
         }
     }
@@ -6268,6 +6282,18 @@ fn glyph_interpolation_compatibility_summary(
         layer_count: compatibility.layer_signatures.len(),
         issue_count: compatibility.issue_count,
         issue_kind_counts: compatibility.issue_kind_counts.clone(),
+    }
+}
+
+fn interpolation_compatibility_index_summary(
+    index: &ShiftInterpolationCompatibilityIndex,
+) -> ShiftInterpolationCompatibilityIndexSummary {
+    ShiftInterpolationCompatibilityIndexSummary {
+        glyph_count: index.glyph_count,
+        compatible_glyph_count: index.compatible_glyph_count,
+        incompatible_glyph_count: index.incompatible_glyph_count,
+        issue_count: index.issue_count,
+        issue_kind_counts: index.issue_kind_counts.clone(),
     }
 }
 

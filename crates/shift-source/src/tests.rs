@@ -18,10 +18,11 @@ use crate::{
     ShiftGlyphRelinkReplacementCandidateSummary, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
     ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse,
-    ShiftInterpolationCompatibilityIndexReport, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftInterpolationCompatibilityIndexReport, ShiftInterpolationCompatibilityIndexSummary,
+    ShiftMappedAxisValue, ShiftMappedAxisValueSource, ShiftMappedLocationSummary,
+    ShiftMissingSourceLayer, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
+    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
     ShiftSourceMappedLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
     ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
@@ -513,7 +514,17 @@ fn interpolation_compatibility_index_accepts_matching_layer_topology() {
     let working_source = ShiftWorkingSource::new(package).expect("working source should build");
     assert_eq!(
         working_source.interpolation_compatibility_index_report(),
-        ShiftInterpolationCompatibilityIndexReport { revision: 0, index }
+        ShiftInterpolationCompatibilityIndexReport {
+            revision: 0,
+            summary: ShiftInterpolationCompatibilityIndexSummary {
+                glyph_count: 1,
+                compatible_glyph_count: 1,
+                incompatible_glyph_count: 0,
+                issue_count: 0,
+                issue_kind_counts: Vec::new(),
+            },
+            index,
+        }
     );
 }
 
@@ -587,6 +598,22 @@ fn interpolation_compatibility_index_reports_contour_topology_mismatch() {
         ShiftGlyphInterpolationCompatibilitySummary {
             compatible: false,
             layer_count: 2,
+            issue_count: 1,
+            issue_kind_counts: vec![ShiftInterpolationCompatibilityIssueKindCount {
+                kind: ShiftInterpolationCompatibilityIssueKind::ContourTopologyMismatch,
+                issue_count: 1,
+            }],
+        }
+    );
+
+    let index_report = working_source.interpolation_compatibility_index_report();
+    assert_eq!(index_report.revision, 0);
+    assert_eq!(
+        index_report.summary,
+        ShiftInterpolationCompatibilityIndexSummary {
+            glyph_count: 1,
+            compatible_glyph_count: 0,
+            incompatible_glyph_count: 1,
             issue_count: 1,
             issue_kind_counts: vec![ShiftInterpolationCompatibilityIssueKindCount {
                 kind: ShiftInterpolationCompatibilityIssueKind::ContourTopologyMismatch,
