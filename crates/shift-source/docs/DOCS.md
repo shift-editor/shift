@@ -1732,3 +1732,18 @@ derived indexes must be safe to delete
 - Export/build diagnostics are not wired through the `shift-backends`/`fontc`
   path yet, but the source model now rejects out-of-range authored coordinates
   before backend export.
+
+## Recalibration
+
+The source-package spike should not keep expanding as one broad work stream.
+Future work should be split into narrow goals:
+
+- persistence hardening before alpha, with staged transaction mechanics tested
+  in Rust and TypeScript limited to app-level open/save contracts
+- variable component editing and preview, with small resolved-state DTOs rather
+  than package-shaped component reports
+- source authoring and axis mapping, with Rust-owned source rows, worklists,
+  and mapped locations instead of TypeScript interpolation
+
+This crate can keep rich graph facts internally, but public bridge/API surface
+should be pulled by concrete editor journeys.

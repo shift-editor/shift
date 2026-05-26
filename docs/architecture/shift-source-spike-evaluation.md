@@ -52,19 +52,19 @@ bridge should not expose generic package status just because the source crate ca
 compute it. A query is valid only when it answers a concrete screen decision,
 confirmation, inspector row, canvas preview, or save/recovery state.
 
-| Journey | User decision | Rust-owned answer | Must not leak to TS |
-| --- | --- | --- | --- |
-| Open source package | Can I trust and edit this package now? | load result, recovery status, staged-commit blockers, readable next action | raw staged files, package traversal, silent repair |
-| Edit font info | Did this metadata edit apply and is the document dirty? | validated edit result, changed fields, revision | source/master work status, glyph rewrites, package paths |
-| Add source/master | Was the source created at a valid axis location? | source ID, display name, completed/authored location, diagnostics, affected source table row | export readiness, all glyph payloads |
-| Source panel worklist | What work did adding/changing this source create? | missing glyph-layer rows and interpolation blockers for the visible source/panel | global “ready” flag with no UI action, TS scans over glyph files |
-| Fill source layer | Can I add this glyph layer without overwriting or corrupting variation data? | created layer, overwrite/stale blockers, affected glyph/source rows, revision, save impact | heuristic “layer exists” checks in TS |
-| Rename glyph | Can I rename this label without breaking component identity? | ID-keyed rename result, old/new labels, refreshed dependent labels, revision | component repair by glyph name |
-| Delete glyph | Which destructive choices are valid? | preview with exact user-visible references and valid strategies, then revision-checked chosen delete command | blind delete, TypeScript dependency graph reconstruction |
-| Edit component | What does this component resolve to at the current preview location? | stable component/base IDs, resolved axis values with provenance, condition result, transform fields that vary | condition evaluation or reset/inherit semantics in TS |
-| Scrub variable component/source location | What changed for this visible glyph/component at this coordinate? | small resolved preview/delta from cached Rust state | package-sized DTOs per frame |
-| Save | Can this dirty graph be safely persisted? | save preview, conflict/recovery blockers, semantic change summary, final saved revision after disk verification | clearing dirty before semantic reload, path-level assertions in editor tests |
-| Reopen after save/crash | What state should the user see after interruption? | recovered/blocked load state and app-visible package summary | accepting mixed old/new source graph |
+| Journey                                  | User decision                                                                | Rust-owned answer                                                                                               | Must not leak to TS                                                          |
+| ---------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Open source package                      | Can I trust and edit this package now?                                       | load result, recovery status, staged-commit blockers, readable next action                                      | raw staged files, package traversal, silent repair                           |
+| Edit font info                           | Did this metadata edit apply and is the document dirty?                      | validated edit result, changed fields, revision                                                                 | source/master work status, glyph rewrites, package paths                     |
+| Add source/master                        | Was the source created at a valid axis location?                             | source ID, display name, completed/authored location, diagnostics, affected source table row                    | export readiness, all glyph payloads                                         |
+| Source panel worklist                    | What work did adding/changing this source create?                            | missing glyph-layer rows and interpolation blockers for the visible source/panel                                | global “ready” flag with no UI action, TS scans over glyph files             |
+| Fill source layer                        | Can I add this glyph layer without overwriting or corrupting variation data? | created layer, overwrite/stale blockers, affected glyph/source rows, revision, save impact                      | heuristic “layer exists” checks in TS                                        |
+| Rename glyph                             | Can I rename this label without breaking component identity?                 | ID-keyed rename result, old/new labels, refreshed dependent labels, revision                                    | component repair by glyph name                                               |
+| Delete glyph                             | Which destructive choices are valid?                                         | preview with exact user-visible references and valid strategies, then revision-checked chosen delete command    | blind delete, TypeScript dependency graph reconstruction                     |
+| Edit component                           | What does this component resolve to at the current preview location?         | stable component/base IDs, resolved axis values with provenance, condition result, transform fields that vary   | condition evaluation or reset/inherit semantics in TS                        |
+| Scrub variable component/source location | What changed for this visible glyph/component at this coordinate?            | small resolved preview/delta from cached Rust state                                                             | package-sized DTOs per frame                                                 |
+| Save                                     | Can this dirty graph be safely persisted?                                    | save preview, conflict/recovery blockers, semantic change summary, final saved revision after disk verification | clearing dirty before semantic reload, path-level assertions in editor tests |
+| Reopen after save/crash                  | What state should the user see after interruption?                           | recovered/blocked load state and app-visible package summary                                                    | accepting mixed old/new source graph                                         |
 
 Delete previews are required only for destructive journeys. They are not a
 generic preflight layer. A preview exists when the user must choose between
@@ -84,45 +84,45 @@ The public document service should be organized around editor intentions, not
 storage verbs. Names below are illustrative, but this is the level of meaning we
 should test.
 
-| Operation | User intent | Required behavior | Primary test |
-| --- | --- | --- | --- |
-| `openEditablePackage` | Open a font project and know whether it is safe to edit | validate manifest, recover or block staged commits, fingerprint canonical paths, return app-visible package summary | opens clean package, refuses uncertain staged state, presents recovery action |
-| `editFontInfo` | Change family/style/metrics | validate values, mutate font metadata only, return changed fields and revision | edits UPM/name, save/reopen preserves values |
-| `defineAxis` | Add/edit/remove a user or construction axis | preserve stable axis ID, validate tag/name/range/default, update affected source locations/mappings | creates construction axis without exposing it as a user-facing axis |
-| `mapAxisCoordinates` | Make a public design slider drive construction coordinates | validate complete samples, reject cycles/duplicate sample inputs, return mapped source rows and diagnostics | edits mapping and updates source rows without TS interpolation |
-| `addMaster` | Add a design source at a location | allocate source ID, complete/default sparse location with provenance, return source row and affected panel work items | adds Bold source and lists missing visible glyph layers |
-| `editMasterLocation` | Move a source in design space | validate location, recompute mapped rows and affected compatibility/worklist rows | moving source updates only source metadata and derived indexes |
-| `removeMaster` | Remove a source safely | block default source, preview layer/variation-source users, require explicit cascade when needed | deleting unused source succeeds; referenced/default source reports blocker |
-| `addGlyph` | Add a glyph from the grid/sidebar | allocate stable glyph ID and collision-safe display name, create requested default layer, return grid row | quick-add glyph appears in grid and can be selected by ID |
-| `renameGlyph` | Rename label without breaking identity | operate by glyph ID, refresh dependent component labels, reject stale/duplicate rename | rename base glyph updates composites while component target IDs stay stable |
-| `removeGlyph` | Delete a glyph intentionally | if references exist, return valid strategies; chosen command removes/relinks/decomposes by expected revision | base glyph delete shows component users and chosen strategy updates dependents |
-| `addGlyphLayerForMaster` | Fill missing design data for one source | reject overwrite unless explicit, validate layer geometry, update source worklist row | adding Bold layer removes that glyph from missing-layer worklist |
-| `editGlyphGeometry` | Move points/contours/anchors in one layer | patch only the glyph/layer, maintain IDs, update compatibility for affected glyph | point edit redraws current glyph without changing unrelated glyph state |
-| `editComponent` | Add/change a component in a glyph layer | store component ID, base glyph ID, transform, sparse location, inheritance/reset behavior, condition | component inspector shows resolved base/location without TS graph repair |
-| `resolveComponentPreview` | Preview a component at current slider/scrub location | evaluate condition tree, parent/root locations, local axes, varied transform fields in Rust | scrub returns small resolved state/delta for visible component |
-| `editGlyphLocalAxis` | Make one base glyph variable along local axes | validate local axis IDs, prevent global-axis shadowing, update component-location editor rows | adding local axis enables component location control without global axis pollution |
-| `savePackage` | Persist without data loss | preview conflicts/staged blockers, stage canonical writes, apply, reload, semantic-equality check, update baseline | external edit blocks save; successful save clears dirty after reload |
-| `exportWithFontc` | Build binary artifacts | hand source/IR intent to fontc path, report lowering blockers, do not make UFO/designspace export a success criterion | export preflight reports fontc handoff blockers separately from editor worklists |
+| Operation                 | User intent                                                | Required behavior                                                                                                     | Primary test                                                                       |
+| ------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `openEditablePackage`     | Open a font project and know whether it is safe to edit    | validate manifest, recover or block staged commits, fingerprint canonical paths, return app-visible package summary   | opens clean package, refuses uncertain staged state, presents recovery action      |
+| `editFontInfo`            | Change family/style/metrics                                | validate values, mutate font metadata only, return changed fields and revision                                        | edits UPM/name, save/reopen preserves values                                       |
+| `defineAxis`              | Add/edit/remove a user or construction axis                | preserve stable axis ID, validate tag/name/range/default, update affected source locations/mappings                   | creates construction axis without exposing it as a user-facing axis                |
+| `mapAxisCoordinates`      | Make a public design slider drive construction coordinates | validate complete samples, reject cycles/duplicate sample inputs, return mapped source rows and diagnostics           | edits mapping and updates source rows without TS interpolation                     |
+| `addMaster`               | Add a design source at a location                          | allocate source ID, complete/default sparse location with provenance, return source row and affected panel work items | adds Bold source and lists missing visible glyph layers                            |
+| `editMasterLocation`      | Move a source in design space                              | validate location, recompute mapped rows and affected compatibility/worklist rows                                     | moving source updates only source metadata and derived indexes                     |
+| `removeMaster`            | Remove a source safely                                     | block default source, preview layer/variation-source users, require explicit cascade when needed                      | deleting unused source succeeds; referenced/default source reports blocker         |
+| `addGlyph`                | Add a glyph from the grid/sidebar                          | allocate stable glyph ID and collision-safe display name, create requested default layer, return grid row             | quick-add glyph appears in grid and can be selected by ID                          |
+| `renameGlyph`             | Rename label without breaking identity                     | operate by glyph ID, refresh dependent component labels, reject stale/duplicate rename                                | rename base glyph updates composites while component target IDs stay stable        |
+| `removeGlyph`             | Delete a glyph intentionally                               | if references exist, return valid strategies; chosen command removes/relinks/decomposes by expected revision          | base glyph delete shows component users and chosen strategy updates dependents     |
+| `addGlyphLayerForMaster`  | Fill missing design data for one source                    | reject overwrite unless explicit, validate layer geometry, update source worklist row                                 | adding Bold layer removes that glyph from missing-layer worklist                   |
+| `editGlyphGeometry`       | Move points/contours/anchors in one layer                  | patch only the glyph/layer, maintain IDs, update compatibility for affected glyph                                     | point edit redraws current glyph without changing unrelated glyph state            |
+| `editComponent`           | Add/change a component in a glyph layer                    | store component ID, base glyph ID, transform, sparse location, inheritance/reset behavior, condition                  | component inspector shows resolved base/location without TS graph repair           |
+| `resolveComponentPreview` | Preview a component at current slider/scrub location       | evaluate condition tree, parent/root locations, local axes, varied transform fields in Rust                           | scrub returns small resolved state/delta for visible component                     |
+| `editGlyphLocalAxis`      | Make one base glyph variable along local axes              | validate local axis IDs, prevent global-axis shadowing, update component-location editor rows                         | adding local axis enables component location control without global axis pollution |
+| `savePackage`             | Persist without data loss                                  | preview conflicts/staged blockers, stage canonical writes, apply, reload, semantic-equality check, update baseline    | external edit blocks save; successful save clears dirty after reload               |
+| `exportWithFontc`         | Build binary artifacts                                     | hand source/IR intent to fontc path, report lowering blockers, do not make UFO/designspace export a success criterion | export preflight reports fontc handoff blockers separately from editor worklists   |
 
 ### Semantic Test Suites
 
 Tests should be named after these behaviors, not after helper classes or storage
 modules.
 
-| Suite | Required scenarios |
-| --- | --- |
-| `package open and recovery` | clean open, malformed manifest, stale staged commit, partially applied staged commit, recovery cleanup, app-visible blocker text/action |
-| `font info editing` | valid edit, invalid UPM/metrics rejection before mutation, save/reopen, external conflict before save |
-| `axis authoring` | create user axis, create construction axis, reject duplicate IDs/tags where invalid, delete axis with source/mapping users |
-| `axis mapping authoring` | one-dimensional mapping, multi-axis mapping, duplicate sample rejection, mapped source diagnostics, no TS interpolation |
-| `source authoring` | add source, edit source location, delete unused source, block default/referenced source, source-panel worklist scoped to visible source |
-| `glyph identity` | create glyph, rename by ID, duplicate-name rejection, dependent component label refresh, stale confirmation rejection |
-| `glyph deletion strategies` | direct delete, blocked delete with component users, remove-component strategy, relink strategy, cycle/local-axis blockers |
-| `glyph layer editing` | add source layer, reject overwrite, delete unused layer, block layer used by glyph/component variation source |
-| `component authoring` | add component by base glyph ID, rename base keeps target, edit decomposed transform, edit sparse location, reset vs inherit preview |
-| `variable component preview` | local-axis component location, condition true/false, varied transform field summary, recursive component resolution, package-sized DTO guard |
-| `safe save` | unchanged preview, semantic dirty summary, external conflict, derived cache conflict policy, crash/staged recovery, semantic reload before clean |
-| `fontc export handoff` | source-to-fontir handoff shape, unsupported variable component lowering blocker, static lowering path, no Shift-to-UFO requirement |
+| Suite                        | Required scenarios                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `package open and recovery`  | clean open, malformed manifest, stale staged commit, partially applied staged commit, recovery cleanup, app-visible blocker text/action          |
+| `font info editing`          | valid edit, invalid UPM/metrics rejection before mutation, save/reopen, external conflict before save                                            |
+| `axis authoring`             | create user axis, create construction axis, reject duplicate IDs/tags where invalid, delete axis with source/mapping users                       |
+| `axis mapping authoring`     | one-dimensional mapping, multi-axis mapping, duplicate sample rejection, mapped source diagnostics, no TS interpolation                          |
+| `source authoring`           | add source, edit source location, delete unused source, block default/referenced source, source-panel worklist scoped to visible source          |
+| `glyph identity`             | create glyph, rename by ID, duplicate-name rejection, dependent component label refresh, stale confirmation rejection                            |
+| `glyph deletion strategies`  | direct delete, blocked delete with component users, remove-component strategy, relink strategy, cycle/local-axis blockers                        |
+| `glyph layer editing`        | add source layer, reject overwrite, delete unused layer, block layer used by glyph/component variation source                                    |
+| `component authoring`        | add component by base glyph ID, rename base keeps target, edit decomposed transform, edit sparse location, reset vs inherit preview              |
+| `variable component preview` | local-axis component location, condition true/false, varied transform field summary, recursive component resolution, package-sized DTO guard     |
+| `safe save`                  | unchanged preview, semantic dirty summary, external conflict, derived cache conflict policy, crash/staged recovery, semantic reload before clean |
+| `fontc export handoff`       | source-to-fontir handoff shape, unsupported variable component lowering blocker, static lowering path, no Shift-to-UFO requirement               |
 
 Passing these suites is stronger evidence than a broad “source readiness” report.
 Each test should fail if TypeScript reconstructs package semantics, if the bridge
@@ -140,20 +140,20 @@ This is the spike's current evidence map. “Rust” means the source package al
 has semantic working-source commands and unit tests. “Bridge” means at least one
 headless app-facing test crosses N-API/TS and proves the renderer boundary shape.
 
-| Operation group | Current evidence | Gap before alpha decision |
-| --- | --- | --- |
-| Package trust | Rust tests cover pending, partial, applied, diverged, invalid, and cleanup-only staged commits plus recovery plans. Bridge tests cover clean open preview and unresolved staged-transaction blocking before editable data loads. | Partial staged recovery should stay covered in Rust until the bridge has a native fault-injection fixture. Need malformed-manifest and cleanup-only bridge/app open evidence. |
-| Font identity | Rust tests cover narrow font-info impact, no-op revisions, invalid values, staged payloads, save/reopen. Bridge tests cover edit/save/reopen. | Expand bridge operation beyond family name/UPM to the actual font-info fields used by the dialog. |
-| Axis authoring | Rust tests cover create/update/delete, app projections, referenced-axis delete previews, invalid updates. | No bridge/app evidence. Need semantic axis commands named around user/construction axes and tests for deleting axes used by sources/mappings/components. |
-| Axis mapping authoring | Rust tests cover first-class file roundtrip, one/multi-axis mapping, duplicate samples, implicit-chain rejection, mapped-source diagnostics. | No bridge/app evidence. Need a headless “edit mapping -> mapped source rows change” test, with TS doing no interpolation. |
-| Source authoring | Rust tests cover add/update/delete source, default-source blockers, referenced-source blockers, completed sparse locations, source worklists. Bridge tests cover add source, `masterLayerWorklist`, and add glyph layer; they assert the missing-layer row changes without TS scanning glyph package data. | Need bridge/app evidence for edit source location, delete unused source, default/referenced-source blockers, and interpolation-mismatch worklist rows. |
-| Glyph identity | Rust tests cover create, rename by ID, duplicate/missing preview rejection, dependent component label refresh. Bridge tests cover create/rename and component label refresh. | Need stale expected-revision tests and app-shaped grid row response. |
-| Glyph deletion strategies | Rust tests cover direct delete, blocked delete, remove-component delete, relink delete, previews, cycle blockers, local-axis relink blockers, variable component recipe preservation. Bridge tests cover base-glyph removal preview and the remove-component-uses strategy, asserting component users and dependent composite state without file-path assertions. | Need bridge/app evidence for direct delete, relink, decompose, stale confirmations, cycle/local-axis blockers. |
-| Glyph layer authoring | Rust tests cover source-layer create/delete, overwrite rejection, referenced-layer blockers, narrow impact. | No bridge/app evidence beyond create layer. Need add/edit/delete layer flows scoped to one glyph/source. |
-| Component authoring | Rust tests cover component activity, recipes, variation sources, condition validation, local-axis validation, reset/inherit resolution. | No bridge/app evidence. Need app-shaped component inspector DTO before exposing broad package component data. |
-| Variable component preview | Rust tests cover inactive conditions, interpolation of component variation state, inherited dynamic global values, recursive recipe reports. | Missing scrub-oriented bridge/API. Need cached Rust query returning small resolved state/delta for one visible glyph/component. |
-| Safe save | Rust tests cover staged commit preparation, conflict blocking, mark-saved semantic equality, save preview states, and partial staged transaction recovery. Bridge tests cover external conflict and staged cleanup after save. | Need native fault-injection coverage around write interruption from the app harness; TypeScript should not handcraft staged transaction internals. |
-| Fontc export handoff | Rust has export preflight and component lowering diagnostics. | Still not a real fontc handoff. Keep export as separate preflight; do not let editor worklists become export readiness. |
+| Operation group            | Current evidence                                                                                                                                                                                                                                                                                                                                                  | Gap before alpha decision                                                                                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Package trust              | Rust tests cover pending, partial, applied, diverged, invalid, and cleanup-only staged commits plus recovery plans. Bridge tests cover clean open preview and unresolved staged-transaction blocking before editable data loads.                                                                                                                                  | Partial staged recovery should stay covered in Rust until the bridge has a native fault-injection fixture. Need malformed-manifest and cleanup-only bridge/app open evidence. |
+| Font identity              | Rust tests cover narrow font-info impact, no-op revisions, invalid values, staged payloads, save/reopen. Bridge tests cover edit/save/reopen.                                                                                                                                                                                                                     | Expand bridge operation beyond family name/UPM to the actual font-info fields used by the dialog.                                                                             |
+| Axis authoring             | Rust tests cover create/update/delete, app projections, referenced-axis delete previews, invalid updates.                                                                                                                                                                                                                                                         | No bridge/app evidence. Need semantic axis commands named around user/construction axes and tests for deleting axes used by sources/mappings/components.                      |
+| Axis mapping authoring     | Rust tests cover first-class file roundtrip, one/multi-axis mapping, duplicate samples, implicit-chain rejection, mapped-source diagnostics.                                                                                                                                                                                                                      | No bridge/app evidence. Need a headless “edit mapping -> mapped source rows change” test, with TS doing no interpolation.                                                     |
+| Source authoring           | Rust tests cover add/update/delete source, default-source blockers, referenced-source blockers, completed sparse locations, source worklists. Bridge tests cover add source, `masterLayerWorklist`, and add glyph layer; they assert the missing-layer row changes without TS scanning glyph package data.                                                        | Need bridge/app evidence for edit source location, delete unused source, default/referenced-source blockers, and interpolation-mismatch worklist rows.                        |
+| Glyph identity             | Rust tests cover create, rename by ID, duplicate/missing preview rejection, dependent component label refresh. Bridge tests cover create/rename and component label refresh.                                                                                                                                                                                      | Need stale expected-revision tests and app-shaped grid row response.                                                                                                          |
+| Glyph deletion strategies  | Rust tests cover direct delete, blocked delete, remove-component delete, relink delete, previews, cycle blockers, local-axis relink blockers, variable component recipe preservation. Bridge tests cover base-glyph removal preview and the remove-component-uses strategy, asserting component users and dependent composite state without file-path assertions. | Need bridge/app evidence for direct delete, relink, decompose, stale confirmations, cycle/local-axis blockers.                                                                |
+| Glyph layer authoring      | Rust tests cover source-layer create/delete, overwrite rejection, referenced-layer blockers, narrow impact.                                                                                                                                                                                                                                                       | No bridge/app evidence beyond create layer. Need add/edit/delete layer flows scoped to one glyph/source.                                                                      |
+| Component authoring        | Rust tests cover component activity, recipes, variation sources, condition validation, local-axis validation, reset/inherit resolution.                                                                                                                                                                                                                           | No bridge/app evidence. Need app-shaped component inspector DTO before exposing broad package component data.                                                                 |
+| Variable component preview | Rust tests cover inactive conditions, interpolation of component variation state, inherited dynamic global values, recursive recipe reports.                                                                                                                                                                                                                      | Missing scrub-oriented bridge/API. Need cached Rust query returning small resolved state/delta for one visible glyph/component.                                               |
+| Safe save                  | Rust tests cover staged commit preparation, conflict blocking, mark-saved semantic equality, save preview states, and partial staged transaction recovery. Bridge tests cover external conflict and staged cleanup after save.                                                                                                                                    | Need native fault-injection coverage around write interruption from the app harness; TypeScript should not handcraft staged transaction internals.                            |
+| Fontc export handoff       | Rust has export preflight and component lowering diagnostics.                                                                                                                                                                                                                                                                                                     | Still not a real fontc handoff. Keep export as separate preflight; do not let editor worklists become export readiness.                                                       |
 
 ## Edge Cases To Force Into Tests
 
@@ -377,19 +377,19 @@ Pass criteria:
 
 For each flow, record:
 
-| Field | Notes |
-| --- | --- |
-| User action | What the designer does |
-| Rust command/query | Exact command or query used |
-| DTO/report returned | App-shaped response |
-| TypeScript state touched | UI projection only |
-| N-API call count | Should be coarse |
-| Payload size concern | Screen-sized, not package-sized |
-| Save impact | Canonical writes, removals, derived invalidations |
-| Stale revision handling | How stale dialogs/responses are rejected |
-| Typed failure states | User-presentable blockers |
-| Better than current path? | Yes/no with reason |
-| Verdict | Keep, simplify, park, or cut |
+| Field                     | Notes                                             |
+| ------------------------- | ------------------------------------------------- |
+| User action               | What the designer does                            |
+| Rust command/query        | Exact command or query used                       |
+| DTO/report returned       | App-shaped response                               |
+| TypeScript state touched  | UI projection only                                |
+| N-API call count          | Should be coarse                                  |
+| Payload size concern      | Screen-sized, not package-sized                   |
+| Save impact               | Canonical writes, removals, derived invalidations |
+| Stale revision handling   | How stale dialogs/responses are rejected          |
+| Typed failure states      | User-presentable blockers                         |
+| Better than current path? | Yes/no with reason                                |
+| Verdict                   | Keep, simplify, park, or cut                      |
 
 ## Initial Evidence Snapshot
 
@@ -605,3 +605,31 @@ User action
 If that loop holds, the Rust document service is worth carrying forward even if `.shift` remains experimental.
 
 If that loop does not hold, harvest the useful ideas and cut the spike back aggressively.
+
+## Recalibration
+
+This spike has become too broad to keep driving as one work queue. It now mixes
+source-package shape, Rust/IR boundaries, bridge DTOs, staged persistence,
+variable component authoring, and fontc export handoff. The useful next step is
+not to add more speculative surface area, but to split the work into narrow
+goals with their own pass criteria.
+
+Recommended next goals:
+
+1. **Harden source persistence before alpha.** Keep staged transaction mechanics
+   in Rust tests, add native fault-injection only if app-boundary coverage needs
+   it, prove malformed/cleanup-only open states, and keep TS away from
+   `.shift-txn` internals.
+2. **Prove variable component editing and preview.** Start from one visible
+   component and one preview location. Return condition result, reset/inherit
+   provenance, local/global axis values, and varied transform fields as a
+   small app-shaped DTO. Do not expose package-shaped component data.
+3. **Prove source authoring and axis mapping.** Edit source locations, delete
+   unused/default/referenced sources, edit public-to-construction mappings, and
+   assert mapped source rows/worklists update from Rust without TypeScript
+   interpolation.
+
+The current broad objective should remain a reference document, not the active
+implementation plan. Each new goal should name the user journey, the Rust-owned
+semantics, the bridge contract, and the tests that prove TypeScript is not
+reconstructing source truth.
