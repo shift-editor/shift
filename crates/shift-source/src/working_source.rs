@@ -950,6 +950,7 @@ pub struct ShiftComponentLoweringDiagnostic {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentLoweringPreflight {
+    pub revision: u64,
     pub readiness: ShiftComponentLoweringPreflightReadiness,
     pub total_component_count: usize,
     pub supported_component_count: usize,
@@ -994,6 +995,7 @@ pub struct ShiftComponentLoweringCapabilityCount {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftStaticComponentExportPreview {
+    pub revision: u64,
     pub readiness: ShiftStaticComponentExportReadiness,
     pub total_component_count: usize,
     pub preserve_reference_count: usize,
@@ -1437,7 +1439,7 @@ impl ShiftStaticComponentExportPreviewBuilder {
         self.components.push(component);
     }
 
-    fn finish(self) -> ShiftStaticComponentExportPreview {
+    fn finish(self, revision: u64) -> ShiftStaticComponentExportPreview {
         let readiness = match (
             self.unsupported_component_count,
             self.fallback_component_count,
@@ -1502,6 +1504,7 @@ impl ShiftStaticComponentExportPreviewBuilder {
             .collect::<Vec<_>>();
 
         ShiftStaticComponentExportPreview {
+            revision,
             readiness,
             total_component_count: self.components.len(),
             preserve_reference_count: self.preserve_reference_count,
@@ -2806,6 +2809,7 @@ impl ShiftWorkingSource {
         };
 
         Ok(ShiftComponentLoweringPreflight {
+            revision: self.revision,
             readiness,
             total_component_count,
             supported_component_count: total_component_count
@@ -2854,7 +2858,7 @@ impl ShiftWorkingSource {
             }
         }
 
-        Ok(builder.finish())
+        Ok(builder.finish(self.revision))
     }
 
     pub fn component_static_export_preview_for_layer(
@@ -2891,7 +2895,7 @@ impl ShiftWorkingSource {
                 .push(self.static_export_component_preview(glyph, layer_id, component, context)?);
         }
 
-        Ok(builder.finish())
+        Ok(builder.finish(self.revision))
     }
 
     fn static_export_component_preview(
@@ -6057,7 +6061,7 @@ mod tests {
             second_reason.clone(),
         ));
 
-        let preview = builder.finish();
+        let preview = builder.finish(0);
 
         assert_eq!(
             preview.readiness,
@@ -6099,7 +6103,7 @@ mod tests {
     fn static_export_preview_builder_reports_readiness() {
         let ready = ShiftStaticComponentExportPreviewBuilder::new(1);
         assert_eq!(
-            ready.finish().readiness,
+            ready.finish(0).readiness,
             ShiftStaticComponentExportReadiness::Ready
         );
 
@@ -6111,7 +6115,7 @@ mod tests {
             ShiftComponentVariationResolution::Inactive,
         ));
         assert_eq!(
-            skipped_inactive.finish().readiness,
+            skipped_inactive.finish(0).readiness,
             ShiftStaticComponentExportReadiness::ReadyWithSkippedInactive
         );
 
@@ -6125,7 +6129,7 @@ mod tests {
             ShiftComponentVariationResolution::Interpolated { source_count: 2 },
         ));
         assert_eq!(
-            fallback.finish().readiness,
+            fallback.finish(0).readiness,
             ShiftStaticComponentExportReadiness::RequiresFallback
         );
     }

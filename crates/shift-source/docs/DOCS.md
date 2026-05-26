@@ -81,8 +81,8 @@ before replacing live state, so renderer panels and export preflights read a
 consistent projection without repeating source/package scans on every query.
 App-facing report queries include the working-source `revision` when their
 answer can be used asynchronously by renderer panels. The renderer should
-ignore a returned coverage/readiness/preflight payload if its revision is older
-than the current document revision.
+ignore a returned coverage/readiness/component-preflight/export-preflight
+payload if its revision is older than the current document revision.
 
 Good renderer-facing queries:
 

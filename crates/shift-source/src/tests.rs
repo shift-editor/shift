@@ -5304,6 +5304,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
 
     let plain_preflight = working_source
         .component_lowering_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(plain_preflight.revision, 0);
     assert_eq!(
         plain_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
@@ -5371,6 +5372,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         ShiftComponentLoweringCapability::VariableLocation,
     ]);
     let partial_preflight = working_source.component_lowering_preflight(&partial_target);
+    assert_eq!(partial_preflight.revision, 0);
     assert_eq!(
         partial_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
@@ -5402,6 +5404,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
 
     let full_target = ShiftComponentLoweringTarget::all_shift_component_semantics();
     let full_preflight = working_source.component_lowering_preflight(&full_target);
+    assert_eq!(full_preflight.revision, 0);
     assert_eq!(
         full_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::Ready
@@ -5420,6 +5423,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             &BTreeMap::new(),
         )
         .expect("location preflight should evaluate default conditions");
+    assert_eq!(static_location_preflight.revision, 0);
     assert_eq!(
         static_location_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
@@ -5475,6 +5479,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     let full_static_location_preflight = working_source
         .component_lowering_preflight_at_location(&full_target, &BTreeMap::new())
         .expect("location preflight should skip inactive conditional components");
+    assert_eq!(full_static_location_preflight.revision, 0);
     assert_eq!(
         full_static_location_preflight.readiness,
         ShiftComponentLoweringPreflightReadiness::ReadyWithSkippedInactive
@@ -5491,6 +5496,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     let static_export_preview = working_source
         .component_static_export_preview_for_layer("glyph_A", "source_Regular", &BTreeMap::new())
         .expect("static export preview should evaluate default component state");
+    assert_eq!(static_export_preview.revision, 0);
     assert_eq!(
         static_export_preview.readiness,
         ShiftStaticComponentExportReadiness::RequiresFallback
@@ -5586,6 +5592,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     let package_static_export_preview = working_source
         .component_static_export_preview(&BTreeMap::new())
         .expect("package static export preview should evaluate every component");
+    assert_eq!(package_static_export_preview.revision, 0);
     assert_eq!(
         package_static_export_preview.readiness,
         ShiftStaticComponentExportReadiness::RequiresFallback
