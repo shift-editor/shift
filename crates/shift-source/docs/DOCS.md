@@ -430,7 +430,12 @@ format exploration:
   explicit component overrides, reset-vs-inherit behavior, and base glyph local
   axis defaults into a concrete component location. Conditional components carry
   the same evaluated condition tree as activity queries, so this query can drive
-  an inspector panel on its own.
+  an inspector panel on its own. The simple query treats the supplied location
+  as both the root font location and the current parent location. The contextual
+  query accepts both locations explicitly, which lets recursive component
+  previews model `VARC`-style behavior where conditions and reset axes use the
+  font location while inherited axes and component variation interpolation use
+  the current parent location.
 - **Component variation source resolution:** inspectors and export preflight can
   ask which authored component source applies at an exact parent location, or
   ask for an interpolated component location/transform at an in-between parent
@@ -508,6 +513,13 @@ Lessons being folded into the package model:
 
 - Variable components need a base glyph, decomposed transform, sparse location,
   explicit inheritance behavior, and sometimes a condition.
+- `VARC` separates the root font coordinates from the current parent component
+  coordinates. Shift exposes that distinction through
+  `ShiftComponentResolveContext`: component conditions and
+  `resetUnspecifiedToFont` read the font location, while inherited sparse axes
+  and parent-location interpolation read the current parent location. This keeps
+  recursive preview/export behavior from accidentally collapsing reset and
+  inherit into the same state.
 - Component location and transform can themselves vary across the parent design
   location. Shift models this as component variation sources and resolves them
   through `shift-ir::variation::NormalizedF64VariationModel`, the same
@@ -705,7 +717,8 @@ The format should make these app behaviors straightforward:
   save/export preflight, with the same query-location validation as export
   preflight and axis-mapping previews.
 - Component recipe UI that can label each resolved axis value as coming from the
-  parent location, font default, base local default, or component override.
+  parent location, font location, font default, base local default, or component
+  override.
 - Component recipe UI that can show exact authored component variation sources:
   completed parent locations, which source changed the component location and
   transform, and stable source IDs for future edit/delete commands.

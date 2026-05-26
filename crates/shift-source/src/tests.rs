@@ -4,16 +4,17 @@ use crate::{
     ShiftComponentActivity, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentRecipeSummary,
-    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
-    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
-    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
-    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
-    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
-    ShiftWorkingSource, ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStatus,
+    ShiftComponentResolveContext, ShiftComponentVariationParentAxisValue,
+    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
+    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
+    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
+    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
+    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
+    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate, ShiftWorkingSource,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -4002,14 +4003,14 @@ fn working_source_resolves_component_location_with_parent_and_local_axes() {
             context,
             field,
             value,
-        } if context == "component resolved locations"
+        } if context == "component resolved locations font location"
             && field == "axis_wght"
             && value.is_infinite()
     ));
 }
 
 #[test]
-fn working_source_resolves_component_location_with_reset_defaults() {
+fn working_source_resolves_component_location_with_reset_font_location() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,
         advance_height: None,
@@ -4044,8 +4045,8 @@ fn working_source_resolves_component_location_with_reset_defaults() {
     assert_eq!(
         resolved[0].values.get("axis_wght"),
         Some(&ShiftResolvedAxisValue {
-            value: 400.0,
-            source: ShiftResolvedAxisValueSource::FontDefault,
+            value: 900.0,
+            source: ShiftResolvedAxisValueSource::FontLocation,
         })
     );
     assert_eq!(
@@ -4053,6 +4054,117 @@ fn working_source_resolves_component_location_with_reset_defaults() {
         Some(&ShiftResolvedAxisValue {
             value: 40.0,
             source: ShiftResolvedAxisValueSource::BaseLocalDefault,
+        })
+    );
+}
+
+#[test]
+fn working_source_resolves_components_with_distinct_font_and_parent_locations() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![
+            ShiftComponent {
+                id: "component_inherit".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::new(),
+                axis_inheritance: ShiftAxisInheritance::InheritParent,
+                variation_sources: Vec::new(),
+                condition: Some(ShiftCondition::AxisRange {
+                    axis_id: "axis_wght".to_string(),
+                    min: Some(600.0),
+                    max: None,
+                }),
+            },
+            ShiftComponent {
+                id: "component_reset".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::new(),
+                axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+                variation_sources: vec![ShiftComponentVariationSource {
+                    id: "componentSource_parent".to_string(),
+                    name: "Parent source".to_string(),
+                    parent_location: BTreeMap::from([("axis_wght".to_string(), 250.0)]),
+                    location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                    transform: None,
+                }],
+                condition: None,
+            },
+        ],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let resolved = working_source
+        .component_resolved_locations_with_context(
+            "glyph_A",
+            "source_Regular",
+            &ShiftComponentResolveContext {
+                font_location: BTreeMap::from([("axis_wght".to_string(), 700.0)]),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 250.0)]),
+            },
+        )
+        .expect("component locations should resolve");
+
+    assert_eq!(
+        resolved[0].condition,
+        Some(ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wght".to_string(),
+            value: 700.0,
+            min: Some(600.0),
+            max: None,
+            active: true,
+        })
+    );
+    assert_eq!(
+        resolved[0].values.get("axis_wght"),
+        Some(&ShiftResolvedAxisValue {
+            value: 250.0,
+            source: ShiftResolvedAxisValueSource::ParentLocation,
+        })
+    );
+    assert_eq!(
+        resolved[1].values.get("axis_wght"),
+        Some(&ShiftResolvedAxisValue {
+            value: 700.0,
+            source: ShiftResolvedAxisValueSource::FontLocation,
+        })
+    );
+
+    let resolved_states = working_source
+        .component_resolved_states_with_context(
+            "glyph_A",
+            "source_Regular",
+            &ShiftComponentResolveContext {
+                font_location: BTreeMap::from([("axis_wght".to_string(), 700.0)]),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 250.0)]),
+            },
+        )
+        .expect("component states should resolve");
+    assert_eq!(
+        resolved_states[1].variation_resolution,
+        ShiftComponentVariationResolution::ExactSource {
+            source: crate::ShiftComponentResolvedVariationSource {
+                id: "componentSource_parent".to_string(),
+                name: "Parent source".to_string(),
+            },
+        }
+    );
+    assert_eq!(
+        resolved_states[1].values.get("axis_stemWidth"),
+        Some(&ShiftResolvedAxisValue {
+            value: 72.0,
+            source: ShiftResolvedAxisValueSource::ComponentVariationSource,
         })
     );
 }

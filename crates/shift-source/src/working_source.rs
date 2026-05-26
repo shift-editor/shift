@@ -724,10 +724,27 @@ pub struct ShiftResolvedAxisValue {
 #[serde(rename_all = "camelCase")]
 pub enum ShiftResolvedAxisValueSource {
     ParentLocation,
+    FontLocation,
     FontDefault,
     BaseLocalDefault,
     ComponentOverride,
     ComponentVariationSource,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentResolveContext {
+    pub font_location: BTreeMap<String, f64>,
+    pub parent_location: BTreeMap<String, f64>,
+}
+
+impl ShiftComponentResolveContext {
+    pub fn from_font_location(location: BTreeMap<String, f64>) -> Self {
+        Self {
+            font_location: location.clone(),
+            parent_location: location,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1497,11 +1514,11 @@ impl ShiftWorkingSource {
             .map(|source| {
                 let parent_values =
                     self.complete_component_variation_parent_location(&source.parent_location);
-                let mut values = self.resolve_component_axis_values(
-                    component,
-                    base_glyph,
-                    &source.parent_location,
+                let context = ShiftComponentResolveContext::from_font_location(
+                    source.parent_location.clone(),
                 );
+                let mut values =
+                    self.resolve_component_axis_values(component, base_glyph, &context);
                 for (axis_id, value) in &source.location {
                     values.insert(
                         axis_id.clone(),
@@ -1860,6 +1877,16 @@ impl ShiftWorkingSource {
         layer_id: &str,
         location: &BTreeMap<String, f64>,
     ) -> ShiftSourceResult<Vec<ShiftComponentResolvedLocation>> {
+        let context = ShiftComponentResolveContext::from_font_location(location.clone());
+        self.component_resolved_locations_with_context(glyph_id, layer_id, &context)
+    }
+
+    pub fn component_resolved_locations_with_context(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        context: &ShiftComponentResolveContext,
+    ) -> ShiftSourceResult<Vec<ShiftComponentResolvedLocation>> {
         let glyph = self.glyph(glyph_id)?;
         let layer =
             glyph
@@ -1869,7 +1896,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph_id.to_string(),
                     layer_id: layer_id.to_string(),
                 })?;
-        self.validate_query_location("component resolved locations", location)?;
+        self.validate_component_resolve_context("component resolved locations", context)?;
 
         layer
             .components
@@ -1878,14 +1905,16 @@ impl ShiftWorkingSource {
                 let condition = component
                     .condition
                     .as_ref()
-                    .map(|condition| self.evaluate_condition(&glyph.name, condition, location))
+                    .map(|condition| {
+                        self.evaluate_condition(&glyph.name, condition, &context.font_location)
+                    })
                     .transpose()?;
                 let active = condition
                     .as_ref()
                     .map(ShiftConditionEvaluation::active)
                     .unwrap_or(true);
                 let base_glyph = self.glyph(&component.base_glyph_id)?;
-                let values = self.resolve_component_axis_values(component, base_glyph, location);
+                let values = self.resolve_component_axis_values(component, base_glyph, context);
 
                 Ok(ShiftComponentResolvedLocation {
                     glyph_id: glyph.id.clone(),
@@ -1909,6 +1938,16 @@ impl ShiftWorkingSource {
         layer_id: &str,
         location: &BTreeMap<String, f64>,
     ) -> ShiftSourceResult<Vec<ShiftComponentResolvedState>> {
+        let context = ShiftComponentResolveContext::from_font_location(location.clone());
+        self.component_resolved_states_with_context(glyph_id, layer_id, &context)
+    }
+
+    pub fn component_resolved_states_with_context(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        context: &ShiftComponentResolveContext,
+    ) -> ShiftSourceResult<Vec<ShiftComponentResolvedState>> {
         let glyph = self.glyph(glyph_id)?;
         let layer =
             glyph
@@ -1918,7 +1957,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph_id.to_string(),
                     layer_id: layer_id.to_string(),
                 })?;
-        self.validate_query_location("component resolved states", location)?;
+        self.validate_component_resolve_context("component resolved states", context)?;
 
         layer
             .components
@@ -1927,7 +1966,9 @@ impl ShiftWorkingSource {
                 let condition = component
                     .condition
                     .as_ref()
-                    .map(|condition| self.evaluate_condition(&glyph.name, condition, location))
+                    .map(|condition| {
+                        self.evaluate_condition(&glyph.name, condition, &context.font_location)
+                    })
                     .transpose()?;
                 let active = condition
                     .as_ref()
@@ -1935,7 +1976,7 @@ impl ShiftWorkingSource {
                     .unwrap_or(true);
                 let base_glyph = self.glyph(&component.base_glyph_id)?;
                 let base_values =
-                    self.resolve_component_axis_values(component, base_glyph, location);
+                    self.resolve_component_axis_values(component, base_glyph, context);
                 let resolved = if active {
                     self.resolve_component_variation_state(
                         &glyph.id,
@@ -1943,7 +1984,7 @@ impl ShiftWorkingSource {
                         component,
                         base_values,
                         component.transform,
-                        location,
+                        &context.parent_location,
                     )
                 } else {
                     ResolvedComponentVariationState {
@@ -3168,21 +3209,25 @@ impl ShiftWorkingSource {
         &self,
         component: &crate::package::ShiftComponent,
         base_glyph: &crate::package::ShiftGlyph,
-        location: &BTreeMap<String, f64>,
+        context: &ShiftComponentResolveContext,
     ) -> BTreeMap<String, ShiftResolvedAxisValue> {
         let mut values = BTreeMap::new();
 
         for axis in &self.package.axes {
             let (value, source) = match component.axis_inheritance {
                 crate::package::ShiftAxisInheritance::InheritParent => {
-                    if let Some(value) = location.get(&axis.id) {
+                    if let Some(value) = context.parent_location.get(&axis.id) {
                         (*value, ShiftResolvedAxisValueSource::ParentLocation)
                     } else {
                         (axis.default, ShiftResolvedAxisValueSource::FontDefault)
                     }
                 }
                 crate::package::ShiftAxisInheritance::ResetUnspecifiedToFont => {
-                    (axis.default, ShiftResolvedAxisValueSource::FontDefault)
+                    if let Some(value) = context.font_location.get(&axis.id) {
+                        (*value, ShiftResolvedAxisValueSource::FontLocation)
+                    } else {
+                        (axis.default, ShiftResolvedAxisValueSource::FontDefault)
+                    }
                 }
             };
             values.insert(axis.id.clone(), ShiftResolvedAxisValue { value, source });
@@ -3352,6 +3397,21 @@ impl ShiftWorkingSource {
         }
 
         Ok(())
+    }
+
+    fn validate_component_resolve_context(
+        &self,
+        context: &str,
+        resolve_context: &ShiftComponentResolveContext,
+    ) -> ShiftSourceResult<()> {
+        self.validate_query_location(
+            &format!("{context} font location"),
+            &resolve_context.font_location,
+        )?;
+        self.validate_query_location(
+            &format!("{context} parent location"),
+            &resolve_context.parent_location,
+        )
     }
 
     fn default_mapped_values(
