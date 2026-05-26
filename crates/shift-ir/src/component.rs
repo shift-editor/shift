@@ -101,7 +101,7 @@ impl ComponentLocation {
 /// | xy  yy  dy |
 /// | 0   0   1  | (implicit)
 /// ```
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Transform {
     pub xx: f64,
     pub xy: f64,
@@ -112,7 +112,12 @@ pub struct Transform {
 }
 
 /// Decomposed 2D transformation with explicit scale, rotation, skew, and translation.
-/// Composition order: translate to center → rotate → scale → skew → translate back
+///
+/// Values use source-space units: translation and transformation center are in
+/// font units, and rotation/skew are in degrees. Composition follows the
+/// variable-component convention used by Fontra and VARC:
+/// translate(translate + center), rotate, scale, skew(-skewX, skewY),
+/// translate(-center).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecomposedTransform {
@@ -159,32 +164,15 @@ impl DecomposedTransform {
     }
 
     /// Compose the decomposed transform into a raw affine matrix.
-    ///
-    /// Order: translate to center → scale → skew → rotate → translate back → translate
     pub fn to_matrix(&self) -> Transform {
-        let cos_r = self.rotation.to_radians().cos();
-        let sin_r = self.rotation.to_radians().sin();
-        let tan_sx = self.skew_x.to_radians().tan();
-        let tan_sy = self.skew_y.to_radians().tan();
-
-        let xx = self.scale_x * cos_r + self.scale_y * tan_sx * sin_r;
-        let xy = self.scale_x * sin_r - self.scale_y * tan_sx * cos_r;
-        let yx = self.scale_y * -sin_r + self.scale_x * tan_sy * cos_r;
-        let yy = self.scale_y * cos_r + self.scale_x * tan_sy * sin_r;
-
-        let center_x = self.t_center_x;
-        let center_y = self.t_center_y;
-        let dx = self.translate_x + center_x - (xx * center_x + yx * center_y);
-        let dy = self.translate_y + center_y - (xy * center_x + yy * center_y);
-
-        Transform {
-            xx,
-            xy,
-            yx,
-            yy,
-            dx,
-            dy,
-        }
+        Transform::translate(
+            self.translate_x + self.t_center_x,
+            self.translate_y + self.t_center_y,
+        )
+        .compose(Transform::rotate_degrees(self.rotation))
+        .compose(Transform::scale(self.scale_x, self.scale_y))
+        .compose(Transform::skew_degrees(-self.skew_x, self.skew_y))
+        .compose(Transform::translate(-self.t_center_x, -self.t_center_y))
     }
 
     /// Decompose a raw affine matrix into components.
@@ -250,6 +238,27 @@ impl Transform {
         Self {
             xx: sx,
             yy: sy,
+            ..Self::identity()
+        }
+    }
+
+    pub fn rotate_degrees(angle: f64) -> Self {
+        let radians = angle.to_radians();
+        let cos = radians.cos();
+        let sin = radians.sin();
+        Self {
+            xx: cos,
+            xy: sin,
+            yx: -sin,
+            yy: cos,
+            ..Self::identity()
+        }
+    }
+
+    pub fn skew_degrees(x_angle: f64, y_angle: f64) -> Self {
+        Self {
+            yx: x_angle.to_radians().tan(),
+            xy: y_angle.to_radians().tan(),
             ..Self::identity()
         }
     }
@@ -628,6 +637,27 @@ mod tests {
     }
 
     #[test]
+    fn transform_rotate_degrees() {
+        let t = Transform::rotate_degrees(90.0);
+        let (x, y) = t.transform_point(10.0, 0.0);
+        assert!(x.abs() < 1e-10);
+        assert!((y - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn transform_skew_degrees() {
+        let t = Transform::skew_degrees(45.0, 0.0);
+        let (x, y) = t.transform_point(10.0, 20.0);
+        assert!((x - 30.0).abs() < 1e-10);
+        assert!((y - 20.0).abs() < 1e-10);
+
+        let t = Transform::skew_degrees(0.0, 45.0);
+        let (x, y) = t.transform_point(10.0, 20.0);
+        assert!((x - 10.0).abs() < 1e-10);
+        assert!((y - 30.0).abs() < 1e-10);
+    }
+
+    #[test]
     fn transform_compose_order() {
         let translate = Transform::translate(10.0, 20.0);
         let scale = Transform::scale(2.0, 3.0);
@@ -668,6 +698,48 @@ mod tests {
         let (x, y) = d.transform_point(10.0, 20.0);
         assert!((x - 20.0).abs() < 1e-10);
         assert!((y - 60.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn decomposed_transform_uses_variable_component_composition_order() {
+        let d = DecomposedTransform {
+            translate_x: 5.0,
+            translate_y: 7.0,
+            rotation: 30.0,
+            scale_x: 2.0,
+            scale_y: 3.0,
+            skew_x: 10.0,
+            skew_y: 20.0,
+            t_center_x: 40.0,
+            t_center_y: 50.0,
+        };
+        let expected =
+            Transform::translate(d.translate_x + d.t_center_x, d.translate_y + d.t_center_y)
+                .compose(Transform::rotate_degrees(d.rotation))
+                .compose(Transform::scale(d.scale_x, d.scale_y))
+                .compose(Transform::skew_degrees(-d.skew_x, d.skew_y))
+                .compose(Transform::translate(-d.t_center_x, -d.t_center_y));
+
+        assert_eq!(d.to_matrix(), expected);
+    }
+
+    #[test]
+    fn decomposed_transform_skew_fields_follow_x_then_y_axis_convention() {
+        let skew_x = DecomposedTransform {
+            skew_x: 45.0,
+            ..Default::default()
+        };
+        let (x, y) = skew_x.transform_point(10.0, 20.0);
+        assert!((x - -10.0).abs() < 1e-10);
+        assert!((y - 20.0).abs() < 1e-10);
+
+        let skew_y = DecomposedTransform {
+            skew_y: 45.0,
+            ..Default::default()
+        };
+        let (x, y) = skew_y.transform_point(10.0, 20.0);
+        assert!((x - 10.0).abs() < 1e-10);
+        assert!((y - 30.0).abs() < 1e-10);
     }
 
     #[test]

@@ -564,6 +564,13 @@ Lessons being folded into the package model:
 
 Current component sketch:
 
+Component transforms use the same decomposed field set as Fontra variable
+components and `VARC`: translation and transformation-center values are in font
+units, while rotation and skew are stored in degrees. Matrix composition is:
+translate by `translate + center`, rotate, scale, skew by `(-skewX, skewY)`,
+then translate by `-center`. Binary export can convert those degrees into the
+target representation, but source files keep the authoring units designers edit.
+
 ```json
 {
   "id": "component_A_stem",
