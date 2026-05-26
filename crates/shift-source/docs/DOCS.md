@@ -87,7 +87,13 @@ current document revision. Destructive dialogs should also re-check that preview
 revision before committing the command, so a rename/delete/source-layer action
 cannot accidentally apply a stale confirmation after another edit.
 
-Good renderer-facing queries:
+Good renderer-facing operations should be named for the editor action. The
+lower-level working-source methods may still use package terminology, but the
+bridge should expose app-shaped commands such as `previewGlyphRemoval` and
+`removeGlyphAndComponentUses` rather than forcing the renderer to understand
+delete report internals.
+
+Current working-source capabilities:
 
 ```text
 getGlyphDependenciesReport(glyphId)
@@ -1710,6 +1716,10 @@ derived indexes must be safe to delete
   Working-source rename commands refresh dependent component labels through
   narrow `UpdateGlyphLabels` writes, so app surfaces and package files stay
   readable after a rename without relinking component identity.
+- Bridge operation tests should assert semantic editor state, not package file
+  paths. File impact belongs to persistence diagnostics; editor tests should
+  prove that glyph rows, component users, dependent composites, source work
+  items, stale confirmations, and save/reopen state behave correctly.
 - Glyph-local axes, variable component locations, axis inheritance, and
   conditions now project into `shift-ir`. Component locations stay ID-keyed
   because they can reference glyph-local axes as well as global axes. Component

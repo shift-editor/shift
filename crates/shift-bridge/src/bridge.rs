@@ -20,7 +20,7 @@ use shift_edit::{
 use shift_source::{
   load_package as load_shift_package, preview_package_load, recover_staged_commits,
   save_package as save_shift_package, ShiftAxis as PackageAxis, ShiftAxisRole as PackageAxisRole,
-  ShiftComponent as PackageComponent, ShiftContour as PackageContour,
+  ShiftComponent as PackageComponent, ShiftComponentUse, ShiftContour as PackageContour,
   ShiftCreateGlyph as CreateGlyph, ShiftCreateGlyphSourceLayer as CreateGlyphLayer,
   ShiftCreateSource as CreateSource, ShiftFontInfo as PackageFont,
   ShiftFontInfoUpdate as FontUpdate, ShiftGlyph as PackageGlyph, ShiftGlyphLayer as PackageLayer,
@@ -35,6 +35,7 @@ use shift_wire::{
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
   GlyphStructureChange, GlyphValueChange, Source,
 };
+use std::collections::BTreeMap;
 use std::sync::{
   atomic::{AtomicU64, Ordering},
   Arc,
@@ -169,6 +170,45 @@ pub struct FontSourceEdit {
   #[napi(ts_type = "SourceId")]
   pub source_id: String,
   pub source_name: String,
+  #[napi(ts_type = "SourceReadiness")]
+  pub variable_readiness: String,
+  pub missing_layer_count: u32,
+}
+
+#[napi(object)]
+pub struct GlyphComponentUser {
+  #[napi(ts_type = "GlyphId")]
+  pub glyph_id: String,
+  #[napi(ts_type = "GlyphName")]
+  pub glyph_name: String,
+  pub component_count: u32,
+}
+
+#[napi(object)]
+pub struct GlyphRemovalPreview {
+  pub revision: u32,
+  #[napi(ts_type = "GlyphId")]
+  pub glyph_id: String,
+  #[napi(ts_type = "GlyphName")]
+  pub glyph_name: String,
+  pub can_remove_directly: bool,
+  pub requires_strategy: bool,
+  pub component_use_count: u32,
+  pub component_user_count: u32,
+  pub component_users: Vec<GlyphComponentUser>,
+  #[napi(ts_type = "Array<GlyphRemovalStrategy>")]
+  pub valid_strategies: Vec<String>,
+}
+
+#[napi(object)]
+pub struct GlyphRemovalEdit {
+  pub impact: EditImpact,
+  #[napi(ts_type = "GlyphId")]
+  pub glyph_id: String,
+  #[napi(ts_type = "GlyphName")]
+  pub glyph_name: String,
+  pub removed_component_use_count: u32,
+  pub component_users: Vec<GlyphComponentUser>,
   #[napi(ts_type = "SourceReadiness")]
   pub variable_readiness: String,
   pub missing_layer_count: u32,
@@ -520,6 +560,31 @@ fn source_variable_readiness(readiness: VariableFontReadiness) -> String {
   .to_string()
 }
 
+fn glyph_component_users(component_uses: &[ShiftComponentUse]) -> Vec<GlyphComponentUser> {
+  let mut users = BTreeMap::<String, GlyphComponentUser>::new();
+  for component_use in component_uses {
+    users
+      .entry(component_use.glyph_id.clone())
+      .and_modify(|user| user.component_count += 1)
+      .or_insert_with(|| GlyphComponentUser {
+        glyph_id: component_use.glyph_id.clone(),
+        glyph_name: component_use.glyph_name.clone(),
+        component_count: 1,
+      });
+  }
+  users.into_values().collect()
+}
+
+fn glyph_removal_strategies(can_remove_directly: bool, component_use_count: usize) -> Vec<String> {
+  if can_remove_directly {
+    return vec!["direct".to_string()];
+  }
+  if component_use_count > 0 {
+    return vec!["removeComponentUses".to_string()];
+  }
+  Vec::new()
+}
+
 fn source_open_preview_status(status: ShiftPackageLoadPreviewStatus) -> String {
   match status {
     ShiftPackageLoadPreviewStatus::Ready => "ready",
@@ -819,6 +884,58 @@ impl ShiftSourceDocument {
       impact: edit_impact(report.diff, report.revision),
       glyph_id: report.glyph_id,
       glyph_name: report.new_name,
+      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
+    })
+  }
+
+  #[napi]
+  pub fn preview_glyph_removal(
+    &self,
+    #[napi(ts_arg_type = "GlyphId")] glyph_id: String,
+  ) -> Result<GlyphRemovalPreview> {
+    let preview = self
+      .working_source
+      .preview_delete_glyph(&glyph_id)
+      .map_err(map_source_error)?;
+    let component_use_count = preview.component_dependents.len();
+    let component_users = glyph_component_users(&preview.component_dependents);
+    Ok(GlyphRemovalPreview {
+      revision: preview.revision.min(u32::MAX as u64) as u32,
+      glyph_id: preview.glyph_id,
+      glyph_name: preview.glyph_name,
+      can_remove_directly: preview.can_remove_without_decomposing,
+      requires_strategy: !preview.can_remove_without_decomposing,
+      component_use_count: component_use_count as u32,
+      component_user_count: component_users.len() as u32,
+      component_users,
+      valid_strategies: glyph_removal_strategies(
+        preview.can_remove_without_decomposing,
+        component_use_count,
+      ),
+    })
+  }
+
+  #[napi]
+  pub fn remove_glyph_and_component_uses(
+    &mut self,
+    #[napi(ts_arg_type = "GlyphId")] glyph_id: String,
+  ) -> Result<GlyphRemovalEdit> {
+    let preview = self
+      .working_source
+      .preview_delete_glyph(&glyph_id)
+      .map_err(map_source_error)?;
+    let component_users = glyph_component_users(&preview.component_dependents);
+    let report = self
+      .working_source
+      .delete_glyph_and_remove_component_references(&glyph_id)
+      .map_err(map_source_error)?;
+    Ok(GlyphRemovalEdit {
+      impact: edit_impact(report.diff, report.revision),
+      glyph_id: report.glyph_id,
+      glyph_name: report.glyph_name,
+      removed_component_use_count: preview.component_dependents.len() as u32,
+      component_users,
       variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
       missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
     })

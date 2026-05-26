@@ -49,6 +49,10 @@ export type SaveAction =
   | "resolveStagedCommit";
 
 export type SaveStatus = "unchanged" | "saved";
+
+export type GlyphRemovalStrategy =
+  | "direct"
+  | "removeComponentUses";
 export interface BridgeApi {
   createFont(): void
   loadFont(path: string): void
@@ -103,6 +107,8 @@ export declare class ShiftSourceDocument {
   updateFontInfo(familyName: string, unitsPerEm: number): EditImpact
   createGlyph(name: string, unicode: string | undefined | null, width: number): GlyphEdit
   renameGlyph(glyphId: GlyphId, name: GlyphName): GlyphEdit
+  previewGlyphRemoval(glyphId: GlyphId): GlyphRemovalPreview
+  removeGlyphAndComponentUses(glyphId: GlyphId): GlyphRemovalEdit
   createSource(name: string, weight: number): FontSourceEdit
   createGlyphSourceLayer(glyphId: GlyphId, sourceId: SourceId, width: number): GlyphEdit
   previewSave(path: string): SavePreview
@@ -131,6 +137,12 @@ export interface FontSourceEdit {
   missingLayerCount: number
 }
 
+export interface GlyphComponentUser {
+  glyphId: GlyphId
+  glyphName: GlyphName
+  componentCount: number
+}
+
 export interface GlyphEdit {
   impact: EditImpact
   glyphId: GlyphId
@@ -148,6 +160,28 @@ export interface GlyphEntry {
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface GlyphRemovalEdit {
+  impact: EditImpact
+  glyphId: GlyphId
+  glyphName: GlyphName
+  removedComponentUseCount: number
+  componentUsers: Array<GlyphComponentUser>
+  variableReadiness: SourceReadiness
+  missingLayerCount: number
+}
+
+export interface GlyphRemovalPreview {
+  revision: number
+  glyphId: GlyphId
+  glyphName: GlyphName
+  canRemoveDirectly: boolean
+  requiresStrategy: boolean
+  componentUseCount: number
+  componentUserCount: number
+  componentUsers: Array<GlyphComponentUser>
+  validStrategies: Array<GlyphRemovalStrategy>
 }
 
 export interface AnchorData {

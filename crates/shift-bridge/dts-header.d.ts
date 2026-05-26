@@ -44,3 +44,7 @@ export type SaveAction =
   | "resolveStagedCommit";
 
 export type SaveStatus = "unchanged" | "saved";
+
+export type GlyphRemovalStrategy =
+  | "direct"
+  | "removeComponentUses";

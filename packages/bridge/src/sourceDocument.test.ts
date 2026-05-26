@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   asGlyphId,
   asSourceId,
+  type GlyphRemovalStrategy,
   type OpenAction,
   type OpenPreviewStatus,
   type SaveAction,
@@ -15,6 +16,7 @@ import { createPackageFixture, type PackageFixture } from "./testing/sourcePacka
 
 const singleSource = "singleSource" satisfies SourceReadiness;
 const missingSourceLayers = "missingSourceLayers" satisfies SourceReadiness;
+const removeComponentUses = "removeComponentUses" satisfies GlyphRemovalStrategy;
 const readyToOpen = "ready" satisfies OpenPreviewStatus;
 const load = "load" satisfies OpenAction;
 const blockedByRecovery = "blockedByRecovery" satisfies OpenPreviewStatus;
@@ -36,7 +38,7 @@ describe("source document persistence", () => {
 
   it("persists metadata edits and reopens the saved values", () => {
     const report = pkg.document.updateFontInfo("Test Sans Text", 2048);
-    expect(report).toMatchObject({ revision: 1, canonicalPaths: ["font.json"] });
+    expect(report).toMatchObject({ revision: 1, changeCount: 1 });
 
     expect(pkg.document.save(pkg.path)).toMatchObject({ status: saved });
     expect(pkg.reopen().fontInfo()).toMatchObject({
@@ -82,16 +84,12 @@ describe("source document persistence", () => {
       glyphName: "A.base",
       variableReadiness: singleSource,
     });
-    expect(report.impact.canonicalPaths).toEqual([
-      "glyphs/glyph_A.json",
-      "glyphs/glyph_Aacute.json",
-    ]);
     expect(pkg.glyph("glyph_Aacute")).toMatchObject({
       componentBaseGlyphNames: ["A.base"],
     });
   });
 
-  it("reports source readiness while filling sparse source layers", () => {
+  it("tracks which glyphs still need a layer after adding a master", () => {
     const source = pkg.document.createSource("Bold", 900);
     expect(source).toMatchObject({
       sourceId: asSourceId("source_Bold"),
@@ -103,7 +101,49 @@ describe("source document persistence", () => {
       glyphId: asGlyphId("glyph_A"),
       variableReadiness: missingSourceLayers,
     });
-    expect(layer.impact.canonicalPaths).toEqual(["glyphs/glyph_A.json"]);
+    expect(layer.missingLayerCount).toBeGreaterThan(0);
+  });
+
+  it("removes a base glyph by applying the component-use strategy", () => {
+    const preview = pkg.document.previewGlyphRemoval(pkg.glyphId("glyph_A"));
+
+    expect(preview).toMatchObject({
+      glyphId: asGlyphId("glyph_A"),
+      glyphName: "A",
+      canRemoveDirectly: false,
+      requiresStrategy: true,
+      componentUseCount: 1,
+      componentUserCount: 1,
+      validStrategies: [removeComponentUses],
+      componentUsers: [
+        {
+          glyphId: asGlyphId("glyph_Aacute"),
+          glyphName: "Aacute",
+          componentCount: 1,
+        },
+      ],
+    });
+
+    const edit = pkg.document.removeGlyphAndComponentUses(pkg.glyphId("glyph_A"));
+
+    expect(edit).toMatchObject({
+      glyphId: asGlyphId("glyph_A"),
+      glyphName: "A",
+      removedComponentUseCount: 1,
+      variableReadiness: singleSource,
+      componentUsers: [
+        {
+          glyphId: asGlyphId("glyph_Aacute"),
+          glyphName: "Aacute",
+          componentCount: 1,
+        },
+      ],
+    });
+    expect(edit.impact.changeCount).toBe(2);
+    expect(pkg.glyph("glyph_A")).toBeUndefined();
+    expect(pkg.glyph("glyph_Aacute")).toMatchObject({
+      componentBaseGlyphNames: [],
+    });
   });
 
   it("blocks save when a canonical file changed outside the document", () => {

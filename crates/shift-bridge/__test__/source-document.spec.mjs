@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRequire } from "module";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -31,7 +31,6 @@ describe("source document persistence", () => {
     expect(document.updateFontInfo("Test Sans Text", 2048)).toMatchObject({
       revision: 1,
       changeCount: 1,
-      canonicalPaths: ["font.json"],
     });
 
     expect(document.save(packagePath)).toMatchObject({ status: "saved" });
@@ -76,7 +75,7 @@ describe("source document persistence", () => {
     }).toThrow();
   });
 
-  it("creates glyphs with narrow source-file impact", () => {
+  it("creates glyphs that can be selected by stable id", () => {
     const report = document.createGlyph("newGlyph", "0042", 500);
 
     expect(report).toMatchObject({
@@ -85,22 +84,22 @@ describe("source document persistence", () => {
       variableReadiness: "singleSource",
       missingLayerCount: 0,
     });
-    expect(report.impact.canonicalPaths).toEqual(["glyphs/glyph_newGlyph.json"]);
+    expect(glyph("glyph_newGlyph")).toMatchObject({
+      id: "glyph_newGlyph",
+      name: "newGlyph",
+    });
   });
 
   it("renames component bases by stable glyph id", () => {
     const report = document.renameGlyph("glyph_A", "A.base");
 
-    expect(report.impact.canonicalPaths).toEqual([
-      "glyphs/glyph_A.json",
-      "glyphs/glyph_Aacute.json",
-    ]);
+    expect(report).toMatchObject({ glyphId: "glyph_A", glyphName: "A.base" });
     expect(glyph("glyph_Aacute")).toMatchObject({
       componentBaseGlyphNames: ["A.base"],
     });
   });
 
-  it("reports source readiness while filling sparse source layers", () => {
+  it("tracks which glyphs still need a layer after adding a master", () => {
     const source = document.createSource("Bold", 900);
     expect(source).toMatchObject({
       sourceId: "source_Bold",
@@ -113,7 +112,47 @@ describe("source document persistence", () => {
       glyphId: "glyph_A",
       variableReadiness: "missingSourceLayers",
     });
-    expect(layer.impact.canonicalPaths).toEqual(["glyphs/glyph_A.json"]);
+    expect(layer.missingLayerCount).toBeGreaterThan(0);
+  });
+
+  it("removes a base glyph by applying the component-use strategy", () => {
+    expect(document.previewGlyphRemoval("glyph_A")).toMatchObject({
+      glyphId: "glyph_A",
+      glyphName: "A",
+      canRemoveDirectly: false,
+      requiresStrategy: true,
+      componentUseCount: 1,
+      componentUserCount: 1,
+      validStrategies: ["removeComponentUses"],
+      componentUsers: [
+        {
+          glyphId: "glyph_Aacute",
+          glyphName: "Aacute",
+          componentCount: 1,
+        },
+      ],
+    });
+
+    const edit = document.removeGlyphAndComponentUses("glyph_A");
+
+    expect(edit).toMatchObject({
+      glyphId: "glyph_A",
+      glyphName: "A",
+      removedComponentUseCount: 1,
+      variableReadiness: "singleSource",
+      componentUsers: [
+        {
+          glyphId: "glyph_Aacute",
+          glyphName: "Aacute",
+          componentCount: 1,
+        },
+      ],
+    });
+    expect(edit.impact.changeCount).toBe(2);
+    expect(glyph("glyph_A")).toBeUndefined();
+    expect(glyph("glyph_Aacute")).toMatchObject({
+      componentBaseGlyphNames: [],
+    });
   });
 
   it("blocks save when a canonical file changed outside the document", () => {
@@ -140,7 +179,11 @@ describe("source document persistence", () => {
       status: "saved",
       stagedRecoveryCount: 0,
     });
-    expect(existsSync(join(packagePath, "font.json"))).toBe(true);
-    expect(existsSync(join(packagePath, "glyphs", "glyph_A.json"))).toBe(true);
+
+    const reopened = new ShiftSourceDocument();
+    reopened.open(packagePath);
+    expect(reopened.glyphs().find((record) => record.id === "glyph_A")).toMatchObject({
+      name: "A.base",
+    });
   });
 });
