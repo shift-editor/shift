@@ -2,13 +2,14 @@ use crate::error::{ShiftSourceError, ShiftSourceResult};
 use crate::package::{
     apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
     compare_fingerprints, diff_packages, fingerprint_package, fingerprint_relative_paths,
-    parse_unicode_scalar, prepare_package_commit, stage_prepared_commit, ShiftAppliedCommit,
-    ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample, ShiftComponent, ShiftComponentUse,
-    ShiftComponentVariationSource, ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint,
-    ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer,
-    ShiftGlyphSource, ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
-    ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource,
-    ShiftStagedCommit,
+    parse_unicode_scalar, plan_staged_commit_recovery, prepare_package_commit,
+    stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
+    ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition,
+    ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
+    ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
+    ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue, ShiftPackage,
+    ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
+    ShiftStagedCommitRecoveryPlan,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -498,6 +499,7 @@ pub enum ShiftWorkingSourceSaveStatus {
 pub struct ShiftWorkingSourceSavePreview {
     pub status: ShiftWorkingSourceSavePreviewStatus,
     pub prepared: ShiftPreparedCommit,
+    pub staged_recovery_plans: Vec<ShiftStagedCommitRecoveryPlan>,
     pub revision: u64,
 }
 
@@ -507,6 +509,7 @@ pub enum ShiftWorkingSourceSavePreviewStatus {
     Unchanged,
     Ready,
     BlockedByExternalChanges,
+    BlockedByStagedCommit,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2037,8 +2040,12 @@ impl ShiftWorkingSource {
         &self,
         root: impl AsRef<Path>,
     ) -> ShiftSourceResult<ShiftWorkingSourceSavePreview> {
+        let root = root.as_ref();
+        let staged_recovery_plans = plan_staged_commit_recovery(root)?;
         let prepared = self.prepare_commit(root)?;
-        let status = if !prepared.conflicts.is_empty() {
+        let status = if !staged_recovery_plans.is_empty() {
+            ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit
+        } else if !prepared.conflicts.is_empty() {
             ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
         } else if prepared.diff.changes.is_empty() {
             ShiftWorkingSourceSavePreviewStatus::Unchanged
@@ -2049,6 +2056,7 @@ impl ShiftWorkingSource {
         Ok(ShiftWorkingSourceSavePreview {
             status,
             prepared,
+            staged_recovery_plans,
             revision: self.revision,
         })
     }
@@ -2073,6 +2081,11 @@ impl ShiftWorkingSource {
         if preview.status == ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges {
             return Err(ShiftSourceError::PreparedCommitHasConflicts {
                 conflict_count: prepared.conflicts.len(),
+            });
+        }
+        if preview.status == ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit {
+            return Err(ShiftSourceError::ActiveStagedCommits {
+                transaction_count: preview.staged_recovery_plans.len(),
             });
         }
 

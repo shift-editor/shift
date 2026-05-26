@@ -78,6 +78,11 @@ pub enum ShiftSourceError {
         invalid_count: usize,
     },
 
+    #[error(
+        "cannot save Shift source package while {transaction_count} staged commits are active"
+    )]
+    ActiveStagedCommits { transaction_count: usize },
+
     #[error("cannot apply Shift staged commit '{transaction_id}' because it has {issue_count} recovery issues")]
     StagedCommitHasIssues {
         transaction_id: String,

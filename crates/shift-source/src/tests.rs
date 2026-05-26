@@ -3428,6 +3428,49 @@ fn working_source_previews_save_ready_without_staging() {
 }
 
 #[test]
+fn working_source_previews_save_blocked_by_active_staged_commit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    let (_, staged) = stage_base_glyph_rename(&package_path, "StagedBase");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    let preview = working_source
+        .preview_save(&package_path)
+        .expect("save preview should inspect staged commits");
+
+    assert_eq!(
+        preview.status,
+        ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit
+    );
+    assert_eq!(preview.revision, 1);
+    assert_eq!(preview.staged_recovery_plans.len(), 1);
+    assert_eq!(
+        preview.staged_recovery_plans[0].transaction_id,
+        staged.transaction_id
+    );
+    assert_eq!(
+        preview.staged_recovery_plans[0].action,
+        ShiftStagedCommitRecoveryAction::Resume
+    );
+    assert_eq!(
+        preview.prepared.diff.changes,
+        vec![
+            ShiftPackageChange::RenameGlyph {
+                glyph_id: "glyph_A".to_string(),
+            },
+            ShiftPackageChange::UpdateGlyphLabels {
+                glyph_id: "glyph_Aacute".to_string(),
+            },
+        ]
+    );
+}
+
+#[test]
 fn working_source_previews_save_unchanged_without_refreshing_baseline() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
@@ -3582,6 +3625,41 @@ fn working_source_unchanged_save_refuses_external_changes_without_marking_saved(
             ShiftFingerprintConflictKind::Modified,
         )]
     );
+}
+
+#[test]
+fn working_source_save_refuses_active_staged_commit_without_marking_saved() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    let _ = stage_base_glyph_rename(&package_path, "StagedBase");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    let err = working_source
+        .save(&package_path)
+        .expect_err("active staged commit should block even unchanged saves");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::ActiveStagedCommits {
+            transaction_count: 1
+        }
+    ));
+    assert_eq!(working_source.revision(), 0);
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed after blocked save");
+    let preview = working_source
+        .preview_save(&package_path)
+        .expect("save preview should still report staged commit");
+
+    assert_eq!(
+        preview.status,
+        ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit
+    );
+    assert_eq!(preview.revision, 1);
 }
 
 #[test]

@@ -207,6 +207,9 @@ Current writer behavior:
   Even an unchanged working source compares the full saved package fingerprint
   against disk before reporting `unchanged`, so external edits cannot be
   accidentally accepted as the new clean baseline.
+  It also reports `blockedByStagedCommit` with staged recovery plans when
+  `.shift-txn` contains active transaction metadata, so the app resolves or
+  cleans recovery state before allowing a new save.
 - `ShiftWorkingSource::save()` is the app-facing happy path for a document save:
   it prepares, stages, applies, and marks the working source saved only after
   the staged commit has succeeded.
@@ -930,7 +933,8 @@ open package
   -> ShiftWorkingSource::open_saved(root, package)
 edit through working-source semantic operations
   -> previewSave(root)
-  -> render unchanged/ready/blockedByExternalChanges from prepared evidence
+  -> render unchanged/ready/blockedByExternalChanges/blockedByStagedCommit
+     from prepared and recovery evidence
 save
   -> ShiftWorkingSource::save(root)
        prepares, stages, applies, then markSaved(root)
