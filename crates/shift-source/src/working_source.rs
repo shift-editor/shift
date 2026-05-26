@@ -764,6 +764,10 @@ pub struct ShiftStaticComponentExportPreview {
     pub fallback_component_count: usize,
     pub skipped_inactive_component_count: usize,
     pub unsupported_component_count: usize,
+    pub preserve_reference_glyph_count: usize,
+    pub fallback_glyph_count: usize,
+    pub skipped_inactive_glyph_count: usize,
+    pub unsupported_glyph_count: usize,
     pub fallback_capabilities: Vec<ShiftComponentLoweringCapability>,
     pub fallback_capability_counts: Vec<ShiftComponentLoweringCapabilityCount>,
     pub components: Vec<ShiftStaticComponentExportComponent>,
@@ -808,6 +812,10 @@ struct ShiftStaticComponentExportPreviewBuilder {
     fallback_component_count: usize,
     skipped_inactive_component_count: usize,
     unsupported_component_count: usize,
+    preserve_reference_glyph_ids: BTreeSet<String>,
+    fallback_glyph_ids: BTreeSet<String>,
+    skipped_inactive_glyph_ids: BTreeSet<String>,
+    unsupported_glyph_ids: BTreeSet<String>,
     fallback_capability_counts: BTreeMap<ShiftComponentLoweringCapability, usize>,
     components: Vec<ShiftStaticComponentExportComponent>,
 }
@@ -1098,6 +1106,10 @@ impl ShiftStaticComponentExportPreviewBuilder {
             fallback_component_count: 0,
             skipped_inactive_component_count: 0,
             unsupported_component_count: 0,
+            preserve_reference_glyph_ids: BTreeSet::new(),
+            fallback_glyph_ids: BTreeSet::new(),
+            skipped_inactive_glyph_ids: BTreeSet::new(),
+            unsupported_glyph_ids: BTreeSet::new(),
             fallback_capability_counts: BTreeMap::new(),
             components: Vec::with_capacity(component_capacity),
         }
@@ -1107,11 +1119,14 @@ impl ShiftStaticComponentExportPreviewBuilder {
         match &component.disposition {
             ShiftStaticComponentExportDisposition::PreserveReference => {
                 self.preserve_reference_count += 1;
+                self.preserve_reference_glyph_ids
+                    .insert(component.glyph_id.clone());
             }
             ShiftStaticComponentExportDisposition::RequiresFallback {
                 missing_capabilities,
             } => {
                 self.fallback_component_count += 1;
+                self.fallback_glyph_ids.insert(component.glyph_id.clone());
                 for capability in missing_capabilities {
                     *self
                         .fallback_capability_counts
@@ -1121,9 +1136,13 @@ impl ShiftStaticComponentExportPreviewBuilder {
             }
             ShiftStaticComponentExportDisposition::SkipInactive => {
                 self.skipped_inactive_component_count += 1;
+                self.skipped_inactive_glyph_ids
+                    .insert(component.glyph_id.clone());
             }
             ShiftStaticComponentExportDisposition::Unsupported { .. } => {
                 self.unsupported_component_count += 1;
+                self.unsupported_glyph_ids
+                    .insert(component.glyph_id.clone());
             }
         }
         self.components.push(component);
@@ -1152,6 +1171,10 @@ impl ShiftStaticComponentExportPreviewBuilder {
             fallback_component_count: self.fallback_component_count,
             skipped_inactive_component_count: self.skipped_inactive_component_count,
             unsupported_component_count: self.unsupported_component_count,
+            preserve_reference_glyph_count: self.preserve_reference_glyph_ids.len(),
+            fallback_glyph_count: self.fallback_glyph_ids.len(),
+            skipped_inactive_glyph_count: self.skipped_inactive_glyph_ids.len(),
+            unsupported_glyph_count: self.unsupported_glyph_ids.len(),
             fallback_capabilities,
             fallback_capability_counts,
             components: self.components,

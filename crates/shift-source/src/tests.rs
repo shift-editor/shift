@@ -5173,6 +5173,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(static_export_preview.fallback_component_count, 2);
     assert_eq!(static_export_preview.skipped_inactive_component_count, 1);
     assert_eq!(static_export_preview.unsupported_component_count, 0);
+    assert_eq!(static_export_preview.preserve_reference_glyph_count, 1);
+    assert_eq!(static_export_preview.fallback_glyph_count, 1);
+    assert_eq!(static_export_preview.skipped_inactive_glyph_count, 1);
+    assert_eq!(static_export_preview.unsupported_glyph_count, 0);
     assert_eq!(
         static_export_preview.fallback_capabilities,
         vec![
@@ -5263,6 +5267,16 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         1
     );
     assert_eq!(package_static_export_preview.unsupported_component_count, 0);
+    assert_eq!(
+        package_static_export_preview.preserve_reference_glyph_count,
+        1
+    );
+    assert_eq!(package_static_export_preview.fallback_glyph_count, 1);
+    assert_eq!(
+        package_static_export_preview.skipped_inactive_glyph_count,
+        1
+    );
+    assert_eq!(package_static_export_preview.unsupported_glyph_count, 0);
     assert_eq!(
         package_static_export_preview.fallback_capability_counts,
         static_export_preview.fallback_capability_counts
@@ -5372,6 +5386,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(narrow_export_preview.fallback_component_count, 1);
     assert_eq!(narrow_export_preview.skipped_inactive_component_count, 1);
     assert_eq!(narrow_export_preview.unsupported_component_count, 0);
+    assert_eq!(narrow_export_preview.preserve_reference_glyph_count, 1);
+    assert_eq!(narrow_export_preview.fallback_glyph_count, 1);
+    assert_eq!(narrow_export_preview.skipped_inactive_glyph_count, 1);
+    assert_eq!(narrow_export_preview.unsupported_glyph_count, 0);
     assert_eq!(
         narrow_export_preview.fallback_capability_counts,
         vec![ShiftComponentLoweringCapabilityCount {
