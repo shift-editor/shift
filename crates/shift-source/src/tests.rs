@@ -5737,24 +5737,26 @@ fn package_requires_a_valid_default_source() {
 
 #[test]
 fn package_rejects_invalid_unicode_values() {
-    let package = package_with_single_source(vec![ShiftGlyph {
-        id: "glyph_A".to_string(),
-        name: "A".to_string(),
-        unicodes: vec!["not-hex".to_string()],
-        local_axes: Vec::new(),
-        variation_sources: Vec::new(),
-        layers: BTreeMap::new(),
-    }]);
+    for invalid_unicode in ["not-hex", "D800", "110000"] {
+        let package = package_with_single_source(vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: vec![invalid_unicode.to_string()],
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::new(),
+        }]);
 
-    let error = package
-        .into_font()
-        .expect_err("invalid unicode should fail");
+        let error = package
+            .into_font()
+            .expect_err("invalid unicode should fail");
 
-    assert!(matches!(
-        error,
-        ShiftSourceError::InvalidUnicode { glyph_name, value }
-            if glyph_name == "A" && value == "not-hex"
-    ));
+        assert!(matches!(
+            error,
+            ShiftSourceError::InvalidUnicode { glyph_name, value }
+                if glyph_name == "A" && value == invalid_unicode
+        ));
+    }
 }
 
 #[test]
@@ -7810,6 +7812,26 @@ fn working_source_rejects_invalid_glyph_create_without_mutating() {
         error,
         ShiftSourceError::InvalidUnicode { glyph_name, value }
             if glyph_name == "B" && value == "not_hex"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .all(|glyph| glyph.name != "B"));
+
+    let error = working_source
+        .create_glyph(ShiftCreateGlyph {
+            glyph_id: None,
+            name: "B".to_string(),
+            unicodes: vec!["110000".to_string()],
+            default_layer: None,
+        })
+        .expect_err("out-of-range unicode should fail");
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidUnicode { glyph_name, value }
+            if glyph_name == "B" && value == "110000"
     ));
     assert_eq!(working_source.revision(), 0);
     assert!(working_source

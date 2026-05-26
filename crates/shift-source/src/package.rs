@@ -1111,10 +1111,7 @@ impl ShiftPackage {
             }
 
             for unicode in &glyph.unicodes {
-                u32::from_str_radix(unicode, 16).map_err(|_| ShiftSourceError::InvalidUnicode {
-                    glyph_name: glyph.name.clone(),
-                    value: unicode.clone(),
-                })?;
+                parse_unicode_scalar(&glyph.name, unicode)?;
             }
 
             for (source_id, layer) in &glyph.layers {
@@ -1381,6 +1378,21 @@ fn validate_identifier(context: impl Into<String>, identifier: &str) -> ShiftSou
         context: context.into(),
         identifier: identifier.to_string(),
     })
+}
+
+fn parse_unicode_scalar(glyph_name: &str, value: &str) -> ShiftSourceResult<u32> {
+    let parsed = u32::from_str_radix(value, 16).map_err(|_| ShiftSourceError::InvalidUnicode {
+        glyph_name: glyph_name.to_string(),
+        value: value.to_string(),
+    })?;
+    if char::from_u32(parsed).is_none() {
+        return Err(ShiftSourceError::InvalidUnicode {
+            glyph_name: glyph_name.to_string(),
+            value: value.to_string(),
+        });
+    }
+
+    Ok(parsed)
 }
 
 fn validate_axis_tag(axis_tag: &str) -> ShiftSourceResult<()> {
@@ -2617,12 +2629,7 @@ impl ShiftGlyph {
         let mut glyph = Glyph::with_id(glyph_id, self.name.clone());
         let mut unicodes = Vec::with_capacity(self.unicodes.len());
         for unicode in self.unicodes {
-            let parsed = u32::from_str_radix(&unicode, 16).map_err(|_| {
-                ShiftSourceError::InvalidUnicode {
-                    glyph_name: self.name.clone(),
-                    value: unicode,
-                }
-            })?;
+            let parsed = parse_unicode_scalar(&self.name, &unicode)?;
             unicodes.push(parsed);
         }
         glyph.set_unicodes(unicodes);

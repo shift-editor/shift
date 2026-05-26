@@ -258,6 +258,9 @@ format exploration:
   not be blank after trimming. Semantic create/rename commands normalize UI
   whitespace before validation so a direct grid edit cannot save source data
   that later panics during IR projection.
+- **Glyph Unicode values are scalar values:** package validation rejects
+  malformed hex, surrogate codepoints, and values above `U+10FFFF` before they
+  can reach IR projection or export.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any
