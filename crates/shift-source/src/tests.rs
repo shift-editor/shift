@@ -3,19 +3,20 @@ use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingUpdate,
     ShiftComponentActivity, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
-    ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentRecipeSummary,
-    ShiftComponentResolveContext, ShiftComponentTransformField,
-    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
-    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
-    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
-    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
-    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
-    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount, ShiftSourceUpdate,
-    ShiftStaticComponentExportDisposition, ShiftWorkingSource,
+    ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
+    ShiftComponentRecipeKind, ShiftComponentRecipeSummary, ShiftComponentResolveContext,
+    ShiftComponentTransformField, ShiftComponentVariationParentAxisValue,
+    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
+    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
+    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
+    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
+    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
+    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
+    ShiftSourceLayerCoverageReadinessCount, ShiftSourceUpdate,
+    ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness, ShiftWorkingSource,
     ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
     ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
     ShiftWorkingSourceSaveStagedRecoveryActionCount,
@@ -5201,6 +5202,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
 
     let plain_preflight = working_source
         .component_lowering_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(
+        plain_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
     assert_eq!(plain_preflight.total_component_count, 4);
     assert_eq!(plain_preflight.supported_component_count, 1);
     assert_eq!(plain_preflight.unsupported_component_count, 3);
@@ -5264,6 +5269,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         ShiftComponentLoweringCapability::VariableLocation,
     ]);
     let partial_preflight = working_source.component_lowering_preflight(&partial_target);
+    assert_eq!(
+        partial_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
     assert_eq!(partial_preflight.total_component_count, 4);
     assert_eq!(partial_preflight.supported_component_count, 3);
     assert_eq!(partial_preflight.unsupported_component_count, 1);
@@ -5291,6 +5300,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
 
     let full_target = ShiftComponentLoweringTarget::all_shift_component_semantics();
     let full_preflight = working_source.component_lowering_preflight(&full_target);
+    assert_eq!(
+        full_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::Ready
+    );
     assert_eq!(full_preflight.total_component_count, 4);
     assert_eq!(full_preflight.supported_component_count, 4);
     assert_eq!(full_preflight.unsupported_component_count, 0);
@@ -5305,6 +5318,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             &BTreeMap::new(),
         )
         .expect("location preflight should evaluate default conditions");
+    assert_eq!(
+        static_location_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
     assert_eq!(static_location_preflight.total_component_count, 4);
     assert_eq!(static_location_preflight.supported_component_count, 1);
     assert_eq!(static_location_preflight.unsupported_component_count, 2);
@@ -5353,9 +5370,29 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         })
     );
 
+    let full_static_location_preflight = working_source
+        .component_lowering_preflight_at_location(&full_target, &BTreeMap::new())
+        .expect("location preflight should skip inactive conditional components");
+    assert_eq!(
+        full_static_location_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::ReadyWithSkippedInactive
+    );
+    assert_eq!(
+        full_static_location_preflight.unsupported_component_count,
+        0
+    );
+    assert_eq!(
+        full_static_location_preflight.skipped_inactive_component_count,
+        1
+    );
+
     let static_export_preview = working_source
         .component_static_export_preview_for_layer("glyph_A", "source_Regular", &BTreeMap::new())
         .expect("static export preview should evaluate default component state");
+    assert_eq!(
+        static_export_preview.readiness,
+        ShiftStaticComponentExportReadiness::RequiresFallback
+    );
     assert_eq!(static_export_preview.total_component_count, 4);
     assert_eq!(static_export_preview.preserve_reference_count, 1);
     assert_eq!(static_export_preview.fallback_component_count, 2);
@@ -5447,6 +5484,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     let package_static_export_preview = working_source
         .component_static_export_preview(&BTreeMap::new())
         .expect("package static export preview should evaluate every component");
+    assert_eq!(
+        package_static_export_preview.readiness,
+        ShiftStaticComponentExportReadiness::RequiresFallback
+    );
     assert_eq!(package_static_export_preview.total_component_count, 4);
     assert_eq!(package_static_export_preview.preserve_reference_count, 1);
     assert_eq!(package_static_export_preview.fallback_component_count, 2);
@@ -5516,6 +5557,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             ]),
         )
         .expect("location preflight should evaluate explicit conditions");
+    assert_eq!(
+        narrow_location_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
     assert_eq!(narrow_location_preflight.total_component_count, 4);
     assert_eq!(narrow_location_preflight.supported_component_count, 2);
     assert_eq!(narrow_location_preflight.unsupported_component_count, 1);
@@ -5570,6 +5615,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             ]),
         )
         .expect("static export preview should evaluate explicit component state");
+    assert_eq!(
+        narrow_export_preview.readiness,
+        ShiftStaticComponentExportReadiness::RequiresFallback
+    );
     assert_eq!(narrow_export_preview.preserve_reference_count, 2);
     assert_eq!(narrow_export_preview.fallback_component_count, 1);
     assert_eq!(narrow_export_preview.skipped_inactive_component_count, 1);
@@ -5609,6 +5658,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             },
         )
         .expect("contextual preflight should evaluate font-location conditions");
+    assert_eq!(
+        contextual_preflight.readiness,
+        ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents
+    );
     assert_eq!(contextual_preflight.total_component_count, 4);
     assert_eq!(contextual_preflight.supported_component_count, 2);
     assert_eq!(contextual_preflight.unsupported_component_count, 1);

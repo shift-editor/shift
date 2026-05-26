@@ -841,6 +841,7 @@ pub struct ShiftComponentLoweringDiagnostic {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentLoweringPreflight {
+    pub readiness: ShiftComponentLoweringPreflightReadiness,
     pub total_component_count: usize,
     pub supported_component_count: usize,
     pub unsupported_component_count: usize,
@@ -850,6 +851,14 @@ pub struct ShiftComponentLoweringPreflight {
     pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
     pub missing_capability_counts: Vec<ShiftComponentLoweringCapabilityCount>,
     pub diagnostics: Vec<ShiftComponentLoweringDiagnostic>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentLoweringPreflightReadiness {
+    Ready,
+    ReadyWithSkippedInactive,
+    BlockedByUnsupportedComponents,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -876,6 +885,7 @@ pub struct ShiftComponentLoweringCapabilityCount {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftStaticComponentExportPreview {
+    pub readiness: ShiftStaticComponentExportReadiness,
     pub total_component_count: usize,
     pub preserve_reference_count: usize,
     pub fallback_component_count: usize,
@@ -892,6 +902,15 @@ pub struct ShiftStaticComponentExportPreview {
     pub unsupported_reasons: Vec<ShiftComponentVariationUnsupportedReason>,
     pub unsupported_reason_counts: Vec<ShiftComponentVariationUnsupportedReasonCount>,
     pub components: Vec<ShiftStaticComponentExportComponent>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftStaticComponentExportReadiness {
+    Ready,
+    ReadyWithSkippedInactive,
+    RequiresFallback,
+    BlockedByUnsupportedComponents,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1310,6 +1329,23 @@ impl ShiftStaticComponentExportPreviewBuilder {
     }
 
     fn finish(self) -> ShiftStaticComponentExportPreview {
+        let readiness = match (
+            self.unsupported_component_count,
+            self.fallback_component_count,
+            self.skipped_inactive_component_count,
+        ) {
+            (unsupported, _, _) if unsupported > 0 => {
+                ShiftStaticComponentExportReadiness::BlockedByUnsupportedComponents
+            }
+            (0, fallback, _) if fallback > 0 => {
+                ShiftStaticComponentExportReadiness::RequiresFallback
+            }
+            (0, 0, skipped) if skipped > 0 => {
+                ShiftStaticComponentExportReadiness::ReadyWithSkippedInactive
+            }
+            (0, 0, 0) => ShiftStaticComponentExportReadiness::Ready,
+            _ => unreachable!("static export readiness cases are exhaustive"),
+        };
         let fallback_capabilities = self
             .fallback_capability_counts
             .keys()
@@ -1357,6 +1393,7 @@ impl ShiftStaticComponentExportPreviewBuilder {
             .collect::<Vec<_>>();
 
         ShiftStaticComponentExportPreview {
+            readiness,
             total_component_count: self.components.len(),
             preserve_reference_count: self.preserve_reference_count,
             fallback_component_count: self.fallback_component_count,
@@ -2493,8 +2530,17 @@ impl ShiftWorkingSource {
             )
             .collect::<Vec<_>>();
         let unsupported_component_count = diagnostics.len();
+        let readiness = match (
+            unsupported_component_count,
+            skipped_inactive_component_count,
+        ) {
+            (0, 0) => ShiftComponentLoweringPreflightReadiness::Ready,
+            (0, _) => ShiftComponentLoweringPreflightReadiness::ReadyWithSkippedInactive,
+            (_, _) => ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents,
+        };
 
         Ok(ShiftComponentLoweringPreflight {
+            readiness,
             total_component_count,
             supported_component_count: total_component_count
                 - unsupported_component_count
@@ -5715,6 +5761,10 @@ mod tests {
 
         let preview = builder.finish();
 
+        assert_eq!(
+            preview.readiness,
+            ShiftStaticComponentExportReadiness::BlockedByUnsupportedComponents
+        );
         assert_eq!(preview.unsupported_component_count, 2);
         assert_eq!(preview.unsupported_glyph_count, 1);
         assert_eq!(
@@ -5747,10 +5797,61 @@ mod tests {
         );
     }
 
+    #[test]
+    fn static_export_preview_builder_reports_readiness() {
+        let ready = ShiftStaticComponentExportPreviewBuilder::new(1);
+        assert_eq!(
+            ready.finish().readiness,
+            ShiftStaticComponentExportReadiness::Ready
+        );
+
+        let mut skipped_inactive = ShiftStaticComponentExportPreviewBuilder::new(1);
+        skipped_inactive.push(static_export_component(
+            "glyph_A",
+            "component_A_top",
+            ShiftStaticComponentExportDisposition::SkipInactive,
+            ShiftComponentVariationResolution::Inactive,
+        ));
+        assert_eq!(
+            skipped_inactive.finish().readiness,
+            ShiftStaticComponentExportReadiness::ReadyWithSkippedInactive
+        );
+
+        let mut fallback = ShiftStaticComponentExportPreviewBuilder::new(1);
+        fallback.push(static_export_component(
+            "glyph_A",
+            "component_A_top",
+            ShiftStaticComponentExportDisposition::RequiresFallback {
+                missing_capabilities: vec![ShiftComponentLoweringCapability::VariableLocation],
+            },
+            ShiftComponentVariationResolution::Interpolated { source_count: 2 },
+        ));
+        assert_eq!(
+            fallback.finish().readiness,
+            ShiftStaticComponentExportReadiness::RequiresFallback
+        );
+    }
+
     fn unsupported_static_export_component(
         glyph_id: &str,
         component_id: &str,
         reason: ShiftComponentVariationUnsupportedReason,
+    ) -> ShiftStaticComponentExportComponent {
+        static_export_component(
+            glyph_id,
+            component_id,
+            ShiftStaticComponentExportDisposition::Unsupported {
+                reason: reason.clone(),
+            },
+            ShiftComponentVariationResolution::Unsupported { reason },
+        )
+    }
+
+    fn static_export_component(
+        glyph_id: &str,
+        component_id: &str,
+        disposition: ShiftStaticComponentExportDisposition,
+        variation_resolution: ShiftComponentVariationResolution,
     ) -> ShiftStaticComponentExportComponent {
         ShiftStaticComponentExportComponent {
             glyph_id: glyph_id.to_string(),
@@ -5759,15 +5860,13 @@ mod tests {
             component_id: component_id.to_string(),
             base_glyph_id: "glyph_base".to_string(),
             base_glyph_name: "base".to_string(),
-            disposition: ShiftStaticComponentExportDisposition::Unsupported {
-                reason: reason.clone(),
-            },
+            disposition,
             required_capabilities: Vec::new(),
             variation_transform_fields: Vec::new(),
             condition: None,
             values: BTreeMap::new(),
             transform: DecomposedTransform::identity(),
-            variation_resolution: ShiftComponentVariationResolution::Unsupported { reason },
+            variation_resolution,
             variation_source: None,
         }
     }

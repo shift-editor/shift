@@ -452,8 +452,9 @@ format exploration:
   unsupported capabilities per glyph, layer, component, and evaluated condition
   when a concrete context is provided. A summary query also returns
   total/supported/unsupported component counts, affected glyph count, and counts
-  per missing capability so export UI can make a fast proceed/fallback/fail
-  decision without re-walking every diagnostic.
+  per missing capability plus an explicit readiness state, so export UI can make
+  a fast proceed/fallback/fail decision without re-walking every diagnostic or
+  inferring policy from counts.
   `ShiftComponentLoweringTarget::plain_components()` means the target can only
   preserve ordinary static component references. It does not mean "fontc will
   solve variable components." A static export path can still choose to lower
@@ -475,7 +476,9 @@ format exploration:
   variable-component export path. The preview also aggregates glyph counts by
   disposition, fallback capabilities, per-capability component counts,
   stable unsupported-reason-kind counts, and detailed unsupported-reason counts,
-  so export UI can show the reason summary without walking every component row.
+  with an explicit readiness state (`ready`, `readyWithSkippedInactive`,
+  `requiresFallback`, or `blockedByUnsupportedComponents`), so export UI can show
+  the reason summary without walking every component row.
   Context-aware preflight can pass separate root font and current parent
   locations for recursive component checks. Conditions use the font location,
   matching component preview and keeping export capability diagnostics from
