@@ -11554,8 +11554,80 @@ fn working_source_reports_variable_font_export_preflight() {
             .interpolation_incompatible_glyph_count,
         0
     );
+    assert_eq!(ready_preflight.summary.source_mapping_diagnostic_count, 0);
+    assert_eq!(
+        ready_preflight
+            .summary
+            .source_mapping_diagnostic_source_count,
+        0
+    );
+    assert_eq!(
+        ready_preflight
+            .source_mapped_locations
+            .summary
+            .diagnostic_count,
+        0
+    );
     assert_eq!(ready_preflight.summary.unsupported_component_count, 0);
     assert_eq!(ready_preflight.summary.unsupported_component_glyph_count, 0);
+
+    let mut mapping_blocked_package = ready_source.package().clone();
+    mapping_blocked_package.axes.push(internal_stem_axis());
+    mapping_blocked_package.axis_mappings = vec![ShiftAxisMapping {
+        id: "mapping_weight_to_stem".to_string(),
+        name: "Weight drives stem".to_string(),
+        input_axes: vec!["axis_wght".to_string()],
+        output_axes: vec!["axis_stem".to_string()],
+        samples: vec![
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([("axis_wght".to_string(), 500.0)]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.25)]),
+            },
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 1.0)]),
+            },
+        ],
+    }];
+    let mapping_blocked =
+        ShiftWorkingSource::new(mapping_blocked_package).expect("package is valid");
+    let mapping_blocked_preflight = mapping_blocked
+        .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(
+        mapping_blocked_preflight.readiness,
+        ShiftVariableFontExportReadiness::BlockedBySourceReadiness
+    );
+    assert_eq!(
+        mapping_blocked_preflight.primary_action,
+        ShiftVariableFontExportPrimaryAction::ResolveSourceReadiness
+    );
+    assert_eq!(
+        mapping_blocked_preflight.variable_readiness,
+        ShiftVariableFontReadiness::Ready
+    );
+    assert_eq!(
+        mapping_blocked_preflight
+            .summary
+            .source_mapping_diagnostic_count,
+        1
+    );
+    assert_eq!(
+        mapping_blocked_preflight
+            .summary
+            .source_mapping_diagnostic_source_count,
+        1
+    );
+    assert_eq!(
+        mapping_blocked_preflight
+            .source_mapped_locations
+            .summary
+            .diagnostic_count,
+        1
+    );
+    assert!(mapping_blocked_preflight
+        .source_coverage_worklist
+        .items
+        .is_empty());
 
     let mut source_blocked_package = package_with_axes(
         vec![weight_axis()],

@@ -154,12 +154,15 @@ evidence; the export backend owns the artifact-specific fallback choice.
 For variable export UI, `variableFontExportPreflight(target)` combines source
 coverage/interpolation readiness with component capability preflight into one
 app-facing readiness state: single-source, ready, source-blocked,
-component-blocked, or blocked by both. It also returns a `primaryAction`:
-`exportVariableFont`, `addSource`, `resolveSourceReadiness`,
-`resolveComponentLowering`, or `resolveSourceReadinessAndComponentLowering`.
-The renderer can drive menu items, export panels, and warnings from that action
-and a compact top-level summary while still showing the source coverage summary,
-source coverage worklist, and exact component diagnostics as detail.
+component-blocked, or blocked by both. Axis-mapping diagnostics for declared
+source locations are source-readiness blockers too, because exporting with a
+failed mapping would silently use fallback construction-axis defaults. It also
+returns a `primaryAction`: `exportVariableFont`, `addSource`,
+`resolveSourceReadiness`, `resolveComponentLowering`, or
+`resolveSourceReadinessAndComponentLowering`. The renderer can drive menu items,
+export panels, and warnings from that action and a compact top-level summary
+while still showing the source coverage summary, source coverage worklist,
+source mapped-location diagnostics, and exact component diagnostics as detail.
 
 The intended flow is:
 
@@ -654,10 +657,11 @@ format exploration:
   readiness directly, so mutation reports that already return coverage can
   refresh variable-operation affordances without a follow-up query or
   TypeScript-side status derivation. Variable-font export preflight also carries
-  a primary action, compact top-level summary, and the compact source worklist
-  next to component preflight diagnostics, so a blocked export panel can choose
-  the next step, render counts, and explain source blockers and component
-  blockers from one Rust-owned response.
+  a primary action, compact top-level summary, the compact source worklist, and
+  source mapped-location diagnostics next to component preflight diagnostics, so
+  a blocked export panel can choose the next step, render counts, and explain
+  source blockers, mapping blockers, and component blockers from one Rust-owned
+  response.
 - **Coverage-affecting mutation reports:** source create/update/delete, glyph
   create/delete, and glyph source layer create/delete reports include the same
   source coverage report after the mutation. A source sidebar or export-readiness

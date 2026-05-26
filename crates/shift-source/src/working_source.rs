@@ -548,6 +548,7 @@ pub struct ShiftVariableFontExportPreflight {
     pub variable_readiness: ShiftVariableFontReadiness,
     pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
     pub source_coverage_worklist: ShiftSourceLayerCoverageWorklist,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
     pub component_preflight: ShiftComponentLoweringPreflight,
 }
 
@@ -578,6 +579,8 @@ pub struct ShiftVariableFontExportSummary {
     pub source_needing_work_count: usize,
     pub missing_source_layer_count: usize,
     pub interpolation_incompatible_glyph_count: usize,
+    pub source_mapping_diagnostic_count: usize,
+    pub source_mapping_diagnostic_source_count: usize,
     pub unsupported_component_count: usize,
     pub unsupported_component_glyph_count: usize,
     pub skipped_inactive_component_count: usize,
@@ -2103,7 +2106,12 @@ impl ShiftWorkingSource {
         target: &ShiftComponentLoweringTarget,
     ) -> ShiftVariableFontExportPreflight {
         let component_preflight = self.component_lowering_preflight(target);
-        let source_blocked = self.variable_font_readiness != ShiftVariableFontReadiness::Ready;
+        let source_mapped_locations = self
+            .source_mapped_locations_report()
+            .expect("package validation rejects invalid source locations");
+        let source_mapping_blocked = source_mapped_locations.summary.diagnostic_count > 0;
+        let source_blocked = self.variable_font_readiness != ShiftVariableFontReadiness::Ready
+            || source_mapping_blocked;
         let component_blocked = component_preflight.readiness
             == ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents;
         let readiness = match (
@@ -2145,11 +2153,13 @@ impl ShiftWorkingSource {
             primary_action,
             summary: variable_font_export_summary(
                 &self.source_layer_coverage_summary,
+                &source_mapped_locations.summary,
                 &component_preflight,
             ),
             variable_readiness: self.variable_font_readiness,
             source_coverage_summary: self.source_layer_coverage_summary.clone(),
             source_coverage_worklist: self.source_layer_coverage_worklist(),
+            source_mapped_locations,
             component_preflight,
         }
     }
@@ -6084,6 +6094,7 @@ impl CompiledAxisMapping {
 
 fn variable_font_export_summary(
     source_coverage_summary: &ShiftSourceLayerCoverageSummary,
+    source_mapped_location_summary: &ShiftSourceMappedLocationSummary,
     component_preflight: &ShiftComponentLoweringPreflight,
 ) -> ShiftVariableFontExportSummary {
     ShiftVariableFontExportSummary {
@@ -6092,6 +6103,9 @@ fn variable_font_export_summary(
         missing_source_layer_count: source_coverage_summary.missing_layer_count,
         interpolation_incompatible_glyph_count: source_coverage_summary
             .interpolation_incompatible_glyph_count,
+        source_mapping_diagnostic_count: source_mapped_location_summary.diagnostic_count,
+        source_mapping_diagnostic_source_count: source_mapped_location_summary
+            .diagnostic_source_count,
         unsupported_component_count: component_preflight.unsupported_component_count,
         unsupported_component_glyph_count: component_preflight.affected_glyph_count,
         skipped_inactive_component_count: component_preflight.skipped_inactive_component_count,
