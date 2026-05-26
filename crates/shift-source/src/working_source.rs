@@ -237,6 +237,28 @@ pub struct ShiftCreateGlyphSourceLayerReport {
     pub revision: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteGlyphSourceLayerPreview {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub glyph_variation_source_uses: Vec<ShiftGlyphVariationSourceUse>,
+    pub can_delete_without_cascade: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteGlyphSourceLayerReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftCreateGlyphVariationSource {
@@ -1067,6 +1089,50 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn preview_delete_glyph_source_layer(
+        &self,
+        glyph_id: &str,
+        source_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteGlyphSourceLayerPreview> {
+        let glyph = self.glyph(glyph_id)?;
+        let source = self
+            .package
+            .sources
+            .iter()
+            .find(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingSource {
+                source_id: source_id.to_string(),
+            })?;
+        if !glyph.layers.contains_key(source_id) {
+            return Err(ShiftSourceError::MissingGlyphLayer {
+                glyph_id: glyph_id.to_string(),
+                layer_id: source_id.to_string(),
+            });
+        }
+
+        let glyph_variation_source_uses = glyph
+            .variation_sources
+            .iter()
+            .filter(|variation_source| variation_source.layer_id == source_id)
+            .map(|variation_source| ShiftGlyphVariationSourceUse {
+                glyph_id: glyph.id.clone(),
+                glyph_name: glyph.name.clone(),
+                source_id: variation_source.id.clone(),
+                source_name: variation_source.name.clone(),
+                layer_id: variation_source.layer_id.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        Ok(ShiftDeleteGlyphSourceLayerPreview {
+            glyph_id: glyph.id.clone(),
+            glyph_name: glyph.name.clone(),
+            source_id: source.id.clone(),
+            source_name: source.name.clone(),
+            can_delete_without_cascade: glyph_variation_source_uses.is_empty(),
+            glyph_variation_source_uses,
+        })
+    }
+
     pub fn component_activity(
         &self,
         glyph_id: &str,
@@ -1814,6 +1880,48 @@ impl ShiftWorkingSource {
             glyph_name,
             source_id: source_id.to_string(),
             source_name,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn delete_glyph_source_layer(
+        &mut self,
+        glyph_id: &str,
+        source_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteGlyphSourceLayerReport> {
+        let preview = self.preview_delete_glyph_source_layer(glyph_id, source_id)?;
+        if !preview.can_delete_without_cascade {
+            return Err(ShiftSourceError::GlyphLayerHasReferences {
+                glyph_id: glyph_id.to_string(),
+                layer_id: source_id.to_string(),
+                glyph_variation_source_use_count: preview.glyph_variation_source_uses.len(),
+            });
+        }
+
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let glyph = next
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        glyph.layers.remove(source_id);
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftDeleteGlyphSourceLayerReport {
+            glyph_id: preview.glyph_id,
+            glyph_name: preview.glyph_name,
+            source_id: preview.source_id,
+            source_name: preview.source_name,
             diff,
             revision: self.revision,
         })

@@ -97,6 +97,8 @@ createSource(create)
 updateSource(sourceId, update)
 deleteSource(sourceId)
 createGlyphSourceLayer(glyphId, sourceId, create)
+previewDeleteGlyphSourceLayer(glyphId, sourceId)
+deleteGlyphSourceLayer(glyphId, sourceId)
 createGlyphVariationSource(glyphId, create)
 updateGlyphVariationSource(glyphId, sourceId, update)
 deleteGlyphVariationSource(glyphId, sourceId)
@@ -407,6 +409,11 @@ format exploration:
   overwrite an existing layer, validates the candidate package before swapping
   live state, and reports a narrow `UpdateGlyph` diff so incremental saves touch
   only the owner glyph plus derived indexes.
+- **Glyph source layer deletion:** source panels can preview and delete one
+  glyph's layer for a declared source without hand-editing package JSON. The
+  delete command refuses to remove a layer still used by glyph-local variation
+  source rows, then reports a narrow `UpdateGlyph` diff so saves touch only the
+  owner glyph plus derived indexes.
 - **Axis mapping resolution:** source-level user-axis to construction-axis
   mappings can be queried in Rust. One-dimensional mappings interpolate between
   samples; multi-axis mappings use the same `fontdrasil` variation model as

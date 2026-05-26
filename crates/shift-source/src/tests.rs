@@ -9,10 +9,10 @@ use crate::{
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
     ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource, ShiftCreateSource,
     ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceUpdate, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate, ShiftWorkingSource,
-    ShiftWorkingSourceSaveStatus,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
+    ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -7723,6 +7723,161 @@ fn working_source_rejects_invalid_glyph_source_layer_without_mutating() {
     assert_eq!(coverage[1].source_id, "source_Bold");
     assert_eq!(coverage[1].missing_layer_count, 1);
     assert!(!coverage[1].complete);
+}
+
+#[test]
+fn working_source_previews_glyph_source_layer_delete_references() {
+    let mut package = package_with_compatible_two_layer_glyph();
+    package.glyphs[0].variation_sources.push(ShiftGlyphSource {
+        id: "glyphSource_Bold".to_string(),
+        name: "Bold correction".to_string(),
+        layer_id: "source_Bold".to_string(),
+        location: BTreeMap::new(),
+    });
+    let working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let preview = working_source
+        .preview_delete_glyph_source_layer("glyph_A", "source_Bold")
+        .expect("glyph source layer delete should preview");
+
+    assert_eq!(preview.glyph_id, "glyph_A");
+    assert_eq!(preview.glyph_name, "A");
+    assert_eq!(preview.source_id, "source_Bold");
+    assert_eq!(preview.source_name, "Bold");
+    assert!(!preview.can_delete_without_cascade);
+    assert_eq!(
+        preview.glyph_variation_source_uses,
+        vec![ShiftGlyphVariationSourceUse {
+            glyph_id: "glyph_A".to_string(),
+            glyph_name: "A".to_string(),
+            source_id: "glyphSource_Bold".to_string(),
+            source_name: "Bold correction".to_string(),
+            layer_id: "source_Bold".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn working_source_deletes_glyph_source_layer_with_narrow_impact() {
+    let mut working_source = ShiftWorkingSource::new(package_with_compatible_two_layer_glyph())
+        .expect("package is valid");
+
+    let report = working_source
+        .delete_glyph_source_layer("glyph_A", "source_Bold")
+        .expect("unreferenced glyph source layer delete should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.glyph_id, "glyph_A");
+    assert_eq!(report.glyph_name, "A");
+    assert_eq!(report.source_id, "source_Bold");
+    assert_eq!(report.source_name, "Bold");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateGlyph {
+                glyph_id: "glyph_A".to_string(),
+            }],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+    assert!(!working_source
+        .package()
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("glyph should remain")
+        .layers
+        .contains_key("source_Bold"));
+    let coverage = working_source.source_layer_coverage();
+    assert_eq!(coverage[1].source_id, "source_Bold");
+    assert_eq!(coverage[1].missing_layer_count, 1);
+    assert!(!coverage[1].complete);
+}
+
+#[test]
+fn working_source_rejects_referenced_glyph_source_layer_delete_without_mutating() {
+    let mut package = package_with_compatible_two_layer_glyph();
+    package.glyphs[0].variation_sources.push(ShiftGlyphSource {
+        id: "glyphSource_Bold".to_string(),
+        name: "Bold correction".to_string(),
+        layer_id: "source_Bold".to_string(),
+        location: BTreeMap::new(),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let error = working_source
+        .delete_glyph_source_layer("glyph_A", "source_Bold")
+        .expect_err("referenced glyph source layer delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::GlyphLayerHasReferences {
+            glyph_id,
+            layer_id,
+            glyph_variation_source_use_count,
+        } if glyph_id == "glyph_A"
+            && layer_id == "source_Bold"
+            && glyph_variation_source_use_count == 1
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("glyph should remain")
+        .layers
+        .contains_key("source_Bold"));
+}
+
+#[test]
+fn working_source_missing_glyph_source_layer_delete_does_not_mutate() {
+    let mut working_source = ShiftWorkingSource::new(package_with_compatible_two_layer_glyph())
+        .expect("package is valid");
+
+    let error = working_source
+        .delete_glyph_source_layer("glyph_A", "source_Missing")
+        .expect_err("missing source should fail");
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingSource { source_id } if source_id == "source_Missing"
+    ));
+    assert_eq!(working_source.revision(), 0);
+
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let error = working_source
+        .delete_glyph_source_layer("glyph_A", "source_Bold")
+        .expect_err("missing layer should fail");
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingGlyphLayer { glyph_id, layer_id }
+            if glyph_id == "glyph_A" && layer_id == "source_Bold"
+    ));
+    assert_eq!(working_source.revision(), 0);
 }
 
 #[test]

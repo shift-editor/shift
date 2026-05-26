@@ -107,6 +107,13 @@ pub enum ShiftSourceError {
     #[error("glyph id '{glyph_id}' already has layer '{layer_id}'")]
     GlyphLayerAlreadyExists { glyph_id: String, layer_id: String },
 
+    #[error("cannot delete glyph id '{glyph_id}' layer '{layer_id}' because {glyph_variation_source_use_count} glyph variation sources still reference it")]
+    GlyphLayerHasReferences {
+        glyph_id: String,
+        layer_id: String,
+        glyph_variation_source_use_count: usize,
+    },
+
     #[error("missing component id '{component_id}' in glyph id '{glyph_id}' layer '{layer_id}'")]
     MissingComponent {
         glyph_id: String,
