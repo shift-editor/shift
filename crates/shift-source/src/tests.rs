@@ -13,11 +13,11 @@ use crate::{
     ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
     ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
     ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
-    ShiftStaticComponentExportDisposition, ShiftWorkingSource,
-    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
-    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
+    ShiftSourceLayerCoverageReadiness, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
+    ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
+    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -10296,6 +10296,10 @@ fn working_source_reports_source_layer_coverage() {
 
     assert_eq!(coverage.len(), 2);
     assert_eq!(coverage[0].source_id, "source_Regular");
+    assert_eq!(
+        coverage[0].readiness,
+        ShiftSourceLayerCoverageReadiness::Ready
+    );
     assert_eq!(coverage[0].glyph_count, 2);
     assert_eq!(coverage[0].layer_count, 2);
     assert_eq!(coverage[0].missing_layer_count, 0);
@@ -10313,6 +10317,10 @@ fn working_source_reports_source_layer_coverage() {
     assert!(coverage[0].interpolation_compatible);
     assert_eq!(coverage[1].source_id, "source_Bold");
     assert_eq!(coverage[1].source_name, "Bold");
+    assert_eq!(
+        coverage[1].readiness,
+        ShiftSourceLayerCoverageReadiness::MissingLayers
+    );
     assert_eq!(coverage[1].glyph_count, 2);
     assert_eq!(coverage[1].layer_count, 1);
     assert_eq!(coverage[1].missing_layer_count, 1);
@@ -10369,7 +10377,10 @@ fn working_source_reports_source_interpolation_issues() {
                 unicodes: Vec::new(),
                 local_axes: Vec::new(),
                 variation_sources: Vec::new(),
-                layers: BTreeMap::new(),
+                layers: BTreeMap::from([
+                    ("source_Regular".to_string(), empty_layer(600.0)),
+                    ("source_Bold".to_string(), empty_layer(700.0)),
+                ]),
             },
         ],
     );
@@ -10383,6 +10394,10 @@ fn working_source_reports_source_interpolation_issues() {
     let coverage = working_source.source_layer_coverage();
 
     assert_eq!(coverage[0].source_id, "source_Regular");
+    assert_eq!(
+        coverage[0].readiness,
+        ShiftSourceLayerCoverageReadiness::Ready
+    );
     assert!(!coverage[0].interpolation_compatible);
     assert_eq!(coverage[0].interpolation_issue_count, 2);
     assert_eq!(coverage[0].interpolation_reference_issue_count, 2);
@@ -10422,6 +10437,10 @@ fn working_source_reports_source_interpolation_issues() {
         "source_Bold"
     );
     assert_eq!(coverage[1].source_id, "source_Bold");
+    assert_eq!(
+        coverage[1].readiness,
+        ShiftSourceLayerCoverageReadiness::HasInterpolationMismatches
+    );
     assert!(!coverage[1].interpolation_compatible);
     assert_eq!(coverage[1].interpolation_issue_count, 2);
     assert_eq!(coverage[1].interpolation_reference_issue_count, 0);

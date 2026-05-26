@@ -273,6 +273,7 @@ pub struct ShiftSourceInterpolationIssue {
 pub struct ShiftSourceLayerCoverage {
     pub source_id: String,
     pub source_name: String,
+    pub readiness: ShiftSourceLayerCoverageReadiness,
     pub glyph_count: usize,
     pub layer_count: usize,
     pub missing_layer_count: usize,
@@ -290,6 +291,15 @@ pub struct ShiftSourceLayerCoverage {
     pub present_layers: Vec<ShiftSourceLayerUse>,
     pub missing_layers: Vec<ShiftMissingSourceLayer>,
     pub interpolation_issues: Vec<ShiftSourceInterpolationIssue>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftSourceLayerCoverageReadiness {
+    Ready,
+    MissingLayers,
+    HasInterpolationMismatches,
+    MissingLayersAndInterpolationMismatches,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1460,10 +1470,15 @@ impl ShiftWorkingSource {
                     .map(|issue| issue.glyph_id.as_str())
                     .collect::<BTreeSet<_>>()
                     .len();
+                let readiness = Self::source_layer_coverage_readiness(
+                    !missing_layers.is_empty(),
+                    interpolation_mismatch_issue_count > 0,
+                );
 
                 ShiftSourceLayerCoverage {
                     source_id: source.id.clone(),
                     source_name: source.name.clone(),
+                    readiness,
                     glyph_count: self.package.glyphs.len(),
                     layer_count: present_layers.len(),
                     missing_layer_count: missing_layers.len(),
@@ -1482,6 +1497,20 @@ impl ShiftWorkingSource {
                 }
             })
             .collect()
+    }
+
+    fn source_layer_coverage_readiness(
+        missing_layers: bool,
+        interpolation_mismatches: bool,
+    ) -> ShiftSourceLayerCoverageReadiness {
+        match (missing_layers, interpolation_mismatches) {
+            (false, false) => ShiftSourceLayerCoverageReadiness::Ready,
+            (true, false) => ShiftSourceLayerCoverageReadiness::MissingLayers,
+            (false, true) => ShiftSourceLayerCoverageReadiness::HasInterpolationMismatches,
+            (true, true) => {
+                ShiftSourceLayerCoverageReadiness::MissingLayersAndInterpolationMismatches
+            }
+        }
     }
 
     fn source_location(&self, source_id: &str) -> ShiftSourceResult<ShiftSourceLocation> {

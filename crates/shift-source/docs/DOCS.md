@@ -523,6 +523,9 @@ format exploration:
   interpolation compatibility issues involve that source. Coverage rows include
   reference issue counts, mismatch issue counts, affected-glyph counts, and
   issue-kind counts split by all/reference/mismatch roles. The app can
+  use the explicit readiness state for source-row badges while still showing
+  reference-only context when a canonical source is involved in other layers'
+  failures. It can
   distinguish "this source is the canonical reference for other broken layers"
   from "this source is the layer that needs work," distinguish "one glyph has
   several fixes" from "several glyphs are broken," and separate contour topology
