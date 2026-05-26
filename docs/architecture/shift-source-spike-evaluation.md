@@ -129,6 +129,82 @@ Each test should fail if TypeScript reconstructs package semantics, if the bridg
 requires per-glyph loops for visible UI state, or if save/load can accept a mixed
 disk graph as clean.
 
+## Current Coverage Audit
+
+This is the spike's current evidence map. “Rust” means the source package already
+has semantic working-source commands and unit tests. “Bridge” means at least one
+headless app-facing test crosses N-API/TS and proves the renderer boundary shape.
+
+| Operation group | Current evidence | Gap before alpha decision |
+| --- | --- | --- |
+| Package trust | Rust tests cover pending, partial, applied, diverged, invalid, and cleanup-only staged commits plus recovery plans. | Bridge/app open path still needs typed recovery actions and a headless test that refuses uncertain staged state before exposing editable data. |
+| Font identity | Rust tests cover narrow font-info impact, no-op revisions, invalid values, staged payloads, save/reopen. Bridge tests cover edit/save/reopen. | Expand bridge operation beyond family name/UPM to the actual font-info fields used by the dialog. |
+| Axis authoring | Rust tests cover create/update/delete, app projections, referenced-axis delete previews, invalid updates. | No bridge/app evidence. Need semantic axis commands named around user/construction axes and tests for deleting axes used by sources/mappings/components. |
+| Axis mapping authoring | Rust tests cover first-class file roundtrip, one/multi-axis mapping, duplicate samples, implicit-chain rejection, mapped-source diagnostics. | No bridge/app evidence. Need a headless “edit mapping -> mapped source rows change” test, with TS doing no interpolation. |
+| Source authoring | Rust tests cover add/update/delete source, default-source blockers, referenced-source blockers, completed sparse locations, source worklists. Bridge tests cover add source and add glyph layer. | Bridge currently exposes too little source row/worklist detail for a real Sources panel. Add only journey-scoped queries, not a generic readiness flag. |
+| Glyph identity | Rust tests cover create, rename by ID, duplicate/missing preview rejection, dependent component label refresh. Bridge tests cover create/rename and component label refresh. | Need stale expected-revision tests and app-shaped grid row response. |
+| Glyph deletion strategies | Rust tests cover direct delete, blocked delete, remove-component delete, relink delete, previews, cycle blockers, local-axis relink blockers, variable component recipe preservation. | No bridge/app evidence. Next best bridge test: delete base glyph preview shows component users, then selected strategy mutates dependents. |
+| Glyph layer authoring | Rust tests cover source-layer create/delete, overwrite rejection, referenced-layer blockers, narrow impact. | No bridge/app evidence beyond create layer. Need add/edit/delete layer flows scoped to one glyph/source. |
+| Component authoring | Rust tests cover component activity, recipes, variation sources, condition validation, local-axis validation, reset/inherit resolution. | No bridge/app evidence. Need app-shaped component inspector DTO before exposing broad package component data. |
+| Variable component preview | Rust tests cover inactive conditions, interpolation of component variation state, inherited dynamic global values, recursive recipe reports. | Missing scrub-oriented bridge/API. Need cached Rust query returning small resolved state/delta for one visible glyph/component. |
+| Safe save | Rust tests cover staged commit preparation, conflict blocking, mark-saved semantic equality, save preview states. Bridge tests cover external conflict and staged cleanup after save. | Need bridge load/recovery test for partially applied staged transaction; current bridge starts from clean fixture only. |
+| Fontc export handoff | Rust has export preflight and component lowering diagnostics. | Still not a real fontc handoff. Keep export as separate preflight; do not let editor worklists become export readiness. |
+
+## Edge Cases To Force Into Tests
+
+- **Stale confirmations:** rename/delete/source-layer dialogs must carry an
+  expected revision. A preview from revision `n` must not commit after revision
+  `n + 1` changes dependencies.
+- **Name collisions:** glyph, source, axis, mapping, local-axis, component-source
+  names need collision-safe creation and explicit duplicate rejection on edits.
+- **Identity after rename:** components, glyph variation sources, kerning/groups,
+  feature references, and selection state should follow stable IDs where
+  possible; editable names are labels or export aliases.
+- **Delete strategy correctness:** direct delete, remove uses, decompose, and
+  relink are separate commands. Relink must reject cycles, missing local axes,
+  local-axis range mismatches, and attempts to relink to the deleted glyph.
+- **Default source safety:** deleting or moving the default source must either be
+  blocked or explicitly reassign the default source with full compatibility
+  invalidation.
+- **Source worklists:** missing-layer work should be scoped to the visible source
+  panel or selected glyphs. The app should not receive or compute global export
+  readiness during normal source editing.
+- **Sparse coordinates:** omitted component/source axes must have explicit
+  provenance: inherited from parent, reset to root font location, defaulted from
+  axis default, or authored directly.
+- **Local/global axis conflicts:** Shift rejects ambiguous local axes instead of
+  adopting name-precedence behavior. This keeps inspector UI and export lowering
+  explainable.
+- **Condition trees:** empty boolean nodes, invalid ranges, unknown axes, and
+  out-of-domain ranges must fail validation before mutation. TS must never
+  decide active/inactive component state itself.
+- **N-API payload size:** scrubbing and slider movement must call Rust with one
+  location/context and receive visible deltas, not all glyphs/sources/components.
+- **Crash timing:** tests must cover prepare-before-apply, one-file-applied,
+  all-files-applied-before-cleanup, corrupt marker, missing payload, and
+  externally modified target during recovery.
+- **Derived indexes:** dependency and compatibility indexes are derived. They can
+  be regenerated or cleaned, but must not resurrect deleted canonical state or
+  hide canonical conflicts.
+
+## Next Package Priorities
+
+The next code should follow this order because each item unlocks a real editor
+journey while protecting the source graph:
+
+1. **Bridge load/recovery contract:** expose clean/recovered/blocked open results
+   from the source package, with headless tests for partial staged commits.
+2. **Glyph delete strategy bridge flow:** preview base glyph delete, choose
+   remove/relink strategy, and assert dependent components change by stable ID.
+3. **Source panel worklist bridge flow:** add a source, fetch scoped missing-layer
+   rows for that source, fill a layer, and assert the row disappears without TS
+   scanning glyphs.
+4. **Axis mapping bridge flow:** create/edit a mapping and assert mapped source
+   rows/diagnostics update from Rust.
+5. **Variable component preview flow:** one visible component, one preview
+   location, Rust returns condition result, reset/inherit provenance, varied
+   transform fields, and no package-sized DTO.
+
 ## Required Flows
 
 ### 1. Metadata Edit, Save, Reopen

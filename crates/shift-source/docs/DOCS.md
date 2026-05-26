@@ -933,6 +933,28 @@ operation and its app-visible consequences. It should fail if TypeScript must
 scan package files, infer dependency graphs, evaluate component conditions,
 repair names, or decide save/recovery semantics.
 
+### Coverage and Gaps
+
+The crate already has strong Rust coverage for the source graph: staged commit
+recovery, incremental write impact, axis and mapping authoring, source
+authoring, glyph identity, glyph deletion strategies, glyph source layers,
+component variation sources, condition validation, variable component
+resolution, source worklists, and export preflight.
+
+What is not yet proven is the app boundary for several of those operations. The
+bridge must still prove:
+
+- opening a source package with recovery/blocker states before editable data is
+  exposed
+- axis and axis-mapping authoring without TypeScript-side interpolation
+- source-panel worklists scoped to visible source/glyph rows
+- glyph delete previews and selected strategies through stable IDs
+- component inspector and scrub previews with reset/inherit provenance
+- fontc handoff diagnostics separated from editor worklists
+
+These gaps should not be solved by dumping more package data into DTOs. Add a
+query only when it maps to a user decision or visible editor panel.
+
 Lessons being folded into the package model:
 
 - Variable components need a base glyph, decomposed transform, sparse location,
