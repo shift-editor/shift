@@ -11007,6 +11007,68 @@ fn working_source_reports_variable_font_export_preflight() {
 }
 
 #[test]
+fn working_source_refreshes_cached_export_preflight_after_source_mutations() {
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([(
+                "source_Regular".to_string(),
+                layer_with_line_contour(600.0),
+            )]),
+        }],
+    ))
+    .expect("package is valid");
+
+    assert_eq!(
+        working_source
+            .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components())
+            .readiness,
+        ShiftVariableFontExportReadiness::SingleSource
+    );
+
+    let create_source_report = working_source
+        .create_source(ShiftCreateSource {
+            source_id: None,
+            name: "Bold".to_string(),
+            location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+        })
+        .expect("source creation should succeed");
+    assert_eq!(
+        create_source_report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::MissingSourceLayers
+    );
+    assert_eq!(
+        working_source
+            .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components())
+            .readiness,
+        ShiftVariableFontExportReadiness::BlockedBySourceReadiness
+    );
+
+    let create_layer_report = working_source
+        .create_glyph_source_layer(
+            "glyph_A",
+            "source_Bold",
+            ShiftCreateGlyphSourceLayer {
+                layer: layer_with_line_contour(700.0),
+            },
+        )
+        .expect("glyph source layer creation should succeed");
+    assert_eq!(
+        create_layer_report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::Ready
+    );
+    let preflight = working_source
+        .variable_font_export_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(preflight.readiness, ShiftVariableFontExportReadiness::Ready);
+    assert!(preflight.source_coverage_summary.ready);
+}
+
+#[test]
 fn working_source_creates_glyph_with_generated_name_id_and_default_layer() {
     let mut working_source =
         ShiftWorkingSource::new(package_with_single_source(vec![ShiftGlyph {

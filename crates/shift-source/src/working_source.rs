@@ -30,6 +30,9 @@ pub struct ShiftWorkingSource {
     saved_fingerprint: Option<ShiftPackageFingerprint>,
     dependency_index: ShiftDependencyIndex,
     interpolation_compatibility_index: ShiftInterpolationCompatibilityIndex,
+    source_layer_coverage: Vec<ShiftSourceLayerCoverage>,
+    source_layer_coverage_summary: ShiftSourceLayerCoverageSummary,
+    variable_font_readiness: ShiftVariableFontReadiness,
     axis_mapping_resolvers: Vec<CompiledAxisMapping>,
     component_variation_resolvers:
         HashMap<ComponentVariationResolverKey, CompiledComponentVariationResolver>,
@@ -40,6 +43,9 @@ pub struct ShiftWorkingSource {
 struct ShiftWorkingSourceViews {
     dependency_index: ShiftDependencyIndex,
     interpolation_compatibility_index: ShiftInterpolationCompatibilityIndex,
+    source_layer_coverage: Vec<ShiftSourceLayerCoverage>,
+    source_layer_coverage_summary: ShiftSourceLayerCoverageSummary,
+    variable_font_readiness: ShiftVariableFontReadiness,
     axis_mapping_resolvers: Vec<CompiledAxisMapping>,
     component_variation_resolvers:
         HashMap<ComponentVariationResolverKey, CompiledComponentVariationResolver>,
@@ -1462,6 +1468,9 @@ impl ShiftWorkingSource {
             saved_fingerprint: None,
             dependency_index: views.dependency_index,
             interpolation_compatibility_index: views.interpolation_compatibility_index,
+            source_layer_coverage: views.source_layer_coverage,
+            source_layer_coverage_summary: views.source_layer_coverage_summary,
+            variable_font_readiness: views.variable_font_readiness,
             axis_mapping_resolvers: views.axis_mapping_resolvers,
             component_variation_resolvers: views.component_variation_resolvers,
             revision: 0,
@@ -1479,6 +1488,9 @@ impl ShiftWorkingSource {
             saved_fingerprint: Some(saved_fingerprint),
             dependency_index: views.dependency_index,
             interpolation_compatibility_index: views.interpolation_compatibility_index,
+            source_layer_coverage: views.source_layer_coverage,
+            source_layer_coverage_summary: views.source_layer_coverage_summary,
+            variable_font_readiness: views.variable_font_readiness,
             axis_mapping_resolvers: views.axis_mapping_resolvers,
             component_variation_resolvers: views.component_variation_resolvers,
             revision: 0,
@@ -1527,32 +1539,25 @@ impl ShiftWorkingSource {
     }
 
     pub fn source_layer_coverage(&self) -> Vec<ShiftSourceLayerCoverage> {
-        self.build_source_layer_coverage()
+        self.source_layer_coverage.clone()
     }
 
     pub fn source_layer_coverage_summary(&self) -> ShiftSourceLayerCoverageSummary {
-        Self::summarize_source_layer_coverage(&self.build_source_layer_coverage())
+        self.source_layer_coverage_summary.clone()
     }
 
     pub fn source_layer_coverage_report(&self) -> ShiftSourceLayerCoverageReport {
-        let sources = self.build_source_layer_coverage();
-        let summary = Self::summarize_source_layer_coverage(&sources);
-        let variable_readiness = Self::variable_font_readiness_from_coverage_summary(&summary);
         ShiftSourceLayerCoverageReport {
-            summary,
-            variable_readiness,
-            sources,
+            summary: self.source_layer_coverage_summary.clone(),
+            variable_readiness: self.variable_font_readiness,
+            sources: self.source_layer_coverage.clone(),
         }
     }
 
     pub fn variable_font_readiness_report(&self) -> ShiftVariableFontReadinessReport {
-        let source_coverage_summary = self.source_layer_coverage_summary();
-        let readiness =
-            Self::variable_font_readiness_from_coverage_summary(&source_coverage_summary);
-
         ShiftVariableFontReadinessReport {
-            readiness,
-            source_coverage_summary,
+            readiness: self.variable_font_readiness,
+            source_coverage_summary: self.source_layer_coverage_summary.clone(),
         }
     }
 
@@ -1560,14 +1565,15 @@ impl ShiftWorkingSource {
         &self,
         target: &ShiftComponentLoweringTarget,
     ) -> ShiftVariableFontExportPreflight {
-        let source_coverage_summary = self.source_layer_coverage_summary();
-        let variable_readiness =
-            Self::variable_font_readiness_from_coverage_summary(&source_coverage_summary);
         let component_preflight = self.component_lowering_preflight(target);
-        let source_blocked = variable_readiness != ShiftVariableFontReadiness::Ready;
+        let source_blocked = self.variable_font_readiness != ShiftVariableFontReadiness::Ready;
         let component_blocked = component_preflight.readiness
             == ShiftComponentLoweringPreflightReadiness::BlockedByUnsupportedComponents;
-        let readiness = match (variable_readiness, source_blocked, component_blocked) {
+        let readiness = match (
+            self.variable_font_readiness,
+            source_blocked,
+            component_blocked,
+        ) {
             (ShiftVariableFontReadiness::SingleSource, _, _) => {
                 ShiftVariableFontExportReadiness::SingleSource
             }
@@ -1581,8 +1587,8 @@ impl ShiftWorkingSource {
 
         ShiftVariableFontExportPreflight {
             readiness,
-            variable_readiness,
-            source_coverage_summary,
+            variable_readiness: self.variable_font_readiness,
+            source_coverage_summary: self.source_layer_coverage_summary.clone(),
             component_preflight,
         }
     }
@@ -1607,20 +1613,33 @@ impl ShiftWorkingSource {
         }
     }
 
-    fn build_source_layer_coverage(&self) -> Vec<ShiftSourceLayerCoverage> {
-        self.package
+    fn build_source_layer_coverage(
+        package: &ShiftPackage,
+        interpolation_compatibility_index: &ShiftInterpolationCompatibilityIndex,
+    ) -> Vec<ShiftSourceLayerCoverage> {
+        package
             .sources
             .iter()
-            .map(|source| self.source_layer_coverage_for_source(source))
+            .map(|source| {
+                Self::source_layer_coverage_for_source(
+                    package,
+                    interpolation_compatibility_index,
+                    source,
+                )
+            })
             .collect()
     }
 
-    fn source_layer_coverage_for_source(&self, source: &ShiftSource) -> ShiftSourceLayerCoverage {
+    fn source_layer_coverage_for_source(
+        package: &ShiftPackage,
+        interpolation_compatibility_index: &ShiftInterpolationCompatibilityIndex,
+        source: &ShiftSource,
+    ) -> ShiftSourceLayerCoverage {
         let mut present_layers = Vec::new();
         let mut missing_layers = Vec::new();
         let mut interpolation_issues = Vec::new();
 
-        for glyph in &self.package.glyphs {
+        for glyph in &package.glyphs {
             if glyph.layers.contains_key(&source.id) {
                 present_layers.push(ShiftSourceLayerUse {
                     glyph_id: glyph.id.clone(),
@@ -1635,9 +1654,7 @@ impl ShiftWorkingSource {
                 });
             }
 
-            if let Some(compatibility) =
-                self.interpolation_compatibility_index.glyphs.get(&glyph.id)
-            {
+            if let Some(compatibility) = interpolation_compatibility_index.glyphs.get(&glyph.id) {
                 interpolation_issues.extend(
                     compatibility
                         .issues
@@ -1693,7 +1710,7 @@ impl ShiftWorkingSource {
             source_id: source.id.clone(),
             source_name: source.name.clone(),
             readiness,
-            glyph_count: self.package.glyphs.len(),
+            glyph_count: package.glyphs.len(),
             layer_count: present_layers.len(),
             missing_layer_count: missing_layers.len(),
             interpolation_issue_count: interpolation_issues.len(),
@@ -4033,6 +4050,9 @@ impl ShiftWorkingSource {
         self.package = package;
         self.dependency_index = views.dependency_index;
         self.interpolation_compatibility_index = views.interpolation_compatibility_index;
+        self.source_layer_coverage = views.source_layer_coverage;
+        self.source_layer_coverage_summary = views.source_layer_coverage_summary;
+        self.variable_font_readiness = views.variable_font_readiness;
         self.axis_mapping_resolvers = views.axis_mapping_resolvers;
         self.component_variation_resolvers = views.component_variation_resolvers;
         Ok(())
@@ -5299,12 +5319,24 @@ fn build_working_source_views(
     package.validate()?;
     let dependency_index = build_dependency_index(package)?;
     let interpolation_compatibility_index = build_interpolation_compatibility_index(package)?;
+    let source_layer_coverage = ShiftWorkingSource::build_source_layer_coverage(
+        package,
+        &interpolation_compatibility_index,
+    );
+    let source_layer_coverage_summary =
+        ShiftWorkingSource::summarize_source_layer_coverage(&source_layer_coverage);
+    let variable_font_readiness = ShiftWorkingSource::variable_font_readiness_from_coverage_summary(
+        &source_layer_coverage_summary,
+    );
     let axis_mapping_resolvers = compile_axis_mapping_resolvers(package);
     let component_variation_resolvers = compile_component_variation_resolvers(package);
 
     Ok(ShiftWorkingSourceViews {
         dependency_index,
         interpolation_compatibility_index,
+        source_layer_coverage,
+        source_layer_coverage_summary,
+        variable_font_readiness,
         axis_mapping_resolvers,
         component_variation_resolvers,
     })

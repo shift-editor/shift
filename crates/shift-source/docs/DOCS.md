@@ -73,9 +73,12 @@ WorkingSource
 
 The first implementation of this boundary is `ShiftWorkingSource`. It owns a
 validated `ShiftPackage`, keeps dependency and interpolation-compatibility
-indexes warm, compiles axis-mapping and component-variation resolvers for
-repeated location queries, and exposes semantic operations that the app can
-call without parsing package files or mutating IR directly.
+indexes warm, caches source-layer coverage and variable-font readiness, compiles
+axis-mapping and component-variation resolvers for repeated location queries,
+and exposes semantic operations that the app can call without parsing package
+files or mutating IR directly. Semantic mutations rebuild these derived views
+before replacing live state, so renderer panels and export preflights read a
+consistent projection without repeating source/package scans on every query.
 
 Good renderer-facing queries:
 
