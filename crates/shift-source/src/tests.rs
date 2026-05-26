@@ -17,7 +17,7 @@ use crate::{
     ShiftStaticComponentExportDisposition, ShiftWorkingSource,
     ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
     ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSaveStatus,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -3490,6 +3490,13 @@ fn working_source_previews_save_blocked_by_active_staged_commit() {
     assert_eq!(preview.summary.change_count, 2);
     assert_eq!(preview.summary.conflict_count, 0);
     assert_eq!(preview.summary.staged_recovery_count, 1);
+    assert_eq!(
+        preview.summary.staged_recovery_action_counts,
+        vec![ShiftWorkingSourceSaveStagedRecoveryActionCount {
+            action: ShiftStagedCommitRecoveryAction::Resume,
+            recovery_count: 1,
+        }]
+    );
     assert_eq!(preview.staged_recovery_plans.len(), 1);
     assert_eq!(
         preview.staged_recovery_plans[0].transaction_id,

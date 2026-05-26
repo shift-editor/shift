@@ -69,5 +69,6 @@ pub use working_source::{
     ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
     ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreview,
     ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveReport,
-    ShiftWorkingSourceSaveStatus, ShiftWorkingSourceSaveSummary,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount, ShiftWorkingSourceSaveStatus,
+    ShiftWorkingSourceSaveSummary,
 };

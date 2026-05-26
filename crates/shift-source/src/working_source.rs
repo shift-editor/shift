@@ -9,7 +9,7 @@ use crate::package::{
     ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer,
     ShiftGlyphSource, ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
     ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource,
-    ShiftStagedCommit, ShiftStagedCommitRecoveryPlan,
+    ShiftStagedCommit, ShiftStagedCommitRecoveryAction, ShiftStagedCommitRecoveryPlan,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -526,6 +526,7 @@ pub struct ShiftWorkingSourceSaveSummary {
     pub conflict_kind_counts: Vec<ShiftWorkingSourceSaveConflictKindCount>,
     pub conflict_path_class_counts: Vec<ShiftWorkingSourceSaveConflictPathClassCount>,
     pub staged_recovery_count: usize,
+    pub staged_recovery_action_counts: Vec<ShiftWorkingSourceSaveStagedRecoveryActionCount>,
     pub write_file_count: usize,
     pub remove_file_count: usize,
     pub invalidate_derived_count: usize,
@@ -550,6 +551,13 @@ pub enum ShiftWorkingSourceSaveConflictPathClass {
 pub struct ShiftWorkingSourceSaveConflictPathClassCount {
     pub path_class: ShiftWorkingSourceSaveConflictPathClass,
     pub conflict_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftWorkingSourceSaveStagedRecoveryActionCount {
+    pub action: ShiftStagedCommitRecoveryAction,
+    pub recovery_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -3999,10 +4007,17 @@ fn save_summary(
     let mut conflict_kind_counts = BTreeMap::<ShiftFingerprintConflictKind, usize>::new();
     let mut conflict_path_class_counts =
         BTreeMap::<ShiftWorkingSourceSaveConflictPathClass, usize>::new();
+    let mut staged_recovery_action_counts =
+        BTreeMap::<ShiftStagedCommitRecoveryAction, usize>::new();
     for conflict in &prepared.conflicts {
         *conflict_kind_counts.entry(conflict.kind).or_default() += 1;
         *conflict_path_class_counts
             .entry(save_conflict_path_class(&conflict.path))
+            .or_default() += 1;
+    }
+    for plan in staged_recovery_plans {
+        *staged_recovery_action_counts
+            .entry(plan.action)
             .or_default() += 1;
     }
 
@@ -4032,6 +4047,15 @@ fn save_summary(
             )
             .collect(),
         staged_recovery_count: staged_recovery_plans.len(),
+        staged_recovery_action_counts: staged_recovery_action_counts
+            .into_iter()
+            .map(
+                |(action, recovery_count)| ShiftWorkingSourceSaveStagedRecoveryActionCount {
+                    action,
+                    recovery_count,
+                },
+            )
+            .collect(),
         ..Default::default()
     };
 
