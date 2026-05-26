@@ -317,6 +317,7 @@ pub struct ShiftCreateSourceReport {
     pub source: ShiftSourceLocation,
     pub source_locations: ShiftSourceLocationReport,
     pub source_mapped_locations: ShiftSourceMappedLocationReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -329,6 +330,7 @@ pub struct ShiftUpdateSourceReport {
     pub source: ShiftSourceLocation,
     pub source_locations: ShiftSourceLocationReport,
     pub source_mapped_locations: ShiftSourceMappedLocationReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -341,6 +343,7 @@ pub struct ShiftDeleteSourceReport {
     pub source_name: String,
     pub source_locations: ShiftSourceLocationReport,
     pub source_mapped_locations: ShiftSourceMappedLocationReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -445,6 +448,7 @@ pub struct ShiftInterpolationCompatibilityIndexSummary {
 pub struct ShiftInterpolationCompatibilityUpdateReport {
     pub revision: u64,
     pub summary: ShiftInterpolationCompatibilityIndexSummary,
+    pub invalidates_all_glyphs: bool,
     pub affected_glyphs: Vec<ShiftGlyphInterpolationCompatibility>,
     pub removed_glyph_ids: Vec<String>,
 }
@@ -2009,6 +2013,7 @@ impl ShiftWorkingSource {
     ) -> ShiftInterpolationCompatibilityUpdateReport {
         let mut affected_glyph_ids = BTreeSet::new();
         let mut removed_glyph_ids = BTreeSet::new();
+        let mut invalidates_all_glyphs = false;
 
         for change in &diff.changes {
             match change {
@@ -2021,12 +2026,14 @@ impl ShiftWorkingSource {
                     removed_glyph_ids.insert(glyph_id.clone());
                 }
                 ShiftPackageChange::UpdateManifest
-                | ShiftPackageChange::UpdateFontInfo
                 | ShiftPackageChange::UpdateAxes
                 | ShiftPackageChange::UpdateSources
                 | ShiftPackageChange::UpdateAxisMappings
-                | ShiftPackageChange::UpdateGlyphLabels { .. }
-                | ShiftPackageChange::RebuildDerivedIndexes => {}
+                | ShiftPackageChange::RebuildDerivedIndexes => {
+                    invalidates_all_glyphs = true;
+                }
+                ShiftPackageChange::UpdateFontInfo
+                | ShiftPackageChange::UpdateGlyphLabels { .. } => {}
             }
         }
 
@@ -2045,6 +2052,7 @@ impl ShiftWorkingSource {
             summary: interpolation_compatibility_index_summary(
                 &self.interpolation_compatibility_index,
             ),
+            invalidates_all_glyphs,
             affected_glyphs,
             removed_glyph_ids: removed_glyph_ids.into_iter().collect(),
         }
@@ -4155,6 +4163,7 @@ impl ShiftWorkingSource {
             source,
             source_locations,
             source_mapped_locations,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4193,6 +4202,7 @@ impl ShiftWorkingSource {
             source,
             source_locations,
             source_mapped_locations,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4239,6 +4249,7 @@ impl ShiftWorkingSource {
             source_name: source.name,
             source_locations,
             source_mapped_locations,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,

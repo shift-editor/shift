@@ -2971,6 +2971,7 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
     );
     assert_eq!(report.interpolation_compatibility.revision, 1);
     assert_eq!(report.interpolation_compatibility.summary.glyph_count, 2);
+    assert!(!report.interpolation_compatibility.invalidates_all_glyphs);
     assert_eq!(
         report
             .interpolation_compatibility
@@ -7849,6 +7850,7 @@ fn working_source_deletes_leaf_glyph_with_narrow_impact() {
     assert_eq!(report.dependency_index.summary.component_dependent_count, 0);
     assert_eq!(report.interpolation_compatibility.revision, 1);
     assert_eq!(report.interpolation_compatibility.summary.glyph_count, 1);
+    assert!(!report.interpolation_compatibility.invalidates_all_glyphs);
     assert!(report
         .interpolation_compatibility
         .affected_glyphs
@@ -8131,6 +8133,7 @@ fn working_source_deletes_glyph_and_relinks_component_references() {
     assert_eq!(report.dependency_index.summary.component_dependent_count, 1);
     assert_eq!(report.interpolation_compatibility.revision, 1);
     assert_eq!(report.interpolation_compatibility.summary.glyph_count, 2);
+    assert!(!report.interpolation_compatibility.invalidates_all_glyphs);
     assert_eq!(
         report
             .interpolation_compatibility
@@ -12808,6 +12811,17 @@ fn working_source_creates_source_with_generated_id_and_completed_location() {
     );
     assert_eq!(report.source_coverage.summary.source_count, 2);
     assert!(report.source_coverage.summary.ready);
+    assert_eq!(report.interpolation_compatibility.revision, 1);
+    assert_eq!(report.interpolation_compatibility.summary.glyph_count, 0);
+    assert!(report.interpolation_compatibility.invalidates_all_glyphs);
+    assert!(report
+        .interpolation_compatibility
+        .affected_glyphs
+        .is_empty());
+    assert!(report
+        .interpolation_compatibility
+        .removed_glyph_ids
+        .is_empty());
     assert_eq!(
         report.source.values.get("axis_wght"),
         Some(&ShiftSourceAxisValue {
@@ -12891,6 +12905,17 @@ fn working_source_updates_source_with_narrow_impact() {
     );
     assert_eq!(report.source_coverage.summary.source_count, 2);
     assert!(report.source_coverage.summary.ready);
+    assert_eq!(report.interpolation_compatibility.revision, 1);
+    assert_eq!(report.interpolation_compatibility.summary.glyph_count, 0);
+    assert!(report.interpolation_compatibility.invalidates_all_glyphs);
+    assert!(report
+        .interpolation_compatibility
+        .affected_glyphs
+        .is_empty());
+    assert!(report
+        .interpolation_compatibility
+        .removed_glyph_ids
+        .is_empty());
     assert_eq!(
         report.source.values.get("axis_wght"),
         Some(&ShiftSourceAxisValue {
@@ -12993,6 +13018,17 @@ fn working_source_deletes_source_with_narrow_impact() {
     assert_eq!(report.source_mapped_locations.summary.source_count, 1);
     assert_eq!(report.source_coverage.summary.source_count, 1);
     assert!(report.source_coverage.summary.ready);
+    assert_eq!(report.interpolation_compatibility.revision, 1);
+    assert_eq!(report.interpolation_compatibility.summary.glyph_count, 0);
+    assert!(report.interpolation_compatibility.invalidates_all_glyphs);
+    assert!(report
+        .interpolation_compatibility
+        .affected_glyphs
+        .is_empty());
+    assert!(report
+        .interpolation_compatibility
+        .removed_glyph_ids
+        .is_empty());
     assert_eq!(
         report.diff,
         ShiftPackageDiff {

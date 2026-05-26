@@ -705,15 +705,18 @@ format exploration:
   counts, and the detailed compatibility record. The app can therefore show
   variable-font warnings for a selected glyph and discard stale async results
   without scanning the package-level compatibility index in TypeScript.
-- **Compatibility mutation updates:** glyph create/rename/delete, glyph source
-  layer create/delete, glyph variation-source create/update/delete, and
-  component variation-source create/update/delete reports include a compact
-  interpolation-compatibility update. It carries the working-source revision,
-  the package-level compatibility summary, affected glyph compatibility rows,
-  and removed glyph IDs. The app can patch grid badges, inspector warnings, and
-  export preflight counts from the mutation response without shipping the full
-  package-wide compatibility index or keeping stale variable-font state until a
-  follow-up query completes.
+- **Compatibility mutation updates:** glyph create/rename/delete, source
+  create/update/delete, glyph source layer create/delete, glyph
+  variation-source create/update/delete, and component variation-source
+  create/update/delete reports include a compact interpolation-compatibility
+  update. It carries the working-source revision, package-level compatibility
+  summary, precise affected glyph rows when the change is glyph-scoped, removed
+  glyph IDs for deletes, and an `invalidatesAllGlyphs` flag when a broad source,
+  axis, mapping, or manifest change means renderer caches should refresh the
+  package-level compatibility view. The app can patch grid badges, inspector
+  warnings, and export preflight counts from the mutation response without
+  shipping the full package-wide compatibility index or keeping stale
+  variable-font state until a follow-up query completes.
 - **Source layer coverage:** source panels can ask which glyphs have a layer for
   each family source, which glyphs are missing that layer, and which
   interpolation compatibility issues involve that source. Coverage rows include
