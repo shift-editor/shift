@@ -693,7 +693,9 @@ format exploration:
   compact package-level summary that separates unique axes from per-mapping axis
   references. Mapping panels and export preflights can render avar2 authoring
   status from a revision-stamped Rust-owned response instead of inspecting
-  `axis-mappings.json` or rebuilding mapping metadata in TypeScript.
+  `axis-mappings.json` or rebuilding mapping metadata in TypeScript. Axis
+  mapping create/update/delete reports include this refreshed mapping report, so
+  app panels can update from the command response that changed the mapping graph.
   The mapped-location report wraps resolved axis values and mapping diagnostics
   with the working-source revision plus compact counts for input, default,
   mapped, applied-mapping, and diagnostic states. Variable sliders and export
