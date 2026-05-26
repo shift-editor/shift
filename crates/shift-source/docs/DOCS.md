@@ -99,6 +99,7 @@ getSourceLayerCoverage()
 getSourceLayerCoverageWorklist()
 getVariableFontReadinessReport()
 getVariableFontExportPreflight(target) -> readiness + primaryAction + source/component blockers
+getAxisMappingsReport()
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
 getComponentRecipe(glyphId, layerId, componentId)
@@ -687,6 +688,12 @@ format exploration:
   created, updated, and deleted through semantic working-source commands; each
   command validates the candidate package, swaps query views atomically, and
   reports the `axis-mappings.json` write impact plus derived-cache invalidation.
+  The axis mappings report lists mapping rows with static/one-dimensional/
+  multi-dimensional kind, input/output axis references, sample counts, and a
+  compact package-level summary that separates unique axes from per-mapping axis
+  references. Mapping panels and export preflights can render avar2 authoring
+  status from a revision-stamped Rust-owned response instead of inspecting
+  `axis-mappings.json` or rebuilding mapping metadata in TypeScript.
   The mapped-location report wraps resolved axis values and mapping diagnostics
   with the working-source revision plus compact counts for input, default,
   mapped, applied-mapping, and diagnostic states. Variable sliders and export

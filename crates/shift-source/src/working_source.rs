@@ -236,6 +236,49 @@ pub struct ShiftDeleteAxisMappingReport {
     pub revision: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftAxisMappingReport {
+    pub revision: u64,
+    pub summary: ShiftAxisMappingSummary,
+    pub mappings: Vec<ShiftAxisMappingListItem>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftAxisMappingSummary {
+    pub mapping_count: usize,
+    pub input_axis_reference_count: usize,
+    pub output_axis_reference_count: usize,
+    pub unique_input_axis_count: usize,
+    pub unique_output_axis_count: usize,
+    pub sample_count: usize,
+    pub static_mapping_count: usize,
+    pub one_dimensional_mapping_count: usize,
+    pub multi_dimensional_mapping_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftAxisMappingListItem {
+    pub mapping_id: String,
+    pub mapping_name: String,
+    pub kind: ShiftAxisMappingKind,
+    pub input_axes: Vec<String>,
+    pub output_axes: Vec<String>,
+    pub input_axis_count: usize,
+    pub output_axis_count: usize,
+    pub sample_count: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftAxisMappingKind {
+    Static,
+    OneDimensional,
+    MultiDimensional,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftCreateSource {
@@ -1888,6 +1931,20 @@ impl ShiftWorkingSource {
             revision: self.revision,
             summary: source_location_summary(&sources),
             sources,
+        }
+    }
+
+    pub fn axis_mappings_report(&self) -> ShiftAxisMappingReport {
+        let mappings = self
+            .package
+            .axis_mappings
+            .iter()
+            .map(axis_mapping_list_item)
+            .collect::<Vec<_>>();
+        ShiftAxisMappingReport {
+            revision: self.revision,
+            summary: axis_mapping_summary(&mappings),
+            mappings,
         }
     }
 
@@ -6164,6 +6221,64 @@ fn source_location_summary(sources: &[ShiftSourceLocation]) -> ShiftSourceLocati
         resolved_axis_value_count,
         source_location_value_count,
         axis_default_value_count,
+    }
+}
+
+fn axis_mapping_list_item(mapping: &ShiftAxisMapping) -> ShiftAxisMappingListItem {
+    let kind = axis_mapping_kind(mapping);
+    ShiftAxisMappingListItem {
+        mapping_id: mapping.id.clone(),
+        mapping_name: mapping.name.clone(),
+        kind,
+        input_axes: mapping.input_axes.clone(),
+        output_axes: mapping.output_axes.clone(),
+        input_axis_count: mapping.input_axes.len(),
+        output_axis_count: mapping.output_axes.len(),
+        sample_count: mapping.samples.len(),
+    }
+}
+
+fn axis_mapping_kind(mapping: &ShiftAxisMapping) -> ShiftAxisMappingKind {
+    match mapping.input_axes.len() {
+        0 => ShiftAxisMappingKind::Static,
+        1 => ShiftAxisMappingKind::OneDimensional,
+        _ => ShiftAxisMappingKind::MultiDimensional,
+    }
+}
+
+fn axis_mapping_summary(mappings: &[ShiftAxisMappingListItem]) -> ShiftAxisMappingSummary {
+    let mut input_axis_reference_count = 0;
+    let mut output_axis_reference_count = 0;
+    let mut unique_input_axes = BTreeSet::new();
+    let mut unique_output_axes = BTreeSet::new();
+    let mut sample_count = 0;
+    let mut static_mapping_count = 0;
+    let mut one_dimensional_mapping_count = 0;
+    let mut multi_dimensional_mapping_count = 0;
+
+    for mapping in mappings {
+        input_axis_reference_count += mapping.input_axis_count;
+        output_axis_reference_count += mapping.output_axis_count;
+        unique_input_axes.extend(mapping.input_axes.iter().cloned());
+        unique_output_axes.extend(mapping.output_axes.iter().cloned());
+        sample_count += mapping.sample_count;
+        match mapping.kind {
+            ShiftAxisMappingKind::Static => static_mapping_count += 1,
+            ShiftAxisMappingKind::OneDimensional => one_dimensional_mapping_count += 1,
+            ShiftAxisMappingKind::MultiDimensional => multi_dimensional_mapping_count += 1,
+        }
+    }
+
+    ShiftAxisMappingSummary {
+        mapping_count: mappings.len(),
+        input_axis_reference_count,
+        output_axis_reference_count,
+        unique_input_axis_count: unique_input_axes.len(),
+        unique_output_axis_count: unique_output_axes.len(),
+        sample_count,
+        static_mapping_count,
+        one_dimensional_mapping_count,
+        multi_dimensional_mapping_count,
     }
 }
 

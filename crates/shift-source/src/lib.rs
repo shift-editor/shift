@@ -35,10 +35,12 @@ pub use package::{
     INTERPOLATION_COMPATIBILITY_INDEX_PATH, SHIFT_INTERPOLATION_COMPATIBILITY_INDEX_VERSION,
 };
 pub use working_source::{
-    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingUpdate,
-    ShiftComponentActivity, ShiftComponentActivityReport, ShiftComponentActivitySummary,
-    ShiftComponentLoweringCapability, ShiftComponentLoweringCapabilityCount,
-    ShiftComponentLoweringDiagnostic, ShiftComponentLoweringHint, ShiftComponentLoweringPreflight,
+    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingKind,
+    ShiftAxisMappingListItem, ShiftAxisMappingReport, ShiftAxisMappingSummary,
+    ShiftAxisMappingUpdate, ShiftComponentActivity, ShiftComponentActivityReport,
+    ShiftComponentActivitySummary, ShiftComponentLoweringCapability,
+    ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringDiagnostic,
+    ShiftComponentLoweringHint, ShiftComponentLoweringPreflight,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
     ShiftComponentRecipeDetailReport, ShiftComponentRecipeKind, ShiftComponentRecipeReport,
     ShiftComponentRecipeReportSummary, ShiftComponentRecipeSummary, ShiftComponentResolveContext,

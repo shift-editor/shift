@@ -1,7 +1,8 @@
 use crate::package::*;
 use crate::{
-    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingUpdate,
-    ShiftComponentActivity, ShiftComponentActivitySummary, ShiftComponentLoweringCapability,
+    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingKind,
+    ShiftAxisMappingSummary, ShiftAxisMappingUpdate, ShiftComponentActivity,
+    ShiftComponentActivitySummary, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
     ShiftComponentRecipeKind, ShiftComponentRecipeReportSummary, ShiftComponentRecipeSummary,
@@ -5187,6 +5188,127 @@ fn working_source_creates_axis_mapping_with_generated_id_and_updates_mapping_que
             source: ShiftMappedAxisValueSource::AxisMapping,
             mapping_id: Some("mapping_Weight_drives_stem".to_string()),
         })
+    );
+}
+
+#[test]
+fn working_source_axis_mappings_report_summarizes_mapping_shapes() {
+    let mut package = package_with_axes(
+        vec![weight_axis(), width_axis(), internal_stem_axis()],
+        Vec::new(),
+    );
+    package.axis_mappings = vec![
+        ShiftAxisMapping {
+            id: "mapping_static_stem".to_string(),
+            name: "Static stem".to_string(),
+            input_axes: Vec::new(),
+            output_axes: vec!["axis_stem".to_string()],
+            samples: vec![ShiftAxisMappingSample {
+                input_location: BTreeMap::new(),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.1)]),
+            }],
+        },
+        ShiftAxisMapping {
+            id: "mapping_weight_to_stem".to_string(),
+            name: "Weight drives stem".to_string(),
+            input_axes: vec!["axis_wght".to_string()],
+            output_axes: vec!["axis_stem".to_string()],
+            samples: vec![
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+                },
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 1.0)]),
+                },
+            ],
+        },
+        ShiftAxisMapping {
+            id: "mapping_weight_width_to_stem".to_string(),
+            name: "Weight and width drive stem".to_string(),
+            input_axes: vec!["axis_wght".to_string(), "axis_wdth".to_string()],
+            output_axes: vec!["axis_stem".to_string()],
+            samples: vec![
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([
+                        ("axis_wght".to_string(), 100.0),
+                        ("axis_wdth".to_string(), 50.0),
+                    ]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+                },
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([
+                        ("axis_wght".to_string(), 100.0),
+                        ("axis_wdth".to_string(), 200.0),
+                    ]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.2)]),
+                },
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([
+                        ("axis_wght".to_string(), 900.0),
+                        ("axis_wdth".to_string(), 50.0),
+                    ]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.8)]),
+                },
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([
+                        ("axis_wght".to_string(), 900.0),
+                        ("axis_wdth".to_string(), 200.0),
+                    ]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 1.0)]),
+                },
+            ],
+        },
+    ];
+    let working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source.axis_mappings_report();
+
+    assert_eq!(report.revision, 0);
+    assert_eq!(
+        report.summary,
+        ShiftAxisMappingSummary {
+            mapping_count: 3,
+            input_axis_reference_count: 3,
+            output_axis_reference_count: 3,
+            unique_input_axis_count: 2,
+            unique_output_axis_count: 1,
+            sample_count: 7,
+            static_mapping_count: 1,
+            one_dimensional_mapping_count: 1,
+            multi_dimensional_mapping_count: 1,
+        }
+    );
+    assert_eq!(
+        report
+            .mappings
+            .iter()
+            .map(|mapping| (
+                mapping.mapping_id.as_str(),
+                mapping.kind,
+                mapping.input_axis_count,
+                mapping.output_axis_count,
+                mapping.sample_count
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("mapping_static_stem", ShiftAxisMappingKind::Static, 0, 1, 1),
+            (
+                "mapping_weight_to_stem",
+                ShiftAxisMappingKind::OneDimensional,
+                1,
+                1,
+                2,
+            ),
+            (
+                "mapping_weight_width_to_stem",
+                ShiftAxisMappingKind::MultiDimensional,
+                2,
+                1,
+                4,
+            ),
+        ]
     );
 }
 
