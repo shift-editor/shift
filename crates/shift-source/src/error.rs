@@ -263,6 +263,9 @@ pub enum ShiftSourceError {
     #[error("duplicate Shift axis name '{axis_name}'")]
     DuplicateAxisName { axis_name: String },
 
+    #[error("missing Shift axis id '{axis_id}'")]
+    MissingAxis { axis_id: String },
+
     #[error("invalid Shift axis tag '{axis_tag}'")]
     InvalidAxisTag { axis_tag: String },
 

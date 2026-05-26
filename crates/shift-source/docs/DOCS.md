@@ -100,6 +100,9 @@ getSourceLayerCoverage()
 getSourceLayerCoverageWorklist()
 getVariableFontReadinessReport()
 getVariableFontExportPreflight(target) -> readiness + primaryAction + source/component blockers
+getAxesReport()
+createAxis(create)
+updateAxis(axisId, update)
 getAxisMappingsReport()
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
@@ -443,9 +446,12 @@ format exploration:
   source updates fail without mutating the working graph.
 - **Axis and mapping labels are app-safe:** axis names and axis-mapping names
   must be nonblank and unique, keeping sliders, mapping panels, and diagnostics
-  readable. Semantic mapping creation can fall back to `New Mapping` and
-  disambiguates duplicate names, while blank mapping updates fail without
-  mutating the working graph.
+  readable. Semantic axis creation can fall back to `New Axis`, generates a
+  stable `axis_*` ID from the authored tag, and returns refreshed source,
+  mapping, compatibility, and coverage projections from the same command
+  response. Semantic mapping creation can fall back to `New Mapping` and
+  disambiguates duplicate names, while blank axis or mapping updates fail
+  without mutating the working graph.
 - **Variable authoring labels are app-safe:** glyph-local axes, glyph variation
   sources, and component variation sources also require nonblank, unique labels
   inside their owning glyph or component. Semantic variation-source creation
@@ -790,6 +796,14 @@ format exploration:
   UI before constructing a candidate package. Default sources and referenced
   sources return semantic errors with reference counts, so the app can show a
   stable warning instead of interpreting lower-level validation failures.
+- **Axis authoring:** variable-axis panels should create or edit global axes
+  through `ShiftWorkingSource`, not by replacing `axes.json` directly. Axis
+  create/update commands validate the whole candidate graph before swapping live
+  state, then return the updated axis list, completed source locations, mapped
+  source locations, source coverage, and compatibility invalidation. This lets
+  the app refresh sliders, master coordinates, mapping diagnostics, variable
+  readiness, and export status from one Rust-owned response while preserving the
+  same staged-save guarantees as other source mutations.
 - **Glyph source layer creation:** source panels can add a missing glyph layer
   for a declared source through a semantic command. The command refuses to
   overwrite an existing layer, validates the candidate package before swapping

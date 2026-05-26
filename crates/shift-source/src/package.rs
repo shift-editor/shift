@@ -35,7 +35,7 @@ pub struct ShiftFontInfo {
     pub metrics: FontMetrics,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftAxis {
     pub id: String,

@@ -1,7 +1,7 @@
 use crate::package::*;
 use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingKind,
-    ShiftAxisMappingSummary, ShiftAxisMappingUpdate, ShiftComponentActivity,
+    ShiftAxisMappingSummary, ShiftAxisMappingUpdate, ShiftAxisUpdate, ShiftComponentActivity,
     ShiftComponentActivitySummary, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringPreflightReadiness, ShiftComponentLoweringTarget,
@@ -11,18 +11,19 @@ use crate::{
     ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
     ShiftComponentVariationResolution, ShiftComponentVariationSourceLocationSummary,
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
-    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftDependencyIndexSummary, ShiftFontInfoUpdate,
-    ShiftGlyphDependenciesSummary, ShiftGlyphInterpolationCompatibilitySummary,
-    ShiftGlyphRelinkReplacementBlocker, ShiftGlyphRelinkReplacementCandidateSummary,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceLocationSummary, ShiftGlyphVariationSourceUpdate,
-    ShiftGlyphVariationSourceUse, ShiftInterpolationCompatibilityIndexReport,
-    ShiftInterpolationCompatibilityIndexSummary, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftConditionEvaluation, ShiftCreateAxis, ShiftCreateAxisMapping,
+    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
+    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftDependencyIndexSummary,
+    ShiftFontInfoUpdate, ShiftGlyphDependenciesSummary,
+    ShiftGlyphInterpolationCompatibilitySummary, ShiftGlyphRelinkReplacementBlocker,
+    ShiftGlyphRelinkReplacementCandidateSummary, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse,
+    ShiftInterpolationCompatibilityIndexReport, ShiftInterpolationCompatibilityIndexSummary,
+    ShiftMappedAxisValue, ShiftMappedAxisValueSource, ShiftMappedLocationSummary,
+    ShiftMissingSourceLayer, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
+    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
     ShiftSourceMappedLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
     ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
@@ -13021,6 +13022,223 @@ fn working_source_rejects_invalid_font_info_without_mutating() {
         } if context == "font metrics" && field == "unitsPerEm" && value.is_nan()
     ));
     assert_eq!(working_source.package().font, original_font);
+    assert_eq!(working_source.revision(), 0);
+}
+
+#[test]
+fn working_source_creates_axis_with_generated_id_and_app_projections() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_single_source(Vec::new())).expect("package is valid");
+
+    let report = working_source
+        .create_axis(ShiftCreateAxis {
+            axis_id: None,
+            tag: "wdth".to_string(),
+            name: "Width".to_string(),
+            minimum: 50.0,
+            default: 100.0,
+            maximum: 200.0,
+            hidden: false,
+            role: ShiftAxisRole::UserFacing,
+        })
+        .expect("axis creation should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.axis_id, "axis_wdth");
+    assert_eq!(report.axis.name, "Width");
+    assert_eq!(report.axes.revision, 1);
+    assert_eq!(report.axes.summary.axis_count, 1);
+    assert_eq!(report.axes.summary.user_facing_axis_count, 1);
+    assert_eq!(report.axes.summary.internal_axis_count, 0);
+    assert_eq!(report.axes.summary.hidden_axis_count, 0);
+    assert_eq!(report.source_locations.summary.source_count, 1);
+    assert_eq!(
+        report.source_locations.sources[0].values.get("axis_wdth"),
+        Some(&ShiftSourceAxisValue {
+            value: 100.0,
+            source: ShiftSourceAxisValueSource::AxisDefault,
+        })
+    );
+    assert_eq!(
+        report
+            .source_mapped_locations
+            .summary
+            .mapped_axis_value_count,
+        1
+    );
+    assert_eq!(
+        report
+            .source_mapped_locations
+            .summary
+            .axis_default_value_count,
+        1
+    );
+    assert_eq!(report.source_coverage.summary.source_count, 1);
+    assert!(report.source_coverage.summary.ready);
+    assert!(report.interpolation_compatibility.invalidates_all_glyphs);
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateAxes],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["axes.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+}
+
+#[test]
+fn working_source_updates_axis_with_app_projections() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let report = working_source
+        .update_axis(
+            "axis_wght",
+            ShiftAxisUpdate {
+                tag: "wght".to_string(),
+                name: "Grade".to_string(),
+                minimum: 300.0,
+                default: 500.0,
+                maximum: 900.0,
+                hidden: true,
+                role: ShiftAxisRole::Internal,
+            },
+        )
+        .expect("axis update should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.axis_id, "axis_wght");
+    assert_eq!(report.axis.name, "Grade");
+    assert_eq!(report.axis.default, 500.0);
+    assert!(report.axis.hidden);
+    assert_eq!(report.axis.role, ShiftAxisRole::Internal);
+    assert_eq!(report.axes.summary.axis_count, 1);
+    assert_eq!(report.axes.summary.user_facing_axis_count, 0);
+    assert_eq!(report.axes.summary.internal_axis_count, 1);
+    assert_eq!(report.axes.summary.hidden_axis_count, 1);
+    assert_eq!(
+        report.source_locations.sources[0].values.get("axis_wght"),
+        Some(&ShiftSourceAxisValue {
+            value: 500.0,
+            source: ShiftSourceAxisValueSource::AxisDefault,
+        })
+    );
+    assert!(report.interpolation_compatibility.invalidates_all_glyphs);
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateAxes],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["axes.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+    assert_eq!(working_source.revision(), 1);
+}
+
+#[test]
+fn working_source_axis_no_op_does_not_advance_revision() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let report = working_source
+        .update_axis(
+            "axis_wght",
+            ShiftAxisUpdate {
+                tag: "wght".to_string(),
+                name: "Weight".to_string(),
+                minimum: 100.0,
+                default: 400.0,
+                maximum: 900.0,
+                hidden: false,
+                role: ShiftAxisRole::UserFacing,
+            },
+        )
+        .expect("axis no-op should succeed");
+
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.axes.summary.axis_count, 1);
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: Vec::new(),
+            impact: ShiftWriteImpact {
+                canonical_paths: Vec::new(),
+                removed_canonical_paths: Vec::new(),
+                derived_paths: Vec::new(),
+            },
+        }
+    );
+    assert_eq!(working_source.revision(), 0);
+}
+
+#[test]
+fn working_source_rejects_invalid_axis_update_without_mutating() {
+    let mut package = package_with_axes(vec![weight_axis()], Vec::new());
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let error = working_source
+        .update_axis(
+            "axis_wght",
+            ShiftAxisUpdate {
+                tag: "wght".to_string(),
+                name: "Weight".to_string(),
+                minimum: 100.0,
+                default: 400.0,
+                maximum: 800.0,
+                hidden: false,
+                role: ShiftAxisRole::UserFacing,
+            },
+        )
+        .expect_err("axis update should reject out-of-range source locations");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::AxisCoordinateOutOfRange {
+            context,
+            axis_id,
+            value,
+            minimum,
+            maximum,
+        } if context == "source 'source_Bold'"
+            && axis_id == "axis_wght"
+            && value == 900.0
+            && minimum == 100.0
+            && maximum == 800.0
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(working_source.package().axes[0], weight_axis());
+
+    let error = working_source
+        .update_axis(
+            "axis_missing",
+            ShiftAxisUpdate {
+                tag: "wdth".to_string(),
+                name: "Width".to_string(),
+                minimum: 50.0,
+                default: 100.0,
+                maximum: 200.0,
+                hidden: false,
+                role: ShiftAxisRole::UserFacing,
+            },
+        )
+        .expect_err("missing axis should fail");
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingAxis { axis_id } if axis_id == "axis_missing"
+    ));
     assert_eq!(working_source.revision(), 0);
 }
 

@@ -5,7 +5,7 @@ use crate::package::{
     interpolation_issue_kind_counts, load_package, parse_unicode_scalar,
     plan_staged_commit_recovery, prepare_package_commit, stage_prepared_commit,
     summarize_staged_commit_recovery, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping,
-    ShiftAxisMappingSample, ShiftCommitOperation, ShiftComponent, ShiftComponentUse,
+    ShiftAxisMappingSample, ShiftAxisRole, ShiftCommitOperation, ShiftComponent, ShiftComponentUse,
     ShiftComponentVariationSource, ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint,
     ShiftFingerprintConflictKind, ShiftFontInfo, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
@@ -196,6 +196,79 @@ pub enum ShiftGlyphRelinkReplacementBlocker {
         minimum: f64,
         maximum: f64,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateAxis {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_id: Option<String>,
+    pub tag: String,
+    pub name: String,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+    pub hidden: bool,
+    #[serde(default)]
+    pub role: ShiftAxisRole,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftAxisUpdate {
+    pub tag: String,
+    pub name: String,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+    pub hidden: bool,
+    #[serde(default)]
+    pub role: ShiftAxisRole,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateAxisReport {
+    pub axis_id: String,
+    pub axis: ShiftAxis,
+    pub axes: ShiftAxisReport,
+    pub source_locations: ShiftSourceLocationReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftUpdateAxisReport {
+    pub axis_id: String,
+    pub axis: ShiftAxis,
+    pub axes: ShiftAxisReport,
+    pub source_locations: ShiftSourceLocationReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
+    pub interpolation_compatibility: ShiftInterpolationCompatibilityUpdateReport,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftAxisReport {
+    pub revision: u64,
+    pub summary: ShiftAxisSummary,
+    pub axes: Vec<ShiftAxis>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftAxisSummary {
+    pub axis_count: usize,
+    pub user_facing_axis_count: usize,
+    pub internal_axis_count: usize,
+    pub hidden_axis_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2140,6 +2213,14 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn axes_report(&self) -> ShiftAxisReport {
+        ShiftAxisReport {
+            revision: self.revision,
+            summary: axis_summary(&self.package.axes),
+            axes: self.package.axes.clone(),
+        }
+    }
+
     pub fn axis_mappings_report(&self) -> ShiftAxisMappingReport {
         let mappings = self
             .package
@@ -4059,6 +4140,104 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn create_axis(
+        &mut self,
+        create: ShiftCreateAxis,
+    ) -> ShiftSourceResult<ShiftCreateAxisReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let axis_name = unique_member_name_with_fallback(
+            create.name.trim(),
+            "New Axis",
+            next.axes.iter().map(|axis| axis.name.as_str()),
+        );
+        let axis_tag = create.tag.trim().to_string();
+        let axis_id = create.axis_id.unwrap_or_else(|| {
+            unique_member_id(
+                "axis",
+                &axis_tag,
+                next.axes.iter().map(|axis| axis.id.as_str()),
+            )
+        });
+        next.axes.push(ShiftAxis {
+            id: axis_id.clone(),
+            tag: axis_tag,
+            name: axis_name,
+            minimum: create.minimum,
+            default: create.default,
+            maximum: create.maximum,
+            hidden: create.hidden,
+            role: create.role,
+        });
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+        let axis = self.axis(&axis_id)?.clone();
+        let source_locations = self.source_locations_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
+
+        Ok(ShiftCreateAxisReport {
+            axis_id,
+            axis,
+            axes: self.axes_report(),
+            source_locations,
+            source_mapped_locations,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
+            source_coverage: self.source_layer_coverage_report(),
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn update_axis(
+        &mut self,
+        axis_id: &str,
+        update: ShiftAxisUpdate,
+    ) -> ShiftSourceResult<ShiftUpdateAxisReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let axis = next
+            .axes
+            .iter_mut()
+            .find(|axis| axis.id == axis_id)
+            .ok_or_else(|| ShiftSourceError::MissingAxis {
+                axis_id: axis_id.to_string(),
+            })?;
+        axis.tag = update.tag.trim().to_string();
+        axis.name = update.name.trim().to_string();
+        axis.minimum = update.minimum;
+        axis.default = update.default;
+        axis.maximum = update.maximum;
+        axis.hidden = update.hidden;
+        axis.role = update.role;
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+        let axis = self.axis(axis_id)?.clone();
+        let source_locations = self.source_locations_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
+
+        Ok(ShiftUpdateAxisReport {
+            axis_id: axis_id.to_string(),
+            axis,
+            axes: self.axes_report(),
+            source_locations,
+            source_mapped_locations,
+            interpolation_compatibility: self.interpolation_compatibility_update_report(&diff),
+            source_coverage: self.source_layer_coverage_report(),
+            diff,
+            revision: self.revision,
+        })
+    }
+
     pub fn create_axis_mapping(
         &mut self,
         create: ShiftCreateAxisMapping,
@@ -5037,6 +5216,16 @@ impl ShiftWorkingSource {
             .find(|mapping| mapping.id == mapping_id)
             .ok_or_else(|| ShiftSourceError::MissingAxisMapping {
                 mapping_id: mapping_id.to_string(),
+            })
+    }
+
+    fn axis(&self, axis_id: &str) -> ShiftSourceResult<&ShiftAxis> {
+        self.package
+            .axes
+            .iter()
+            .find(|axis| axis.id == axis_id)
+            .ok_or_else(|| ShiftSourceError::MissingAxis {
+                axis_id: axis_id.to_string(),
             })
     }
 
@@ -6597,6 +6786,27 @@ fn axis_mapping_kind(mapping: &ShiftAxisMapping) -> ShiftAxisMappingKind {
         1 => ShiftAxisMappingKind::OneDimensional,
         _ => ShiftAxisMappingKind::MultiDimensional,
     }
+}
+
+fn axis_summary(axes: &[ShiftAxis]) -> ShiftAxisSummary {
+    let mut summary = ShiftAxisSummary {
+        axis_count: axes.len(),
+        user_facing_axis_count: 0,
+        internal_axis_count: 0,
+        hidden_axis_count: 0,
+    };
+
+    for axis in axes {
+        match axis.role {
+            ShiftAxisRole::UserFacing => summary.user_facing_axis_count += 1,
+            ShiftAxisRole::Internal => summary.internal_axis_count += 1,
+        }
+        if axis.hidden {
+            summary.hidden_axis_count += 1;
+        }
+    }
+
+    summary
 }
 
 fn axis_mapping_summary(mappings: &[ShiftAxisMappingListItem]) -> ShiftAxisMappingSummary {
