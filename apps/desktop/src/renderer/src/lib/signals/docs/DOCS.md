@@ -109,7 +109,6 @@ cd apps/desktop && npm test
 - `HoverManager` -- uses `$hoveredPointId`, `$hoveredSegmentId`, etc.
 - `Selection` -- uses `WritableSignal` fields for selected point/anchor/segment state
 - `NativeBridge` -- `$glyph` signal with `equals: () => false` for identity changes
-- `ShiftState` -- uses `signal` for application-level reactive state
 - `useSignalState` -- React bridge hook (in this module)
 - `useSignalEffect` -- lifecycle-aware effect hook (in `@/hooks/useSignalEffect`)
 - `CommandHistory` -- imports from reactive for undo/redo state signals

@@ -5,19 +5,10 @@ export type DocumentIdentity =
   | { readonly kind: "file"; readonly path: string };
 
 export interface DocumentServices {
-  readonly persistence: DocumentPersistence;
   readonly setFilePath: (filePath: string | null) => void;
   readonly clearDirty: () => void;
   readonly createUntitledId?: () => string;
   readonly notifySaveCompleted?: (path: string) => Promise<void> | void;
-}
-
-export interface DocumentPersistence {
-  closeDocument(): void;
-  openDocument(filePath: string): void;
-  openUntitledDocument(docId: string): void;
-  onDocumentPathChanged(filePath: string | null): void;
-  flushNow(): void;
 }
 
 /**
@@ -25,12 +16,11 @@ export interface DocumentPersistence {
  *
  * `Document` owns the distinction between no document, a new untitled font,
  * and a file-backed font. It coordinates editor font lifecycle, file identity,
- * dirty state, and document-scoped persistence.
+ * and dirty state.
  */
 export class Document {
   readonly editor: Editor;
 
-  readonly #persistence: DocumentPersistence;
   readonly #setFilePath: (filePath: string | null) => void;
   readonly #clearDirty: () => void;
   readonly #createUntitledId: () => string;
@@ -40,7 +30,6 @@ export class Document {
 
   constructor(editor: Editor, services: DocumentServices) {
     this.editor = editor;
-    this.#persistence = services.persistence;
     this.#setFilePath = services.setFilePath;
     this.#clearDirty = services.clearDirty;
     this.#createUntitledId = services.createUntitledId ?? createUntitledId;
@@ -56,30 +45,20 @@ export class Document {
   }
 
   createFont(): void {
-    this.#persistence.closeDocument();
-
     const id = this.#createUntitledId();
     this.editor.createFont();
     this.#identity = { kind: "untitled", id };
 
     this.#setFilePath(null);
     this.#clearDirty();
-
-    this.#persistence.openUntitledDocument(id);
-    this.#persistence.flushNow();
   }
 
   openFont(path: string): void {
-    this.#persistence.closeDocument();
-
     this.editor.loadFont(path);
     this.#identity = { kind: "file", path };
 
     this.#setFilePath(path);
     this.#clearDirty();
-
-    this.#persistence.openDocument(path);
-    this.#persistence.flushNow();
   }
 
   async saveFont(path?: string): Promise<void> {
@@ -94,8 +73,6 @@ export class Document {
     this.#setFilePath(savePath);
     this.#clearDirty();
 
-    this.#persistence.onDocumentPathChanged(savePath);
-    this.#persistence.flushNow();
     await this.#notifySaveCompleted(savePath);
   }
 
@@ -104,7 +81,6 @@ export class Document {
   }
 
   close(): void {
-    this.#persistence.closeDocument();
     this.editor.closeFont();
     this.#identity = null;
     this.#setFilePath(null);

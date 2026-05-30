@@ -9,7 +9,6 @@ import { ZoomToast } from "@/components/chrome/ZoomToast";
 import { isDev } from "@/lib/utils/utils";
 import { dumpSelectionPatternsToConsole } from "@/lib/debug/dumpSelectionPatterns";
 import { getDocument } from "@/store/store";
-import { documentPersistence } from "@/persistence";
 
 import { RouteDispatcher } from "./RouteDispatcher";
 
@@ -41,13 +40,7 @@ export const App = () => {
   useEffect(() => {
     const fontDocument = getDocument();
     const editor = fontDocument.editor;
-    documentPersistence.init(editor);
     let didOpenFont = false;
-
-    const handleBeforeUnload = () => {
-      documentPersistence.flushNow();
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
 
     const handleOpenFont = (filePath: string, source: "event" | "restore" = "event") => {
       if (source === "restore" && didOpenFont) {
@@ -79,21 +72,7 @@ export const App = () => {
           return;
         }
 
-        const state = documentPersistence.getState();
-        const mostRecentDocId = state.registry.lruDocIds[0];
-        const mostRecentPath = mostRecentDocId ? state.registry.docIdToPath[mostRecentDocId] : null;
-        if (!mostRecentPath) {
-          fontDocument.createFont();
-          return;
-        }
-
-        const exists = await window.electronAPI?.pathsExist([mostRecentPath]);
-        if (!exists?.[0]) {
-          fontDocument.createFont();
-          return;
-        }
-
-        handleOpenFont(mostRecentPath, "restore");
+        fontDocument.createFont();
       })();
     } else if (needsLoadedDocument(window.location.hash) && !fontDocument.loaded) {
       fontDocument.createFont();
@@ -128,8 +107,6 @@ export const App = () => {
     });
 
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      documentPersistence.dispose();
       if (unsubscribeNew) unsubscribeNew();
       if (unsubscribeOpen) unsubscribeOpen();
       if (unsubscribeExternalOpen) unsubscribeExternalOpen();
