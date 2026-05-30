@@ -1,14 +1,13 @@
 # Validation
 
-Point sequence validation and persistence schema checking for the Shift font editor.
+Point sequence and clipboard payload validation for the Shift font editor.
 
 ## Architecture Invariants
 
 - **Architecture Invariant:** Every validator returns a `ValidationResult<T>` discriminated union -- callers branch on `valid` and access either `.value` (parsed payload) or `.errors` (structured `ValidationError[]`). Never throw from validators.
 - **Architecture Invariant:** Point sequences must start and end with `onCurve` points. At most 2 consecutive `offCurve` points are allowed (cubic bezier). 3+ consecutive off-curve points are always invalid.
 - **Architecture Invariant:** `Validate` methods come in pairs: a `ValidationResult`-returning variant for detailed errors (e.g. `canFormSegments`) and a boolean shortcut for hot paths (e.g. `canFormValidSegments`). The boolean variants must enforce identical rules without allocating error objects.
-- **Architecture Invariant:** Clipboard and persistence validation check serialized boundary payloads only. Editor/runtime glyph state validation belongs with the source-aware glyph model, not snapshot-era DTOs.
-- **Architecture Invariant:** Persistence schemas use Zod and are the single source of truth for on-disk format shape. The inferred types (e.g. `PersistedRoot`) are derived from schemas, never hand-written separately.
+- **Architecture Invariant:** Clipboard validation checks serialized boundary payloads only. Editor/runtime glyph state validation belongs with the source-aware glyph model, not snapshot-era DTOs.
 
 ## Codemap
 
@@ -17,7 +16,6 @@ validation/src/
   types.ts              -- ValidationResult, ValidationError, ValidationErrorCode, PointLike
   Validate.ts           -- point sequence rules: ordering, segment formation, anchor checks
   ValidateClipboard.ts  -- clipboard payload shape checks (contours, points, metadata)
-  persistence.ts        -- Zod schemas for persisted document state and text runs
   index.ts              -- public barrel export
 ```
 
@@ -29,9 +27,6 @@ validation/src/
 - `PointLike` -- minimal `{ pointType: PointType }` interface accepted by all point-sequence validators. Full `Point` objects, snapshots, and test stubs all satisfy it.
 - `Validate` -- namespace object with point predicates (`isOnCurve`, `isOffCurve`), pattern matchers (`matchesLinePattern`, `matchesQuadPattern`, `matchesCubicPattern`), sequence validators (`sequence`, `canFormSegments`), boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`), and result constructors (`ok`, `fail`, `error`).
 - `ValidateClipboard` -- namespace object with `isClipboardContent` (validates contour array shape) and `isClipboardPayload` (validates full `shift/glyph-data` envelope with format, version, metadata, content).
-- `PersistedRootSchema` -- top-level Zod schema for the entire persisted state file (registry, app modules, documents).
-- `PersistedDocumentSchema` -- Zod schema for a single document's persisted state (docId, updatedAt, modules map).
-- `TextRunModuleSchema` -- Zod schema for the text-run persistence module payload.
 
 ## How it works
 
@@ -47,10 +42,6 @@ Boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`) 
 
 `ValidateClipboard.isClipboardContent` validates the contour/point structure of clipboard data. `isClipboardPayload` checks the full envelope (format string `"shift/glyph-data"`, version number, metadata with timestamp). Used by `Clipboard` when parsing pasted content.
 
-### Persistence schemas
-
-Zod schemas in `persistence.ts` validate the shape of data read from disk. `PersistedRootSchema` is the top-level schema parsed in the persistence kernel on app startup. Types like `PersistedRoot` are inferred from the schemas via `z.infer`, keeping the schema and type in lockstep.
-
 ## Workflow recipes
 
 ### Add a new validation error code
@@ -59,17 +50,11 @@ Zod schemas in `persistence.ts` validate the shape of data read from disk. `Pers
 2. Use it in a validator via `Validate.error("YOUR_CODE", "message")`
 3. Add test cases covering the new failure path
 
-### Add a new persistence schema
-
-1. Define the Zod schema in `persistence.ts`
-2. Export the schema and inferred type from `index.ts`
-3. Add a test case in `persistence.test.ts` with valid and invalid payloads
-
 ## Gotchas
 
 - `Validate.sequence` accepts a single `onCurve` point as valid, but `Validate.canFormSegments` requires at least 2 points. Use the right one depending on whether you need drawable segments or just a well-formed sequence.
 - `ValidateClipboard.isClipboardPayload` hardcodes the format string `"shift/glyph-data"`. If the clipboard format changes, this must be updated in sync.
-- The `PointLike` interface only requires `pointType` -- validators do not check coordinates or IDs. Use clipboard or persistence validators at serialization boundaries when full structural validation is needed.
+- The `PointLike` interface only requires `pointType` -- validators do not check coordinates or IDs. Use clipboard validators at serialization boundaries when full structural validation is needed.
 
 ## Verification
 
@@ -85,6 +70,4 @@ cd packages/validation && npx tsc --noEmit
 
 - `Clipboard` -- uses `Validate.hasValidAnchor` for copy eligibility and `ValidateClipboard.isClipboardContent` for paste parsing
 - `Segments` / `Segment` -- uses `Validate.isOnCurve` / `Validate.isOffCurve` for segment decomposition
-- `Editor` -- parses `TextRunModuleSchema` from persisted state
-- `persistence/kernel` -- parses `PersistedRootSchema` on app startup
 - `PointType` from `@shift/types` -- the underlying union (`"onCurve" | "offCurve"`) that `PointLike` wraps

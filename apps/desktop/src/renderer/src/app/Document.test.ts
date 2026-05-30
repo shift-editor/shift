@@ -1,42 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
-import { Document, type DocumentPersistence } from "./Document";
-
-class InMemoryDocumentPersistence implements DocumentPersistence {
-  currentDocId: string | null = null;
-  currentPath: string | null = null;
-
-  closeDocument(): void {
-    this.currentDocId = null;
-    this.currentPath = null;
-  }
-
-  openDocument(filePath: string): void {
-    this.currentPath = filePath;
-    this.currentDocId = `file:${filePath}`;
-  }
-
-  openUntitledDocument(docId: string): void {
-    this.currentDocId = docId;
-    this.currentPath = null;
-  }
-
-  onDocumentPathChanged(filePath: string | null): void {
-    this.currentPath = filePath;
-    if (filePath) this.currentDocId ??= `file:${filePath}`;
-  }
-
-  flushNow(): void {}
-}
+import { Document } from "./Document";
 
 function testDocument() {
   const editor = new TestEditor();
-  const persistence = new InMemoryDocumentPersistence();
   let filePath: string | null = "stale.ufo";
   let dirty = true;
   const document = new Document(editor, {
-    persistence,
     createUntitledId: () => "untitled-1",
     setFilePath: (nextPath) => {
       filePath = nextPath;
@@ -49,7 +20,6 @@ function testDocument() {
   return {
     document,
     editor,
-    persistence,
     get filePath() {
       return filePath;
     },
@@ -71,7 +41,6 @@ describe("Document", () => {
     });
     expect(state.editor.font.loaded).toBe(true);
     expect(state.editor.font.defaultSource.name).toBe("Regular");
-    expect(state.persistence.currentDocId).toBe("untitled-1");
     expect(state.filePath).toBeNull();
     expect(state.dirty).toBe(false);
   });
@@ -90,7 +59,6 @@ describe("Document", () => {
       name: "A",
       unicode: 65,
     });
-    expect(state.persistence.currentPath).toBe(MUTATORSANS_DESIGNSPACE);
     expect(state.filePath).toBe(MUTATORSANS_DESIGNSPACE);
     expect(state.dirty).toBe(false);
   });
@@ -104,7 +72,6 @@ describe("Document", () => {
     expect(state.document.identity).toBeNull();
     expect(state.editor.font.loaded).toBe(false);
     expect(state.editor.font.sources).toEqual([]);
-    expect(state.persistence.currentDocId).toBeNull();
     expect(state.filePath).toBeNull();
   });
 

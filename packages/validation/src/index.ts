@@ -23,21 +23,5 @@
 
 export { Validate } from "./Validate";
 export { ValidateClipboard } from "./ValidateClipboard";
-export {
-  PersistedTextRunSchema,
-  TextRunModuleSchema,
-  PersistedModuleEnvelopeSchema,
-  PersistenceRegistrySchema,
-  PersistedDocumentSchema,
-  PersistedRootSchema,
-} from "./persistence";
 
 export type { ValidationResult, ValidationError, ValidationErrorCode, PointLike } from "./types";
-export type {
-  PersistedTextRun,
-  TextRunModule,
-  PersistedModuleEnvelope,
-  PersistenceRegistry,
-  PersistedDocument,
-  PersistedRoot,
-} from "./persistence";

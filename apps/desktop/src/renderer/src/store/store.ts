@@ -1,6 +1,5 @@
 import { Editor } from "@/lib/editor/Editor";
 import { Document } from "@/app/Document";
-import { documentPersistence } from "@/persistence";
 import { electronSystemClipboard } from "@/lib/clipboard";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { create } from "zustand";
@@ -72,7 +71,6 @@ const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
   };
 
   const document = new Document(editor, {
-    persistence: documentPersistence,
     setFilePath,
     clearDirty,
     notifySaveCompleted: (path) => window.electronAPI?.saveCompleted(path),

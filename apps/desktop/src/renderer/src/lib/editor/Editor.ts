@@ -65,13 +65,10 @@ import { TextRuns } from "@/lib/text/TextRuns";
 import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
 import { glyphTextItem, Positioner } from "@/lib/text/layout";
 import type { GlyphAnchor } from "@/lib/text/layout";
-import { TextRunModuleSchema } from "@shift/validation";
-import type { TextRunModule } from "@/persistence/types";
 
 import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
 import { EventEmitter } from "./lifecycle";
-import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
 import type { LineSegmentPoints } from "@shift/glyph-state";
 import type { ShiftBridge } from "@shift/bridge";
@@ -184,8 +181,6 @@ export class Editor {
 
   #events: EventEmitter;
 
-  #stateRegistry: StateRegistry;
-
   #textRuns: TextRuns;
 
   #glyphFinderOpen: WritableSignal<boolean>;
@@ -207,7 +202,7 @@ export class Editor {
     app: Map<string, unknown>;
     document: Map<string, unknown>;
   };
-  #toolStateVersion: WritableSignal<number>;
+
   /**
    * Initializes all subsystems, wires signal dependencies, and sets up
    * reactive effects that schedule canvas redraws when state changes.
@@ -227,12 +222,10 @@ export class Editor {
 
     this.#commandHistory = new CommandHistory(this.#glyph.edit.glyphSource);
 
-    this.#stateRegistry = new StateRegistry();
     this.#toolState = {
       app: new Map<string, unknown>(),
       document: new Map<string, unknown>(),
     };
-    this.#toolStateVersion = signal(0, { name: "editor.toolState.version" });
 
     this.#glyphFinderOpen = signal(false, { name: "editor.glyphFinder.open" });
 
@@ -262,31 +255,6 @@ export class Editor {
     this.#glyphDisplay = new GlyphDisplay(this.#text, this.#textRuns);
 
     this.#renderer = new Renderer(this);
-
-    const textRunPersistence = this.registerState<TextRunModule>({
-      id: "text-run",
-      scope: "document",
-      initial: () => ({ runsByGlyph: {} }),
-      serialize: () => ({ runsByGlyph: this.#textRuns.serialize() }),
-      deserialize: (json) => {
-        const payload = TextRunModuleSchema.parse(json);
-        this.#textRuns.deserialize(payload.runsByGlyph);
-        return payload;
-      },
-    });
-
-    // Bridge: when active run's buffer changes (or active switches), notify persistence.
-    effect(
-      () => {
-        const run = this.#textRuns.activeCell.value;
-        run.buffer.itemsCell.value;
-        run.buffer.cursorCell.value;
-        run.buffer.anchorCell.value;
-        run.buffer.originXCell.value;
-        textRunPersistence.set({ runsByGlyph: this.#textRuns.serialize() });
-      },
-      { name: "editor.textRun.persistence" },
-    );
 
     this.#events.on("fontLoaded", () => {
       this.#commandHistory.clear();
@@ -420,10 +388,6 @@ export class Editor {
 
   public withBatch<TResult>(label: string, fn: () => TResult): TResult {
     return this.#commandHistory.withBatch(label, fn);
-  }
-
-  public get toolStateVersionCell(): Signal<number> {
-    return this.#toolStateVersion;
   }
 
   public get debugOverlays(): DebugOverlays {
@@ -805,38 +769,12 @@ export class Editor {
     const stateKey = this.#toolStateKey(toolId, key);
     if (scopedState.get(stateKey) === value) return;
     scopedState.set(stateKey, value);
-    this.#bumpToolStateVersion();
   }
 
   public deleteToolState(scope: ToolStateScope, toolId: string, key: string): void {
     const scopedState = this.#getToolScopeMap(scope);
     const stateKey = this.#toolStateKey(toolId, key);
     if (!scopedState.delete(stateKey)) return;
-    this.#bumpToolStateVersion();
-  }
-
-  public exportToolState(scope: ToolStateScope): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    for (const [key, value] of this.#getToolScopeMap(scope).entries()) {
-      out[key] = value;
-    }
-    return out;
-  }
-
-  public hydrateToolState(scope: ToolStateScope, state: Record<string, unknown>): void {
-    const scopedState = this.#getToolScopeMap(scope);
-    scopedState.clear();
-    for (const [key, value] of Object.entries(state)) {
-      scopedState.set(key, value);
-    }
-    this.#bumpToolStateVersion();
-  }
-
-  public clearToolState(scope: ToolStateScope): void {
-    const scopedState = this.#getToolScopeMap(scope);
-    if (scopedState.size === 0) return;
-    scopedState.clear();
-    this.#bumpToolStateVersion();
   }
 
   public get glyph(): Signal<Glyph | null> {
@@ -849,16 +787,6 @@ export class Editor {
 
   /** Subscribe to a lifecycle event. Returns an unsubscribe function. */
   public on: EventEmitter["on"] = (...args) => this.#events.on(...args);
-
-  /** Register persistent state. Returns a reactive handle for reading/writing. */
-  public registerState<T>(options: ShiftStateOptions<T>): ShiftState<T> {
-    return this.#stateRegistry.register(options);
-  }
-
-  /** @internal Used by persistence kernel. */
-  get stateRegistry(): StateRegistry {
-    return this.#stateRegistry;
-  }
 
   public get commands(): CommandHistory {
     return this.#commandHistory;
@@ -1422,9 +1350,5 @@ export class Editor {
 
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
     return this.#toolState[scope];
-  }
-
-  #bumpToolStateVersion(): void {
-    this.#toolStateVersion.set(this.#toolStateVersion.peek() + 1);
   }
 }
