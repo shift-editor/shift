@@ -9,4 +9,5 @@ shift-backends = { path = "crates/shift-backends" }
 shift-bridge = { path = "crates/shift-bridge" }
 shift-edit = { path = "crates/shift-edit" }
 shift-ir = { path = "crates/shift-ir" }
+shift-document = { path = "crates/shift-document" }
 shift-store = { path = "crates/shift-store" }
