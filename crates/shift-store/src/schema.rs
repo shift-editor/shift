@@ -1,6 +1,25 @@
 use crate::StoreError;
 
 pub(crate) const SCHEMA_V1: &str = r#"
+CREATE TABLE IF NOT EXISTS font_info (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    family_name TEXT,
+    copyright TEXT,
+    trademark TEXT,
+    description TEXT,
+    sample_text TEXT,
+    designer TEXT,
+    designer_url TEXT,
+    manufacturer TEXT,
+    manufacturer_url TEXT,
+    license_description TEXT,
+    license_info_url TEXT,
+    vendor_id TEXT,
+    version_major INTEGER CHECK (version_major IS NULL OR version_major >= 0),
+    version_minor INTEGER CHECK (version_minor IS NULL OR version_minor >= 0),
+    units_per_em INTEGER NOT NULL CHECK (units_per_em > 0)
+);
+
 CREATE TABLE IF NOT EXISTS axes (
     id TEXT PRIMARY KEY,
     tag TEXT NOT NULL,
