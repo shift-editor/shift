@@ -1,11 +1,66 @@
 use shift_store::{
-    AxisId, ComponentId, GlyphId, LayerId, NewAxis, NewGlyph, NewGlyphComponent, NewGlyphLayer,
-    NewSource, ShiftStore, SourceId, SourceKind,
+    AxisId, ComponentId, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph, NewGlyphComponent,
+    NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceKind,
 };
 
 #[test]
 fn opens_memory_store() {
     ShiftStore::open_memory_for_test().expect("memory store should open");
+}
+
+#[test]
+fn writes_and_reads_font_info() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let font_info = open_sans_font_info();
+
+    store
+        .set_font_info(font_info.clone())
+        .expect("font info should be written");
+
+    let loaded = store
+        .get_font_info()
+        .expect("font info query should succeed")
+        .expect("font info should exist");
+
+    assert_eq!(loaded, font_info);
+}
+
+#[test]
+fn overwrites_font_info() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    store
+        .set_font_info(open_sans_font_info())
+        .expect("font info should be written");
+
+    store
+        .set_font_info(FontInfo {
+            family_name: Some("Shift Sans".to_string()),
+            units_per_em: 1000,
+            ..empty_font_info()
+        })
+        .expect("font info should be overwritten");
+
+    let loaded = store
+        .get_font_info()
+        .expect("font info query should succeed")
+        .expect("font info should exist");
+
+    assert_eq!(loaded.family_name.as_deref(), Some("Shift Sans"));
+    assert_eq!(loaded.units_per_em, 1000);
+    assert_eq!(loaded.copyright, None);
+}
+
+#[test]
+fn font_info_requires_positive_units_per_em() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let result = store.set_font_info(FontInfo {
+        units_per_em: 0,
+        ..empty_font_info()
+    });
+
+    assert!(result.is_err());
 }
 
 #[test]
@@ -213,6 +268,55 @@ fn create_glyph_a(store: &mut ShiftStore) -> GlyphId {
         .expect("glyph should be created");
 
     glyph_id
+}
+
+fn open_sans_font_info() -> FontInfo {
+    FontInfo {
+        family_name: Some("Open Sans".to_string()),
+        copyright: Some(
+            "Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)"
+                .to_string(),
+        ),
+        trademark: Some(
+            "Open Sans is a trademark of Google and may be registered in certain jurisdictions."
+                .to_string(),
+        ),
+        description: Some("Designed by Monotype design team.".to_string()),
+        sample_text: None,
+        designer: Some("Monotype Design Team".to_string()),
+        designer_url: Some("http://www.monotype.com/studio".to_string()),
+        manufacturer: Some("Monotype Imaging Inc.".to_string()),
+        manufacturer_url: Some("http://www.google.com/get/noto/".to_string()),
+        license_description: Some(
+            "This Font Software is licensed under the SIL Open Font License, Version 1.1."
+                .to_string(),
+        ),
+        license_info_url: Some("http://scripts.sil.org/OFL".to_string()),
+        vendor_id: None,
+        version_major: Some(3),
+        version_minor: Some(3),
+        units_per_em: 2048,
+    }
+}
+
+fn empty_font_info() -> FontInfo {
+    FontInfo {
+        family_name: None,
+        copyright: None,
+        trademark: None,
+        description: None,
+        sample_text: None,
+        designer: None,
+        designer_url: None,
+        manufacturer: None,
+        manufacturer_url: None,
+        license_description: None,
+        license_info_url: None,
+        vendor_id: None,
+        version_major: None,
+        version_minor: None,
+        units_per_em: 1000,
+    }
 }
 
 fn create_glyph_b(store: &mut ShiftStore) -> GlyphId {
