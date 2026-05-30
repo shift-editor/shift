@@ -1,5 +1,6 @@
 use shift_store::{
-    AxisId, GlyphId, NewAxis, NewGlyph, NewSource, ShiftStore, SourceId, SourceKind,
+    AxisId, ComponentId, GlyphId, LayerId, NewAxis, NewGlyph, NewGlyphComponent, NewGlyphLayer,
+    NewSource, ShiftStore, SourceId, SourceKind,
 };
 
 #[test]
@@ -96,6 +97,173 @@ fn source_location_requires_existing_source_and_axis() {
     );
 
     assert!(result.is_err());
+}
+
+#[test]
+fn creates_and_reads_glyph_layer() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let glyph_id = create_glyph_a(&mut store);
+    let source_id = create_regular_source(&mut store);
+    let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
+
+    let layer = store
+        .get_glyph_layer(&layer_id)
+        .expect("glyph layer query should succeed")
+        .expect("glyph layer should exist");
+
+    assert_eq!(layer.id, layer_id);
+    assert_eq!(layer.glyph_id, glyph_id);
+    assert_eq!(layer.source_id, source_id);
+    assert_eq!(layer.name.as_deref(), Some("Regular"));
+}
+
+#[test]
+fn glyph_layer_requires_existing_glyph_and_source() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let result = store.create_glyph_layer(NewGlyphLayer {
+        id: LayerId::new("layer-A-regular"),
+        glyph_id: GlyphId::new("glyph-missing"),
+        source_id: SourceId::new("source-missing"),
+        name: Some("Regular".to_string()),
+    });
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn lists_glyph_layers_for_glyph() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let glyph_id = create_glyph_a(&mut store);
+    let source_id = create_regular_source(&mut store);
+    let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
+
+    let layers = store
+        .list_glyph_layers_for_glyph(&glyph_id)
+        .expect("glyph layers query should succeed");
+
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].id, layer_id);
+    assert_eq!(layers[0].glyph_id, glyph_id);
+    assert_eq!(layers[0].source_id, source_id);
+}
+
+#[test]
+fn creates_and_reads_glyph_component() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let glyph_id = create_glyph_a(&mut store);
+    let base_glyph_id = create_glyph_b(&mut store);
+    let source_id = create_regular_source(&mut store);
+    let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
+    let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
+
+    let component = store
+        .get_glyph_component(&component_id)
+        .expect("glyph component query should succeed")
+        .expect("glyph component should exist");
+
+    assert_eq!(component.id, component_id);
+    assert_eq!(component.layer_id, layer_id);
+    assert_eq!(component.base_glyph_id, base_glyph_id);
+    assert_eq!(component.order_index, 0);
+}
+
+#[test]
+fn glyph_component_requires_existing_layer_and_base_glyph() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let result = store.create_glyph_component(NewGlyphComponent {
+        id: ComponentId::new("component-A-B"),
+        layer_id: LayerId::new("layer-missing"),
+        base_glyph_id: GlyphId::new("glyph-missing"),
+        order_index: 0,
+    });
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn lists_glyph_components_for_layer() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let glyph_id = create_glyph_a(&mut store);
+    let base_glyph_id = create_glyph_b(&mut store);
+    let source_id = create_regular_source(&mut store);
+    let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
+    let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
+
+    let components = store
+        .list_glyph_components_for_layer(&layer_id)
+        .expect("glyph components query should succeed");
+
+    assert_eq!(components.len(), 1);
+    assert_eq!(components[0].id, component_id);
+    assert_eq!(components[0].layer_id, layer_id);
+    assert_eq!(components[0].base_glyph_id, base_glyph_id);
+    assert_eq!(components[0].order_index, 0);
+}
+
+fn create_glyph_a(store: &mut ShiftStore) -> GlyphId {
+    let glyph_id = GlyphId::new("glyph-A");
+
+    store
+        .create_glyph(NewGlyph {
+            id: glyph_id.clone(),
+            name: Some("A".to_string()),
+        })
+        .expect("glyph should be created");
+
+    glyph_id
+}
+
+fn create_glyph_b(store: &mut ShiftStore) -> GlyphId {
+    let glyph_id = GlyphId::new("glyph-B");
+
+    store
+        .create_glyph(NewGlyph {
+            id: glyph_id.clone(),
+            name: Some("B".to_string()),
+        })
+        .expect("glyph should be created");
+
+    glyph_id
+}
+
+fn create_default_glyph_layer(
+    store: &mut ShiftStore,
+    glyph_id: &GlyphId,
+    source_id: &SourceId,
+) -> LayerId {
+    let layer_id = LayerId::new("layer-A-regular");
+
+    store
+        .create_glyph_layer(NewGlyphLayer {
+            id: layer_id.clone(),
+            glyph_id: glyph_id.clone(),
+            source_id: source_id.clone(),
+            name: Some("Regular".to_string()),
+        })
+        .expect("glyph layer should be created");
+
+    layer_id
+}
+
+fn create_default_component(
+    store: &mut ShiftStore,
+    layer_id: &LayerId,
+    base_glyph_id: &GlyphId,
+) -> ComponentId {
+    let component_id = ComponentId::new("component-A-B");
+
+    store
+        .create_glyph_component(NewGlyphComponent {
+            id: component_id.clone(),
+            layer_id: layer_id.clone(),
+            base_glyph_id: base_glyph_id.clone(),
+            order_index: 0,
+        })
+        .expect("glyph component should be created");
+
+    component_id
 }
 
 fn create_weight_axis(store: &mut ShiftStore) -> AxisId {

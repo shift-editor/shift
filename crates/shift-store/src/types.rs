@@ -1,4 +1,17 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ComponentId(String);
+
+impl ComponentId {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct AxisId(String);
 
 impl AxisId {

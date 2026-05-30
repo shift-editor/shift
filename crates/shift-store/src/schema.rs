@@ -30,6 +30,42 @@ CREATE TABLE IF NOT EXISTS glyphs (
 CREATE INDEX IF NOT EXISTS glyphs_name_idx
 ON glyphs(name);
 
+CREATE TABLE IF NOT EXISTS glyph_layers (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    name TEXT,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_layers_glyph_source_unique
+ON glyph_layers(glyph_id, source_id);
+
+CREATE INDEX IF NOT EXISTS glyph_layers_glyph_id_idx
+ON glyph_layers(glyph_id);
+
+CREATE INDEX IF NOT EXISTS glyph_layers_source_id_idx
+ON glyph_layers(source_id);
+
+CREATE TABLE IF NOT EXISTS glyph_components (
+    id TEXT PRIMARY KEY,
+    layer_id TEXT NOT NULL,
+    base_glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE,
+    FOREIGN KEY (base_glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_components_layer_order_unique
+ON glyph_components(layer_id, order_index);
+
+CREATE INDEX IF NOT EXISTS glyph_components_layer_id_idx
+ON glyph_components(layer_id);
+
+CREATE INDEX IF NOT EXISTS glyph_components_base_glyph_id_idx
+ON glyph_components(base_glyph_id);
+
 CREATE TABLE IF NOT EXISTS source_locations (
     source_id TEXT NOT NULL,
     axis_id TEXT NOT NULL,
