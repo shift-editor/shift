@@ -1720,6 +1720,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-document"
+version = "0.1.0"
+dependencies = [
+ "shift-ir",
+ "shift-store",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "shift-edit"
 version = "0.0.0"
 dependencies = [
