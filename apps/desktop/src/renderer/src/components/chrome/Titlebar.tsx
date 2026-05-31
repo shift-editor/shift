@@ -1,3 +1,4 @@
+import { shiftHost } from "@/host/shiftHost";
 import { useState } from "react";
 
 interface TrafficLightButtonProps {
@@ -68,15 +69,15 @@ export const Titlebar = () => {
   const [isHovered, setIsHovered] = useState(false);
 
   const handleClose = () => {
-    window.electronAPI?.closeWindow();
+    shiftHost.commands.run("window.close");
   };
 
   const handleMinimize = () => {
-    window.electronAPI?.minimizeWindow();
+    shiftHost.commands.run("window.minimise");
   };
 
   const handleMaximize = () => {
-    window.electronAPI?.maximizeWindow();
+    shiftHost.commands.run("window.maximise");
   };
 
   return (

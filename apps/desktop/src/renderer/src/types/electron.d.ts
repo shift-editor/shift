@@ -1,11 +1,10 @@
-import type { ElectronAPI } from "@shared/ipc/electronAPI";
+import type { ShiftHost } from "@shared/host/ShiftHost";
 
-export type { ThemeName, DebugOverlays, Debug } from "@shared/ipc/types";
-export type { ElectronAPI } from "@shared/ipc/electronAPI";
+export type { ShiftHost } from "@shared/host/ShiftHost";
 
 declare global {
   interface Window {
-    electronAPI?: ElectronAPI;
+    shiftHost?: ShiftHost;
   }
 }
 

@@ -1,27 +1,26 @@
 # Preload
 
-Electron preload script that exposes the native Rust bridge and typed IPC channels to the renderer through `contextBridge`.
+Electron preload script that exposes the native Rust bridge and Shift host API to the renderer through `contextBridge`.
 
 ## Architecture Invariants
 
 - **Architecture Invariant:** The native bridge is created through `@shift/bridge`, not by importing the raw `shift-bridge` NAPI package here. **WHY:** native loading and native-module typing stay in one package boundary.
 - **Architecture Invariant:** `buildContextBridgeApi` flattens prototype methods into a plain object before exposing them. **WHY:** `contextBridge` does not preserve class prototype semantics across the isolated context boundary.
-- **Architecture Invariant:** Two separate globals are exposed: `window.shiftBridge` for Rust bridge calls and `window.electronAPI` for IPC/system access. **WHY:** native bridge calls and Electron IPC have different lifecycles and failure modes.
-- **Architecture Invariant:** The `electronAPI` object must satisfy the `ElectronAPI` interface exactly. **WHY:** adding IPC channels should fail at typecheck time unless preload wiring is updated.
+- **Architecture Invariant:** Two separate globals are exposed: `window.shiftBridge` for Rust bridge calls and `window.shiftHost` for app shell calls. **WHY:** native bridge calls and Electron app-shell IPC have different lifecycles and failure modes.
 
 ## Codemap
 
 ```
 preload/
-  preload.ts -- creates BridgeApi, flattens it for contextBridge, wires IPC globals
+  preload.ts -- creates BridgeApi, flattens it for contextBridge, exposes shiftHost
 ```
 
 ## Key Types
 
 - `BridgeApi` -- native bridge API generated from Rust declarations and exposed by `@shift/bridge`.
-- `ElectronAPI` -- typed interface for IPC commands, event listeners, system utilities, and clipboard access.
-- `IpcEvents` -- main-to-renderer broadcast channel map.
-- `IpcCommands` -- renderer-to-main request/response channel map.
+- `ShiftHost` -- renderer-facing app shell API.
+- `RendererToMain` -- renderer-to-main request/response channel map.
+- `MainToRenderer` -- main-to-renderer broadcast channel map.
 
 ## How It Works
 
@@ -30,7 +29,7 @@ The preload runs once before the renderer loads:
 1. Calls `createBridge()` from `@shift/bridge`.
 2. Converts the bridge class instance into a plain method object with `buildContextBridgeApi`.
 3. Exposes that object as `window.shiftBridge`.
-4. Builds typed IPC helpers and exposes them as `window.electronAPI`.
+4. Builds the Shift host API and exposes it as `window.shiftHost`.
 
 ## Gotchas
 
@@ -49,5 +48,5 @@ pnpm --filter @shift/desktop lint
 
 - `@shift/bridge` -- runtime native bridge loader and bridge type exports.
 - `@shift/types` -- generated bridge DTO/API facade plus shared primitive DTO types.
-- `ElectronAPI` -- IPC/system API surface exposed as `window.electronAPI`.
-- `WindowManager` -- loads this preload script through `webPreferences.preload`.
+- `ShiftHost` -- app shell API surface exposed as `window.shiftHost`.
+- `Window` -- loads this preload script through `webPreferences.preload`.
