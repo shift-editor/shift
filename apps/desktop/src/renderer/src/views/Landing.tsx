@@ -14,15 +14,9 @@ export const Landing = () => {
     navigate("/home");
   };
 
-  const handleLoadFont = async () => {
-    const filePath = await window.electronAPI?.openFontDialog();
-    if (filePath) {
-      openFont(filePath);
-    }
-  };
+  const handleLoadFont = async () => {};
 
   const handleNewFont = () => {
-    fontDocument.createFont();
     navigate("/home");
   };
 

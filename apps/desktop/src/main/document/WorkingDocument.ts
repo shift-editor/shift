@@ -6,4 +6,6 @@
  */
 export class WorkingDocument {
   constructor() {}
+
+  newUnitled() {}
 }

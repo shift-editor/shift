@@ -91,36 +91,6 @@ impl From<FontExportResult> for NapiFontExportResult {
   }
 }
 
-#[napi(object)]
-pub struct NapiGlyphVariationDiagnosticSource {
-  #[napi(ts_type = "SourceId")]
-  pub id: String,
-  pub index: u32,
-  pub name: String,
-}
-
-#[napi(object)]
-pub struct NapiGlyphVariationDiagnostic {
-  #[napi(ts_type = "GlyphName")]
-  pub glyph_name: String,
-  pub code: String,
-  pub severity: String,
-  pub source: Option<NapiGlyphVariationDiagnosticSource>,
-  pub message: String,
-}
-
-#[napi(object)]
-pub struct NapiGlyphVariationReport {
-  #[napi(ts_type = "GlyphName")]
-  pub glyph_name: String,
-  pub status: String,
-  pub variation_data_available: bool,
-  pub master_count: u32,
-  pub compatible_master_count: u32,
-  pub skipped_master_count: u32,
-  pub diagnostics: Vec<NapiGlyphVariationDiagnostic>,
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DocumentVersion(u64);
 
