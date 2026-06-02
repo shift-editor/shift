@@ -663,6 +663,20 @@ export class Editor {
     return this.#glyph.edit.source.peek();
   }
 
+  /**
+   * Returns the authored glyph source currently targeted by edit commands.
+   *
+   * @remarks
+   * This is the source-backed edit target, not the interpolated preview
+   * geometry shown at the current design location. Clipboard, command, and test
+   * code should use this when reading or mutating authored point data.
+   *
+   * @returns null when no glyph source is open for editing.
+   */
+  public get activeGlyphSource(): GlyphSource | null {
+    return this.#glyph.edit.glyphSource.peek();
+  }
+
   /** Glyph instance resolved at the current design location. */
   public get glyphInstance(): GlyphInstance | null {
     return this.#glyph.preview.instance.peek();

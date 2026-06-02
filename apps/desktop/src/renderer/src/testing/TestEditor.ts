@@ -1,5 +1,5 @@
 /**
- * TestEditor — a real Editor with a mock NAPI backend for testing.
+ * TestEditor — a real Editor with a NAPI backend for testing.
  *
  * Usage:
  *   const editor = new TestEditor();
@@ -10,10 +10,8 @@
  */
 
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
-import type { PointId } from "@shift/types";
-import type { Point2D } from "@shift/geo";
-import type { Glyph, GlyphInstance, GlyphInstanceEdit } from "@/lib/model/Glyph";
 import { Editor } from "@/lib/editor/Editor";
+import type { GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { createBridge } from "@shift/bridge";
@@ -49,6 +47,18 @@ export class TestEditor extends Editor {
 
   get clipboardBuffer(): string {
     return this.#clipboard.buffer;
+  }
+
+  get pointCount(): number {
+    return this.activeGlyphSource?.allPoints.length ?? 0;
+  }
+
+  get currentEdit(): GlyphSource | null {
+    return this.activeGlyphSource;
+  }
+
+  get currentGlyphInstance(): GlyphInstance | null {
+    return this.glyphInstance;
   }
 
   startSession(handle: GlyphHandle = { name: "A", unicode: 65 }): this {
@@ -112,31 +122,5 @@ export class TestEditor extends Editor {
   selectTool(name: ToolName): this {
     this.setActiveTool(name);
     return this;
-  }
-
-  get currentGlyph(): Glyph | null {
-    return this.glyph.peek();
-  }
-
-  get currentGlyphInstance(): GlyphInstance | null {
-    return this.glyphInstance;
-  }
-
-  get currentEdit(): GlyphInstanceEdit | null {
-    return this.glyphInstance?.edit ?? null;
-  }
-
-  get pointCount(): number {
-    return this.currentGlyphInstance?.geometry.allPoints.length ?? 0;
-  }
-
-  getPointPosition(pointId: PointId): Point2D | null {
-    const geometry = this.currentGlyphInstance?.geometry;
-    if (!geometry) return null;
-
-    const point = geometry.point(pointId);
-    if (!point) return null;
-
-    return { x: point.x, y: point.y };
   }
 }
