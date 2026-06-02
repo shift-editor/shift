@@ -1747,6 +1747,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-font"
+version = "0.1.0"
+dependencies = [
+ "fontdrasil 0.4.0",
+ "indexmap",
+ "kurbo 0.13.0",
+ "linesweeper",
+ "serde",
+]
+
+[[package]]
 name = "shift-ir"
 version = "0.1.0"
 dependencies = [
