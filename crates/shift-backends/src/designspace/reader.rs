@@ -5,7 +5,7 @@ use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
-use shift_ir::{Axis, Font, Layer, LayerId, Location, Source};
+use shift_font::{Axis, Font, Layer, LayerId, Location, Source};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;

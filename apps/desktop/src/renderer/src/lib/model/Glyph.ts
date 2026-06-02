@@ -3,6 +3,7 @@ import type {
   ContourData,
   ContourId,
   GlyphName,
+  GlyphLayerRef,
   GlyphState,
   GlyphStructure,
   GlyphStructureChange,
@@ -118,30 +119,26 @@ class GlyphEditSession {
   }
 
   setXAdvance(width: number): void {
-    this.#ensureActiveSession();
-    this.#applyValueChange(this.#font.bridge.setXAdvance(width));
+    this.#applyValueChange(this.#font.bridge.setXAdvance(this.#glyphRef(), width));
   }
 
   applyPositionPatch(updates: SourcePositions): void {
     const patch = SourcePositionPatch.from(updates);
     if (patch.isEmpty) return;
-    this.#ensureActiveSession();
 
-    this.#font.bridge.applyPositionPatch(...patch.toBridgePayload());
+    this.#font.bridge.applyPositionPatch(this.#glyphRef(), ...patch.toBridgePayload());
     this.#applyPositionPatchLocally(patch.positions);
   }
 
   commitPositionPatch(updates: SourcePositions): void {
     const patch = SourcePositionPatch.from(updates);
     if (patch.isEmpty) return;
-    this.#ensureActiveSession();
 
-    this.#font.bridge.applyPositionPatch(...patch.toBridgePayload());
+    this.#font.bridge.applyPositionPatch(this.#glyphRef(), ...patch.toBridgePayload());
   }
 
   translateLayer(dx: number, dy: number): void {
-    this.#ensureActiveSession();
-    this.#applyValueChange(this.#font.bridge.translateLayer(dx, dy));
+    this.#applyValueChange(this.#font.bridge.translateLayer(this.#glyphRef(), dx, dy));
   }
 
   previewPositionPatch(updates: SourcePositions): void {
@@ -154,8 +151,7 @@ class GlyphEditSession {
   }
 
   addContour(): ContourId {
-    this.#ensureActiveSession();
-    const change = this.#font.bridge.addContour();
+    const change = this.#font.bridge.addContour(this.#glyphRef());
     this.#applyStructureChange(change);
     const contourId = change.changed.contourIds[0];
     if (!contourId) throw new Error("Bridge did not return a created contour ID");
@@ -163,9 +159,8 @@ class GlyphEditSession {
   }
 
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
-    this.#ensureActiveSession();
-
     const change = this.#font.bridge.addPoint(
+      this.#glyphRef(),
       contourId,
       edit.x,
       edit.y,
@@ -182,8 +177,8 @@ class GlyphEditSession {
   }
 
   insertPointBefore(beforePointId: PointId, edit: NewPoint): PointId {
-    this.#ensureActiveSession();
     const change = this.#font.bridge.insertPointBefore(
+      this.#glyphRef(),
       beforePointId,
       edit.x,
       edit.y,
@@ -197,18 +192,15 @@ class GlyphEditSession {
   }
 
   openContour(contourId: ContourId): void {
-    this.#ensureActiveSession();
-    this.#applyStructureChange(this.#font.bridge.openContour(contourId));
+    this.#applyStructureChange(this.#font.bridge.openContour(this.#glyphRef(), contourId));
   }
 
   closeContour(contourId: ContourId): void {
-    this.#ensureActiveSession();
-    this.#applyStructureChange(this.#font.bridge.closeContour(contourId));
+    this.#applyStructureChange(this.#font.bridge.closeContour(this.#glyphRef(), contourId));
   }
 
   reverseContour(contourId: ContourId): void {
-    this.#ensureActiveSession();
-    this.#applyStructureChange(this.#font.bridge.reverseContour(contourId));
+    this.#applyStructureChange(this.#font.bridge.reverseContour(this.#glyphRef(), contourId));
   }
 
   applyBooleanOp(
@@ -216,40 +208,31 @@ class GlyphEditSession {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    this.#ensureActiveSession();
-    this.#applyStructureChange(this.#font.bridge.applyBooleanOp(contourIdA, contourIdB, operation));
+    this.#applyStructureChange(
+      this.#font.bridge.applyBooleanOp(this.#glyphRef(), contourIdA, contourIdB, operation),
+    );
   }
 
   removePoints(pointIds: readonly PointId[]): void {
     if (pointIds.length === 0) return;
-    this.#ensureActiveSession();
-    this.#applyStructureChange(this.#font.bridge.removePoints([...pointIds]));
+    this.#applyStructureChange(this.#font.bridge.removePoints(this.#glyphRef(), [...pointIds]));
   }
 
   toggleSmooth(pointId: PointId): void {
-    this.#ensureActiveSession();
-    this.#applyStructureChange(this.#font.bridge.toggleSmooth(pointId));
+    this.#applyStructureChange(this.#font.bridge.toggleSmooth(this.#glyphRef(), pointId));
   }
 
   restore(state: GlyphState): void {
-    this.#ensureActiveSession();
-    this.#applyStructureChange(this.#font.bridge.restoreState(state.structure, state.values));
+    this.#applyStructureChange(
+      this.#font.bridge.restoreState(this.#glyphRef(), state.structure, state.values),
+    );
   }
 
-  #ensureActiveSession(): void {
-    const bridge = this.#font.bridge;
-    if (
-      bridge.getEditingGlyphName() === this.#handle.name &&
-      bridge.getEditingSourceId() === this.#source.id
-    ) {
-      return;
-    }
-
-    if (bridge.hasEditSession()) {
-      bridge.endEditSession();
-    }
-
-    bridge.startEditSession(this.#handle, this.#source.id);
+  #glyphRef(): GlyphLayerRef {
+    return {
+      glyphHandle: this.#handle,
+      layerId: this.#source.layerId,
+    };
   }
 
   #applyStructureChange(change: GlyphStructureChange): void {
@@ -269,8 +252,8 @@ class GlyphEditSession {
  *
  * A source is the authored glyph at a designspace location. `GlyphSource`
  * exposes the reactive geometry for that source and forwards mutations to the
- * active bridge edit session. Preview methods update the renderer-facing
- * reactive data; commit methods also produce bridge changes.
+ * bridge with an explicit glyph-layer reference. Preview methods update the
+ * renderer-facing reactive data; commit methods also produce bridge changes.
  */
 export class GlyphSource {
   readonly source: Source;
@@ -430,7 +413,7 @@ export class GlyphSource {
    *
    * Use this after the same patch has already been applied locally with
    * {@link previewPositionPatch}. This is the drag-end path: it updates the
-   * active Rust edit session without replacing TypeScript geometry.
+   * native glyph layer without replacing TypeScript geometry.
    *
    * @param updates - Final point and anchor positions to persist.
    */
@@ -717,7 +700,7 @@ export class GlyphSource {
    * Replace this source's editable state.
    *
    * Used by undo/redo and command rollback. This mutates the source model and
-   * syncs the active bridge edit session back to the restored state.
+   * syncs the native glyph layer back to the restored state.
    *
    * @param state - Source state snapshot to restore.
    */

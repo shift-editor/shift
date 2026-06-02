@@ -16,7 +16,7 @@
     "glyph-info:repl": "pnpm --filter @shift/glyph-info repl",
     "test": "turbo run test",
     "test:unit": "pnpm turbo run test --filter='!shift-bridge'",
-    "test:integration": "pnpm --filter shift-bridge run test && cargo test -p shift-edit --test font_loading --test round_trip",
+    "test:integration": "pnpm --filter shift-bridge run test && cargo test --workspace",
     "test:lint": "pnpm --filter @shift/desktop run lint:check",
     "test:typecheck": "pnpm typecheck",
     "test:perf": "pnpm --filter @shift/desktop exec vitest bench --run",

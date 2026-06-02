@@ -9,9 +9,8 @@ license = "MIT"
 crate-type = ["cdylib"]
 
 [dependencies]
-shift-edit = { workspace = true }
+shift-font = { workspace = true }
 shift-wire = { workspace = true, features = ["napi"] }
-shift-ir = { workspace = true }
 shift-backends = { workspace = true }
 
 napi = { version = "=3.8.6", default-features = false, features = ["napi6"] }

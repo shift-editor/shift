@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
-use shift_ir::{Font, Glyph, GlyphLayer, PointType};
+use shift_font::{Font, Glyph, GlyphLayer, PointType};
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

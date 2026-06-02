@@ -1,4 +1,4 @@
-use shift_ir::{AnchorId, ContourId, PointId};
+use crate::{AnchorId, ContourId, PointId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {

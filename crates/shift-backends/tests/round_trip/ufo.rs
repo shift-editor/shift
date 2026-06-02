@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
-use shift_ir::{Anchor, Font, Glyph, GlyphLayer};
+use shift_font::{Anchor, Font, Glyph, GlyphLayer};
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -44,7 +44,7 @@ fn main_layer(glyph: &Glyph) -> &GlyphLayer {
         .expect("glyph should have at least one layer")
 }
 
-fn sorted_contours(layer: &GlyphLayer) -> Vec<&shift_ir::Contour> {
+fn sorted_contours(layer: &GlyphLayer) -> Vec<&shift_font::Contour> {
     let mut contours: Vec<_> = layer.contours_iter().collect();
     contours.sort_by(|a, b| {
         let a_first = a.points().first().map(|point| {

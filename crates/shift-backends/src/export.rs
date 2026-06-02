@@ -144,7 +144,7 @@ fn path_to_str<'a>(path: &'a Path, label: &'static str) -> Result<&'a str, Expor
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_ir::{Contour, Font, Glyph, GlyphLayer, PointType};
+    use shift_font::{Contour, Font, Glyph, GlyphLayer, PointType};
     use skrifa::{FontRef, MetadataProvider};
 
     fn simple_font() -> Font {

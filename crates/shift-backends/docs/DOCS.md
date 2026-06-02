@@ -4,7 +4,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 ## Architecture Invariants
 
-**Architecture Invariant:** All backends convert to/from `Font` (the shift-ir representation), never exposing format-specific types (norad, glyphs-reader) to callers. WHY: The rest of the editor operates on a single IR; leaking format types would couple the editor to specific file formats.
+**Architecture Invariant:** All backends convert to/from `Font` (the shift-font representation), never exposing format-specific types (norad, glyphs-reader) to callers. WHY: The rest of the editor operates on a single IR; leaking format types would couple the editor to specific file formats.
 
 **Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
 
@@ -26,11 +26,11 @@ src/
   traits.rs        -- FontReader, FontWriter, FontBackend trait definitions
   ufo/
     mod.rs         -- UfoBackend convenience struct combining reader+writer; round-trip tests
-    reader.rs      -- UfoReader: norad::Font -> shift_ir::Font
-    writer.rs      -- UfoWriter: shift_ir::Font -> norad::Font (with coordinate rounding)
+    reader.rs      -- UfoReader: norad::Font -> shift_font::Font
+    writer.rs      -- UfoWriter: shift_font::Font -> norad::Font (with coordinate rounding)
   glyphs/
     mod.rs         -- GlyphsReader re-export; fixture-based integration tests
-    reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_ir::Font (read-only)
+    reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_font::Font (read-only)
 ```
 
 ## Key Types
@@ -99,7 +99,7 @@ cargo test -p shift-backends loads_glyphs_package
 
 ## Related
 
-- `Font`, `Glyph`, `GlyphLayer`, `Contour`, `PointType` -- IR types this crate converts to/from (shift-ir)
+- `Font`, `Glyph`, `GlyphLayer`, `Contour`, `PointType` -- IR types this crate converts to/from (shift-font)
 - `FontLoader`, `FontAdaptor` -- shift-core dispatcher that selects backends by file extension
 - `KerningData`, `KerningSide`, `KerningPair` -- IR kerning types that backends populate
 - `FeatureData` -- IR feature storage, populated from `features.fea` or Glyphs feature snippets

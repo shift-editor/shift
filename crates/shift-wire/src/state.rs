@@ -2,12 +2,12 @@
 
 use std::str::FromStr;
 
-use crate::error::{CoreError, CoreResult};
-use shift_ir::{
+use crate::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
+use shift_font::{
     Anchor as IrAnchor, AnchorId, Component as IrComponent, ComponentId, Contour as IrContour,
-    ContourId, DecomposedTransform as IrTransform, GlyphLayer, PointId, PointType as IrPointType,
+    ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphLayer, PointId,
+    PointType as IrPointType,
 };
-use shift_wire::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
 
 pub fn layer_from_state(
     structure: &GlyphStructure,
@@ -177,8 +177,8 @@ fn restore_components(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_ir::{Anchor, Component, DecomposedTransform};
-    use shift_wire::values_from_layer;
+    use crate::values_from_layer;
+    use shift_font::{Anchor, Component, DecomposedTransform};
 
     fn sample_layer() -> GlyphLayer {
         let mut layer = GlyphLayer::with_width(500.0);

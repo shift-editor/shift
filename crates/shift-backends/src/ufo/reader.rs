@@ -1,7 +1,7 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
-use shift_ir::{
+use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, Guideline, KerningData,
     KerningPair, KerningSide, Layer, LibData, LibValue, PointType, Transform,
 };
@@ -100,7 +100,7 @@ impl UfoReader {
 
     fn convert_glyph_layer(
         norad_glyph: &norad::Glyph,
-        layer_id: shift_ir::LayerId,
+        layer_id: shift_font::LayerId,
     ) -> (Glyph, GlyphLayer) {
         let mut glyph_layer = GlyphLayer::with_width(norad_glyph.width);
         if norad_glyph.height != 0.0 {

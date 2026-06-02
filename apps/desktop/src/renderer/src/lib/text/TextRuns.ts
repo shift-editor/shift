@@ -2,7 +2,7 @@
  * TextRuns — per-glyph store of TextRun instances.
  *
  * One TextRun per glyph name (each glyph carries its own typing context
- * across edit sessions). Plus a default-active run keyed by `__default__`
+ * across glyph editing changes). Plus a default-active run keyed by `__default__`
  * for cases where no specific glyph owns the run yet.
  *
  * Active run is selected via `switchTo(glyphName | null)`, which returns

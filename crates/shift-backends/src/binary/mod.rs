@@ -2,7 +2,7 @@ mod reader;
 
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::font_loader::FontAdaptor;
-use shift_ir::Font;
+use shift_font::Font;
 
 pub struct BytesFontAdaptor;
 

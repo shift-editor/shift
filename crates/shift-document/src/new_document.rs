@@ -9,7 +9,7 @@ impl Default for NewDocument {
     fn default() -> Self {
         Self {
             family_name: DEFAULT_FAMILY_NAME.to_string(),
-            units_per_em: shift_ir::FontMetrics::default().units_per_em as i64,
+            units_per_em: shift_font::FontMetrics::default().units_per_em as i64,
         }
     }
 }

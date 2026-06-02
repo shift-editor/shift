@@ -20,7 +20,6 @@ export function commandSourceFixture(): CommandSourceFixture {
 
   const handle = { name: "A", unicode: 65 };
   const source = font.defaultSource;
-  bridge.startEditSession(handle, source.id);
 
   const glyphSource = font.glyphSource(handle, source);
   if (!glyphSource) throw new Error("Expected editable glyph source");

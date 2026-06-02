@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::{DocumentError, NewDocument};
 
 pub struct ShiftDocument {
-    font: shift_ir::Font,
+    font: shift_font::Font,
     store: shift_store::ShiftStore,
 }
 
@@ -16,16 +16,16 @@ impl ShiftDocument {
         store.set_font_info(new_document.font_info())?;
 
         Ok(Self {
-            font: shift_ir::Font::new(),
+            font: shift_font::Font::new(),
             store,
         })
     }
 
-    pub fn from_parts(font: shift_ir::Font, store: shift_store::ShiftStore) -> Self {
+    pub fn from_parts(font: shift_font::Font, store: shift_store::ShiftStore) -> Self {
         Self { font, store }
     }
 
-    pub fn font(&self) -> &shift_ir::Font {
+    pub fn font(&self) -> &shift_font::Font {
         &self.font
     }
 
