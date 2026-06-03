@@ -5,6 +5,8 @@ import { extractFirstFontPath, isSupportedFontPath, normalizeFontPath } from "./
 describe("openFontPath", () => {
   describe("isSupportedFontPath", () => {
     it("accepts supported font extensions", () => {
+      expect(isSupportedFontPath("/tmp/font.shift")).toBe(true);
+      expect(isSupportedFontPath("/tmp/font.SHIFT")).toBe(true);
       expect(isSupportedFontPath("/tmp/font.ufo")).toBe(true);
       expect(isSupportedFontPath("/tmp/font.ttf")).toBe(true);
       expect(isSupportedFontPath("/tmp/font.otf")).toBe(true);

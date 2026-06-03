@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Glyph, GlyphGeometry } from "@/lib/model/Glyph";
-import { TestEditor, MUTATORSANS_DESIGNSPACE } from "@/testing";
+import { TestEditor, MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
 import { emptyAxisLocation, withAxisValue } from "@/lib/variation/location";
 import type { AxisLocation } from "@/types/variation";
 
@@ -24,7 +24,7 @@ describe("Editor.open — variation-aware glyph reads", () => {
     // master's stored coordinates, so the canvas didn't
     // match what the user clicked when the slider was off-default.
     const editor = new TestEditor();
-    editor.loadFont(MUTATORSANS_DESIGNSPACE);
+    editor.loadFont(MUTATORSANS_DESIGNSPACE, testStorePath("default"));
 
     const atDefault = editor.getGlyph({ name: "A", unicode: 65 })!;
     const defaultGeometry = atDefault.geometryAt(editor.designLocation);
@@ -45,7 +45,7 @@ describe("Editor.open — variation-aware glyph reads", () => {
     // to the grid), then re-open the same glyph. The re-opened glyph should
     // carry the edit, not revert to the unedited geometry.
     const editor = new TestEditor();
-    editor.loadFont(MUTATORSANS_DESIGNSPACE);
+    editor.loadFont(MUTATORSANS_DESIGNSPACE, testStorePath("persist"));
 
     const opened = editor.getGlyph({ name: "A", unicode: 65 })!;
     const point = opened.contours[0].points[0];
@@ -68,7 +68,7 @@ describe("Editor.open — variation-aware glyph reads", () => {
     // glyph closes, the registry's Glyph must reflect the edits the user
     // just made. Otherwise the grid shows the pre-edit outline.
     const editor = new TestEditor();
-    editor.loadFont(MUTATORSANS_DESIGNSPACE);
+    editor.loadFont(MUTATORSANS_DESIGNSPACE, testStorePath("registry"));
 
     const opened = editor.getGlyph({ name: "A", unicode: 65 })!;
     const point = opened.contours[0].points[0];

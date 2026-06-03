@@ -16,10 +16,11 @@ export type GlyphName = string;
 export type Unicode = number;
 
 export interface BridgeApi {
-  createFont(): void
-  loadFont(path: string): void
-  saveFont(path: string): Promise<number>
-  exportFont(request: FontExportRequest): Promise<FontExportResult>
+  createWorkspace(sourcePath: string, storePath: string, options?: NewWorkspace | undefined | null): void
+  openWorkspace(path: string, storePath: string): void
+  saveWorkspace(): number
+  saveWorkspaceAs(path: string): number
+  exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
   getGlyphCount(): number
@@ -94,6 +95,11 @@ export interface GlyphVariationReport {
   compatibleMasterCount: number
   skippedMasterCount: number
   diagnostics: Array<GlyphVariationDiagnostic>
+}
+
+export interface NewWorkspace {
+  familyName?: string
+  unitsPerEm?: number
 }
 export interface AnchorData {
   id: AnchorId

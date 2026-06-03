@@ -7,7 +7,7 @@ import {
   withAxisValue,
 } from "@/lib/variation/location";
 import type { AxisLocation } from "@/types/variation";
-import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
+import { MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
 import { Font } from "./Font";
 import type { PointId } from "@shift/types";
 import type { Glyph, GlyphSource } from "./Glyph";
@@ -21,7 +21,7 @@ function editGlyph(): {
 } {
   const bridge = createBridge();
   const font = new Font(bridge);
-  font.load(MUTATORSANS_DESIGNSPACE);
+  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("glyph-edit"));
 
   const handle = { name: "A" };
   const source = font.defaultSource;
@@ -79,7 +79,7 @@ function sourcePosition(layer: GlyphSource, pointId: PointId): { x: number; y: n
 
 function loadMutatorSans(): Font {
   const font = new Font(createBridge());
-  font.load(MUTATORSANS_DESIGNSPACE);
+  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("glyph-load"));
 
   return font;
 }

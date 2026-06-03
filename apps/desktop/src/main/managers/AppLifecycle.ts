@@ -212,7 +212,7 @@ export class AppLifecycle {
         filters: [
           {
             name: "Fonts",
-            extensions: ["ttf", "otf", "ufo", "glyphs", "glyphspackage", "designspace"],
+            extensions: ["shift", "ttf", "otf", "ufo", "glyphs", "glyphspackage", "designspace"],
           },
         ],
       });

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createRequire } from "module";
 import { existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -9,9 +9,16 @@ const { Bridge } = require("../index.js");
 
 describe("Bridge", () => {
   let bridge;
+  let tempDir;
 
   beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-"));
     bridge = new Bridge();
+    bridge.createWorkspace(join(tempDir, "TestFont.shift"), join(tempDir, "working.sqlite"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   function defaultSourceId() {
@@ -25,7 +32,7 @@ describe("Bridge", () => {
     };
   }
 
-  it("starts with default committed font metadata", () => {
+  it("creates a workspace with default committed font metadata", () => {
     expect(bridge.getMetadata()).toMatchObject({
       familyName: "Untitled Font",
       styleName: "Regular",
@@ -53,46 +60,40 @@ describe("Bridge", () => {
     ]);
   });
 
-  it("saves direct glyph layer edits", async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-save-"));
-    try {
-      const glyphRef = defaultLayerRef();
-      const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
-      bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
+  it("saves direct glyph layer edits to a shift source package target", () => {
+    const glyphRef = defaultLayerRef();
+    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
+    bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
 
-      const outputPath = join(tempDir, "output.ufo");
-      const savedVersion = await bridge.saveFont(outputPath);
+    const outputPath = join(tempDir, "output.shift");
+    const savedVersion = bridge.saveWorkspaceAs(outputPath);
 
-      expect(savedVersion).toBe(2);
-      expect(bridge.getPersistedVersion()).toBe(2);
-      expect(bridge.isDirty()).toBe(false);
-      expect(existsSync(outputPath)).toBe(true);
-
-      const reloaded = new Bridge();
-      reloaded.loadFont(outputPath);
-      expect(reloaded.getGlyphs()).toEqual([
-        { name: "A", unicodes: [65], componentBaseGlyphNames: [] },
-      ]);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
+    expect(savedVersion).toBe(2);
+    expect(bridge.getPersistedVersion()).toBe(2);
+    expect(bridge.isDirty()).toBe(false);
+    expect(existsSync(outputPath)).toBe(true);
   });
 
-  it("records the persisted version when an async save completes", async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-async-save-"));
-    try {
-      bridge.addContour(defaultLayerRef());
+  it("records the persisted version when saving the current workspace", () => {
+    bridge.addContour(defaultLayerRef());
 
-      const outputPath = join(tempDir, "async-output.ufo");
-      const savedVersion = await bridge.saveFont(outputPath);
+    const savedVersion = bridge.saveWorkspace();
 
-      expect(savedVersion).toBe(1);
-      expect(bridge.getPersistedVersion()).toBe(1);
-      expect(bridge.isDirty()).toBe(false);
-      expect(existsSync(outputPath)).toBe(true);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
+    expect(savedVersion).toBe(1);
+    expect(bridge.getPersistedVersion()).toBe(1);
+    expect(bridge.isDirty()).toBe(false);
+  });
+
+  it("exports the live workspace font through an explicit export path", async () => {
+    const glyphRef = defaultLayerRef();
+    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
+    bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
+
+    const outputPath = join(tempDir, "output.ttf");
+    const result = await bridge.exportWorkspace({ path: outputPath, format: "ttf" });
+
+    expect(result).toMatchObject({ path: outputPath, format: "ttf" });
+    expect(existsSync(outputPath)).toBe(true);
   });
 
   it("adds a point to a contour and returns structure, values, and changed ids", () => {

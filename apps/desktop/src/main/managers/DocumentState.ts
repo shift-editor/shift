@@ -45,7 +45,7 @@ export class DocumentState {
 
   private isWritableFormat(filePath: string | null): boolean {
     if (!filePath) return false;
-    return filePath.endsWith(".designspace") || filePath.endsWith(".ufo");
+    return filePath.endsWith(".shift");
   }
 
   async save(saveAs = false): Promise<boolean> {
@@ -56,18 +56,15 @@ export class DocumentState {
     let savePath = this.filePath;
 
     if (!savePath || saveAs || !this.isWritableFormat(savePath)) {
-      let defaultPath = "Untitled.designspace";
+      let defaultPath = "Untitled.shift";
       if (this.filePath) {
         const baseName = path.basename(this.filePath, path.extname(this.filePath));
-        defaultPath = `${baseName}.designspace`;
+        defaultPath = `${baseName}.shift`;
       }
 
       const result = await dialog.showSaveDialog({
         defaultPath,
-        filters: [
-          { name: "Designspace Files", extensions: ["designspace"] },
-          { name: "UFO Files", extensions: ["ufo"] },
-        ],
+        filters: [{ name: "Shift Source Packages", extensions: ["shift"] }],
       });
 
       if (result.canceled || !result.filePath) {
@@ -75,8 +72,8 @@ export class DocumentState {
       }
 
       savePath = result.filePath;
-      if (!savePath.endsWith(".designspace") && !savePath.endsWith(".ufo")) {
-        savePath += ".designspace";
+      if (!savePath.endsWith(".shift")) {
+        savePath += ".shift";
       }
     }
 

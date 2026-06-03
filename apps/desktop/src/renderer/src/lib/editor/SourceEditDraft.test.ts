@@ -5,13 +5,13 @@ import { signal } from "@/lib/signals/signal";
 import { CommandHistory } from "@/lib/commands/core/CommandHistory";
 import { Font } from "@/lib/model/Font";
 import type { GlyphSource } from "@/lib/model/Glyph";
-import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
+import { MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
 import { SourceEditDraft } from "./SourceEditDraft";
 
 function editableSource(): GlyphSource {
   const bridge = createBridge();
   const font = new Font(bridge);
-  font.load(MUTATORSANS_DESIGNSPACE);
+  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("source-edit-draft"));
 
   const handle = { name: "A", unicode: 65 };
   const source = font.defaultSource;

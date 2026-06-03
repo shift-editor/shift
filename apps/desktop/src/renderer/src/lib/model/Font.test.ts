@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createBridge } from "@shift/bridge";
-import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
+import { MUTATORSANS_DESIGNSPACE, testSourcePath, testStorePath } from "@/testing";
 import {
   axisLocationFromLocation,
   axisValue,
@@ -14,7 +14,7 @@ import { Font } from "./Font";
 
 function loadFont(): Font {
   const font = new Font(createBridge());
-  font.load(MUTATORSANS_DESIGNSPACE);
+  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("load"));
   return font;
 }
 
@@ -62,7 +62,8 @@ describe("Font", () => {
   it("creates a fresh loaded font with a default source", () => {
     const font = new Font(createBridge());
 
-    font.create();
+    const sourcePath = testSourcePath("create");
+    font.create(sourcePath, `${sourcePath}/working.sqlite`);
 
     expect(font.loaded).toBe(true);
     expect(font.sources).toHaveLength(1);

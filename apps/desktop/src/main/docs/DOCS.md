@@ -9,7 +9,7 @@ Electron main process: application lifecycle, window management, menus, document
 - **Architecture Invariant:** IPC channels are type-safe. All `ipcMain.handle` calls use the typed `ipc.handle` wrapper from `shared/ipc/main`, and all `webContents.send` calls use the typed `ipc.send` wrapper. Channel names and payload types are defined in `IpcCommands` (renderer-to-main) and `IpcEvents` (main-to-renderer).
 - **Architecture Invariant: CRITICAL:** `main.ts` enforces a single-instance lock via `app.requestSingleInstanceLock()`. The second instance forwards its argv to the first instance via the `second-instance` event and then quits. Removing this breaks file-association double-click on all platforms.
 - **Architecture Invariant: CRITICAL:** The `before-quit` handler in `AppLifecycle` must call `event.preventDefault()` before the async `confirmClose` check. If the guard is removed, the app quits before the save dialog can appear.
-- **Architecture Invariant:** `.designspace` is the default writable format, with `.ufo` still accepted for direct UFO saves (`DocumentState.isWritableFormat`). Saving other imported formats triggers Save As. Autosave skips non-writable files silently.
+- **Architecture Invariant:** `.shift` is the only direct writable source format (`DocumentState.isWritableFormat`). Imported font formats can be opened, but saving them triggers Save As to a `.shift` package. Export is a separate workflow.
 
 ## Codemap
 
@@ -33,7 +33,7 @@ src/main/
 - `DebugOverlays` -- per-overlay booleans (`tightBounds`, `hitRadii`, `segmentBounds`, `glyphBbox`)
 - `IpcCommands` -- renderer-to-main request/response channels (invoke/handle)
 - `IpcEvents` -- main-to-renderer broadcast channels (send/on)
-- `SUPPORTED_FONT_EXTENSIONS` -- the set of file extensions accepted for opening (`.ufo`, `.ttf`, `.otf`, `.glyphs`, `.glyphspackage`, `.designspace`)
+- `SUPPORTED_FONT_EXTENSIONS` -- the set of file extensions accepted for opening (`.shift`, `.ufo`, `.ttf`, `.otf`, `.glyphs`, `.glyphspackage`, `.designspace`)
 
 ## How it works
 
@@ -55,7 +55,7 @@ Files arrive via three paths: CLI launch args (`handleLaunchArgs`), second-insta
 
 ### Save and autosave
 
-`DocumentState.save` checks `isWritableFormat` -- `.designspace` and `.ufo` can be saved in-place. Other imported formats and Save As show the save dialog with Designspace as the default filter. On save, the main process sends `menu:save-font` to the renderer, which does the actual write and calls back `document:saveCompleted`. Autosave runs on a 30-second interval (`AUTOSAVE_INTERVAL_MS`) and only fires if dirty and the file is writable.
+`DocumentState.save` checks `isWritableFormat` -- only `.shift` packages can be saved in-place. Imported formats and Save As show the save dialog with Shift Source Package as the default filter. On save, the main process sends `menu:save-font` to the renderer, which writes through the Rust workspace and calls back `document:saveCompleted`. Autosave runs on a 30-second interval (`AUTOSAVE_INTERVAL_MS`) and only fires if dirty and the file is writable.
 
 ### Menu
 
@@ -104,7 +104,7 @@ IPC handlers are split across managers. `WindowManager` registers window-control
 - `npx vitest run apps/desktop/src/main/managers/openFontPath.test.ts` -- openFontPath unit tests
 - Manual: launch with a font path argument, verify it opens
 - Manual: edit a document, Cmd+Q, verify save dialog appears
-- Manual: open a .ttf, Cmd+S, verify Save As dialog defaults to .designspace
+- Manual: open a .ttf, Cmd+S, verify Save As dialog defaults to .shift
 
 ## Related
 
