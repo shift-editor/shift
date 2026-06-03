@@ -157,6 +157,7 @@ export class GestureDetector {
       return [{ type: "pointerMove", point: coords.scene, coords }];
     }
 
+    // TODO: make this use Vec library
     const distance = Math.hypot(
       screenPoint.x - this.downScreenPoint.x,
       screenPoint.y - this.downScreenPoint.y,
@@ -186,10 +187,12 @@ export class GestureDetector {
           screenPoint,
           origin: this.downPoint,
           screenOrigin: this.downScreenPoint,
+          // TODO: Vec
           delta: {
             x: coords.scene.x - this.downPoint.x,
             y: coords.scene.y - this.downPoint.y,
           },
+          // TODO: Vec
           screenDelta: {
             x: screenPoint.x - this.downScreenPoint.x,
             y: screenPoint.y - this.downScreenPoint.y,
@@ -228,7 +231,8 @@ export class GestureDetector {
       const now = Date.now();
       const timeSinceLastClick = now - this.lastClickTime;
       const distFromLastClick = this.lastClickPoint
-        ? Math.hypot(point.x - this.lastClickPoint.x, point.y - this.lastClickPoint.y)
+        ? //TODO: VEC
+          Math.hypot(point.x - this.lastClickPoint.x, point.y - this.lastClickPoint.y)
         : Infinity;
 
       if (

@@ -14,9 +14,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cargo watch \
-  -w "crates/shift-edit/src/" \
+  -w "crates/shift-font/src/" \
   -w "crates/shift-bridge/src/" \
-  -w "crates/shift-edit/Cargo.toml" \
+  -w "crates/shift-font/Cargo.toml" \
   -w "crates/shift-bridge/Cargo.toml" \
   -w "Cargo.toml" \
   -s "pnpm run build:native:debug && touch apps/desktop/src/main/main.ts"

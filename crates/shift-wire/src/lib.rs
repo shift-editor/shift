@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use shift_ir::{
+use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, Component as IrComponent, ComponentId,
     Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphLayer,
@@ -15,6 +15,8 @@ use shift_ir::{
 };
 
 pub mod bridges;
+pub mod interpolation;
+pub mod state;
 
 /// Flat numeric glyph values ordered to match `GlyphStructure`.
 ///

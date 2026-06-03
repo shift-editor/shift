@@ -18,6 +18,13 @@ describe("Bridge", () => {
     return bridge.getSources()[0].id;
   }
 
+  function defaultLayerRef(name = "A", unicode = 65) {
+    return {
+      glyphHandle: { name, unicode },
+      layerId: bridge.getSources()[0].layerId,
+    };
+  }
+
   it("starts with default committed font metadata", () => {
     expect(bridge.getMetadata()).toMatchObject({
       familyName: "Untitled Font",
@@ -38,33 +45,25 @@ describe("Bridge", () => {
     expect(bridge.getGlyphs()).toEqual([]);
   });
 
-  it("commits a new glyph when the edit session ends", () => {
-    bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-    expect(bridge.hasEditSession()).toBe(true);
-    expect(bridge.getEditingGlyphName()).toBe("A");
-    expect(bridge.getEditingSourceId()).toBe(defaultSourceId());
-    expect(bridge.getEditingUnicode()).toBe(65);
+  it("creates a new glyph through an explicit layer edit", () => {
+    bridge.setXAdvance(defaultLayerRef(), 500);
 
-    bridge.endEditSession();
-
-    expect(bridge.hasEditSession()).toBe(false);
     expect(bridge.getGlyphs()).toEqual([
       { name: "A", unicodes: [65], componentBaseGlyphNames: [] },
     ]);
   });
 
-  it("saves the active edit snapshot without ending the session", async () => {
+  it("saves direct glyph layer edits", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-save-"));
     try {
-      bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-      const contourId = bridge.addContour().changed.contourIds[0];
-      bridge.addPoint(contourId, 10, 20, "onCurve", false);
+      const glyphRef = defaultLayerRef();
+      const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
+      bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
 
       const outputPath = join(tempDir, "output.ufo");
       const savedVersion = await bridge.saveFont(outputPath);
 
       expect(savedVersion).toBe(2);
-      expect(bridge.hasEditSession()).toBe(true);
       expect(bridge.getPersistedVersion()).toBe(2);
       expect(bridge.isDirty()).toBe(false);
       expect(existsSync(outputPath)).toBe(true);
@@ -82,8 +81,7 @@ describe("Bridge", () => {
   it("records the persisted version when an async save completes", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-async-save-"));
     try {
-      bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-      bridge.addContour();
+      bridge.addContour(defaultLayerRef());
 
       const outputPath = join(tempDir, "async-output.ufo");
       const savedVersion = await bridge.saveFont(outputPath);
@@ -97,21 +95,12 @@ describe("Bridge", () => {
     }
   });
 
-  it("rejects starting a second active edit session", () => {
-    bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-
-    expect(() =>
-      bridge.startEditSession({ name: "B", unicode: 66 }, defaultSourceId()),
-    ).toThrow(/edit session already active/i);
-    expect(bridge.getEditingGlyphName()).toBe("A");
-  });
-
   it("adds a point to a contour and returns structure, values, and changed ids", () => {
-    bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-    const contourChange = bridge.addContour();
+    const glyphRef = defaultLayerRef();
+    const contourChange = bridge.addContour(glyphRef);
     const contourId = contourChange.changed.contourIds[0];
 
-    const change = bridge.addPoint(contourId, 10, 20, "onCurve", false);
+    const change = bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
 
     expect(change.changed.pointIds).toHaveLength(1);
     expect(change.structure.contours).toHaveLength(1);
@@ -130,12 +119,13 @@ describe("Bridge", () => {
   });
 
   it("applies point positions through the sparse typed-array hot path", () => {
-    bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-    const contourId = bridge.addContour().changed.contourIds[0];
-    const pointId = bridge.addPoint(contourId, 10, 20, "onCurve", false).changed
+    const glyphRef = defaultLayerRef();
+    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
+    const pointId = bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false).changed
       .pointIds[0];
 
     bridge.applyPositionPatch(
+      glyphRef,
       new BigUint64Array([BigInt(pointId)]),
       new Float64Array([30, 40]),
       null,
@@ -149,13 +139,14 @@ describe("Bridge", () => {
     expect(Array.from(state.values)).toEqual([500, 30, 40]);
   });
 
-  it("restores structure and values into the active session", () => {
-    bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-    const contourId = bridge.addContour().changed.contourIds[0];
-    const before = bridge.addPoint(contourId, 10, 20, "onCurve", false);
+  it("restores structure and values into a glyph layer", () => {
+    const glyphRef = defaultLayerRef();
+    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
+    const before = bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
     const pointId = before.changed.pointIds[0];
 
     const change = bridge.restoreState(
+      glyphRef,
       before.structure,
       new Float64Array([700, 90, 120]),
     );
@@ -165,14 +156,17 @@ describe("Bridge", () => {
   });
 
   it("surfaces typed bridge errors at the NAPI boundary", () => {
-    expect(() => bridge.addContour()).toThrow(/active edit/i);
-
-    bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
     expect(() =>
-      bridge.addPoint("not-a-contour", 10, 20, "onCurve", false),
+      bridge.addContour({ glyphHandle: { name: "A", unicode: 65 }, layerId: "not-a-layer" }),
+    ).toThrow(/layer ID/i);
+
+    const glyphRef = defaultLayerRef();
+    expect(() =>
+      bridge.addPoint(glyphRef, "not-a-contour", 10, 20, "onCurve", false),
     ).toThrow(/contour ID/i);
     expect(() =>
       bridge.applyPositionPatch(
+        glyphRef,
         new BigUint64Array([1n]),
         new Float64Array([10]),
         null,

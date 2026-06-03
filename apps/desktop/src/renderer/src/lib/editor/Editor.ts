@@ -496,7 +496,7 @@ export class Editor {
    * This is a read/focus API. It chooses the current active source context for
    * camera metrics, asks `Font` for existing glyph state, and updates
    * `editingGlyph` when the glyph can be loaded. It does not create missing
-   * glyph data and does not start an edit session.
+   * glyph data and does not select an editable source.
    *
    * @returns The focused glyph model, or `null` when the glyph has no readable state.
    */
@@ -541,10 +541,6 @@ export class Editor {
     const source = this.font.source(sourceId);
     if (!source) return null;
 
-    if (this.#bridge.hasEditSession()) {
-      this.#bridge.endEditSession();
-    }
-    this.#bridge.startEditSession(handle, source.id);
     this.#glyph.edit.selectSource(source.id);
 
     const glyph = this.getGlyph(handle);
@@ -593,7 +589,7 @@ export class Editor {
    *   TextRuns.resolveAnchor(anchor)
    *      │
    *      ▼
-   *   native edit session + drawOffset = focused.editOrigin
+   *   source glyph geometry + drawOffset = focused.editOrigin
    */
   public setGlyphFocus(anchor: GlyphAnchor): void {
     const focused = this.#textRuns.resolveAnchor(anchor);
@@ -625,11 +621,8 @@ export class Editor {
     return this.#text.glyphPlacement.peek();
   }
 
-  /** Ends the current editing session. */
+  /** Clears the current glyph focus and active contour selection. */
   public close(): void {
-    if (this.#bridge.hasEditSession()) {
-      this.#bridge.endEditSession();
-    }
     this.#glyph.open.glyph.set(null);
     this.#glyph.open.activeContourId.set(null);
   }
@@ -661,6 +654,20 @@ export class Editor {
   /** Authored font source currently selected for editing, or `null` when unavailable. */
   public get editSource(): Source | null {
     return this.#glyph.edit.source.peek();
+  }
+
+  /**
+   * Returns the authored glyph source currently targeted by edit commands.
+   *
+   * @remarks
+   * This is the source-backed edit target, not the interpolated preview
+   * geometry shown at the current design location. Clipboard, command, and test
+   * code should use this when reading or mutating authored point data.
+   *
+   * @returns null when no glyph source is open for editing.
+   */
+  public get activeGlyphSource(): GlyphSource | null {
+    return this.#glyph.edit.glyphSource.peek();
   }
 
   /** Glyph instance resolved at the current design location. */
@@ -1025,10 +1032,6 @@ export class Editor {
    * default design location.
    */
   public createFont(): void {
-    if (this.#bridge.hasEditSession()) {
-      this.close();
-    }
-
     this.font.create();
     this.setDesignLocation(this.font.defaultLocation());
     this.#events.emit("fontLoaded", { font: this.font });
@@ -1039,20 +1042,12 @@ export class Editor {
    * location.
    */
   public loadFont(filePath: string): void {
-    if (this.#bridge.hasEditSession()) {
-      this.close();
-    }
-
     this.font.load(filePath);
     this.setDesignLocation(this.font.defaultLocation());
     this.#events.emit("fontLoaded", { font: this.font });
   }
 
   public closeFont(): void {
-    if (this.#bridge.hasEditSession()) {
-      this.close();
-    }
-
     this.font.close();
     this.setDesignLocation(emptyAxisLocation());
   }

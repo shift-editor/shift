@@ -422,8 +422,8 @@ export class Font {
    * @param fromName - Existing committed glyph name.
    * @param name - New unique glyph name after trimming whitespace.
    * @param unicodes - Complete Unicode assignment for the renamed glyph.
-   * @throws {Error} when `fromName` is missing, `name` is empty, `name` already
-   *   exists, or an edit session is active.
+   * @throws {Error} when `fromName` is missing, `name` is empty, or `name`
+   *   already exists.
    */
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: readonly Unicode[]): void {
     this.#bridge.updateGlyphIdentity(fromName, name.trim() as GlyphName, [...unicodes]);
@@ -437,23 +437,25 @@ export class Font {
    *
    * @remarks
    * If the requested name already exists, a numeric suffix is appended using
-   * {@link nextAvailableGlyphName}. The bridge edit session is opened and
-   * immediately ended so downstream save/export paths see a real committed
-   * glyph record, not a UI-only placeholder.
+   * {@link nextAvailableGlyphName}. The bridge receives an explicit glyph layer
+   * mutation so downstream save/export paths see a real committed glyph record,
+   * not a UI-only placeholder.
    *
    * @param name - Preferred glyph name. Blank input falls back to `newGlyph`.
    * @returns The handle for the glyph that was actually created.
-   * @throws {Error} when the bridge rejects session creation or commit.
+   * @throws {Error} when the bridge rejects glyph creation.
    */
   createGlyph(name: GlyphName): GlyphHandle {
     const glyphName = this.nextAvailableGlyphName(name);
-    if (this.#bridge.hasEditSession()) {
-      this.#bridge.endEditSession();
-    }
 
     const handle = this.glyphHandleForName(glyphName);
-    this.#bridge.startEditSession(handle, this.defaultSource.id);
-    this.#bridge.endEditSession();
+    this.#bridge.setXAdvance(
+      {
+        glyphHandle: handle,
+        layerId: this.defaultSource.layerId,
+      },
+      500,
+    );
 
     this.#glyphs.clear();
     this.#glyphSources.clear();
@@ -501,9 +503,9 @@ export class Font {
   /**
    * Get the cached model for an existing glyph.
    *
-   * This is a read/data access API. It asks the bridge for committed or active
-   * glyph state at the font's default source and returns `null` when no state
-   * exists. It does not create missing glyphs and does not start an edit session.
+   * This is a read/data access API. It asks the bridge for glyph state at the
+   * font's default source and returns `null` when no state exists. It does not
+   * create missing glyphs or select an editable source.
    *
    * @example
    * ```ts
@@ -577,8 +579,8 @@ export class Font {
    * Read raw glyph state for a source from the bridge.
    *
    * This is the lowest-level glyph data read used by the domain model. The
-   * bridge may return active edit-session state, committed font state, or
-   * `null` when the glyph has no data for the source.
+   * bridge may return native glyph-layer state or `null` when the glyph has no
+   * data for the source.
    *
    * @returns Raw glyph state, or `null` when the bridge cannot provide state.
    */

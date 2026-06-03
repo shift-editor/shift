@@ -193,6 +193,7 @@ export class AppLifecycle {
       if (!shouldOpen) return;
     }
 
+    // OK this is the problem, we are sending an open file event to the renderer to open the file from the bridge
     ipc.send(window.webContents, "external:open-font", filePath);
   }
 

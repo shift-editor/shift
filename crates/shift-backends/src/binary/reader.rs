@@ -1,5 +1,5 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use shift_ir::{Contour, Font, Glyph, GlyphLayer, PointType};
+use shift_font::{Contour, Font, Glyph, GlyphLayer, PointType};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},

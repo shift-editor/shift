@@ -4,12 +4,11 @@ use std::str::FromStr;
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
 use fontdrasil::variations::VariationModel;
-use shift_ir::Axis;
-use shift_wire::{
+use shift_font::{Axis, Font, Glyph};
+
+use crate::{
     values_from_layer, AxisTent, GlyphMaster, GlyphStructure, GlyphVariationData, Location,
 };
-
-use crate::{Font, Glyph};
 
 #[derive(Debug, Clone)]
 pub struct SourceError {
@@ -261,10 +260,10 @@ pub fn get_glyph_variation_data(
 mod tests {
     use std::collections::HashMap;
 
-    use shift_wire::{ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType};
+    use crate::{ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType};
 
     use super::build_glyph_variation_data;
-    use shift_ir::Axis;
+    use shift_font::Axis;
 
     fn structure_with_smooth(smooth: bool) -> GlyphStructure {
         GlyphStructure {

@@ -1697,7 +1697,7 @@ dependencies = [
  "norad 0.16.0",
  "plist",
  "quick-xml",
- "shift-ir",
+ "shift-font",
  "skrifa",
  "tempfile",
  "thiserror 2.0.18",
@@ -1713,8 +1713,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shift-backends",
- "shift-edit",
- "shift-ir",
+ "shift-font",
  "shift-wire",
  "thiserror 2.0.18",
 ]
@@ -1723,26 +1722,9 @@ dependencies = [
 name = "shift-document"
 version = "0.1.0"
 dependencies = [
- "shift-ir",
+ "shift-font",
  "shift-store",
  "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "shift-edit"
-version = "0.0.0"
-dependencies = [
- "bitflags",
- "fontc",
- "fontdrasil 0.4.0",
- "norad 0.16.0",
- "serde",
- "serde_json",
- "shift-backends",
- "shift-ir",
- "shift-wire",
- "skrifa",
  "thiserror 2.0.18",
 ]
 
@@ -1755,17 +1737,7 @@ dependencies = [
  "kurbo 0.13.0",
  "linesweeper",
  "serde",
-]
-
-[[package]]
-name = "shift-ir"
-version = "0.1.0"
-dependencies = [
- "fontdrasil 0.4.0",
- "indexmap",
- "kurbo 0.13.0",
- "linesweeper",
- "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1781,10 +1753,11 @@ dependencies = [
 name = "shift-wire"
 version = "0.0.0"
 dependencies = [
+ "fontdrasil 0.4.0",
  "napi",
  "napi-derive",
  "serde",
- "shift-ir",
+ "shift-font",
 ]
 
 [[package]]

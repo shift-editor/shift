@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use shift_ir::Font;
+use shift_font::Font;
 
 use crate::designspace::{DesignspaceReader, DesignspaceWriter};
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};

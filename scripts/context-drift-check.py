@@ -29,9 +29,8 @@ MD_PARSER = MarkdownIt("commonmark")
 
 # All known DOCS.md locations (must match routing index)
 EXPECTED_DOCS = [
-    "crates/shift-edit/docs/DOCS.md",
     "crates/shift-backends/docs/DOCS.md",
-    "crates/shift-ir/docs/DOCS.md",
+    "crates/shift-font/docs/DOCS.md",
     "crates/shift-bridge/docs/DOCS.md",
     "apps/desktop/src/main/docs/DOCS.md",
     "apps/desktop/src/preload/docs/DOCS.md",

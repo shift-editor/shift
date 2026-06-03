@@ -10,7 +10,7 @@ pub use writer::DesignspaceWriter;
 mod tests {
     use super::*;
     use crate::traits::{FontReader, FontWriter};
-    use shift_ir::{Contour, Font, Glyph, GlyphLayer, PointType};
+    use shift_font::{Contour, Font, Glyph, GlyphLayer, PointType};
     use std::fs;
 
     fn test_font() -> Font {

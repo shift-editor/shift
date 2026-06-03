@@ -1,10 +1,10 @@
 # shift-bridge
 
-NAPI bindings that expose the Rust font/editing engine to Node.js and Electron as a `Bridge` class.
+NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
 ## Architecture Invariants
 
-**Architecture Invariant:** Only one `ActiveEdit` may be active at a time. Starting a second edit session returns a typed bridge error. **WHY:** The bridge owns one mutable edit surface and saves use an overlay snapshot of that active glyph.
+**Architecture Invariant:** The bridge does not own hidden edit sessions. Mutation methods receive an explicit `GlyphLayerRef`, resolve the target glyph layer, and mutate the model object in `shift-font`. **WHY:** Renderer selection state stays in TypeScript, while Rust remains the authoritative model and ID allocator.
 
 **Architecture Invariant:** Public bridge DTOs live in `shift-wire`; NAPI-specific wrappers live under `shift-wire::bridges::napi`. **WHY:** Wire shapes remain independent of the native module implementation, while NAPI can still return efficient types such as `Float64Array`.
 
@@ -12,7 +12,7 @@ NAPI bindings that expose the Rust font/editing engine to Node.js and Electron a
 
 **Architecture Invariant:** Bulk position updates use `Float64Array` values plus typed node descriptors. **WHY:** Drag updates keep the hot path in flat numeric buffers while IDs remain branded strings at the API boundary.
 
-**Architecture Invariant:** Save uses a clone/COW `FontSaveSnapshot` plus an active glyph overlay. **WHY:** Async save can run from a stable view of the font without ending or mutating the current edit session.
+**Architecture Invariant:** Save uses a clone/COW `FontSaveSnapshot` of the current font. **WHY:** Async save can run from a stable view without coupling persistence to renderer focus state.
 
 ## Codemap
 
@@ -20,28 +20,28 @@ NAPI bindings that expose the Rust font/editing engine to Node.js and Electron a
 crates/shift-bridge/
   src/
     lib.rs       -- crate root
-    bridge.rs    -- `Bridge` NAPI class, session lifecycle, font reads, save task
+    bridge.rs    -- `Bridge` NAPI class, font reads, mutations, save task
     errors.rs    -- bridge error type and NAPI mapping
     input.rs     -- boundary parsing/adaptation helpers
-  Cargo.toml     -- cdylib crate; depends on shift-edit, shift-wire, shift-backends, napi
+  Cargo.toml     -- cdylib crate; depends on shift-font, shift-wire, shift-backends, napi
 ```
 
 ## Key Types
 
-- `Bridge` -- the exported `#[napi]` class holding the committed `Font`, optional `ActiveEdit`, and document versions.
-- `ActiveEdit` -- active glyph/session/layer bundle used while editing.
-- `FontSaveSnapshot` -- clone/COW save view with an optional active glyph override.
+- `Bridge` -- the exported `#[napi]` class holding the current `Font` and document versions.
+- `GlyphLayerRef` -- boundary identity for the glyph layer being mutated.
+- `FontSaveSnapshot` -- clone/COW save view of the current font.
 - `SaveFontTask` -- NAPI `Task` implementation for async font saving.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
-- `GlyphStructureChange` / `GlyphValueChange` -- canonical wire DTOs returned by edit mutations.
+- `GlyphStructureChange` / `GlyphValueChange` -- canonical wire DTOs returned by mutations.
 - `NapiGlyphStructureChange` / `NapiGlyphValueChange` -- NAPI adapters for those DTOs.
 
-## Session Lifecycle
+## How it works
 
-1. JS calls `startEditSession(GlyphHandle)`.
-2. `Bridge` creates or finds the glyph, removes the editable layer into an `EditSession`, and stores it in `active_edit`.
-3. Mutation methods parse boundary inputs, borrow the active session, call `EditSession`, then return a wire change object.
-4. `endEditSession` commits the session layer back into the glyph and stores it in the font.
+1. The renderer chooses the active glyph/source and builds a `GlyphLayerRef`.
+2. JS calls a mutation such as `closeContour(glyphRef, contourId)`.
+3. `Bridge` parses boundary strings, resolves or creates the target glyph layer, and calls the matching `GlyphLayer` method from `shift-font`.
+4. The bridge returns a `shift-wire` change DTO and bumps the live version.
 5. `saveFont(path)` creates a `FontSaveSnapshot` and saves asynchronously through `shift-backends`.
 
 ## Type Boundary
@@ -54,16 +54,16 @@ crates/shift-bridge/
 
 ### Adding a new mutation method
 
-1. Add the domain operation to `EditSession` in `shift-edit`.
+1. Add the domain operation to the relevant model object in `shift-font`.
 2. Add or reuse a canonical DTO in `shift-wire`.
 3. Add a NAPI adapter in `shift-wire::bridges::napi` only if NAPI needs a different representation.
 4. Add the `#[napi]` method on `Bridge`.
-5. Parse string IDs through `input.rs`, call the session, then return the appropriate wire change.
+5. Accept `GlyphLayerRef` when the operation targets glyph outline state, parse string IDs through `input.rs`, call the model method, then return the appropriate wire change.
 6. Run `cargo check -p shift-bridge` and rebuild the native module before regenerating bridge types.
 
 ### Adding a new read-only query
 
-1. Prefer committed-font reads unless the method is explicitly about the active edit session.
+1. Prefer committed font reads unless the method is explicitly asking for the currently focused renderer source.
 2. Return native NAPI DTOs rather than serialized JSON.
 3. Keep editor/rendering concerns out of Rust; TypeScript owns canvas-specific interpretation.
 
@@ -79,8 +79,7 @@ pnpm generate:bridge-types
 
 ## Related
 
-- `shift-edit` -- edit session and glyph mutation logic.
-- `shift-ir` -- font/glyph/layer data model.
+- `shift-font` -- font/glyph/layer data model and model-level mutation logic.
 - `shift-wire` -- canonical bridge DTOs and NAPI adapters.
 - `shift-backends` -- font loading/saving.
 - `packages/types/src/bridge` -- generated TypeScript bridge facade.

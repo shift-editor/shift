@@ -5,7 +5,7 @@ use crate::ufo::UfoWriter;
 use norad::designspace::{Axis as DsAxis, DesignSpaceDocument, Dimension, Source as DsSource};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
-use shift_ir::{Axis, Font, Location, Source};
+use shift_font::{Axis, Font, Location, Source};
 use std::fs;
 use std::path::Path;
 

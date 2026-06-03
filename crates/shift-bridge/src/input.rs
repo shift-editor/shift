@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use shift_ir::{AnchorId, ComponentId, ContourId, GuidelineId, LayerId, PointId, SourceId};
+use shift_font::{AnchorId, ComponentId, ContourId, GuidelineId, LayerId, PointId, SourceId};
 
 use crate::errors::{BridgeError, BridgeResult};
 

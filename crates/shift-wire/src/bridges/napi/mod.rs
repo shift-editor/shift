@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
-use shift_ir::PointType as IrPointType;
+use shift_font::PointType as IrPointType;
 
 use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,

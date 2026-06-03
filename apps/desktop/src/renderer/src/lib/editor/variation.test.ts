@@ -18,10 +18,10 @@ function flattenPoints(g: Glyph | GlyphGeometry): number[] {
   return out;
 }
 
-describe("Editor.open — variation-aware edit sessions", () => {
+describe("Editor.open — variation-aware glyph reads", () => {
   it("opens a glyph with values interpolated at the current variation location", () => {
-    // Regression for 1c2c575: opening a glyph from the grid used to start an
-    // edit session at the master's stored coordinates, so the canvas didn't
+    // Regression for 1c2c575: opening a glyph from the grid used to read the
+    // master's stored coordinates, so the canvas didn't
     // match what the user clicked when the slider was off-default.
     const editor = new TestEditor();
     editor.loadFont(MUTATORSANS_DESIGNSPACE);
@@ -63,9 +63,9 @@ describe("Editor.open — variation-aware edit sessions", () => {
     expect(samePoint?.x).toBe(movedX);
   });
 
-  it("edits to a glyph are visible from the registry after closing the session", () => {
-    // The grid renders via `font.glyph(name)` (not the editor) — so after a
-    // session ends, the registry's Glyph must reflect the edits the user
+  it("edits to a glyph are visible from the registry after closing the glyph", () => {
+    // The grid renders via `font.glyph(name)` (not the editor), so after the
+    // glyph closes, the registry's Glyph must reflect the edits the user
     // just made. Otherwise the grid shows the pre-edit outline.
     const editor = new TestEditor();
     editor.loadFont(MUTATORSANS_DESIGNSPACE);

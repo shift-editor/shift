@@ -26,36 +26,35 @@ export declare class Bridge {
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
-  startEditSession(glyphHandle: GlyphHandle, sourceId: SourceId): void
   getPersistedVersion(): number
   isDirty(): boolean
-  endEditSession(): void
-  hasEditSession(): boolean
-  getEditingUnicode(): Unicode | null
-  getEditingGlyphName(): GlyphName | null
-  getEditingSourceId(): SourceId | null
-  setXAdvance(width: number): NapiGlyphValueChange
-  translateLayer(dx: number, dy: number): NapiGlyphValueChange
-  addPoint(contourId: ContourId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange
-  insertPointBefore(beforePointId: PointId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange
-  addContour(): NapiGlyphStructureChange
-  openContour(contourId: ContourId): NapiGlyphStructureChange
-  closeContour(contourId: ContourId): NapiGlyphStructureChange
-  reverseContour(contourId: ContourId): NapiGlyphStructureChange
-  applyBooleanOp(contourIdA: ContourId, contourIdB: ContourId, operation: string): NapiGlyphStructureChange
-  removePoints(pointIds: Array<PointId>): NapiGlyphStructureChange
-  toggleSmooth(pointId: PointId): NapiGlyphStructureChange
+  setXAdvance(glyphRef: GlyphLayerRef, width: number): NapiGlyphValueChange
+  translateLayer(glyphRef: GlyphLayerRef, dx: number, dy: number): NapiGlyphValueChange
+  addPoint(glyphRef: GlyphLayerRef, contourId: ContourId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange
+  insertPointBefore(glyphRef: GlyphLayerRef, beforePointId: PointId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange
+  addContour(glyphRef: GlyphLayerRef): NapiGlyphStructureChange
+  openContour(glyphRef: GlyphLayerRef, contourId: ContourId): NapiGlyphStructureChange
+  closeContour(glyphRef: GlyphLayerRef, contourId: ContourId): NapiGlyphStructureChange
+  reverseContour(glyphRef: GlyphLayerRef, contourId: ContourId): NapiGlyphStructureChange
+  applyBooleanOp(glyphRef: GlyphLayerRef, contourIdA: ContourId, contourIdB: ContourId, operation: string): NapiGlyphStructureChange
+  removePoints(glyphRef: GlyphLayerRef, pointIds: Array<PointId>): NapiGlyphStructureChange
+  toggleSmooth(glyphRef: GlyphLayerRef, pointId: PointId): NapiGlyphStructureChange
   /**
    * Bulk position sync. IDs use BigUint64Array to avoid lossy float packing.
    * Coords are interleaved [x0, y0, x1, y1, ...].
    */
-  applyPositionPatch(pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): void
-  restoreState(structure: NapiGlyphStructure, values: Float64Array): NapiGlyphStructureChange
+  applyPositionPatch(glyphRef: GlyphLayerRef, pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): void
+  restoreState(glyphRef: GlyphLayerRef, structure: NapiGlyphStructure, values: Float64Array): NapiGlyphStructureChange
 }
 
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface GlyphLayerRef {
+  glyphHandle: GlyphHandle
+  layerId: LayerId
 }
 
 export interface NapiFontExportRequest {

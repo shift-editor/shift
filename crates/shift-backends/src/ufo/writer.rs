@@ -1,7 +1,7 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
-use shift_ir::{
+use shift_font::{
     Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, Point, PointType,
 };
 use std::path::Path;
@@ -76,7 +76,7 @@ impl UfoWriter {
         norad::Contour::new(points, None)
     }
 
-    fn convert_component(component: &shift_ir::Component) -> norad::Component {
+    fn convert_component(component: &shift_font::Component) -> norad::Component {
         let matrix = component.matrix();
         norad::Component::new(
             Name::new(component.base_glyph()).unwrap(),
@@ -92,7 +92,7 @@ impl UfoWriter {
         )
     }
 
-    fn convert_anchor(anchor: &shift_ir::Anchor) -> norad::Anchor {
+    fn convert_anchor(anchor: &shift_font::Anchor) -> norad::Anchor {
         norad::Anchor::new(
             anchor.x().ufo_round(),
             anchor.y().ufo_round(),

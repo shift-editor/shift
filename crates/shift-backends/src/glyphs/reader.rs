@@ -1,5 +1,5 @@
 use glyphs_reader::{FeatureSnippet, Font as GlyphsFont, NodeType, Shape};
-use shift_ir::{
+use shift_font::{
     Anchor, Axis, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, KerningData,
     KerningPair, KerningSide, Layer, Location, Source, Transform,
 };
@@ -21,15 +21,15 @@ impl GlyphsReader {
         Self
     }
 
-    fn convert_node_type(node_type: NodeType) -> (shift_ir::PointType, bool) {
+    fn convert_node_type(node_type: NodeType) -> (shift_font::PointType, bool) {
         match node_type {
-            NodeType::Line => (shift_ir::PointType::OnCurve, false),
-            NodeType::LineSmooth => (shift_ir::PointType::OnCurve, true),
-            NodeType::OffCurve => (shift_ir::PointType::OffCurve, false),
-            NodeType::Curve => (shift_ir::PointType::OnCurve, false),
-            NodeType::CurveSmooth => (shift_ir::PointType::OnCurve, true),
-            NodeType::QCurve => (shift_ir::PointType::QCurve, false),
-            NodeType::QCurveSmooth => (shift_ir::PointType::QCurve, true),
+            NodeType::Line => (shift_font::PointType::OnCurve, false),
+            NodeType::LineSmooth => (shift_font::PointType::OnCurve, true),
+            NodeType::OffCurve => (shift_font::PointType::OffCurve, false),
+            NodeType::Curve => (shift_font::PointType::OnCurve, false),
+            NodeType::CurveSmooth => (shift_font::PointType::OnCurve, true),
+            NodeType::QCurve => (shift_font::PointType::QCurve, false),
+            NodeType::QCurveSmooth => (shift_font::PointType::QCurve, true),
         }
     }
 
@@ -79,7 +79,7 @@ impl GlyphsReader {
             }
         }
 
-        // shift-ir currently stores static kerning, so we load kerning for default master.
+        // shift-font currently stores static kerning, so we load kerning for default master.
         let Some(default_master) = font.masters.get(font.default_master_idx) else {
             return kerning;
         };

@@ -20,8 +20,11 @@ function setupDrag(scale: PointScale) {
   const pm = createPointMark(scale);
   pm.editor.selectTool("select");
 
-  const glyph = pm.editor.currentGlyph!;
+  const glyph = pm.editor.activeGlyphSource;
+  if (!glyph) throw new Error("No editable glyph source after point-mark setup");
   const firstPoint = glyph.allPoints[0];
+  if (!firstPoint) throw new Error("Point-mark setup did not create any points");
+
   const startX = firstPoint.x;
   const startY = firstPoint.y;
 

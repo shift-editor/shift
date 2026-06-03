@@ -1,11 +1,29 @@
 use crate::{
+    boolean,
     error::{CoreError, CoreResult},
-    state::apply_state_to_layer,
-    GlyphStructure, PointId, PointType, Transform,
+    Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, GlyphLayer, Point, PointId,
+    PointType, Transform,
 };
-use shift_ir::{boolean, Anchor, AnchorId, BooleanOp, Contour, ContourId, GlyphLayer, Point};
-use shift_wire::{GlyphChangedEntities, GlyphValue};
 use std::collections::{HashMap, HashSet};
+
+pub type GlyphValue = f64;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChangedEntities {
+    pub point_ids: Vec<PointId>,
+    pub anchor_ids: Vec<AnchorId>,
+    pub contour_ids: Vec<ContourId>,
+    pub component_ids: Vec<ComponentId>,
+}
+
+impl ChangedEntities {
+    pub fn points(point_ids: Vec<PointId>) -> Self {
+        Self {
+            point_ids,
+            ..Default::default()
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditableNode {
@@ -168,52 +186,9 @@ fn invalid_position_update_input(kind: &'static str, message: impl Into<String>)
     }
 }
 
-pub struct EditSession {
-    layer: GlyphLayer,
-    glyph_name: String,
-    unicode: u32,
-}
-
-impl EditSession {
-    pub fn new(name: String, unicode: u32, layer: GlyphLayer) -> Self {
-        Self {
-            layer,
-            glyph_name: name,
-            unicode,
-        }
-    }
-
-    pub fn layer(&self) -> &GlyphLayer {
-        &self.layer
-    }
-
-    pub fn layer_mut(&mut self) -> &mut GlyphLayer {
-        &mut self.layer
-    }
-
-    pub fn into_layer(self) -> GlyphLayer {
-        self.layer
-    }
-
-    pub fn glyph_name(&self) -> &str {
-        &self.glyph_name
-    }
-
-    pub fn unicode(&self) -> u32 {
-        self.unicode
-    }
-
-    pub fn width(&self) -> f64 {
-        self.layer.width()
-    }
-}
-
-impl EditSession {
+impl GlyphLayer {
     fn contour_mut_or_err(&mut self, id: ContourId) -> CoreResult<&mut Contour> {
-        let contour = self
-            .layer
-            .contour_mut(id)
-            .ok_or(CoreError::ContourNotFound(id))?;
+        let contour = self.contour_mut(id).ok_or(CoreError::ContourNotFound(id))?;
 
         Ok(contour)
     }
@@ -240,8 +215,7 @@ impl EditSession {
     }
 
     fn anchor_mut_or_err(&mut self, anchor_id: AnchorId) -> CoreResult<&mut Anchor> {
-        self.layer
-            .anchor_mut(anchor_id)
+        self.anchor_mut(anchor_id)
             .ok_or(CoreError::AnchorNotFound(anchor_id))
     }
 
@@ -277,7 +251,7 @@ impl EditSession {
 
     fn anchors_exist_or_err(&self, anchor_ids: &[AnchorId]) -> CoreResult<()> {
         for anchor_id in anchor_ids {
-            if self.layer.anchor(*anchor_id).is_none() {
+            if self.anchor(*anchor_id).is_none() {
                 return Err(CoreError::AnchorNotFound(*anchor_id));
             }
         }
@@ -289,7 +263,7 @@ impl EditSession {
         updates: &HashMap<AnchorId, NodePosition>,
     ) -> CoreResult<()> {
         for anchor_id in updates.keys() {
-            if self.layer.anchor(*anchor_id).is_none() {
+            if self.anchor(*anchor_id).is_none() {
                 return Err(CoreError::AnchorNotFound(*anchor_id));
             }
         }
@@ -308,7 +282,7 @@ impl EditSession {
             return Ok(());
         }
 
-        for contour in self.layer.contours_iter_mut() {
+        for contour in self.contours_iter_mut() {
             for point in contour.points_mut() {
                 if remaining.remove(&point.id()) {
                     update(point);
@@ -332,7 +306,7 @@ impl EditSession {
             return Ok(());
         }
 
-        for contour in self.layer.contours_iter_mut() {
+        for contour in self.contours_iter_mut() {
             for point in contour.points_mut() {
                 let point_id = point.id();
                 if let Some(position) = updates.get(&point_id) {
@@ -394,9 +368,9 @@ impl EditSession {
     }
 }
 
-impl EditSession {
+impl GlyphLayer {
     pub fn set_x_advance(&mut self, width: f64) {
-        self.layer.set_width(width);
+        self.set_width(width);
     }
 
     /// Translate all editable glyph geometry in the active layer.
@@ -404,51 +378,35 @@ impl EditSession {
     /// This moves contour points, anchors, and component transforms.
     /// Glyph advance width is intentionally left unchanged.
     pub fn translate_layer(&mut self, dx: f64, dy: f64) {
-        for contour in self.layer.contours_iter_mut() {
+        for contour in self.contours_iter_mut() {
             for point in contour.points_mut() {
                 point.translate(dx, dy);
             }
         }
 
-        let anchor_ids: Vec<_> = self
-            .layer
-            .anchors_iter()
-            .map(|anchor| anchor.id())
-            .collect();
-        self.layer.move_anchors(&anchor_ids, dx, dy);
+        let anchor_ids: Vec<_> = self.anchors_iter().map(|anchor| anchor.id()).collect();
+        self.move_anchors(&anchor_ids, dx, dy);
 
-        let component_ids: Vec<_> = self.layer.components().keys().cloned().collect();
+        let component_ids: Vec<_> = self.components().keys().cloned().collect();
         for component_id in component_ids {
-            if let Some(mut component) = self.layer.remove_component(component_id) {
+            if let Some(mut component) = self.remove_component(component_id) {
                 component.translate(dx, dy);
-                self.layer.add_component(component);
+                self.add_component(component);
             }
         }
     }
-
-    pub fn restore_layer(
-        &mut self,
-        structure: &GlyphStructure,
-        values: &[GlyphValue],
-    ) -> CoreResult<()> {
-        let mut new_layer = self.layer.clone();
-        apply_state_to_layer(&mut new_layer, structure, values)?;
-        self.layer = new_layer;
-        Ok(())
-    }
 }
 
-impl EditSession {
+impl GlyphLayer {
     pub fn add_empty_contour(&mut self) -> ContourId {
         let contour = Contour::new();
         let contour_id = contour.id();
-        self.layer.add_contour(contour);
+        self.add_contour(contour);
         contour_id
     }
 
-    pub fn remove_contour(&mut self, contour_id: ContourId) -> CoreResult<Contour> {
-        self.layer
-            .remove_contour(contour_id)
+    pub fn remove_contour_checked(&mut self, contour_id: ContourId) -> CoreResult<Contour> {
+        self.remove_contour(contour_id)
             .ok_or(CoreError::ContourNotFound(contour_id))
     }
 
@@ -477,12 +435,10 @@ impl EditSession {
         op: BooleanOp,
     ) -> CoreResult<Vec<ContourId>> {
         let a = self
-            .layer
             .contour(contour_id_a)
             .ok_or(CoreError::ContourNotFound(contour_id_a))?
             .clone();
         let b = self
-            .layer
             .contour(contour_id_b)
             .ok_or(CoreError::ContourNotFound(contour_id_b))?
             .clone();
@@ -490,12 +446,12 @@ impl EditSession {
         let result =
             boolean(op, &a, &b).map_err(|e| CoreError::BooleanOperationFailed(e.to_string()))?;
 
-        self.remove_contour(contour_id_a)?;
-        self.remove_contour(contour_id_b)?;
+        self.remove_contour_checked(contour_id_a)?;
+        self.remove_contour_checked(contour_id_b)?;
 
         let mut created_ids = Vec::new();
         for contour in result.0 {
-            let id = self.layer.add_contour(contour);
+            let id = self.add_contour(contour);
             created_ids.push(id);
         }
 
@@ -503,7 +459,7 @@ impl EditSession {
     }
 
     pub fn find_point_contour(&self, point_id: PointId) -> Option<ContourId> {
-        for contour in self.layer.contours_iter() {
+        for contour in self.contours_iter() {
             if contour.get_point(point_id).is_some() {
                 return Some(contour.id());
             }
@@ -512,7 +468,7 @@ impl EditSession {
     }
 }
 
-impl EditSession {
+impl GlyphLayer {
     pub fn add_point_to_contour(
         &mut self,
         contour_id: ContourId,
@@ -607,14 +563,24 @@ impl EditSession {
     }
 }
 
-impl EditSession {
+impl GlyphLayer {
     /// Set absolute position for a single anchor
-    pub fn set_anchor_position(&mut self, anchor_id: AnchorId, x: f64, y: f64) -> CoreResult<()> {
+    pub fn set_anchor_position_checked(
+        &mut self,
+        anchor_id: AnchorId,
+        x: f64,
+        y: f64,
+    ) -> CoreResult<()> {
         self.anchor_mut_or_err(anchor_id)?.set_position(x, y);
         Ok(())
     }
 
-    pub fn move_anchors(&mut self, anchor_ids: &[AnchorId], dx: f64, dy: f64) -> CoreResult<()> {
+    pub fn move_anchors_checked(
+        &mut self,
+        anchor_ids: &[AnchorId],
+        dx: f64,
+        dy: f64,
+    ) -> CoreResult<()> {
         self.anchors_exist_or_err(anchor_ids)?;
 
         for anchor_id in anchor_ids {
@@ -644,7 +610,7 @@ impl EditSession {
         self.anchors_exist_or_err(&groups.anchors)?;
 
         self.move_points(&groups.points, dx, dy)?;
-        self.move_anchors(&groups.anchors, dx, dy)
+        self.move_anchors_checked(&groups.anchors, dx, dy)
     }
 
     pub fn transform_nodes(
@@ -663,9 +629,9 @@ impl EditSession {
     pub fn set_bulk_node_positions(
         &mut self,
         updates: BulkNodePositionUpdates<'_>,
-    ) -> CoreResult<GlyphChangedEntities> {
+    ) -> CoreResult<ChangedEntities> {
         let groups = Self::bulk_node_position_updates(updates)?;
-        let changed = GlyphChangedEntities {
+        let changed = ChangedEntities {
             point_ids: groups.points.keys().copied().collect(),
             anchor_ids: groups.anchors.keys().copied().collect(),
             ..Default::default()
@@ -684,25 +650,13 @@ impl EditSession {
     }
 }
 
-impl EditSession {
-    pub fn contour(&self, id: ContourId) -> Option<&Contour> {
-        self.layer.contour(id)
-    }
-
-    pub fn contour_mut(&mut self, id: ContourId) -> Option<&mut Contour> {
-        self.layer.contour_mut(id)
-    }
-
-    pub fn contours_iter(&self) -> impl Iterator<Item = &Contour> {
-        self.layer.contours_iter()
-    }
-
+impl GlyphLayer {
     pub fn contours_count(&self) -> usize {
-        self.layer.contours().len()
+        self.contours().len()
     }
 }
 
-impl EditSession {
+impl GlyphLayer {
     pub fn paste_contours(
         &mut self,
         contours: Vec<PasteContour>,
@@ -729,7 +683,7 @@ impl EditSession {
                 contour.close();
             }
 
-            let contour_id = self.layer.add_contour(contour);
+            let contour_id = self.add_contour(contour);
             created_contour_ids.push(contour_id);
         }
 
@@ -766,32 +720,30 @@ pub struct PasteResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_ir::{Anchor, Component};
+    use crate::{Anchor, Component};
 
-    fn create_session() -> EditSession {
-        EditSession::new("test".to_string(), 65, GlyphLayer::with_width(500.0))
+    fn create_session() -> GlyphLayer {
+        GlyphLayer::with_width(500.0)
     }
 
-    fn session_with_contour() -> (EditSession, ContourId) {
+    fn session_with_contour() -> (GlyphLayer, ContourId) {
         let mut session = create_session();
         let contour_id = session.add_empty_contour();
         (session, contour_id)
     }
 
-    fn add_point(session: &mut EditSession, contour_id: ContourId, x: f64, y: f64) -> PointId {
+    fn add_point(session: &mut GlyphLayer, contour_id: ContourId, x: f64, y: f64) -> PointId {
         session
             .add_point_to_contour(contour_id, x, y, PointType::OnCurve, false)
             .unwrap()
     }
 
-    fn add_anchor(session: &mut EditSession, x: f64, y: f64) -> AnchorId {
-        session
-            .layer_mut()
-            .add_anchor(Anchor::new(Some("top".to_string()), x, y))
+    fn add_anchor(session: &mut GlyphLayer, x: f64, y: f64) -> AnchorId {
+        session.add_anchor(Anchor::new(Some("top".to_string()), x, y))
     }
 
     fn point_position(
-        session: &EditSession,
+        session: &GlyphLayer,
         contour_id: ContourId,
         point_id: PointId,
     ) -> (f64, f64) {
@@ -803,8 +755,8 @@ mod tests {
         (point.x(), point.y())
     }
 
-    fn anchor_position(session: &EditSession, anchor_id: AnchorId) -> (f64, f64) {
-        let anchor = session.layer().anchor(anchor_id).unwrap();
+    fn anchor_position(session: &GlyphLayer, anchor_id: AnchorId) -> (f64, f64) {
+        let anchor = session.anchor(anchor_id).unwrap();
         (anchor.x(), anchor.y())
     }
 
@@ -812,7 +764,7 @@ mod tests {
     fn remove_contour_removes_contour() {
         let (mut session, contour_id) = session_with_contour();
 
-        session.remove_contour(contour_id).unwrap();
+        session.remove_contour_checked(contour_id).unwrap();
 
         assert_eq!(session.contours_count(), 0);
     }
@@ -823,7 +775,7 @@ mod tests {
         let contour_id = ContourId::new();
 
         assert!(matches!(
-            session.remove_contour(contour_id),
+            session.remove_contour_checked(contour_id),
             Err(CoreError::ContourNotFound(id)) if id == contour_id
         ));
     }
@@ -989,7 +941,7 @@ mod tests {
         let anchor_id = add_anchor(&mut session, 10.0, 20.0);
         let missing_id = AnchorId::new();
 
-        let result = session.move_anchors(&[anchor_id, missing_id], 5.0, 6.0);
+        let result = session.move_anchors_checked(&[anchor_id, missing_id], 5.0, 6.0);
 
         assert!(matches!(
             result,
@@ -1052,10 +1004,7 @@ mod tests {
         let point_id = session
             .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
             .unwrap();
-        let anchor_id =
-            session
-                .layer_mut()
-                .add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
+        let anchor_id = session.add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
 
         session.translate_layer(5.0, -3.0);
 
@@ -1064,7 +1013,7 @@ mod tests {
             .unwrap()
             .get_point(point_id)
             .unwrap();
-        let anchor = session.layer().anchor(anchor_id).unwrap();
+        let anchor = session.anchor(anchor_id).unwrap();
         assert_eq!(point.x(), 15.0);
         assert_eq!(point.y(), 17.0);
         assert_eq!(anchor.x(), 35.0);
@@ -1075,13 +1024,11 @@ mod tests {
     #[test]
     fn translate_layer_moves_component_transforms() {
         let mut session = create_session();
-        let component_id = session
-            .layer_mut()
-            .add_component(Component::new("base".to_string()));
+        let component_id = session.add_component(Component::new("base".to_string()));
 
         session.translate_layer(12.0, -7.0);
 
-        let component = session.layer().component(component_id).unwrap();
+        let component = session.component(component_id).unwrap();
         let matrix = component.matrix();
         assert_eq!(matrix.dx, 12.0);
         assert_eq!(matrix.dy, -7.0);

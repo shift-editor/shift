@@ -6,7 +6,7 @@ pub use writer::UfoWriter;
 
 use crate::traits::{FontReader, FontWriter};
 use crate::FormatBackendResult;
-use shift_ir::Font;
+use shift_font::Font;
 
 pub struct UfoBackend;
 
@@ -25,7 +25,7 @@ impl FontWriter for UfoBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_ir::{Contour, Glyph, GlyphLayer, PointType};
+    use shift_font::{Contour, Glyph, GlyphLayer, PointType};
     use std::fs;
 
     fn create_test_font() -> Font {

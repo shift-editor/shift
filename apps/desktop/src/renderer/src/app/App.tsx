@@ -79,6 +79,9 @@ export const App = () => {
     }
 
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont(handleOpenFont);
+
+    // TODO: have all this annoying logic for when HMR happens to re-open the already open font
+    // this should be handled more gracefully.
     const unsubscribeExternalOpen = window.electronAPI?.onExternalOpenFont(handleOpenFont);
     const unsubscribeNew = window.electronAPI?.onDocumentNew(() => {
       fontDocument.createFont();
@@ -106,6 +109,7 @@ export const App = () => {
       dumpSelectionPatternsToConsole();
     });
 
+    // TODO: I image these can get stale (or maybe not, they don't capture anything)
     return () => {
       if (unsubscribeNew) unsubscribeNew();
       if (unsubscribeOpen) unsubscribeOpen();

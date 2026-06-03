@@ -235,7 +235,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Edit Operations**
 
-- [x] EditSession ownership model for glyph editing
+- [x] Glyph layer mutation ownership model for glyph editing
 - [x] Add/remove points
 - [x] Move points (single and batch)
 - [x] Add/remove contours

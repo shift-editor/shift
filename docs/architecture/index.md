@@ -15,9 +15,8 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 | Path pattern               | Canonical doc                                                                    | Purpose                                                        |
 | -------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `crates/shift-edit/**`     | [`crates/shift-edit/docs/DOCS.md`](../../crates/shift-edit/docs/DOCS.md)         | Editing logic and composite helpers                            |
 | `crates/shift-backends/**` | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md) | Font format backends for reading/writing various font formats  |
-| `crates/shift-ir/**`       | [`crates/shift-ir/docs/DOCS.md`](../../crates/shift-ir/docs/DOCS.md)             | Format-agnostic intermediate representation for the font model |
+| `crates/shift-font/**`     | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)         | First-class Rust font object model and editing behavior        |
 | `crates/shift-bridge/**`   | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)     | NAPI bridge exposing Rust to Node.js/Electron                  |
 
 ### Desktop app — Electron shell

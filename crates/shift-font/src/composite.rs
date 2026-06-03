@@ -471,8 +471,7 @@ fn compose_transform(outer: Transform, inner: Transform) -> Transform {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Anchor, Contour, Font, Glyph, GlyphLayer, PointType, Transform};
-    use shift_ir::Component;
+    use crate::{Anchor, Component, Contour, Font, Glyph, GlyphLayer, PointType, Transform};
 
     fn two_point_contour(x0: f64, y0: f64, x1: f64, y1: f64) -> Contour {
         let mut contour = Contour::new();

@@ -1,5 +1,5 @@
 use crate::errors::FormatBackendResult;
-use shift_ir::{
+use shift_font::{
     Axis, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphName, Guideline, KerningData,
     Layer, LayerId, LibData, Source,
 };

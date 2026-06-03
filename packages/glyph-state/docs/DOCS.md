@@ -33,7 +33,7 @@ packages/glyph-state/src/
 
 ## How It Fits
 
-Rust owns loading, persistence, edit sessions, ID allocation, boolean operations, and authoritative mutation. The bridge returns `GlyphStructure + values` for a source. This package turns that state into useful geometry. The renderer wraps these readers in signals and editor APIs.
+Rust owns loading, persistence, ID allocation, boolean operations, and authoritative mutation. The bridge returns `GlyphStructure + values` for a source. This package turns that state into useful geometry. The renderer wraps these readers in signals and editor APIs.
 
 ```ts
 const geometry = new GlyphStateGeometry(state.structure, state.values);

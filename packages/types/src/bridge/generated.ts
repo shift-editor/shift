@@ -31,36 +31,35 @@ export interface BridgeApi {
   isVariable(): boolean
   getAxes(): Array<Axis>
   getSources(): Array<Source>
-  startEditSession(glyphHandle: GlyphHandle, sourceId: SourceId): void
   getPersistedVersion(): number
   isDirty(): boolean
-  endEditSession(): void
-  hasEditSession(): boolean
-  getEditingUnicode(): Unicode | null
-  getEditingGlyphName(): GlyphName | null
-  getEditingSourceId(): SourceId | null
-  setXAdvance(width: number): GlyphValueChange
-  translateLayer(dx: number, dy: number): GlyphValueChange
-  addPoint(contourId: ContourId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
-  insertPointBefore(beforePointId: PointId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
-  addContour(): GlyphStructureChange
-  openContour(contourId: ContourId): GlyphStructureChange
-  closeContour(contourId: ContourId): GlyphStructureChange
-  reverseContour(contourId: ContourId): GlyphStructureChange
-  applyBooleanOp(contourIdA: ContourId, contourIdB: ContourId, operation: string): GlyphStructureChange
-  removePoints(pointIds: Array<PointId>): GlyphStructureChange
-  toggleSmooth(pointId: PointId): GlyphStructureChange
+  setXAdvance(glyphRef: GlyphLayerRef, width: number): GlyphValueChange
+  translateLayer(glyphRef: GlyphLayerRef, dx: number, dy: number): GlyphValueChange
+  addPoint(glyphRef: GlyphLayerRef, contourId: ContourId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
+  insertPointBefore(glyphRef: GlyphLayerRef, beforePointId: PointId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
+  addContour(glyphRef: GlyphLayerRef): GlyphStructureChange
+  openContour(glyphRef: GlyphLayerRef, contourId: ContourId): GlyphStructureChange
+  closeContour(glyphRef: GlyphLayerRef, contourId: ContourId): GlyphStructureChange
+  reverseContour(glyphRef: GlyphLayerRef, contourId: ContourId): GlyphStructureChange
+  applyBooleanOp(glyphRef: GlyphLayerRef, contourIdA: ContourId, contourIdB: ContourId, operation: string): GlyphStructureChange
+  removePoints(glyphRef: GlyphLayerRef, pointIds: Array<PointId>): GlyphStructureChange
+  toggleSmooth(glyphRef: GlyphLayerRef, pointId: PointId): GlyphStructureChange
   /**
    * Bulk position sync. IDs use BigUint64Array to avoid lossy float packing.
    * Coords are interleaved [x0, y0, x1, y1, ...].
    */
-  applyPositionPatch(pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): void
-  restoreState(structure: GlyphStructure, values: Float64Array): GlyphStructureChange
+  applyPositionPatch(glyphRef: GlyphLayerRef, pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): void
+  restoreState(glyphRef: GlyphLayerRef, structure: GlyphStructure, values: Float64Array): GlyphStructureChange
 }
 
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface GlyphLayerRef {
+  glyphHandle: GlyphHandle
+  layerId: LayerId
 }
 
 export interface FontExportRequest {

@@ -88,7 +88,7 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 ## Project Structure
 
 - `apps/desktop/src/` - Electron app (main, preload, renderer, shared)
-- `crates/` - Rust workspace (shift-core, shift-backends, shift-ir, shift-node)
+- `crates/` - Rust workspace (shift-font, shift-backends, shift-bridge, shift-store)
 - `packages/` - TypeScript packages (types, geo, font, ui)
 
 ## Code Organization Rules

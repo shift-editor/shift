@@ -25,7 +25,6 @@ function editGlyph(): {
 
   const handle = { name: "A" };
   const source = font.defaultSource;
-  bridge.startEditSession(handle, source.id);
 
   const glyph = font.glyph(handle);
   if (!glyph) throw new Error("Expected edit glyph");
@@ -107,7 +106,7 @@ describe("Glyph", () => {
     layer = nextLayer;
   });
 
-  it("hydrates state from the active edit session", () => {
+  it("hydrates state from the native glyph layer", () => {
     expect(glyph.name).toBe("A");
     expect(glyph.unicode).toBeNull();
     expect(glyph.xAdvance).toBeGreaterThan(0);
