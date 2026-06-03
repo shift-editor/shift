@@ -1,4 +1,6 @@
-use shift_workspace::{FontWorkspace, NewWorkspace};
+use std::path::PathBuf;
+
+use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 #[test]
 fn creates_workspace_with_source_package_and_working_store() {
@@ -6,15 +8,21 @@ fn creates_workspace_with_source_package_and_working_store() {
     let source_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
 
-    let workspace = FontWorkspace::create_new(
+    let workspace = FontWorkspace::create(
         &source_path,
         &store_path,
         NewWorkspace::with_family_name("Test Font"),
     )
     .unwrap();
 
-    assert_eq!(workspace.source_package().path(), source_path.as_path());
-    assert!(workspace.source_package().manifest_path().is_file());
+    assert_eq!(
+        workspace.source(),
+        &WorkspaceSource::Package {
+            path: source_path.clone()
+        }
+    );
+    assert_eq!(workspace.save_target(), Some(source_path.as_path()));
+    assert!(source_path.join("manifest.json").is_file());
     assert_eq!(
         workspace
             .font_info()
@@ -24,7 +32,7 @@ fn creates_workspace_with_source_package_and_working_store() {
             .as_deref(),
         Some("Test Font")
     );
-    assert_eq!(workspace.font().glyphs().len(), 0);
+    assert!(workspace.font().glyphs().is_empty());
 }
 
 #[test]
@@ -33,10 +41,76 @@ fn opens_existing_workspace_paths() {
     let source_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
 
-    FontWorkspace::create_new(&source_path, &store_path, NewWorkspace::new()).unwrap();
+    FontWorkspace::create(&source_path, &store_path, NewWorkspace::new()).unwrap();
 
     let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
 
-    assert_eq!(workspace.source_package().path(), source_path.as_path());
+    assert_eq!(workspace.save_target(), Some(source_path.as_path()));
     assert!(workspace.font_info().unwrap().is_some());
+}
+
+#[test]
+fn imports_external_fonts_without_a_save_target() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let store_path = temp.path().join("working.sqlite");
+
+    let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+
+    assert_eq!(
+        workspace.source(),
+        &WorkspaceSource::Imported {
+            original_path: source_path
+        }
+    );
+    assert_eq!(workspace.save_target(), None);
+    assert!(!workspace.font().glyphs().is_empty());
+    assert!(
+        workspace
+            .font_info()
+            .unwrap()
+            .unwrap()
+            .family_name
+            .is_some()
+    );
+}
+
+#[test]
+fn save_requires_save_as_for_imported_fonts() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let store_path = temp.path().join("working.sqlite");
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+
+    let error = workspace.save().unwrap_err();
+
+    assert!(matches!(error, WorkspaceError::NeedsSaveAs));
+}
+
+#[test]
+fn save_as_assigns_a_shift_package_save_target() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let store_path = temp.path().join("working.sqlite");
+    let save_path = temp.path().join("SavedFont.shift");
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    workspace.save_as(&save_path).unwrap();
+
+    assert_eq!(
+        workspace.source(),
+        &WorkspaceSource::Package {
+            path: save_path.clone()
+        }
+    );
+    assert_eq!(workspace.save_target(), Some(save_path.as_path()));
+    assert!(save_path.join("manifest.json").is_file());
+    workspace.save().unwrap();
+}
+
+fn fixture(path: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(path)
 }

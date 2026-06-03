@@ -21,13 +21,16 @@ crates/shift-workspace/src/
 
 - `FontWorkspace` -- live backend object for one open font project.
 - `NewWorkspace` -- options used when creating a new source package and working store.
+- `WorkspaceSource` -- explicit source state: saved `.shift` package or imported external file.
 - `WorkspaceError` -- source-package and store failures.
 
 ## How it works
 
-`FontWorkspace::create_new(source_path, store_path, options)` creates a placeholder `.shift` package, opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font`.
+`FontWorkspace::create(source_path, store_path, options)` creates a placeholder `.shift` package, opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font`.
 
-`FontWorkspace::open(source_path, store_path)` validates the existing source package, opens the working store, and starts with an empty in-memory font until source/store hydration is implemented.
+`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. Other supported font paths are imported through `shift-backends` into an unsaved workspace with no save target.
+
+`FontWorkspace::save()` succeeds for saved `.shift` workspaces and returns `NeedsSaveAs` for imported workspaces. `save_as(path)` creates a `.shift` package and makes it the save target.
 
 ## Verification
 

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+shift-backends = { workspace = true }
 shift-font = { workspace = true }
 shift-source = { workspace = true }
 shift-store = { workspace = true }
