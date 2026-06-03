@@ -13,11 +13,13 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 ### Rust crates
 
-| Path pattern               | Canonical doc                                                                    | Purpose                                                        |
-| -------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `crates/shift-backends/**` | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md) | Font format backends for reading/writing various font formats  |
-| `crates/shift-font/**`     | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)         | First-class Rust font object model and editing behavior        |
-| `crates/shift-bridge/**`   | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)     | NAPI bridge exposing Rust to Node.js/Electron                  |
+| Path pattern                | Canonical doc                                                                        | Purpose                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)     | Font format backends for reading/writing various font formats  |
+| `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)             | First-class Rust font object model and editing behavior        |
+| `crates/shift-source/**`    | [`crates/shift-source/docs/DOCS.md`](../../crates/shift-source/docs/DOCS.md)         | User-authored `.shift` source package layout                   |
+| `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font       |
+| `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)         | NAPI bridge exposing Rust to Node.js/Electron                  |
 
 ### Desktop app — Electron shell
 
