@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
+import { MUTATORSANS_DESIGNSPACE, testSourcePath, testStorePath } from "@/testing";
 import { Document } from "./Document";
 
 function testDocument() {
@@ -9,6 +9,14 @@ function testDocument() {
   let dirty = true;
   const document = new Document(editor, {
     createUntitledId: () => "untitled-1",
+    createWorkspacePaths: (id) => {
+      const sourcePath = testSourcePath(id);
+      return { sourcePath, storePath: `${sourcePath}/working.sqlite` };
+    },
+    workspacePathsForOpen: (path) => ({
+      sourcePath: path,
+      storePath: testStorePath("document-open"),
+    }),
     setFilePath: (nextPath) => {
       filePath = nextPath;
     },

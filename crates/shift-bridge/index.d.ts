@@ -11,10 +11,11 @@ import type {
 } from "@shift/types";
 export declare class Bridge {
   constructor()
-  createFont(): void
-  loadFont(path: string): void
-  saveFont(path: string): Promise<number>
-  exportFont(request: NapiFontExportRequest): Promise<NapiFontExportResult>
+  createWorkspace(sourcePath: string, storePath: string, options?: NapiNewWorkspace | undefined | null): void
+  openWorkspace(path: string, storePath: string): void
+  saveWorkspace(): number
+  saveWorkspaceAs(path: string): number
+  exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
   getGlyphCount(): number
@@ -89,6 +90,11 @@ export interface NapiGlyphVariationReport {
   compatibleMasterCount: number
   skippedMasterCount: number
   diagnostics: Array<NapiGlyphVariationDiagnostic>
+}
+
+export interface NapiNewWorkspace {
+  familyName?: string
+  unitsPerEm?: number
 }
 export interface NapiAnchorData {
   id: AnchorId

@@ -226,6 +226,14 @@ class GlyphDirectory {
 
 type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
 
+const DEFAULT_FONT_METRICS: FontMetrics = {
+  unitsPerEm: 1000,
+  ascender: 800,
+  descender: -200,
+  capHeight: 700,
+  xHeight: 500,
+};
+
 /**
  * Reactive domain model for the loaded font.
  *
@@ -254,7 +262,7 @@ export class Font {
 
   constructor(bridge: ShiftBridge) {
     this.#bridge = bridge;
-    this.#defaultMetrics = bridge.getMetrics();
+    this.#defaultMetrics = DEFAULT_FONT_METRICS;
     this.#$loaded = signal(false);
     this.#$metrics = signal<FontMetrics>(this.#defaultMetrics);
     this.#$sources = signal<Source[]>([]);
@@ -710,26 +718,26 @@ export class Font {
     return this.#bridge.getVariationReports();
   }
 
-  create(): void {
+  create(sourcePath: string, storePath: string): void {
     this.#glyphs.clear();
     this.#glyphSources.clear();
-    this.#bridge.createFont();
+    this.#bridge.createWorkspace(sourcePath, storePath);
     this.#hydrateFromBridge();
   }
 
-  load(path: string): void {
+  load(path: string, storePath: string): void {
     this.#glyphs.clear();
     this.#glyphSources.clear();
-    this.#bridge.loadFont(path);
+    this.#bridge.openWorkspace(path, storePath);
     this.#hydrateFromBridge();
   }
 
-  async save(path: string): Promise<number> {
-    return this.#bridge.saveFont(path);
+  async save(path?: string): Promise<number> {
+    return path ? this.#bridge.saveWorkspaceAs(path) : this.#bridge.saveWorkspace();
   }
 
   async export(path: string): Promise<void> {
-    await this.#bridge.exportFont({ path, format: "ttf" });
+    await this.#bridge.exportWorkspace({ path, format: "ttf" });
   }
 
   /** @knipclassignore — called when closing a document */

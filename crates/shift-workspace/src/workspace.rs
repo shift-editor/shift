@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
+use shift_font::{Glyph, GlyphLayer, LayerId, error::CoreError};
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
 
@@ -8,6 +9,12 @@ use crate::NewWorkspace;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
+    #[error("invalid {kind}: {value}")]
+    InvalidInput { kind: &'static str, value: String },
+
+    #[error(transparent)]
+    Font(#[from] CoreError),
+
     #[error("source package error")]
     Source(#[from] shift_source::SourcePackageError),
 
@@ -31,6 +38,13 @@ pub enum WorkspaceError {
 pub enum WorkspaceSource {
     Package { path: PathBuf },
     Imported { original_path: PathBuf },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GlyphLayerTarget {
+    pub glyph_name: String,
+    pub unicode: Option<u32>,
+    pub layer_id: LayerId,
 }
 
 pub struct FontWorkspace {
@@ -97,6 +111,99 @@ impl FontWorkspace {
         FontExporter::new()
             .export(&self.font, request)
             .map_err(WorkspaceError::from)
+    }
+
+    pub fn update_glyph_identity(
+        &mut self,
+        from_name: &str,
+        name: String,
+        unicodes: Vec<u32>,
+    ) -> Result<(), WorkspaceError> {
+        let name = name.trim();
+        let mut next_font = self.font.clone();
+
+        let existing = next_font
+            .glyph(from_name)
+            .ok_or_else(|| WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: from_name.to_string(),
+            })?;
+        if from_name == name && existing.unicodes() == unicodes.as_slice() {
+            return Ok(());
+        }
+
+        if name.is_empty() {
+            return Err(WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: name.to_string(),
+            });
+        }
+
+        if from_name != name && next_font.glyph(name).is_some() {
+            return Err(WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: format!("{name} already exists"),
+            });
+        }
+
+        let Some(mut glyph) = next_font.take_glyph(from_name) else {
+            return Err(WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: from_name.to_string(),
+            });
+        };
+
+        let glyph_name = shift_font::GlyphName::new(name.to_string()).map_err(|_| {
+            WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: name.to_string(),
+            }
+        })?;
+
+        glyph.set_name(glyph_name);
+        glyph.set_unicodes(unicodes);
+        next_font.put_glyph(glyph);
+
+        self.commit_font(next_font);
+        Ok(())
+    }
+
+    pub fn edit_glyph_layer<R>(
+        &mut self,
+        target: GlyphLayerTarget,
+        edit: impl FnOnce(&mut GlyphLayer) -> Result<R, CoreError>,
+    ) -> Result<R, WorkspaceError> {
+        let mut next_font = self.font.clone();
+
+        if next_font.glyph(&target.glyph_name).is_none() {
+            let mut glyph = Glyph::new(target.glyph_name.clone());
+            if let Some(unicode) = target.unicode {
+                glyph.add_unicode(unicode);
+            }
+            glyph.set_layer(target.layer_id, GlyphLayer::with_width(500.0));
+            next_font.insert_glyph(glyph);
+        }
+
+        let glyph = next_font.glyph_mut(&target.glyph_name).ok_or_else(|| {
+            WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: target.glyph_name.clone(),
+            }
+        })?;
+
+        if let Some(unicode) = target.unicode {
+            glyph.add_unicode(unicode);
+        }
+
+        let result = edit(glyph.get_or_create_layer(target.layer_id))?;
+        self.commit_font(next_font);
+
+        Ok(result)
+    }
+
+    fn commit_font(&mut self, next_font: shift_font::Font) {
+        // TODO: apply a shift-font domain change set to shift-store before swapping.
+        self.font = next_font;
     }
 
     fn open_package(

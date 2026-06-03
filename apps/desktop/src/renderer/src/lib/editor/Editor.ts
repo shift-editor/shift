@@ -1031,8 +1031,8 @@ export class Editor {
    * Creates a new loaded font document and resets editor placement to its
    * default design location.
    */
-  public createFont(): void {
-    this.font.create();
+  public createFont(sourcePath: string, storePath: string): void {
+    this.font.create(sourcePath, storePath);
     this.setDesignLocation(this.font.defaultLocation());
     this.#events.emit("fontLoaded", { font: this.font });
   }
@@ -1041,8 +1041,8 @@ export class Editor {
    * Loads a font from disk and resets editor placement to its default design
    * location.
    */
-  public loadFont(filePath: string): void {
-    this.font.load(filePath);
+  public loadFont(filePath: string, storePath: string): void {
+    this.font.load(filePath, storePath);
     this.setDesignLocation(this.font.defaultLocation());
     this.#events.emit("fontLoaded", { font: this.font });
   }
@@ -1052,7 +1052,7 @@ export class Editor {
     this.setDesignLocation(emptyAxisLocation());
   }
 
-  public async saveFont(filePath: string): Promise<number> {
+  public async saveFont(filePath?: string): Promise<number> {
     return this.font.save(filePath);
   }
 

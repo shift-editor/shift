@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 shift-font = { workspace = true }
 shift-wire = { workspace = true, features = ["napi"] }
 shift-backends = { workspace = true }
+shift-workspace = { workspace = true }
 
 napi = { version = "=3.8.6", default-features = false, features = ["napi6"] }
 napi-derive = "=3.5.5"

@@ -1,6 +1,7 @@
 import path from "node:path";
 
 const SUPPORTED_FONT_EXTENSIONS = new Set([
+  ".shift",
   ".ufo",
   ".ttf",
   ".otf",

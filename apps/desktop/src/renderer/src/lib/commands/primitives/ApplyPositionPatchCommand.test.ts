@@ -4,13 +4,13 @@ import type { PointId } from "@shift/types";
 import { ApplyPositionPatchCommand } from "./ApplyPositionPatchCommand";
 import { Font } from "@/lib/model/Font";
 import type { GlyphSource } from "@/lib/model/Glyph";
-import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
+import { MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
 import type { CommandContext } from "../core";
 
 function editableSource(): GlyphSource {
   const bridge = createBridge();
   const font = new Font(bridge);
-  font.load(MUTATORSANS_DESIGNSPACE);
+  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("apply-position-patch"));
 
   const handle = { name: "A", unicode: 65 };
   const source = font.defaultSource;

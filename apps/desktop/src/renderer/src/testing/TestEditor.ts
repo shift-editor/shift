@@ -17,6 +17,7 @@ import { registerBuiltInTools } from "@/lib/tools/tools";
 import { createBridge } from "@shift/bridge";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { MUTATORSANS_DESIGNSPACE } from "./fixtures";
+import { testStorePath } from "./workspacePaths";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -63,7 +64,7 @@ export class TestEditor extends Editor {
 
   startSession(handle: GlyphHandle = { name: "A", unicode: 65 }): this {
     if (!this.font.loaded) {
-      this.loadFont(MUTATORSANS_DESIGNSPACE);
+      this.loadFont(MUTATORSANS_DESIGNSPACE, testStorePath("session"));
     }
 
     const source = this.font.defaultSource;

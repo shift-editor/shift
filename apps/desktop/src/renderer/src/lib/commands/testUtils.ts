@@ -4,7 +4,7 @@ import { signal, type Signal } from "@/lib/signals/signal";
 import { Font } from "@/lib/model/Font";
 import type { GlyphSource } from "@/lib/model/Glyph";
 import { Point } from "@shift/glyph-state";
-import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
+import { MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
 import type { CommandContext } from "./core";
 
 export interface CommandSourceFixture {
@@ -16,7 +16,7 @@ export interface CommandSourceFixture {
 export function commandSourceFixture(): CommandSourceFixture {
   const bridge = createBridge();
   const font = new Font(bridge);
-  font.load(MUTATORSANS_DESIGNSPACE);
+  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("command-source"));
 
   const handle = { name: "A", unicode: 65 };
   const source = font.defaultSource;

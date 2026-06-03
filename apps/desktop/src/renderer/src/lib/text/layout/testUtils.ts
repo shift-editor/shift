@@ -6,7 +6,7 @@
  * the loaded font, not hardcoded advances.
  */
 import { Font } from "@/lib/model/Font";
-import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
+import { MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
 import { TextLayout } from "./TextLayout";
 import { Positioner } from "./Positioner";
 import type { TextItem, GlyphTextItem, SegmentedRun } from "./types";
@@ -17,7 +17,7 @@ export function loadTestFont(): Font {
   const bridge = createBridge();
   const font = new Font(bridge);
 
-  font.load(MUTATORSANS_DESIGNSPACE);
+  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("layout"));
   return font;
 }
 
