@@ -31,6 +31,8 @@ MD_PARSER = MarkdownIt("commonmark")
 EXPECTED_DOCS = [
     "crates/shift-backends/docs/DOCS.md",
     "crates/shift-font/docs/DOCS.md",
+    "crates/shift-source/docs/DOCS.md",
+    "crates/shift-workspace/docs/DOCS.md",
     "crates/shift-bridge/docs/DOCS.md",
     "apps/desktop/src/main/docs/DOCS.md",
     "apps/desktop/src/preload/docs/DOCS.md",

@@ -1741,6 +1741,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-source"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "shift-store"
 version = "0.1.0"
 dependencies = [
@@ -1758,6 +1766,17 @@ dependencies = [
  "napi-derive",
  "serde",
  "shift-font",
+]
+
+[[package]]
+name = "shift-workspace"
+version = "0.1.0"
+dependencies = [
+ "shift-font",
+ "shift-source",
+ "shift-store",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

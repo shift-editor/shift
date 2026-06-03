@@ -10,3 +10,5 @@ shift-bridge = { path = "crates/shift-bridge" }
 shift-font = { path = "crates/shift-font" }
 shift-document = { path = "crates/shift-document" }
 shift-store = { path = "crates/shift-store" }
+shift-source = { path = "crates/shift-source" }
+shift-workspace = { path = "crates/shift-workspace" }
