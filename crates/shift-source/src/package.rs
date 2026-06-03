@@ -35,6 +35,13 @@ pub struct ShiftSourcePackage {
 }
 
 impl ShiftSourcePackage {
+    pub fn is_package_path(path: impl AsRef<Path>) -> bool {
+        path.as_ref()
+            .extension()
+            .and_then(|extension| extension.to_str())
+            == Some("shift")
+    }
+
     pub fn create_empty(path: impl AsRef<Path>) -> Result<Self, SourcePackageError> {
         let path = path.as_ref();
         validate_shift_extension(path)?;
@@ -79,7 +86,7 @@ impl ShiftSourcePackage {
 }
 
 fn validate_shift_extension(path: &Path) -> Result<(), SourcePackageError> {
-    if path.extension().and_then(|extension| extension.to_str()) == Some("shift") {
+    if ShiftSourcePackage::is_package_path(path) {
         Ok(())
     } else {
         Err(SourcePackageError::InvalidExtension(path.to_path_buf()))
