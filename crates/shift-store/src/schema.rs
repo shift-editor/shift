@@ -49,23 +49,64 @@ CREATE TABLE IF NOT EXISTS glyphs (
 CREATE INDEX IF NOT EXISTS glyphs_name_idx
 ON glyphs(name);
 
+CREATE TABLE IF NOT EXISTS glyph_unicodes (
+    glyph_id TEXT NOT NULL,
+    unicode INTEGER NOT NULL CHECK (unicode >= 0),
+    order_index INTEGER NOT NULL,
+    PRIMARY KEY (glyph_id, unicode),
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS glyph_unicodes_glyph_id_idx
+ON glyph_unicodes(glyph_id);
+
 CREATE TABLE IF NOT EXISTS glyph_layers (
     id TEXT PRIMARY KEY,
     glyph_id TEXT NOT NULL,
     source_id TEXT NOT NULL,
     name TEXT,
+    width REAL NOT NULL DEFAULT 0,
+    height REAL,
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,
     FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS glyph_layers_glyph_source_unique
-ON glyph_layers(glyph_id, source_id);
 
 CREATE INDEX IF NOT EXISTS glyph_layers_glyph_id_idx
 ON glyph_layers(glyph_id);
 
 CREATE INDEX IF NOT EXISTS glyph_layers_source_id_idx
 ON glyph_layers(source_id);
+
+CREATE TABLE IF NOT EXISTS glyph_layer_contours (
+    id TEXT PRIMARY KEY,
+    layer_id TEXT NOT NULL,
+    closed INTEGER NOT NULL DEFAULT 0 CHECK (closed IN (0, 1)),
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_layer_contours_layer_order_unique
+ON glyph_layer_contours(layer_id, order_index);
+
+CREATE INDEX IF NOT EXISTS glyph_layer_contours_layer_id_idx
+ON glyph_layer_contours(layer_id);
+
+CREATE TABLE IF NOT EXISTS glyph_layer_points (
+    id TEXT PRIMARY KEY,
+    contour_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    point_type TEXT NOT NULL,
+    smooth INTEGER NOT NULL DEFAULT 0 CHECK (smooth IN (0, 1)),
+    FOREIGN KEY (contour_id) REFERENCES glyph_layer_contours(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_layer_points_contour_order_unique
+ON glyph_layer_points(contour_id, order_index);
+
+CREATE INDEX IF NOT EXISTS glyph_layer_points_contour_id_idx
+ON glyph_layer_points(contour_id);
 
 CREATE TABLE IF NOT EXISTS glyph_components (
     id TEXT PRIMARY KEY,

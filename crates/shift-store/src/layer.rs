@@ -7,12 +7,14 @@ pub struct NewGlyphLayer {
     pub name: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GlyphLayerRecord {
     pub id: LayerId,
     pub glyph_id: GlyphId,
     pub source_id: SourceId,
     pub name: Option<String>,
+    pub width: f64,
+    pub height: Option<f64>,
 }
 
 impl ShiftStore {
@@ -45,7 +47,9 @@ impl ShiftStore {
                 id,
                 glyph_id,
                 source_id,
-                name
+                name,
+                width,
+                height
             FROM glyph_layers
             WHERE id = ?1
             ",
@@ -68,7 +72,9 @@ impl ShiftStore {
                 id,
                 glyph_id,
                 source_id,
-                name
+                name,
+                width,
+                height
             FROM glyph_layers
             WHERE glyph_id = ?1
             ORDER BY source_id, id
@@ -87,5 +93,7 @@ fn map_glyph_layer_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GlyphLayerRe
         glyph_id: GlyphId::new(row.get::<_, String>(1)?),
         source_id: SourceId::new(row.get::<_, String>(2)?),
         name: row.get(3)?,
+        width: row.get(4)?,
+        height: row.get(5)?,
     })
 }

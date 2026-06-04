@@ -1,9 +1,11 @@
+pub mod changes;
 pub mod composite;
 pub mod curve;
 pub mod error;
 pub mod ir;
 pub mod layer_edit;
 
+pub use changes::*;
 pub use error::{CoreError, CoreResult};
 pub use ir::*;
 pub use ir::{

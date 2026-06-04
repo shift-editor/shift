@@ -39,6 +39,23 @@ impl ShiftStore {
             Err(err) => Err(err.into()),
         }
     }
+
+    pub fn list_glyph_unicodes(&self, id: &GlyphId) -> Result<Vec<u32>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "
+            SELECT unicode
+            FROM glyph_unicodes
+            WHERE glyph_id = ?1
+            ORDER BY order_index
+            ",
+        )?;
+
+        let rows = stmt.query_map([id.as_str()], |row| {
+            row.get::<_, i64>(0).map(|unicode| unicode as u32)
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
 }
 
 fn map_glyph_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GlyphRecord> {
