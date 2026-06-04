@@ -5,4 +5,7 @@ pub enum StoreError {
 
     #[error("unknown source kind: {0}")]
     UnknownSourceKind(String),
+
+    #[error("missing {kind}: {id}")]
+    MissingEntity { kind: &'static str, id: String },
 }

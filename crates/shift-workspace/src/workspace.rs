@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
-use shift_font::{Glyph, GlyphLayer, LayerId, error::CoreError};
+use shift_font::{
+    FontChange, FontChangeSet, Glyph, GlyphCreated, GlyphLayer, GlyphLayerChangeTarget, LayerId,
+    SourceId, error::CoreError,
+};
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
 
@@ -66,6 +69,7 @@ impl FontWorkspace {
         let mut font = shift_font::Font::new();
         font.metadata_mut().family_name = Some(new_workspace.family_name);
         font.metrics_mut().units_per_em = new_workspace.units_per_em as f64;
+        store.replace_font_state(&font)?;
 
         Ok(Self {
             font,
@@ -153,6 +157,9 @@ impl FontWorkspace {
             });
         };
 
+        let glyph_id = glyph.id();
+        let from_name = glyph.glyph_name().clone();
+        let from_unicodes = glyph.unicodes().to_vec();
         let glyph_name = shift_font::GlyphName::new(name.to_string()).map_err(|_| {
             WorkspaceError::InvalidInput {
                 kind: "glyph name",
@@ -162,9 +169,22 @@ impl FontWorkspace {
 
         glyph.set_name(glyph_name);
         glyph.set_unicodes(unicodes);
+        let to_name = glyph.glyph_name().clone();
+        let to_unicodes = glyph.unicodes().to_vec();
         next_font.put_glyph(glyph);
 
-        self.commit_font(next_font);
+        self.commit_font(
+            next_font,
+            FontChangeSet::new(vec![FontChange::GlyphIdentityChanged(
+                shift_font::GlyphIdentityChanged {
+                    glyph_id,
+                    from_name,
+                    to_name,
+                    from_unicodes,
+                    to_unicodes,
+                },
+            )]),
+        )?;
         Ok(())
     }
 
@@ -172,8 +192,10 @@ impl FontWorkspace {
         &mut self,
         target: GlyphLayerTarget,
         edit: impl FnOnce(&mut GlyphLayer) -> Result<R, CoreError>,
+        changes: impl FnOnce(&GlyphLayerChangeTarget, &GlyphLayer, &R) -> FontChangeSet,
     ) -> Result<R, WorkspaceError> {
         let mut next_font = self.font.clone();
+        let mut change_set = FontChangeSet::default();
 
         if next_font.glyph(&target.glyph_name).is_none() {
             let mut glyph = Glyph::new(target.glyph_name.clone());
@@ -181,9 +203,29 @@ impl FontWorkspace {
                 glyph.add_unicode(unicode);
             }
             glyph.set_layer(target.layer_id, GlyphLayer::with_width(500.0));
+            change_set.push(FontChange::GlyphCreated(GlyphCreated::from(&glyph)));
             next_font.insert_glyph(glyph);
         }
 
+        let source_id = source_id_for_layer(&next_font, target.layer_id).ok_or_else(|| {
+            WorkspaceError::InvalidInput {
+                kind: "layer ID",
+                value: target.layer_id.to_string(),
+            }
+        })?;
+        let glyph =
+            next_font
+                .glyph(&target.glyph_name)
+                .ok_or_else(|| WorkspaceError::InvalidInput {
+                    kind: "glyph name",
+                    value: target.glyph_name.clone(),
+                })?;
+        let change_target = GlyphLayerChangeTarget {
+            glyph_id: glyph.id(),
+            glyph_name: glyph.glyph_name().clone(),
+            source_id,
+            layer_id: target.layer_id,
+        };
         let glyph = next_font.glyph_mut(&target.glyph_name).ok_or_else(|| {
             WorkspaceError::InvalidInput {
                 kind: "glyph name",
@@ -195,15 +237,24 @@ impl FontWorkspace {
             glyph.add_unicode(unicode);
         }
 
-        let result = edit(glyph.get_or_create_layer(target.layer_id))?;
-        self.commit_font(next_font);
+        let layer = glyph.get_or_create_layer(target.layer_id);
+        let result = edit(layer)?;
+        let layer_changes = changes(&change_target, layer, &result);
+        change_set.changes.extend(layer_changes.changes);
+
+        self.commit_font(next_font, change_set)?;
 
         Ok(result)
     }
 
-    fn commit_font(&mut self, next_font: shift_font::Font) {
-        // TODO: apply a shift-font domain change set to shift-store before swapping.
+    fn commit_font(
+        &mut self,
+        next_font: shift_font::Font,
+        change_set: FontChangeSet,
+    ) -> Result<(), WorkspaceError> {
+        self.store.apply_change_set(&change_set)?;
         self.font = next_font;
+        Ok(())
     }
 
     fn open_package(
@@ -211,10 +262,12 @@ impl FontWorkspace {
         store_path: impl AsRef<Path>,
     ) -> Result<Self, WorkspaceError> {
         let source_package = ShiftSourcePackage::open(source_path)?;
-        let store = ShiftStore::open(store_path)?;
+        let mut store = ShiftStore::open(store_path)?;
+        let font = shift_font::Font::new();
+        store.replace_font_state(&font)?;
 
         Ok(Self {
-            font: shift_font::Font::new(),
+            font,
             source: WorkspaceSource::Package {
                 path: source_package.path().to_path_buf(),
             },
@@ -233,6 +286,7 @@ impl FontWorkspace {
         let font = FontLoader::new().read_font(import_path_str)?;
         let mut store = ShiftStore::open(store_path)?;
         store.set_font_info(font_info_from_font(&font))?;
+        store.replace_font_state(&font)?;
 
         Ok(Self {
             font,
@@ -290,4 +344,12 @@ fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
         version_minor: metadata.version_minor.map(i64::from),
         units_per_em: font.metrics().units_per_em as i64,
     }
+}
+
+fn source_id_for_layer(font: &shift_font::Font, layer_id: LayerId) -> Option<SourceId> {
+    font.sources()
+        .iter()
+        .find(|source| source.layer_id() == layer_id)
+        .map(shift_font::Source::id)
+        .or_else(|| font.default_source().map(shift_font::Source::id))
 }

@@ -519,9 +519,35 @@ impl Bridge {
     &mut self,
     glyph_ref: GlyphLayerRef,
     edit: impl FnOnce(&mut GlyphLayer) -> std::result::Result<R, shift_font::error::CoreError>,
+    changes: impl FnOnce(
+      &shift_font::GlyphLayerChangeTarget,
+      &GlyphLayer,
+      &R,
+    ) -> shift_font::FontChangeSet,
   ) -> BridgeResult<R> {
     let target = self.glyph_layer_target(glyph_ref)?;
-    Ok(self.workspace_mut()?.edit_glyph_layer(target, edit)?)
+    Ok(
+      self
+        .workspace_mut()?
+        .edit_glyph_layer(target, edit, changes)?,
+    )
+  }
+
+  fn one_change(change: shift_font::FontChange) -> shift_font::FontChangeSet {
+    shift_font::FontChangeSet::new(vec![change])
+  }
+
+  fn layer_replaced_change(
+    target: &shift_font::GlyphLayerChangeTarget,
+    layer: &GlyphLayer,
+    _result: &impl Sized,
+  ) -> shift_font::FontChangeSet {
+    Self::one_change(shift_font::FontChange::LayerGeometryReplaced(
+      shift_font::LayerGeometryReplaced {
+        target: target.clone(),
+        layer: shift_font::GlyphLayerValue::from(layer),
+      },
+    ))
   }
 
   fn variation_build_for_glyph(
@@ -684,10 +710,18 @@ impl Bridge {
     glyph_ref: GlyphLayerRef,
     width: f64,
   ) -> errors::Result<NapiGlyphValueChange> {
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.set_x_advance(width);
-      Ok(GlyphValueChange::from_layer(layer, Default::default()))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.set_x_advance(width);
+        Ok(GlyphValueChange::from_layer(layer, Default::default()))
+      },
+      |target, layer, _change| {
+        Self::one_change(shift_font::FontChange::LayerMetricsChanged(
+          shift_font::LayerMetricsChanged::from_layer(target.clone(), layer),
+        ))
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -700,10 +734,14 @@ impl Bridge {
     dx: f64,
     dy: f64,
   ) -> errors::Result<NapiGlyphValueChange> {
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.translate_layer(dx, dy);
-      Ok(GlyphValueChange::from_layer(layer, Default::default()))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.translate_layer(dx, dy);
+        Ok(GlyphValueChange::from_layer(layer, Default::default()))
+      },
+      Self::layer_replaced_change,
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -722,14 +760,33 @@ impl Bridge {
     let contour_id = parse::<ContourId>(&contour_id)?;
     let point_type = point_type.into();
 
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      let point_id = layer.add_point_to_contour(contour_id, x, y, point_type, smooth)?;
-      let changed = GlyphChangedEntities {
-        point_ids: vec![point_id],
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        let point_id = layer.add_point_to_contour(contour_id, x, y, point_type, smooth)?;
+        let changed = GlyphChangedEntities {
+          point_ids: vec![point_id],
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      move |target, layer, change| {
+        let contour = layer
+          .contour(contour_id)
+          .map(shift_font::ContourValue::from);
+        contour
+          .map(|contour| {
+            Self::one_change(shift_font::FontChange::PointsAdded(
+              shift_font::PointsAdded {
+                target: target.clone(),
+                contour,
+                point_ids: change.changed.point_ids.clone(),
+              },
+            ))
+          })
+          .unwrap_or_default()
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -748,14 +805,35 @@ impl Bridge {
     let before_point_id = parse::<PointId>(&before_point_id)?;
     let point_type = point_type.into();
 
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      let point_id = layer.insert_point_before(before_point_id, x, y, point_type, smooth)?;
-      let changed = GlyphChangedEntities {
-        point_ids: vec![point_id],
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        let point_id = layer.insert_point_before(before_point_id, x, y, point_type, smooth)?;
+        let changed = GlyphChangedEntities {
+          point_ids: vec![point_id],
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      move |target, layer, change| {
+        let Some(contour_id) = layer.find_point_contour(before_point_id) else {
+          return Self::layer_replaced_change(target, layer, change);
+        };
+        let Some(contour) = layer
+          .contour(contour_id)
+          .map(shift_font::ContourValue::from)
+        else {
+          return Self::layer_replaced_change(target, layer, change);
+        };
+        Self::one_change(shift_font::FontChange::PointsAdded(
+          shift_font::PointsAdded {
+            target: target.clone(),
+            contour,
+            point_ids: change.changed.point_ids.clone(),
+          },
+        ))
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -763,14 +841,32 @@ impl Bridge {
 
   #[napi]
   pub fn add_contour(&mut self, glyph_ref: GlyphLayerRef) -> Result<NapiGlyphStructureChange> {
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      let contour_id = layer.add_empty_contour();
-      let changed = GlyphChangedEntities {
-        contour_ids: vec![contour_id],
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        let contour_id = layer.add_empty_contour();
+        let changed = GlyphChangedEntities {
+          contour_ids: vec![contour_id],
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      |target, layer, change| {
+        let Some(contour) = layer
+          .contours_iter()
+          .last()
+          .map(shift_font::ContourValue::from)
+        else {
+          return Self::layer_replaced_change(target, layer, change);
+        };
+        Self::one_change(shift_font::FontChange::ContourAdded(
+          shift_font::ContourAdded {
+            target: target.clone(),
+            contour,
+          },
+        ))
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -783,14 +879,26 @@ impl Bridge {
     #[napi(ts_arg_type = "ContourId")] contour_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.open_contour(contour_id)?;
-      let changed = GlyphChangedEntities {
-        contour_ids: vec![contour_id],
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.open_contour(contour_id)?;
+        let changed = GlyphChangedEntities {
+          contour_ids: vec![contour_id],
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      move |target, _layer, _change| {
+        Self::one_change(shift_font::FontChange::ContourOpenClosedChanged(
+          shift_font::ContourOpenClosedChanged {
+            target: target.clone(),
+            contour_id,
+            closed: false,
+          },
+        ))
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -803,14 +911,26 @@ impl Bridge {
     #[napi(ts_arg_type = "ContourId")] contour_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.close_contour(contour_id)?;
-      let changed = GlyphChangedEntities {
-        contour_ids: vec![contour_id],
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.close_contour(contour_id)?;
+        let changed = GlyphChangedEntities {
+          contour_ids: vec![contour_id],
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      move |target, _layer, _change| {
+        Self::one_change(shift_font::FontChange::ContourOpenClosedChanged(
+          shift_font::ContourOpenClosedChanged {
+            target: target.clone(),
+            contour_id,
+            closed: true,
+          },
+        ))
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -823,14 +943,18 @@ impl Bridge {
     #[napi(ts_arg_type = "ContourId")] contour_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.reverse_contour(contour_id)?;
-      let changed = GlyphChangedEntities {
-        contour_ids: vec![contour_id],
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.reverse_contour(contour_id)?;
+        let changed = GlyphChangedEntities {
+          contour_ids: vec![contour_id],
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      Self::layer_replaced_change,
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -860,14 +984,18 @@ impl Bridge {
       }
     };
 
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      let created_ids = layer.apply_boolean_op(cid_a, cid_b, op)?;
-      let changed = GlyphChangedEntities {
-        contour_ids: created_ids,
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        let created_ids = layer.apply_boolean_op(cid_a, cid_b, op)?;
+        let changed = GlyphChangedEntities {
+          contour_ids: created_ids,
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      Self::layer_replaced_change,
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -882,11 +1010,15 @@ impl Bridge {
     let point_ids: BridgeResult<Vec<_>> = point_ids.iter().map(|id| parse::<PointId>(id)).collect();
     let point_ids = point_ids?;
 
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.remove_points(&point_ids)?;
-      let changed = GlyphChangedEntities::points(point_ids);
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.remove_points(&point_ids)?;
+        let changed = GlyphChangedEntities::points(point_ids);
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      Self::layer_replaced_change,
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -899,14 +1031,34 @@ impl Bridge {
     #[napi(ts_arg_type = "PointId")] point_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let parsed_id = parse::<PointId>(&point_id)?;
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.toggle_smooth(parsed_id)?;
-      let changed = GlyphChangedEntities {
-        point_ids: vec![parsed_id],
-        ..Default::default()
-      };
-      Ok(GlyphStructureChange::from_layer(layer, changed))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.toggle_smooth(parsed_id)?;
+        let changed = GlyphChangedEntities {
+          point_ids: vec![parsed_id],
+          ..Default::default()
+        };
+        Ok(GlyphStructureChange::from_layer(layer, changed))
+      },
+      move |target, layer, change| {
+        let smooth = layer
+          .contours_iter()
+          .find_map(|contour| contour.get_point(parsed_id))
+          .map(|point| point.is_smooth());
+        smooth
+          .map(|smooth| {
+            Self::one_change(shift_font::FontChange::PointSmoothChanged(
+              shift_font::PointSmoothChanged {
+                target: target.clone(),
+                point_id: parsed_id,
+                smooth,
+              },
+            ))
+          })
+          .unwrap_or_else(|| Self::layer_replaced_change(target, layer, change))
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
@@ -923,27 +1075,48 @@ impl Bridge {
     anchor_ids: Option<BigUint64Array>,
     anchor_coords: Option<Float64Array>,
   ) -> errors::Result<()> {
-    self.edit_glyph_layer(glyph_ref, |layer| {
-      layer.apply_bulk_node_positions(BulkNodePositionUpdates {
-        point_ids: point_ids.as_ref().map(|ids| {
-          let ids: &[u64] = ids;
-          ids
-        }),
-        point_coords: point_coords.as_ref().map(|coords| {
-          let coords: &[f64] = coords;
-          coords
-        }),
-        anchor_ids: anchor_ids.as_ref().map(|ids| {
-          let ids: &[u64] = ids;
-          ids
-        }),
-        anchor_coords: anchor_coords.as_ref().map(|coords| {
-          let coords: &[f64] = coords;
-          coords
-        }),
-      })?;
-      Ok(())
-    })?;
+    let point_position_changes = read_point_position_changes(&point_ids, &point_coords)?;
+    let has_anchor_updates = anchor_ids.as_ref().is_some_and(|ids| !ids.is_empty())
+      || anchor_coords
+        .as_ref()
+        .is_some_and(|coords| !coords.is_empty());
+
+    self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        layer.apply_bulk_node_positions(BulkNodePositionUpdates {
+          point_ids: point_ids.as_ref().map(|ids| {
+            let ids: &[u64] = ids;
+            ids
+          }),
+          point_coords: point_coords.as_ref().map(|coords| {
+            let coords: &[f64] = coords;
+            coords
+          }),
+          anchor_ids: anchor_ids.as_ref().map(|ids| {
+            let ids: &[u64] = ids;
+            ids
+          }),
+          anchor_coords: anchor_coords.as_ref().map(|coords| {
+            let coords: &[f64] = coords;
+            coords
+          }),
+        })?;
+        Ok(())
+      },
+      move |target, layer, result| {
+        if has_anchor_updates {
+          return Self::layer_replaced_change(target, layer, result);
+        }
+
+        Self::one_change(shift_font::FontChange::PointPositionsChanged(
+          shift_font::PointPositionsChanged {
+            target: target.clone(),
+            points: point_position_changes,
+          },
+        ))
+      },
+    )?;
 
     self.mark_font_changed();
     Ok(())
@@ -959,14 +1132,58 @@ impl Bridge {
     let structure = GlyphStructure::from(structure);
     let values: &[f64] = &values;
 
-    let change = self.edit_glyph_layer(glyph_ref, |layer| {
-      apply_state_to_layer(layer, &structure, values)?;
-      Ok(GlyphStructureChange::from_layer(layer, Default::default()))
-    })?;
+    let change = self.edit_glyph_layer(
+      glyph_ref,
+      |layer| {
+        apply_state_to_layer(layer, &structure, values)?;
+        Ok(GlyphStructureChange::from_layer(layer, Default::default()))
+      },
+      Self::layer_replaced_change,
+    )?;
 
     self.mark_font_changed();
     Ok(change.into())
   }
+}
+
+fn read_point_position_changes(
+  point_ids: &Option<BigUint64Array>,
+  point_coords: &Option<Float64Array>,
+) -> BridgeResult<Vec<shift_font::PointPosition>> {
+  let Some(point_ids) = point_ids.as_ref() else {
+    return Ok(Vec::new());
+  };
+
+  let point_ids: &[u64] = point_ids;
+  let point_coords = point_coords
+    .as_ref()
+    .ok_or_else(|| BridgeError::InvalidInput {
+      kind: "point positions",
+      value: "missing coordinates".to_string(),
+    })?;
+  let point_coords: &[f64] = point_coords;
+  let expected_coords = point_ids.len() * 2;
+  if point_coords.len() != expected_coords {
+    return Err(BridgeError::InvalidInput {
+      kind: "point positions",
+      value: format!(
+        "expected {expected_coords} coordinates, got {}",
+        point_coords.len()
+      ),
+    });
+  }
+
+  Ok(
+    point_ids
+      .iter()
+      .enumerate()
+      .map(|(index, point_id)| shift_font::PointPosition {
+        point_id: PointId::from_raw(*point_id as u128),
+        x: point_coords[index * 2],
+        y: point_coords[index * 2 + 1],
+      })
+      .collect(),
+  )
 }
 
 #[cfg(test)]
