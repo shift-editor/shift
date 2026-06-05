@@ -46,9 +46,8 @@ pub enum WorkspaceSource {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GlyphLayerTarget {
-    pub glyph_name: String,
-    pub unicode: Option<u32>,
+pub struct GlyphLayerHandle {
+    pub glyph_id: GlyphId,
     pub layer_id: LayerId,
 }
 
@@ -192,26 +191,33 @@ impl FontWorkspace {
 
     pub fn set_x_advance(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         width: f64,
     ) -> Result<GlyphValueChange, WorkspaceError> {
-        self.edit_glyph_layer(
-            target,
-            |layer| {
-                layer.set_x_advance(width);
-                Ok(GlyphValueChange::from_layer(layer, Default::default()))
-            },
-            |target, layer, _change| {
-                FontChangeSet::new(vec![FontChange::LayerMetricsChanged(
-                    shift_font::LayerMetricsChanged::from_layer(target.clone(), layer),
-                )])
-            },
-        )
+        // clones the font
+        // generates the change set
+        // applies it to the store
+        // replaces previous font
+
+
+
+        // self.edit_glyph_layer(
+        //     target,
+        //     |layer| {
+        //         layer.set_x_advance(width);
+        //         Ok(GlyphValueChange::from_layer(layer, Default::default()))
+        //     },
+        //     |target, layer, _change| {
+        //         FontChangeSet::new(vec![FontChange::LayerMetricsChanged(
+        //             shift_font::LayerMetricsChanged::from_layer(target.clone(), layer),
+        //         )])
+        //     },
+        // )
     }
 
     pub fn translate_layer(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         dx: f64,
         dy: f64,
     ) -> Result<GlyphValueChange, WorkspaceError> {
@@ -227,7 +233,7 @@ impl FontWorkspace {
 
     pub fn add_point(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         contour_id: ContourId,
         x: f64,
         y: f64,
@@ -263,7 +269,7 @@ impl FontWorkspace {
 
     pub fn insert_point_before(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         before_point_id: PointId,
         x: f64,
         y: f64,
@@ -302,7 +308,7 @@ impl FontWorkspace {
 
     pub fn add_contour(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
     ) -> Result<GlyphStructureChange, WorkspaceError> {
         self.edit_glyph_layer(
             target,
@@ -332,7 +338,7 @@ impl FontWorkspace {
 
     pub fn open_contour(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         contour_id: ContourId,
     ) -> Result<GlyphStructureChange, WorkspaceError> {
         self.set_contour_closed(target, contour_id, false)
@@ -340,7 +346,7 @@ impl FontWorkspace {
 
     pub fn close_contour(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         contour_id: ContourId,
     ) -> Result<GlyphStructureChange, WorkspaceError> {
         self.set_contour_closed(target, contour_id, true)
@@ -348,7 +354,7 @@ impl FontWorkspace {
 
     pub fn reverse_contour(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         contour_id: ContourId,
     ) -> Result<GlyphStructureChange, WorkspaceError> {
         self.edit_glyph_layer(
@@ -367,7 +373,7 @@ impl FontWorkspace {
 
     pub fn apply_boolean_op(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         contour_id_a: ContourId,
         contour_id_b: ContourId,
         operation: BooleanOp,
@@ -388,7 +394,7 @@ impl FontWorkspace {
 
     pub fn remove_points(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         point_ids: Vec<PointId>,
     ) -> Result<GlyphStructureChange, WorkspaceError> {
         self.edit_glyph_layer(
@@ -404,7 +410,7 @@ impl FontWorkspace {
 
     pub fn toggle_smooth(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         point_id: PointId,
     ) -> Result<GlyphStructureChange, WorkspaceError> {
         self.edit_glyph_layer(
@@ -439,7 +445,7 @@ impl FontWorkspace {
 
     pub fn apply_position_patch(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         updates: BulkNodePositionUpdates<'_>,
         point_position_changes: Vec<PointPosition>,
         has_anchor_updates: bool,
@@ -467,7 +473,7 @@ impl FontWorkspace {
 
     pub fn restore_state(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         structure: &GlyphStructure,
         values: &[f64],
     ) -> Result<GlyphStructureChange, WorkspaceError> {
@@ -481,68 +487,9 @@ impl FontWorkspace {
         )
     }
 
-    pub fn edit_glyph_layer<R>(
-        &mut self,
-        target: GlyphLayerTarget,
-        edit: impl FnOnce(&mut GlyphLayer) -> Result<R, CoreError>,
-        changes: impl FnOnce(&GlyphLayerChangeTarget, &GlyphLayer, &R) -> FontChangeSet,
-    ) -> Result<R, WorkspaceError> {
-        let mut next_font = self.font.clone();
-        let mut change_set = FontChangeSet::default();
-
-        if next_font.glyph(&target.glyph_name).is_none() {
-            let mut glyph = Glyph::new(target.glyph_name.clone());
-            if let Some(unicode) = target.unicode {
-                glyph.add_unicode(unicode);
-            }
-            glyph.set_layer(target.layer_id, GlyphLayer::with_width(500.0));
-            change_set.push(FontChange::GlyphCreated(GlyphCreated::from(&glyph)));
-            next_font.insert_glyph(glyph);
-        }
-
-        let source_id = source_id_for_layer(&next_font, target.layer_id).ok_or_else(|| {
-            WorkspaceError::InvalidInput {
-                kind: "layer ID",
-                value: target.layer_id.to_string(),
-            }
-        })?;
-        let glyph =
-            next_font
-                .glyph(&target.glyph_name)
-                .ok_or_else(|| WorkspaceError::InvalidInput {
-                    kind: "glyph name",
-                    value: target.glyph_name.clone(),
-                })?;
-        let change_target = GlyphLayerChangeTarget {
-            glyph_id: glyph.id(),
-            glyph_name: glyph.glyph_name().clone(),
-            source_id,
-            layer_id: target.layer_id,
-        };
-        let glyph = next_font.glyph_mut(&target.glyph_name).ok_or_else(|| {
-            WorkspaceError::InvalidInput {
-                kind: "glyph name",
-                value: target.glyph_name.clone(),
-            }
-        })?;
-
-        if let Some(unicode) = target.unicode {
-            glyph.add_unicode(unicode);
-        }
-
-        let layer = glyph.get_or_create_layer(target.layer_id);
-        let result = edit(layer)?;
-        let layer_changes = changes(&change_target, layer, &result);
-        change_set.changes.extend(layer_changes.changes);
-
-        self.commit_font(next_font, change_set)?;
-
-        Ok(result)
-    }
-
     fn set_contour_closed(
         &mut self,
-        target: GlyphLayerTarget,
+        target: GlyphLayerHandle,
         contour_id: ContourId,
         closed: bool,
     ) -> Result<GlyphStructureChange, WorkspaceError> {
