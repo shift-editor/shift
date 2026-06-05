@@ -4,10 +4,9 @@ use std::str::FromStr;
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
 use fontdrasil::variations::VariationModel;
-use shift_font::{Axis, Font, Glyph};
-
-use crate::{
-    values_from_layer, AxisTent, GlyphMaster, GlyphStructure, GlyphVariationData, Location,
+use shift_font::{
+    values_from_layer, Axis, AxisTent, Font, Glyph, GlyphMaster, GlyphStructure,
+    GlyphVariationData, Location,
 };
 
 #[derive(Debug, Clone)]
@@ -129,11 +128,7 @@ fn to_fd_wire_location(location: &Location, axes: &[Axis]) -> NormalizedLocation
     let mut result = NormalizedLocation::new();
 
     for axis in axes {
-        let value = location
-            .values
-            .get(axis.tag())
-            .copied()
-            .unwrap_or(axis.default());
+        let value = location.get(axis.tag()).unwrap_or(axis.default());
         let normalized = axis.normalize(value);
         let Ok(tag) = Tag::from_str(axis.tag()) else {
             continue;
@@ -180,7 +175,7 @@ pub fn build_masters(font: &Font, glyph: &Glyph) -> Option<Vec<GlyphMaster>> {
             source_id: source.id().to_string(),
             source_name: source.name().to_string(),
             is_default_source: default_source_id == Some(source.id()),
-            location: source.location().into(),
+            location: source.location().clone(),
             structure,
             values,
         });
@@ -260,7 +255,7 @@ pub fn get_glyph_variation_data(
 mod tests {
     use std::collections::HashMap;
 
-    use crate::{ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType};
+    use shift_font::{ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType};
 
     use super::build_glyph_variation_data;
     use shift_font::Axis;
@@ -299,9 +294,7 @@ mod tests {
             source_id: source_name.to_string(),
             source_name: source_name.to_string(),
             is_default_source,
-            location: Location {
-                values: HashMap::from([("wght".to_string(), location_value)]),
-            },
+            location: Location::from_map(HashMap::from([("wght".to_string(), location_value)])),
             structure: structure_with_smooth(smooth),
             values: vec![500.0, x_offset, 0.0, 100.0 + x_offset, 0.0],
         }

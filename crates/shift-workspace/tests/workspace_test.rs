@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
-use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
+use shift_font::PointType;
+use shift_store::GlyphId as StoreGlyphId;
+use shift_workspace::{
+    FontWorkspace, GlyphLayerTarget, NewWorkspace, WorkspaceError, WorkspaceSource,
+};
 
 #[test]
 fn creates_workspace_with_source_package_and_working_store() {
@@ -107,6 +111,87 @@ fn save_as_assigns_a_shift_package_save_target() {
     assert_eq!(workspace.save_target(), Some(save_path.as_path()));
     assert!(save_path.join("manifest.json").is_file());
     workspace.save().unwrap();
+}
+
+#[test]
+fn workspace_add_contour_creates_glyph_and_persists_layer() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join("TestFont.shift");
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace =
+        FontWorkspace::create(&source_path, &store_path, NewWorkspace::new()).unwrap();
+
+    let target = GlyphLayerTarget {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+        layer_id: workspace.font().default_layer_id(),
+    };
+
+    let change = workspace.add_contour(target).unwrap();
+
+    assert_eq!(change.structure.contours.len(), 1);
+    let glyph = workspace.font().glyph("A").unwrap();
+    assert_eq!(glyph.unicodes(), &[65]);
+    assert!(
+        workspace
+            .store()
+            .get_glyph(&StoreGlyphId::new(glyph.id().to_string()))
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[test]
+fn workspace_add_point_updates_live_font_and_store() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join("TestFont.shift");
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace =
+        FontWorkspace::create(&source_path, &store_path, NewWorkspace::new()).unwrap();
+
+    let target = GlyphLayerTarget {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+        layer_id: workspace.font().default_layer_id(),
+    };
+    let contour = workspace
+        .add_contour(target.clone())
+        .unwrap()
+        .structure
+        .contours[0]
+        .id
+        .parse()
+        .unwrap();
+
+    let change = workspace
+        .add_point(
+            target.clone(),
+            contour,
+            10.0,
+            20.0,
+            PointType::OnCurve,
+            false,
+        )
+        .unwrap();
+
+    assert_eq!(change.changed.point_ids.len(), 1);
+    let glyph = workspace.font().glyph("A").unwrap();
+    let layer = glyph.layer(target.layer_id).unwrap();
+    let point = layer
+        .contour(contour)
+        .unwrap()
+        .get_point(change.changed.point_ids[0])
+        .unwrap();
+    assert_eq!((point.x(), point.y()), (10.0, 20.0));
+    assert_eq!(point.point_type(), PointType::OnCurve);
+    assert_eq!(
+        workspace
+            .store()
+            .list_points_for_contour(&contour.to_string())
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 fn fixture(path: &str) -> PathBuf {

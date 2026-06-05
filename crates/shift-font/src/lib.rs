@@ -4,6 +4,7 @@ pub mod curve;
 pub mod error;
 pub mod ir;
 pub mod layer_edit;
+pub mod state;
 
 pub use changes::*;
 pub use error::{CoreError, CoreResult};
@@ -15,3 +16,4 @@ pub use ir::{
 pub use layer_edit::{
     BulkNodePositionUpdates, ChangedEntities, EditableNode, PasteContour, PastePoint, PasteResult,
 };
+pub use state::*;

@@ -2,14 +2,13 @@ use std::collections::HashMap;
 
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
-use shift_font::PointType as IrPointType;
-
-use crate::{
-    AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure,
-    GlyphStructureChange, GlyphValueChange, GlyphVariationData, Location, PointData, PointType,
-    Source,
+use shift_font::{
+    AnchorData, AxisTent, ComponentData, ContourData, GlyphChangedEntities, GlyphMaster,
+    GlyphState, GlyphStructure, GlyphStructureChange, GlyphValueChange, GlyphVariationData,
+    Location as IrLocation, PointData, PointType,
 };
+
+use crate::{Axis, FontMetadata, FontMetrics, GlyphRecord, Location, Source};
 
 #[napi(string_enum = "camelCase")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,7 +20,7 @@ pub enum NapiPointType {
 impl From<PointType> for NapiPointType {
     fn from(point_type: PointType) -> Self {
         match point_type {
-            PointType::OnCurve => Self::OnCurve,
+            PointType::OnCurve | PointType::QCurve => Self::OnCurve,
             PointType::OffCurve => Self::OffCurve,
         }
     }
@@ -33,13 +32,6 @@ impl From<NapiPointType> for PointType {
             NapiPointType::OnCurve => Self::OnCurve,
             NapiPointType::OffCurve => Self::OffCurve,
         }
-    }
-}
-
-impl From<NapiPointType> for IrPointType {
-    fn from(point_type: NapiPointType) -> Self {
-        let point_type: PointType = point_type.into();
-        point_type.into()
     }
 }
 
@@ -420,6 +412,17 @@ impl From<Location> for NapiLocation {
     fn from(location: Location) -> Self {
         Self {
             values: location.values,
+        }
+    }
+}
+
+impl From<IrLocation> for NapiLocation {
+    fn from(location: IrLocation) -> Self {
+        Self {
+            values: location
+                .iter()
+                .map(|(tag, value)| (tag.clone(), *value))
+                .collect(),
         }
     }
 }
