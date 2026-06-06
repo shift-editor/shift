@@ -4,6 +4,8 @@ import type {
   AnchorId,
   ComponentId,
   GuidelineId,
+  GlyphId,
+  LayerId,
   SourceId,
 } from "../ids";
 
@@ -33,6 +35,8 @@ export interface BridgeApi {
   getSources(): Array<Source>
   getPersistedVersion(): number
   isDirty(): boolean
+  createGlyph(name: GlyphName, unicodes: Array<Unicode>): GlyphId
+  createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId
   setXAdvance(glyphRef: GlyphLayerRef, width: number): GlyphValueChange
   translateLayer(glyphRef: GlyphLayerRef, dx: number, dy: number): GlyphValueChange
   addPoint(glyphRef: GlyphLayerRef, contourId: ContourId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange

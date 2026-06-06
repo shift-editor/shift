@@ -4,6 +4,7 @@ import type {
   AnchorId,
   ComponentId,
   GuidelineId,
+  GlyphId,
   GlyphName,
   LayerId,
   SourceId,
@@ -29,6 +30,8 @@ export declare class Bridge {
   getSources(): Array<NapiSource>
   getPersistedVersion(): number
   isDirty(): boolean
+  createGlyph(name: GlyphName, unicodes: Array<Unicode>): GlyphId
+  createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId
   setXAdvance(glyphRef: GlyphLayerRef, width: number): NapiGlyphValueChange
   translateLayer(glyphRef: GlyphLayerRef, dx: number, dy: number): NapiGlyphValueChange
   addPoint(glyphRef: GlyphLayerRef, contourId: ContourId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange

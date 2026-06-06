@@ -16,6 +16,12 @@ pub struct ChangedEntities {
     pub component_ids: Vec<ComponentId>,
 }
 
+#[derive(Clone, Debug)]
+pub struct AddedPoint {
+    pub point_id: PointId,
+    pub contour: Contour,
+}
+
 impl ChangedEntities {
     pub fn points(point_ids: Vec<PointId>) -> Self {
         Self {
@@ -398,11 +404,12 @@ impl GlyphLayer {
 }
 
 impl GlyphLayer {
-    pub fn add_empty_contour(&mut self) -> ContourId {
+    pub fn add_empty_contour(&mut self) -> Contour {
         let contour = Contour::new();
-        let contour_id = contour.id();
+        let created_contour = contour.clone();
         self.add_contour(contour);
-        contour_id
+
+        created_contour
     }
 
     pub fn remove_contour_checked(&mut self, contour_id: ContourId) -> CoreResult<Contour> {
@@ -451,8 +458,8 @@ impl GlyphLayer {
 
         let mut created_ids = Vec::new();
         for contour in result.0 {
-            let id = self.add_contour(contour);
-            created_ids.push(id);
+            let contour_id = self.add_contour(contour);
+            created_ids.push(contour_id);
         }
 
         Ok(created_ids)
@@ -476,11 +483,14 @@ impl GlyphLayer {
         y: f64,
         point_type: PointType,
         is_smooth: bool,
-    ) -> CoreResult<PointId> {
+    ) -> CoreResult<AddedPoint> {
         let contour = self.contour_mut_or_err(contour_id)?;
         let point_id = contour.add_point(x, y, point_type, is_smooth);
 
-        Ok(point_id)
+        Ok(AddedPoint {
+            point_id,
+            contour: contour.clone(),
+        })
     }
 
     pub fn insert_point_before(
@@ -490,7 +500,7 @@ impl GlyphLayer {
         y: f64,
         point_type: PointType,
         is_smooth: bool,
-    ) -> CoreResult<PointId> {
+    ) -> CoreResult<AddedPoint> {
         let contour_id = self.point_contour_or_err(before_id)?;
         let contour = self.contour_mut_or_err(contour_id)?;
 
@@ -498,7 +508,10 @@ impl GlyphLayer {
             .insert_point_before(before_id, x, y, point_type, is_smooth)
             .ok_or(CoreError::PointNotFound(before_id))?;
 
-        Ok(point_id)
+        Ok(AddedPoint {
+            point_id,
+            contour: contour.clone(),
+        })
     }
 
     pub fn remove_point(&mut self, point_id: PointId) -> CoreResult<()> {
@@ -540,13 +553,13 @@ impl GlyphLayer {
         Ok(())
     }
 
-    pub fn toggle_smooth(&mut self, point_id: PointId) -> CoreResult<()> {
+    pub fn toggle_smooth(&mut self, point_id: PointId) -> CoreResult<bool> {
         let contour_id = self.point_contour_or_err(point_id)?;
         let point = self.point_mut_or_err(contour_id, point_id)?;
 
         point.toggle_smooth();
 
-        Ok(())
+        Ok(point.is_smooth())
     }
 
     pub fn remove_points(&mut self, point_ids: &[PointId]) -> CoreResult<()> {
@@ -728,7 +741,7 @@ mod tests {
 
     fn session_with_contour() -> (GlyphLayer, ContourId) {
         let mut session = create_session();
-        let contour_id = session.add_empty_contour();
+        let contour_id = session.add_empty_contour().id();
         (session, contour_id)
     }
 
@@ -736,6 +749,7 @@ mod tests {
         session
             .add_point_to_contour(contour_id, x, y, PointType::OnCurve, false)
             .unwrap()
+            .point_id
     }
 
     fn add_anchor(session: &mut GlyphLayer, x: f64, y: f64) -> AnchorId {
@@ -901,15 +915,17 @@ mod tests {
     #[test]
     fn move_points_across_contours() {
         let mut session = create_session();
-        let c1_id = session.add_empty_contour();
+        let c1_id = session.add_empty_contour().id();
         let p1 = session
             .add_point_to_contour(c1_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
+        let p1 = p1.point_id;
 
-        let c2_id = session.add_empty_contour();
+        let c2_id = session.add_empty_contour().id();
         let p2 = session
             .add_point_to_contour(c2_id, 50.0, 50.0, PointType::OnCurve, false)
             .unwrap();
+        let p2 = p2.point_id;
 
         session.move_points(&[p1, p2], 5.0, 5.0).unwrap();
 
@@ -1000,10 +1016,11 @@ mod tests {
     fn translate_layer_moves_points_and_anchors_without_changing_width() {
         let mut session = create_session();
         let original_width = session.width();
-        let contour_id = session.add_empty_contour();
+        let contour_id = session.add_empty_contour().id();
         let point_id = session
             .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
             .unwrap();
+        let point_id = point_id.point_id;
         let anchor_id = session.add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
 
         session.translate_layer(5.0, -3.0);
@@ -1072,6 +1089,7 @@ mod tests {
         let control = session
             .insert_point_before(anchor2, 50.0, 75.0, PointType::OffCurve, false)
             .unwrap();
+        let control = control.point_id;
 
         let contour = session.contour(contour_id).unwrap();
         let points: Vec<_> = contour.points().iter().collect();
