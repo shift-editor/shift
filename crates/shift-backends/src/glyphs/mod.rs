@@ -37,7 +37,10 @@ mod tests {
         assert_eq!(font.metadata().family_name.as_deref(), Some("Homenaje"));
         assert_eq!(font.metrics().units_per_em, 1000.0);
         assert!(font.glyph_count() >= 300, "font should contain many glyphs");
-        assert!(font.glyph("A").is_some(), "glyph A should be present");
+        assert!(
+            font.glyph_by_name("A").is_some(),
+            "glyph A should be present"
+        );
 
         let fea = font
             .features()
@@ -47,7 +50,7 @@ mod tests {
 
         assert_eq!(font.kerning().get_kerning("A", "V"), Some(-55.0));
 
-        let aacute = font.glyph("Aacute").expect("Aacute should exist");
+        let aacute = font.glyph_by_name("Aacute").expect("Aacute should exist");
         let layer = aacute
             .layers()
             .values()
@@ -113,7 +116,10 @@ unicode = 0041;
             .expect("failed to load .glyphspackage fixture");
 
         assert_eq!(font.metadata().family_name.as_deref(), Some("Package Font"));
-        assert!(font.glyph("A").is_some(), "glyph A should be present");
+        assert!(
+            font.glyph_by_name("A").is_some(),
+            "glyph A should be present"
+        );
 
         let _ = fs::remove_dir_all(package_dir.parent().unwrap());
     }

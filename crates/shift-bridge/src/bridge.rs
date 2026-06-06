@@ -211,8 +211,6 @@ impl FontView for FontSaveSnapshot {
       self
         .font
         .glyphs()
-        .values()
-        .map(|glyph| glyph.as_ref())
         .filter(|glyph| override_name.as_deref() != Some(glyph.name())),
     );
 
@@ -226,7 +224,7 @@ impl FontView for FontSaveSnapshot {
       }
     }
 
-    self.font.glyph(name)
+    self.font.glyph_by_name(name)
   }
 
   fn kerning(&self) -> &shift_font::KerningData {
@@ -358,8 +356,6 @@ impl Bridge {
     let mut records: Vec<_> = self
       .font()?
       .glyphs()
-      .values()
-      .map(|glyph| glyph.as_ref())
       .map(GlyphRecord::from)
       .map(Into::into)
       .collect();
@@ -422,8 +418,7 @@ impl Bridge {
     let mut glyph_names: Vec<String> = self
       .font()?
       .glyphs()
-      .keys()
-      .map(|glyph_name| glyph_name.to_string())
+      .map(|glyph| glyph.name().to_string())
       .collect();
     glyph_names.sort();
 
@@ -477,7 +472,7 @@ impl Bridge {
   }
 
   fn glyph_for_read(&self, glyph_name: &str) -> BridgeResult<Option<Glyph>> {
-    Ok(self.font()?.glyph(glyph_name).cloned())
+    Ok(self.font()?.glyph_by_name(glyph_name).cloned())
   }
 
   fn glyph_layer_target(&self, glyph_ref: GlyphLayerRef) -> BridgeResult<GlyphLayerTarget> {
@@ -496,7 +491,7 @@ impl Bridge {
 
     let layer_id = self
       .font()?
-      .glyph(&glyph_ref.glyph_handle.name)
+      .glyph_by_name(&glyph_ref.glyph_handle.name)
       .and_then(|glyph| glyph.layer_for_source(source_id))
       .map(GlyphLayer::id)
       .unwrap_or_else(LayerId::new);

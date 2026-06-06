@@ -121,12 +121,12 @@ fn preserves_contours_points_and_widths_for_default_geometry() {
     for glyph_name in ["A", "O"] {
         let original_layer = main_layer(
             original
-                .glyph(glyph_name)
+                .glyph_by_name(glyph_name)
                 .unwrap_or_else(|| panic!("original {glyph_name} should exist")),
         );
         let reloaded_layer = main_layer(
             reloaded
-                .glyph(glyph_name)
+                .glyph_by_name(glyph_name)
                 .unwrap_or_else(|| panic!("reloaded {glyph_name} should exist")),
         );
 
@@ -138,20 +138,24 @@ fn preserves_contours_points_and_widths_for_default_geometry() {
 #[test]
 fn preserves_components_anchors_layers_and_kerning() {
     let mut original = load_font(&mutatorsans_ufo_path());
-    original
-        .glyph_mut("E")
+    let e_layer_id = original
+        .glyph_by_name("E")
         .expect("E glyph should exist")
         .layers()
         .iter()
         .max_by_key(|(_, layer)| layer.contours().len())
         .map(|(layer_id, _)| *layer_id)
-        .and_then(|layer_id| original.glyph_mut("E").unwrap().layer_mut(layer_id))
+        .expect("E should have a main layer");
+    original
+        .layer_mut(e_layer_id)
         .expect("E should have a main layer")
         .add_anchor(Anchor::new(None::<String>, 123.0, 456.0));
 
     let reloaded = round_trip(&original);
 
-    let aacute = reloaded.glyph("Aacute").expect("Aacute should exist");
+    let aacute = reloaded
+        .glyph_by_name("Aacute")
+        .expect("Aacute should exist");
     let component_bases: Vec<_> = main_layer(aacute)
         .components_iter()
         .map(|component| component.base_glyph().as_str())
@@ -160,7 +164,7 @@ fn preserves_components_anchors_layers_and_kerning() {
     assert!(component_bases.contains(&"A"));
     assert!(component_bases.contains(&"acute"));
 
-    let e = reloaded.glyph("E").expect("E should exist");
+    let e = reloaded.glyph_by_name("E").expect("E should exist");
     let anchors: Vec<_> = e
         .layers()
         .values()

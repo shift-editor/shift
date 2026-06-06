@@ -1,15 +1,17 @@
 use crate::axis::{Axis, Location};
-use crate::entity::SourceId;
+use crate::entity::{GlyphId, LayerId, SourceId};
+use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
-use crate::glyph::Glyph;
+use crate::glyph::{Glyph, GlyphLayer};
 use crate::guideline::Guideline;
 use crate::kerning::KerningData;
 use crate::lib_data::LibData;
 use crate::metrics::FontMetrics;
 use crate::source::Source;
 use crate::GlyphName;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use indexmap::IndexMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -75,9 +77,15 @@ impl FontMetadata {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Font {
-    inner: Arc<FontData>,
+    state: Arc<FontState>,
+}
+
+#[derive(Clone, Debug)]
+struct FontState {
+    data: FontData,
+    index: FontIndex,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -88,11 +96,173 @@ struct FontData {
     sources: Vec<Source>,
     #[serde(default)]
     default_source_id: Option<SourceId>,
-    glyphs: HashMap<GlyphName, Arc<Glyph>>,
+    glyphs: IndexMap<GlyphId, Arc<Glyph>>,
     kerning: KerningData,
     features: FeatureData,
     guidelines: Vec<Guideline>,
     lib: LibData,
+}
+
+#[derive(Clone, Debug, Default)]
+struct FontIndex {
+    glyph_by_name: HashMap<GlyphName, GlyphId>,
+    layer_owner: HashMap<LayerId, GlyphId>,
+    layer_by_glyph_source: HashMap<(GlyphId, SourceId), LayerId>,
+    glyphs_by_unicode: HashMap<u32, Vec<GlyphId>>,
+}
+
+impl FontIndex {
+    fn from_glyphs(glyphs: &IndexMap<GlyphId, Arc<Glyph>>) -> CoreResult<Self> {
+        let mut index = Self::default();
+
+        for (glyph_id, glyph) in glyphs {
+            if *glyph_id != glyph.id() {
+                return Err(CoreError::MismatchedGlyphId {
+                    key: *glyph_id,
+                    glyph_id: glyph.id(),
+                });
+            }
+
+            if index
+                .glyph_by_name
+                .insert(glyph.glyph_name().clone(), *glyph_id)
+                .is_some()
+            {
+                return Err(CoreError::DuplicateGlyphName(glyph.glyph_name().clone()));
+            }
+
+            for unicode in glyph.unicodes() {
+                index
+                    .glyphs_by_unicode
+                    .entry(*unicode)
+                    .or_default()
+                    .push(*glyph_id);
+            }
+
+            for layer in glyph.layers().values().map(Arc::as_ref) {
+                if index.layer_owner.insert(layer.id(), *glyph_id).is_some() {
+                    return Err(CoreError::DuplicateLayerId(layer.id()));
+                }
+
+                if index
+                    .layer_by_glyph_source
+                    .insert((*glyph_id, layer.source_id()), layer.id())
+                    .is_some()
+                {
+                    return Err(CoreError::DuplicateGlyphLayer {
+                        glyph_id: *glyph_id,
+                        source_id: layer.source_id(),
+                    });
+                }
+            }
+        }
+
+        Ok(index)
+    }
+
+    fn validate_glyph_insert(&self, glyph_id: GlyphId, glyph: &Glyph) -> CoreResult<()> {
+        if glyph_id != glyph.id() {
+            return Err(CoreError::MismatchedGlyphId {
+                key: glyph_id,
+                glyph_id: glyph.id(),
+            });
+        }
+
+        if self.glyph_by_name.contains_key(glyph.glyph_name()) {
+            return Err(CoreError::DuplicateGlyphName(glyph.glyph_name().clone()));
+        }
+
+        let mut local_sources = HashSet::new();
+        for layer in glyph.layers().values().map(Arc::as_ref) {
+            if self.layer_owner.contains_key(&layer.id()) {
+                return Err(CoreError::DuplicateLayerId(layer.id()));
+            }
+
+            if self
+                .layer_by_glyph_source
+                .contains_key(&(glyph_id, layer.source_id()))
+                || !local_sources.insert(layer.source_id())
+            {
+                return Err(CoreError::DuplicateGlyphLayer {
+                    glyph_id,
+                    source_id: layer.source_id(),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn insert_glyph(&mut self, glyph_id: GlyphId, glyph: &Glyph) {
+        self.glyph_by_name
+            .insert(glyph.glyph_name().clone(), glyph_id);
+
+        for unicode in glyph.unicodes() {
+            self.glyphs_by_unicode
+                .entry(*unicode)
+                .or_default()
+                .push(glyph_id);
+        }
+
+        for layer in glyph.layers().values().map(Arc::as_ref) {
+            self.layer_owner.insert(layer.id(), glyph_id);
+            self.layer_by_glyph_source
+                .insert((glyph_id, layer.source_id()), layer.id());
+        }
+    }
+
+    fn remove_glyph(&mut self, glyph_id: GlyphId, glyph: &Glyph) {
+        self.glyph_by_name.remove(glyph.glyph_name());
+
+        for unicode in glyph.unicodes() {
+            if let Some(glyph_ids) = self.glyphs_by_unicode.get_mut(unicode) {
+                glyph_ids.retain(|id| *id != glyph_id);
+                if glyph_ids.is_empty() {
+                    self.glyphs_by_unicode.remove(unicode);
+                }
+            }
+        }
+
+        for layer in glyph.layers().values().map(Arc::as_ref) {
+            self.layer_owner.remove(&layer.id());
+            self.layer_by_glyph_source
+                .remove(&(glyph_id, layer.source_id()));
+        }
+    }
+}
+
+impl FontState {
+    fn from_data(data: FontData) -> CoreResult<Self> {
+        let index = FontIndex::from_glyphs(&data.glyphs)?;
+        Ok(Self { data, index })
+    }
+
+    fn rebuild_index(&mut self) -> CoreResult<()> {
+        self.index = FontIndex::from_glyphs(&self.data.glyphs)?;
+        Ok(())
+    }
+}
+
+impl Serialize for Font {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.data().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Font {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let data = FontData::deserialize(deserializer)?;
+        let state = FontState::from_data(data).map_err(serde::de::Error::custom)?;
+        Ok(Self {
+            state: Arc::new(state),
+        })
+    }
 }
 
 impl Default for Font {
@@ -101,17 +271,20 @@ impl Default for Font {
         let default_source_id = default_source.id();
 
         Self {
-            inner: Arc::new(FontData {
-                metadata: FontMetadata::default(),
-                metrics: FontMetrics::default(),
-                axes: Vec::new(),
-                sources: vec![default_source],
-                default_source_id: Some(default_source_id),
-                glyphs: HashMap::new(),
-                kerning: KerningData::new(),
-                features: FeatureData::new(),
-                guidelines: Vec::new(),
-                lib: LibData::new(),
+            state: Arc::new(FontState {
+                data: FontData {
+                    metadata: FontMetadata::default(),
+                    metrics: FontMetrics::default(),
+                    axes: Vec::new(),
+                    sources: vec![default_source],
+                    default_source_id: Some(default_source_id),
+                    glyphs: IndexMap::new(),
+                    kerning: KerningData::new(),
+                    features: FeatureData::new(),
+                    guidelines: Vec::new(),
+                    lib: LibData::new(),
+                },
+                index: FontIndex::default(),
             }),
         }
     }
@@ -124,27 +297,38 @@ impl Font {
 
     pub fn empty() -> Self {
         Self {
-            inner: Arc::new(FontData {
-                metadata: FontMetadata::default(),
-                metrics: FontMetrics::default(),
-                axes: Vec::new(),
-                sources: Vec::new(),
-                default_source_id: None,
-                glyphs: HashMap::new(),
-                kerning: KerningData::new(),
-                features: FeatureData::new(),
-                guidelines: Vec::new(),
-                lib: LibData::new(),
+            state: Arc::new(FontState {
+                data: FontData {
+                    metadata: FontMetadata::default(),
+                    metrics: FontMetrics::default(),
+                    axes: Vec::new(),
+                    sources: Vec::new(),
+                    default_source_id: None,
+                    glyphs: IndexMap::new(),
+                    kerning: KerningData::new(),
+                    features: FeatureData::new(),
+                    guidelines: Vec::new(),
+                    lib: LibData::new(),
+                },
+                index: FontIndex::default(),
             }),
         }
     }
 
     fn data(&self) -> &FontData {
-        &self.inner
+        &self.state.data
     }
 
     fn data_mut(&mut self) -> &mut FontData {
-        Arc::make_mut(&mut self.inner)
+        &mut Arc::make_mut(&mut self.state).data
+    }
+
+    fn index(&self) -> &FontIndex {
+        &self.state.index
+    }
+
+    fn state_mut(&mut self) -> &mut FontState {
+        Arc::make_mut(&mut self.state)
     }
 
     pub fn metadata(&self) -> &FontMetadata {
@@ -211,62 +395,174 @@ impl Font {
         !self.data().axes.is_empty()
     }
 
-    pub fn glyphs(&self) -> &HashMap<GlyphName, Arc<Glyph>> {
-        &self.data().glyphs
+    pub fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
+        self.data().glyphs.values().map(Arc::as_ref)
     }
 
-    pub fn glyph(&self, name: &str) -> Option<&Glyph> {
-        self.data().glyphs.get(name).map(Arc::as_ref)
+    pub fn glyph(&self, glyph_id: GlyphId) -> Option<&Glyph> {
+        self.data().glyphs.get(&glyph_id).map(Arc::as_ref)
     }
 
-    pub fn glyph_mut(&mut self, name: &str) -> Option<&mut Glyph> {
-        self.data_mut().glyphs.get_mut(name).map(Arc::make_mut)
+    pub fn glyph_id_by_name(&self, name: &str) -> Option<GlyphId> {
+        self.index().glyph_by_name.get(name).copied()
     }
 
-    pub fn glyph_by_unicode(&self, unicode: u32) -> Option<&Glyph> {
-        self.data()
-            .glyphs
-            .values()
-            .find(|g| g.unicodes().contains(&unicode))
-            .map(Arc::as_ref)
+    pub fn glyph_by_name(&self, name: &str) -> Option<&Glyph> {
+        self.glyph(self.glyph_id_by_name(name)?)
     }
 
-    pub fn glyph_by_unicode_mut(&mut self, unicode: u32) -> Option<&mut Glyph> {
+    pub fn glyphs_by_unicode(&self, unicode: u32) -> impl Iterator<Item = &Glyph> {
+        self.index()
+            .glyphs_by_unicode
+            .get(&unicode)
+            .into_iter()
+            .flatten()
+            .filter_map(|glyph_id| self.glyph(*glyph_id))
+    }
+
+    pub fn glyph_id_by_layer(&self, layer_id: LayerId) -> Option<GlyphId> {
+        self.index().layer_owner.get(&layer_id).copied()
+    }
+
+    pub fn layer_id_for_glyph_source(
+        &self,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+    ) -> Option<LayerId> {
+        self.index()
+            .layer_by_glyph_source
+            .get(&(glyph_id, source_id))
+            .copied()
+    }
+
+    pub fn layer(&self, layer_id: LayerId) -> Option<&GlyphLayer> {
+        let glyph_id = self.glyph_id_by_layer(layer_id)?;
+        self.glyph(glyph_id)?.layer(layer_id)
+    }
+
+    pub fn layer_mut(&mut self, layer_id: LayerId) -> Option<&mut GlyphLayer> {
+        let glyph_id = self.glyph_id_by_layer(layer_id)?;
         self.data_mut()
             .glyphs
-            .values_mut()
-            .find(|g| g.unicodes().contains(&unicode))
-            .map(Arc::make_mut)
+            .get_mut(&glyph_id)
+            .and_then(|glyph| Arc::make_mut(glyph).layer_mut(layer_id))
     }
 
-    pub fn insert_glyph(&mut self, glyph: Glyph) {
-        self.data_mut()
-            .glyphs
-            .insert(glyph.glyph_name().clone(), Arc::new(glyph));
+    pub fn insert_glyph(&mut self, glyph: Glyph) -> CoreResult<GlyphId> {
+        let glyph_id = glyph.id();
+        if self.data().glyphs.contains_key(&glyph_id) {
+            return Err(CoreError::DuplicateGlyphId(glyph_id));
+        }
+        self.index().validate_glyph_insert(glyph_id, &glyph)?;
+
+        let state = self.state_mut();
+        state.index.insert_glyph(glyph_id, &glyph);
+        state.data.glyphs.insert(glyph_id, Arc::new(glyph));
+        Ok(glyph_id)
     }
 
-    pub fn remove_glyph(&mut self, name: &str) -> Option<Glyph> {
-        self.data_mut()
+    pub fn remove_glyph(&mut self, glyph_id: GlyphId) -> Option<Glyph> {
+        let state = self.state_mut();
+        let glyph = state
+            .data
             .glyphs
-            .remove(name)
-            .map(Arc::unwrap_or_clone)
+            .shift_remove(&glyph_id)
+            .map(Arc::unwrap_or_clone)?;
+        state.index.remove_glyph(glyph_id, &glyph);
+        Some(glyph)
     }
 
     pub fn glyph_count(&self) -> usize {
         self.data().glyphs.len()
     }
 
-    pub fn take_glyph(&mut self, name: &str) -> Option<Glyph> {
-        self.data_mut()
+    pub fn rename_glyph(&mut self, glyph_id: GlyphId, name: GlyphName) -> CoreResult<()> {
+        let mut state = (*self.state).clone();
+        let glyph = state
+            .data
             .glyphs
-            .remove(name)
-            .map(Arc::unwrap_or_clone)
+            .get_mut(&glyph_id)
+            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+        Arc::make_mut(glyph).set_name(name);
+        state.rebuild_index()?;
+        self.state = Arc::new(state);
+        Ok(())
     }
 
-    pub fn put_glyph(&mut self, glyph: Glyph) {
-        self.data_mut()
+    pub fn set_glyph_unicodes(&mut self, glyph_id: GlyphId, unicodes: Vec<u32>) -> CoreResult<()> {
+        let mut state = (*self.state).clone();
+        let glyph = state
+            .data
             .glyphs
-            .insert(glyph.glyph_name().clone(), Arc::new(glyph));
+            .get_mut(&glyph_id)
+            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+        Arc::make_mut(glyph).set_unicodes(unicodes);
+        state.rebuild_index()?;
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
+    pub fn create_glyph_layer(
+        &mut self,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+    ) -> CoreResult<LayerId> {
+        if !self.sources().iter().any(|source| source.id() == source_id) {
+            return Err(CoreError::SourceNotFound(source_id));
+        }
+        if self
+            .layer_id_for_glyph_source(glyph_id, source_id)
+            .is_some()
+        {
+            return Err(CoreError::DuplicateGlyphLayer {
+                glyph_id,
+                source_id,
+            });
+        }
+
+        let layer = GlyphLayer::new(LayerId::new(), source_id);
+        let layer_id = layer.id();
+        self.insert_glyph_layer(glyph_id, layer)?;
+        Ok(layer_id)
+    }
+
+    pub fn insert_glyph_layer(&mut self, glyph_id: GlyphId, layer: GlyphLayer) -> CoreResult<()> {
+        if !self
+            .sources()
+            .iter()
+            .any(|source| source.id() == layer.source_id())
+        {
+            return Err(CoreError::SourceNotFound(layer.source_id()));
+        }
+
+        let mut state = (*self.state).clone();
+        let glyph = state
+            .data
+            .glyphs
+            .get_mut(&glyph_id)
+            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+        Arc::make_mut(glyph).set_layer(layer);
+        state.rebuild_index()?;
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
+    pub fn remove_glyph_layer(&mut self, layer_id: LayerId) -> CoreResult<GlyphLayer> {
+        let glyph_id = self
+            .glyph_id_by_layer(layer_id)
+            .ok_or(CoreError::LayerNotFound(layer_id))?;
+        let mut state = (*self.state).clone();
+        let glyph = state
+            .data
+            .glyphs
+            .get_mut(&glyph_id)
+            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+        let layer = Arc::make_mut(glyph)
+            .remove_layer(layer_id)
+            .ok_or(CoreError::LayerNotFound(layer_id))?;
+        state.rebuild_index()?;
+        self.state = Arc::new(state);
+        Ok(layer)
     }
 
     pub fn kerning(&self) -> &KerningData {
@@ -346,7 +642,7 @@ mod tests {
             }
 
             glyph.set_layer(layer);
-            font.insert_glyph(glyph);
+            font.insert_glyph(glyph).unwrap();
         }
 
         font
@@ -376,26 +672,177 @@ mod tests {
         let mut glyph = Glyph::with_unicode("A".to_string(), 65);
         let layer =
             GlyphLayer::with_width(LayerId::new(), font.default_source_id().unwrap(), 600.0);
+        let layer_id = layer.id();
         glyph.set_layer(layer);
 
-        font.insert_glyph(glyph);
+        let glyph_id = font.insert_glyph(glyph).unwrap();
 
         assert_eq!(font.glyph_count(), 1);
-        assert!(font.glyph("A").is_some());
-        assert!(font.glyph_by_unicode(65).is_some());
+        assert!(font.glyph(glyph_id).is_some());
+        assert_eq!(font.glyph_id_by_name("A"), Some(glyph_id));
+        assert!(font.glyph_by_name("A").is_some());
+        assert_eq!(font.glyph_id_by_layer(layer_id), Some(glyph_id));
+        assert_eq!(
+            font.layer_id_for_glyph_source(glyph_id, font.default_source_id().unwrap()),
+            Some(layer_id)
+        );
+        assert_eq!(
+            font.glyphs_by_unicode(65)
+                .map(Glyph::id)
+                .collect::<Vec<_>>(),
+            vec![glyph_id]
+        );
     }
 
     #[test]
-    fn font_take_put_glyph() {
+    fn font_remove_insert_glyph() {
         let mut font = Font::new();
-        font.insert_glyph(Glyph::with_unicode("A".to_string(), 65));
+        let glyph = Glyph::with_unicode("A".to_string(), 65);
+        let glyph_id = font.insert_glyph(glyph).unwrap();
 
-        let taken = font.take_glyph("A");
+        let taken = font.remove_glyph(glyph_id);
         assert!(taken.is_some());
         assert_eq!(font.glyph_count(), 0);
+        assert_eq!(font.glyph_id_by_name("A"), None);
 
-        font.put_glyph(taken.unwrap());
+        font.insert_glyph(taken.unwrap()).unwrap();
         assert_eq!(font.glyph_count(), 1);
+        assert_eq!(font.glyph_id_by_name("A"), Some(glyph_id));
+    }
+
+    #[test]
+    fn glyph_names_are_unique() {
+        let mut font = Font::new();
+        font.insert_glyph(Glyph::new("A")).unwrap();
+
+        let error = font.insert_glyph(Glyph::new("A")).unwrap_err();
+
+        assert!(matches!(error, CoreError::DuplicateGlyphName(name) if name.as_str() == "A"));
+    }
+
+    #[test]
+    fn glyph_iteration_preserves_insertion_order() {
+        let mut font = Font::new();
+        font.insert_glyph(Glyph::new("B")).unwrap();
+        font.insert_glyph(Glyph::new("A")).unwrap();
+
+        let names: Vec<_> = font
+            .glyphs()
+            .map(|glyph| glyph.name().to_string())
+            .collect();
+
+        assert_eq!(names, vec!["B", "A"]);
+    }
+
+    #[test]
+    fn rename_glyph_keeps_id_stable_and_updates_name_index() {
+        let mut font = Font::new();
+        let glyph_id = font.insert_glyph(Glyph::new("A")).unwrap();
+
+        font.rename_glyph(glyph_id, GlyphName::from("A.alt"))
+            .unwrap();
+
+        assert_eq!(font.glyph_id_by_name("A"), None);
+        assert_eq!(font.glyph_id_by_name("A.alt"), Some(glyph_id));
+        assert_eq!(font.glyph(glyph_id).unwrap().name(), "A.alt");
+    }
+
+    #[test]
+    fn unicode_lookup_returns_all_matching_glyphs() {
+        let mut font = Font::new();
+        let a = font.insert_glyph(Glyph::with_unicode("A", 0x41)).unwrap();
+        let a_alt = font
+            .insert_glyph(Glyph::with_unicode("A.alt", 0x41))
+            .unwrap();
+
+        let glyph_ids: Vec<_> = font.glyphs_by_unicode(0x41).map(Glyph::id).collect();
+
+        assert_eq!(glyph_ids, vec![a, a_alt]);
+    }
+
+    #[test]
+    fn deserialization_rebuilds_private_indexes() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let mut glyph = Glyph::with_unicode("A", 0x41);
+        let layer = GlyphLayer::new(LayerId::new(), source_id);
+        let layer_id = layer.id();
+        glyph.set_layer(layer);
+        let glyph_id = font.insert_glyph(glyph).unwrap();
+
+        let json = serde_json::to_string(&font).unwrap();
+        let decoded: Font = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.glyph_id_by_name("A"), Some(glyph_id));
+        assert_eq!(decoded.glyph_id_by_layer(layer_id), Some(glyph_id));
+        assert_eq!(
+            decoded.layer_id_for_glyph_source(glyph_id, source_id),
+            Some(layer_id)
+        );
+        assert_eq!(
+            decoded
+                .glyphs_by_unicode(0x41)
+                .map(Glyph::id)
+                .collect::<Vec<_>>(),
+            vec![glyph_id]
+        );
+    }
+
+    #[test]
+    fn duplicate_glyph_source_layer_is_an_error() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let glyph_id = font.insert_glyph(Glyph::new("A")).unwrap();
+
+        font.create_glyph_layer(glyph_id, source_id).unwrap();
+        let error = font.create_glyph_layer(glyph_id, source_id).unwrap_err();
+
+        assert!(matches!(
+            error,
+            CoreError::DuplicateGlyphLayer {
+                glyph_id: id,
+                source_id: source
+            } if id == glyph_id && source == source_id
+        ));
+    }
+
+    #[test]
+    fn layer_indexes_update_after_layer_removal() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let glyph_id = font.insert_glyph(Glyph::new("A")).unwrap();
+        let layer_id = font.create_glyph_layer(glyph_id, source_id).unwrap();
+
+        assert_eq!(font.glyph_id_by_layer(layer_id), Some(glyph_id));
+        assert_eq!(
+            font.layer_id_for_glyph_source(glyph_id, source_id),
+            Some(layer_id)
+        );
+
+        font.remove_glyph_layer(layer_id).unwrap();
+
+        assert_eq!(font.glyph_id_by_layer(layer_id), None);
+        assert_eq!(font.layer_id_for_glyph_source(glyph_id, source_id), None);
+    }
+
+    #[test]
+    fn index_validation_rejects_duplicate_layers_for_one_glyph_source() {
+        let source_id = SourceId::new();
+        let mut glyph = Glyph::new("A");
+        glyph.set_layer(GlyphLayer::new(LayerId::new(), source_id));
+        glyph.set_layer(GlyphLayer::new(LayerId::new(), source_id));
+        let mut glyphs = IndexMap::new();
+        glyphs.insert(glyph.id(), Arc::new(glyph));
+
+        let error = FontIndex::from_glyphs(&glyphs).unwrap_err();
+
+        assert!(matches!(
+            error,
+            CoreError::DuplicateGlyphLayer {
+                glyph_id: _,
+                source_id: source
+            } if source == source_id
+        ));
     }
 
     #[test]
@@ -403,11 +850,11 @@ mod tests {
         let mut font = Font::new();
         let snapshot = font.clone();
 
-        assert!(Arc::ptr_eq(&font.inner, &snapshot.inner));
+        assert!(Arc::ptr_eq(&font.state, &snapshot.state));
 
         font.metadata_mut().family_name = Some("Edited".to_string());
 
-        assert!(!Arc::ptr_eq(&font.inner, &snapshot.inner));
+        assert!(!Arc::ptr_eq(&font.state, &snapshot.state));
         assert_eq!(font.metadata().family_name.as_deref(), Some("Edited"));
         assert_eq!(
             snapshot.metadata().family_name.as_deref(),
@@ -418,23 +865,25 @@ mod tests {
     #[test]
     fn mutating_one_glyph_after_snapshot_keeps_other_glyphs_shared() {
         let mut font = Font::new();
-        font.insert_glyph(Glyph::with_unicode("A".to_string(), 65));
-        font.insert_glyph(Glyph::with_unicode("B".to_string(), 66));
+        let a = font
+            .insert_glyph(Glyph::with_unicode("A".to_string(), 65))
+            .unwrap();
+        let b = font
+            .insert_glyph(Glyph::with_unicode("B".to_string(), 66))
+            .unwrap();
         let snapshot = font.clone();
 
-        font.glyph_mut("A")
-            .unwrap()
-            .set_unicodes(vec![0x41, 0x00C1]);
+        font.set_glyph_unicodes(a, vec![0x41, 0x00C1]).unwrap();
 
-        assert_eq!(font.glyph("A").unwrap().unicodes(), &[0x41, 0x00C1]);
-        assert_eq!(snapshot.glyph("A").unwrap().unicodes(), &[0x41]);
+        assert_eq!(font.glyph(a).unwrap().unicodes(), &[0x41, 0x00C1]);
+        assert_eq!(snapshot.glyph(a).unwrap().unicodes(), &[0x41]);
         assert!(!Arc::ptr_eq(
-            font.inner.glyphs.get("A").unwrap(),
-            snapshot.inner.glyphs.get("A").unwrap()
+            font.state.data.glyphs.get(&a).unwrap(),
+            snapshot.state.data.glyphs.get(&a).unwrap()
         ));
         assert!(Arc::ptr_eq(
-            font.inner.glyphs.get("B").unwrap(),
-            snapshot.inner.glyphs.get("B").unwrap()
+            font.state.data.glyphs.get(&b).unwrap(),
+            snapshot.state.data.glyphs.get(&b).unwrap()
         ));
     }
 
@@ -469,7 +918,7 @@ mod tests {
 
             assert_eq!(font.glyph_count(), mark.glyphs);
             for snapshot in &snapshots {
-                assert!(Arc::ptr_eq(&font.inner, &snapshot.inner));
+                assert!(Arc::ptr_eq(&font.state, &snapshot.state));
                 assert_eq!(snapshot.glyph_count(), font.glyph_count());
             }
 
@@ -493,46 +942,130 @@ mod tests {
         let mut font = synthetic_point_heavy_font(mark);
         let snapshot = font.clone();
         let default_source_id = font.default_source_id().unwrap();
+        let glyph_id = font.glyph_id_by_name("g00000").unwrap();
+        let layer_id = font
+            .layer_id_for_glyph_source(glyph_id, default_source_id)
+            .unwrap();
+        let other_glyph_id = font.glyph_id_by_name("g00001").unwrap();
         let start = Instant::now();
 
-        font.glyph_mut("g00000")
+        font.layer_mut(layer_id)
             .expect("target glyph should exist")
-            .layer_for_source_mut(default_source_id)
-            .expect("target source layer should exist")
             .set_width(777.0);
 
         let elapsed = start.elapsed();
 
         assert_eq!(
-            font.glyph("g00000")
-                .unwrap()
-                .layer_for_source(default_source_id)
-                .unwrap()
+            font.layer(layer_id)
+                .expect("target source layer should exist")
                 .width(),
             777.0
         );
         assert_ne!(
             snapshot
-                .glyph("g00000")
-                .unwrap()
-                .layer_for_source(snapshot.default_source_id().unwrap())
-                .unwrap()
+                .layer(layer_id)
+                .expect("target source layer should exist")
                 .width(),
             777.0
         );
         assert!(!Arc::ptr_eq(
-            font.inner.glyphs.get("g00000").unwrap(),
-            snapshot.inner.glyphs.get("g00000").unwrap()
+            font.state.data.glyphs.get(&glyph_id).unwrap(),
+            snapshot.state.data.glyphs.get(&glyph_id).unwrap()
         ));
         assert!(Arc::ptr_eq(
-            font.inner.glyphs.get("g00001").unwrap(),
-            snapshot.inner.glyphs.get("g00001").unwrap()
+            font.state.data.glyphs.get(&other_glyph_id).unwrap(),
+            snapshot.state.data.glyphs.get(&other_glyph_id).unwrap()
         ));
 
         print_perf_mark("single glyph mutation after snapshot", mark, elapsed);
         assert!(
             elapsed < Duration::from_secs(1),
             "single-glyph COW mutation should stay comfortably sub-second; got {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn perf_mark_large_font_rename_rebuilds_indexes_within_budget() {
+        let mark = PerfFontMark {
+            label: "cjk-scale",
+            glyphs: 10_000,
+            contours_per_glyph: 2,
+            points_per_contour: 8,
+        };
+        let mut font = synthetic_point_heavy_font(mark);
+        let glyph_id = font.glyph_id_by_name("g00000").unwrap();
+        let start = Instant::now();
+
+        font.rename_glyph(glyph_id, GlyphName::from("g00000.alt"))
+            .unwrap();
+
+        let elapsed = start.elapsed();
+
+        assert_eq!(font.glyph_id_by_name("g00000"), None);
+        assert_eq!(font.glyph_id_by_name("g00000.alt"), Some(glyph_id));
+        print_perf_mark("rename glyph and rebuild indexes", mark, elapsed);
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "glyph rename index rebuild should stay comfortably sub-second; got {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn perf_mark_large_font_unicode_update_rebuilds_indexes_within_budget() {
+        let mark = PerfFontMark {
+            label: "cjk-scale",
+            glyphs: 10_000,
+            contours_per_glyph: 2,
+            points_per_contour: 8,
+        };
+        let mut font = synthetic_point_heavy_font(mark);
+        let glyph_id = font.glyph_id_by_name("g00000").unwrap();
+        let unicode = 0xE000;
+        let start = Instant::now();
+
+        font.set_glyph_unicodes(glyph_id, vec![0x41, unicode])
+            .unwrap();
+
+        let elapsed = start.elapsed();
+
+        assert_eq!(
+            font.glyphs_by_unicode(unicode)
+                .map(Glyph::id)
+                .collect::<Vec<_>>(),
+            vec![glyph_id]
+        );
+        print_perf_mark("set glyph unicodes and rebuild indexes", mark, elapsed);
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "glyph Unicode index rebuild should stay comfortably sub-second; got {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn perf_mark_large_font_layer_membership_rebuilds_indexes_within_budget() {
+        let mark = PerfFontMark {
+            label: "cjk-scale",
+            glyphs: 10_000,
+            contours_per_glyph: 2,
+            points_per_contour: 8,
+        };
+        let mut font = synthetic_point_heavy_font(mark);
+        let glyph_id = font.glyph_id_by_name("g00000").unwrap();
+        let source_id = font.add_source(Source::new("Bold".to_string(), Location::new()));
+        let start = Instant::now();
+
+        let layer_id = font.create_glyph_layer(glyph_id, source_id).unwrap();
+        let removed = font.remove_glyph_layer(layer_id).unwrap();
+
+        let elapsed = start.elapsed();
+
+        assert_eq!(removed.id(), layer_id);
+        assert_eq!(font.glyph_id_by_layer(layer_id), None);
+        assert_eq!(font.layer_id_for_glyph_source(glyph_id, source_id), None);
+        print_perf_mark("create/remove layer and rebuild indexes", mark, elapsed);
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "glyph layer membership index rebuild should stay comfortably sub-second; got {elapsed:?}"
         );
     }
 }

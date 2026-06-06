@@ -256,12 +256,12 @@ impl FontReader for UfoReader {
             for norad_glyph in layer.iter() {
                 let glyph = Self::convert_glyph_layer(norad_glyph, LayerId::new(), source_id);
 
-                if let Some(existing) = font.glyph_mut(glyph.name()) {
+                if let Some(glyph_id) = font.glyph_id_by_name(glyph.name()) {
                     for layer_data in glyph.layers().values() {
-                        existing.set_layer(layer_data.as_ref().clone());
+                        font.insert_glyph_layer(glyph_id, layer_data.as_ref().clone())?;
                     }
                 } else {
-                    font.insert_glyph(glyph);
+                    font.insert_glyph(glyph)?;
                 }
             }
         }

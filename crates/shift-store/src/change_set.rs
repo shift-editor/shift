@@ -32,7 +32,7 @@ impl ShiftStore {
             upsert_source(&tx, source.id(), Some(source.name()))?;
         }
 
-        for glyph in font.glyphs().values().map(|glyph| glyph.as_ref()) {
+        for glyph in font.glyphs() {
             upsert_glyph(&tx, glyph.id(), glyph.glyph_name())?;
             replace_glyph_unicodes(&tx, glyph.id(), glyph.unicodes())?;
 

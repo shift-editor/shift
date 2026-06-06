@@ -83,7 +83,8 @@ fn exports_mutatorsans_ufo_to_readable_ttf() {
 
     for codepoint in [0x0041, 0x004F, 0x0053] {
         let glyph = exported
-            .glyph_by_unicode(codepoint)
+            .glyphs_by_unicode(codepoint)
+            .next()
             .unwrap_or_else(|| panic!("exported TTF should contain U+{codepoint:04X}"));
         let layer = main_layer(glyph);
 
@@ -99,10 +100,12 @@ fn exports_mutatorsans_ufo_to_readable_ttf() {
 
     for codepoint in [0x0041, 0x004F] {
         let source_glyph = source
-            .glyph_by_unicode(codepoint)
+            .glyphs_by_unicode(codepoint)
+            .next()
             .unwrap_or_else(|| panic!("source UFO should contain U+{codepoint:04X}"));
         let exported_glyph = exported
-            .glyph_by_unicode(codepoint)
+            .glyphs_by_unicode(codepoint)
+            .next()
             .unwrap_or_else(|| panic!("exported TTF should contain U+{codepoint:04X}"));
         let source_layer = main_layer(source_glyph);
         let exported_layer = main_layer(exported_glyph);

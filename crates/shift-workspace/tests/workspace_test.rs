@@ -32,7 +32,7 @@ fn creates_workspace_with_source_package_and_working_store() {
             .as_deref(),
         Some("Test Font")
     );
-    assert!(workspace.font().glyphs().is_empty());
+    assert_eq!(workspace.font().glyph_count(), 0);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn imports_external_fonts_without_a_save_target() {
         }
     );
     assert_eq!(workspace.save_target(), None);
-    assert!(!workspace.font().glyphs().is_empty());
+    assert!(workspace.font().glyph_count() > 0);
     assert!(
         workspace
             .font_info()

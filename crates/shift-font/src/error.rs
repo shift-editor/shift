@@ -1,4 +1,4 @@
-use crate::{AnchorId, ContourId, PointId};
+use crate::{AnchorId, ContourId, GlyphId, GlyphName, LayerId, PointId, SourceId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -37,6 +37,33 @@ pub enum CoreError {
 
     #[error("invalid {kind}: {message}")]
     InvalidPositionUpdateInput { kind: &'static str, message: String },
+
+    #[error("glyph {0} not found")]
+    GlyphNotFound(GlyphId),
+
+    #[error("source {0} not found")]
+    SourceNotFound(SourceId),
+
+    #[error("layer {0} not found")]
+    LayerNotFound(LayerId),
+
+    #[error("duplicate glyph id {0}")]
+    DuplicateGlyphId(GlyphId),
+
+    #[error("duplicate glyph name {0}")]
+    DuplicateGlyphName(GlyphName),
+
+    #[error("duplicate glyph layer for glyph {glyph_id} and source {source_id}")]
+    DuplicateGlyphLayer {
+        glyph_id: GlyphId,
+        source_id: SourceId,
+    },
+
+    #[error("layer {0} is already owned by another glyph")]
+    DuplicateLayerId(LayerId),
+
+    #[error("glyph storage key {key} does not match glyph id {glyph_id}")]
+    MismatchedGlyphId { key: GlyphId, glyph_id: GlyphId },
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

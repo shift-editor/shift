@@ -56,7 +56,7 @@ mod tests {
         layer.add_contour(inner);
 
         glyph.set_layer(layer);
-        font.insert_glyph(glyph);
+        font.insert_glyph(glyph).unwrap();
 
         font
     }
@@ -88,8 +88,8 @@ mod tests {
         );
         assert_eq!(loaded.glyph_count(), original.glyph_count());
 
-        let original_glyph = original.glyph("A").unwrap();
-        let loaded_glyph = loaded.glyph("A").unwrap();
+        let original_glyph = original.glyph_by_name("A").unwrap();
+        let loaded_glyph = loaded.glyph_by_name("A").unwrap();
 
         assert_eq!(
             original_glyph.primary_unicode(),
@@ -144,7 +144,7 @@ mod tests {
         layer.add_contour(Contour::new());
 
         glyph.set_layer(layer);
-        font.insert_glyph(glyph);
+        font.insert_glyph(glyph).unwrap();
 
         let temp_dir = std::env::temp_dir().join("shift_test_ufo_writer_format");
         let ufo_path = temp_dir.join("writer_format.ufo");
