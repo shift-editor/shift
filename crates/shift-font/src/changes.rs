@@ -32,6 +32,7 @@ impl From<FontChange> for FontChangeSet {
 pub enum FontChange {
     GlyphCreated(GlyphCreated),
     GlyphIdentityChanged(GlyphIdentityChanged),
+    GlyphLayerCreated(GlyphLayerCreated),
     LayerMetricsChanged(LayerMetricsChanged),
     ContourAdded(ContourAdded),
     ContourOpenClosedChanged(ContourOpenClosedChanged),
@@ -63,63 +64,60 @@ impl FontChange {
         })
     }
 
-    pub fn layer_metrics_changed(target: GlyphLayerChangeTarget, layer: &GlyphLayer) -> Self {
-        Self::LayerMetricsChanged(LayerMetricsChanged::from_layer(target, layer))
+    pub fn glyph_layer_created(
+        glyph_id: GlyphId,
+        name: Option<GlyphName>,
+        layer: &GlyphLayer,
+    ) -> Self {
+        Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, name, layer))
     }
 
-    pub fn contour_added(target: GlyphLayerChangeTarget, contour: &Contour) -> Self {
+    pub fn layer_metrics_changed(layer: &GlyphLayer) -> Self {
+        Self::LayerMetricsChanged(LayerMetricsChanged::from_layer(layer))
+    }
+
+    pub fn contour_added(layer_id: LayerId, contour: &Contour) -> Self {
         Self::ContourAdded(ContourAdded {
-            target,
+            layer_id,
             contour: ContourValue::from(contour),
         })
     }
 
     pub fn contour_open_closed_changed(
-        target: GlyphLayerChangeTarget,
+        layer_id: LayerId,
         contour_id: ContourId,
         closed: bool,
     ) -> Self {
         Self::ContourOpenClosedChanged(ContourOpenClosedChanged {
-            target,
+            layer_id,
             contour_id,
             closed,
         })
     }
 
-    pub fn points_added(
-        target: GlyphLayerChangeTarget,
-        contour: &Contour,
-        point_ids: Vec<PointId>,
-    ) -> Self {
+    pub fn points_added(layer_id: LayerId, contour: &Contour, point_ids: Vec<PointId>) -> Self {
         Self::PointsAdded(PointsAdded {
-            target,
+            layer_id,
             contour: ContourValue::from(contour),
             point_ids,
         })
     }
 
-    pub fn point_smooth_changed(
-        target: GlyphLayerChangeTarget,
-        point_id: PointId,
-        smooth: bool,
-    ) -> Self {
+    pub fn point_smooth_changed(layer_id: LayerId, point_id: PointId, smooth: bool) -> Self {
         Self::PointSmoothChanged(PointSmoothChanged {
-            target,
+            layer_id,
             point_id,
             smooth,
         })
     }
 
-    pub fn point_positions_changed(
-        target: GlyphLayerChangeTarget,
-        points: Vec<PointPosition>,
-    ) -> Self {
-        Self::PointPositionsChanged(PointPositionsChanged { target, points })
+    pub fn point_positions_changed(layer_id: LayerId, points: Vec<PointPosition>) -> Self {
+        Self::PointPositionsChanged(PointPositionsChanged { layer_id, points })
     }
 
-    pub fn layer_geometry_replaced(target: GlyphLayerChangeTarget, layer: &GlyphLayer) -> Self {
+    pub fn layer_geometry_replaced(layer: &GlyphLayer) -> Self {
         Self::LayerGeometryReplaced(LayerGeometryReplaced {
-            target,
+            layer_id: layer.id(),
             layer: GlyphLayerValue::from(layer),
         })
     }
@@ -152,24 +150,39 @@ pub struct GlyphIdentityChanged {
 }
 
 #[derive(Clone, Debug)]
-pub struct GlyphLayerChangeTarget {
+pub struct GlyphLayerCreated {
     pub glyph_id: GlyphId,
-    pub glyph_name: GlyphName,
     pub source_id: SourceId,
     pub layer_id: LayerId,
+    pub name: Option<GlyphName>,
+    pub width: f64,
+    pub height: Option<f64>,
+}
+
+impl GlyphLayerCreated {
+    pub fn from_layer(glyph_id: GlyphId, name: Option<GlyphName>, layer: &GlyphLayer) -> Self {
+        Self {
+            glyph_id,
+            source_id: layer.source_id(),
+            layer_id: layer.id(),
+            name,
+            width: layer.width(),
+            height: layer.height(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct LayerMetricsChanged {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub width: f64,
     pub height: Option<f64>,
 }
 
 impl LayerMetricsChanged {
-    pub fn from_layer(target: GlyphLayerChangeTarget, layer: &GlyphLayer) -> Self {
+    pub fn from_layer(layer: &GlyphLayer) -> Self {
         Self {
-            target,
+            layer_id: layer.id(),
             width: layer.width(),
             height: layer.height(),
         }
@@ -178,41 +191,41 @@ impl LayerMetricsChanged {
 
 #[derive(Clone, Debug)]
 pub struct ContourAdded {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub contour: ContourValue,
 }
 
 #[derive(Clone, Debug)]
 pub struct ContourOpenClosedChanged {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub contour_id: ContourId,
     pub closed: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct PointsAdded {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub contour: ContourValue,
     pub point_ids: Vec<PointId>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PointsDeleted {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub contour: ContourValue,
     pub point_ids: Vec<PointId>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PointSmoothChanged {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub point_id: PointId,
     pub smooth: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct PointPositionsChanged {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub points: Vec<PointPosition>,
 }
 
@@ -225,7 +238,7 @@ pub struct PointPosition {
 
 #[derive(Clone, Debug)]
 pub struct LayerGeometryReplaced {
-    pub target: GlyphLayerChangeTarget,
+    pub layer_id: LayerId,
     pub layer: GlyphLayerValue,
 }
 
