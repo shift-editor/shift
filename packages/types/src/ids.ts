@@ -11,6 +11,7 @@ declare const ContourIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
+declare const GlyphIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 
@@ -45,6 +46,12 @@ export type ComponentId = string & { readonly [ComponentIdBrand]: typeof Compone
  * Branded string type - can't be confused with other IDs or plain strings.
  */
 export type GuidelineId = string & { readonly [GuidelineIdBrand]: typeof GuidelineIdBrand };
+
+/**
+ * A glyph identifier from Rust.
+ * Branded string type - can't be confused with names or other IDs.
+ */
+export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
 
 /**
  * A layer identifier from Rust.
@@ -96,6 +103,14 @@ export function asComponentId(id: string): ComponentId {
  */
 export function asGuidelineId(id: string): GuidelineId {
   return id as GuidelineId;
+}
+
+/**
+ * Convert a string ID from Rust to a typed GlyphId.
+ * Use this when receiving IDs from Rust snapshots.
+ */
+export function asGlyphId(id: string): GlyphId {
+  return id as GlyphId;
 }
 
 /**
@@ -151,6 +166,14 @@ export function isValidComponentId(id: unknown): id is ComponentId {
  * Useful for runtime validation in debug builds.
  */
 export function isValidGuidelineId(id: unknown): id is GuidelineId {
+  return typeof id === "string" && id.length > 0;
+}
+
+/**
+ * Type guard to check if a value is a valid GlyphId.
+ * Useful for runtime validation in debug builds.
+ */
+export function isValidGlyphId(id: unknown): id is GlyphId {
   return typeof id === "string" && id.length > 0;
 }
 

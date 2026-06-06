@@ -445,9 +445,9 @@ export class Font {
    *
    * @remarks
    * If the requested name already exists, a numeric suffix is appended using
-   * {@link nextAvailableGlyphName}. The bridge receives an explicit glyph layer
-   * mutation so downstream save/export paths see a real committed glyph record,
-   * not a UI-only placeholder.
+   * {@link nextAvailableGlyphName}. Glyph identity and its default-source layer
+   * are created as explicit bridge operations before this model rehydrates from
+   * the native font state.
    *
    * @param name - Preferred glyph name. Blank input falls back to `newGlyph`.
    * @returns The handle for the glyph that was actually created.
@@ -457,13 +457,9 @@ export class Font {
     const glyphName = this.nextAvailableGlyphName(name);
 
     const handle = this.glyphHandleForName(glyphName);
-    this.#bridge.setXAdvance(
-      {
-        glyphHandle: handle,
-        sourceId: this.defaultSource.id,
-      },
-      500,
-    );
+    const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
+    const glyphId = this.#bridge.createGlyph(glyphName, unicodes);
+    this.#bridge.createGlyphLayer(glyphId, this.defaultSource.id);
 
     this.#glyphs.clear();
     this.#glyphSources.clear();

@@ -22,6 +22,12 @@ impl FontChangeSet {
     }
 }
 
+impl From<FontChange> for FontChangeSet {
+    fn from(change: FontChange) -> Self {
+        Self::new(vec![change])
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum FontChange {
     GlyphCreated(GlyphCreated),
@@ -34,6 +40,89 @@ pub enum FontChange {
     PointSmoothChanged(PointSmoothChanged),
     PointPositionsChanged(PointPositionsChanged),
     LayerGeometryReplaced(LayerGeometryReplaced),
+}
+
+impl FontChange {
+    pub fn glyph_created(glyph: &Glyph) -> Self {
+        Self::GlyphCreated(GlyphCreated::from(glyph))
+    }
+
+    pub fn glyph_identity_changed(
+        glyph_id: GlyphId,
+        from_name: GlyphName,
+        to_name: GlyphName,
+        from_unicodes: Vec<u32>,
+        to_unicodes: Vec<u32>,
+    ) -> Self {
+        Self::GlyphIdentityChanged(GlyphIdentityChanged {
+            glyph_id,
+            from_name,
+            to_name,
+            from_unicodes,
+            to_unicodes,
+        })
+    }
+
+    pub fn layer_metrics_changed(target: GlyphLayerChangeTarget, layer: &GlyphLayer) -> Self {
+        Self::LayerMetricsChanged(LayerMetricsChanged::from_layer(target, layer))
+    }
+
+    pub fn contour_added(target: GlyphLayerChangeTarget, contour: &Contour) -> Self {
+        Self::ContourAdded(ContourAdded {
+            target,
+            contour: ContourValue::from(contour),
+        })
+    }
+
+    pub fn contour_open_closed_changed(
+        target: GlyphLayerChangeTarget,
+        contour_id: ContourId,
+        closed: bool,
+    ) -> Self {
+        Self::ContourOpenClosedChanged(ContourOpenClosedChanged {
+            target,
+            contour_id,
+            closed,
+        })
+    }
+
+    pub fn points_added(
+        target: GlyphLayerChangeTarget,
+        contour: &Contour,
+        point_ids: Vec<PointId>,
+    ) -> Self {
+        Self::PointsAdded(PointsAdded {
+            target,
+            contour: ContourValue::from(contour),
+            point_ids,
+        })
+    }
+
+    pub fn point_smooth_changed(
+        target: GlyphLayerChangeTarget,
+        point_id: PointId,
+        smooth: bool,
+    ) -> Self {
+        Self::PointSmoothChanged(PointSmoothChanged {
+            target,
+            point_id,
+            smooth,
+        })
+    }
+
+    pub fn point_positions_changed(
+        target: GlyphLayerChangeTarget,
+        points: Vec<PointPosition>,
+    ) -> Self {
+        Self::PointPositionsChanged(PointPositionsChanged { target, points })
+    }
+
+    pub fn layer_geometry_replaced(target: GlyphLayerChangeTarget, layer: &GlyphLayer) -> Self {
+        Self::LayerGeometryReplaced(LayerGeometryReplaced {
+            target,
+            layer: GlyphLayerValue::from(layer),
+        })
+    }
 }
 
 #[derive(Clone, Debug)]

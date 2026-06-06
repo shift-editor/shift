@@ -9,6 +9,7 @@ export type {
   AnchorId,
   ComponentId,
   GuidelineId,
+  GlyphId,
   LayerId,
   SourceId,
 } from "./ids";
@@ -18,6 +19,7 @@ export {
   asAnchorId,
   asComponentId,
   asGuidelineId,
+  asGlyphId,
   asLayerId,
   asSourceId,
   isValidPointId,
@@ -25,6 +27,7 @@ export {
   isValidAnchorId,
   isValidComponentId,
   isValidGuidelineId,
+  isValidGlyphId,
   isValidLayerId,
   isValidSourceId,
 } from "./ids";

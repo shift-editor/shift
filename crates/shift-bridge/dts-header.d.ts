@@ -4,6 +4,7 @@ import type {
   AnchorId,
   ComponentId,
   GuidelineId,
+  GlyphId,
   GlyphName,
   LayerId,
   SourceId,
