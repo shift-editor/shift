@@ -13,7 +13,7 @@ pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
         .map_err(|e| FormatBackendError::Binary(format!("failed to read '{path}': {e}")))?;
     let font = FontRef::new(&bytes)
         .map_err(|e| FormatBackendError::Binary(format!("failed to parse '{path}': {e}")))?;
-    Ok(font_from_skrifa(&font))
+    font_from_skrifa(&font)
 }
 
 #[derive(Default)]
@@ -119,7 +119,7 @@ fn detect_smooth_points(contours: &mut [Contour]) {
     }
 }
 
-fn font_from_skrifa(font: &FontRef<'_>) -> Font {
+fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     let outlines = font.outline_glyphs();
     let char_map = font.charmap();
 
@@ -164,10 +164,10 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
             layer.add_contour(contour);
         }
         glyph.set_layer(layer);
-        ir_font.insert_glyph(glyph);
+        ir_font.insert_glyph(glyph)?;
     }
 
-    ir_font
+    Ok(ir_font)
 }
 
 fn localized_string(font: &FontRef<'_>, id: StringId) -> Option<String> {

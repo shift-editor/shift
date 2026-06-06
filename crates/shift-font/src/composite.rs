@@ -49,7 +49,7 @@ impl<'a> FontLayerProvider<'a> {
 impl GlyphLayerProvider for FontLayerProvider<'_> {
     fn glyph_layer(&self, glyph_name: &str) -> Option<&GlyphLayer> {
         self.font
-            .glyph(glyph_name)
+            .glyph_by_name(glyph_name)
             .and_then(preferred_layer_for_glyph)
     }
 }
@@ -496,18 +496,18 @@ mod tests {
         let mut base_layer = test_layer(source_id, 500.0);
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 10.0));
         base.set_layer(base_layer);
-        font.insert_glyph(base);
+        font.insert_glyph(base).unwrap();
 
         let mut composite = Glyph::new("comp".to_string());
         let mut composite_layer = test_layer(source_id, 500.0);
         let composite_layer_id = composite_layer.id();
         composite_layer.add_component(Component::new("base".to_string()));
         composite.set_layer(composite_layer);
-        font.insert_glyph(composite);
+        font.insert_glyph(composite).unwrap();
 
         let provider = FontLayerProvider::new(&font);
         let layer = font
-            .glyph("comp")
+            .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(composite_layer_id))
             .unwrap();
         let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
@@ -527,24 +527,24 @@ mod tests {
         a_layer.add_component(Component::new("B".to_string()));
         a_layer.add_component(Component::new("C".to_string()));
         a.set_layer(a_layer);
-        font.insert_glyph(a);
+        font.insert_glyph(a).unwrap();
 
         let mut b = Glyph::new("B".to_string());
         let mut b_layer = test_layer(source_id, 500.0);
         b_layer.add_contour(two_point_contour(0.0, 0.0, 20.0, 20.0));
         b_layer.add_component(Component::new("A".to_string()));
         b.set_layer(b_layer);
-        font.insert_glyph(b);
+        font.insert_glyph(b).unwrap();
 
         let mut c = Glyph::new("C".to_string());
         let mut c_layer = test_layer(source_id, 500.0);
         c_layer.add_contour(two_point_contour(10.0, 0.0, 30.0, 20.0));
         c.set_layer(c_layer);
-        font.insert_glyph(c);
+        font.insert_glyph(c).unwrap();
 
         let provider = FontLayerProvider::new(&font);
         let layer = font
-            .glyph("A")
+            .glyph_by_name("A")
             .and_then(|glyph| glyph.layer(a_layer_id))
             .unwrap();
         let resolved = flatten_component_contours_for_layer(&provider, layer, "A");
@@ -562,14 +562,14 @@ mod tests {
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         base.set_layer(base_layer);
-        font.insert_glyph(base);
+        font.insert_glyph(base).unwrap();
 
         let mut mark = Glyph::new("mark".to_string());
         let mut mark_layer = test_layer(source_id, 500.0);
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
         mark.set_layer(mark_layer);
-        font.insert_glyph(mark);
+        font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
         let mut comp_layer = test_layer(source_id, 500.0);
@@ -577,11 +577,11 @@ mod tests {
         comp_layer.add_component(Component::new("base".to_string()));
         comp_layer.add_component(Component::new("mark".to_string()));
         comp.set_layer(comp_layer);
-        font.insert_glyph(comp);
+        font.insert_glyph(comp).unwrap();
 
         let provider = FontLayerProvider::new(&font);
         let layer = font
-            .glyph("comp")
+            .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
         let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
@@ -604,7 +604,7 @@ mod tests {
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark_layer.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 0.0));
         mark.set_layer(mark_layer);
-        font.insert_glyph(mark);
+        font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
         let mut comp_layer = test_layer(source_id, 500.0);
@@ -612,11 +612,11 @@ mod tests {
         let matrix = Transform::translate(30.0, 40.0);
         comp_layer.add_component(Component::with_matrix("mark".to_string(), &matrix));
         comp.set_layer(comp_layer);
-        font.insert_glyph(comp);
+        font.insert_glyph(comp).unwrap();
 
         let provider = FontLayerProvider::new(&font);
         let layer = font
-            .glyph("comp")
+            .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
         let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
@@ -638,14 +638,14 @@ mod tests {
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         base.set_layer(base_layer);
-        font.insert_glyph(base);
+        font.insert_glyph(base).unwrap();
 
         let mut mark = Glyph::new("mark".to_string());
         let mut mark_layer = test_layer(source_id, 500.0);
         mark_layer.add_anchor(Anchor::new(Some("top_extra".to_string()), 5.0, 0.0));
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark.set_layer(mark_layer);
-        font.insert_glyph(mark);
+        font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
         let mut comp_layer = test_layer(source_id, 500.0);
@@ -654,11 +654,11 @@ mod tests {
         comp_layer.add_component(Component::new("base".to_string()));
         comp_layer.add_component(Component::new("mark".to_string()));
         comp.set_layer(comp_layer);
-        font.insert_glyph(comp);
+        font.insert_glyph(comp).unwrap();
 
         let provider = FontLayerProvider::new(&font);
         let layer = font
-            .glyph("comp")
+            .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
         let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
@@ -681,7 +681,7 @@ mod tests {
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         base.set_layer(base_layer);
-        font.insert_glyph(base);
+        font.insert_glyph(base).unwrap();
 
         let mut mark = Glyph::new("mark".to_string());
         let mut mark_layer = test_layer(source_id, 500.0);
@@ -689,7 +689,7 @@ mod tests {
         mark_layer.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 20.0));
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark.set_layer(mark_layer);
-        font.insert_glyph(mark);
+        font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
         let mut comp_layer = test_layer(source_id, 500.0);
@@ -698,11 +698,11 @@ mod tests {
         comp_layer.add_component(Component::new("mark".to_string()));
         comp_layer.add_component(Component::new("mark".to_string()));
         comp.set_layer(comp_layer);
-        font.insert_glyph(comp);
+        font.insert_glyph(comp).unwrap();
 
         let provider = FontLayerProvider::new(&font);
         let layer = font
-            .glyph("comp")
+            .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
         let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");

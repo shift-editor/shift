@@ -127,8 +127,15 @@ impl FontWorkspace {
         let name = name.trim();
         let mut next_font = self.font.clone();
 
+        let glyph_id =
+            next_font
+                .glyph_id_by_name(from_name)
+                .ok_or_else(|| WorkspaceError::InvalidInput {
+                    kind: "glyph name",
+                    value: from_name.to_string(),
+                })?;
         let existing = next_font
-            .glyph(from_name)
+            .glyph(glyph_id)
             .ok_or_else(|| WorkspaceError::InvalidInput {
                 kind: "glyph name",
                 value: from_name.to_string(),
@@ -144,21 +151,16 @@ impl FontWorkspace {
             });
         }
 
-        if from_name != name && next_font.glyph(name).is_some() {
+        if from_name != name && next_font.glyph_id_by_name(name).is_some() {
             return Err(WorkspaceError::InvalidInput {
                 kind: "glyph name",
                 value: format!("{name} already exists"),
             });
         }
 
-        let Some(mut glyph) = next_font.take_glyph(from_name) else {
-            return Err(WorkspaceError::InvalidInput {
-                kind: "glyph name",
-                value: from_name.to_string(),
-            });
-        };
-
-        let glyph_id = glyph.id();
+        let glyph = next_font
+            .glyph(glyph_id)
+            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
         let from_name = glyph.glyph_name().clone();
         let from_unicodes = glyph.unicodes().to_vec();
         let glyph_name = shift_font::GlyphName::new(name.to_string()).map_err(|_| {
@@ -168,11 +170,13 @@ impl FontWorkspace {
             }
         })?;
 
-        glyph.set_name(glyph_name);
-        glyph.set_unicodes(unicodes);
+        next_font.rename_glyph(glyph_id, glyph_name)?;
+        next_font.set_glyph_unicodes(glyph_id, unicodes)?;
+        let glyph = next_font
+            .glyph(glyph_id)
+            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
         let to_name = glyph.glyph_name().clone();
         let to_unicodes = glyph.unicodes().to_vec();
-        next_font.put_glyph(glyph);
 
         self.commit_font(
             next_font,
@@ -198,7 +202,7 @@ impl FontWorkspace {
         let mut next_font = self.font.clone();
         let mut change_set = FontChangeSet::default();
 
-        if next_font.glyph(&target.glyph_name).is_none() {
+        if next_font.glyph_id_by_name(&target.glyph_name).is_none() {
             let mut glyph = Glyph::new(target.glyph_name.clone());
             if let Some(unicode) = target.unicode {
                 glyph.add_unicode(unicode);
@@ -209,7 +213,7 @@ impl FontWorkspace {
                 500.0,
             ));
             change_set.push(FontChange::GlyphCreated(GlyphCreated::from(&glyph)));
-            next_font.insert_glyph(glyph);
+            next_font.insert_glyph(glyph)?;
         }
 
         if !next_font
@@ -223,42 +227,43 @@ impl FontWorkspace {
             });
         }
 
-        if let Some(glyph) = next_font.glyph_mut(&target.glyph_name)
-            && glyph.layer(target.layer_id).is_none()
-        {
-            glyph.set_layer(GlyphLayer::with_width(
-                LayerId::new(),
-                target.source_id,
-                500.0,
-            ));
+        let glyph_id = next_font
+            .glyph_id_by_name(&target.glyph_name)
+            .ok_or_else(|| WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: target.glyph_name.clone(),
+            })?;
+
+        if next_font.layer(target.layer_id).is_none() {
+            next_font.insert_glyph_layer(
+                glyph_id,
+                GlyphLayer::with_width(target.layer_id, target.source_id, 500.0),
+            )?;
         }
 
-        let glyph =
-            next_font
-                .glyph(&target.glyph_name)
-                .ok_or_else(|| WorkspaceError::InvalidInput {
-                    kind: "glyph name",
-                    value: target.glyph_name.clone(),
-                })?;
+        let glyph = next_font
+            .glyph(glyph_id)
+            .ok_or_else(|| WorkspaceError::InvalidInput {
+                kind: "glyph name",
+                value: target.glyph_name.clone(),
+            })?;
         let change_target = GlyphLayerChangeTarget {
             glyph_id: glyph.id(),
             glyph_name: glyph.glyph_name().clone(),
             source_id: target.source_id,
             layer_id: target.layer_id,
         };
-        let glyph = next_font.glyph_mut(&target.glyph_name).ok_or_else(|| {
-            WorkspaceError::InvalidInput {
-                kind: "glyph name",
-                value: target.glyph_name.clone(),
-            }
-        })?;
 
-        if let Some(unicode) = target.unicode {
-            glyph.add_unicode(unicode);
+        if let Some(unicode) = target.unicode
+            && !glyph.unicodes().contains(&unicode)
+        {
+            let mut unicodes = glyph.unicodes().to_vec();
+            unicodes.push(unicode);
+            next_font.set_glyph_unicodes(glyph_id, unicodes)?;
         }
 
         let layer =
-            glyph
+            next_font
                 .layer_mut(target.layer_id)
                 .ok_or_else(|| WorkspaceError::InvalidInput {
                     kind: "layer ID",

@@ -1738,6 +1738,7 @@ dependencies = [
  "kurbo 0.13.0",
  "linesweeper",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 

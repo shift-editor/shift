@@ -253,7 +253,7 @@ impl FontReader for GlyphsReader {
                 ir_glyph.set_layer(ir_layer);
             }
 
-            font.insert_glyph(ir_glyph);
+            font.insert_glyph(ir_glyph)?;
         }
 
         *font.features_mut() = Self::convert_features(&glyphs_font);

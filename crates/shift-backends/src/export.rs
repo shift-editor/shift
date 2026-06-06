@@ -159,7 +159,7 @@ mod tests {
         contour.close();
         layer.add_contour(contour);
         glyph.set_layer(layer);
-        font.insert_glyph(glyph);
+        font.insert_glyph(glyph).unwrap();
         font
     }
 

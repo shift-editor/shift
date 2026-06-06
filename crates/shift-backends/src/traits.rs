@@ -40,11 +40,11 @@ impl FontView for Font {
     }
 
     fn glyphs(&self) -> Vec<&Glyph> {
-        self.glyphs().values().map(|glyph| glyph.as_ref()).collect()
+        self.glyphs().collect()
     }
 
     fn glyph(&self, name: &str) -> Option<&Glyph> {
-        self.glyph(name)
+        self.glyph_by_name(name)
     }
 
     fn kerning(&self) -> &KerningData {
@@ -68,7 +68,7 @@ pub trait FontReader: Send + Sync {
     fn load(&self, path: &str) -> FormatBackendResult<Font>;
 
     fn get_glyph(&self, font: &Font, name: &GlyphName) -> Option<Glyph> {
-        font.glyph(name).cloned()
+        font.glyph_by_name(name).cloned()
     }
 
     fn get_kerning(&self, font: &Font) -> KerningData {

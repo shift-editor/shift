@@ -66,10 +66,10 @@ fn loads_ufo_metadata_metrics_and_geometry() {
     assert_eq!(metrics.cap_height, Some(700.0));
     assert_eq!(metrics.x_height, Some(500.0));
 
-    let glyph_a = font.glyph("A").expect("A glyph should exist");
+    let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     assert!(!main_layer(glyph_a).contours().is_empty());
 
-    let glyph_o = font.glyph("O").expect("O glyph should exist");
+    let glyph_o = font.glyph_by_name("O").expect("O glyph should exist");
     let has_off_curve = main_layer(glyph_o)
         .contours_iter()
         .flat_map(|contour| contour.points())
@@ -81,7 +81,9 @@ fn loads_ufo_metadata_metrics_and_geometry() {
 fn loads_ufo_components_anchors_layers_and_kerning() {
     let font = load_font(&mutatorsans_ufo_path());
 
-    let aacute = font.glyph("Aacute").expect("Aacute glyph should exist");
+    let aacute = font
+        .glyph_by_name("Aacute")
+        .expect("Aacute glyph should exist");
     let component_bases: Vec<_> = main_layer(aacute)
         .components_iter()
         .map(|component| component.base_glyph().as_str())
@@ -90,7 +92,7 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
     assert!(component_bases.contains(&"A"));
     assert!(component_bases.contains(&"acute"));
 
-    let e = font.glyph("E").expect("E glyph should exist");
+    let e = font.glyph_by_name("E").expect("E glyph should exist");
     let anchor_names: Vec<_> = e
         .layers()
         .values()
@@ -104,7 +106,6 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
     assert!(font.sources().len() >= 2);
     assert!(font
         .glyphs()
-        .values()
         .flat_map(|glyph| glyph.layers().values())
         .all(|layer| font
             .sources()
@@ -120,7 +121,8 @@ fn loads_binary_fonts_with_contours() {
     for path in [mutatorsans_ttf_path(), mutatorsans_otf_path()] {
         let font = load_font(&path);
         let glyph_a = font
-            .glyph_by_unicode(65)
+            .glyphs_by_unicode(65)
+            .next()
             .unwrap_or_else(|| panic!("{} should contain U+0041", path.display()));
 
         assert!(font.glyph_count() > 0);
@@ -149,7 +151,9 @@ fn loads_glyphs_file_features_kerning_components_and_anchors() {
     assert_eq!(font.kerning().get_kerning("A", "V"), Some(-55.0));
     assert_eq!(font.kerning().get_kerning("V", "a"), Some(-65.0));
 
-    let aacute = font.glyph("Aacute").expect("Aacute glyph should exist");
+    let aacute = font
+        .glyph_by_name("Aacute")
+        .expect("Aacute glyph should exist");
     let component_bases: Vec<_> = main_layer(aacute)
         .components_iter()
         .map(|component| component.base_glyph().as_str())
@@ -158,7 +162,7 @@ fn loads_glyphs_file_features_kerning_components_and_anchors() {
     assert!(component_bases.contains(&"A"));
     assert!(component_bases.contains(&"acute"));
 
-    let u = font.glyph("u").expect("u glyph should exist");
+    let u = font.glyph_by_name("u").expect("u glyph should exist");
     let anchor_names: Vec<_> = main_layer(u)
         .anchors_iter()
         .filter_map(|anchor| anchor.name())
@@ -181,7 +185,7 @@ fn loads_variable_glyphs_sources_and_compatible_layers() {
     assert_eq!(font.sources()[0].location().get("wght"), Some(100.0));
     assert_eq!(font.sources()[1].location().get("wght"), Some(900.0));
 
-    let glyph_a = font.glyph("A").expect("A glyph should exist");
+    let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     let layers: Vec<_> = glyph_a.layers().values().collect();
     assert_eq!(layers.len(), 2);
     assert_eq!(layers[0].contours().len(), layers[1].contours().len());
@@ -217,6 +221,6 @@ fn loads_designspace_sources_axes_and_default_metadata() {
     assert_eq!(font.sources()[0].location().get("wght"), Some(0.0));
     assert!(font.sources()[0].filename().is_some());
 
-    let glyph_a = font.glyph("A").expect("A glyph should exist");
+    let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     assert!(glyph_a.layers().len() >= 4);
 }

@@ -30,7 +30,7 @@ mod tests {
         contour.close();
         layer.add_contour(contour);
         glyph.set_layer(layer);
-        font.insert_glyph(glyph);
+        font.insert_glyph(glyph).unwrap();
 
         font
     }
@@ -65,7 +65,7 @@ mod tests {
             Some("Placeholder Sans")
         );
         assert_eq!(loaded.glyph_count(), 1);
-        assert!(loaded.glyph("o").is_some());
+        assert!(loaded.glyph_by_name("o").is_some());
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
