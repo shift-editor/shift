@@ -341,7 +341,8 @@ fn applies_layer_geometry_replacement() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (target, first_contour, _) = store_change_target_with_contour();
     let store_layer_id = store_layer_id(&target);
-    let mut layer = shift_font::GlyphLayer::with_width(500.0);
+    let mut layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), target.source_id, 500.0);
     layer.add_contour(contour_with_point(10.0, 20.0));
 
     store

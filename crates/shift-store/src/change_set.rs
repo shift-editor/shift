@@ -36,15 +36,15 @@ impl ShiftStore {
             upsert_glyph(&tx, glyph.id(), glyph.glyph_name())?;
             replace_glyph_unicodes(&tx, glyph.id(), glyph.unicodes())?;
 
-            for (layer_id, layer) in glyph.layers() {
+            for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
                 let target = font::GlyphLayerChangeTarget {
                     glyph_id: glyph.id(),
                     glyph_name: glyph.glyph_name().clone(),
-                    source_id: source_id_for_layer(font, *layer_id),
-                    layer_id: *layer_id,
+                    source_id: layer.source_id(),
+                    layer_id: layer.id(),
                 };
                 upsert_layer(&tx, &target, layer.width(), layer.height())?;
-                replace_layer_geometry(&tx, &target, &font::GlyphLayerValue::from(layer.as_ref()))?;
+                replace_layer_geometry(&tx, &target, &font::GlyphLayerValue::from(layer))?;
             }
         }
 
@@ -362,13 +362,4 @@ fn require_changed(rows_changed: usize, kind: &'static str, id: String) -> Resul
 
 fn layer_row_id(target: &font::GlyphLayerChangeTarget) -> String {
     format!("{}:{}", target.glyph_id, target.layer_id)
-}
-
-fn source_id_for_layer(font: &font::Font, layer_id: font::LayerId) -> font::SourceId {
-    font.sources()
-        .iter()
-        .find(|source| source.layer_id() == layer_id)
-        .map(font::Source::id)
-        .or_else(|| font.default_source().map(font::Source::id))
-        .unwrap_or_default()
 }

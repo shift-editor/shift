@@ -1,5 +1,5 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use shift_font::{Contour, Font, Glyph, GlyphLayer, PointType};
+use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
@@ -125,7 +125,9 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
 
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
     let mut ir_font = Font::new();
-    let default_layer_id = ir_font.default_layer_id();
+    let default_source_id = ir_font
+        .default_source_id()
+        .expect("new font should have a default source");
 
     ir_font.metrics_mut().units_per_em = metrics.units_per_em as f64;
     ir_font.metrics_mut().ascender = metrics.ascent as f64;
@@ -154,13 +156,14 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
             .unwrap_or_else(|| format!("uni{unicode:04X}"));
 
         let mut glyph = Glyph::with_unicode(glyph_name, unicode);
-        let mut layer = GlyphLayer::with_width(advance_width as f64);
+        let mut layer =
+            GlyphLayer::with_width(LayerId::new(), default_source_id, advance_width as f64);
         let mut contours = pen.contours();
         detect_smooth_points(&mut contours);
         for contour in contours {
             layer.add_contour(contour);
         }
-        glyph.set_layer(default_layer_id, layer);
+        glyph.set_layer(layer);
         ir_font.insert_glyph(glyph);
     }
 

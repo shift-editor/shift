@@ -55,7 +55,7 @@ export interface GlyphHandle {
 
 export interface GlyphLayerRef {
   glyphHandle: GlyphHandle
-  layerId: LayerId
+  sourceId: SourceId
 }
 
 export interface NapiFontExportRequest {
@@ -230,6 +230,5 @@ export interface NapiSource {
   id: SourceId
   name: string
   location: NapiLocation
-  layerId: LayerId
   filename?: string
 }

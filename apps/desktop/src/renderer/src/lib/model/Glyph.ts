@@ -231,7 +231,7 @@ class GlyphEditSession {
   #glyphRef(): GlyphLayerRef {
     return {
       glyphHandle: this.#handle,
-      layerId: this.#source.layerId,
+      sourceId: this.#source.id,
     };
   }
 

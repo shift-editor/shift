@@ -21,7 +21,6 @@ const idTypeNames = new Set([
   "AnchorId",
   "ComponentId",
   "GuidelineId",
-  "LayerId",
   "SourceId",
 ]);
 const scalarTypeNames = new Set(["GlyphName", "Unicode"]);

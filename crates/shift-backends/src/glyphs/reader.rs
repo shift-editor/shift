@@ -1,7 +1,7 @@
 use glyphs_reader::{FeatureSnippet, Font as GlyphsFont, NodeType, Shape};
 use shift_font::{
     Anchor, Axis, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, KerningData,
-    KerningPair, KerningSide, Layer, Location, Source, Transform,
+    KerningPair, KerningSide, Layer, LayerId, Location, Source, Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -130,7 +130,6 @@ impl FontReader for GlyphsReader {
             .map_err(|e| FormatBackendError::Glyphs(e.to_string()))?;
 
         let mut font = Font::empty();
-        let default_layer_id = font.default_layer_id();
 
         // Metadata and metrics from default master.
         if let Some(family_name) = glyphs_font.names.get("familyNames") {
@@ -182,14 +181,11 @@ impl FontReader for GlyphsReader {
             font.add_axis(axis);
         }
 
-        let mut layer_by_master_id = HashMap::new();
+        let mut source_by_master_id = HashMap::new();
         for (master_idx, master) in glyphs_font.masters.iter().enumerate() {
-            let layer_id = if master_idx == glyphs_font.default_master_idx {
-                default_layer_id
-            } else {
-                font.add_layer(Layer::new(master.name.clone()))
-            };
-            layer_by_master_id.insert(master.id.clone(), layer_id);
+            if master_idx != glyphs_font.default_master_idx {
+                font.add_layer(Layer::new(master.name.clone()));
+            }
 
             let mut location = Location::new();
             for (axis_idx, axis) in glyphs_font.axes.iter().enumerate() {
@@ -197,7 +193,8 @@ impl FontReader for GlyphsReader {
                     location.set(axis.tag.clone(), value.into_inner());
                 }
             }
-            let source_id = font.add_source(Source::new(master.name.clone(), location, layer_id));
+            let source_id = font.add_source(Source::new(master.name.clone(), location));
+            source_by_master_id.insert(master.id.clone(), source_id);
             if master_idx == glyphs_font.default_master_idx {
                 font.set_default_source_id(source_id);
             }
@@ -210,11 +207,12 @@ impl FontReader for GlyphsReader {
             }
 
             for layer in &glyph.layers {
-                let Some(layer_id) = layer_by_master_id.get(layer.master_id()).copied() else {
+                let Some(source_id) = source_by_master_id.get(layer.master_id()).copied() else {
                     continue;
                 };
 
-                let mut ir_layer = GlyphLayer::with_width(layer.width.into_inner());
+                let mut ir_layer =
+                    GlyphLayer::with_width(LayerId::new(), source_id, layer.width.into_inner());
 
                 for shape in &layer.shapes {
                     match shape {
@@ -256,7 +254,7 @@ impl FontReader for GlyphsReader {
                     ir_layer.add_anchor(Anchor::new(name, anchor.pos.x, anchor.pos.y));
                 }
 
-                ir_glyph.set_layer(layer_id, ir_layer);
+                ir_glyph.set_layer(ir_layer);
             }
 
             font.insert_glyph(ir_glyph);

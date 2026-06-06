@@ -140,8 +140,6 @@ pub struct NapiSource {
     pub id: String,
     pub name: String,
     pub location: NapiLocation,
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
     pub filename: Option<String>,
 }
 
@@ -151,7 +149,6 @@ impl From<Source> for NapiSource {
             id: source.id.to_string(),
             name: source.name,
             location: source.location.into(),
-            layer_id: source.layer_id.to_string(),
             filename: source.filename,
         }
     }

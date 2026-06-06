@@ -19,18 +19,31 @@ Shift aims to redefine font editing by combining the power of Rust for performan
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      Frontend                           │
-│  React UI  ←→  Editor  ←→  Canvas 2D Renderer           │
-└────────────────────────┬────────────────────────────────┘
-                         │ IPC / NAPI
-┌────────────────────────┴────────────────────────────────┐
-│                       Backend                           │
-│  shift-node (N-API bindings)  ←→  shift-core (Rust)     │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                         Desktop App                          │
+│  Electron shell  ←→  React UI  ←→  TypeScript Editor         │
+└───────────────────────────────┬──────────────────────────────┘
+                                │ IPC / native bridge
+┌───────────────────────────────┴──────────────────────────────┐
+│                         Rust Crates                          │
+│  shift-bridge      transport adapter                         │
+│  shift-workspace   open working state                        │
+│  shift-font        live font authoring model                 │
+│  shift-store       SQLite working store                      │
+│  shift-source      .shift source package IO                  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-The frontend handles UI and rendering via Electron, while all font data and editing operations live in Rust. Communication happens through native Node.js bindings, keeping performance-critical work off the main thread.
+The desktop app owns shell and editor interaction. Rust owns the live font authoring model, durable working state, source package IO, and native transport boundary.
+
+`shift-font` is the core Rust object model:
+
+- `Font` owns glyphs, sources, axes, metadata, and font-level data.
+- `Source` is an editable designspace position with a name and location.
+- `Glyph` is a glyph concept identified by `GlyphId`.
+- `GlyphLayer` is authored editable data for one glyph at one source.
+
+Stable IDs are identity. Names and Unicode values are editable metadata.
 
 ## Getting Started
 

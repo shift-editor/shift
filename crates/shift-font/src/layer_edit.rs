@@ -720,10 +720,10 @@ pub struct PasteResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Anchor, Component};
+    use crate::{Anchor, Component, LayerId, SourceId};
 
     fn create_session() -> GlyphLayer {
-        GlyphLayer::with_width(500.0)
+        GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0)
     }
 
     fn session_with_contour() -> (GlyphLayer, ContourId) {
