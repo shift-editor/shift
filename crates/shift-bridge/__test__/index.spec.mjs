@@ -28,7 +28,7 @@ describe("Bridge", () => {
   function defaultLayerRef(name = "A", unicode = 65) {
     return {
       glyphHandle: { name, unicode },
-      layerId: bridge.getSources()[0].layerId,
+      sourceId: defaultSourceId(),
     };
   }
 
@@ -158,8 +158,8 @@ describe("Bridge", () => {
 
   it("surfaces typed bridge errors at the NAPI boundary", () => {
     expect(() =>
-      bridge.addContour({ glyphHandle: { name: "A", unicode: 65 }, layerId: "not-a-layer" }),
-    ).toThrow(/layer ID/i);
+      bridge.addContour({ glyphHandle: { name: "A", unicode: 65 }, sourceId: "not-a-source" }),
+    ).toThrow(/source ID/i);
 
     const glyphRef = defaultLayerRef();
     expect(() =>

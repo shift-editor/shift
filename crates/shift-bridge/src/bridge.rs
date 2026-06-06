@@ -196,15 +196,6 @@ impl FontView for FontSaveSnapshot {
     self.font.default_source_id()
   }
 
-  fn layers(&self) -> Vec<(LayerId, &shift_font::Layer)> {
-    self
-      .font
-      .layers()
-      .iter()
-      .map(|(layer_id, layer)| (*layer_id, layer))
-      .collect()
-  }
-
   fn glyphs(&self) -> Vec<&Glyph> {
     let override_name = self
       .active_glyph_override
@@ -252,10 +243,6 @@ impl FontView for FontSaveSnapshot {
 
   fn lib(&self) -> &shift_font::LibData {
     self.font.lib()
-  }
-
-  fn default_layer_id(&self) -> LayerId {
-    self.font.default_layer_id()
   }
 }
 

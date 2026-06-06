@@ -99,9 +99,17 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
         .collect();
     assert!(anchor_names.contains(&"top"));
 
-    let layer_names: Vec<_> = font.layers().values().map(|layer| layer.name()).collect();
-    assert!(layer_names.contains(&"public.default"));
-    assert!(font.layers().len() >= 2);
+    let source_names: Vec<_> = font.sources().iter().map(|source| source.name()).collect();
+    assert!(source_names.contains(&"Regular"));
+    assert!(font.sources().len() >= 2);
+    assert!(font
+        .glyphs()
+        .values()
+        .flat_map(|glyph| glyph.layers().values())
+        .all(|layer| font
+            .sources()
+            .iter()
+            .any(|source| source.id() == layer.source_id())));
 
     assert_eq!(font.kerning().get_kerning("T", "A"), Some(-75.0));
     assert_eq!(font.kerning().get_kerning("V", "A"), Some(-100.0));

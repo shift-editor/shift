@@ -5,7 +5,7 @@ use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
-use shift_font::{Axis, Font, Layer, LayerId, Location, Source, SourceId};
+use shift_font::{Axis, Font, LayerId, Location, Source, SourceId};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -156,7 +156,6 @@ impl DesignspaceReader {
             };
 
             let name = source_name(ds_source, idx);
-            font.add_layer(Layer::new(name.clone()));
             let location = location_from_dimensions(&ds_source.location, &doc);
             let source_id = font.add_source(Source::with_filename(
                 name,
@@ -281,7 +280,6 @@ fn load_axisless_designspace(
         };
 
         let name = axisless_source_name(ds_source, idx);
-        font.add_layer(Layer::new(name.clone()));
         let source_id = font.add_source(Source::with_filename(
             name,
             Location::new(),
