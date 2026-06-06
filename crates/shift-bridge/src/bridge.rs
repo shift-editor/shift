@@ -18,7 +18,9 @@ use shift_wire::{
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
   GlyphStructureChange, GlyphValueChange, Source,
 };
-use shift_workspace::{FontWorkspace, NewWorkspace};
+use shift_workspace::{
+  FontWorkspace, GlyphEditEntities, GlyphStructureEdit, GlyphValueEdit, NewWorkspace,
+};
 use std::sync::{
   atomic::{AtomicU64, Ordering},
   Arc,
@@ -655,8 +657,7 @@ impl Bridge {
     width: f64,
   ) -> errors::Result<NapiGlyphValueChange> {
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let layer = self.workspace_mut()?.set_x_advance(layer_id, width)?;
-    let change = GlyphValueChange::from_layer(&layer, Default::default());
+    let change = glyph_value_change(self.workspace_mut()?.set_x_advance(layer_id, width)?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -670,8 +671,7 @@ impl Bridge {
     dy: f64,
   ) -> errors::Result<NapiGlyphValueChange> {
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let layer = self.workspace_mut()?.translate_layer(layer_id, dx, dy)?;
-    let change = GlyphValueChange::from_layer(&layer, Default::default());
+    let change = glyph_value_change(self.workspace_mut()?.translate_layer(layer_id, dx, dy)?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -691,14 +691,11 @@ impl Bridge {
     let point_type = point_type.into();
 
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let (layer, point_id) = self
-      .workspace_mut()?
-      .add_point(layer_id, contour_id, x, y, point_type, smooth)?;
-    let changed = GlyphChangedEntities {
-      point_ids: vec![point_id],
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    let change = glyph_structure_change(
+      self
+        .workspace_mut()?
+        .add_point(layer_id, contour_id, x, y, point_type, smooth)?,
+    );
 
     self.mark_font_changed();
     Ok(change.into())
@@ -718,19 +715,14 @@ impl Bridge {
     let point_type = point_type.into();
 
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let (layer, point_id) = self.workspace_mut()?.insert_point_before(
+    let change = glyph_structure_change(self.workspace_mut()?.insert_point_before(
       layer_id,
       before_point_id,
       x,
       y,
       point_type,
       smooth,
-    )?;
-    let changed = GlyphChangedEntities {
-      point_ids: vec![point_id],
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    )?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -742,12 +734,7 @@ impl Bridge {
     #[napi(ts_arg_type = "LayerId")] layer_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let (layer, contour_id) = self.workspace_mut()?.add_contour(layer_id)?;
-    let changed = GlyphChangedEntities {
-      contour_ids: vec![contour_id],
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    let change = glyph_structure_change(self.workspace_mut()?.add_contour(layer_id)?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -761,14 +748,7 @@ impl Bridge {
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let layer = self
-      .workspace_mut()?
-      .open_contour(layer_id, contour_id.clone())?;
-    let changed = GlyphChangedEntities {
-      contour_ids: vec![contour_id],
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    let change = glyph_structure_change(self.workspace_mut()?.open_contour(layer_id, contour_id)?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -782,14 +762,7 @@ impl Bridge {
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let layer = self
-      .workspace_mut()?
-      .close_contour(layer_id, contour_id.clone())?;
-    let changed = GlyphChangedEntities {
-      contour_ids: vec![contour_id],
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    let change = glyph_structure_change(self.workspace_mut()?.close_contour(layer_id, contour_id)?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -803,14 +776,11 @@ impl Bridge {
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let layer = self
-      .workspace_mut()?
-      .reverse_contour(layer_id, contour_id.clone())?;
-    let changed = GlyphChangedEntities {
-      contour_ids: vec![contour_id],
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    let change = glyph_structure_change(
+      self
+        .workspace_mut()?
+        .reverse_contour(layer_id, contour_id)?,
+    );
 
     self.mark_font_changed();
     Ok(change.into())
@@ -841,14 +811,11 @@ impl Bridge {
     };
 
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let (layer, contour_ids) = self
-      .workspace_mut()?
-      .apply_boolean_op(layer_id, cid_a, cid_b, op)?;
-    let changed = GlyphChangedEntities {
-      contour_ids,
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    let change = glyph_structure_change(
+      self
+        .workspace_mut()?
+        .apply_boolean_op(layer_id, cid_a, cid_b, op)?,
+    );
 
     self.mark_font_changed();
     Ok(change.into())
@@ -864,10 +831,7 @@ impl Bridge {
     let point_ids = point_ids?;
 
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let layer = self
-      .workspace_mut()?
-      .remove_points(layer_id, point_ids.clone())?;
-    let change = GlyphStructureChange::from_layer(&layer, GlyphChangedEntities::points(point_ids));
+    let change = glyph_structure_change(self.workspace_mut()?.remove_points(layer_id, point_ids)?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -881,14 +845,7 @@ impl Bridge {
   ) -> errors::Result<NapiGlyphStructureChange> {
     let parsed_id = parse::<PointId>(&point_id)?;
     let layer_id = parse::<LayerId>(&layer_id)?;
-    let layer = self
-      .workspace_mut()?
-      .toggle_smooth(layer_id, parsed_id.clone())?;
-    let changed = GlyphChangedEntities {
-      point_ids: vec![parsed_id],
-      ..Default::default()
-    };
-    let change = GlyphStructureChange::from_layer(&layer, changed);
+    let change = glyph_structure_change(self.workspace_mut()?.toggle_smooth(layer_id, parsed_id)?);
 
     self.mark_font_changed();
     Ok(change.into())
@@ -958,13 +915,32 @@ impl Bridge {
       ))?
       .clone();
     apply_state_to_layer(&mut layer, &structure, values)?;
-    let layer = self
-      .workspace_mut()?
-      .replace_layer(layer_id.clone(), layer)?;
-    let change = GlyphStructureChange::from_layer(&layer, Default::default());
+    let change = glyph_structure_change(
+      self
+        .workspace_mut()?
+        .replace_layer(layer_id.clone(), layer)?,
+    );
 
     self.mark_font_changed();
     Ok(change.into())
+  }
+}
+
+fn glyph_value_change(edit: GlyphValueEdit) -> GlyphValueChange {
+  GlyphValueChange::from_layer(&edit.layer, glyph_changed_entities(edit.changed))
+}
+
+fn glyph_structure_change(edit: GlyphStructureEdit) -> GlyphStructureChange {
+  GlyphStructureChange::from_layer(&edit.layer, glyph_changed_entities(edit.changed))
+}
+
+fn glyph_changed_entities(changed: GlyphEditEntities) -> GlyphChangedEntities {
+  GlyphChangedEntities {
+    point_ids: changed.point_ids,
+    contour_ids: changed.contour_ids,
+    anchor_ids: changed.anchor_ids,
+    guideline_ids: changed.guideline_ids,
+    component_ids: changed.component_ids,
   }
 }
 
