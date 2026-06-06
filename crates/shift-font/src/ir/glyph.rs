@@ -1,7 +1,7 @@
 use crate::anchor::Anchor;
 use crate::component::Component;
 use crate::contour::Contour;
-use crate::entity::{AnchorId, ComponentId, ContourId, GlyphId, LayerId};
+use crate::entity::{AnchorId, ComponentId, ContourId, GlyphId, LayerId, SourceId};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::GlyphName;
@@ -19,8 +19,10 @@ pub struct Glyph {
     lib: LibData,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GlyphLayer {
+    id: LayerId,
+    source_id: SourceId,
     width: f64,
     height: Option<f64>,
     contours: IndexMap<ContourId, Contour>,
@@ -31,15 +33,40 @@ pub struct GlyphLayer {
 }
 
 impl GlyphLayer {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(id: LayerId, source_id: SourceId) -> Self {
+        Self {
+            id,
+            source_id,
+            width: 0.0,
+            height: None,
+            contours: IndexMap::new(),
+            components: HashMap::new(),
+            anchors: Vec::new(),
+            guidelines: Vec::new(),
+            lib: LibData::new(),
+        }
     }
 
-    pub fn with_width(width: f64) -> Self {
+    pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
         Self {
             width,
-            ..Self::default()
+            ..Self::new(id, source_id)
         }
+    }
+
+    pub fn id(&self) -> LayerId {
+        self.id
+    }
+
+    pub fn source_id(&self) -> SourceId {
+        self.source_id
+    }
+
+    pub fn clone_with_identity(&self, id: LayerId, source_id: SourceId) -> Self {
+        let mut layer = self.clone();
+        layer.id = id;
+        layer.source_id = source_id;
+        layer
     }
 
     pub fn width(&self) -> f64 {
@@ -264,12 +291,38 @@ impl Glyph {
         self.layers.get_mut(&id).map(Arc::make_mut)
     }
 
-    pub fn get_or_create_layer(&mut self, id: LayerId) -> &mut GlyphLayer {
-        Arc::make_mut(self.layers.entry(id).or_default())
+    pub fn ensure_layer_for_source(&mut self, source_id: SourceId) -> &mut GlyphLayer {
+        if let Some(layer_id) = self
+            .layers
+            .values()
+            .find(|layer| layer.source_id() == source_id)
+            .map(|layer| layer.id())
+        {
+            return self.layer_mut(layer_id).expect("layer id came from glyph");
+        }
+
+        let layer = GlyphLayer::new(LayerId::new(), source_id);
+        let layer_id = layer.id();
+        self.layers.insert(layer_id, Arc::new(layer));
+        self.layer_mut(layer_id).expect("layer was just inserted")
     }
 
-    pub fn set_layer(&mut self, id: LayerId, layer: GlyphLayer) {
-        self.layers.insert(id, Arc::new(layer));
+    pub fn set_layer(&mut self, layer: GlyphLayer) {
+        self.layers.insert(layer.id(), Arc::new(layer));
+    }
+
+    pub fn layer_for_source(&self, source_id: SourceId) -> Option<&GlyphLayer> {
+        self.layers
+            .values()
+            .find(|layer| layer.source_id() == source_id)
+            .map(Arc::as_ref)
+    }
+
+    pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
+        self.layers
+            .values_mut()
+            .find(|layer| layer.source_id() == source_id)
+            .map(Arc::make_mut)
     }
 
     pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {
@@ -301,21 +354,33 @@ mod tests {
     #[test]
     fn glyph_layer_operations() {
         let mut g = Glyph::new("A".to_string());
-        let layer_id = LayerId::new();
+        let source_id = SourceId::new();
 
-        let layer = g.get_or_create_layer(layer_id);
+        let layer = g.ensure_layer_for_source(source_id);
+        let layer_id = layer.id();
         layer.set_width(600.0);
 
         assert_eq!(g.layer(layer_id).unwrap().width(), 600.0);
+        assert_eq!(g.layer_for_source(source_id).unwrap().id(), layer_id);
     }
 
     #[test]
     fn cloned_glyph_shares_layers_until_one_layer_is_mutated() {
         let mut glyph = Glyph::new("A".to_string());
+        let first_source_id = SourceId::new();
+        let second_source_id = SourceId::new();
         let first_layer_id = LayerId::new();
         let second_layer_id = LayerId::new();
-        glyph.set_layer(first_layer_id, GlyphLayer::with_width(500.0));
-        glyph.set_layer(second_layer_id, GlyphLayer::with_width(600.0));
+        glyph.set_layer(GlyphLayer::with_width(
+            first_layer_id,
+            first_source_id,
+            500.0,
+        ));
+        glyph.set_layer(GlyphLayer::with_width(
+            second_layer_id,
+            second_source_id,
+            600.0,
+        ));
         let snapshot = glyph.clone();
 
         glyph
@@ -337,7 +402,7 @@ mod tests {
 
     #[test]
     fn glyph_layer_contours() {
-        let mut layer = GlyphLayer::with_width(500.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0);
         assert!(layer.is_empty());
 
         let contour = Contour::new();
@@ -349,7 +414,7 @@ mod tests {
 
     #[test]
     fn glyph_layer_anchors_are_ordered() {
-        let mut layer = GlyphLayer::new();
+        let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
         let a1 = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 20.0));
         let a2 = layer.add_anchor(Anchor::new(Some("bottom".to_string()), 30.0, 40.0));
 

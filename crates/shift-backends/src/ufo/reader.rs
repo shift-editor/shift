@@ -3,7 +3,8 @@ use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, Guideline, KerningData,
-    KerningPair, KerningSide, Layer, LibData, LibValue, PointType, Transform,
+    KerningPair, KerningSide, Layer, LayerId, LibData, LibValue, Location, PointType, Source,
+    SourceId, Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -100,9 +101,10 @@ impl UfoReader {
 
     fn convert_glyph_layer(
         norad_glyph: &norad::Glyph,
-        layer_id: shift_font::LayerId,
-    ) -> (Glyph, GlyphLayer) {
-        let mut glyph_layer = GlyphLayer::with_width(norad_glyph.width);
+        layer_id: LayerId,
+        source_id: SourceId,
+    ) -> Glyph {
+        let mut glyph_layer = GlyphLayer::with_width(layer_id, source_id, norad_glyph.width);
         if norad_glyph.height != 0.0 {
             glyph_layer.set_height(Some(norad_glyph.height));
         }
@@ -136,8 +138,8 @@ impl UfoReader {
             *glyph.lib_mut() = Self::convert_lib(&norad_glyph.lib);
         }
 
-        glyph.set_layer(layer_id, glyph_layer);
-        (glyph, GlyphLayer::new())
+        glyph.set_layer(glyph_layer);
+        glyph
     }
 
     fn convert_kerning(norad_font: &NoradFont) -> KerningData {
@@ -207,7 +209,9 @@ impl FontReader for UfoReader {
         let ufo_path = Path::new(path);
 
         let mut font = Font::new();
-        let default_layer_id = font.default_layer_id();
+        let default_source_id = font
+            .default_source_id()
+            .expect("new font should have a default source");
 
         if let Some(family) = &norad_font.font_info.family_name {
             font.metadata_mut().family_name = Some(family.clone());
@@ -243,19 +247,20 @@ impl FontReader for UfoReader {
 
         let norad_default_layer_name = norad_font.layers.default_layer().name().clone();
         for layer in norad_font.layers.iter() {
-            let layer_id = if layer.name() == &norad_default_layer_name {
-                default_layer_id
+            let source_id = if layer.name() == &norad_default_layer_name {
+                default_source_id
             } else {
                 let new_layer = Layer::new(layer.name().to_string());
-                font.add_layer(new_layer)
+                font.add_layer(new_layer);
+                font.add_source(Source::new(layer.name().to_string(), Location::new()))
             };
 
             for norad_glyph in layer.iter() {
-                let (glyph, _) = Self::convert_glyph_layer(norad_glyph, layer_id);
+                let glyph = Self::convert_glyph_layer(norad_glyph, LayerId::new(), source_id);
 
                 if let Some(existing) = font.glyph_mut(glyph.name()) {
-                    if let Some(layer_data) = glyph.layer(layer_id) {
-                        existing.set_layer(layer_id, layer_data.clone());
+                    for layer_data in glyph.layers().values() {
+                        existing.set_layer(layer_data.as_ref().clone());
                     }
                 } else {
                     font.insert_glyph(glyph);

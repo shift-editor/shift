@@ -25,7 +25,7 @@ impl FontWriter for UfoBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Contour, Glyph, GlyphLayer, PointType};
+    use shift_font::{Contour, Glyph, GlyphLayer, LayerId, PointType};
     use std::fs;
 
     fn create_test_font() -> Font {
@@ -36,10 +36,10 @@ mod tests {
         font.metrics_mut().ascender = 800.0;
         font.metrics_mut().descender = -200.0;
 
-        let default_layer_id = font.default_layer_id();
+        let default_source_id = font.default_source_id().unwrap();
 
         let mut glyph = Glyph::with_unicode("A".to_string(), 65);
-        let mut layer = GlyphLayer::with_width(600.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 600.0);
 
         let mut contour = Contour::new();
         contour.add_point(0.0, 0.0, PointType::OnCurve, false);
@@ -55,7 +55,7 @@ mod tests {
         inner.close();
         layer.add_contour(inner);
 
-        glyph.set_layer(default_layer_id, layer);
+        glyph.set_layer(layer);
         font.insert_glyph(glyph);
 
         font
@@ -96,11 +96,12 @@ mod tests {
             loaded_glyph.primary_unicode()
         );
 
-        let default_layer_id = original.default_layer_id();
-        let loaded_default_layer_id = loaded.default_layer_id();
-
-        let original_layer = original_glyph.layer(default_layer_id).unwrap();
-        let loaded_layer = loaded_glyph.layer(loaded_default_layer_id).unwrap();
+        let original_layer = original_glyph
+            .layer_for_source(original.default_source_id().unwrap())
+            .unwrap();
+        let loaded_layer = loaded_glyph
+            .layer_for_source(loaded.default_source_id().unwrap())
+            .unwrap();
 
         assert_eq!(original_layer.width(), loaded_layer.width());
         assert_eq!(
@@ -114,10 +115,10 @@ mod tests {
     #[test]
     fn writer_rounds_coordinates_and_skips_empty_contours() {
         let mut font = Font::new();
-        let default_layer_id = font.default_layer_id();
+        let default_source_id = font.default_source_id().unwrap();
 
         let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-        let mut layer = GlyphLayer::with_width(500.4);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 500.4);
 
         let mut contour = Contour::new();
         contour.add_point(
@@ -142,7 +143,7 @@ mod tests {
         layer.add_contour(contour);
         layer.add_contour(Contour::new());
 
-        glyph.set_layer(default_layer_id, layer);
+        glyph.set_layer(layer);
         font.insert_glyph(glyph);
 
         let temp_dir = std::env::temp_dir().join("shift_test_ufo_writer_format");

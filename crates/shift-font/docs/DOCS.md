@@ -2,11 +2,27 @@
 
 First-class Rust font object model for Shift.
 
+## Object Model
+
+- `Font` owns glyphs, sources, axes, metadata, and font-level data.
+- `Source` is an editable designspace position with a name and location.
+- `Glyph` is a glyph concept identified by `GlyphId`.
+- `GlyphLayer` is authored editable data for one glyph at one source.
+- `Contour` and `Point` describe outline geometry inside a glyph layer.
+
+## Identity
+
+Stable IDs are identity. Names and Unicode values are editable metadata.
+
+- `GlyphId` identifies a glyph.
+- `SourceId` identifies a source.
+- `LayerId` identifies a glyph layer: the authored data for one glyph at one source.
+
 ## Responsibilities
 
 - Own font authoring data structures such as `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Source`, and `Axis`.
 - Keep object-level mutation behavior near the objects it mutates.
-- Provide model-native helpers for layer editing, composite resolution, interpolation support, and geometry-derived behavior.
+- Provide model-native helpers for layer editing, component resolution, variation behavior, and geometry-derived behavior.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 
 ## Boundaries
@@ -15,7 +31,7 @@ First-class Rust font object model for Shift.
 
 `shift-font` should not perform SQLite persistence. Durable working-store reads and writes belong in `shift-store`.
 
-`shift-font` should not own Electron, renderer, or tool state. The TypeScript editor owns UI interaction, selection, hover, camera, tools, and command history.
+`shift-font` should not own Electron, NAPI, or editor state. The TypeScript editor owns UI interaction, selection, hover, camera, tools, and command history.
 
 ## Editing Shape
 
@@ -28,4 +44,4 @@ layer.remove_points(&point_ids)?;
 layer.apply_bulk_node_positions(updates)?;
 ```
 
-Transport layers should pass enough identity to find the model object, then call these methods. They should not introduce hidden native edit sessions.
+Transport and workspace layers should pass stable identity to find the model object, then call these methods. They should not introduce hidden native edit sessions.

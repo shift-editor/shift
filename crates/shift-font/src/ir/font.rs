@@ -103,7 +103,7 @@ impl Default for Font {
         let default_layer_id = LayerId::new();
         let mut layers = HashMap::new();
         layers.insert(default_layer_id, Layer::default_layer());
-        let default_source = Source::new("Regular".to_string(), Location::new(), default_layer_id);
+        let default_source = Source::new("Regular".to_string(), Location::new());
         let default_source_id = default_source.id();
 
         Self {
@@ -365,11 +365,12 @@ mod tests {
 
     fn synthetic_point_heavy_font(mark: PerfFontMark) -> Font {
         let mut font = Font::new();
-        let default_layer_id = font.default_layer_id();
+        let source_id = font.default_source_id().unwrap();
 
         for glyph_index in 0..mark.glyphs {
             let mut glyph = Glyph::with_unicode(format!("g{glyph_index:05}"), glyph_index as u32);
-            let mut layer = GlyphLayer::with_width(500.0 + glyph_index as f64);
+            let mut layer =
+                GlyphLayer::with_width(LayerId::new(), source_id, 500.0 + glyph_index as f64);
 
             for contour_index in 0..mark.contours_per_glyph {
                 let mut contour = Contour::new();
@@ -384,7 +385,7 @@ mod tests {
                 layer.add_contour(contour);
             }
 
-            glyph.set_layer(default_layer_id, layer);
+            glyph.set_layer(layer);
             font.insert_glyph(glyph);
         }
 
@@ -414,8 +415,9 @@ mod tests {
     fn font_glyph_operations() {
         let mut font = Font::new();
         let mut glyph = Glyph::with_unicode("A".to_string(), 65);
-        let layer = GlyphLayer::with_width(600.0);
-        glyph.set_layer(font.default_layer_id(), layer);
+        let layer =
+            GlyphLayer::with_width(LayerId::new(), font.default_source_id().unwrap(), 600.0);
+        glyph.set_layer(layer);
 
         font.insert_glyph(glyph);
 
@@ -531,13 +533,13 @@ mod tests {
         };
         let mut font = synthetic_point_heavy_font(mark);
         let snapshot = font.clone();
-        let default_layer_id = font.default_layer_id();
+        let default_source_id = font.default_source_id().unwrap();
         let start = Instant::now();
 
         font.glyph_mut("g00000")
             .expect("target glyph should exist")
-            .layer_mut(default_layer_id)
-            .expect("target layer should exist")
+            .layer_for_source_mut(default_source_id)
+            .expect("target source layer should exist")
             .set_width(777.0);
 
         let elapsed = start.elapsed();
@@ -545,7 +547,7 @@ mod tests {
         assert_eq!(
             font.glyph("g00000")
                 .unwrap()
-                .layer(default_layer_id)
+                .layer_for_source(default_source_id)
                 .unwrap()
                 .width(),
             777.0
@@ -554,7 +556,7 @@ mod tests {
             snapshot
                 .glyph("g00000")
                 .unwrap()
-                .layer(snapshot.default_layer_id())
+                .layer_for_source(snapshot.default_source_id().unwrap())
                 .unwrap()
                 .width(),
             777.0

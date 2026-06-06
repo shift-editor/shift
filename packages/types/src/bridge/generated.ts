@@ -4,7 +4,6 @@ import type {
   AnchorId,
   ComponentId,
   GuidelineId,
-  LayerId,
   SourceId,
 } from "../ids";
 
@@ -60,7 +59,7 @@ export interface GlyphHandle {
 
 export interface GlyphLayerRef {
   glyphHandle: GlyphHandle
-  layerId: LayerId
+  sourceId: SourceId
 }
 
 export interface FontExportRequest {
@@ -232,6 +231,5 @@ export interface Source {
   id: SourceId
   name: string
   location: Location
-  layerId: LayerId
   filename?: string
 }

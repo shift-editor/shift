@@ -5,7 +5,7 @@ use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
-use shift_font::{Axis, Font, Layer, LayerId, Location, Source};
+use shift_font::{Axis, Font, Layer, LayerId, Location, Source, SourceId};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -77,6 +77,9 @@ impl DesignspaceReader {
                     path: default_ufo_path.clone(),
                     details: source.to_string(),
                 })?;
+        let default_ufo_source_id = font
+            .default_source_id()
+            .ok_or(DesignspaceError::NoSources)?;
         font.clear_sources();
 
         if let Some(ref family) = default_ds_source.familyname {
@@ -98,16 +101,15 @@ impl DesignspaceReader {
         }
 
         // Register the default source.
-        let default_layer_id = font.default_layer_id();
         let default_location = location_from_dimensions(&default_ds_source.location, &doc);
         let default_name = source_name(default_ds_source, default_idx);
         let default_source_id = font.add_source(Source::with_filename(
             default_name,
             default_location,
-            default_layer_id,
             default_ds_source.filename.clone(),
         ));
         font.set_default_source_id(default_source_id);
+        move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id);
 
         // Cache loaded UFO fonts so we don't re-read the same file for support layers.
         let mut ufo_cache: HashMap<String, Font> = HashMap::new();
@@ -142,40 +144,38 @@ impl DesignspaceReader {
             };
 
             // Determine which layer from the source UFO to read.
-            let source_layer_id = match &ds_source.layer {
-                Some(layer_name) => {
-                    find_layer_by_name(source_font, layer_name).ok_or_else(|| {
-                        DesignspaceError::MissingLayer {
-                            layer: layer_name.clone(),
-                            filename: ds_source.filename.clone(),
-                        }
-                    })?
-                }
-                None => source_font.default_layer_id(),
+            let source_source_id = match &ds_source.layer {
+                Some(layer_name) => find_source_by_external_layer_name(source_font, layer_name)
+                    .ok_or_else(|| DesignspaceError::MissingLayer {
+                        layer: layer_name.clone(),
+                        filename: ds_source.filename.clone(),
+                    })?,
+                None => source_font
+                    .default_source_id()
+                    .ok_or(DesignspaceError::NoSources)?,
             };
 
             let name = source_name(ds_source, idx);
-            let layer = Layer::new(name.clone());
-            let layer_id = font.add_layer(layer);
+            font.add_layer(Layer::new(name.clone()));
+            let location = location_from_dimensions(&ds_source.location, &doc);
+            let source_id = font.add_source(Source::with_filename(
+                name,
+                location,
+                ds_source.filename.clone(),
+            ));
 
             // Copy glyphs from the resolved layer into the new layer.
             for (glyph_name, source_glyph) in source_font.glyphs() {
-                if let Some(source_layer) = source_glyph.layer(source_layer_id) {
+                if let Some(source_layer) = source_glyph.layer_for_source(source_source_id) {
                     if let Some(existing_glyph) = font.glyph_mut(glyph_name) {
-                        existing_glyph.set_layer(layer_id, source_layer.clone());
+                        existing_glyph
+                            .set_layer(source_layer.clone_with_identity(LayerId::new(), source_id));
                     }
                 }
             }
-
-            let location = location_from_dimensions(&ds_source.location, &doc);
-            font.add_source(Source::with_filename(
-                name,
-                location,
-                layer_id,
-                ds_source.filename.clone(),
-            ));
         }
 
+        remove_glyph_layers_without_source(&mut font);
         Ok(font)
     }
 }
@@ -227,6 +227,9 @@ fn load_axisless_designspace(
                 path: default_ufo_path.clone(),
                 details: source.to_string(),
             })?;
+    let default_ufo_source_id = font
+        .default_source_id()
+        .ok_or(DesignspaceError::NoSources)?;
     font.clear_sources();
 
     if let Some(family) = &default_source.familyname {
@@ -236,10 +239,10 @@ fn load_axisless_designspace(
     let default_source_id = font.add_source(Source::with_filename(
         axisless_source_name(default_source, 0),
         Location::new(),
-        font.default_layer_id(),
         default_source.filename.clone(),
     ));
     font.set_default_source_id(default_source_id);
+    move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id);
 
     let mut ufo_cache: HashMap<String, Font> = HashMap::new();
     for (idx, ds_source) in sources.iter().enumerate().skip(1) {
@@ -266,36 +269,36 @@ fn load_axisless_designspace(
             }
         };
 
-        let source_layer_id = match &ds_source.layer {
-            Some(layer_name) => find_layer_by_name(source_font, layer_name).ok_or_else(|| {
-                DesignspaceError::MissingLayer {
+        let source_source_id = match &ds_source.layer {
+            Some(layer_name) => find_source_by_external_layer_name(source_font, layer_name)
+                .ok_or_else(|| DesignspaceError::MissingLayer {
                     layer: layer_name.clone(),
                     filename: ds_source.filename.clone(),
-                }
-            })?,
-            None => source_font.default_layer_id(),
+                })?,
+            None => source_font
+                .default_source_id()
+                .ok_or(DesignspaceError::NoSources)?,
         };
 
         let name = axisless_source_name(ds_source, idx);
-        let layer = Layer::new(name.clone());
-        let layer_id = font.add_layer(layer);
+        font.add_layer(Layer::new(name.clone()));
+        let source_id = font.add_source(Source::with_filename(
+            name,
+            Location::new(),
+            ds_source.filename.clone(),
+        ));
 
         for (glyph_name, source_glyph) in source_font.glyphs() {
-            if let Some(source_layer) = source_glyph.layer(source_layer_id) {
+            if let Some(source_layer) = source_glyph.layer_for_source(source_source_id) {
                 if let Some(existing_glyph) = font.glyph_mut(glyph_name) {
-                    existing_glyph.set_layer(layer_id, source_layer.clone());
+                    existing_glyph
+                        .set_layer(source_layer.clone_with_identity(LayerId::new(), source_id));
                 }
             }
         }
-
-        font.add_source(Source::with_filename(
-            name,
-            Location::new(),
-            layer_id,
-            ds_source.filename.clone(),
-        ));
     }
 
+    remove_glyph_layers_without_source(&mut font);
     Ok(font)
 }
 
@@ -415,11 +418,57 @@ fn find_default_source_index(doc: &DesignSpaceDocument) -> usize {
     0
 }
 
-fn find_layer_by_name(font: &Font, name: &str) -> Option<LayerId> {
-    font.layers()
+fn find_source_by_external_layer_name(font: &Font, name: &str) -> Option<SourceId> {
+    font.sources()
         .iter()
-        .find(|(_, layer)| layer.name() == name)
-        .map(|(&id, _)| id)
+        .find(|source| source.name() == name)
+        .map(Source::id)
+}
+
+fn move_glyph_layers_to_source(font: &mut Font, from_source_id: SourceId, to_source_id: SourceId) {
+    let glyph_names: Vec<_> = font.glyphs().keys().cloned().collect();
+
+    for glyph_name in glyph_names {
+        let Some(glyph) = font.glyph_mut(&glyph_name) else {
+            continue;
+        };
+        let Some(layer) = glyph
+            .layer_for_source(from_source_id)
+            .map(|layer| layer.clone_with_identity(LayerId::new(), to_source_id))
+        else {
+            continue;
+        };
+        let old_layer_ids: Vec<_> = glyph
+            .layers()
+            .values()
+            .filter(|layer| layer.source_id() == from_source_id)
+            .map(|layer| layer.id())
+            .collect();
+        for old_layer_id in old_layer_ids {
+            glyph.remove_layer(old_layer_id);
+        }
+        glyph.set_layer(layer);
+    }
+}
+
+fn remove_glyph_layers_without_source(font: &mut Font) {
+    let source_ids: Vec<_> = font.sources().iter().map(Source::id).collect();
+    let glyph_names: Vec<_> = font.glyphs().keys().cloned().collect();
+
+    for glyph_name in glyph_names {
+        let Some(glyph) = font.glyph_mut(&glyph_name) else {
+            continue;
+        };
+        let orphan_layer_ids: Vec<_> = glyph
+            .layers()
+            .values()
+            .filter(|layer| !source_ids.contains(&layer.source_id()))
+            .map(|layer| layer.id())
+            .collect();
+        for layer_id in orphan_layer_ids {
+            glyph.remove_layer(layer_id);
+        }
+    }
 }
 
 /// Derive (minimum, maximum) for an axis from norad's parsed designspace.

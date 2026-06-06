@@ -38,8 +38,8 @@ pub struct GlyphHandle {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GlyphLayerRef {
   pub glyph_handle: GlyphHandle,
-  #[napi(ts_type = "LayerId")]
-  pub layer_id: String,
+  #[napi(ts_type = "SourceId")]
+  pub source_id: String,
 }
 
 #[napi(object)]
@@ -190,6 +190,10 @@ impl FontView for FontSaveSnapshot {
 
   fn sources(&self) -> &[shift_font::Source] {
     self.font.sources()
+  }
+
+  fn default_source_id(&self) -> Option<SourceId> {
+    self.font.default_source_id()
   }
 
   fn layers(&self) -> Vec<(LayerId, &shift_font::Layer)> {
@@ -398,13 +402,12 @@ impl Bridge {
     #[napi(ts_arg_type = "SourceId")] source_id: String,
   ) -> errors::Result<Option<NapiGlyphState>> {
     let source_id = parse::<SourceId>(&source_id)?;
-    let layer_id = self.source_layer_id(source_id)?;
 
     let glyph = match self.glyph_for_read(&glyph_handle.name)? {
       Some(glyph) => glyph,
       None => return Ok(None),
     };
-    let layer = match glyph.layer(layer_id) {
+    let layer = match glyph.layer_for_source(source_id) {
       Some(layer) => layer,
       None => return Ok(None),
     };
@@ -482,22 +485,6 @@ impl Bridge {
     )
   }
 
-  fn source_layer_id(&self, source_id: SourceId) -> BridgeResult<LayerId> {
-    if let Some(source) = self
-      .font()?
-      .sources()
-      .iter()
-      .find(|source| source.id() == source_id)
-    {
-      return Ok(source.layer_id());
-    }
-
-    Err(BridgeError::InvalidInput {
-      kind: "source ID",
-      value: source_id.to_string(),
-    })
-  }
-
   fn save_snapshot(&self) -> BridgeResult<FontSaveSnapshot> {
     Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
   }
@@ -507,10 +494,30 @@ impl Bridge {
   }
 
   fn glyph_layer_target(&self, glyph_ref: GlyphLayerRef) -> BridgeResult<GlyphLayerTarget> {
-    let layer_id = parse::<LayerId>(&glyph_ref.layer_id)?;
+    let source_id = parse::<SourceId>(&glyph_ref.source_id)?;
+    if !self
+      .font()?
+      .sources()
+      .iter()
+      .any(|source| source.id() == source_id)
+    {
+      return Err(BridgeError::InvalidInput {
+        kind: "source ID",
+        value: source_id.to_string(),
+      });
+    }
+
+    let layer_id = self
+      .font()?
+      .glyph(&glyph_ref.glyph_handle.name)
+      .and_then(|glyph| glyph.layer_for_source(source_id))
+      .map(GlyphLayer::id)
+      .unwrap_or_else(LayerId::new);
+
     Ok(GlyphLayerTarget {
       glyph_name: glyph_ref.glyph_handle.name,
       unicode: glyph_ref.glyph_handle.unicode,
+      source_id,
       layer_id,
     })
   }
@@ -1227,7 +1234,7 @@ mod tests {
   fn default_layer_ref(bridge: &Bridge, name: &str, unicode: Option<u32>) -> GlyphLayerRef {
     GlyphLayerRef {
       glyph_handle: glyph_handle(name, unicode),
-      layer_id: bridge.get_sources().unwrap()[0].layer_id.clone(),
+      source_id: bridge.get_sources().unwrap()[0].id.clone(),
     }
   }
 
@@ -1324,7 +1331,7 @@ mod tests {
       .glyph("A")
       .expect("snapshot should include edited A");
     let layer = glyph
-      .layer(snapshot.default_layer_id())
+      .layer_for_source(snapshot.default_source_id().unwrap())
       .expect("edited glyph should include default layer");
 
     assert_eq!(bridge.get_glyphs().unwrap().len(), 1);
@@ -1479,9 +1486,9 @@ mod tests {
 
     let result = bridge.add_contour(GlyphLayerRef {
       glyph_handle: glyph_handle("A", Some(65)),
-      layer_id: "not-a-layer-id".to_string(),
+      source_id: "not-a-source-id".to_string(),
     });
 
-    assert!(result.err().unwrap().reason.contains("invalid layer ID"));
+    assert!(result.err().unwrap().reason.contains("invalid source ID"));
   }
 }

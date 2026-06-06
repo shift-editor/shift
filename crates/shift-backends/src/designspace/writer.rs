@@ -50,12 +50,10 @@ impl DesignspaceWriter {
     }
 
     fn source(source: &Source, font: &Font, filename: &str, axes: &[Axis]) -> DsSource {
-        let layer = if source.layer_id() == font.default_layer_id() {
+        let layer = if Some(source.id()) == font.default_source_id() {
             None
         } else {
-            font.layers()
-                .get(&source.layer_id())
-                .map(|layer| layer.name().to_string())
+            Some(source.name().to_string())
         };
 
         DsSource {
@@ -69,12 +67,10 @@ impl DesignspaceWriter {
     }
 
     fn source_layer(source: &Source, font: &Font) -> Option<String> {
-        if source.layer_id() == font.default_layer_id() {
+        if Some(source.id()) == font.default_source_id() {
             None
         } else {
-            font.layers()
-                .get(&source.layer_id())
-                .map(|layer| layer.name().to_string())
+            Some(source.name().to_string())
         }
     }
 

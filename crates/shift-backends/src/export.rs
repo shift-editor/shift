@@ -144,21 +144,21 @@ fn path_to_str<'a>(path: &'a Path, label: &'static str) -> Result<&'a str, Expor
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Contour, Font, Glyph, GlyphLayer, PointType};
+    use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
     use skrifa::{FontRef, MetadataProvider};
 
     fn simple_font() -> Font {
         let mut font = Font::new();
-        let default_layer_id = font.default_layer_id();
+        let default_source_id = font.default_source_id().unwrap();
         let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-        let mut layer = GlyphLayer::with_width(600.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 600.0);
         let mut contour = Contour::new();
         contour.add_point(100.0, 0.0, PointType::OnCurve, false);
         contour.add_point(300.0, 700.0, PointType::OnCurve, false);
         contour.add_point(500.0, 0.0, PointType::OnCurve, false);
         contour.close();
         layer.add_contour(contour);
-        glyph.set_layer(default_layer_id, layer);
+        glyph.set_layer(layer);
         font.insert_glyph(glyph);
         font
     }

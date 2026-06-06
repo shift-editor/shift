@@ -278,28 +278,31 @@ impl UfoWriter {
             norad_font.lib = Self::convert_lib(font.lib());
         }
 
-        let default_layer_id = font.default_layer_id();
+        let default_source_id = font.default_source_id();
         let default_layer = norad_font.layers.default_layer_mut();
 
         for glyph in font.glyphs() {
-            if let Some(layer_data) = glyph.layer(default_layer_id) {
+            let Some(source_id) = default_source_id else {
+                continue;
+            };
+            if let Some(layer_data) = glyph.layer_for_source(source_id) {
                 let norad_glyph = Self::convert_glyph(glyph, layer_data);
                 default_layer.insert_glyph(norad_glyph);
             }
         }
 
-        for (layer_id, layer) in font.layers() {
-            if layer_id == default_layer_id {
+        for source in font.sources() {
+            if Some(source.id()) == default_source_id {
                 continue;
             }
 
             let norad_layer = norad_font
                 .layers
-                .new_layer(layer.name())
+                .new_layer(source.name())
                 .map_err(|e| e.to_string())?;
 
             for glyph in font.glyphs() {
-                if let Some(layer_data) = glyph.layer(layer_id) {
+                if let Some(layer_data) = glyph.layer_for_source(source.id()) {
                     let norad_glyph = Self::convert_glyph(glyph, layer_data);
                     norad_layer.insert_glyph(norad_glyph);
                 }

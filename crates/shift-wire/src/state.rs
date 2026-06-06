@@ -5,15 +5,17 @@ use std::str::FromStr;
 use crate::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Component as IrComponent, ComponentId, Contour as IrContour,
-    ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphLayer, PointId,
-    PointType as IrPointType,
+    ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphLayer, LayerId,
+    PointId, PointType as IrPointType, SourceId,
 };
 
 pub fn layer_from_state(
+    layer_id: LayerId,
+    source_id: SourceId,
     structure: &GlyphStructure,
     values: &[GlyphValue],
 ) -> CoreResult<GlyphLayer> {
-    let mut layer = GlyphLayer::new();
+    let mut layer = GlyphLayer::new(layer_id, source_id);
     apply_state_to_layer(&mut layer, structure, values)?;
     Ok(layer)
 }
@@ -178,10 +180,10 @@ fn restore_components(
 mod tests {
     use super::*;
     use crate::values_from_layer;
-    use shift_font::{Anchor, Component, DecomposedTransform};
+    use shift_font::{Anchor, Component, DecomposedTransform, LayerId, SourceId};
 
     fn sample_layer() -> GlyphLayer {
-        let mut layer = GlyphLayer::with_width(500.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0);
 
         let mut contour = IrContour::with_id(ContourId::from_raw(10));
         contour.add_point_with_id(PointId::from_raw(20), 1.0, 2.0, IrPointType::OnCurve, false);
@@ -232,8 +234,15 @@ mod tests {
     fn layer_from_state_restores_ids_structure_and_values() -> CoreResult<()> {
         let layer = sample_layer();
         let structure = GlyphStructure::from(&layer);
-        let restored = layer_from_state(&structure, &values_from_layer(&layer))?;
+        let restored = layer_from_state(
+            layer.id(),
+            layer.source_id(),
+            &structure,
+            &values_from_layer(&layer),
+        )?;
 
+        assert_eq!(restored.id(), layer.id());
+        assert_eq!(restored.source_id(), layer.source_id());
         assert_eq!(restored.width(), 500.0);
 
         let contour = restored.contour(ContourId::from_raw(10)).unwrap();
@@ -264,7 +273,7 @@ mod tests {
 
     #[test]
     fn glyph_structure_sorts_components_by_id() {
-        let mut layer = GlyphLayer::new();
+        let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
         layer.add_component(Component::with_id(
             ComponentId::from_raw(200),
             "later".to_string(),
@@ -291,7 +300,7 @@ mod tests {
         };
 
         assert!(matches!(
-            layer_from_state(&structure, &[]),
+            layer_from_state(LayerId::new(), SourceId::new(), &structure, &[]),
             Err(CoreError::MissingGlyphValue { index: 0 })
         ));
     }
@@ -305,7 +314,7 @@ mod tests {
         };
 
         assert!(matches!(
-            layer_from_state(&structure, &[500.0, 1.0]),
+            layer_from_state(LayerId::new(), SourceId::new(), &structure, &[500.0, 1.0]),
             Err(CoreError::TrailingGlyphValues {
                 expected: 1,
                 actual: 2,
@@ -326,7 +335,7 @@ mod tests {
         };
 
         assert!(matches!(
-            layer_from_state(&structure, &[500.0]),
+            layer_from_state(LayerId::new(), SourceId::new(), &structure, &[500.0]),
             Err(CoreError::InvalidContourId(value)) if value == "not-a-contour-id"
         ));
     }

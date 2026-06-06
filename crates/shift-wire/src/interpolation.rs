@@ -162,7 +162,7 @@ pub fn build_masters(font: &Font, glyph: &Glyph) -> Option<Vec<GlyphMaster>> {
     let mut masters: Vec<GlyphMaster> = Vec::new();
 
     for source in font.sources() {
-        let layer = match glyph.layer(source.layer_id()) {
+        let layer = match glyph.layer_for_source(source.id()) {
             Some(layer)
                 if !layer.contours().is_empty()
                     || !layer.anchors().is_empty()

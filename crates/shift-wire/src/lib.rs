@@ -10,7 +10,7 @@ use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, Component as IrComponent, ComponentId,
     Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphLayer,
-    GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
+    GlyphName, GuidelineId, Location as IrLocation, Point as IrPoint, PointId,
     PointType as IrPointType, Source as IrSource, SourceId,
 };
 
@@ -134,7 +134,6 @@ pub struct Source {
     pub id: SourceId,
     pub name: String,
     pub location: Location,
-    pub layer_id: LayerId,
     pub filename: Option<String>,
 }
 
@@ -144,7 +143,6 @@ impl From<&IrSource> for Source {
             id: source.id(),
             name: source.name().to_string(),
             location: source.location().into(),
-            layer_id: source.layer_id(),
             filename: source.filename().map(str::to_string),
         }
     }

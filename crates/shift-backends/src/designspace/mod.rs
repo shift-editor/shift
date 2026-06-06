@@ -10,7 +10,7 @@ pub use writer::DesignspaceWriter;
 mod tests {
     use super::*;
     use crate::traits::{FontReader, FontWriter};
-    use shift_font::{Contour, Font, Glyph, GlyphLayer, PointType};
+    use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
     use std::fs;
 
     fn test_font() -> Font {
@@ -20,7 +20,8 @@ mod tests {
         font.metrics_mut().units_per_em = 1000.0;
 
         let mut glyph = Glyph::with_unicode("o".to_string(), 'o' as u32);
-        let mut layer = GlyphLayer::with_width(520.0);
+        let mut layer =
+            GlyphLayer::with_width(LayerId::new(), font.default_source_id().unwrap(), 520.0);
         let mut contour = Contour::new();
         contour.add_point(100.0, 0.0, PointType::OnCurve, false);
         contour.add_point(420.0, 0.0, PointType::OnCurve, false);
@@ -28,7 +29,7 @@ mod tests {
         contour.add_point(100.0, 500.0, PointType::OnCurve, false);
         contour.close();
         layer.add_contour(contour);
-        glyph.set_layer(font.default_layer_id(), layer);
+        glyph.set_layer(layer);
         font.insert_glyph(glyph);
 
         font

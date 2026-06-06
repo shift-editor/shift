@@ -47,6 +47,7 @@ pub enum WorkspaceSource {
 pub struct GlyphLayerTarget {
     pub glyph_name: String,
     pub unicode: Option<u32>,
+    pub source_id: SourceId,
     pub layer_id: LayerId,
 }
 
@@ -202,17 +203,36 @@ impl FontWorkspace {
             if let Some(unicode) = target.unicode {
                 glyph.add_unicode(unicode);
             }
-            glyph.set_layer(target.layer_id, GlyphLayer::with_width(500.0));
+            glyph.set_layer(GlyphLayer::with_width(
+                target.layer_id,
+                target.source_id,
+                500.0,
+            ));
             change_set.push(FontChange::GlyphCreated(GlyphCreated::from(&glyph)));
             next_font.insert_glyph(glyph);
         }
 
-        let source_id = source_id_for_layer(&next_font, target.layer_id).ok_or_else(|| {
-            WorkspaceError::InvalidInput {
-                kind: "layer ID",
-                value: target.layer_id.to_string(),
-            }
-        })?;
+        if !next_font
+            .sources()
+            .iter()
+            .any(|source| source.id() == target.source_id)
+        {
+            return Err(WorkspaceError::InvalidInput {
+                kind: "source ID",
+                value: target.source_id.to_string(),
+            });
+        }
+
+        if let Some(glyph) = next_font.glyph_mut(&target.glyph_name)
+            && glyph.layer(target.layer_id).is_none()
+        {
+            glyph.set_layer(GlyphLayer::with_width(
+                LayerId::new(),
+                target.source_id,
+                500.0,
+            ));
+        }
+
         let glyph =
             next_font
                 .glyph(&target.glyph_name)
@@ -223,7 +243,7 @@ impl FontWorkspace {
         let change_target = GlyphLayerChangeTarget {
             glyph_id: glyph.id(),
             glyph_name: glyph.glyph_name().clone(),
-            source_id,
+            source_id: target.source_id,
             layer_id: target.layer_id,
         };
         let glyph = next_font.glyph_mut(&target.glyph_name).ok_or_else(|| {
@@ -237,7 +257,13 @@ impl FontWorkspace {
             glyph.add_unicode(unicode);
         }
 
-        let layer = glyph.get_or_create_layer(target.layer_id);
+        let layer =
+            glyph
+                .layer_mut(target.layer_id)
+                .ok_or_else(|| WorkspaceError::InvalidInput {
+                    kind: "layer ID",
+                    value: target.layer_id.to_string(),
+                })?;
         let result = edit(layer)?;
         let layer_changes = changes(&change_target, layer, &result);
         change_set.changes.extend(layer_changes.changes);
@@ -344,12 +370,4 @@ fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
         version_minor: metadata.version_minor.map(i64::from),
         units_per_em: font.metrics().units_per_em as i64,
     }
-}
-
-fn source_id_for_layer(font: &shift_font::Font, layer_id: LayerId) -> Option<SourceId> {
-    font.sources()
-        .iter()
-        .find(|source| source.layer_id() == layer_id)
-        .map(shift_font::Source::id)
-        .or_else(|| font.default_source().map(shift_font::Source::id))
 }

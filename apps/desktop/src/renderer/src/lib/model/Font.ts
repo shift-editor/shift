@@ -460,7 +460,7 @@ export class Font {
     this.#bridge.setXAdvance(
       {
         glyphHandle: handle,
-        layerId: this.defaultSource.layerId,
+        sourceId: this.defaultSource.id,
       },
       500,
     );
