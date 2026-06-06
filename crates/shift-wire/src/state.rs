@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn glyph_structure_sorts_components_by_id() {
+    fn glyph_structure_preserves_component_order() {
         let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
         layer.add_component(Component::with_id(
             ComponentId::from_raw(200),
@@ -287,8 +287,8 @@ mod tests {
 
         let structure = GlyphStructure::from(&layer);
 
-        assert_eq!(structure.components[0].id, "100");
-        assert_eq!(structure.components[1].id, "200");
+        assert_eq!(structure.components[0].id, "component_200");
+        assert_eq!(structure.components[1].id, "component_100");
     }
 
     #[test]

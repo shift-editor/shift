@@ -207,10 +207,7 @@ impl From<&GlyphLayer> for GlyphStructure {
         Self {
             contours: layer.contours_iter().map(ContourData::from).collect(),
             anchors: layer.anchors_iter().map(AnchorData::from).collect(),
-            components: sorted_components(layer)
-                .into_iter()
-                .map(ComponentData::from)
-                .collect(),
+            components: layer.components_iter().map(ComponentData::from).collect(),
         }
     }
 }
@@ -466,19 +463,11 @@ pub fn values_from_layer(layer: &GlyphLayer) -> GlyphValues {
         values.push(anchor.y());
     }
 
-    for component in sorted_components(layer) {
+    for component in layer.components_iter() {
         push_transform_values(&mut values, component.transform());
     }
 
     values
-}
-
-/// Components live in a `HashMap` in the IR, but the values array needs stable
-/// ordering. Sort by component ID everywhere structure and values are exported.
-fn sorted_components(layer: &GlyphLayer) -> Vec<&IrComponent> {
-    let mut components: Vec<_> = layer.components_iter().collect();
-    components.sort_by_key(|component| component.id().raw());
-    components
 }
 
 fn push_transform_values(values: &mut Vec<f64>, transform: &IrTransform) {

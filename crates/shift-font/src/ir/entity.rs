@@ -1,22 +1,19 @@
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU64, Ordering};
 
-static ENTITY_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EntityId(u64);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EntityId(String);
 
 impl EntityId {
     pub fn new() -> Self {
-        Self(ENTITY_COUNTER.fetch_add(1, Ordering::Relaxed))
+        Self(prefixed_id("entity"))
     }
 
-    pub fn raw(&self) -> u64 {
-        self.0
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 
-    pub fn from_raw(raw: u64) -> Self {
-        Self(raw)
+    pub fn from_raw(raw: impl std::fmt::Display) -> Self {
+        Self(format!("entity_{raw}"))
     }
 }
 
@@ -28,14 +25,14 @@ impl Default for EntityId {
 
 impl std::fmt::Display for EntityId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        f.write_str(self.as_str())
     }
 }
 
 macro_rules! typed_id {
-    ($name:ident) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-        pub struct $name(EntityId);
+    ($name:ident, $prefix:literal) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+        pub struct $name(String);
 
         impl Default for $name {
             fn default() -> Self {
@@ -45,49 +42,76 @@ macro_rules! typed_id {
 
         impl $name {
             pub fn new() -> Self {
-                Self(EntityId::new())
+                Self(prefixed_id($prefix))
             }
 
-            pub fn raw(&self) -> u64 {
-                self.0.raw()
+            pub fn as_str(&self) -> &str {
+                &self.0
             }
 
-            pub fn from_raw(raw: u128) -> Self {
-                Self(EntityId::from_raw(raw as u64))
-            }
-        }
-
-        impl From<$name> for u64 {
-            fn from(id: $name) -> u64 {
-                id.raw()
+            pub fn from_raw(raw: impl std::fmt::Display) -> Self {
+                let raw = raw.to_string();
+                if raw.starts_with(concat!($prefix, "_")) {
+                    Self(raw)
+                } else {
+                    Self(format!("{}_{raw}", $prefix))
+                }
             }
         }
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.0)
+                f.write_str(self.as_str())
             }
         }
 
         impl std::str::FromStr for $name {
-            type Err = std::num::ParseIntError;
+            type Err = InvalidEntityId;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                let raw: u64 = s.parse()?;
-                Ok(Self::from_raw(raw as u128))
+                if s.starts_with(concat!($prefix, "_")) {
+                    Ok(Self(s.to_string()))
+                } else {
+                    Err(InvalidEntityId {
+                        expected_prefix: $prefix,
+                        value: s.to_string(),
+                    })
+                }
             }
         }
     };
 }
 
-typed_id!(PointId);
-typed_id!(ContourId);
-typed_id!(ComponentId);
-typed_id!(AnchorId);
-typed_id!(GuidelineId);
-typed_id!(LayerId);
-typed_id!(GlyphId);
-typed_id!(SourceId);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidEntityId {
+    expected_prefix: &'static str,
+    value: String,
+}
+
+impl std::fmt::Display for InvalidEntityId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "expected ID with prefix '{}_', got '{}'",
+            self.expected_prefix, self.value
+        )
+    }
+}
+
+impl std::error::Error for InvalidEntityId {}
+
+fn prefixed_id(prefix: &str) -> String {
+    format!("{prefix}_{}", uuid::Uuid::new_v4().simple())
+}
+
+typed_id!(PointId, "point");
+typed_id!(ContourId, "contour");
+typed_id!(ComponentId, "component");
+typed_id!(AnchorId, "anchor");
+typed_id!(GuidelineId, "guideline");
+typed_id!(LayerId, "layer");
+typed_id!(GlyphId, "glyph");
+typed_id!(SourceId, "source");
 
 #[cfg(test)]
 mod tests {
@@ -103,16 +127,16 @@ mod tests {
     #[test]
     fn typed_id_from_raw_roundtrip() {
         let original = PointId::new();
-        let raw = original.raw();
-        let reconstructed = PointId::from_raw(raw as u128);
+        let raw = original.as_str();
+        let reconstructed = PointId::from_raw(raw);
         assert_eq!(original, reconstructed);
     }
 
     #[test]
     fn typed_id_display_and_parse() {
-        let id = ContourId::from_raw(12345u128);
-        assert_eq!(id.to_string(), "12345");
-        let parsed: ContourId = "12345".parse().unwrap();
+        let id = ContourId::from_raw("test");
+        assert_eq!(id.to_string(), "contour_test");
+        let parsed: ContourId = "contour_test".parse().unwrap();
         assert_eq!(id, parsed);
     }
 }

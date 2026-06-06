@@ -53,7 +53,7 @@ impl Guideline {
     }
 
     pub fn id(&self) -> GuidelineId {
-        self.id
+        self.id.clone()
     }
 
     pub fn x(&self) -> Option<f64> {

@@ -43,7 +43,7 @@ impl Contour {
     }
 
     pub fn id(&self) -> ContourId {
-        self.id
+        self.id.clone()
     }
 
     pub fn points(&self) -> &[Point] {
@@ -80,7 +80,7 @@ impl Contour {
 
     pub fn add_point(&mut self, x: f64, y: f64, point_type: PointType, smooth: bool) -> PointId {
         let id = PointId::new();
-        let point = Point::new(id, x, y, point_type, smooth);
+        let point = Point::new(id.clone(), x, y, point_type, smooth);
         self.points.push(point);
         id
     }
@@ -136,7 +136,7 @@ impl Contour {
     ) -> Option<PointId> {
         let index = self.points.iter().position(|p| p.id() == before_id)?;
         let id = PointId::new();
-        let point = Point::new(id, x, y, point_type, smooth);
+        let point = Point::new(id.clone(), x, y, point_type, smooth);
         self.points.insert(index, point);
         Some(id)
     }

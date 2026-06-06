@@ -190,7 +190,7 @@ impl FontReader for GlyphsReader {
                 }
             }
             let source_id = font.add_source(Source::new(master.name.clone(), location));
-            source_by_master_id.insert(master.id.clone(), source_id);
+            source_by_master_id.insert(master.id.clone(), source_id.clone());
             if master_idx == glyphs_font.default_master_idx {
                 font.set_default_source_id(source_id);
             }
@@ -203,7 +203,7 @@ impl FontReader for GlyphsReader {
             }
 
             for layer in &glyph.layers {
-                let Some(source_id) = source_by_master_id.get(layer.master_id()).copied() else {
+                let Some(source_id) = source_by_master_id.get(layer.master_id()).cloned() else {
                     continue;
                 };
 

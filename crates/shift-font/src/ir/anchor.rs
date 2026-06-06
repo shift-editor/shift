@@ -29,7 +29,7 @@ impl Anchor {
     }
 
     pub fn id(&self) -> AnchorId {
-        self.id
+        self.id.clone()
     }
 
     pub fn name(&self) -> Option<&str> {
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn anchor_with_id_roundtrip() {
         let id = AnchorId::new();
-        let a = Anchor::with_id(id, Some("top".to_string()), 1.0, 2.0);
+        let a = Anchor::with_id(id.clone(), Some("top".to_string()), 1.0, 2.0);
         assert_eq!(a.id(), id);
         assert_eq!(a.name(), Some("top"));
     }

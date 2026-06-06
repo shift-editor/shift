@@ -31,7 +31,7 @@ impl Source {
     }
 
     pub fn id(&self) -> SourceId {
-        self.id
+        self.id.clone()
     }
 
     pub fn name(&self) -> &str {

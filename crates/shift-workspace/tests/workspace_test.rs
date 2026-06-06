@@ -122,7 +122,7 @@ fn set_x_advance_updates_existing_layer() {
     let layer = workspace.create_glyph_layer(glyph.id(), source_id).unwrap();
     let layer_id = layer.id();
 
-    let edited_layer = workspace.set_x_advance(layer_id, 640.0).unwrap();
+    let edited_layer = workspace.set_x_advance(layer_id.clone(), 640.0).unwrap();
 
     assert_eq!(edited_layer.width(), 640.0);
     assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
@@ -137,7 +137,9 @@ fn set_x_advance_rejects_missing_layer() {
         FontWorkspace::create(&source_path, &store_path, NewWorkspace::new()).unwrap();
     let layer_id = LayerId::new();
 
-    let error = workspace.set_x_advance(layer_id, 640.0).unwrap_err();
+    let error = workspace
+        .set_x_advance(layer_id.clone(), 640.0)
+        .unwrap_err();
 
     assert!(matches!(
         error,

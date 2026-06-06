@@ -248,17 +248,18 @@ impl FontReader for UfoReader {
         let norad_default_layer_name = norad_font.layers.default_layer().name().clone();
         for layer in norad_font.layers.iter() {
             let source_id = if layer.name() == &norad_default_layer_name {
-                default_source_id
+                default_source_id.clone()
             } else {
                 font.add_source(Source::new(layer.name().to_string(), Location::new()))
             };
 
             for norad_glyph in layer.iter() {
-                let glyph = Self::convert_glyph_layer(norad_glyph, LayerId::new(), source_id);
+                let glyph =
+                    Self::convert_glyph_layer(norad_glyph, LayerId::new(), source_id.clone());
 
                 if let Some(glyph_id) = font.glyph_id_by_name(glyph.name()) {
                     for layer_data in glyph.layers().values() {
-                        font.insert_glyph_layer(glyph_id, layer_data.as_ref().clone())?;
+                        font.insert_glyph_layer(glyph_id.clone(), layer_data.as_ref().clone())?;
                     }
                 } else {
                     font.insert_glyph(glyph)?;

@@ -282,10 +282,10 @@ impl UfoWriter {
         let default_layer = norad_font.layers.default_layer_mut();
 
         for glyph in font.glyphs() {
-            let Some(source_id) = default_source_id else {
+            let Some(ref source_id) = default_source_id else {
                 continue;
             };
-            if let Some(layer_data) = glyph.layer_for_source(source_id) {
+            if let Some(layer_data) = glyph.layer_for_source(source_id.clone()) {
                 let norad_glyph = Self::convert_glyph(glyph, layer_data);
                 default_layer.insert_glyph(norad_glyph);
             }

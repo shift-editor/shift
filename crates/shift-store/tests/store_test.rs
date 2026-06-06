@@ -267,7 +267,7 @@ fn applies_glyph_identity_change_set() {
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::GlyphCreated(shift_font::GlyphCreated::from(&glyph)),
             shift_font::FontChange::GlyphIdentityChanged(shift_font::GlyphIdentityChanged {
-                glyph_id,
+                glyph_id: glyph_id.clone(),
                 from_name: shift_font::GlyphName::from("A"),
                 to_name: shift_font::GlyphName::from("A.alt"),
                 from_unicodes: vec![65],
@@ -314,7 +314,7 @@ fn applies_layer_metrics_and_contour_point_changes() {
             shift_font::FontChange::PointPositionsChanged(shift_font::PointPositionsChanged {
                 layer_id: layer.id(),
                 points: vec![shift_font::PointPosition {
-                    point_id,
+                    point_id: point_id.clone(),
                     x: 40.0,
                     y: 50.0,
                 }],
@@ -398,7 +398,7 @@ fn rejects_incremental_change_for_missing_point_row() {
         shift_font::FontChange::PointPositionsChanged(shift_font::PointPositionsChanged {
             layer_id: layer.id(),
             points: vec![shift_font::PointPosition {
-                point_id: missing_point_id,
+                point_id: missing_point_id.clone(),
                 x: 1.0,
                 y: 2.0,
             }],
@@ -420,7 +420,7 @@ fn rejects_layer_edit_for_missing_layer_row() {
 
     let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
         shift_font::FontChange::LayerMetricsChanged(shift_font::LayerMetricsChanged {
-            layer_id: missing_layer_id,
+            layer_id: missing_layer_id.clone(),
             width: 600.0,
             height: None,
         }),

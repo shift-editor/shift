@@ -44,10 +44,10 @@ export declare class Bridge {
   removePoints(glyphRef: GlyphLayerRef, pointIds: Array<PointId>): NapiGlyphStructureChange
   toggleSmooth(glyphRef: GlyphLayerRef, pointId: PointId): NapiGlyphStructureChange
   /**
-   * Bulk position sync. IDs use BigUint64Array to avoid lossy float packing.
+   * Bulk position sync. IDs are stable typed strings from the current glyph state.
    * Coords are interleaved [x0, y0, x1, y1, ...].
    */
-  applyPositionPatch(glyphRef: GlyphLayerRef, pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): void
+  applyPositionPatch(glyphRef: GlyphLayerRef, pointIds?: Array<PointId> | null, pointCoords?: Float64Array | undefined | null, anchorIds?: Array<AnchorId> | null, anchorCoords?: Float64Array | undefined | null): void
   restoreState(glyphRef: GlyphLayerRef, structure: NapiGlyphStructure, values: Float64Array): NapiGlyphStructureChange
 }
 
