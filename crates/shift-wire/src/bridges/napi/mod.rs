@@ -180,6 +180,8 @@ impl From<GlyphRecord> for NapiGlyphRecord {
 
 #[napi(object)]
 pub struct NapiGlyphState {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
     pub structure: NapiGlyphStructure,
     /// Numeric glyph state ordered to match `GlyphStructure`.
     pub values: Float64Array,
@@ -189,6 +191,7 @@ pub struct NapiGlyphState {
 impl From<GlyphState> for NapiGlyphState {
     fn from(state: GlyphState) -> Self {
         Self {
+            layer_id: state.layer_id.to_string(),
             structure: state.structure.into(),
             values: state.values.into(),
             variation_data: state.variation_data.map(Into::into),

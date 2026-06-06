@@ -29,19 +29,11 @@ describe("Bridge", () => {
     return unicode ?? (name === "A" ? 65 : undefined);
   }
 
-  function defaultLayerRef(name = "A", unicode) {
-    return {
-      glyphHandle: { name, unicode: defaultUnicode(name, unicode) },
-      sourceId: defaultSourceId(),
-    };
-  }
-
   function createDefaultLayer(name = "A", unicode) {
     const resolvedUnicode = defaultUnicode(name, unicode);
     const unicodes = resolvedUnicode === undefined ? [] : [resolvedUnicode];
     const glyphId = bridge.createGlyph(name, unicodes);
-    bridge.createGlyphLayer(glyphId, defaultSourceId());
-    return defaultLayerRef(name, resolvedUnicode);
+    return bridge.createGlyphLayer(glyphId, defaultSourceId());
   }
 
   it("creates a workspace with default committed font metadata", () => {
@@ -73,9 +65,9 @@ describe("Bridge", () => {
   });
 
   it("saves direct glyph layer edits to a shift source package target", () => {
-    const glyphRef = createDefaultLayer();
-    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
-    bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
+    const layerId = createDefaultLayer();
+    const contourId = bridge.addContour(layerId).changed.contourIds[0];
+    bridge.addPoint(layerId, contourId, 10, 20, "onCurve", false);
 
     const outputPath = join(tempDir, "output.shift");
     const savedVersion = bridge.saveWorkspaceAs(outputPath);
@@ -98,9 +90,9 @@ describe("Bridge", () => {
 
   it("exports the live workspace font through an explicit export path", async () => {
     createDefaultLayer(".notdef", undefined);
-    const glyphRef = createDefaultLayer();
-    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
-    bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
+    const layerId = createDefaultLayer();
+    const contourId = bridge.addContour(layerId).changed.contourIds[0];
+    bridge.addPoint(layerId, contourId, 10, 20, "onCurve", false);
 
     const outputPath = join(tempDir, "output.ttf");
     const result = await bridge.exportWorkspace({ path: outputPath, format: "ttf" });
@@ -110,11 +102,11 @@ describe("Bridge", () => {
   });
 
   it("adds a point to a contour and returns structure, values, and changed ids", () => {
-    const glyphRef = createDefaultLayer();
-    const contourChange = bridge.addContour(glyphRef);
+    const layerId = createDefaultLayer();
+    const contourChange = bridge.addContour(layerId);
     const contourId = contourChange.changed.contourIds[0];
 
-    const change = bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
+    const change = bridge.addPoint(layerId, contourId, 10, 20, "onCurve", false);
 
     expect(change.changed.pointIds).toHaveLength(1);
     expect(change.structure.contours).toHaveLength(1);
@@ -133,13 +125,13 @@ describe("Bridge", () => {
   });
 
   it("applies point positions through the sparse bridge patch path", () => {
-    const glyphRef = createDefaultLayer();
-    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
-    const pointId = bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false).changed
+    const layerId = createDefaultLayer();
+    const contourId = bridge.addContour(layerId).changed.contourIds[0];
+    const pointId = bridge.addPoint(layerId, contourId, 10, 20, "onCurve", false).changed
       .pointIds[0];
 
     bridge.applyPositionPatch(
-      glyphRef,
+      layerId,
       [pointId],
       new Float64Array([30, 40]),
       null,
@@ -150,17 +142,18 @@ describe("Bridge", () => {
       { name: "A", unicode: 65 },
       defaultSourceId(),
     );
+    expect(state.layerId).toBe(layerId);
     expect(Array.from(state.values)).toEqual([500, 30, 40]);
   });
 
   it("restores structure and values into a glyph layer", () => {
-    const glyphRef = createDefaultLayer();
-    const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
-    const before = bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false);
+    const layerId = createDefaultLayer();
+    const contourId = bridge.addContour(layerId).changed.contourIds[0];
+    const before = bridge.addPoint(layerId, contourId, 10, 20, "onCurve", false);
     const pointId = before.changed.pointIds[0];
 
     const change = bridge.restoreState(
-      glyphRef,
+      layerId,
       before.structure,
       new Float64Array([700, 90, 120]),
     );
@@ -171,16 +164,16 @@ describe("Bridge", () => {
 
   it("surfaces typed bridge errors at the NAPI boundary", () => {
     expect(() =>
-      bridge.addContour({ glyphHandle: { name: "A", unicode: 65 }, sourceId: "not-a-source" }),
-    ).toThrow(/source ID/i);
+      bridge.addContour("not-a-layer"),
+    ).toThrow(/layer ID/i);
 
-    const glyphRef = createDefaultLayer();
+    const layerId = createDefaultLayer();
     expect(() =>
-      bridge.addPoint(glyphRef, "not-a-contour", 10, 20, "onCurve", false),
+      bridge.addPoint(layerId, "not-a-contour", 10, 20, "onCurve", false),
     ).toThrow(/contour ID/i);
     expect(() =>
       bridge.applyPositionPatch(
-        glyphRef,
+        layerId,
         ["not-a-point"],
         new Float64Array([10]),
         null,

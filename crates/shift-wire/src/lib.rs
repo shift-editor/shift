@@ -10,7 +10,7 @@ use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, Component as IrComponent, ComponentId,
     Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphLayer,
-    GlyphName, GuidelineId, Location as IrLocation, Point as IrPoint, PointId,
+    GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
     PointType as IrPointType, Source as IrSource, SourceId,
 };
 
@@ -178,6 +178,7 @@ impl From<&IrGlyph> for GlyphRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlyphState {
+    pub layer_id: LayerId,
     pub structure: GlyphStructure,
     /// Numeric glyph state ordered to match `GlyphStructure`.
     pub values: GlyphValues,
@@ -187,6 +188,7 @@ pub struct GlyphState {
 impl GlyphState {
     pub fn from_layer(layer: &GlyphLayer, variation_data: Option<GlyphVariationData>) -> Self {
         Self {
+            layer_id: layer.id(),
             structure: GlyphStructure::from(layer),
             values: values_from_layer(layer),
             variation_data,

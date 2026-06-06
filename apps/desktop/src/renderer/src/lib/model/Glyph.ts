@@ -3,12 +3,12 @@ import type {
   ContourData,
   ContourId,
   GlyphName,
-  GlyphLayerRef,
   GlyphState,
   GlyphStructure,
   GlyphStructureChange,
   GlyphValueChange,
   GlyphVariationData,
+  LayerId,
   PointId,
   Source,
   Unicode,
@@ -99,14 +99,12 @@ export interface GlyphInstanceGeometry {
 
 class GlyphEditSession {
   readonly #font: Font;
-  readonly #handle: GlyphHandle;
-  readonly #source: Source;
+  readonly #layerId: LayerId;
   readonly #state: GlyphEditState;
 
-  constructor(font: Font, handle: GlyphHandle, source: Source, state: GlyphEditState) {
+  constructor(font: Font, layerId: LayerId, state: GlyphEditState) {
     this.#font = font;
-    this.#handle = handle;
-    this.#source = source;
+    this.#layerId = layerId;
     this.#state = state;
   }
 
@@ -119,14 +117,14 @@ class GlyphEditSession {
   }
 
   setXAdvance(width: number): void {
-    this.#applyValueChange(this.#font.bridge.setXAdvance(this.#glyphRef(), width));
+    this.#applyValueChange(this.#font.bridge.setXAdvance(this.#layerId, width));
   }
 
   applyPositionPatch(updates: SourcePositions): void {
     const patch = SourcePositionPatch.from(updates);
     if (patch.isEmpty) return;
 
-    this.#font.bridge.applyPositionPatch(this.#glyphRef(), ...patch.toBridgePayload());
+    this.#font.bridge.applyPositionPatch(this.#layerId, ...patch.toBridgePayload());
     this.#applyPositionPatchLocally(patch.positions);
   }
 
@@ -134,11 +132,11 @@ class GlyphEditSession {
     const patch = SourcePositionPatch.from(updates);
     if (patch.isEmpty) return;
 
-    this.#font.bridge.applyPositionPatch(this.#glyphRef(), ...patch.toBridgePayload());
+    this.#font.bridge.applyPositionPatch(this.#layerId, ...patch.toBridgePayload());
   }
 
   translateLayer(dx: number, dy: number): void {
-    this.#applyValueChange(this.#font.bridge.translateLayer(this.#glyphRef(), dx, dy));
+    this.#applyValueChange(this.#font.bridge.translateLayer(this.#layerId, dx, dy));
   }
 
   previewPositionPatch(updates: SourcePositions): void {
@@ -151,7 +149,7 @@ class GlyphEditSession {
   }
 
   addContour(): ContourId {
-    const change = this.#font.bridge.addContour(this.#glyphRef());
+    const change = this.#font.bridge.addContour(this.#layerId);
     this.#applyStructureChange(change);
     const contourId = change.changed.contourIds[0];
     if (!contourId) throw new Error("Bridge did not return a created contour ID");
@@ -160,7 +158,7 @@ class GlyphEditSession {
 
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
     const change = this.#font.bridge.addPoint(
-      this.#glyphRef(),
+      this.#layerId,
       contourId,
       edit.x,
       edit.y,
@@ -178,7 +176,7 @@ class GlyphEditSession {
 
   insertPointBefore(beforePointId: PointId, edit: NewPoint): PointId {
     const change = this.#font.bridge.insertPointBefore(
-      this.#glyphRef(),
+      this.#layerId,
       beforePointId,
       edit.x,
       edit.y,
@@ -192,15 +190,15 @@ class GlyphEditSession {
   }
 
   openContour(contourId: ContourId): void {
-    this.#applyStructureChange(this.#font.bridge.openContour(this.#glyphRef(), contourId));
+    this.#applyStructureChange(this.#font.bridge.openContour(this.#layerId, contourId));
   }
 
   closeContour(contourId: ContourId): void {
-    this.#applyStructureChange(this.#font.bridge.closeContour(this.#glyphRef(), contourId));
+    this.#applyStructureChange(this.#font.bridge.closeContour(this.#layerId, contourId));
   }
 
   reverseContour(contourId: ContourId): void {
-    this.#applyStructureChange(this.#font.bridge.reverseContour(this.#glyphRef(), contourId));
+    this.#applyStructureChange(this.#font.bridge.reverseContour(this.#layerId, contourId));
   }
 
   applyBooleanOp(
@@ -209,34 +207,28 @@ class GlyphEditSession {
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
     this.#applyStructureChange(
-      this.#font.bridge.applyBooleanOp(this.#glyphRef(), contourIdA, contourIdB, operation),
+      this.#font.bridge.applyBooleanOp(this.#layerId, contourIdA, contourIdB, operation),
     );
   }
 
   removePoints(pointIds: readonly PointId[]): void {
     if (pointIds.length === 0) return;
-    this.#applyStructureChange(this.#font.bridge.removePoints(this.#glyphRef(), [...pointIds]));
+    this.#applyStructureChange(this.#font.bridge.removePoints(this.#layerId, [...pointIds]));
   }
 
   toggleSmooth(pointId: PointId): void {
-    this.#applyStructureChange(this.#font.bridge.toggleSmooth(this.#glyphRef(), pointId));
+    this.#applyStructureChange(this.#font.bridge.toggleSmooth(this.#layerId, pointId));
   }
 
   restore(state: GlyphState): void {
     this.#applyStructureChange(
-      this.#font.bridge.restoreState(this.#glyphRef(), state.structure, state.values),
+      this.#font.bridge.restoreState(this.#layerId, state.structure, state.values),
     );
-  }
-
-  #glyphRef(): GlyphLayerRef {
-    return {
-      glyphHandle: this.#handle,
-      sourceId: this.#source.id,
-    };
   }
 
   #applyStructureChange(change: GlyphStructureChange): void {
     this.#state.state.replace({
+      layerId: this.#layerId,
       structure: change.structure,
       values: change.values,
     });
@@ -252,7 +244,7 @@ class GlyphEditSession {
  *
  * A source is the authored glyph at a designspace location. `GlyphSource`
  * exposes the reactive geometry for that source and forwards mutations to the
- * bridge with an explicit glyph-layer reference. Preview methods update the
+ * bridge with the source layer's stable ID. Preview methods update the
  * renderer-facing reactive data; commit methods also produce bridge changes.
  */
 export class GlyphSource {
@@ -1653,7 +1645,7 @@ export class Glyph {
 
     this.#xAdvance = computed(() => this.#sourceState.coordinateBuffersCell.value.xAdvance.value);
 
-    this.#edit = new GlyphEditSession(font, handle, source, {
+    this.#edit = new GlyphEditSession(font, state.layerId, {
       state: this.#sourceState,
       geometry: this.#geometry,
     });
@@ -1816,7 +1808,7 @@ export class Glyph {
 
     const sourceState = new GlyphSourceState(state);
     const geometry = computed(() => sourceState.geometryCell.value);
-    const edit = new GlyphEditSession(this.#font, this.handle, source, {
+    const edit = new GlyphEditSession(this.#font, state.layerId, {
       state: sourceState,
       geometry,
     });
@@ -1849,6 +1841,7 @@ export class Glyph {
     if (!variationData) return state;
 
     return {
+      layerId: state.layerId,
       structure: state.structure,
       values: state.values,
       variationData,

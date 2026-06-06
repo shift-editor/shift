@@ -6,8 +6,7 @@ use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
 use shift_font::{
-  BooleanOp, BulkNodePositionUpdates, ContourId, Font, Glyph, GlyphId, GlyphLayer, LayerId,
-  PointId, SourceId,
+  BooleanOp, BulkNodePositionUpdates, ContourId, Font, Glyph, GlyphId, LayerId, PointId, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
@@ -32,14 +31,6 @@ pub struct GlyphHandle {
   pub name: String,
   #[napi(ts_type = "Unicode")]
   pub unicode: Option<u32>,
-}
-
-#[napi(object)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GlyphLayerRef {
-  pub glyph_handle: GlyphHandle,
-  #[napi(ts_type = "SourceId")]
-  pub source_id: String,
 }
 
 #[napi(object)]
@@ -475,24 +466,6 @@ impl Bridge {
     Ok(self.font()?.glyph_by_name(glyph_name).cloned())
   }
 
-  fn existing_layer_id(&self, glyph_ref: GlyphLayerRef) -> BridgeResult<LayerId> {
-    let source_id = parse::<SourceId>(&glyph_ref.source_id)?;
-    let layer_id = self
-      .font()?
-      .glyph_by_name(&glyph_ref.glyph_handle.name)
-      .and_then(|glyph| glyph.layer_for_source(source_id))
-      .map(GlyphLayer::id)
-      .ok_or_else(|| BridgeError::InvalidInput {
-        kind: "glyph layer",
-        value: format!(
-          "{} at source {}",
-          glyph_ref.glyph_handle.name, glyph_ref.source_id
-        ),
-      })?;
-
-    Ok(layer_id)
-  }
-
   fn variation_build_for_glyph(
     &self,
     glyph: &Glyph,
@@ -678,10 +651,10 @@ impl Bridge {
   #[napi]
   pub fn set_x_advance(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     width: f64,
   ) -> errors::Result<NapiGlyphValueChange> {
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let layer = self.workspace_mut()?.set_x_advance(layer_id, width)?;
     let change = GlyphValueChange::from_layer(&layer, Default::default());
 
@@ -692,11 +665,11 @@ impl Bridge {
   #[napi]
   pub fn translate_layer(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     dx: f64,
     dy: f64,
   ) -> errors::Result<NapiGlyphValueChange> {
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let layer = self.workspace_mut()?.translate_layer(layer_id, dx, dy)?;
     let change = GlyphValueChange::from_layer(&layer, Default::default());
 
@@ -707,7 +680,7 @@ impl Bridge {
   #[napi]
   pub fn add_point(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "ContourId")] contour_id: String,
     x: f64,
     y: f64,
@@ -717,7 +690,7 @@ impl Bridge {
     let contour_id = parse::<ContourId>(&contour_id)?;
     let point_type = point_type.into();
 
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let (layer, point_id) = self
       .workspace_mut()?
       .add_point(layer_id, contour_id, x, y, point_type, smooth)?;
@@ -734,7 +707,7 @@ impl Bridge {
   #[napi]
   pub fn insert_point_before(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "PointId")] before_point_id: String,
     x: f64,
     y: f64,
@@ -744,7 +717,7 @@ impl Bridge {
     let before_point_id = parse::<PointId>(&before_point_id)?;
     let point_type = point_type.into();
 
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let (layer, point_id) = self.workspace_mut()?.insert_point_before(
       layer_id,
       before_point_id,
@@ -766,9 +739,9 @@ impl Bridge {
   #[napi]
   pub fn add_contour(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let (layer, contour_id) = self.workspace_mut()?.add_contour(layer_id)?;
     let changed = GlyphChangedEntities {
       contour_ids: vec![contour_id],
@@ -783,11 +756,11 @@ impl Bridge {
   #[napi]
   pub fn open_contour(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "ContourId")] contour_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let layer = self
       .workspace_mut()?
       .open_contour(layer_id, contour_id.clone())?;
@@ -804,11 +777,11 @@ impl Bridge {
   #[napi]
   pub fn close_contour(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "ContourId")] contour_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let layer = self
       .workspace_mut()?
       .close_contour(layer_id, contour_id.clone())?;
@@ -825,11 +798,11 @@ impl Bridge {
   #[napi]
   pub fn reverse_contour(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "ContourId")] contour_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let layer = self
       .workspace_mut()?
       .reverse_contour(layer_id, contour_id.clone())?;
@@ -846,7 +819,7 @@ impl Bridge {
   #[napi]
   pub fn apply_boolean_op(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "ContourId")] contour_id_a: String,
     #[napi(ts_arg_type = "ContourId")] contour_id_b: String,
     operation: String,
@@ -867,7 +840,7 @@ impl Bridge {
       }
     };
 
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let (layer, contour_ids) = self
       .workspace_mut()?
       .apply_boolean_op(layer_id, cid_a, cid_b, op)?;
@@ -884,13 +857,13 @@ impl Bridge {
   #[napi]
   pub fn remove_points(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "Array<PointId>")] point_ids: Vec<String>,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let point_ids: BridgeResult<Vec<_>> = point_ids.iter().map(|id| parse::<PointId>(id)).collect();
     let point_ids = point_ids?;
 
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let layer = self
       .workspace_mut()?
       .remove_points(layer_id, point_ids.clone())?;
@@ -903,11 +876,11 @@ impl Bridge {
   #[napi]
   pub fn toggle_smooth(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "PointId")] point_id: String,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let parsed_id = parse::<PointId>(&point_id)?;
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let layer = self
       .workspace_mut()?
       .toggle_smooth(layer_id, parsed_id.clone())?;
@@ -926,7 +899,7 @@ impl Bridge {
   #[napi]
   pub fn apply_position_patch(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     #[napi(ts_arg_type = "Array<PointId> | null")] point_ids: Option<Vec<String>>,
     point_coords: Option<Float64Array>,
     #[napi(ts_arg_type = "Array<AnchorId> | null")] anchor_ids: Option<Vec<String>>,
@@ -939,7 +912,7 @@ impl Bridge {
       || anchor_coords
         .as_ref()
         .is_some_and(|coords| !coords.is_empty());
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let point_id_slice = point_ids.as_deref();
     let point_coord_slice = point_coords.as_ref().map(|coords| {
       let coords: &[f64] = coords;
@@ -970,13 +943,13 @@ impl Bridge {
   #[napi]
   pub fn restore_state(
     &mut self,
-    glyph_ref: GlyphLayerRef,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
     structure: NapiGlyphStructure,
     values: Float64Array,
   ) -> errors::Result<NapiGlyphStructureChange> {
     let structure = GlyphStructure::from(structure);
     let values: &[f64] = &values;
-    let layer_id = self.existing_layer_id(glyph_ref)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
     let mut layer = self
       .font()?
       .layer(layer_id.clone())
@@ -1078,26 +1051,11 @@ mod tests {
     bridge.get_sources().unwrap()[0].id.clone()
   }
 
-  fn default_layer_ref(bridge: &Bridge, name: &str, unicode: Option<u32>) -> GlyphLayerRef {
-    GlyphLayerRef {
-      glyph_handle: glyph_handle(name, unicode),
-      source_id: bridge.get_sources().unwrap()[0].id.clone(),
-    }
-  }
-
-  fn create_default_glyph_layer(
-    bridge: &mut Bridge,
-    name: &str,
-    unicode: Option<u32>,
-  ) -> GlyphLayerRef {
-    let glyph_ref = default_layer_ref(bridge, name, unicode);
+  fn create_default_glyph_layer(bridge: &mut Bridge, name: &str, unicode: Option<u32>) -> String {
+    let source_id = bridge.get_sources().unwrap()[0].id.clone();
     let unicodes = unicode.into_iter().collect();
     let glyph_id = bridge.create_glyph(name.to_string(), unicodes).unwrap();
-    bridge
-      .create_glyph_layer(glyph_id, glyph_ref.source_id.clone())
-      .unwrap();
-
-    glyph_ref
+    bridge.create_glyph_layer(glyph_id, source_id).unwrap()
   }
 
   #[test]
@@ -1133,8 +1091,8 @@ mod tests {
   #[test]
   fn create_workspace_resets_to_fresh_font_state() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
-    bridge.add_contour(glyph_ref).unwrap();
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    bridge.add_contour(layer_id).unwrap();
 
     let (source_path, store_path) = test_paths("reset");
     bridge
@@ -1150,9 +1108,9 @@ mod tests {
   #[test]
   fn add_contour_returns_structure_change() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
 
-    let change = bridge.add_contour(glyph_ref).unwrap();
+    let change = bridge.add_contour(layer_id).unwrap();
 
     assert_eq!(change.structure.contours.len(), 1);
     assert_eq!(change.changed.contour_ids.len(), 1);
@@ -1164,21 +1122,18 @@ mod tests {
   }
 
   #[test]
-  fn set_x_advance_requires_existing_glyph_layer() {
+  fn set_x_advance_requires_existing_layer_id() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = default_layer_ref(&bridge, "A", Some(65));
+    let missing_layer_id = LayerId::new().to_string();
 
-    let error = match bridge.set_x_advance(glyph_ref, 640.0) {
+    let error = match bridge.set_x_advance(missing_layer_id, 640.0) {
       Ok(_) => panic!("set_x_advance should require an existing glyph layer"),
       Err(error) => error,
     };
 
     assert!(matches!(
       error,
-      BridgeError::InvalidInput {
-        kind: "glyph layer",
-        ..
-      }
+      BridgeError::Workspace(_) | BridgeError::Core(_)
     ));
     assert_eq!(bridge.get_glyph_count().unwrap(), 0);
   }
@@ -1186,9 +1141,9 @@ mod tests {
   #[test]
   fn set_x_advance_updates_existing_glyph_layer() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
 
-    let change = bridge.set_x_advance(glyph_ref, 640.0).unwrap();
+    let change = bridge.set_x_advance(layer_id, 640.0).unwrap();
 
     assert_eq!(&change.values[..], &[640.0]);
     assert!(change.changed.contour_ids.is_empty());
@@ -1198,16 +1153,16 @@ mod tests {
   #[test]
   fn save_snapshot_includes_direct_glyph_layer_edit() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
     let contour_id = bridge
-      .add_contour(glyph_ref.clone())
+      .add_contour(layer_id.clone())
       .unwrap()
       .changed
       .contour_ids[0]
       .clone();
     let point_id = bridge
       .add_point(
-        glyph_ref,
+        layer_id,
         contour_id,
         10.0,
         20.0,
@@ -1257,9 +1212,9 @@ mod tests {
   #[test]
   fn persisted_older_snapshot_keeps_document_dirty_after_new_edit() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
     let contour_id = bridge
-      .add_contour(glyph_ref.clone())
+      .add_contour(layer_id.clone())
       .unwrap()
       .changed
       .contour_ids[0]
@@ -1268,7 +1223,7 @@ mod tests {
 
     bridge
       .add_point(
-        glyph_ref,
+        layer_id,
         contour_id,
         10.0,
         20.0,
@@ -1290,8 +1245,8 @@ mod tests {
   #[test]
   fn opening_workspace_resets_persisted_version_handle_for_old_saves() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
-    bridge.add_contour(glyph_ref).unwrap();
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    bridge.add_contour(layer_id).unwrap();
     let old_persisted_version = bridge.persisted_version.clone();
 
     let (source_path, store_path) = test_paths("reopen");
@@ -1307,9 +1262,9 @@ mod tests {
   #[test]
   fn add_point_returns_structure_and_changed_point() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
     let contour_id = bridge
-      .add_contour(glyph_ref.clone())
+      .add_contour(layer_id.clone())
       .unwrap()
       .changed
       .contour_ids[0]
@@ -1317,7 +1272,7 @@ mod tests {
 
     let change = bridge
       .add_point(
-        glyph_ref,
+        layer_id,
         contour_id,
         10.0,
         20.0,
@@ -1337,16 +1292,16 @@ mod tests {
   #[test]
   fn get_glyph_state_reads_direct_glyph_layer_edit() {
     let mut bridge = bridge_with_workspace();
-    let glyph_ref = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
     let contour_id = bridge
-      .add_contour(glyph_ref.clone())
+      .add_contour(layer_id.clone())
       .unwrap()
       .changed
       .contour_ids[0]
       .clone();
     bridge
       .add_point(
-        glyph_ref,
+        layer_id.clone(),
         contour_id,
         10.0,
         20.0,
@@ -1361,6 +1316,7 @@ mod tests {
       .expect("edited glyph should be readable");
 
     assert_eq!(bridge.get_glyphs().unwrap().len(), 1);
+    assert_eq!(state.layer_id, layer_id);
     assert_eq!(state.structure.contours.len(), 1);
     assert_eq!(state.structure.contours[0].points.len(), 1);
     assert_eq!(&state.values[..], &[500.0, 10.0, 20.0]);
@@ -1377,18 +1333,15 @@ mod tests {
   }
 
   #[test]
-  fn edit_methods_require_valid_layer_ref() {
+  fn edit_methods_require_valid_layer_id() {
     let mut bridge = bridge_with_workspace();
 
-    let result = bridge.add_contour(GlyphLayerRef {
-      glyph_handle: glyph_handle("A", Some(65)),
-      source_id: "not-a-source-id".to_string(),
-    });
+    let result = bridge.add_contour("not-a-layer-id".to_string());
 
     assert!(matches!(
       result.err().unwrap(),
       BridgeError::InvalidInput {
-        kind: "source ID",
+        kind: "layer ID",
         ..
       }
     ));
