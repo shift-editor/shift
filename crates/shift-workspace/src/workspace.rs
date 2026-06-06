@@ -2,8 +2,9 @@ use std::path::{Path, PathBuf};
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
-    BooleanOp, BulkNodePositionUpdates, ContourId, FontChange, FontChangeSet, Glyph, GlyphId,
-    GlyphLayer, GlyphName, LayerId, PointId, PointPosition, PointType, SourceId, error::CoreError,
+    AnchorId, BooleanOp, BulkNodePositionUpdates, ComponentId, ContourId, FontChange,
+    FontChangeSet, Glyph, GlyphId, GlyphLayer, GlyphName, GuidelineId, LayerId, PointId,
+    PointPosition, PointType, SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
@@ -47,6 +48,75 @@ pub struct FontWorkspace {
     font: shift_font::Font,
     source: WorkspaceSource,
     store: ShiftStore,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphValueEdit {
+    pub layer: GlyphLayer,
+    pub changed: GlyphEditEntities,
+}
+
+impl GlyphValueEdit {
+    fn new(layer: &GlyphLayer, changed: GlyphEditEntities) -> Self {
+        Self {
+            layer: layer.clone(),
+            changed,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphStructureEdit {
+    pub layer: GlyphLayer,
+    pub changed: GlyphEditEntities,
+}
+
+impl GlyphStructureEdit {
+    fn new(layer: &GlyphLayer, changed: GlyphEditEntities) -> Self {
+        Self {
+            layer: layer.clone(),
+            changed,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct GlyphEditEntities {
+    pub point_ids: Vec<PointId>,
+    pub contour_ids: Vec<ContourId>,
+    pub anchor_ids: Vec<AnchorId>,
+    pub guideline_ids: Vec<GuidelineId>,
+    pub component_ids: Vec<ComponentId>,
+}
+
+impl GlyphEditEntities {
+    fn point(id: PointId) -> Self {
+        Self {
+            point_ids: vec![id],
+            ..Default::default()
+        }
+    }
+
+    fn points(ids: Vec<PointId>) -> Self {
+        Self {
+            point_ids: ids,
+            ..Default::default()
+        }
+    }
+
+    fn contour(id: ContourId) -> Self {
+        Self {
+            contour_ids: vec![id],
+            ..Default::default()
+        }
+    }
+
+    fn contours(ids: Vec<ContourId>) -> Self {
+        Self {
+            contour_ids: ids,
+            ..Default::default()
+        }
+    }
 }
 
 impl FontWorkspace {
@@ -250,17 +320,17 @@ impl FontWorkspace {
         &mut self,
         layer_id: LayerId,
         width: f64,
-    ) -> Result<GlyphLayer, WorkspaceError> {
+    ) -> Result<GlyphValueEdit, WorkspaceError> {
         self.commit_edit(|font| {
             let layer = font
                 .layer_mut(layer_id.clone())
                 .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
 
             layer.set_x_advance(width);
-            let edited_layer = layer.clone();
+            let edit_change = GlyphValueEdit::new(layer, Default::default());
             let change_set = FontChange::layer_metrics_changed(layer).into();
 
-            Ok((edited_layer, change_set))
+            Ok((edit_change, change_set))
         })
     }
 
@@ -269,11 +339,13 @@ impl FontWorkspace {
         layer_id: LayerId,
         dx: f64,
         dy: f64,
-    ) -> Result<GlyphLayer, WorkspaceError> {
-        self.replace_layer_geometry(layer_id, |layer| {
+    ) -> Result<GlyphValueEdit, WorkspaceError> {
+        let layer = self.replace_layer_geometry(layer_id, |layer| {
             layer.translate_layer(dx, dy);
             Ok(())
-        })
+        })?;
+
+        Ok(GlyphValueEdit::new(&layer, Default::default()))
     }
 
     pub fn add_point(
@@ -284,13 +356,14 @@ impl FontWorkspace {
         y: f64,
         point_type: PointType,
         smooth: bool,
-    ) -> Result<(GlyphLayer, PointId), WorkspaceError> {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
         self.commit_edit(|font| {
             let layer = font
                 .layer_mut(layer_id.clone())
                 .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             let added = layer.add_point_to_contour(contour_id.clone(), x, y, point_type, smooth)?;
-            let edited_layer = layer.clone();
+            let edit_change =
+                GlyphStructureEdit::new(layer, GlyphEditEntities::point(added.point_id.clone()));
             let change_set = FontChange::points_added(
                 layer_id.clone(),
                 &added.contour,
@@ -298,7 +371,7 @@ impl FontWorkspace {
             )
             .into();
 
-            Ok(((edited_layer, added.point_id.clone()), change_set))
+            Ok((edit_change, change_set))
         })
     }
 
@@ -310,14 +383,15 @@ impl FontWorkspace {
         y: f64,
         point_type: PointType,
         smooth: bool,
-    ) -> Result<(GlyphLayer, PointId), WorkspaceError> {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
         self.commit_edit(|font| {
             let layer = font
                 .layer_mut(layer_id.clone())
                 .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             let added =
                 layer.insert_point_before(before_point_id.clone(), x, y, point_type, smooth)?;
-            let edited_layer = layer.clone();
+            let edit_change =
+                GlyphStructureEdit::new(layer, GlyphEditEntities::point(added.point_id.clone()));
             let change_set = FontChange::points_added(
                 layer_id.clone(),
                 &added.contour,
@@ -325,23 +399,21 @@ impl FontWorkspace {
             )
             .into();
 
-            Ok(((edited_layer, added.point_id.clone()), change_set))
+            Ok((edit_change, change_set))
         })
     }
 
-    pub fn add_contour(
-        &mut self,
-        layer_id: LayerId,
-    ) -> Result<(GlyphLayer, ContourId), WorkspaceError> {
+    pub fn add_contour(&mut self, layer_id: LayerId) -> Result<GlyphStructureEdit, WorkspaceError> {
         self.commit_edit(|font| {
             let layer = font
                 .layer_mut(layer_id.clone())
                 .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             let contour = layer.add_empty_contour();
-            let edited_layer = layer.clone();
+            let edit_change =
+                GlyphStructureEdit::new(layer, GlyphEditEntities::contour(contour.id()));
             let change_set = FontChange::contour_added(layer_id.clone(), &contour).into();
 
-            Ok(((edited_layer, contour.id()), change_set))
+            Ok((edit_change, change_set))
         })
     }
 
@@ -349,7 +421,7 @@ impl FontWorkspace {
         &mut self,
         layer_id: LayerId,
         contour_id: ContourId,
-    ) -> Result<GlyphLayer, WorkspaceError> {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
         self.set_contour_closed(layer_id, contour_id, false)
     }
 
@@ -357,7 +429,7 @@ impl FontWorkspace {
         &mut self,
         layer_id: LayerId,
         contour_id: ContourId,
-    ) -> Result<GlyphLayer, WorkspaceError> {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
         self.set_contour_closed(layer_id, contour_id, true)
     }
 
@@ -365,11 +437,17 @@ impl FontWorkspace {
         &mut self,
         layer_id: LayerId,
         contour_id: ContourId,
-    ) -> Result<GlyphLayer, WorkspaceError> {
-        self.replace_layer_geometry(layer_id, |layer| {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
+        let contour_id_for_change = contour_id.clone();
+        let layer = self.replace_layer_geometry(layer_id, |layer| {
             layer.reverse_contour(contour_id)?;
             Ok(())
-        })
+        })?;
+
+        Ok(GlyphStructureEdit::new(
+            &layer,
+            GlyphEditEntities::contour(contour_id_for_change),
+        ))
     }
 
     pub fn apply_boolean_op(
@@ -378,38 +456,50 @@ impl FontWorkspace {
         contour_id_a: ContourId,
         contour_id_b: ContourId,
         operation: BooleanOp,
-    ) -> Result<(GlyphLayer, Vec<ContourId>), WorkspaceError> {
-        self.replace_layer_geometry_with_result(layer_id, |layer| {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
+        let (layer, contour_ids) = self.replace_layer_geometry_with_result(layer_id, |layer| {
             layer.apply_boolean_op(contour_id_a, contour_id_b, operation)
-        })
+        })?;
+
+        Ok(GlyphStructureEdit::new(
+            &layer,
+            GlyphEditEntities::contours(contour_ids),
+        ))
     }
 
     pub fn remove_points(
         &mut self,
         layer_id: LayerId,
         point_ids: Vec<PointId>,
-    ) -> Result<GlyphLayer, WorkspaceError> {
-        self.replace_layer_geometry(layer_id, |layer| {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
+        let point_ids_for_change = point_ids.clone();
+        let layer = self.replace_layer_geometry(layer_id, |layer| {
             layer.remove_points(&point_ids)?;
             Ok(())
-        })
+        })?;
+
+        Ok(GlyphStructureEdit::new(
+            &layer,
+            GlyphEditEntities::points(point_ids_for_change),
+        ))
     }
 
     pub fn toggle_smooth(
         &mut self,
         layer_id: LayerId,
         point_id: PointId,
-    ) -> Result<GlyphLayer, WorkspaceError> {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
         self.commit_edit(|font| {
             let layer = font
                 .layer_mut(layer_id.clone())
                 .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             let smooth = layer.toggle_smooth(point_id.clone())?;
-            let edited_layer = layer.clone();
+            let edit_change =
+                GlyphStructureEdit::new(layer, GlyphEditEntities::point(point_id.clone()));
             let change_set =
                 FontChange::point_smooth_changed(layer_id.clone(), point_id.clone(), smooth).into();
 
-            Ok((edited_layer, change_set))
+            Ok((edit_change, change_set))
         })
     }
 
@@ -443,11 +533,13 @@ impl FontWorkspace {
         &mut self,
         layer_id: LayerId,
         replacement: GlyphLayer,
-    ) -> Result<GlyphLayer, WorkspaceError> {
-        self.replace_layer_geometry(layer_id, |layer| {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
+        let layer = self.replace_layer_geometry(layer_id, |layer| {
             *layer = replacement;
             Ok(())
-        })
+        })?;
+
+        Ok(GlyphStructureEdit::new(&layer, Default::default()))
     }
 
     fn commit_font(
@@ -476,7 +568,7 @@ impl FontWorkspace {
         layer_id: LayerId,
         contour_id: ContourId,
         closed: bool,
-    ) -> Result<GlyphLayer, WorkspaceError> {
+    ) -> Result<GlyphStructureEdit, WorkspaceError> {
         self.commit_edit(|font| {
             let layer = font
                 .layer_mut(layer_id.clone())
@@ -486,7 +578,8 @@ impl FontWorkspace {
             } else {
                 layer.open_contour(contour_id.clone())?;
             }
-            let edited_layer = layer.clone();
+            let edit_change =
+                GlyphStructureEdit::new(layer, GlyphEditEntities::contour(contour_id.clone()));
             let change_set = FontChange::contour_open_closed_changed(
                 layer_id.clone(),
                 contour_id.clone(),
@@ -494,7 +587,7 @@ impl FontWorkspace {
             )
             .into();
 
-            Ok((edited_layer, change_set))
+            Ok((edit_change, change_set))
         })
     }
 
