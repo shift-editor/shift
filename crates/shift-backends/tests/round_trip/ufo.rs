@@ -173,19 +173,19 @@ fn preserves_components_anchors_layers_and_kerning() {
             && (anchor.y() - 456.0).abs() < 0.001
     }));
 
-    let original_layer_names: Vec<_> = original
-        .layers()
-        .values()
-        .map(|layer| layer.name())
+    let original_source_names: Vec<_> = original
+        .sources()
+        .iter()
+        .map(|source| source.name())
         .collect();
-    let reloaded_layer_names: Vec<_> = reloaded
-        .layers()
-        .values()
-        .map(|layer| layer.name())
+    let reloaded_source_names: Vec<_> = reloaded
+        .sources()
+        .iter()
+        .map(|source| source.name())
         .collect();
-    assert_eq!(reloaded_layer_names.len(), original_layer_names.len());
-    for name in original_layer_names {
-        assert!(reloaded_layer_names.contains(&name));
+    assert_eq!(reloaded_source_names.len(), original_source_names.len());
+    for name in original_source_names {
+        assert!(reloaded_source_names.contains(&name));
     }
 
     assert_eq!(reloaded.kerning().get_kerning("T", "A"), Some(-75.0));

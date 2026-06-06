@@ -1,7 +1,7 @@
 use glyphs_reader::{FeatureSnippet, Font as GlyphsFont, NodeType, Shape};
 use shift_font::{
     Anchor, Axis, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, KerningData,
-    KerningPair, KerningSide, Layer, LayerId, Location, Source, Transform,
+    KerningPair, KerningSide, LayerId, Location, Source, Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -183,10 +183,6 @@ impl FontReader for GlyphsReader {
 
         let mut source_by_master_id = HashMap::new();
         for (master_idx, master) in glyphs_font.masters.iter().enumerate() {
-            if master_idx != glyphs_font.default_master_idx {
-                font.add_layer(Layer::new(master.name.clone()));
-            }
-
             let mut location = Location::new();
             for (axis_idx, axis) in glyphs_font.axes.iter().enumerate() {
                 if let Some(value) = master.axes_values.get(axis_idx) {

@@ -1,10 +1,9 @@
 use crate::axis::{Axis, Location};
-use crate::entity::{LayerId, SourceId};
+use crate::entity::SourceId;
 use crate::features::FeatureData;
 use crate::glyph::Glyph;
 use crate::guideline::Guideline;
 use crate::kerning::KerningData;
-use crate::layer::Layer;
 use crate::lib_data::LibData;
 use crate::metrics::FontMetrics;
 use crate::source::Source;
@@ -89,20 +88,15 @@ struct FontData {
     sources: Vec<Source>,
     #[serde(default)]
     default_source_id: Option<SourceId>,
-    layers: HashMap<LayerId, Layer>,
     glyphs: HashMap<GlyphName, Arc<Glyph>>,
     kerning: KerningData,
     features: FeatureData,
     guidelines: Vec<Guideline>,
     lib: LibData,
-    default_layer_id: LayerId,
 }
 
 impl Default for Font {
     fn default() -> Self {
-        let default_layer_id = LayerId::new();
-        let mut layers = HashMap::new();
-        layers.insert(default_layer_id, Layer::default_layer());
         let default_source = Source::new("Regular".to_string(), Location::new());
         let default_source_id = default_source.id();
 
@@ -113,13 +107,11 @@ impl Default for Font {
                 axes: Vec::new(),
                 sources: vec![default_source],
                 default_source_id: Some(default_source_id),
-                layers,
                 glyphs: HashMap::new(),
                 kerning: KerningData::new(),
                 features: FeatureData::new(),
                 guidelines: Vec::new(),
                 lib: LibData::new(),
-                default_layer_id,
             }),
         }
     }
@@ -131,10 +123,6 @@ impl Font {
     }
 
     pub fn empty() -> Self {
-        let default_layer_id = LayerId::new();
-        let mut layers = HashMap::new();
-        layers.insert(default_layer_id, Layer::default_layer());
-
         Self {
             inner: Arc::new(FontData {
                 metadata: FontMetadata::default(),
@@ -142,13 +130,11 @@ impl Font {
                 axes: Vec::new(),
                 sources: Vec::new(),
                 default_source_id: None,
-                layers,
                 glyphs: HashMap::new(),
                 kerning: KerningData::new(),
                 features: FeatureData::new(),
                 guidelines: Vec::new(),
                 lib: LibData::new(),
-                default_layer_id,
             }),
         }
     }
@@ -223,32 +209,6 @@ impl Font {
 
     pub fn is_variable(&self) -> bool {
         !self.data().axes.is_empty()
-    }
-
-    pub fn layers(&self) -> &HashMap<LayerId, Layer> {
-        &self.data().layers
-    }
-
-    pub fn layer(&self, id: LayerId) -> Option<&Layer> {
-        self.data().layers.get(&id)
-    }
-
-    pub fn layer_mut(&mut self, id: LayerId) -> Option<&mut Layer> {
-        self.data_mut().layers.get_mut(&id)
-    }
-
-    pub fn default_layer_id(&self) -> LayerId {
-        self.data().default_layer_id
-    }
-
-    pub fn default_layer(&self) -> Option<&Layer> {
-        self.data().layers.get(&self.data().default_layer_id)
-    }
-
-    pub fn add_layer(&mut self, layer: Layer) -> LayerId {
-        let id = layer.id();
-        self.data_mut().layers.insert(id, layer);
-        id
     }
 
     pub fn glyphs(&self) -> &HashMap<GlyphName, Arc<Glyph>> {
@@ -345,7 +305,7 @@ impl Font {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Contour, GlyphLayer, PointType};
+    use crate::{Contour, GlyphLayer, LayerId, PointType};
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -406,7 +366,6 @@ mod tests {
     fn font_creation() {
         let font = Font::new();
         assert_eq!(font.glyph_count(), 0);
-        assert!(font.default_layer().is_some());
         assert_eq!(font.sources().len(), 1);
         assert_eq!(font.default_source().map(Source::name), Some("Regular"));
     }

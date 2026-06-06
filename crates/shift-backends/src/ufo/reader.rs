@@ -3,8 +3,8 @@ use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, Guideline, KerningData,
-    KerningPair, KerningSide, Layer, LayerId, LibData, LibValue, Location, PointType, Source,
-    SourceId, Transform,
+    KerningPair, KerningSide, LayerId, LibData, LibValue, Location, PointType, Source, SourceId,
+    Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -250,8 +250,6 @@ impl FontReader for UfoReader {
             let source_id = if layer.name() == &norad_default_layer_name {
                 default_source_id
             } else {
-                let new_layer = Layer::new(layer.name().to_string());
-                font.add_layer(new_layer);
                 font.add_source(Source::new(layer.name().to_string(), Location::new()))
             };
 
