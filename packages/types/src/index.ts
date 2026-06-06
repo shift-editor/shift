@@ -43,7 +43,6 @@ export type {
   FontMetrics,
   GlyphChangedEntities,
   GlyphHandle,
-  GlyphLayerRef,
   GlyphMaster,
   GlyphName,
   GlyphRecord,

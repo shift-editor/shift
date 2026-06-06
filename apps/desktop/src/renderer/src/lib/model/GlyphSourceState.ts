@@ -1,4 +1,11 @@
-import type { AnchorId, ContourId, GlyphState, GlyphStructure, PointId } from "@shift/types";
+import type {
+  AnchorId,
+  ContourId,
+  GlyphState,
+  GlyphStructure,
+  LayerId,
+  PointId,
+} from "@shift/types";
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
 import {
   GlyphStateGeometry as GlyphGeometry,
@@ -29,6 +36,7 @@ interface PointBufferLocation {
  * update a touched contour without invalidating every contour path.
  */
 export class GlyphSourceState {
+  readonly #layerId: LayerId;
   readonly #structure: WritableSignal<GlyphStructure>;
   readonly #coordinates: WritableSignal<SourceCoordinateBuffers>;
   readonly #xAdvance: ComputedSignal<number>;
@@ -37,6 +45,7 @@ export class GlyphSourceState {
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
   constructor(state: GlyphState) {
+    this.#layerId = state.layerId;
     this.#structure = signal(state.structure, {
       name: "glyphSource.structure",
     });
@@ -133,6 +142,7 @@ export class GlyphSourceState {
 
   get state(): GlyphState {
     return {
+      layerId: this.#layerId,
       structure: this.#structure.peek(),
       values: this.#coordinates.peek().snapshot.peek(),
     };
@@ -156,6 +166,7 @@ export class GlyphSourceState {
   replaceValues(values: Float64Array): void {
     this.#coordinates.set(
       SourceCoordinateBuffers.fromState({
+        layerId: this.#layerId,
         structure: this.#structure.peek(),
         values,
       }),

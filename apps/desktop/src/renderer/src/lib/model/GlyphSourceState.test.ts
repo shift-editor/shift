@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { AnchorId, ContourId, GlyphState, PointId } from "@shift/types";
+import type { AnchorId, ContourId, GlyphState, LayerId, PointId } from "@shift/types";
 import { GlyphSourceState } from "./GlyphSourceState";
 
 const contourId = (index: number): ContourId => `contour-${index}` as ContourId;
 const pointId = (index: number): PointId => `point-${index}` as PointId;
 const anchorId = (index: number): AnchorId => `anchor-${index}` as AnchorId;
+const layerId = (index: number): LayerId => `layer-${index}` as LayerId;
 
 function sourceState(): GlyphState {
   return {
+    layerId: layerId(1),
     structure: {
       contours: [
         {

@@ -29,7 +29,7 @@ crates/shift-bridge/
 ## Key Types
 
 - `Bridge` -- the exported `#[napi]` class holding the current `FontWorkspace` and document versions.
-- `GlyphLayerRef` -- boundary identity for the glyph layer being mutated.
+- `LayerId` -- mutation-side identity for the glyph layer being edited.
 - `FontSaveSnapshot` -- clone/COW export view of the current workspace font.
 - `ExportFontTask` -- NAPI `Task` implementation for async font export.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
@@ -38,9 +38,9 @@ crates/shift-bridge/
 
 ## How it works
 
-1. The renderer chooses the active glyph/source and builds a `GlyphLayerRef`.
-2. JS calls a mutation such as `closeContour(glyphRef, contourId)`.
-3. `Bridge` parses boundary strings and asks `FontWorkspace` to run the edit against the target glyph layer.
+1. The renderer resolves glyph state with `GlyphHandle + SourceId` and receives a stable `layerId`.
+2. JS calls a mutation such as `closeContour(layerId, contourId)`.
+3. `Bridge` parses boundary strings and asks `FontWorkspace` to run the edit against that layer.
 4. The bridge returns a `shift-wire` change DTO and bumps the live version.
 5. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
 6. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
@@ -59,7 +59,7 @@ crates/shift-bridge/
 2. Add or reuse a canonical DTO in `shift-wire`.
 3. Add a NAPI adapter in `shift-wire::bridges::napi` only if NAPI needs a different representation.
 4. Add the `#[napi]` method on `Bridge`.
-5. Accept `GlyphLayerRef` when the operation targets glyph outline state, parse string IDs through `input.rs`, call the model method, then return the appropriate wire change.
+5. Accept `LayerId` when the operation targets glyph outline state, parse string IDs through `input.rs`, call the workspace method, then return the appropriate wire change.
 6. Run `cargo check -p shift-bridge` and rebuild the native module before regenerating bridge types.
 
 ### Adding a new read-only query
