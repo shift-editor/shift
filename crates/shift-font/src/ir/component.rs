@@ -240,7 +240,7 @@ impl Component {
     }
 
     pub fn id(&self) -> ComponentId {
-        self.id
+        self.id.clone()
     }
 
     pub fn base_glyph(&self) -> &GlyphName {

@@ -29,22 +29,24 @@ impl ShiftStore {
         tx.execute("DELETE FROM axes", [])?;
 
         for source in font.sources() {
-            upsert_source(&tx, source.id(), Some(source.name()))?;
+            upsert_source(&tx, &source.id(), Some(source.name()))?;
         }
 
         for glyph in font.glyphs() {
-            upsert_glyph(&tx, glyph.id(), glyph.glyph_name())?;
-            replace_glyph_unicodes(&tx, glyph.id(), glyph.unicodes())?;
+            upsert_glyph(&tx, &glyph.id(), glyph.glyph_name())?;
+            replace_glyph_unicodes(&tx, &glyph.id(), glyph.unicodes())?;
 
             for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
-                let target = font::GlyphLayerChangeTarget {
-                    glyph_id: glyph.id(),
-                    glyph_name: glyph.glyph_name().clone(),
-                    source_id: layer.source_id(),
-                    layer_id: layer.id(),
-                };
-                upsert_layer(&tx, &target, layer.width(), layer.height())?;
-                replace_layer_geometry(&tx, &target, &font::GlyphLayerValue::from(layer))?;
+                upsert_layer(
+                    &tx,
+                    &layer.id(),
+                    &glyph.id(),
+                    &layer.source_id(),
+                    Some(glyph.glyph_name()),
+                    layer.width(),
+                    layer.height(),
+                )?;
+                replace_layer_geometry(&tx, &layer.id(), &font::GlyphLayerValue::from(layer))?;
             }
         }
 
@@ -56,32 +58,40 @@ impl ShiftStore {
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
         font::FontChange::GlyphCreated(change) => {
-            upsert_glyph(tx, change.glyph_id, &change.name)?;
-            replace_glyph_unicodes(tx, change.glyph_id, &change.unicodes)
+            upsert_glyph(tx, &change.glyph_id, &change.name)?;
+            replace_glyph_unicodes(tx, &change.glyph_id, &change.unicodes)
         }
         font::FontChange::GlyphIdentityChanged(change) => {
-            upsert_glyph(tx, change.glyph_id, &change.to_name)?;
-            replace_glyph_unicodes(tx, change.glyph_id, &change.to_unicodes)
+            upsert_glyph(tx, &change.glyph_id, &change.to_name)?;
+            replace_glyph_unicodes(tx, &change.glyph_id, &change.to_unicodes)
         }
+        font::FontChange::GlyphLayerCreated(change) => upsert_layer(
+            tx,
+            &change.layer_id,
+            &change.glyph_id,
+            &change.source_id,
+            change.name.as_ref(),
+            change.width,
+            change.height,
+        ),
         font::FontChange::LayerMetricsChanged(change) => {
-            ensure_target(tx, &change.target)?;
             let rows_changed = tx.execute(
                 "
                 UPDATE glyph_layers
                 SET width = ?2, height = ?3
                 WHERE id = ?1
                 ",
-                params![layer_row_id(&change.target), change.width, change.height,],
+                params![layer_row_id(&change.layer_id), change.width, change.height,],
             )?;
-            require_changed(rows_changed, "glyph layer", layer_row_id(&change.target))?;
+            require_changed(rows_changed, "glyph layer", layer_row_id(&change.layer_id))?;
             Ok(())
         }
         font::FontChange::ContourAdded(change) => {
-            ensure_target(tx, &change.target)?;
-            replace_contour(tx, &change.target, &change.contour)
+            require_layer_exists(tx, &change.layer_id)?;
+            replace_contour(tx, &change.layer_id, &change.contour)
         }
         font::FontChange::ContourOpenClosedChanged(change) => {
-            ensure_target(tx, &change.target)?;
+            require_layer_exists(tx, &change.layer_id)?;
             let rows_changed = tx.execute(
                 "
                 UPDATE glyph_layer_contours
@@ -94,15 +104,15 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::PointsAdded(change) => {
-            ensure_target(tx, &change.target)?;
-            replace_contour(tx, &change.target, &change.contour)
+            require_layer_exists(tx, &change.layer_id)?;
+            replace_contour(tx, &change.layer_id, &change.contour)
         }
         font::FontChange::PointsDeleted(change) => {
-            ensure_target(tx, &change.target)?;
-            replace_contour(tx, &change.target, &change.contour)
+            require_layer_exists(tx, &change.layer_id)?;
+            replace_contour(tx, &change.layer_id, &change.contour)
         }
         font::FontChange::PointSmoothChanged(change) => {
-            ensure_target(tx, &change.target)?;
+            require_layer_exists(tx, &change.layer_id)?;
             let rows_changed = tx.execute(
                 "
                 UPDATE glyph_layer_points
@@ -115,7 +125,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::PointPositionsChanged(change) => {
-            ensure_target(tx, &change.target)?;
+            require_layer_exists(tx, &change.layer_id)?;
             for point in &change.points {
                 let rows_changed = tx.execute(
                     "
@@ -130,24 +140,15 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::LayerGeometryReplaced(change) => {
-            ensure_target(tx, &change.target)?;
-            replace_layer_geometry(tx, &change.target, &change.layer)
+            require_layer_exists(tx, &change.layer_id)?;
+            replace_layer_geometry(tx, &change.layer_id, &change.layer)
         }
     }
 }
 
-fn ensure_target(
-    tx: &Transaction<'_>,
-    target: &font::GlyphLayerChangeTarget,
-) -> Result<(), StoreError> {
-    upsert_source(tx, target.source_id, None)?;
-    upsert_glyph(tx, target.glyph_id, &target.glyph_name)?;
-    upsert_layer(tx, target, 0.0, None)
-}
-
 fn upsert_source(
     tx: &Transaction<'_>,
-    source_id: font::SourceId,
+    source_id: &font::SourceId,
     name: Option<&str>,
 ) -> Result<(), StoreError> {
     tx.execute(
@@ -164,7 +165,7 @@ fn upsert_source(
 
 fn upsert_glyph(
     tx: &Transaction<'_>,
-    glyph_id: font::GlyphId,
+    glyph_id: &font::GlyphId,
     name: &font::GlyphName,
 ) -> Result<(), StoreError> {
     tx.execute(
@@ -181,7 +182,7 @@ fn upsert_glyph(
 
 fn replace_glyph_unicodes(
     tx: &Transaction<'_>,
-    glyph_id: font::GlyphId,
+    glyph_id: &font::GlyphId,
     unicodes: &[u32],
 ) -> Result<(), StoreError> {
     tx.execute(
@@ -204,7 +205,10 @@ fn replace_glyph_unicodes(
 
 fn upsert_layer(
     tx: &Transaction<'_>,
-    target: &font::GlyphLayerChangeTarget,
+    layer_id: &font::LayerId,
+    glyph_id: &font::GlyphId,
+    source_id: &font::SourceId,
+    name: Option<&font::GlyphName>,
     width: f64,
     height: Option<f64>,
 ) -> Result<(), StoreError> {
@@ -218,10 +222,10 @@ fn upsert_layer(
             name = excluded.name
         ",
         params![
-            layer_row_id(target),
-            target.glyph_id.to_string(),
-            target.source_id.to_string(),
-            target.glyph_name.as_str(),
+            layer_row_id(layer_id),
+            glyph_id.to_string(),
+            source_id.to_string(),
+            name.map(font::GlyphName::as_str),
             width,
             height,
         ],
@@ -231,27 +235,28 @@ fn upsert_layer(
 
 fn replace_layer_geometry(
     tx: &Transaction<'_>,
-    target: &font::GlyphLayerChangeTarget,
+    layer_id: &font::LayerId,
     layer: &font::GlyphLayerValue,
 ) -> Result<(), StoreError> {
-    tx.execute(
+    let rows_changed = tx.execute(
         "
         UPDATE glyph_layers
         SET width = ?2, height = ?3
         WHERE id = ?1
         ",
-        params![layer_row_id(target), layer.width, layer.height],
+        params![layer_row_id(layer_id), layer.width, layer.height],
     )?;
+    require_changed(rows_changed, "glyph layer", layer_row_id(layer_id))?;
     tx.execute(
         "
         DELETE FROM glyph_layer_contours
         WHERE layer_id = ?1
         ",
-        [layer_row_id(target)],
+        [layer_row_id(layer_id)],
     )?;
 
     for (order_index, contour) in layer.contours.iter().enumerate() {
-        insert_contour(tx, target, order_index, contour)?;
+        insert_contour(tx, layer_id, order_index, contour)?;
     }
 
     Ok(())
@@ -259,7 +264,7 @@ fn replace_layer_geometry(
 
 fn replace_contour(
     tx: &Transaction<'_>,
-    target: &font::GlyphLayerChangeTarget,
+    layer_id: &font::LayerId,
     contour: &font::ContourValue,
 ) -> Result<(), StoreError> {
     tx.execute(
@@ -273,7 +278,11 @@ fn replace_contour(
             closed = excluded.closed,
             layer_id = excluded.layer_id
         ",
-        params![contour.id.to_string(), layer_row_id(target), contour.closed,],
+        params![
+            contour.id.to_string(),
+            layer_row_id(layer_id),
+            contour.closed,
+        ],
     )?;
     tx.execute(
         "DELETE FROM glyph_layer_points WHERE contour_id = ?1",
@@ -281,7 +290,7 @@ fn replace_contour(
     )?;
 
     for point in &contour.points {
-        insert_point(tx, contour.id, point)?;
+        insert_point(tx, &contour.id, point)?;
     }
 
     Ok(())
@@ -289,7 +298,7 @@ fn replace_contour(
 
 fn insert_contour(
     tx: &Transaction<'_>,
-    target: &font::GlyphLayerChangeTarget,
+    layer_id: &font::LayerId,
     order_index: usize,
     contour: &font::ContourValue,
 ) -> Result<(), StoreError> {
@@ -300,14 +309,14 @@ fn insert_contour(
         ",
         params![
             contour.id.to_string(),
-            layer_row_id(target),
+            layer_row_id(layer_id),
             contour.closed,
             order_index as i64,
         ],
     )?;
 
     for point in &contour.points {
-        insert_point(tx, contour.id, point)?;
+        insert_point(tx, &contour.id, point)?;
     }
 
     Ok(())
@@ -315,7 +324,7 @@ fn insert_contour(
 
 fn insert_point(
     tx: &Transaction<'_>,
-    contour_id: font::ContourId,
+    contour_id: &font::ContourId,
     point: &font::PointValue,
 ) -> Result<(), StoreError> {
     tx.execute(
@@ -360,6 +369,22 @@ fn require_changed(rows_changed: usize, kind: &'static str, id: String) -> Resul
     }
 }
 
-fn layer_row_id(target: &font::GlyphLayerChangeTarget) -> String {
-    format!("{}:{}", target.glyph_id, target.layer_id)
+fn require_layer_exists(tx: &Transaction<'_>, layer_id: &font::LayerId) -> Result<(), StoreError> {
+    let exists: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM glyph_layers WHERE id = ?1)",
+        [layer_row_id(layer_id)],
+        |row| row.get(0),
+    )?;
+    if exists {
+        Ok(())
+    } else {
+        Err(StoreError::MissingEntity {
+            kind: "glyph layer",
+            id: layer_row_id(layer_id),
+        })
+    }
+}
+
+fn layer_row_id(layer_id: &font::LayerId) -> String {
+    layer_id.to_string()
 }

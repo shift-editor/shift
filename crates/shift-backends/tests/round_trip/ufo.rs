@@ -144,7 +144,7 @@ fn preserves_components_anchors_layers_and_kerning() {
         .layers()
         .iter()
         .max_by_key(|(_, layer)| layer.contours().len())
-        .map(|(layer_id, _)| *layer_id)
+        .map(|(layer_id, _)| layer_id.clone())
         .expect("E should have a main layer");
     original
         .layer_mut(e_layer_id)

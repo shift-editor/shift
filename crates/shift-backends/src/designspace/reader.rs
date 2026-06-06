@@ -108,7 +108,7 @@ impl DesignspaceReader {
             default_location,
             default_ds_source.filename.clone(),
         ));
-        font.set_default_source_id(default_source_id);
+        font.set_default_source_id(default_source_id.clone());
         move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
 
         // Cache loaded UFO fonts so we don't re-read the same file for support layers.
@@ -165,11 +165,12 @@ impl DesignspaceReader {
 
             // Copy glyphs from the resolved layer into the new layer.
             for source_glyph in source_font.glyphs() {
-                if let Some(source_layer) = source_glyph.layer_for_source(source_source_id) {
+                if let Some(source_layer) = source_glyph.layer_for_source(source_source_id.clone())
+                {
                     if let Some(glyph_id) = font.glyph_id_by_name(source_glyph.name()) {
                         font.insert_glyph_layer(
                             glyph_id,
-                            source_layer.clone_with_identity(LayerId::new(), source_id),
+                            source_layer.clone_with_identity(LayerId::new(), source_id.clone()),
                         )?;
                     }
                 }
@@ -242,7 +243,7 @@ fn load_axisless_designspace(
         Location::new(),
         default_source.filename.clone(),
     ));
-    font.set_default_source_id(default_source_id);
+    font.set_default_source_id(default_source_id.clone());
     move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
 
     let mut ufo_cache: HashMap<String, Font> = HashMap::new();
@@ -289,11 +290,11 @@ fn load_axisless_designspace(
         ));
 
         for source_glyph in source_font.glyphs() {
-            if let Some(source_layer) = source_glyph.layer_for_source(source_source_id) {
+            if let Some(source_layer) = source_glyph.layer_for_source(source_source_id.clone()) {
                 if let Some(glyph_id) = font.glyph_id_by_name(source_glyph.name()) {
                     font.insert_glyph_layer(
                         glyph_id,
-                        source_layer.clone_with_identity(LayerId::new(), source_id),
+                        source_layer.clone_with_identity(LayerId::new(), source_id.clone()),
                     )?;
                 }
             }
@@ -435,11 +436,11 @@ fn move_glyph_layers_to_source(
     let layer_moves: Vec<_> = font
         .glyphs()
         .filter_map(|glyph| {
-            glyph.layer_for_source(from_source_id).map(|layer| {
+            glyph.layer_for_source(from_source_id.clone()).map(|layer| {
                 (
                     glyph.id(),
                     layer.id(),
-                    layer.clone_with_identity(LayerId::new(), to_source_id),
+                    layer.clone_with_identity(LayerId::new(), to_source_id.clone()),
                 )
             })
         })

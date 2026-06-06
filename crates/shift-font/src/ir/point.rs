@@ -23,7 +23,7 @@ impl std::str::FromStr for PointType {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Point {
     id: PointId,
     x: f64,
@@ -52,7 +52,7 @@ impl Point {
     }
 
     pub fn id(&self) -> PointId {
-        self.id
+        self.id.clone()
     }
 
     pub fn x(&self) -> f64 {

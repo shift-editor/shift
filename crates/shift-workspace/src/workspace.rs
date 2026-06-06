@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
     BooleanOp, BulkNodePositionUpdates, ContourId, FontChange, FontChangeSet, Glyph, GlyphId,
-    GlyphLayer, GlyphLayerChangeTarget, GlyphName, LayerId, PointId, PointPosition, PointType,
-    SourceId, error::CoreError,
+    GlyphLayer, GlyphName, LayerId, PointId, PointPosition, PointType, SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
@@ -127,12 +126,13 @@ impl FontWorkspace {
                     kind: "glyph name",
                     value: from_name.to_string(),
                 })?;
-        let existing = next_font
-            .glyph(glyph_id)
-            .ok_or_else(|| WorkspaceError::InvalidInput {
-                kind: "glyph name",
-                value: from_name.to_string(),
-            })?;
+        let existing =
+            next_font
+                .glyph(glyph_id.clone())
+                .ok_or_else(|| WorkspaceError::InvalidInput {
+                    kind: "glyph name",
+                    value: from_name.to_string(),
+                })?;
         if from_name == name && existing.unicodes() == unicodes.as_slice() {
             return Ok(());
         }
@@ -152,8 +152,8 @@ impl FontWorkspace {
         }
 
         let glyph = next_font
-            .glyph(glyph_id)
-            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+            .glyph(glyph_id.clone())
+            .ok_or(CoreError::GlyphNotFound(glyph_id.clone()))?;
         let from_name = glyph.glyph_name().clone();
         let from_unicodes = glyph.unicodes().to_vec();
         let glyph_name = shift_font::GlyphName::new(name.to_string()).map_err(|_| {
@@ -163,18 +163,18 @@ impl FontWorkspace {
             }
         })?;
 
-        next_font.rename_glyph(glyph_id, glyph_name)?;
-        next_font.set_glyph_unicodes(glyph_id, unicodes)?;
+        next_font.rename_glyph(glyph_id.clone(), glyph_name)?;
+        next_font.set_glyph_unicodes(glyph_id.clone(), unicodes)?;
         let glyph = next_font
-            .glyph(glyph_id)
-            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+            .glyph(glyph_id.clone())
+            .ok_or(CoreError::GlyphNotFound(glyph_id.clone()))?;
         let to_name = glyph.glyph_name().clone();
         let to_unicodes = glyph.unicodes().to_vec();
 
         self.commit_font(
             next_font,
             FontChange::glyph_identity_changed(
-                glyph_id,
+                glyph_id.clone(),
                 from_name,
                 to_name,
                 from_unicodes,
@@ -228,24 +228,19 @@ impl FontWorkspace {
     ) -> Result<GlyphLayer, WorkspaceError> {
         self.commit_edit(|font| {
             let glyph = font
-                .glyph(glyph_id)
-                .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+                .glyph(glyph_id.clone())
+                .ok_or(CoreError::GlyphNotFound(glyph_id.clone()))?;
             let glyph_name = glyph.glyph_name().clone();
-            let layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+            let layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 500.0);
             let layer_id = layer.id();
 
-            font.insert_glyph_layer(glyph_id, layer)?;
+            font.insert_glyph_layer(glyph_id.clone(), layer)?;
             let layer = font
-                .layer(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?
+                .layer(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?
                 .clone();
-            let target = GlyphLayerChangeTarget {
-                glyph_id,
-                glyph_name,
-                source_id,
-                layer_id,
-            };
-            let change_set = FontChange::layer_metrics_changed(target, &layer).into();
+            let change_set =
+                FontChange::glyph_layer_created(glyph_id.clone(), Some(glyph_name), &layer).into();
 
             Ok((layer, change_set))
         })
@@ -257,14 +252,13 @@ impl FontWorkspace {
         width: f64,
     ) -> Result<GlyphLayer, WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
 
             layer.set_x_advance(width);
             let edited_layer = layer.clone();
-            let change_set = FontChange::layer_metrics_changed(target, layer).into();
+            let change_set = FontChange::layer_metrics_changed(layer).into();
 
             Ok((edited_layer, change_set))
         })
@@ -292,16 +286,19 @@ impl FontWorkspace {
         smooth: bool,
     ) -> Result<(GlyphLayer, PointId), WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
-            let added = layer.add_point_to_contour(contour_id, x, y, point_type, smooth)?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+            let added = layer.add_point_to_contour(contour_id.clone(), x, y, point_type, smooth)?;
             let edited_layer = layer.clone();
-            let change_set =
-                FontChange::points_added(target, &added.contour, vec![added.point_id]).into();
+            let change_set = FontChange::points_added(
+                layer_id.clone(),
+                &added.contour,
+                vec![added.point_id.clone()],
+            )
+            .into();
 
-            Ok(((edited_layer, added.point_id), change_set))
+            Ok(((edited_layer, added.point_id.clone()), change_set))
         })
     }
 
@@ -315,16 +312,20 @@ impl FontWorkspace {
         smooth: bool,
     ) -> Result<(GlyphLayer, PointId), WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
-            let added = layer.insert_point_before(before_point_id, x, y, point_type, smooth)?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+            let added =
+                layer.insert_point_before(before_point_id.clone(), x, y, point_type, smooth)?;
             let edited_layer = layer.clone();
-            let change_set =
-                FontChange::points_added(target, &added.contour, vec![added.point_id]).into();
+            let change_set = FontChange::points_added(
+                layer_id.clone(),
+                &added.contour,
+                vec![added.point_id.clone()],
+            )
+            .into();
 
-            Ok(((edited_layer, added.point_id), change_set))
+            Ok(((edited_layer, added.point_id.clone()), change_set))
         })
     }
 
@@ -333,13 +334,12 @@ impl FontWorkspace {
         layer_id: LayerId,
     ) -> Result<(GlyphLayer, ContourId), WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             let contour = layer.add_empty_contour();
             let edited_layer = layer.clone();
-            let change_set = FontChange::contour_added(target, &contour).into();
+            let change_set = FontChange::contour_added(layer_id.clone(), &contour).into();
 
             Ok(((edited_layer, contour.id()), change_set))
         })
@@ -401,13 +401,13 @@ impl FontWorkspace {
         point_id: PointId,
     ) -> Result<GlyphLayer, WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
-            let smooth = layer.toggle_smooth(point_id)?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+            let smooth = layer.toggle_smooth(point_id.clone())?;
             let edited_layer = layer.clone();
-            let change_set = FontChange::point_smooth_changed(target, point_id, smooth).into();
+            let change_set =
+                FontChange::point_smooth_changed(layer_id.clone(), point_id.clone(), smooth).into();
 
             Ok((edited_layer, change_set))
         })
@@ -421,15 +421,18 @@ impl FontWorkspace {
         replace_geometry: bool,
     ) -> Result<(), WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             layer.apply_bulk_node_positions(updates)?;
             let change_set = if replace_geometry {
-                Self::layer_replaced_change_set(target, layer)
+                Self::layer_replaced_change_set(layer)
             } else {
-                FontChange::point_positions_changed(target, point_position_changes).into()
+                FontChange::point_positions_changed(
+                    layer_id.clone(),
+                    point_position_changes.clone(),
+                )
+                .into()
             };
 
             Ok(((), change_set))
@@ -468,28 +471,6 @@ impl FontWorkspace {
         Ok(result)
     }
 
-    fn layer_change_target(
-        font: &shift_font::Font,
-        layer_id: LayerId,
-    ) -> Result<GlyphLayerChangeTarget, WorkspaceError> {
-        let glyph_id = font
-            .glyph_id_by_layer(layer_id)
-            .ok_or(CoreError::LayerNotFound(layer_id))?;
-        let glyph = font
-            .glyph(glyph_id)
-            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
-        let layer = glyph
-            .layer(layer_id)
-            .ok_or(CoreError::LayerNotFound(layer_id))?;
-
-        Ok(GlyphLayerChangeTarget {
-            glyph_id,
-            glyph_name: glyph.glyph_name().clone(),
-            source_id: layer.source_id(),
-            layer_id,
-        })
-    }
-
     fn set_contour_closed(
         &mut self,
         layer_id: LayerId,
@@ -497,18 +478,21 @@ impl FontWorkspace {
         closed: bool,
     ) -> Result<GlyphLayer, WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             if closed {
-                layer.close_contour(contour_id)?;
+                layer.close_contour(contour_id.clone())?;
             } else {
-                layer.open_contour(contour_id)?;
+                layer.open_contour(contour_id.clone())?;
             }
             let edited_layer = layer.clone();
-            let change_set =
-                FontChange::contour_open_closed_changed(target, contour_id, closed).into();
+            let change_set = FontChange::contour_open_closed_changed(
+                layer_id.clone(),
+                contour_id.clone(),
+                closed,
+            )
+            .into();
 
             Ok((edited_layer, change_set))
         })
@@ -532,23 +516,19 @@ impl FontWorkspace {
         edit: impl FnOnce(&mut GlyphLayer) -> Result<R, CoreError>,
     ) -> Result<(GlyphLayer, R), WorkspaceError> {
         self.commit_edit(|font| {
-            let target = Self::layer_change_target(font, layer_id)?;
             let layer = font
-                .layer_mut(layer_id)
-                .ok_or(CoreError::LayerNotFound(layer_id))?;
+                .layer_mut(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             let result = edit(layer)?;
             let edited_layer = layer.clone();
-            let change_set = Self::layer_replaced_change_set(target, layer);
+            let change_set = Self::layer_replaced_change_set(layer);
 
             Ok(((edited_layer, result), change_set))
         })
     }
 
-    fn layer_replaced_change_set(
-        target: GlyphLayerChangeTarget,
-        layer: &GlyphLayer,
-    ) -> FontChangeSet {
-        FontChange::layer_geometry_replaced(target, layer).into()
+    fn layer_replaced_change_set(layer: &GlyphLayer) -> FontChangeSet {
+        FontChange::layer_geometry_replaced(layer).into()
     }
 
     fn open_package(

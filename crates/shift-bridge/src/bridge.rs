@@ -1,5 +1,5 @@
 use crate::errors::{self, BridgeError, BridgeResult};
-use crate::input::parse;
+use crate::input::{parse, BridgeParse};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -788,7 +788,9 @@ impl Bridge {
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
     let layer_id = self.existing_layer_id(glyph_ref)?;
-    let layer = self.workspace_mut()?.open_contour(layer_id, contour_id)?;
+    let layer = self
+      .workspace_mut()?
+      .open_contour(layer_id, contour_id.clone())?;
     let changed = GlyphChangedEntities {
       contour_ids: vec![contour_id],
       ..Default::default()
@@ -807,7 +809,9 @@ impl Bridge {
   ) -> errors::Result<NapiGlyphStructureChange> {
     let contour_id = parse::<ContourId>(&contour_id)?;
     let layer_id = self.existing_layer_id(glyph_ref)?;
-    let layer = self.workspace_mut()?.close_contour(layer_id, contour_id)?;
+    let layer = self
+      .workspace_mut()?
+      .close_contour(layer_id, contour_id.clone())?;
     let changed = GlyphChangedEntities {
       contour_ids: vec![contour_id],
       ..Default::default()
@@ -828,7 +832,7 @@ impl Bridge {
     let layer_id = self.existing_layer_id(glyph_ref)?;
     let layer = self
       .workspace_mut()?
-      .reverse_contour(layer_id, contour_id)?;
+      .reverse_contour(layer_id, contour_id.clone())?;
     let changed = GlyphChangedEntities {
       contour_ids: vec![contour_id],
       ..Default::default()
@@ -904,7 +908,9 @@ impl Bridge {
   ) -> errors::Result<NapiGlyphStructureChange> {
     let parsed_id = parse::<PointId>(&point_id)?;
     let layer_id = self.existing_layer_id(glyph_ref)?;
-    let layer = self.workspace_mut()?.toggle_smooth(layer_id, parsed_id)?;
+    let layer = self
+      .workspace_mut()?
+      .toggle_smooth(layer_id, parsed_id.clone())?;
     let changed = GlyphChangedEntities {
       point_ids: vec![parsed_id],
       ..Default::default()
@@ -915,35 +921,31 @@ impl Bridge {
     Ok(change.into())
   }
 
-  /// Bulk position sync. IDs use BigUint64Array to avoid lossy float packing.
+  /// Bulk position sync. IDs are stable typed strings from the current glyph state.
   /// Coords are interleaved [x0, y0, x1, y1, ...].
   #[napi]
   pub fn apply_position_patch(
     &mut self,
     glyph_ref: GlyphLayerRef,
-    point_ids: Option<BigUint64Array>,
+    #[napi(ts_arg_type = "Array<PointId> | null")] point_ids: Option<Vec<String>>,
     point_coords: Option<Float64Array>,
-    anchor_ids: Option<BigUint64Array>,
+    #[napi(ts_arg_type = "Array<AnchorId> | null")] anchor_ids: Option<Vec<String>>,
     anchor_coords: Option<Float64Array>,
   ) -> errors::Result<()> {
-    let point_position_changes = read_point_position_changes(&point_ids, &point_coords)?;
+    let point_ids = parse_ids::<PointId>(point_ids.as_deref())?;
+    let anchor_ids = parse_ids::<shift_font::AnchorId>(anchor_ids.as_deref())?;
+    let point_position_changes = read_point_position_changes(point_ids.as_deref(), &point_coords)?;
     let has_anchor_updates = anchor_ids.as_ref().is_some_and(|ids| !ids.is_empty())
       || anchor_coords
         .as_ref()
         .is_some_and(|coords| !coords.is_empty());
     let layer_id = self.existing_layer_id(glyph_ref)?;
-    let point_id_slice = point_ids.as_ref().map(|ids| {
-      let ids: &[u64] = ids;
-      ids
-    });
+    let point_id_slice = point_ids.as_deref();
     let point_coord_slice = point_coords.as_ref().map(|coords| {
       let coords: &[f64] = coords;
       coords
     });
-    let anchor_id_slice = anchor_ids.as_ref().map(|ids| {
-      let ids: &[u64] = ids;
-      ids
-    });
+    let anchor_id_slice = anchor_ids.as_deref();
     let anchor_coord_slice = anchor_coords.as_ref().map(|coords| {
       let coords: &[f64] = coords;
       coords
@@ -977,11 +979,15 @@ impl Bridge {
     let layer_id = self.existing_layer_id(glyph_ref)?;
     let mut layer = self
       .font()?
-      .layer(layer_id)
-      .ok_or(shift_font::error::CoreError::LayerNotFound(layer_id))?
+      .layer(layer_id.clone())
+      .ok_or(shift_font::error::CoreError::LayerNotFound(
+        layer_id.clone(),
+      ))?
       .clone();
     apply_state_to_layer(&mut layer, &structure, values)?;
-    let layer = self.workspace_mut()?.replace_layer(layer_id, layer)?;
+    let layer = self
+      .workspace_mut()?
+      .replace_layer(layer_id.clone(), layer)?;
     let change = GlyphStructureChange::from_layer(&layer, Default::default());
 
     self.mark_font_changed();
@@ -989,15 +995,20 @@ impl Bridge {
   }
 }
 
+fn parse_ids<T: BridgeParse>(ids: Option<&[String]>) -> BridgeResult<Option<Vec<T>>> {
+  ids
+    .map(|ids| ids.iter().map(|id| parse::<T>(id)).collect())
+    .transpose()
+}
+
 fn read_point_position_changes(
-  point_ids: &Option<BigUint64Array>,
+  point_ids: Option<&[PointId]>,
   point_coords: &Option<Float64Array>,
 ) -> BridgeResult<Vec<shift_font::PointPosition>> {
-  let Some(point_ids) = point_ids.as_ref() else {
+  let Some(point_ids) = point_ids else {
     return Ok(Vec::new());
   };
 
-  let point_ids: &[u64] = point_ids;
   let point_coords = point_coords
     .as_ref()
     .ok_or_else(|| BridgeError::InvalidInput {
@@ -1021,7 +1032,7 @@ fn read_point_position_changes(
       .iter()
       .enumerate()
       .map(|(index, point_id)| shift_font::PointPosition {
-        point_id: PointId::from_raw(*point_id as u128),
+        point_id: point_id.clone(),
         x: point_coords[index * 2],
         y: point_coords[index * 2 + 1],
       })

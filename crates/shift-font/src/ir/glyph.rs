@@ -26,7 +26,7 @@ pub struct GlyphLayer {
     width: f64,
     height: Option<f64>,
     contours: IndexMap<ContourId, Contour>,
-    components: HashMap<ComponentId, Component>,
+    components: IndexMap<ComponentId, Component>,
     anchors: Vec<Anchor>,
     guidelines: Vec<Guideline>,
     lib: LibData,
@@ -40,7 +40,7 @@ impl GlyphLayer {
             width: 0.0,
             height: None,
             contours: IndexMap::new(),
-            components: HashMap::new(),
+            components: IndexMap::new(),
             anchors: Vec::new(),
             guidelines: Vec::new(),
             lib: LibData::new(),
@@ -55,11 +55,11 @@ impl GlyphLayer {
     }
 
     pub fn id(&self) -> LayerId {
-        self.id
+        self.id.clone()
     }
 
     pub fn source_id(&self) -> SourceId {
-        self.source_id
+        self.source_id.clone()
     }
 
     pub fn clone_with_identity(&self, id: LayerId, source_id: SourceId) -> Self {
@@ -107,7 +107,7 @@ impl GlyphLayer {
 
     pub fn add_contour(&mut self, contour: Contour) -> ContourId {
         let id = contour.id();
-        self.contours.insert(id, contour);
+        self.contours.insert(id.clone(), contour);
         id
     }
 
@@ -119,7 +119,7 @@ impl GlyphLayer {
         self.contours.clear();
     }
 
-    pub fn components(&self) -> &HashMap<ComponentId, Component> {
+    pub fn components(&self) -> &IndexMap<ComponentId, Component> {
         &self.components
     }
 
@@ -133,12 +133,12 @@ impl GlyphLayer {
 
     pub fn add_component(&mut self, component: Component) -> ComponentId {
         let id = component.id();
-        self.components.insert(id, component);
+        self.components.insert(id.clone(), component);
         id
     }
 
     pub fn remove_component(&mut self, id: ComponentId) -> Option<Component> {
-        self.components.remove(&id)
+        self.components.shift_remove(&id)
     }
 
     pub fn clear_components(&mut self) {
@@ -191,9 +191,9 @@ impl GlyphLayer {
     pub fn move_anchors(&mut self, ids: &[AnchorId], dx: f64, dy: f64) -> Vec<AnchorId> {
         let mut moved = Vec::new();
         for id in ids {
-            if let Some(anchor) = self.anchor_mut(*id) {
+            if let Some(anchor) = self.anchor_mut(id.clone()) {
                 anchor.translate(dx, dy);
-                moved.push(*id);
+                moved.push(id.clone());
             }
         }
         moved
@@ -242,7 +242,7 @@ impl Glyph {
     }
 
     pub fn id(&self) -> GlyphId {
-        self.id
+        self.id.clone()
     }
 
     pub fn name(&self) -> &str {
@@ -303,7 +303,7 @@ impl Glyph {
 
         let layer = GlyphLayer::new(LayerId::new(), source_id);
         let layer_id = layer.id();
-        self.layers.insert(layer_id, Arc::new(layer));
+        self.layers.insert(layer_id.clone(), Arc::new(layer));
         self.layer_mut(layer_id).expect("layer was just inserted")
     }
 
@@ -356,12 +356,15 @@ mod tests {
         let mut g = Glyph::new("A".to_string());
         let source_id = SourceId::new();
 
-        let layer = g.ensure_layer_for_source(source_id);
+        let layer = g.ensure_layer_for_source(source_id.clone());
         let layer_id = layer.id();
         layer.set_width(600.0);
 
-        assert_eq!(g.layer(layer_id).unwrap().width(), 600.0);
-        assert_eq!(g.layer_for_source(source_id).unwrap().id(), layer_id);
+        assert_eq!(g.layer(layer_id.clone()).unwrap().width(), 600.0);
+        assert_eq!(
+            g.layer_for_source(source_id.clone()).unwrap().id(),
+            layer_id.clone()
+        );
     }
 
     #[test]
@@ -372,24 +375,27 @@ mod tests {
         let first_layer_id = LayerId::new();
         let second_layer_id = LayerId::new();
         glyph.set_layer(GlyphLayer::with_width(
-            first_layer_id,
-            first_source_id,
+            first_layer_id.clone(),
+            first_source_id.clone(),
             500.0,
         ));
         glyph.set_layer(GlyphLayer::with_width(
-            second_layer_id,
-            second_source_id,
+            second_layer_id.clone(),
+            second_source_id.clone(),
             600.0,
         ));
         let snapshot = glyph.clone();
 
         glyph
-            .layer_mut(first_layer_id)
+            .layer_mut(first_layer_id.clone())
             .expect("first layer should exist")
             .set_width(700.0);
 
-        assert_eq!(glyph.layer(first_layer_id).unwrap().width(), 700.0);
-        assert_eq!(snapshot.layer(first_layer_id).unwrap().width(), 500.0);
+        assert_eq!(glyph.layer(first_layer_id.clone()).unwrap().width(), 700.0);
+        assert_eq!(
+            snapshot.layer(first_layer_id.clone()).unwrap().width(),
+            500.0
+        );
         assert!(!Arc::ptr_eq(
             glyph.layers.get(&first_layer_id).unwrap(),
             snapshot.layers.get(&first_layer_id).unwrap()

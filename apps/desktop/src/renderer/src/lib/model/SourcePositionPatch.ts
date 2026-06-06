@@ -1,9 +1,10 @@
 import type { GlyphPositions } from "@shift/glyph-state";
+import type { AnchorId, PointId } from "@shift/types";
 
 export type BridgePositionPatchPayload = readonly [
-  pointIds: BigUint64Array | null,
+  pointIds: PointId[] | null,
   pointCoords: Float64Array | null,
-  anchorIds: BigUint64Array | null,
+  anchorIds: AnchorId[] | null,
   anchorCoords: Float64Array | null,
 ];
 
@@ -31,28 +32,28 @@ export class SourcePositionPatch {
   }
 
   toBridgePayload(): BridgePositionPatchPayload {
-    const pointIds: bigint[] = [];
+    const pointIds: PointId[] = [];
     const pointCoords: number[] = [];
-    const anchorIds: bigint[] = [];
+    const anchorIds: AnchorId[] = [];
     const anchorCoords: number[] = [];
 
     for (const position of this.positions) {
       switch (position.kind) {
         case "point":
-          pointIds.push(BigInt(position.id));
+          pointIds.push(position.id);
           pointCoords.push(position.x, position.y);
           break;
         case "anchor":
-          anchorIds.push(BigInt(position.id));
+          anchorIds.push(position.id);
           anchorCoords.push(position.x, position.y);
           break;
       }
     }
 
     return [
-      pointIds.length > 0 ? BigUint64Array.from(pointIds) : null,
+      pointIds.length > 0 ? pointIds : null,
       pointCoords.length > 0 ? Float64Array.from(pointCoords) : null,
-      anchorIds.length > 0 ? BigUint64Array.from(anchorIds) : null,
+      anchorIds.length > 0 ? anchorIds : null,
       anchorCoords.length > 0 ? Float64Array.from(anchorCoords) : null,
     ];
   }

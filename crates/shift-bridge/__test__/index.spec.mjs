@@ -132,7 +132,7 @@ describe("Bridge", () => {
     expect(Array.from(change.values)).toEqual([500, 10, 20]);
   });
 
-  it("applies point positions through the sparse typed-array hot path", () => {
+  it("applies point positions through the sparse bridge patch path", () => {
     const glyphRef = createDefaultLayer();
     const contourId = bridge.addContour(glyphRef).changed.contourIds[0];
     const pointId = bridge.addPoint(glyphRef, contourId, 10, 20, "onCurve", false).changed
@@ -140,7 +140,7 @@ describe("Bridge", () => {
 
     bridge.applyPositionPatch(
       glyphRef,
-      new BigUint64Array([BigInt(pointId)]),
+      [pointId],
       new Float64Array([30, 40]),
       null,
       null,
@@ -181,11 +181,11 @@ describe("Bridge", () => {
     expect(() =>
       bridge.applyPositionPatch(
         glyphRef,
-        new BigUint64Array([1n]),
+        ["not-a-point"],
         new Float64Array([10]),
         null,
         null,
       ),
-    ).toThrow(/point positions/i);
+    ).toThrow(/point ID/i);
   });
 });

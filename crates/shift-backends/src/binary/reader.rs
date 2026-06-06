@@ -156,8 +156,11 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
             .unwrap_or_else(|| format!("uni{unicode:04X}"));
 
         let mut glyph = Glyph::with_unicode(glyph_name, unicode);
-        let mut layer =
-            GlyphLayer::with_width(LayerId::new(), default_source_id, advance_width as f64);
+        let mut layer = GlyphLayer::with_width(
+            LayerId::new(),
+            default_source_id.clone(),
+            advance_width as f64,
+        );
         let mut contours = pen.contours();
         detect_smooth_points(&mut contours);
         for contour in contours {

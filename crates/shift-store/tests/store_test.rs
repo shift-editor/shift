@@ -267,7 +267,7 @@ fn applies_glyph_identity_change_set() {
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::GlyphCreated(shift_font::GlyphCreated::from(&glyph)),
             shift_font::FontChange::GlyphIdentityChanged(shift_font::GlyphIdentityChanged {
-                glyph_id,
+                glyph_id: glyph_id.clone(),
                 from_name: shift_font::GlyphName::from("A"),
                 to_name: shift_font::GlyphName::from("A.alt"),
                 from_unicodes: vec![65],
@@ -291,24 +291,30 @@ fn applies_glyph_identity_change_set() {
 #[test]
 fn applies_layer_metrics_and_contour_point_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
-    let (target, contour, point_id) = store_change_target_with_contour();
-    let store_layer_id = store_layer_id(&target);
+    let (glyph, layer, contour, point_id) = store_layer_with_contour();
+    create_regular_source_with_id(&mut store, layer.source_id());
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::glyph_created(&glyph),
+            shift_font::FontChange::glyph_layer_created(
+                glyph.id(),
+                Some(glyph.glyph_name().clone()),
+                &layer,
+            ),
             shift_font::FontChange::LayerMetricsChanged(shift_font::LayerMetricsChanged {
-                target: target.clone(),
+                layer_id: layer.id(),
                 width: 720.0,
                 height: None,
             }),
             shift_font::FontChange::ContourAdded(shift_font::ContourAdded {
-                target: target.clone(),
+                layer_id: layer.id(),
                 contour,
             }),
             shift_font::FontChange::PointPositionsChanged(shift_font::PointPositionsChanged {
-                target,
+                layer_id: layer.id(),
                 points: vec![shift_font::PointPosition {
-                    point_id,
+                    point_id: point_id.clone(),
                     x: 40.0,
                     y: 50.0,
                 }],
@@ -317,11 +323,11 @@ fn applies_layer_metrics_and_contour_point_changes() {
         .expect("change set should apply");
 
     let layer = store
-        .get_glyph_layer(&store_layer_id)
+        .get_glyph_layer(&LayerId::new(layer.id().to_string()))
         .expect("layer query should succeed")
         .expect("layer should exist");
     let contours = store
-        .list_contours_for_layer(&store_layer_id)
+        .list_contours_for_layer(&layer.id)
         .expect("contour query should succeed");
     let points = store
         .list_points_for_contour(&contours[0].id)
@@ -339,27 +345,32 @@ fn applies_layer_metrics_and_contour_point_changes() {
 #[test]
 fn applies_layer_geometry_replacement() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
-    let (target, first_contour, _) = store_change_target_with_contour();
-    let store_layer_id = store_layer_id(&target);
-    let mut layer =
-        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), target.source_id, 500.0);
-    layer.add_contour(contour_with_point(10.0, 20.0));
+    let (glyph, layer, first_contour, _) = store_layer_with_contour();
+    create_regular_source_with_id(&mut store, layer.source_id());
+    let mut replacement = shift_font::GlyphLayer::with_width(layer.id(), layer.source_id(), 500.0);
+    replacement.add_contour(contour_with_point(10.0, 20.0));
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::glyph_created(&glyph),
+            shift_font::FontChange::glyph_layer_created(
+                glyph.id(),
+                Some(glyph.glyph_name().clone()),
+                &layer,
+            ),
             shift_font::FontChange::ContourAdded(shift_font::ContourAdded {
-                target: target.clone(),
+                layer_id: layer.id(),
                 contour: first_contour,
             }),
             shift_font::FontChange::LayerGeometryReplaced(shift_font::LayerGeometryReplaced {
-                target: target.clone(),
-                layer: shift_font::GlyphLayerValue::from(&layer),
+                layer_id: layer.id(),
+                layer: shift_font::GlyphLayerValue::from(&replacement),
             }),
         ]))
         .expect("change set should apply");
 
     let contours = store
-        .list_contours_for_layer(&store_layer_id)
+        .list_contours_for_layer(&LayerId::new(layer.id().to_string()))
         .expect("contour query should succeed");
     let points = store
         .list_points_for_contour(&contours[0].id)
@@ -373,14 +384,21 @@ fn applies_layer_geometry_replacement() {
 #[test]
 fn rejects_incremental_change_for_missing_point_row() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
-    let (target, _, _) = store_change_target_with_contour();
+    let (glyph, layer, _, _) = store_layer_with_contour();
+    create_regular_source_with_id(&mut store, layer.source_id());
     let missing_point_id = shift_font::PointId::new();
 
     let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::glyph_created(&glyph),
+        shift_font::FontChange::glyph_layer_created(
+            glyph.id(),
+            Some(glyph.glyph_name().clone()),
+            &layer,
+        ),
         shift_font::FontChange::PointPositionsChanged(shift_font::PointPositionsChanged {
-            target,
+            layer_id: layer.id(),
             points: vec![shift_font::PointPosition {
-                point_id: missing_point_id,
+                point_id: missing_point_id.clone(),
                 x: 1.0,
                 y: 2.0,
             }],
@@ -392,6 +410,27 @@ fn rejects_incremental_change_for_missing_point_row() {
             .expect_err("missing point should reject")
             .to_string()
             .contains(&missing_point_id.to_string())
+    );
+}
+
+#[test]
+fn rejects_layer_edit_for_missing_layer_row() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let missing_layer_id = shift_font::LayerId::new();
+
+    let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::LayerMetricsChanged(shift_font::LayerMetricsChanged {
+            layer_id: missing_layer_id.clone(),
+            width: 600.0,
+            height: None,
+        }),
+    ]));
+
+    assert!(
+        result
+            .expect_err("missing layer should reject")
+            .to_string()
+            .contains(&missing_layer_id.to_string())
     );
 }
 
@@ -542,24 +581,33 @@ fn create_regular_source(store: &mut ShiftStore) -> SourceId {
     source_id
 }
 
-fn store_change_target_with_contour() -> (
-    shift_font::GlyphLayerChangeTarget,
+fn create_regular_source_with_id(store: &mut ShiftStore, source_id: shift_font::SourceId) {
+    store
+        .create_source(NewSource {
+            id: SourceId::new(source_id.to_string()),
+            name: Some("Regular".to_string()),
+            family_name: Some("Shift Sans".to_string()),
+            style_name: Some("Regular".to_string()),
+            kind: SourceKind::Master,
+        })
+        .expect("source should be created");
+}
+
+fn store_layer_with_contour() -> (
+    shift_font::Glyph,
+    shift_font::GlyphLayer,
     shift_font::ContourValue,
     shift_font::PointId,
 ) {
     let glyph = shift_font::Glyph::with_unicode("A", 65);
-    let layer_id = shift_font::LayerId::new();
     let source_id = shift_font::SourceId::new();
+    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id, 500.0);
     let contour = contour_with_point(10.0, 20.0);
     let point_id = contour.points()[0].id();
 
     (
-        shift_font::GlyphLayerChangeTarget {
-            glyph_id: glyph.id(),
-            glyph_name: glyph.glyph_name().clone(),
-            source_id,
-            layer_id,
-        },
+        glyph,
+        layer,
         shift_font::ContourValue::from(&contour),
         point_id,
     )
@@ -569,8 +617,4 @@ fn contour_with_point(x: f64, y: f64) -> shift_font::Contour {
     let mut contour = shift_font::Contour::new();
     contour.add_point(x, y, shift_font::PointType::OnCurve, false);
     contour
-}
-
-fn store_layer_id(target: &shift_font::GlyphLayerChangeTarget) -> LayerId {
-    LayerId::new(format!("{}:{}", target.glyph_id, target.layer_id))
 }
