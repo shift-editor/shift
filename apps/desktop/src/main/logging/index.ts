@@ -1,0 +1,1 @@
+export { createShiftLogger } from "./ElectronShiftLogger";
