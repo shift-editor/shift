@@ -39,6 +39,7 @@ pub enum WorkspaceError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WorkspaceSource {
+    Untitled,
     Package { path: PathBuf },
     Imported { original_path: PathBuf },
 }
@@ -50,27 +51,36 @@ pub struct FontWorkspace {
 }
 
 impl FontWorkspace {
-    pub fn create(
+    pub fn create_untitled(
+        store_path: impl AsRef<Path>,
+        new_workspace: NewWorkspace,
+    ) -> Result<Self, WorkspaceError> {
+        let mut store = ShiftStore::open(store_path)?;
+        store.set_font_info(new_workspace.font_info())?;
+
+        let font = new_font(new_workspace);
+        store.replace_font_state(&font)?;
+
+        Ok(Self {
+            font,
+            source: WorkspaceSource::Untitled,
+            store,
+        })
+    }
+
+    pub fn create_package(
         source_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
         new_workspace: NewWorkspace,
     ) -> Result<Self, WorkspaceError> {
         let source_package = ShiftSourcePackage::create_empty(source_path)?;
-        let mut store = ShiftStore::open(store_path)?;
-        store.set_font_info(new_workspace.font_info())?;
+        let mut workspace = Self::create_untitled(store_path, new_workspace)?;
 
-        let mut font = shift_font::Font::new();
-        font.metadata_mut().family_name = Some(new_workspace.family_name);
-        font.metrics_mut().units_per_em = new_workspace.units_per_em as f64;
-        store.replace_font_state(&font)?;
+        workspace.source = WorkspaceSource::Package {
+            path: source_package.path().to_path_buf(),
+        };
 
-        Ok(Self {
-            font,
-            source: WorkspaceSource::Package {
-                path: source_package.path().to_path_buf(),
-            },
-            store,
-        })
+        Ok(workspace)
     }
 
     pub fn open(
@@ -91,7 +101,9 @@ impl FontWorkspace {
                 ShiftSourcePackage::open(path)?;
                 Ok(())
             }
-            WorkspaceSource::Imported { .. } => Err(WorkspaceError::NeedsSaveAs),
+            WorkspaceSource::Untitled | WorkspaceSource::Imported { .. } => {
+                Err(WorkspaceError::NeedsSaveAs)
+            }
         }
     }
 
@@ -581,6 +593,7 @@ impl FontWorkspace {
 
     pub fn save_target(&self) -> Option<&Path> {
         match &self.source {
+            WorkspaceSource::Untitled => None,
             WorkspaceSource::Package { path } => Some(path),
             WorkspaceSource::Imported { .. } => None,
         }
@@ -618,4 +631,11 @@ fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
         version_minor: metadata.version_minor.map(i64::from),
         units_per_em: font.metrics().units_per_em as i64,
     }
+}
+
+fn new_font(new_workspace: NewWorkspace) -> shift_font::Font {
+    let mut font = shift_font::Font::new();
+    font.metadata_mut().family_name = Some(new_workspace.family_name);
+    font.metrics_mut().units_per_em = new_workspace.units_per_em as f64;
+    font
 }

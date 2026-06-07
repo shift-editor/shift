@@ -14,7 +14,7 @@ describe("Bridge", () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-"));
     bridge = new Bridge();
-    bridge.createWorkspace(join(tempDir, "TestFont.shift"), join(tempDir, "working.sqlite"));
+    bridge.createUntitledWorkspace(join(tempDir, "working.sqlite"));
   });
 
   afterEach(() => {
@@ -36,7 +36,7 @@ describe("Bridge", () => {
     return bridge.createGlyphLayer(glyphId, defaultSourceId());
   }
 
-  it("creates a workspace with default committed font metadata", () => {
+  it("creates an untitled workspace with default committed font metadata", () => {
     expect(bridge.getMetadata()).toMatchObject({
       familyName: "Untitled Font",
       styleName: "Regular",
@@ -54,6 +54,12 @@ describe("Bridge", () => {
 
     expect(bridge.getGlyphCount()).toBe(0);
     expect(bridge.getGlyphs()).toEqual([]);
+  });
+
+  it("closes the active workspace", () => {
+    bridge.closeWorkspace();
+
+    expect(() => bridge.getMetadata()).toThrow(/no workspace is open/i);
   });
 
   it("creates a new glyph through an explicit layer edit", () => {
@@ -79,12 +85,14 @@ describe("Bridge", () => {
   });
 
   it("records the persisted version when saving the current workspace", () => {
-    bridge.addContour(createDefaultLayer());
+    const layerId = createDefaultLayer();
+    bridge.saveWorkspaceAs(join(tempDir, "saved.shift"));
+    bridge.addContour(layerId);
 
     const savedVersion = bridge.saveWorkspace();
 
-    expect(savedVersion).toBe(3);
-    expect(bridge.getPersistedVersion()).toBe(3);
+    expect(savedVersion).toBe(4);
+    expect(bridge.getPersistedVersion()).toBe(4);
     expect(bridge.isDirty()).toBe(false);
   });
 

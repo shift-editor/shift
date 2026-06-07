@@ -4,12 +4,36 @@ use shift_font::{LayerId, error::CoreError};
 use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 #[test]
-fn creates_workspace_with_source_package_and_working_store() {
+fn creates_untitled_workspace_with_working_store_only() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+
+    let workspace =
+        FontWorkspace::create_untitled(&store_path, NewWorkspace::with_family_name("Test Font"))
+            .unwrap();
+
+    assert_eq!(workspace.source(), &WorkspaceSource::Untitled);
+    assert_eq!(workspace.save_target(), None);
+    assert!(store_path.is_file());
+    assert_eq!(
+        workspace
+            .font_info()
+            .unwrap()
+            .unwrap()
+            .family_name
+            .as_deref(),
+        Some("Test Font")
+    );
+    assert_eq!(workspace.font().glyph_count(), 0);
+}
+
+#[test]
+fn creates_package_workspace_with_source_package_and_working_store() {
     let temp = tempfile::tempdir().unwrap();
     let source_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
 
-    let workspace = FontWorkspace::create(
+    let workspace = FontWorkspace::create_package(
         &source_path,
         &store_path,
         NewWorkspace::with_family_name("Test Font"),
@@ -42,7 +66,7 @@ fn opens_existing_workspace_paths() {
     let source_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
 
-    FontWorkspace::create(&source_path, &store_path, NewWorkspace::new()).unwrap();
+    FontWorkspace::create_package(&source_path, &store_path, NewWorkspace::new()).unwrap();
 
     let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
 
@@ -74,6 +98,18 @@ fn imports_external_fonts_without_a_save_target() {
             .family_name
             .is_some()
     );
+}
+
+#[test]
+fn save_requires_save_as_for_untitled_workspaces() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+
+    let error = workspace.save().unwrap_err();
+
+    assert!(matches!(error, WorkspaceError::NeedsSaveAs));
 }
 
 #[test]
@@ -113,10 +149,8 @@ fn save_as_assigns_a_shift_package_save_target() {
 #[test]
 fn set_x_advance_updates_existing_layer() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
-    let mut workspace =
-        FontWorkspace::create(&source_path, &store_path, NewWorkspace::new()).unwrap();
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = workspace.font().default_source_id().unwrap();
     let glyph = workspace.create_glyph("A".to_string(), vec![65]).unwrap();
     let layer = workspace.create_glyph_layer(glyph.id(), source_id).unwrap();
@@ -131,10 +165,8 @@ fn set_x_advance_updates_existing_layer() {
 #[test]
 fn set_x_advance_rejects_missing_layer() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
-    let mut workspace =
-        FontWorkspace::create(&source_path, &store_path, NewWorkspace::new()).unwrap();
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let layer_id = LayerId::new();
 
     let error = workspace
