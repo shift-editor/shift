@@ -12,8 +12,9 @@ import type {
 } from "@shift/types";
 export declare class Bridge {
   constructor()
-  createWorkspace(sourcePath: string, storePath: string, options?: NapiNewWorkspace | undefined | null): void
+  createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
   openWorkspace(path: string, storePath: string): void
+  closeWorkspace(): void
   saveWorkspace(): number
   saveWorkspaceAs(path: string): number
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>

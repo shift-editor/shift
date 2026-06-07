@@ -274,27 +274,30 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn create_workspace(
+  pub fn create_untitled_workspace(
     &mut self,
-    source_path: String,
     store_path: String,
     options: Option<NapiNewWorkspace>,
   ) -> errors::Result<()> {
-    self.workspace = Some(FontWorkspace::create(
-      source_path,
+    self.workspace = Some(FontWorkspace::create_untitled(
       store_path,
       new_workspace_from_options(options),
     )?);
-    self.live_version = DocumentVersion::default();
-    self.persisted_version = Arc::new(AtomicU64::new(0));
+    self.reset_versions();
     Ok(())
   }
 
   #[napi]
   pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::open(path, store_path)?);
-    self.live_version = DocumentVersion::default();
-    self.persisted_version = Arc::new(AtomicU64::new(0));
+    self.reset_versions();
+    Ok(())
+  }
+
+  #[napi]
+  pub fn close_workspace(&mut self) -> errors::Result<()> {
+    self.workspace = None;
+    self.reset_versions();
     Ok(())
   }
 
@@ -600,6 +603,11 @@ impl Bridge {
 
   fn bump_live_version(&mut self) {
     self.live_version = self.live_version.next();
+  }
+
+  fn reset_versions(&mut self) {
+    self.live_version = DocumentVersion::default();
+    self.persisted_version = Arc::new(AtomicU64::new(0));
   }
 
   fn live_version(&self) -> DocumentVersion {
@@ -1040,10 +1048,8 @@ mod tests {
 
   fn bridge_with_workspace() -> Bridge {
     let mut bridge = Bridge::new();
-    let (source_path, store_path) = test_paths("workspace");
-    bridge
-      .create_workspace(source_path, store_path, None)
-      .unwrap();
+    let (_, store_path) = test_paths("workspace");
+    bridge.create_untitled_workspace(store_path, None).unwrap();
     bridge
   }
 
@@ -1071,7 +1077,7 @@ mod tests {
   }
 
   #[test]
-  fn create_workspace_exposes_empty_font_state() {
+  fn create_untitled_workspace_exposes_empty_font_state() {
     let bridge = bridge_with_workspace();
 
     let metadata = bridge.get_metadata().unwrap();
@@ -1089,20 +1095,46 @@ mod tests {
   }
 
   #[test]
-  fn create_workspace_resets_to_fresh_font_state() {
+  fn create_untitled_workspace_resets_to_fresh_font_state() {
     let mut bridge = bridge_with_workspace();
     let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
     bridge.add_contour(layer_id).unwrap();
 
-    let (source_path, store_path) = test_paths("reset");
-    bridge
-      .create_workspace(source_path, store_path, None)
-      .unwrap();
+    let (_, store_path) = test_paths("reset");
+    bridge.create_untitled_workspace(store_path, None).unwrap();
 
     assert_eq!(bridge.get_glyph_count().unwrap(), 0);
     assert!(bridge.get_axes().unwrap().is_empty());
     assert_eq!(bridge.get_sources().unwrap().len(), 1);
     assert_eq!(bridge.get_sources().unwrap()[0].name, "Regular");
+  }
+
+  #[test]
+  fn save_as_assigns_a_save_target_for_untitled_workspace() {
+    let mut bridge = bridge_with_workspace();
+    let (source_path, _) = test_paths("save-as");
+
+    let version = bridge.save_workspace_as(source_path.clone()).unwrap();
+
+    assert_eq!(version, bridge.get_persisted_version());
+    assert!(!bridge.is_dirty());
+    assert!(std::path::PathBuf::from(source_path)
+      .join("manifest.json")
+      .is_file());
+  }
+
+  #[test]
+  fn close_workspace_releases_active_workspace() {
+    let mut bridge = bridge_with_workspace();
+
+    bridge.close_workspace().unwrap();
+
+    let error = match bridge.get_metadata() {
+      Ok(_) => panic!("metadata read should require an open workspace after close"),
+      Err(error) => error,
+    };
+
+    assert!(error.to_string().contains("no workspace is open"));
   }
 
   #[test]
@@ -1249,10 +1281,8 @@ mod tests {
     bridge.add_contour(layer_id).unwrap();
     let old_persisted_version = bridge.persisted_version.clone();
 
-    let (source_path, store_path) = test_paths("reopen");
-    bridge
-      .create_workspace(source_path, store_path, None)
-      .unwrap();
+    let (_, store_path) = test_paths("reopen");
+    bridge.create_untitled_workspace(store_path, None).unwrap();
     record_persisted_version(&old_persisted_version, DocumentVersion(1));
 
     assert_eq!(bridge.get_persisted_version(), 0);
