@@ -5,8 +5,6 @@
   "project": [],
   "ignore": [
     "apps/desktop/src/renderer/src/testing/setup.ts",
-    "apps/desktop/src/renderer/src/perf/**",
-    "apps/desktop/src/renderer/src/testing/pointMark.ts",
     "apps/desktop/src/renderer/src/testing/stubCanvas.ts"
   ],
   "includeEntryExports": true,

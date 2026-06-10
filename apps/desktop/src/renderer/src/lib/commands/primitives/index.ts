@@ -1,7 +1,6 @@
-export { AddPointCommand, ToggleSmoothCommand } from "./PointCommands";
+export { ToggleSmoothCommand } from "./PointCommands";
 export { DrawRectangleCommand } from "./ShapeCommands";
 export {
-  CloseContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,

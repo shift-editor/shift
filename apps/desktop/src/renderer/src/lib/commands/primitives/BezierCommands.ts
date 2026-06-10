@@ -4,40 +4,6 @@ import { Point2D, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import { Point, type LineSegmentPoints, type Segment } from "@shift/glyph-state";
 
 /**
- * Closes the active contour, connecting the last point back to the first.
- * No-ops if the contour is already closed. Undo reopens the contour only
- * if this command actually closed it.
- */
-export class CloseContourCommand extends BaseCommand<void> {
-  readonly name = "Close Contour";
-
-  #contourId: ContourId;
-  #wasClosed: boolean = false;
-
-  constructor(contourId: ContourId) {
-    super();
-    this.#contourId = contourId;
-  }
-
-  execute(ctx: CommandContext): void {
-    const contour = ctx.source.contour(this.#contourId);
-    if (!contour) throw new Error("Expected contour");
-
-    this.#wasClosed = contour.closed;
-
-    if (!this.#wasClosed) {
-      ctx.source.closeContour(this.#contourId);
-    }
-  }
-
-  undo(ctx: CommandContext): void {
-    if (!this.#wasClosed) {
-      ctx.source.openContour(this.#contourId);
-    }
-  }
-}
-
-/**
  * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
  * Uses setNodePositions (Float64Array path) instead of movePoints to avoid
  * per-struct NAPI marshaling + full snapshot round-trip.

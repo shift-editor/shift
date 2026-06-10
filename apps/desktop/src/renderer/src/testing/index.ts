@@ -2,5 +2,3 @@ export { createBridge } from "@shift/bridge";
 export { TestEditor } from "./TestEditor";
 export { makeTestCoordinates } from "./coordinates";
 export { expectDefined, expectAt } from "./asserts";
-export { FIXTURES_ROOT, MUTATORSANS_DESIGNSPACE } from "./fixtures";
-export { testStorePath } from "./workspacePaths";

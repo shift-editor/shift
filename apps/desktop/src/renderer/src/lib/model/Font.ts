@@ -3,7 +3,6 @@ import type {
   FontMetadata,
   Axis,
   Source,
-  GlyphVariationData,
   GlyphRecord,
   GlyphState,
   GlyphName,
@@ -101,15 +100,6 @@ class GlyphDirectory {
   }
 
   /**
-   * Builds an empty directory for an unloaded or freshly reset font model.
-   *
-   * @returns A directory with no committed glyph records.
-   */
-  static empty(): GlyphDirectory {
-    return new GlyphDirectory([]);
-  }
-
-  /**
    * Resolves the preferred glyph name for a Unicode scalar.
    *
    * @remarks
@@ -172,15 +162,6 @@ class GlyphDirectory {
    */
   primaryUnicodeForName(name: GlyphName): Unicode | null {
     return this.unicodesForName(name)[0] ?? null;
-  }
-
-  /**
-   * Returns all committed Unicode values in ascending order.
-   *
-   * @returns A read-only snapshot derived from the current font records.
-   */
-  allUnicodes(): readonly Unicode[] {
-    return this.unicodes;
   }
 
   /**
@@ -696,21 +677,6 @@ export class Font {
   get sources(): Source[] {
     return this.#$sources.peek();
   }
-
-  /** @knipclassignore — used by VariationPanel component */
-  getGlyphVariationData(_handle: GlyphHandle): GlyphVariationData | null {
-    return null;
-  }
-
-  create(_sourcePath: string, _storePath: string): void {}
-
-  load(_path: string, _storePath: string): void {}
-
-  async save(_path?: string): Promise<number> {
-    return Promise.resolve(1);
-  }
-
-  async export(_path: string): Promise<void> {}
 
   /** Drops cached glyph models when the directory they were built from changes. */
   #syncCaches(): void {

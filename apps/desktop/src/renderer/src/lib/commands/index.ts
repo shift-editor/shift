@@ -10,10 +10,8 @@ export {
 
 // Primitive commands (point, bezier operations)
 export {
-  AddPointCommand,
   DrawRectangleCommand,
   ToggleSmoothCommand,
-  CloseContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,

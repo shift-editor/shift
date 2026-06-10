@@ -1,15 +1,16 @@
 /**
- * TestEditor — a real Editor with a NAPI backend for testing.
+ * TestEditor — a real Editor with input simulation for testing.
  *
  * Usage:
  *   const editor = new TestEditor();
- *   editor.startSession();
  *   editor.selectTool("pen");
  *   editor.click(100, 200);
  *   expect(editor.pointCount).toBe(1);
+ *
+ * Editing sessions return when glyph mutations flow through workspace
+ * change sets; until then the editor surface under test is tool/input state.
  */
 
-import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import { Editor } from "@/lib/editor/Editor";
 import type { GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
@@ -18,8 +19,6 @@ import { Font } from "@/lib/model/Font";
 import { signal } from "@/lib/signals/signal";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import type { SystemClipboard } from "@/lib/clipboard";
-import { MUTATORSANS_DESIGNSPACE } from "./fixtures";
-import { testStorePath } from "./workspacePaths";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -65,19 +64,6 @@ export class TestEditor extends Editor {
 
   get currentGlyphInstance(): GlyphInstance | null {
     return this.glyphInstance;
-  }
-
-  startSession(handle: GlyphHandle = { name: "A", unicode: 65 }): this {
-    if (!this.font.loaded) {
-      this.loadFont(MUTATORSANS_DESIGNSPACE, testStorePath("session"));
-    }
-
-    const source = this.font.defaultSource;
-    const glyphSource = this.openGlyphSource(handle, source.id);
-    if (glyphSource) {
-      glyphSource.removePoints(glyphSource.allPoints.map((point) => point.id));
-    }
-    return this;
   }
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {

@@ -103,10 +103,12 @@ interface EditorOptions {
  *
  * Typical lifecycle:
  * 1. Construct the Editor (creates all managers and wires signals).
- * 2. Call `loadFont()` to open a font file and populate the glyph store.
- * 3. Register tools via `registerTool()`.
- * 4. Call `setActiveTool()` to begin interaction.
- * 5. Call `destroy()` on teardown to dispose effects and the renderer.
+ * 2. Register tools via `registerTool()`.
+ * 3. Call `setActiveTool()` to begin interaction.
+ * 4. Call `destroy()` on teardown to dispose effects and the renderer.
+ *
+ * Font state arrives through the injected `Font` projection; there is no
+ * load call on the editor.
  *
  * @knipclassignore
  */
@@ -251,11 +253,6 @@ export class Editor {
     this.#glyphDisplay = new GlyphDisplay(this.#text, this.#textRuns);
 
     this.#renderer = new Renderer(this);
-
-    this.#events.on("fontLoaded", () => {
-      this.#commandHistory.clear();
-      this.#textRuns.clearAll();
-    });
 
     this.#cameraMetricsEffect = effect(
       () => {
@@ -1017,34 +1014,6 @@ export class Editor {
 
   public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
     this.#camera.zoomToPoint(screenX, screenY, zoomDelta);
-  }
-
-  /**
-   * Creates a new loaded font document and resets editor placement to its
-   * default design location.
-   */
-  public createFont(sourcePath: string, storePath: string): void {
-    this.font.create(sourcePath, storePath);
-    this.setDesignLocation(this.font.defaultLocation());
-    this.#events.emit("fontLoaded", { font: this.font });
-  }
-
-  /**
-   * Loads a font from disk and resets editor placement to its default design
-   * location.
-   */
-  public loadFont(filePath: string, storePath: string): void {
-    this.font.load(filePath, storePath);
-    this.setDesignLocation(this.font.defaultLocation());
-    this.#events.emit("fontLoaded", { font: this.font });
-  }
-
-  public async saveFont(filePath?: string): Promise<number> {
-    return this.font.save(filePath);
-  }
-
-  public async exportFont(filePath: string): Promise<void> {
-    await this.font.export(filePath);
   }
 
   public setCursor(cursor: CursorType): void {
