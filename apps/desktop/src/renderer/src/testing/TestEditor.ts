@@ -14,7 +14,9 @@ import { Editor } from "@/lib/editor/Editor";
 import type { GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { createBridge } from "@shift/bridge";
+import { Font } from "@/lib/model/Font";
+import { signal } from "@/lib/signals/signal";
+import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { MUTATORSANS_DESIGNSPACE } from "./fixtures";
 import { testStorePath } from "./workspacePaths";
@@ -41,7 +43,10 @@ export class TestEditor extends Editor {
 
   constructor() {
     const clipboard = new InMemorySystemClipboard();
-    super({ bridge: createBridge(), clipboard });
+    super({
+      font: new Font(signal<WorkspaceSnapshot | null>(null)),
+      clipboard,
+    });
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
   }

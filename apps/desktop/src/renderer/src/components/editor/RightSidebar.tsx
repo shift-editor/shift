@@ -3,7 +3,7 @@ import { Separator } from "@shift/ui";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./sidebar-right/GlyphSection";

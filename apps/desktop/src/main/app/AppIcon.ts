@@ -21,7 +21,7 @@ export class AppIcon {
   install(): void {
     if (process.platform !== "darwin") return;
 
-    app.dock.setIcon(this.path());
+    app.dock?.setIcon(this.path());
   }
 
   /**

@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { DebugOverlays as DebugOverlayState } from "@shared/ipc/types";
+import type { DebugOverlays as DebugOverlayState } from "@/types/uiState";
 import type { Glyph, GlyphInstance } from "@/lib/model/Glyph";
 import type { FocusedGlyph, TextRun } from "@/lib/text/TextRun";
 import type { SelectionState } from "@/lib/editor/Selection";

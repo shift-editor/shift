@@ -4,7 +4,7 @@ import { SidebarSection } from "./sidebar-right/SidebarSection";
 import UnionIcon from "@/assets/sidebar-right/union.svg";
 import IntersectIcon from "@/assets/sidebar-right/intersect.svg";
 import SubtractIcon from "@/assets/sidebar-right/subtract.svg";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 
 export const BooleanOps = () => {
   const editor = getEditor();

@@ -13,7 +13,6 @@ import type {
 export declare class Bridge {
   constructor()
   createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
-  openWorkspace(path: string, storePath: string): void
   closeWorkspace(): void
   saveWorkspace(): number
   saveWorkspaceAs(path: string): number
@@ -24,8 +23,6 @@ export declare class Bridge {
   getGlyphs(): Array<NapiGlyphRecord>
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): NapiGlyphState | null
-  getGlyphVariationReport(glyphRef: GlyphHandle): NapiGlyphVariationReport | null
-  getVariationReports(): Array<NapiGlyphVariationReport>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
@@ -65,30 +62,6 @@ export interface NapiFontExportRequest {
 export interface NapiFontExportResult {
   path: string
   format: string
-}
-
-export interface NapiGlyphVariationDiagnostic {
-  glyphName: GlyphName
-  code: string
-  severity: string
-  source?: NapiGlyphVariationDiagnosticSource
-  message: string
-}
-
-export interface NapiGlyphVariationDiagnosticSource {
-  id: SourceId
-  index: number
-  name: string
-}
-
-export interface NapiGlyphVariationReport {
-  glyphName: GlyphName
-  status: string
-  variationDataAvailable: boolean
-  masterCount: number
-  compatibleMasterCount: number
-  skippedMasterCount: number
-  diagnostics: Array<NapiGlyphVariationDiagnostic>
 }
 
 export interface NapiNewWorkspace {

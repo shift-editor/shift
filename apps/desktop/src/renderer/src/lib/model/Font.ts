@@ -4,14 +4,14 @@ import type {
   Axis,
   Source,
   GlyphVariationData,
-  GlyphVariationReport,
   GlyphRecord,
   GlyphState,
   GlyphName,
   SourceId,
   Unicode,
 } from "@shift/types";
-import { computed, signal, type WritableSignal, type Signal } from "@/lib/signals/signal";
+import { computed, type Signal } from "@/lib/signals/signal";
+import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { Glyph, type GlyphSource } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
 import type { GlyphHandle, ShiftBridge } from "@shift/bridge";
@@ -36,8 +36,18 @@ import { fallbackGlyphNameForUnicode } from "../utils/unicode";
  * committed in the font, while handle/name resolution methods may fall back to
  * bundled glyph metadata so UI flows can address missing glyphs.
  */
+// One shared database for every directory rebuild: constructing GlyphInfo
+// indexes the full glyph dataset (~60k search docs) and must not run per
+// workspace snapshot.
+let glyphDatabase: GlyphInfo | null = null;
+
+function getGlyphDatabase(): GlyphInfo {
+  glyphDatabase ??= new GlyphInfo(defaultResources);
+  return glyphDatabase;
+}
+
 class GlyphDirectory {
-  #glyphDatabase: GlyphInfo = new GlyphInfo(defaultResources);
+  #glyphDatabase = getGlyphDatabase();
 
   readonly records: readonly GlyphRecord[];
   readonly unicodes: readonly Unicode[];
@@ -247,25 +257,31 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
  * editor edit/open API when the caller intends to create or edit source data.
  */
 export class Font {
-  readonly #bridge: ShiftBridge;
-  readonly #defaultMetrics: FontMetrics;
-
-  readonly #$loaded: WritableSignal<boolean>;
-  readonly #$metrics: WritableSignal<FontMetrics>;
-  readonly #$sources: WritableSignal<Source[]>;
+  readonly #$loaded: Signal<boolean>;
+  readonly #$metrics: Signal<FontMetrics>;
+  readonly #$metadata: Signal<FontMetadata>;
+  readonly #$sources: Signal<Source[]>;
   readonly #$unicodes: Signal<Unicode[]>;
   readonly #$glyphRecords: Signal<readonly GlyphRecord[]>;
 
-  readonly #directory = signal(GlyphDirectory.empty());
+  readonly #directory: Signal<GlyphDirectory>;
   readonly #glyphs = new Map<GlyphName, Glyph>();
   readonly #glyphSources = new Map<GlyphSourceKey, GlyphSource>();
+  #cachesKeyedTo: GlyphDirectory | null = null;
 
-  constructor(bridge: ShiftBridge) {
-    this.#bridge = bridge;
-    this.#defaultMetrics = DEFAULT_FONT_METRICS;
-    this.#$loaded = signal(false);
-    this.#$metrics = signal<FontMetrics>(this.#defaultMetrics);
-    this.#$sources = signal<Source[]>([]);
+  /**
+   * Projects the renderer's workspace snapshot into the font domain model.
+   *
+   * @param $workspace - Single source of workspace truth owned by
+   *   `WorkspaceClient`. There is no load: every derived value follows this
+   *   signal, and `null` means no font is open.
+   */
+  constructor($workspace: Signal<WorkspaceSnapshot | null>) {
+    this.#$loaded = computed(() => $workspace.value !== null);
+    this.#$metrics = computed(() => $workspace.value?.metrics ?? DEFAULT_FONT_METRICS);
+    this.#$metadata = computed(() => $workspace.value?.metadata ?? {});
+    this.#$sources = computed(() => $workspace.value?.sources ?? []);
+    this.#directory = computed(() => GlyphDirectory.fromRecords($workspace.value?.glyphs ?? []));
     this.#$unicodes = computed(() => [...this.#directory.value.unicodes]);
     this.#$glyphRecords = computed(() => this.#directory.value.records);
   }
@@ -288,12 +304,12 @@ export class Font {
   /** Raw signals for React hooks that need Signal<T>. */
   /** @knipclassignore */
   get $loaded() {
-    return this.#$loaded as Signal<boolean>;
+    return this.#$loaded;
   }
 
   /** @knipclassignore */
   get $metrics() {
-    return this.#$metrics as Signal<FontMetrics>;
+    return this.#$metrics;
   }
 
   /** @knipclassignore */
@@ -308,11 +324,7 @@ export class Font {
 
   /** @knipclassignore */
   get metadata(): FontMetadata {
-    return this.#bridge.getMetadata();
-  }
-
-  get bridge(): ShiftBridge {
-    return this.#bridge;
+    return this.#$metadata.peek();
   }
 
   /**
@@ -421,51 +433,19 @@ export class Font {
   /**
    * Updates an existing glyph's name and Unicode assignment.
    *
-   * @remarks
-   * Glyphs are keyed by name in the native font model. This method re-keys the
-   * glyph through the bridge and replaces its Unicode list, then clears cached
-   * glyph models because existing model objects still carry their original
-   * identity handle.
-   *
-   * @param fromName - Existing committed glyph name.
-   * @param name - New unique glyph name after trimming whitespace.
-   * @param unicodes - Complete Unicode assignment for the renamed glyph.
-   * @throws {Error} when `fromName` is missing, `name` is empty, or `name`
-   *   already exists.
+   * @throws {Error} always — glyph mutations return with workspace change sets.
    */
-  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: readonly Unicode[]): void {
-    this.#bridge.updateGlyphIdentity(fromName, name.trim() as GlyphName, [...unicodes]);
-    this.#glyphs.clear();
-    this.#glyphSources.clear();
-    this.#hydrateFromBridge();
+  updateGlyphIdentity(_fromName: GlyphName, _name: GlyphName, _unicodes: readonly Unicode[]): void {
+    throw new Error("editing is not wired to the workspace yet");
   }
 
   /**
    * Creates an empty committed glyph at the default source.
    *
-   * @remarks
-   * If the requested name already exists, a numeric suffix is appended using
-   * {@link nextAvailableGlyphName}. Glyph identity and its default-source layer
-   * are created as explicit bridge operations before this model rehydrates from
-   * the native font state.
-   *
-   * @param name - Preferred glyph name. Blank input falls back to `newGlyph`.
-   * @returns The handle for the glyph that was actually created.
-   * @throws {Error} when the bridge rejects glyph creation.
+   * @throws {Error} always — glyph mutations return with workspace change sets.
    */
-  createGlyph(name: GlyphName): GlyphHandle {
-    const glyphName = this.nextAvailableGlyphName(name);
-
-    const handle = this.glyphHandleForName(glyphName);
-    const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
-    const glyphId = this.#bridge.createGlyph(glyphName, unicodes);
-    this.#bridge.createGlyphLayer(glyphId, this.defaultSource.id);
-
-    this.#glyphs.clear();
-    this.#glyphSources.clear();
-    this.#hydrateFromBridge();
-
-    return handle;
+  createGlyph(_name: GlyphName): GlyphHandle {
+    throw new Error("editing is not wired to the workspace yet");
   }
 
   /**
@@ -522,6 +502,8 @@ export class Font {
   glyph(handle: GlyphHandle): Glyph | null {
     if (!this.loaded) return null;
 
+    this.#syncCaches();
+
     const cached = this.#glyphs.get(handle.name);
     if (cached) return cached;
 
@@ -551,6 +533,8 @@ export class Font {
    */
   glyphSource(handle: GlyphHandle, source: Source): GlyphSource | null {
     if (!this.source(source.id)) return null;
+
+    this.#syncCaches();
 
     const key = glyphSourceKey(handle.name, source.id);
     const cached = this.#glyphSources.get(key);
@@ -588,12 +572,10 @@ export class Font {
    *
    * @returns Raw glyph state, or `null` when the bridge cannot provide state.
    */
-  glyphState(handle: GlyphHandle, source: Source): GlyphState | null {
-    try {
-      return this.#bridge.getGlyphState(handle, source.id);
-    } catch {
-      return null;
-    }
+  glyphState(_handle: GlyphHandle, _source: Source): GlyphState | null {
+    // Geometry is not part of the workspace snapshot yet; "no state" is the
+    // honest answer for every glyph until change sets land.
+    return null;
   }
 
   /**
@@ -686,12 +668,28 @@ export class Font {
 
   /** @knipclassignore — used by VariationPanel component */
   isVariable(): boolean {
-    return this.#bridge.isVariable();
+    // Untitled workspaces are static; real detection returns when axes land
+    // in the workspace protocol. Must stay false: the variable path routes
+    // into the throwing bridge getter.
+    return false;
+  }
+
+  /**
+   * Native bridge access for glyph editing.
+   *
+   * @throws {Error} always — editing is rebuilt on top of the workspace
+   *   protocol in a later milestone. Kept so `Glyph.ts` compiles.
+   */
+  get bridge(): ShiftBridge {
+    throw new Error("editing is not wired to the workspace yet");
   }
 
   /** @knipclassignore — used by VariationPanel component */
   getAxes(): Axis[] {
-    return this.#bridge.getAxes();
+    // Axes are not part of the workspace snapshot yet; an untitled font is
+    // static. Must not touch the throwing bridge getter: sourceAt/defaultSource
+    // call this on the glyph-grid render path.
+    return [];
   }
 
   /** @knipclassignore — used by VariationPanel component */
@@ -704,59 +702,28 @@ export class Font {
     return null;
   }
 
-  /** @knipclassignore — used by DebugPanel component */
-  getGlyphVariationReport(handle: GlyphHandle): GlyphVariationReport | null {
-    return this.#bridge.getGlyphVariationReport(handle);
+  create(_sourcePath: string, _storePath: string): void {}
+
+  load(_path: string, _storePath: string): void {}
+
+  async save(_path?: string): Promise<number> {
+    return Promise.resolve(1);
   }
 
-  /** @knipclassignore — used by DebugPanel component */
-  getVariationReports(): GlyphVariationReport[] {
-    return this.#bridge.getVariationReports();
-  }
+  async export(_path: string): Promise<void> {}
 
-  create(sourcePath: string, storePath: string): void {
-    this.#glyphs.clear();
-    this.#glyphSources.clear();
-    this.#bridge.createWorkspace(sourcePath, storePath);
-    this.#hydrateFromBridge();
-  }
-
-  load(path: string, storePath: string): void {
-    this.#glyphs.clear();
-    this.#glyphSources.clear();
-    this.#bridge.openWorkspace(path, storePath);
-    this.#hydrateFromBridge();
-  }
-
-  async save(path?: string): Promise<number> {
-    return path ? this.#bridge.saveWorkspaceAs(path) : this.#bridge.saveWorkspace();
-  }
-
-  async export(path: string): Promise<void> {
-    await this.#bridge.exportWorkspace({ path, format: "ttf" });
-  }
-
-  /** @knipclassignore — called when closing a document */
-  close(): void {
-    this.#$loaded.set(false);
+  /** Drops cached glyph models when the directory they were built from changes. */
+  #syncCaches(): void {
+    const directory = this.#directory.peek();
+    if (this.#cachesKeyedTo === directory) return;
 
     this.#glyphs.clear();
     this.#glyphSources.clear();
-    this.#directory.set(GlyphDirectory.empty());
-
-    this.#$metrics.set(this.#defaultMetrics);
-    this.#$sources.set([]);
+    this.#cachesKeyedTo = directory;
   }
 
   defaultLocation(): AxisLocation {
-    return this.isVariable() ? defaultAxisLocation(this.#bridge.getAxes()) : emptyAxisLocation();
-  }
-
-  #hydrateFromBridge(): void {
-    this.#directory.set(GlyphDirectory.fromRecords(this.#bridge.getGlyphs()));
-    this.#$metrics.set(this.#bridge.getMetrics());
-    this.#$sources.set(this.#bridge.getSources());
-    this.#$loaded.set(true);
+    return this.isVariable() ? defaultAxisLocation(this.getAxes()) : emptyAxisLocation();
   }
 }
 

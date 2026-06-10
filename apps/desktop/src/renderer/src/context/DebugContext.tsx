@@ -1,16 +1,7 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, ReactNode } from "react";
 import { isDev } from "@/lib/utils/utils";
-import { enableReactScan, disableReactScan } from "@/lib/debug/reactScan";
-import { getEditor } from "@/store/store";
-import type { DebugOverlays } from "@shared/ipc/types";
+import { getEditor } from "@/store/appStore";
+import type { DebugOverlays } from "@/types/uiState";
 
 const DEFAULT_OVERLAYS: DebugOverlays = {
   tightBounds: false,
@@ -33,67 +24,19 @@ interface DebugProviderProps {
 }
 
 export function DebugProvider({ children }: DebugProviderProps) {
-  const [reactScanEnabled, setReactScanEnabled] = useState(false);
-  const [debugPanelOpen, setDebugPanelOpen] = useState(false);
-  const [overlays, setOverlays] = useState<DebugOverlays>(DEFAULT_OVERLAYS);
+  const reactScanEnabled = false;
+  const debugPanelOpen = false;
+  const overlays = DEFAULT_OVERLAYS;
 
   const dumpSnapshot = useCallback(() => {
     const editor = getEditor();
     const glyph = editor.glyph.peek();
-    console.log(glyph);
     if (!glyph) {
       return;
     }
 
     const json = JSON.stringify(glyph, null, 2);
-
-    window.electronAPI?.clipboardWriteText(json);
-  }, []);
-
-  const dumpSnapshotRef = useRef(dumpSnapshot);
-  dumpSnapshotRef.current = dumpSnapshot;
-
-  useEffect(() => {
-    if (!isDev) return undefined;
-
-    window.electronAPI?.getDebug().then((state) => {
-      setReactScanEnabled(state.reactScanEnabled);
-      setDebugPanelOpen(state.debugPanelOpen);
-      if (state.overlays) {
-        setOverlays(state.overlays);
-      }
-      if (state.reactScanEnabled) {
-        void enableReactScan();
-      }
-    });
-
-    const unsubscribeReactScan = window.electronAPI?.onDebugReactScan((enabled) => {
-      setReactScanEnabled(enabled);
-      if (enabled) {
-        void enableReactScan();
-      } else {
-        disableReactScan();
-      }
-    });
-
-    const unsubscribePanel = window.electronAPI?.onDebugPanel((open) => {
-      setDebugPanelOpen(open);
-    });
-
-    const unsubscribeDump = window.electronAPI?.onDebugDumpSnapshot(() => {
-      dumpSnapshotRef.current();
-    });
-
-    const unsubscribeOverlays = window.electronAPI?.onDebugOverlays((newOverlays) => {
-      setOverlays(newOverlays);
-    });
-
-    return () => {
-      if (unsubscribeReactScan) unsubscribeReactScan();
-      if (unsubscribePanel) unsubscribePanel();
-      if (unsubscribeDump) unsubscribeDump();
-      if (unsubscribeOverlays) unsubscribeOverlays();
-    };
+    void navigator.clipboard?.writeText(json);
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Axis } from "@shift/types";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals";
 
 /**

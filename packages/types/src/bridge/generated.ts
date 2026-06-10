@@ -17,8 +17,8 @@ export type GlyphName = string;
 export type Unicode = number;
 
 export interface BridgeApi {
-  createWorkspace(sourcePath: string, storePath: string, options?: NewWorkspace | undefined | null): void
-  openWorkspace(path: string, storePath: string): void
+  createUntitledWorkspace(storePath: string, options?: NewWorkspace | undefined | null): void
+  closeWorkspace(): void
   saveWorkspace(): number
   saveWorkspaceAs(path: string): number
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
@@ -28,8 +28,6 @@ export interface BridgeApi {
   getGlyphs(): Array<GlyphRecord>
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): GlyphState | null
-  getGlyphVariationReport(glyphRef: GlyphHandle): GlyphVariationReport | null
-  getVariationReports(): Array<GlyphVariationReport>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getSources(): Array<Source>
@@ -69,30 +67,6 @@ export interface FontExportRequest {
 export interface FontExportResult {
   path: string
   format: string
-}
-
-export interface GlyphVariationDiagnostic {
-  glyphName: GlyphName
-  code: string
-  severity: string
-  source?: GlyphVariationDiagnosticSource
-  message: string
-}
-
-export interface GlyphVariationDiagnosticSource {
-  id: SourceId
-  index: number
-  name: string
-}
-
-export interface GlyphVariationReport {
-  glyphName: GlyphName
-  status: string
-  variationDataAvailable: boolean
-  masterCount: number
-  compatibleMasterCount: number
-  skippedMasterCount: number
-  diagnostics: Array<GlyphVariationDiagnostic>
 }
 
 export interface NewWorkspace {

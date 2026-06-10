@@ -4,7 +4,7 @@ import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
 import { effect } from "@/lib/signals/signal";
 import { useSignalState } from "@/lib/signals";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";

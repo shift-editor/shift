@@ -1,4 +1,3 @@
-import { createBridge } from "@shift/bridge";
 import type { ContourId, PointId, PointType } from "@shift/types";
 import { signal, type Signal } from "@/lib/signals/signal";
 import { Font } from "@/lib/model/Font";
@@ -14,8 +13,7 @@ export interface CommandSourceFixture {
 }
 
 export function commandSourceFixture(): CommandSourceFixture {
-  const bridge = createBridge();
-  const font = new Font(bridge);
+  const font = new Font(signal(null));
   font.load(MUTATORSANS_DESIGNSPACE, testStorePath("command-source"));
 
   const handle = { name: "A", unicode: 65 };

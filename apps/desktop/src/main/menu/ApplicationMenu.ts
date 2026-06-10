@@ -56,6 +56,10 @@ export class ApplicationMenu {
         label: app.name,
         submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }],
       },
+      {
+        label: "View",
+        submenu: [{ label: "Developer", submenu: [{ role: "toggleDevTools" }] }],
+      },
     ];
   }
 

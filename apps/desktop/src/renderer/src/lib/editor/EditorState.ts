@@ -3,7 +3,7 @@ import type { ContourId, Source, SourceId } from "@shift/types";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { Coordinates } from "@/types/coordinates";
 import type { AxisLocation } from "@/types/variation";
-import type { DebugOverlays } from "@shared/ipc/types";
+import type { DebugOverlays } from "@/types/uiState";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type { Font } from "../model/Font";
 import type { Glyph, GlyphInstance, GlyphSource } from "../model/Glyph";

@@ -45,7 +45,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
-import { getEditor, getGlyphInfo, markDocumentDirty } from "@/store/store";
+import { getEditor, getGlyphInfo } from "@/store/appStore";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button, Input } from "@shift/ui";
 import type { GlyphName } from "@shift/types";
@@ -198,7 +198,6 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
 
     const resolved = glyphInfo.getGlyphByName(next);
     editor.font.updateGlyphIdentity(glyphName, next, resolved ? [resolved.codepoint] : []);
-    markDocumentDirty();
   };
 
   return (

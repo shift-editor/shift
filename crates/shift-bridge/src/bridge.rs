@@ -258,13 +258,6 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
-    self.workspace = Some(FontWorkspace::open(path, store_path)?);
-    self.reset_versions();
-    Ok(())
-  }
-
-  #[napi]
   pub fn close_workspace(&mut self) -> errors::Result<()> {
     self.workspace = None;
     self.reset_versions();
@@ -367,40 +360,6 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn get_glyph_variation_report(
-    &self,
-    glyph_ref: GlyphHandle,
-  ) -> Option<NapiGlyphVariationReport> {
-    let glyph = self.glyph_for_read(&glyph_ref.name).ok()??;
-    self
-      .variation_report_for_glyph(&glyph_ref.name, &glyph)
-      .ok()
-  }
-
-  #[napi]
-  pub fn get_variation_reports(&self) -> errors::Result<Vec<NapiGlyphVariationReport>> {
-    let mut glyph_names: Vec<String> = self
-      .font()?
-      .glyphs()
-      .map(|glyph| glyph.name().to_string())
-      .collect();
-    glyph_names.sort();
-
-    Ok(
-      glyph_names
-        .into_iter()
-        .filter_map(|glyph_name| {
-          self
-            .glyph_for_read(&glyph_name)
-            .ok()
-            .flatten()
-            .and_then(|glyph| self.variation_report_for_glyph(&glyph_name, &glyph).ok())
-        })
-        .collect(),
-    )
-  }
-
-  #[napi]
   pub fn is_variable(&self) -> errors::Result<bool> {
     Ok(self.font()?.is_variable())
   }
@@ -450,97 +409,6 @@ impl Bridge {
       let build = build_glyph_variation_data(&masters, font.axes());
       (master_count, build)
     }))
-  }
-
-  fn variation_diagnostics_for_build(
-    glyph_name: &str,
-    build: &GlyphVariationBuild,
-  ) -> Vec<NapiGlyphVariationDiagnostic> {
-    let mut diagnostics = Vec::new();
-
-    if build.missing_default_source {
-      diagnostics.push(NapiGlyphVariationDiagnostic {
-        glyph_name: glyph_name.to_string(),
-        code: "missing-default-source".to_string(),
-        severity: "error".to_string(),
-        source: None,
-        message: "glyph has variation masters, but none belongs to the default source".to_string(),
-      });
-    }
-
-    diagnostics.extend(
-      build
-        .source_errors
-        .iter()
-        .map(|error| NapiGlyphVariationDiagnostic {
-          glyph_name: glyph_name.to_string(),
-          code: "incompatible-source".to_string(),
-          severity: "warning".to_string(),
-          source: Some(NapiGlyphVariationDiagnosticSource {
-            id: error.source_id.clone(),
-            index: error.source_index.min(u32::MAX as usize) as u32,
-            name: error.source_name.clone(),
-          }),
-          message: error.message.clone(),
-        }),
-    );
-
-    if let Some(message) = &build.model_error {
-      diagnostics.push(NapiGlyphVariationDiagnostic {
-        glyph_name: glyph_name.to_string(),
-        code: "variation-model-failed".to_string(),
-        severity: "error".to_string(),
-        source: None,
-        message: message.clone(),
-      });
-    }
-
-    diagnostics
-  }
-
-  fn variation_report_for_glyph(
-    &self,
-    glyph_name: &str,
-    glyph: &Glyph,
-  ) -> BridgeResult<NapiGlyphVariationReport> {
-    let Some((master_count, build)) = self.variation_build_for_glyph(glyph)? else {
-      return Ok(NapiGlyphVariationReport {
-        glyph_name: glyph_name.to_string(),
-        status: "static".to_string(),
-        variation_data_available: false,
-        master_count: 0,
-        compatible_master_count: 0,
-        skipped_master_count: 0,
-        diagnostics: Vec::new(),
-      });
-    };
-
-    let diagnostics = Self::variation_diagnostics_for_build(glyph_name, &build);
-    let skipped_master_count = build.source_errors.len();
-    let compatible_master_count = if build.missing_default_source {
-      0
-    } else {
-      master_count.saturating_sub(skipped_master_count)
-    };
-    let variation_data_available = build.variation_data.is_some();
-    let status = match (
-      variation_data_available,
-      skipped_master_count > 0 || !diagnostics.is_empty(),
-    ) {
-      (true, false) => "variable",
-      (true, true) => "partial",
-      (false, _) => "unavailable",
-    };
-
-    Ok(NapiGlyphVariationReport {
-      glyph_name: glyph_name.to_string(),
-      status: status.to_string(),
-      variation_data_available,
-      master_count: master_count.min(u32::MAX as usize) as u32,
-      compatible_master_count: compatible_master_count.min(u32::MAX as usize) as u32,
-      skipped_master_count: skipped_master_count.min(u32::MAX as usize) as u32,
-      diagnostics,
-    })
   }
 
   fn workspace(&self) -> BridgeResult<&FontWorkspace> {
@@ -1193,22 +1061,6 @@ mod tests {
         .to_string(),
       point_id
     );
-  }
-
-  #[test]
-  fn open_workspace_imports_designspace_fonts() {
-    let mut bridge = Bridge::new();
-    let (_, store_path) = test_paths("import");
-    let designspace_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .join("../..")
-      .join("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
-
-    bridge
-      .open_workspace(designspace_path.to_string_lossy().into_owned(), store_path)
-      .unwrap();
-
-    assert!(bridge.get_glyph_count().unwrap() > 0);
-    assert!(bridge.is_variable().unwrap());
   }
 
   #[test]

@@ -9,6 +9,12 @@ import type { CommandId } from "../commands";
  */
 export type RendererToMain = {
   "commands.run": (id: CommandId) => void;
+  /**
+   * Asks main to wire a sync lane to the workspace process. The port itself
+   * arrives separately on the `workspace.port` postMessage channel because
+   * ports cannot travel through `invoke` responses.
+   */
+  "workspace.connect": () => void;
 };
 
 /**

@@ -18,6 +18,7 @@
       "entry": [
         "src/main/main.ts",
         "src/preload/preload.ts",
+        "src/utility/workspace.ts",
         "src/renderer/renderer.ts",
         "forge.config.ts",
         "vitest.config.ts",

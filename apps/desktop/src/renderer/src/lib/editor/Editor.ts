@@ -3,7 +3,7 @@ import type { PointId, ContourId, Source, SourceId, GlyphName } from "@shift/typ
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
 import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
-import { axisLocationFromLocation, emptyAxisLocation } from "@/lib/variation/location";
+import { axisLocationFromLocation } from "@/lib/variation/location";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Segment } from "@shift/glyph-state";
@@ -56,10 +56,10 @@ import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSur
 import type { CameraTransform } from "./managers";
 import type { FocusZone } from "@/types/focus";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
-import type { DebugOverlays } from "@shared/ipc/types";
+import type { DebugOverlays } from "@/types/uiState";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "./Selection";
-import { Font } from "../model/Font";
+import type { Font } from "../model/Font";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { TextRuns } from "@/lib/text/TextRuns";
 import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
@@ -71,7 +71,6 @@ import type { ToolStateScope } from "@/types/editor";
 import { EventEmitter } from "./lifecycle";
 
 import type { LineSegmentPoints } from "@shift/glyph-state";
-import type { ShiftBridge } from "@shift/bridge";
 import { Contour } from "@shift/glyph-state";
 import { SourceEditDraft, type SourceEditSubject } from "./SourceEditDraft";
 import {
@@ -86,7 +85,7 @@ import {
 } from "./EditorState";
 
 interface EditorOptions {
-  bridge: ShiftBridge;
+  font: Font;
   clipboard: SystemClipboard;
 }
 
@@ -163,7 +162,6 @@ export class Editor {
    */
   #camera: Camera;
   #commandHistory: CommandHistory;
-  #bridge: ShiftBridge;
 
   /**
    * Active glyph/source context.
@@ -211,9 +209,7 @@ export class Editor {
   constructor(options: EditorOptions) {
     this.#camera = new Camera();
 
-    this.#bridge = options.bridge;
-
-    this.font = new Font(this.#bridge);
+    this.font = options.font;
     this.#glyph = new EditorGlyphState(this.font);
 
     this.#view = new EditorViewState();
@@ -799,10 +795,6 @@ export class Editor {
     return this.#commandHistory;
   }
 
-  public get bridge(): ShiftBridge {
-    return this.#bridge;
-  }
-
   public updateEdgePan(screenPos: Point2D, canvasBounds: Rect2D): void {
     this.#edgePan.update(screenPos, canvasBounds);
   }
@@ -1045,11 +1037,6 @@ export class Editor {
     this.font.load(filePath, storePath);
     this.setDesignLocation(this.font.defaultLocation());
     this.#events.emit("fontLoaded", { font: this.font });
-  }
-
-  public closeFont(): void {
-    this.font.close();
-    this.setDesignLocation(emptyAxisLocation());
   }
 
   public async saveFont(filePath?: string): Promise<number> {

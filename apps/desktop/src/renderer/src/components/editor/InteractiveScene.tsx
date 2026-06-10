@@ -1,7 +1,7 @@
 import { useContext, useCallback } from "react";
 
 import { CanvasContext } from "@/context/CanvasContext";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 
 export const InteractiveScene = () => {
   const { overlayCanvasRef } = useContext(CanvasContext);

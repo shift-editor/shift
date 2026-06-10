@@ -5,4 +5,9 @@
  * process command registry. The ID is only an identity token; main owns the
  * behavior for each command.
  */
-export type CommandId = "window.close" | "window.minimise" | "window.maximise";
+export type CommandId =
+  | "window.close"
+  | "window.minimise"
+  | "window.maximise"
+  | "font.new"
+  | "font.load";

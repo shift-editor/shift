@@ -1,20 +1,5 @@
-import type { WebContents, IpcMain, IpcMainInvokeEvent } from "electron";
-import type { MainToRenderer, RendererToMain } from "./contract";
-
-/**
- * Sends a typed main-to-renderer event to one renderer target.
- *
- * @param webContents - Renderer target that should receive the event.
- * @param channel - Channel declared in {@link MainToRenderer}.
- * @param args - Payload required by the selected channel.
- */
-export function send<K extends keyof MainToRenderer>(
-  webContents: WebContents,
-  channel: K,
-  ...args: Parameters<MainToRenderer[K]>
-): void {
-  webContents.send(channel, ...args);
-}
+import type { IpcMain, IpcMainInvokeEvent } from "electron";
+import type { RendererToMain } from "./contract";
 
 /**
  * Registers a typed renderer-to-main request handler.

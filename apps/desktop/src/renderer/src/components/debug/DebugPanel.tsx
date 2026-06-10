@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useSignalText } from "@/hooks/useSignalText";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { Separator } from "@shift/ui";
 import { effect } from "@/lib/signals";
 import { useSignalState, useSignalTrigger } from "@/lib/signals/useSignal";

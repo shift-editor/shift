@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals";
 import type { AxisLocation } from "@/types/variation";
 

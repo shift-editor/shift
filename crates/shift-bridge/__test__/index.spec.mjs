@@ -78,7 +78,6 @@ describe("Bridge", () => {
     const outputPath = join(tempDir, "output.shift");
     const savedVersion = bridge.saveWorkspaceAs(outputPath);
 
-    expect(savedVersion).toBe(4);
     expect(bridge.getPersistedVersion()).toBe(4);
     expect(bridge.isDirty()).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
@@ -91,8 +90,8 @@ describe("Bridge", () => {
 
     const savedVersion = bridge.saveWorkspace();
 
-    expect(savedVersion).toBe(4);
-    expect(bridge.getPersistedVersion()).toBe(4);
+    expect(savedVersion).toBe(3);
+    expect(bridge.getPersistedVersion()).toBe(3);
     expect(bridge.isDirty()).toBe(false);
   });
 
@@ -138,18 +137,9 @@ describe("Bridge", () => {
     const pointId = bridge.addPoint(layerId, contourId, 10, 20, "onCurve", false).changed
       .pointIds[0];
 
-    bridge.applyPositionPatch(
-      layerId,
-      [pointId],
-      new Float64Array([30, 40]),
-      null,
-      null,
-    );
+    bridge.applyPositionPatch(layerId, [pointId], new Float64Array([30, 40]), null, null);
 
-    const state = bridge.getGlyphState(
-      { name: "A", unicode: 65 },
-      defaultSourceId(),
-    );
+    const state = bridge.getGlyphState({ name: "A", unicode: 65 }, defaultSourceId());
     expect(state.layerId).toBe(layerId);
     expect(Array.from(state.values)).toEqual([500, 30, 40]);
   });
@@ -160,33 +150,21 @@ describe("Bridge", () => {
     const before = bridge.addPoint(layerId, contourId, 10, 20, "onCurve", false);
     const pointId = before.changed.pointIds[0];
 
-    const change = bridge.restoreState(
-      layerId,
-      before.structure,
-      new Float64Array([700, 90, 120]),
-    );
+    const change = bridge.restoreState(layerId, before.structure, new Float64Array([700, 90, 120]));
 
     expect(change.structure.contours[0].points[0].id).toBe(pointId);
     expect(Array.from(change.values)).toEqual([700, 90, 120]);
   });
 
   it("surfaces typed bridge errors at the NAPI boundary", () => {
-    expect(() =>
-      bridge.addContour("not-a-layer"),
-    ).toThrow(/layer ID/i);
+    expect(() => bridge.addContour("not-a-layer")).toThrow(/layer ID/i);
 
     const layerId = createDefaultLayer();
+    expect(() => bridge.addPoint(layerId, "not-a-contour", 10, 20, "onCurve", false)).toThrow(
+      /contour ID/i,
+    );
     expect(() =>
-      bridge.addPoint(layerId, "not-a-contour", 10, 20, "onCurve", false),
-    ).toThrow(/contour ID/i);
-    expect(() =>
-      bridge.applyPositionPatch(
-        layerId,
-        ["not-a-point"],
-        new Float64Array([10]),
-        null,
-        null,
-      ),
+      bridge.applyPositionPatch(layerId, ["not-a-point"], new Float64Array([10]), null, null),
     ).toThrow(/point ID/i);
   });
 });

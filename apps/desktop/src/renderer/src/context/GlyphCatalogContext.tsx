@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import type { GlyphCategory, GlyphCategoryCatalog, GlyphCategorySummary } from "@shift/glyph-info";
 import type { GlyphName, GlyphRecord } from "@shift/types";
 import { useSignalState } from "@/lib/signals";
-import { getDocument, getEditor, getGlyphInfo, markDocumentDirty } from "@/store/store";
+import { getEditor, getGlyphInfo } from "@/store/appStore";
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
 
 export interface GlyphCatalogItem {
@@ -116,13 +116,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     selectedSubCategoryKey,
     setQuery,
     createQuickGlyph: () => {
-      const document = getDocument();
-      if (!font.loaded) {
-        document.createFont();
-      }
-
       const handle = getEditor().createGlyph("newGlyph");
-      markDocumentDirty();
       setQuery("");
       setSelectedCategory(null);
       setSelectedSubCategoryKey(null);

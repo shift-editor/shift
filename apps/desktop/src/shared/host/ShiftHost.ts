@@ -19,4 +19,15 @@ export interface ShiftHost {
      */
     run: (id: CommandId) => Promise<void>;
   };
+  /** Connects the renderer to the workspace utility process. */
+  workspace: {
+    /**
+     * Asks main to transfer a fresh sync-lane port to the workspace process.
+     *
+     * @remarks
+     * The lane's renderer half arrives via the `workspace.port` postMessage
+     * relay; install that listener before calling.
+     */
+    connect: () => Promise<void>;
+  };
 }

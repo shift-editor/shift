@@ -11,11 +11,9 @@ import { TextLayout } from "./TextLayout";
 import { Positioner } from "./Positioner";
 import type { TextItem, GlyphTextItem, SegmentedRun } from "./types";
 import { signal } from "@/lib/signals/signal";
-import { createBridge } from "@shift/bridge";
 
 export function loadTestFont(): Font {
-  const bridge = createBridge();
-  const font = new Font(bridge);
+  const font = new Font(signal(null));
 
   font.load(MUTATORSANS_DESIGNSPACE, testStorePath("layout"));
   return font;

@@ -1,4 +1,4 @@
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { useSignalState, useSignalTrigger } from "@/lib/signals";
 
 export interface GlyphXAdvanceState {
