@@ -337,105 +337,94 @@ impl Bridge {
     Ok(())
   }
 
-  /// CS0 walking skeleton: applies a small intent set through the existing
-  /// workspace verbs and answers with pure replace-grade state. CS1 replaces
-  /// the stringly intent match with `Font::apply_intents` over per-variant
-  /// structs.
+  /// Applies one intent set as a single atomic workspace apply.
+  ///
+  /// Editing kinds decode through `map_intent` into `Font::apply_intents`;
+  /// `createGlyph` keeps its workspace-verb path until font-level verbs get
+  /// intent homes (CS4 tail). Sets must be homogeneous: font-level and
+  /// editing intents never share a tick.
   #[napi]
   pub fn apply(
     &mut self,
     intents: Vec<NapiFontIntent>,
     label: Option<String>,
   ) -> errors::Result<NapiAppliedChange> {
-    // The ledger lands in CS1b; the label is part of the wire contract now.
+    let (creates, edits): (Vec<_>, Vec<_>) = intents
+      .into_iter()
+      .partition(|intent| intent.kind == "createGlyph");
+
+    if !creates.is_empty() && !edits.is_empty() {
+      return Err(BridgeError::InvalidInput {
+        kind: "intent",
+        value: "createGlyph cannot share a set with editing intents".to_string(),
+      });
+    }
+
+    if creates.is_empty() {
+      return self.apply_editing_intents(edits, label);
+    }
+
+    // Font-level verbs are not in the ledger yet; the label is part of the
+    // wire contract now.
     let _ = label;
 
-    // Pen-vocabulary sets route through Font::apply_intents as ONE atomic
-    // workspace apply; the two skeleton kinds keep their verb paths until
-    // their real homes land (CS4). Sets must be homogeneous.
-    let pen_kinds = [
-      "addPoints",
-      "addContour",
-      "setContourClosed",
-      "movePoints",
-      "setPointSmooth",
-      "removePoints",
-      "reverseContour",
-      "translatePoints",
-      "setXAdvance",
-      "applyBooleanOp",
-    ];
-    if intents
-      .iter()
-      .any(|intent| pen_kinds.contains(&intent.kind.as_str()))
-    {
-      return self.apply_pen_intents(intents, label);
-    }
-
-    let mut layers: Vec<NapiLayerReplaced> = Vec::new();
-    let mut glyphs_changed = false;
-
-    for intent in intents {
-      match intent.kind.as_str() {
-        "createGlyph" => {
-          let name = intent.name.ok_or(BridgeError::InvalidInput {
-            kind: "intent",
-            value: "createGlyph requires name".to_string(),
-          })?;
-          let unicodes = intent.unicodes.unwrap_or_default();
-
-          let source_id = self
-            .font()?
-            .default_source_id()
-            .or_else(|| self.font().ok()?.sources().first().map(|s| s.id()))
-            .ok_or(BridgeError::InvalidInput {
-              kind: "intent",
-              value: "createGlyph requires a font with at least one source".to_string(),
-            })?;
-
-          let glyph = self.workspace_mut()?.create_glyph(name, unicodes)?;
-          let layer = self
-            .workspace_mut()?
-            .create_glyph_layer(glyph.id(), source_id)?;
-
-          layers.push(NapiLayerReplaced {
-            layer_id: layer.id().to_string(),
-            structure: Some(GlyphStructure::from(&layer).into()),
-            values: shift_wire::values_from_layer(&layer).into(),
-            changed: GlyphChangedEntities::default().into(),
-          });
-          glyphs_changed = true;
-        }
-        other => {
-          return Err(BridgeError::InvalidInput {
-            kind: "intent",
-            value: format!("unknown intent kind \"{other}\""),
-          })
-        }
-      }
-    }
+    let layers = creates
+      .into_iter()
+      .map(|intent| self.apply_create_glyph(intent))
+      .collect::<errors::Result<Vec<_>>>()?;
 
     self.mark_font_changed();
 
-    let glyphs = if glyphs_changed {
-      Some(self.get_glyphs()?)
-    } else {
-      None
-    };
-
     Ok(NapiAppliedChange {
       layers,
-      glyphs,
-      // Dependent-composite invalidation lands with the interpreter in CS1.
+      glyphs: Some(self.get_glyphs()?),
+      // Composites cannot depend on a glyph that did not exist yet.
       dependents: Vec::new(),
     })
   }
 
-  fn apply_pen_intents(
+  fn apply_create_glyph(&mut self, intent: NapiFontIntent) -> errors::Result<NapiLayerReplaced> {
+    let name = intent.name.ok_or(BridgeError::InvalidInput {
+      kind: "intent",
+      value: "createGlyph requires name".to_string(),
+    })?;
+    let unicodes = intent.unicodes.unwrap_or_default();
+
+    let source_id = self
+      .font()?
+      .default_source_id()
+      .or_else(|| self.font().ok()?.sources().first().map(|s| s.id()))
+      .ok_or(BridgeError::InvalidInput {
+        kind: "intent",
+        value: "createGlyph requires a font with at least one source".to_string(),
+      })?;
+
+    let glyph = self.workspace_mut()?.create_glyph(name, unicodes)?;
+    let layer = self
+      .workspace_mut()?
+      .create_glyph_layer(glyph.id(), source_id)?;
+
+    Ok(NapiLayerReplaced {
+      layer_id: layer.id().to_string(),
+      structure: Some(GlyphStructure::from(&layer).into()),
+      values: shift_wire::values_from_layer(&layer).into(),
+      changed: GlyphChangedEntities::default().into(),
+    })
+  }
+
+  fn apply_editing_intents(
     &mut self,
     intents: Vec<NapiFontIntent>,
     label: Option<String>,
   ) -> errors::Result<NapiAppliedChange> {
+    if intents.is_empty() {
+      return Ok(NapiAppliedChange {
+        layers: Vec::new(),
+        glyphs: None,
+        dependents: Vec::new(),
+      });
+    }
+
     let mut set = FontIntentSet::default();
     for intent in intents {
       set.intents.push(map_intent(intent)?);
@@ -1017,6 +1006,10 @@ fn parse_ids<T: BridgeParse>(ids: Option<&[String]>) -> BridgeResult<Option<Vec<
     .transpose()
 }
 
+fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
+  ids.iter().map(|id| parse::<T>(id)).collect()
+}
+
 fn read_point_position_changes(
   point_ids: Option<&[PointId]>,
   point_coords: &Option<Float64Array>,
@@ -1101,11 +1094,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
       let payload = intent.move_points.ok_or_else(|| missing("movePoints"))?;
       Ok(FontIntent::MovePoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
-        point_ids: payload
-          .point_ids
-          .iter()
-          .map(|id| parse::<PointId>(id))
-          .collect::<errors::Result<Vec<_>>>()?,
+        point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
         coords: payload.coords,
       })
     }
@@ -1125,11 +1114,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         .ok_or_else(|| missing("removePoints"))?;
       Ok(FontIntent::RemovePoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
-        point_ids: payload
-          .point_ids
-          .iter()
-          .map(|id| parse::<PointId>(id))
-          .collect::<errors::Result<Vec<_>>>()?,
+        point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
       })
     }
     "reverseContour" => {
@@ -1147,11 +1132,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         .ok_or_else(|| missing("translatePoints"))?;
       Ok(FontIntent::TranslatePoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
-        point_ids: payload
-          .point_ids
-          .iter()
-          .map(|id| parse::<PointId>(id))
-          .collect::<errors::Result<Vec<_>>>()?,
+        point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
         dx: payload.dx,
         dy: payload.dy,
       })

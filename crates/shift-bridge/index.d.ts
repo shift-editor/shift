@@ -23,10 +23,12 @@ export declare class Bridge {
   getGlyphs(): Array<NapiGlyphRecord>
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
   /**
-   * CS0 walking skeleton: applies a small intent set through the existing
-   * workspace verbs and answers with pure replace-grade state. CS1 replaces
-   * the stringly intent match with `Font::apply_intents` over per-variant
-   * structs.
+   * Applies one intent set as a single atomic workspace apply.
+   *
+   * Editing kinds decode through `map_intent` into `Font::apply_intents`;
+   * `createGlyph` keeps its workspace-verb path until font-level verbs get
+   * intent homes (CS4 tail). Sets must be homogeneous: font-level and
+   * editing intents never share a tick.
    */
   apply(intents: Array<NapiFontIntent>, label?: string | undefined | null): NapiAppliedChange
   /**
