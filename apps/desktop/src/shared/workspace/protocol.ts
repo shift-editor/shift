@@ -3,8 +3,11 @@ import type {
   FontIntent,
   FontMetadata,
   FontMetrics,
+  GlyphId,
   GlyphRecord,
+  GlyphState,
   Source,
+  SourceId,
 } from "@shift/types";
 
 /**
@@ -51,6 +54,17 @@ export type SyncCallMap = {
   "workspace.apply": {
     request: { intents: FontIntent[]; label?: string };
     response: AppliedChange;
+  };
+  /** Replays the most recent ledger entry; null when the stack is empty. */
+  "workspace.undo": { request: void; response: AppliedChange | null };
+  "workspace.redo": { request: void; response: AppliedChange | null };
+  /**
+   * Pulls replace-grade glyph state for one source (resync + editor open).
+   * Addressed by stable GlyphId — references survive renames.
+   */
+  "workspace.glyph": {
+    request: { glyphId: GlyphId; sourceId: SourceId };
+    response: GlyphState | null;
   };
 };
 

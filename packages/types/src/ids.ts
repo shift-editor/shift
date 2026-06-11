@@ -1,8 +1,11 @@
 /**
- * Branded ID types for type-safe identification of Rust entities.
+ * Branded ID types for type-safe identification of font entities.
  *
- * These types ensure compile-time safety when working with IDs from Rust.
- * TypeScript never generates IDs - they always come from Rust.
+ * These types ensure compile-time safety when working with IDs across the
+ * TS/Rust boundary. Ids are prefixed strings (`point_<uuid>`). The renderer
+ * MINTS ids for entities it creates (client-minted ids: verbs return
+ * identity synchronously; Rust validates and honors them); all other ids
+ * come from Rust.
  */
 
 // Branded type symbols (never exported, just for type branding)
@@ -191,4 +194,17 @@ export function isValidLayerId(id: unknown): id is LayerId {
  */
 export function isValidSourceId(id: unknown): id is SourceId {
   return typeof id === "string" && id.length > 0;
+}
+
+/**
+ * Mints a new point id. Client-minted ids let editing verbs return identity
+ * synchronously; Rust honors them and rejects duplicates.
+ */
+export function mintPointId(): PointId {
+  return `point_${crypto.randomUUID()}` as PointId;
+}
+
+/** Mints a new contour id. See {@link mintPointId}. */
+export function mintContourId(): ContourId {
+  return `contour_${crypto.randomUUID()}` as ContourId;
 }

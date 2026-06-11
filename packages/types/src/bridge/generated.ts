@@ -34,6 +34,21 @@ export interface BridgeApi {
    * structs.
    */
   apply(intents: Array<FontIntent>, label?: string | undefined | null): AppliedChange
+  /**
+   * Replays the most recent ledger entry's pre states; `null` when the
+   * undo stack is empty.
+   */
+  undo(): AppliedChange | null
+  /**
+   * Replays the most recent undone entry's post states; `null` when the
+   * redo stack is empty.
+   */
+  redo(): AppliedChange | null
+  /**
+   * Id-addressed glyph state: the stable-identity twin of
+   * `get_glyph_state`. References survive renames; no name lookup.
+   */
+  getGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphState | null
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): GlyphState | null
   isVariable(): boolean
   getAxes(): Array<Axis>
@@ -80,6 +95,20 @@ export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
 }
+export interface AddContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+export interface AddPointsIntent {
+  layerId: LayerId
+  contourId: ContourId
+  /** Insert before this point; append when absent. */
+  before?: PointId
+  points: Array<PointSeed>
+}
+
 export interface AnchorData {
   id: AnchorId
   name?: string
@@ -90,7 +119,8 @@ export interface AppliedChange {
   layers: Array<LayerReplaced>
   /** Full records list when glyph identity changed; absent when untouched. */
   glyphs?: Array<GlyphRecord>
-  dependents: Array<GlyphName>
+  /** Stable ids: references survive renames without re-indexing. */
+  dependents: Array<GlyphId>
 }
 
 export interface Axis {
@@ -125,8 +155,18 @@ export interface ContourData {
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
  */
 export interface FontIntent {
-  /** "createGlyph" | "setXAdvance" */
+  /**
+   * Discriminator naming the populated payload field. Pen vocabulary:
+   * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
+   * "setPointSmooth". Skeleton leftovers until their real homes land
+   * (CS4): "createGlyph" | "setXAdvance".
+   */
   kind: string
+  addPoints?: AddPointsIntent
+  addContour?: AddContourIntent
+  setContourClosed?: SetContourClosedIntent
+  movePoints?: MovePointsIntent
+  setPointSmooth?: SetPointSmoothIntent
   name?: GlyphName
   unicodes?: Array<Unicode>
   layerId?: LayerId
@@ -180,6 +220,7 @@ export interface GlyphMaster {
 }
 
 export interface GlyphRecord {
+  id: GlyphId
   name: GlyphName
   unicodes: Array<Unicode>
   componentBaseGlyphNames: Array<GlyphName>
@@ -233,13 +274,44 @@ export interface Location {
   values: Record<string, number>
 }
 
+export interface MovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
 export interface PointData {
   id: PointId
   pointType: PointType
   smooth: boolean
 }
 
+/**
+ * A point to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface PointSeed {
+  id: PointId
+  x: number
+  y: number
+  pointType: PointType
+  smooth: boolean
+}
+
 export type PointType = "onCurve" | "offCurve";
+
+export interface SetContourClosedIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+export interface SetPointSmoothIntent {
+  layerId: LayerId
+  pointId: PointId
+  smooth: boolean
+}
 
 export interface Source {
   id: SourceId

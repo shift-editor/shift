@@ -1,7 +1,7 @@
 import { Channel, domPortTransport } from "@shared/workspace/channel";
 import type { SyncCallMap, SyncEventMap, WorkspaceSnapshot } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { AppliedChange, FontIntent } from "@shift/types";
+import type { AppliedChange, FontIntent, GlyphId, GlyphState, SourceId } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
 /**
@@ -61,8 +61,33 @@ export class WorkspaceClient {
   async apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
     await this.connected();
 
-    const applied = await this.#require().call("workspace.apply", { intents, label });
+    return this.#fold(await this.#require().call("workspace.apply", { intents, label }));
+  }
 
+  /** Replays the latest ledger entry; null when nothing is undoable. */
+  async undo(): Promise<AppliedChange | null> {
+    await this.connected();
+
+    const applied = await this.#require().call("workspace.undo", undefined);
+    return applied === null ? null : this.#fold(applied);
+  }
+
+  /** Replays the latest undone entry; null when nothing is redoable. */
+  async redo(): Promise<AppliedChange | null> {
+    await this.connected();
+
+    const applied = await this.#require().call("workspace.redo", undefined);
+    return applied === null ? null : this.#fold(applied);
+  }
+
+  /** Pulls replace-grade glyph state (resync + editor open); id-addressed. */
+  async glyph(glyphId: GlyphId, sourceId: SourceId): Promise<GlyphState | null> {
+    await this.connected();
+
+    return this.#require().call("workspace.glyph", { glyphId, sourceId });
+  }
+
+  #fold(applied: AppliedChange): AppliedChange {
     const current = this.$workspace.peek();
     if (applied.glyphs && current) {
       this.$workspace.set({ ...current, glyphs: applied.glyphs });

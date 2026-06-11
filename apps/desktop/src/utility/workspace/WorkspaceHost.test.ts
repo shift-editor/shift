@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Channel, nodePortTransport, type Transport } from "../../shared/workspace/channel";
+import { mintContourId, mintPointId, type GlyphId, type PointType } from "@shift/types";
 import type {
   ShellCallMap,
   ShellEventMap,
@@ -162,6 +163,104 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(
       sync.call("workspace.apply", { intents: [{ kind: "explodeFont" }] }),
     ).rejects.toThrow("explodeFont");
+  });
+
+  it("pen intents apply atomically with client-minted ids through the channel", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+    const created = await sync.call("workspace.apply", {
+      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+    });
+    const layerId = created.layers[0].layerId;
+
+    const contourId = mintContourId();
+    const p1 = mintPointId();
+    const p2 = mintPointId();
+
+    const applied = await sync.call("workspace.apply", {
+      intents: [
+        { kind: "addContour", addContour: { layerId, contourId, closed: false } },
+        {
+          kind: "addPoints",
+          addPoints: {
+            layerId,
+            contourId,
+            points: [
+              { id: p1, x: 10, y: 20, pointType: "onCurve" as PointType, smooth: false },
+              { id: p2, x: 30, y: 40, pointType: "onCurve" as PointType, smooth: false },
+            ],
+          },
+        },
+        { kind: "setContourClosed", setContourClosed: { layerId, contourId, closed: true } },
+      ],
+      label: "Draw Contour",
+    });
+
+    expect(applied.layers).toHaveLength(1);
+    const structure = applied.layers[0].structure;
+    expect(structure?.contours[0].id).toBe(contourId);
+    expect(structure?.contours[0].closed).toBe(true);
+    expect(structure?.contours[0].points.map((point) => point.id)).toEqual([p1, p2]);
+    expect(applied.glyphs).toBeUndefined();
+    expect(applied.dependents).toEqual([]);
+  });
+
+  it("undo and redo replay ledger entries through the channel", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+    const created = await sync.call("workspace.apply", {
+      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+    });
+    const layerId = created.layers[0].layerId;
+    const contourId = mintContourId();
+    const p1 = mintPointId();
+
+    await sync.call("workspace.apply", {
+      intents: [
+        { kind: "addContour", addContour: { layerId, contourId, closed: false } },
+        {
+          kind: "addPoints",
+          addPoints: {
+            layerId,
+            contourId,
+            points: [{ id: p1, x: 10, y: 20, pointType: "onCurve" as PointType, smooth: false }],
+          },
+        },
+      ],
+      label: "Draw",
+    });
+
+    const undone = await sync.call("workspace.undo", undefined);
+    expect(undone?.layers[0].structure?.contours).toEqual([]);
+
+    const redone = await sync.call("workspace.redo", undefined);
+    expect(redone?.layers[0].structure?.contours[0].points.map((point) => point.id)).toEqual([p1]);
+  });
+
+  it("undo on an empty ledger answers null", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+
+    await expect(sync.call("workspace.undo", undefined)).resolves.toBeNull();
+    await expect(sync.call("workspace.redo", undefined)).resolves.toBeNull();
+  });
+
+  it("workspace.glyph pulls replace-grade state by stable id", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await sync.call("workspace.create", undefined);
+    const sourceId = snapshot.sources[0].id;
+    const created = await sync.call("workspace.apply", {
+      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+    });
+    const glyphId = created.glyphs?.[0].id;
+    if (!glyphId) throw new Error("createGlyph must echo the record id");
+
+    const state = await sync.call("workspace.glyph", { glyphId, sourceId });
+    expect(state?.layerId).toBe(created.layers[0].layerId);
+    expect(state?.structure.contours).toEqual([]);
+
+    const missing = `glyph_${crypto.randomUUID()}` as GlyphId;
+    await expect(sync.call("workspace.glyph", { glyphId: missing, sourceId })).resolves.toBeNull();
   });
 
   it("CS0 skeleton: measures the apply round trip through the full stack", async () => {

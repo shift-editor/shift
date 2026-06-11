@@ -2,13 +2,15 @@ use std::path::{Path, PathBuf};
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
-    BooleanOp, BulkNodePositionUpdates, ContourId, FontChange, FontChangeSet, Glyph, GlyphId,
-    GlyphLayer, GlyphName, LayerId, PointId, PointPosition, PointType, SourceId, error::CoreError,
+    AppliedIntents, BooleanOp, BulkNodePositionUpdates, ContourId, FontChange, FontChangeSet,
+    FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, PointId, PointPosition,
+    PointType, SourceId, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
 
 use crate::NewWorkspace;
+use crate::ledger::{LayerPair, Ledger, LedgerEntry};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
@@ -48,6 +50,7 @@ pub struct FontWorkspace {
     font: shift_font::Font,
     source: WorkspaceSource,
     store: ShiftStore,
+    ledger: Ledger,
 }
 
 impl FontWorkspace {
@@ -65,6 +68,7 @@ impl FontWorkspace {
             font,
             source: WorkspaceSource::Untitled,
             store,
+            ledger: Ledger::default(),
         })
     }
 
@@ -425,6 +429,109 @@ impl FontWorkspace {
         })
     }
 
+    /// Applies a renderer intent set: validate + mutate via shift-font,
+    /// persist the canonical records, swap the live font, record one ledger
+    /// entry. One call = one SQLite transaction = one undo step.
+    pub fn apply(
+        &mut self,
+        set: FontIntentSet,
+        label: Option<String>,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        let mut pre: Vec<GlyphLayer> = Vec::new();
+        for intent in &set.intents {
+            let layer_id = intent.layer_id();
+            if pre.iter().any(|layer| layer.id() == *layer_id) {
+                continue;
+            }
+            if let Some(layer) = self.font.layer(layer_id.clone()) {
+                pre.push(layer.clone());
+            }
+        }
+
+        let outcome = self.commit_edit(|font| {
+            let outcome = font.apply_intents(set)?;
+            let changes = outcome.changes.clone();
+            Ok((outcome, changes))
+        })?;
+
+        let layers = outcome
+            .layers
+            .iter()
+            .filter_map(|touched| {
+                let post = touched.layer.clone();
+                pre.iter()
+                    .find(|layer| layer.id() == post.id())
+                    .map(|pre_layer| LayerPair {
+                        pre: pre_layer.clone(),
+                        post,
+                    })
+            })
+            .collect();
+
+        self.ledger.push(LedgerEntry { label, layers });
+        Ok(outcome)
+    }
+
+    /// Replays the most recent entry's pre states. `None` when the undo
+    /// stack is empty. The echo is the same replace-grade shape as `apply`.
+    pub fn undo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        let Some(entry) = self.ledger.pop_undo() else {
+            return Ok(None);
+        };
+
+        let outcome = self.replay(&entry, |pair| &pair.pre)?;
+        self.ledger.record_undone(entry);
+        Ok(Some(outcome))
+    }
+
+    /// Replays the most recent undone entry's post states.
+    pub fn redo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        let Some(entry) = self.ledger.pop_redo() else {
+            return Ok(None);
+        };
+
+        let outcome = self.replay(&entry, |pair| &pair.post)?;
+        self.ledger.record_redone(entry);
+        Ok(Some(outcome))
+    }
+
+    fn replay(
+        &mut self,
+        entry: &LedgerEntry,
+        side: impl Fn(&LayerPair) -> &GlyphLayer,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        let restored: Vec<GlyphLayer> =
+            entry.layers.iter().map(|pair| side(pair).clone()).collect();
+
+        self.commit_edit(move |font| {
+            let mut changes = FontChangeSet::default();
+            let mut layers = Vec::with_capacity(restored.len());
+
+            for replacement in restored {
+                let layer_id = replacement.id();
+                let layer = font
+                    .layer_mut(layer_id.clone())
+                    .ok_or(CoreError::LayerNotFound(layer_id))?;
+                *layer = replacement;
+
+                // Geometry replace persists contours only; metrics ride their
+                // own change so width/height restores reach SQLite too.
+                changes.push(FontChange::layer_geometry_replaced(layer));
+                changes.push(FontChange::layer_metrics_changed(layer));
+                layers.push(TouchedLayer {
+                    layer: layer.clone(),
+                    structural: true,
+                });
+            }
+
+            let outcome = AppliedIntents {
+                changes: changes.clone(),
+                layers,
+            };
+            Ok((outcome, changes))
+        })
+    }
+
     pub fn apply_position_patch(
         &mut self,
         layer_id: LayerId,
@@ -558,6 +665,7 @@ impl FontWorkspace {
                 path: source_package.path().to_path_buf(),
             },
             store,
+            ledger: Ledger::default(),
         })
     }
 
@@ -580,6 +688,7 @@ impl FontWorkspace {
                 original_path: import_path.to_path_buf(),
             },
             store,
+            ledger: Ledger::default(),
         })
     }
 

@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, Component as IrComponent, ComponentId,
     Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
-    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphLayer,
-    GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
+    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
+    GlyphLayer, GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
     PointType as IrPointType, Source as IrSource, SourceId,
 };
 
@@ -151,6 +151,7 @@ impl From<&IrSource> for Source {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlyphRecord {
+    pub id: GlyphId,
     pub name: GlyphName,
     pub unicodes: Vec<u32>,
     pub component_base_glyph_names: Vec<GlyphName>,
@@ -168,6 +169,7 @@ impl From<&IrGlyph> for GlyphRecord {
         component_base_glyph_names.dedup();
 
         Self {
+            id: glyph.id(),
             name: glyph.glyph_name().clone(),
             unicodes: glyph.unicodes().to_vec(),
             component_base_glyph_names,

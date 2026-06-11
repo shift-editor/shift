@@ -6,13 +6,14 @@ use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
 use shift_font::{
-  BooleanOp, BulkNodePositionUpdates, ContourId, Font, Glyph, GlyphId, LayerId, PointId, SourceId,
+  BooleanOp, BulkNodePositionUpdates, ContourId, Font, FontIntent, FontIntentSet, Glyph, GlyphId,
+  LayerId, PointId, PointSeed, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
     NapiAppliedChange, NapiAxis, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
     NapiGlyphRecord, NapiGlyphState, NapiGlyphStructure, NapiGlyphStructureChange,
-    NapiGlyphValueChange, NapiLayerReplaced, NapiPointType, NapiSource,
+    NapiGlyphValueChange, NapiLayerReplaced, NapiPointSeed, NapiPointType, NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
   state::apply_state_to_layer,
@@ -349,6 +350,23 @@ impl Bridge {
     // The ledger lands in CS1b; the label is part of the wire contract now.
     let _ = label;
 
+    // Pen-vocabulary sets route through Font::apply_intents as ONE atomic
+    // workspace apply; the two skeleton kinds keep their verb paths until
+    // their real homes land (CS4). Sets must be homogeneous.
+    let pen_kinds = [
+      "addPoints",
+      "addContour",
+      "setContourClosed",
+      "movePoints",
+      "setPointSmooth",
+    ];
+    if intents
+      .iter()
+      .any(|intent| pen_kinds.contains(&intent.kind.as_str()))
+    {
+      return self.apply_pen_intents(intents, label);
+    }
+
     let mut layers: Vec<NapiLayerReplaced> = Vec::new();
     let mut glyphs_changed = false;
 
@@ -427,6 +445,107 @@ impl Bridge {
       // Dependent-composite invalidation lands with the interpreter in CS1.
       dependents: Vec::new(),
     })
+  }
+
+  fn apply_pen_intents(
+    &mut self,
+    intents: Vec<NapiFontIntent>,
+    label: Option<String>,
+  ) -> errors::Result<NapiAppliedChange> {
+    let mut set = FontIntentSet::default();
+    for intent in intents {
+      set.intents.push(map_intent(intent)?);
+    }
+
+    let outcome = self.workspace_mut()?.apply(set, label)?;
+    self.mark_font_changed();
+
+    self.applied_echo(outcome)
+  }
+
+  /// Assembles the pure-state echo for an applied outcome: replace-grade
+  /// layers plus dependent composites. Shared by apply/undo/redo.
+  fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
+    let touched_layer_ids: Vec<LayerId> = outcome
+      .layers
+      .iter()
+      .map(|touched| touched.layer.id())
+      .collect();
+    let dependents = self
+      .font()?
+      .dependents_of_layers(&touched_layer_ids)
+      .into_iter()
+      .map(|name| name.to_string())
+      .collect();
+
+    let layers = outcome
+      .layers
+      .into_iter()
+      .map(|touched| NapiLayerReplaced {
+        layer_id: touched.layer.id().to_string(),
+        structure: touched
+          .structural
+          .then(|| GlyphStructure::from(&touched.layer).into()),
+        values: shift_wire::values_from_layer(&touched.layer).into(),
+        changed: GlyphChangedEntities::default().into(),
+      })
+      .collect();
+
+    Ok(NapiAppliedChange {
+      layers,
+      glyphs: None,
+      dependents,
+    })
+  }
+
+  /// Replays the most recent ledger entry's pre states; `null` when the
+  /// undo stack is empty.
+  #[napi]
+  pub fn undo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
+    let Some(outcome) = self.workspace_mut()?.undo()? else {
+      return Ok(None);
+    };
+
+    self.mark_font_changed();
+    Ok(Some(self.applied_echo(outcome)?))
+  }
+
+  /// Replays the most recent undone entry's post states; `null` when the
+  /// redo stack is empty.
+  #[napi]
+  pub fn redo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
+    let Some(outcome) = self.workspace_mut()?.redo()? else {
+      return Ok(None);
+    };
+
+    self.mark_font_changed();
+    Ok(Some(self.applied_echo(outcome)?))
+  }
+
+  /// Id-addressed glyph state: the stable-identity twin of
+  /// `get_glyph_state`. References survive renames; no name lookup.
+  #[napi]
+  pub fn get_glyph(
+    &self,
+    #[napi(ts_arg_type = "GlyphId")] glyph_id: String,
+    #[napi(ts_arg_type = "SourceId")] source_id: String,
+  ) -> errors::Result<Option<NapiGlyphState>> {
+    let glyph_id = parse::<GlyphId>(&glyph_id)?;
+    let source_id = parse::<SourceId>(&source_id)?;
+
+    let font = self.font()?;
+    let Some(glyph) = font.glyph(glyph_id) else {
+      return Ok(None);
+    };
+    let Some(layer) = glyph.layer_for_source(source_id) else {
+      return Ok(None);
+    };
+
+    let variation_data = self
+      .variation_build_for_glyph(glyph)?
+      .and_then(|(_, build)| build.variation_data);
+
+    Ok(Some(GlyphState::from_layer(layer, variation_data).into()))
   }
 
   #[napi]
@@ -953,9 +1072,90 @@ fn read_point_position_changes(
   )
 }
 
+fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
+  let missing = |kind: &str| BridgeError::InvalidInput {
+    kind: "intent",
+    value: format!("{kind} requires its payload field"),
+  };
+
+  match intent.kind.as_str() {
+    "addPoints" => {
+      let payload = intent.add_points.ok_or_else(|| missing("addPoints"))?;
+      Ok(FontIntent::AddPoints {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        contour_id: parse::<ContourId>(&payload.contour_id)?,
+        before: payload.before.map(|id| parse::<PointId>(&id)).transpose()?,
+        points: payload
+          .points
+          .into_iter()
+          .map(map_point_seed)
+          .collect::<errors::Result<Vec<_>>>()?,
+      })
+    }
+    "addContour" => {
+      let payload = intent.add_contour.ok_or_else(|| missing("addContour"))?;
+      Ok(FontIntent::AddContour {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        contour_id: parse::<ContourId>(&payload.contour_id)?,
+        closed: payload.closed,
+      })
+    }
+    "setContourClosed" => {
+      let payload = intent
+        .set_contour_closed
+        .ok_or_else(|| missing("setContourClosed"))?;
+      Ok(FontIntent::SetContourClosed {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        contour_id: parse::<ContourId>(&payload.contour_id)?,
+        closed: payload.closed,
+      })
+    }
+    "movePoints" => {
+      let payload = intent.move_points.ok_or_else(|| missing("movePoints"))?;
+      Ok(FontIntent::MovePoints {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        point_ids: payload
+          .point_ids
+          .iter()
+          .map(|id| parse::<PointId>(id))
+          .collect::<errors::Result<Vec<_>>>()?,
+        coords: payload.coords,
+      })
+    }
+    "setPointSmooth" => {
+      let payload = intent
+        .set_point_smooth
+        .ok_or_else(|| missing("setPointSmooth"))?;
+      Ok(FontIntent::SetPointSmooth {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        point_id: parse::<PointId>(&payload.point_id)?,
+        smooth: payload.smooth,
+      })
+    }
+    other => Err(BridgeError::InvalidInput {
+      kind: "intent",
+      value: format!("unknown intent kind \"{other}\""),
+    }),
+  }
+}
+
+fn map_point_seed(seed: NapiPointSeed) -> errors::Result<PointSeed> {
+  Ok(PointSeed {
+    id: parse::<PointId>(&seed.id)?,
+    x: seed.x,
+    y: seed.y,
+    point_type: seed.point_type.into(),
+    smooth: seed.smooth,
+  })
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+  use shift_wire::bridges::napi::{
+    NapiAddContourIntent, NapiAddPointsIntent, NapiMovePointsIntent, NapiPointSeed,
+    NapiSetContourClosedIntent, NapiSetPointSmoothIntent,
+  };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
   fn glyph_handle(name: &str, unicode: Option<u32>) -> GlyphHandle {
@@ -970,6 +1170,11 @@ mod tests {
   fn skeleton_intent(kind: &str) -> NapiFontIntent {
     NapiFontIntent {
       kind: kind.to_string(),
+      add_points: None,
+      add_contour: None,
+      set_contour_closed: None,
+      move_points: None,
+      set_point_smooth: None,
       name: None,
       unicodes: None,
       layer_id: None,
@@ -1039,6 +1244,333 @@ mod tests {
     assert!(bridge
       .apply(vec![skeleton_intent("explodeFont")], None)
       .is_err());
+  }
+
+  fn pen_setup(bridge: &mut Bridge) -> (String, String) {
+    let created = bridge
+      .apply(
+        vec![NapiFontIntent {
+          name: Some("A".to_string()),
+          unicodes: Some(vec![65]),
+          ..skeleton_intent("createGlyph")
+        }],
+        None,
+      )
+      .unwrap();
+    let layer_id = created.layers[0].layer_id.clone();
+
+    let contour_id = shift_font::ContourId::new().to_string();
+    bridge
+      .apply(
+        vec![NapiFontIntent {
+          add_contour: Some(NapiAddContourIntent {
+            layer_id: layer_id.clone(),
+            contour_id: contour_id.clone(),
+            closed: false,
+          }),
+          ..skeleton_intent("addContour")
+        }],
+        None,
+      )
+      .unwrap();
+
+    (layer_id, contour_id)
+  }
+
+  fn seed(id: &str, x: f64, y: f64) -> NapiPointSeed {
+    NapiPointSeed {
+      id: id.to_string(),
+      x,
+      y,
+      point_type: NapiPointType::OnCurve,
+      smooth: false,
+    }
+  }
+
+  fn add_points_intent(
+    layer_id: &str,
+    contour_id: &str,
+    before: Option<String>,
+    points: Vec<NapiPointSeed>,
+  ) -> NapiFontIntent {
+    NapiFontIntent {
+      add_points: Some(NapiAddPointsIntent {
+        layer_id: layer_id.to_string(),
+        contour_id: contour_id.to_string(),
+        before,
+        points,
+      }),
+      ..skeleton_intent("addPoints")
+    }
+  }
+
+  #[test]
+  fn apply_pen_intents_honors_client_minted_ids_and_one_atomic_echo() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+    let p2 = shift_font::PointId::new().to_string();
+
+    let applied = bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&p1, 10.0, 20.0), seed(&p2, 30.0, 40.0)],
+        )],
+        Some("Add Points".to_string()),
+      )
+      .unwrap();
+
+    assert_eq!(applied.layers.len(), 1);
+    let structure = applied.layers[0].structure.as_ref().unwrap();
+    let ids: Vec<&str> = structure.contours[0]
+      .points
+      .iter()
+      .map(|p| p.id.as_str())
+      .collect();
+    assert_eq!(ids, vec![p1.as_str(), p2.as_str()]);
+    // canonical values: [xAdvance, x0, y0, x1, y1]
+    assert_eq!(applied.layers[0].values[1], 10.0);
+    assert_eq!(applied.layers[0].values[4], 40.0);
+  }
+
+  #[test]
+  fn apply_pen_intents_inserts_before_the_anchor_point() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+    let p2 = shift_font::PointId::new().to_string();
+    let mid = shift_font::PointId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&p1, 0.0, 0.0), seed(&p2, 100.0, 0.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let applied = bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          Some(p2.clone()),
+          vec![seed(&mid, 50.0, 0.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let structure = applied.layers[0].structure.as_ref().unwrap();
+    let ids: Vec<&str> = structure.contours[0]
+      .points
+      .iter()
+      .map(|p| p.id.as_str())
+      .collect();
+    assert_eq!(ids, vec![p1.as_str(), mid.as_str(), p2.as_str()]);
+  }
+
+  #[test]
+  fn apply_pen_intents_moves_points_and_sets_smooth_and_closes() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&p1, 0.0, 0.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let applied = bridge
+      .apply(
+        vec![
+          NapiFontIntent {
+            move_points: Some(NapiMovePointsIntent {
+              layer_id: layer_id.clone(),
+              point_ids: vec![p1.clone()],
+              coords: vec![77.0, 88.0],
+            }),
+            ..skeleton_intent("movePoints")
+          },
+          NapiFontIntent {
+            set_point_smooth: Some(NapiSetPointSmoothIntent {
+              layer_id: layer_id.clone(),
+              point_id: p1.clone(),
+              smooth: true,
+            }),
+            ..skeleton_intent("setPointSmooth")
+          },
+          NapiFontIntent {
+            set_contour_closed: Some(NapiSetContourClosedIntent {
+              layer_id: layer_id.clone(),
+              contour_id: contour_id.clone(),
+              closed: true,
+            }),
+            ..skeleton_intent("setContourClosed")
+          },
+        ],
+        Some("Close Contour".to_string()),
+      )
+      .unwrap();
+
+    // one atomic apply → one echo, structural because smooth/closed changed
+    assert_eq!(applied.layers.len(), 1);
+    let structure = applied.layers[0].structure.as_ref().unwrap();
+    assert!(structure.contours[0].closed);
+    assert!(structure.contours[0].points[0].smooth);
+    assert_eq!(applied.layers[0].values[1], 77.0);
+    assert_eq!(applied.layers[0].values[2], 88.0);
+  }
+
+  #[test]
+  fn apply_pen_intents_rejects_duplicate_ids_atomically() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&p1, 0.0, 0.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    // second set: one valid point THEN a duplicate — whole set must reject
+    let fresh = shift_font::PointId::new().to_string();
+    let result = bridge.apply(
+      vec![add_points_intent(
+        &layer_id,
+        &contour_id,
+        None,
+        vec![seed(&fresh, 1.0, 1.0), seed(&p1, 2.0, 2.0)],
+      )],
+      None,
+    );
+    assert!(result.is_err());
+
+    // atomicity: the valid point from the rejected set must NOT exist
+    let state = bridge
+      .get_glyph_state(
+        GlyphHandle {
+          name: "A".to_string(),
+          unicode: Some(65),
+        },
+        default_source_id(&bridge),
+      )
+      .unwrap()
+      .unwrap();
+    assert_eq!(state.structure.contours[0].points.len(), 1);
+  }
+
+  fn contour_point_count(bridge: &Bridge) -> usize {
+    let state = bridge
+      .get_glyph_state(
+        GlyphHandle {
+          name: "A".to_string(),
+          unicode: Some(65),
+        },
+        default_source_id(bridge),
+      )
+      .unwrap()
+      .unwrap();
+    state
+      .structure
+      .contours
+      .first()
+      .map(|contour| contour.points.len())
+      .unwrap_or(0)
+  }
+
+  #[test]
+  fn undo_restores_pre_state_and_redo_restores_post_state() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&p1, 10.0, 20.0)],
+        )],
+        Some("Add Point".to_string()),
+      )
+      .unwrap();
+    assert_eq!(contour_point_count(&bridge), 1);
+
+    let undone = bridge.undo().unwrap().expect("one entry to undo");
+    assert_eq!(undone.layers.len(), 1);
+    assert_eq!(contour_point_count(&bridge), 0);
+
+    let redone = bridge.redo().unwrap().expect("one entry to redo");
+    assert_eq!(redone.layers.len(), 1);
+    assert_eq!(contour_point_count(&bridge), 1);
+  }
+
+  #[test]
+  fn undo_returns_none_when_the_ledger_is_empty() {
+    let mut bridge = bridge_with_workspace();
+
+    assert!(bridge.undo().unwrap().is_none());
+    assert!(bridge.redo().unwrap().is_none());
+  }
+
+  #[test]
+  fn a_fresh_apply_truncates_the_redo_stack() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+    let p2 = shift_font::PointId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&p1, 0.0, 0.0)],
+        )],
+        None,
+      )
+      .unwrap();
+    bridge.undo().unwrap().expect("undo the first point");
+
+    // a new apply while redo is available must truncate it
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&p2, 5.0, 5.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    assert!(bridge.redo().unwrap().is_none());
+    assert_eq!(contour_point_count(&bridge), 1);
   }
 
   fn test_paths(label: &str) -> (String, String) {

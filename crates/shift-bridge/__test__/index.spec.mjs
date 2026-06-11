@@ -65,9 +65,12 @@ describe("Bridge", () => {
   it("creates a new glyph through an explicit layer edit", () => {
     bridge.setXAdvance(createDefaultLayer(), 500);
 
-    expect(bridge.getGlyphs()).toEqual([
-      { name: "A", unicodes: [65], componentBaseGlyphNames: [] },
-    ]);
+    const glyphs = bridge.getGlyphs();
+    expect(glyphs).toHaveLength(1);
+    expect(glyphs[0].id).toMatch(/^glyph_/);
+    expect(glyphs[0].name).toBe("A");
+    expect(glyphs[0].unicodes).toEqual([65]);
+    expect(glyphs[0].componentBaseGlyphNames).toEqual([]);
   });
 
   it("saves direct glyph layer edits to a shift source package target", () => {

@@ -553,6 +553,17 @@ impl GlyphLayer {
         Ok(())
     }
 
+    pub fn set_point_smooth(&mut self, point_id: PointId, smooth: bool) -> CoreResult<()> {
+        let contour_id = self.point_contour_or_err(point_id.clone())?;
+        self.point_mut_or_err(contour_id, point_id)?
+            .set_smooth(smooth);
+        Ok(())
+    }
+
+    pub fn has_point(&self, point_id: PointId) -> bool {
+        self.point_contour_or_err(point_id).is_ok()
+    }
+
     pub fn toggle_smooth(&mut self, point_id: PointId) -> CoreResult<bool> {
         let contour_id = self.point_contour_or_err(point_id.clone())?;
         let point = self.point_mut_or_err(contour_id, point_id)?;

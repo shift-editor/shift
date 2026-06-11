@@ -156,6 +156,8 @@ impl From<Source> for NapiSource {
 
 #[napi(object)]
 pub struct NapiGlyphRecord {
+    #[napi(ts_type = "GlyphId")]
+    pub id: String,
     #[napi(ts_type = "GlyphName")]
     pub name: String,
     #[napi(ts_type = "Array<Unicode>")]
@@ -167,6 +169,7 @@ pub struct NapiGlyphRecord {
 impl From<GlyphRecord> for NapiGlyphRecord {
     fn from(record: GlyphRecord) -> Self {
         Self {
+            id: record.id.to_string(),
             name: record.name.to_string(),
             unicodes: record.unicodes,
             component_base_glyph_names: record
@@ -492,8 +495,16 @@ impl From<GlyphMaster> for NapiGlyphMaster {
 /// skeleton kinds; CS1 replaces this with per-variant intent structs.
 #[napi(object)]
 pub struct NapiFontIntent {
-    /// "createGlyph" | "setXAdvance"
+    /// Discriminator naming the populated payload field. Pen vocabulary:
+    /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
+    /// "setPointSmooth". Skeleton leftovers until their real homes land
+    /// (CS4): "createGlyph" | "setXAdvance".
     pub kind: String,
+    pub add_points: Option<NapiAddPointsIntent>,
+    pub add_contour: Option<NapiAddContourIntent>,
+    pub set_contour_closed: Option<NapiSetContourClosedIntent>,
+    pub move_points: Option<NapiMovePointsIntent>,
+    pub set_point_smooth: Option<NapiSetPointSmoothIntent>,
     #[napi(ts_type = "GlyphName")]
     pub name: Option<String>,
     #[napi(ts_type = "Array<Unicode>")]
@@ -521,6 +532,68 @@ pub struct NapiAppliedChange {
     pub layers: Vec<NapiLayerReplaced>,
     /// Full records list when glyph identity changed; absent when untouched.
     pub glyphs: Option<Vec<NapiGlyphRecord>>,
-    #[napi(ts_type = "Array<GlyphName>")]
+    /// Stable ids: references survive renames without re-indexing.
+    #[napi(ts_type = "Array<GlyphId>")]
     pub dependents: Vec<String>,
+}
+
+/// A point to create, carrying its caller-minted id (decision 6: ids are
+/// client-minted so verbs return identity synchronously).
+#[napi(object)]
+pub struct NapiPointSeed {
+    #[napi(ts_type = "PointId")]
+    pub id: String,
+    pub x: f64,
+    pub y: f64,
+    pub point_type: NapiPointType,
+    pub smooth: bool,
+}
+
+#[napi(object)]
+pub struct NapiAddPointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+    /// Insert before this point; append when absent.
+    #[napi(ts_type = "PointId")]
+    pub before: Option<String>,
+    pub points: Vec<NapiPointSeed>,
+}
+
+#[napi(object)]
+pub struct NapiAddContourIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+    pub closed: bool,
+}
+
+#[napi(object)]
+pub struct NapiSetContourClosedIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+    pub closed: bool,
+}
+
+#[napi(object)]
+pub struct NapiMovePointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<PointId>")]
+    pub point_ids: Vec<String>,
+    /// Interleaved absolute coordinates: x0, y0, x1, y1, …
+    pub coords: Vec<f64>,
+}
+
+#[napi(object)]
+pub struct NapiSetPointSmoothIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "PointId")]
+    pub point_id: String,
+    pub smooth: bool,
 }

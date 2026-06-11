@@ -30,6 +30,8 @@ export {
   isValidGlyphId,
   isValidLayerId,
   isValidSourceId,
+  mintContourId,
+  mintPointId,
 } from "./ids";
 
 export type {

@@ -29,6 +29,21 @@ export declare class Bridge {
    * structs.
    */
   apply(intents: Array<NapiFontIntent>, label?: string | undefined | null): NapiAppliedChange
+  /**
+   * Replays the most recent ledger entry's pre states; `null` when the
+   * undo stack is empty.
+   */
+  undo(): NapiAppliedChange | null
+  /**
+   * Replays the most recent undone entry's post states; `null` when the
+   * redo stack is empty.
+   */
+  redo(): NapiAppliedChange | null
+  /**
+   * Id-addressed glyph state: the stable-identity twin of
+   * `get_glyph_state`. References survive renames; no name lookup.
+   */
+  getGlyph(glyphId: GlyphId, sourceId: SourceId): NapiGlyphState | null
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): NapiGlyphState | null
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
@@ -75,6 +90,20 @@ export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
 }
+export interface NapiAddContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+export interface NapiAddPointsIntent {
+  layerId: LayerId
+  contourId: ContourId
+  /** Insert before this point; append when absent. */
+  before?: PointId
+  points: Array<NapiPointSeed>
+}
+
 export interface NapiAnchorData {
   id: AnchorId
   name?: string
@@ -85,7 +114,8 @@ export interface NapiAppliedChange {
   layers: Array<NapiLayerReplaced>
   /** Full records list when glyph identity changed; absent when untouched. */
   glyphs?: Array<NapiGlyphRecord>
-  dependents: Array<GlyphName>
+  /** Stable ids: references survive renames without re-indexing. */
+  dependents: Array<GlyphId>
 }
 
 export interface NapiAxis {
@@ -120,8 +150,18 @@ export interface NapiContourData {
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
  */
 export interface NapiFontIntent {
-  /** "createGlyph" | "setXAdvance" */
+  /**
+   * Discriminator naming the populated payload field. Pen vocabulary:
+   * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
+   * "setPointSmooth". Skeleton leftovers until their real homes land
+   * (CS4): "createGlyph" | "setXAdvance".
+   */
   kind: string
+  addPoints?: NapiAddPointsIntent
+  addContour?: NapiAddContourIntent
+  setContourClosed?: NapiSetContourClosedIntent
+  movePoints?: NapiMovePointsIntent
+  setPointSmooth?: NapiSetPointSmoothIntent
   name?: GlyphName
   unicodes?: Array<Unicode>
   layerId?: LayerId
@@ -175,6 +215,7 @@ export interface NapiGlyphMaster {
 }
 
 export interface NapiGlyphRecord {
+  id: GlyphId
   name: GlyphName
   unicodes: Array<Unicode>
   componentBaseGlyphNames: Array<GlyphName>
@@ -228,8 +269,27 @@ export interface NapiLocation {
   values: Record<string, number>
 }
 
+export interface NapiMovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
 export interface NapiPointData {
   id: PointId
+  pointType: NapiPointType
+  smooth: boolean
+}
+
+/**
+ * A point to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface NapiPointSeed {
+  id: PointId
+  x: number
+  y: number
   pointType: NapiPointType
   smooth: boolean
 }
@@ -237,6 +297,18 @@ export interface NapiPointData {
 export declare const enum NapiPointType {
   OnCurve = 'onCurve',
   OffCurve = 'offCurve'
+}
+
+export interface NapiSetContourClosedIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+export interface NapiSetPointSmoothIntent {
+  layerId: LayerId
+  pointId: PointId
+  smooth: boolean
 }
 
 export interface NapiSource {

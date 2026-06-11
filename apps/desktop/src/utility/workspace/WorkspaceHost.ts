@@ -73,6 +73,9 @@ export class WorkspaceHost {
       "workspace.snapshot": () =>
         this.#documentId === null ? null : this.#snapshot(this.#documentId),
       "workspace.apply": ({ intents, label }) => this.#bridge.apply(intents, label),
+      "workspace.undo": () => this.#bridge.undo(),
+      "workspace.redo": () => this.#bridge.redo(),
+      "workspace.glyph": ({ glyphId, sourceId }) => this.#bridge.getGlyph(glyphId, sourceId),
     });
   }
 
