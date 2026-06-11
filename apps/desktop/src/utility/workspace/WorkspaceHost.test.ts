@@ -63,14 +63,18 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(ready).resolves.toBeUndefined();
   });
 
-  it("clears stale drafts on start", () => {
-    const stale = path.join(tmpRoot, "drafts", "stale-draft");
-    fs.mkdirSync(stale, { recursive: true });
+  it("retains existing drafts across host restarts", async () => {
+    // An authored draft must never die with the process: the data-loss
+    // class the durability ADRs were written against.
+    const sync = await connectSyncLane();
+    const { documentId } = await sync.call("workspace.create", undefined);
+    const storePath = path.join(tmpRoot, "drafts", documentId, "document.sqlite");
+    expect(fs.existsSync(storePath)).toBe(true);
 
     const lane = new MessageChannel();
     startHost(nodePortTransport(lane.port2));
 
-    expect(fs.existsSync(stale)).toBe(false);
+    expect(fs.existsSync(storePath)).toBe(true);
   });
 
   it("rejects workspace.connect without a transferred port", async () => {

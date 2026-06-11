@@ -48,10 +48,8 @@ export class WorkspaceHost {
     this.#syncTransport = options.syncTransport;
   }
 
-  /** Serves the shell lane, clears stale drafts, and announces readiness. */
+  /** Serves the shell lane and announces readiness. Drafts are retained. */
   start(): void {
-    this.#documents.clearDrafts();
-
     const shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shell, {
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);

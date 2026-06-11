@@ -8,8 +8,10 @@ import type { DraftAllocation } from "./types";
  *
  * @remarks
  * Moved from main: the utility process owns everything durable, so document
- * ids are minted and store paths allocated here. Drafts are transient by
- * definition; {@link clearDrafts} removes them all on host start.
+ * ids are minted and store paths allocated here. Drafts are RETAINED across
+ * restarts — an authored font must never die with the process (the
+ * data-loss class three ADRs were written against). Reopen/resume UX and
+ * pruning land with the durability series.
  */
 export class DocumentStorage {
   readonly #rootPath: string;
@@ -31,13 +33,5 @@ export class DocumentStorage {
       documentId,
       storePath: path.join(directoryPath, "document.sqlite"),
     };
-  }
-
-  /** Removes every draft store; drafts must not survive a host restart. */
-  clearDrafts(): void {
-    fs.rmSync(path.join(this.#rootPath, "drafts"), {
-      recursive: true,
-      force: true,
-    });
   }
 }
