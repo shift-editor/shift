@@ -22,7 +22,7 @@ export class ToggleSmooth implements SelectBehavior {
     const point = geometry.point(hit.pointId);
     if (!point || !Validate.isOnCurve(point)) return false;
 
-    ctx.editor.commandHistory.execute(new ToggleSmoothCommand(pointId));
+    ctx.editor.commands.run(new ToggleSmoothCommand(pointId));
     return true;
   }
 }

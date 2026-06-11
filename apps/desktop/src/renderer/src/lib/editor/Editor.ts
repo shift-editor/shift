@@ -11,7 +11,7 @@ import { Bounds, Point2D, Rect2D } from "@shift/geo";
 
 import { Camera } from "./managers";
 import {
-  CommandHistory,
+  CommandRunner,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
   SetXAdvanceCommand,
@@ -163,7 +163,7 @@ export class Editor {
    * immutable glyph geometry and from render-only state.
    */
   #camera: Camera;
-  #commandHistory: CommandHistory;
+  #commands: CommandRunner;
 
   /**
    * Active glyph/source context.
@@ -218,7 +218,7 @@ export class Editor {
     this.input = new EditorInput();
     this.gesture = new EditorGesture();
 
-    this.#commandHistory = new CommandHistory(this.#glyph.edit.glyphSource);
+    this.#commands = new CommandRunner(this.#glyph.edit.glyphSource);
 
     this.#toolState = {
       app: new Map<string, unknown>(),
@@ -376,11 +376,7 @@ export class Editor {
       throw new Error("Cannot begin a source edit draft without an active glyph source");
     }
 
-    return new SourceEditDraft(glyphSource, this.#commandHistory, subject);
-  }
-
-  public withBatch<TResult>(label: string, fn: () => TResult): TResult {
-    return this.#commandHistory.withBatch(label, fn);
+    return new SourceEditDraft(glyphSource, subject);
   }
 
   public get debugOverlays(): DebugOverlays {
@@ -781,16 +777,13 @@ export class Editor {
     return this.#glyph.open.glyph;
   }
 
-  public get commandHistory(): CommandHistory {
-    return this.#commandHistory;
+  /** Stateless command executor; undo authority is the workspace ledger. */
+  public get commands(): CommandRunner {
+    return this.#commands;
   }
 
   /** Subscribe to a lifecycle event. Returns an unsubscribe function. */
   public on: EventEmitter["on"] = (...args) => this.#events.on(...args);
-
-  public get commands(): CommandHistory {
-    return this.#commandHistory;
-  }
 
   public updateEdgePan(screenPos: Point2D, canvasBounds: Rect2D): void {
     this.#edgePan.update(screenPos, canvasBounds);
@@ -860,7 +853,7 @@ export class Editor {
 
     if (instance.xAdvance === width) return;
 
-    this.#commandHistory.execute(new SetXAdvanceCommand(instance.xAdvance, width));
+    this.#commands.run(new SetXAdvanceCommand(instance.xAdvance, width));
   }
 
   /**
@@ -879,7 +872,7 @@ export class Editor {
     if (delta === 0) return;
 
     const beforeXAdvance = instance.xAdvance;
-    this.#commandHistory.execute(
+    this.#commands.run(
       new SetLeftSidebearingCommand(beforeXAdvance, beforeXAdvance + delta, delta),
     );
   }
@@ -901,9 +894,7 @@ export class Editor {
     if (delta === 0) return;
 
     const beforeXAdvance = instance.xAdvance;
-    this.#commandHistory.execute(
-      new SetRightSidebearingCommand(beforeXAdvance, beforeXAdvance + delta),
-    );
+    this.#commands.run(new SetRightSidebearingCommand(beforeXAdvance, beforeXAdvance + delta));
   }
 
   public updateMetricsFromFont(): void {
@@ -1084,7 +1075,7 @@ export class Editor {
     if (!written) return false;
 
     const pointIds = this.#selectedClipboardPointIds();
-    this.#commandHistory.execute(new CutCommand(pointIds));
+    this.#commands.run(new CutCommand(pointIds));
     this.selection.clear();
 
     return true;
@@ -1098,7 +1089,7 @@ export class Editor {
     const command = new PasteCommand(result.content, {
       offset: this.#clipboard.nextPasteOffset(),
     });
-    this.#commandHistory.execute(command);
+    this.#commands.run(command);
 
     if (command.createdPointIds.length > 0) {
       this.selection.select(command.createdPointIds.map((id) => ({ kind: "point", id })));
@@ -1136,7 +1127,7 @@ export class Editor {
     if (!center) return;
 
     const cmd = new RotatePointsCommand([...pointIds], angle, center);
-    this.#commandHistory.execute(cmd);
+    this.#commands.run(cmd);
   }
 
   public scaleSelection(sx: number, sy: number, origin?: Point2D): void {
@@ -1147,7 +1138,7 @@ export class Editor {
     if (!o) return;
 
     const cmd = new ScalePointsCommand([...pointIds], sx, sy, o);
-    this.#commandHistory.execute(cmd);
+    this.#commands.run(cmd);
   }
 
   public reflectSelection(axis: ReflectAxis, origin?: Point2D): void {
@@ -1158,7 +1149,7 @@ export class Editor {
     if (!center) return;
 
     const cmd = new ReflectPointsCommand([...pointIds], axis, center);
-    this.#commandHistory.execute(cmd);
+    this.#commands.run(cmd);
   }
 
   public rotate90CCW(): void {
@@ -1186,7 +1177,7 @@ export class Editor {
     if (pointIds.length === 0) return;
 
     const cmd = new MoveSelectionToCommand([...pointIds], target, anchor);
-    this.#commandHistory.execute(cmd);
+    this.#commands.run(cmd);
   }
 
   public alignSelection(alignment: AlignmentType): void {
@@ -1194,7 +1185,7 @@ export class Editor {
     if (pointIds.length === 0) return;
 
     const cmd = new AlignPointsCommand([...pointIds], alignment);
-    this.#commandHistory.execute(cmd);
+    this.#commands.run(cmd);
   }
 
   public distributeSelection(type: DistributeType): void {
@@ -1202,7 +1193,7 @@ export class Editor {
     if (pointIds.length < 3) return;
 
     const cmd = new DistributePointsCommand([...pointIds], type);
-    this.#commandHistory.execute(cmd);
+    this.#commands.run(cmd);
   }
 
   public get activeContourIdCell(): Signal<ContourId | null> {
@@ -1234,32 +1225,32 @@ export class Editor {
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
     this.#glyph.open.activeContourId.set(contourId);
     if (fromStart) {
-      this.#commandHistory.execute(new ReverseContourCommand(contourId));
+      this.#commands.run(new ReverseContourCommand(contourId));
     }
     this.selection.select([{ kind: "point", id: pointId }]);
   }
 
   public splitSegment(segment: Segment, t: number): PointId {
-    return this.#commandHistory.execute(new SplitSegmentCommand(segment, t));
+    return this.#commands.run(new SplitSegmentCommand(segment, t));
   }
 
   public scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void {
     if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
-    this.#commandHistory.execute(new ScalePointsCommand([...pointIds], sx, sy, anchor));
+    this.#commands.run(new ScalePointsCommand([...pointIds], sx, sy, anchor));
   }
 
   public rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void {
     if (pointIds.length === 0 || angle === 0) return;
-    this.#commandHistory.execute(new RotatePointsCommand([...pointIds], angle, center));
+    this.#commands.run(new RotatePointsCommand([...pointIds], angle, center));
   }
 
   public nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void {
     if (pointIds.length === 0 || (dx === 0 && dy === 0)) return;
-    this.#commandHistory.execute(new NudgePointsCommand([...pointIds], dx, dy));
+    this.#commands.run(new NudgePointsCommand([...pointIds], dx, dy));
   }
 
   public upgradeLineToCubic(segment: LineSegmentPoints): void {
-    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment));
+    this.#commands.run(new UpgradeLineToCubicCommand(segment));
   }
 
   public boolean(
@@ -1267,7 +1258,7 @@ export class Editor {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    this.#commandHistory.execute(new BooleanOperationCommand(contourIdA, contourIdB, operation));
+    this.#commands.run(new BooleanOperationCommand(contourIdA, contourIdB, operation));
   }
 
   public duplicateSelection(): PointId[] {
@@ -1275,7 +1266,7 @@ export class Editor {
     if (!content || content.contours.length === 0) return [];
 
     const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-    this.#commandHistory.execute(command);
+    this.#commands.run(command);
     return command.createdPointIds;
   }
 
