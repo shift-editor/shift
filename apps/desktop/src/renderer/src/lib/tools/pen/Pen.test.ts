@@ -53,6 +53,48 @@ describe("Pen tool", () => {
       expect(contour?.segments()[1]?.type).toBe("line");
     });
 
+    it("clicking the first point closes the contour and ends the stroke", async () => {
+      editor.click(100, 200);
+      await editor.settle();
+      editor.click(300, 200);
+      await editor.settle();
+      editor.click(200, 100);
+      await editor.settle();
+
+      editor.click(100, 200); // back on the first point
+      await editor.settle();
+
+      const contour = editor.activeGlyphSource?.geometry.contours[0];
+      expect(contour?.closed).toBe(true);
+      expect(contour?.points.length).toBe(3);
+      expect(editor.getActiveContour()).toBeNull();
+    });
+
+    it("two consecutive curve drags create two cubic segments joined by a smooth point", async () => {
+      editor.click(100, 100);
+      await editor.settle();
+
+      editor.pointerDown(300, 100);
+      editor.pointerMove(380, 140);
+      editor.pointerMove(380, 160);
+      editor.pointerMove(380, 180);
+      editor.pointerUp(380, 180);
+      await editor.settle();
+
+      editor.pointerDown(500, 100);
+      editor.pointerMove(580, 140);
+      editor.pointerMove(580, 160);
+      editor.pointerMove(580, 180);
+      editor.pointerUp(580, 180);
+      await editor.settle();
+
+      const contour = editor.getActiveContour();
+      expect(contour?.segments().map((segment) => segment.type)).toEqual(["cubic", "cubic"]);
+
+      const junction = contour?.segments()[0]?.asCubic()?.end;
+      expect(junction?.smooth).toBe(true);
+    });
+
     it("adding a point and then dragging should create a cubic curve", async () => {
       editor.click(200, -800);
       await editor.settle();
