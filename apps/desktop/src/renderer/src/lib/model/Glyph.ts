@@ -130,7 +130,9 @@ class GlyphEditSession {
     const patch = SourcePositionPatch.from(updates);
     if (patch.isEmpty) return;
 
-    this.#font.bridge.applyPositionPatch(this.#layerId, ...patch.toBridgePayload());
+    // One-shot edits persist through the same movePoints intent as drag
+    // commits; the local apply keeps reads synchronous until the echo folds.
+    this.commitPositionPatch(patch.positions);
     this.#applyPositionPatchLocally(patch.positions);
   }
 

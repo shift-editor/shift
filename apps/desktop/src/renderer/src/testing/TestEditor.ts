@@ -77,6 +77,27 @@ export class TestEditor extends Editor {
     return this;
   }
 
+  /**
+   * Adds another glyph to the workspace font and pulls its model into the
+   * Font cache — the same create-then-open flow EditorView runs in the app.
+   */
+  async addGlyph(name: string, unicode: number | null): Promise<void> {
+    const applied = await this.#stack.client.apply(
+      [
+        {
+          kind: "createGlyph",
+          name: name as GlyphName,
+          unicodes: unicode === null ? [] : [unicode],
+        },
+      ],
+      "Add Glyph",
+    );
+
+    const record = applied.glyphs?.find((glyph) => glyph.name === name);
+    if (!record) throw new Error("createGlyph did not echo the new record");
+    await this.font.openGlyph(record.id, this.font.defaultSource);
+  }
+
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
   async settle(): Promise<this> {
     await this.font.writer.settled();
@@ -116,6 +137,16 @@ export class TestEditor extends Editor {
     this.toolManager.handlePointerDown({ x, y }, mods);
     this.toolManager.handlePointerUp({ x, y });
     return this;
+  }
+
+  /**
+   * Click at glyph-local (UPM) coordinates, projecting through the camera.
+   * Use when a test asserts exact point positions; plain {@link click} takes
+   * screen coordinates, which the viewport y-flips.
+   */
+  clickGlyphLocal(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    const { screen } = this.fromGlyphLocal({ x, y });
+    return this.click(screen.x, screen.y, options);
   }
 
   pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
