@@ -4,7 +4,7 @@ import logo from "@/assets/logo@1024.png";
 import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 import { Titlebar } from "@/components/chrome/Titlebar";
-import { shiftHost } from "@/host/shiftHost";
+import { getShiftHost } from "@/host/shiftHost";
 import { getFont, getWorkspace } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals/useSignal";
 
@@ -16,7 +16,7 @@ export const Landing = () => {
     if (!loaded) return;
 
     navigate("/home");
-    void shiftHost.commands.run("window.maximise");
+    void getShiftHost().commands.run("window.maximise");
   }, [loaded, navigate]);
 
   const handleNewFont = () => {

@@ -21,6 +21,10 @@ export type RendererToMain = {
  * Defines broadcast channels that main may send to renderer windows.
  *
  * @remarks
- * Keep this empty until main needs to push state or events into the renderer.
+ * Add channels here only when main owns the state change and the renderer
+ * merely reflects it.
  */
-export type MainToRenderer = {};
+export type MainToRenderer = {
+  /** UI (chrome) zoom changed via the View menu or its accelerators. */
+  "ui.zoomChanged": (percent: number) => void;
+};

@@ -28,7 +28,9 @@ export class App {
   #commands = new CommandRegistry();
 
   #appIcon = new AppIcon();
-  #applicationMenu = new ApplicationMenu(this.#appIcon.path());
+  #applicationMenu = new ApplicationMenu(this.#appIcon.path(), (id) => {
+    void this.#commands.run(id, this.#commandContext());
+  });
 
   #workspace = new WorkspaceProcess();
 

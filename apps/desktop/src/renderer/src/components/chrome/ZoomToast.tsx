@@ -37,7 +37,29 @@ function useZoomToastListener(onZoomChange: (percent: number) => void) {
   }, []);
 
   useEffect(() => {
+    const onZoom = window.shiftHost?.ui.onZoomChanged;
+    if (!onZoom) return undefined;
+
+    const unsubscribe = onZoom((zoomPercent: number) => {
+      onZoomChange(zoomPercent);
+
+      const m = managerRef.current;
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+
+      const id = toastIdRef.current;
+      const exists = id !== null && m.toasts.some((t) => t.id === id);
+
+      if (exists) {
+        m.update(id, { title: `${zoomPercent}%` });
+      } else {
+        toastIdRef.current = m.add({ title: `${zoomPercent}%` });
+      }
+
+      scheduleClose();
+    });
+
     return () => {
+      unsubscribe();
       if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
     };
   }, [onZoomChange, scheduleClose]);

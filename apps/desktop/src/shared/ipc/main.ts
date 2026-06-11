@@ -1,5 +1,5 @@
-import type { IpcMain, IpcMainInvokeEvent } from "electron";
-import type { RendererToMain } from "./contract";
+import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
+import type { MainToRenderer, RendererToMain } from "./contract";
 
 /**
  * Registers a typed renderer-to-main request handler.
@@ -17,4 +17,19 @@ export function handle<K extends keyof RendererToMain>(
   ) => ReturnType<RendererToMain[K]> | Promise<ReturnType<RendererToMain[K]>>,
 ): void {
   ipcMain.handle(channel, handler as any);
+}
+
+/**
+ * Sends a typed main-to-renderer broadcast to one window.
+ *
+ * @param webContents - Target window's web contents.
+ * @param channel - Channel declared in {@link MainToRenderer}.
+ * @param args - Payload inferred from the channel contract.
+ */
+export function send<K extends keyof MainToRenderer>(
+  webContents: WebContents,
+  channel: K,
+  ...args: Parameters<MainToRenderer[K]>
+): void {
+  webContents.send(channel, ...args);
 }

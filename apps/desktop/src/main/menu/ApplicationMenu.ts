@@ -1,4 +1,6 @@
 import { app, Menu, type MenuItemConstructorOptions } from "electron";
+import type { CommandId } from "../../shared/commands";
+import { commands } from "../commands/Commands";
 
 const isMac = process.platform === "darwin";
 
@@ -12,9 +14,11 @@ const isMac = process.platform === "darwin";
  */
 export class ApplicationMenu {
   readonly #aboutIconPath: string;
+  readonly #runCommand: (id: CommandId) => void;
 
-  constructor(aboutIconPath: string) {
+  constructor(aboutIconPath: string, runCommand: (id: CommandId) => void) {
     this.#aboutIconPath = aboutIconPath;
+    this.#runCommand = runCommand;
   }
 
   /** Installs the current menu template as Electron's application menu. */
@@ -58,7 +62,11 @@ export class ApplicationMenu {
       },
       {
         label: "View",
-        submenu: [{ label: "Developer", submenu: [{ role: "toggleDevTools" }] }],
+        submenu: [
+          ...this.#viewZoomItems(),
+          { type: "separator" },
+          { label: "Developer", submenu: [{ role: "toggleDevTools" }] },
+        ],
       },
     ];
   }
@@ -67,9 +75,33 @@ export class ApplicationMenu {
   buildWindowsMenu(): MenuItemConstructorOptions[] {
     return [
       {
+        label: "View",
+        submenu: this.#viewZoomItems(),
+      },
+      {
         label: "Help",
         submenu: [{ role: "about" }],
       },
     ];
+  }
+
+  #viewZoomItems(): MenuItemConstructorOptions[] {
+    return [
+      this.#commandItem("ui.zoomIn"),
+      this.#commandItem("ui.zoomOut"),
+      this.#commandItem("ui.zoomReset"),
+    ];
+  }
+
+  /** Builds a menu item from the command registry's metadata. */
+  #commandItem(id: CommandId): MenuItemConstructorOptions {
+    const command = commands.find((candidate) => candidate.id === id);
+    if (!command) throw new Error(`Unknown menu command: ${id}`);
+
+    return {
+      label: command.label,
+      accelerator: command.accelerator,
+      click: () => this.#runCommand(id),
+    };
   }
 }

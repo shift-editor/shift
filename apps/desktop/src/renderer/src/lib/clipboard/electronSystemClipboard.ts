@@ -1,15 +1,16 @@
 import type { SystemClipboard } from "./types";
+import { getShiftHost } from "@/host/shiftHost";
 
 /**
- * Production {@link SystemClipboard} placeholder while clipboard moves onto
- * the renderer host API.
+ * Production {@link SystemClipboard} backed by the preload-exposed Shift host
+ * (Electron's clipboard module, no IPC round trip). Resolves the host lazily
+ * per call so importing this module never requires the preload bridge.
  */
 export const electronSystemClipboard: SystemClipboard = {
   writeText(text: string): void {
-    void text;
-    throw new Error("clipboard host API is not wired");
+    getShiftHost().clipboard.writeText(text);
   },
   readText(): string {
-    throw new Error("clipboard host API is not wired");
+    return getShiftHost().clipboard.readText();
   },
 };

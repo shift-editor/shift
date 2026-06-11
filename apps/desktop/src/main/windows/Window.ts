@@ -1,4 +1,5 @@
 import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
+import * as ipc from "../../shared/ipc/main";
 
 export interface WindowOptions {
   title?: string;
@@ -17,6 +18,19 @@ const WINDOW_DEFAULT_OPTIONS: Omit<WindowOptions, "preloadPath"> = {
   minWidth: 1200,
   maximised: false,
 };
+
+/** Chrome zoom steps, matching the browser-conventional ladder. */
+const ZOOM_PERCENTS = [
+  25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
+];
+
+function zoomLevelToPercent(zoomLevel: number): number {
+  return Math.round(Math.pow(1.2, zoomLevel) * 100);
+}
+
+function percentToZoomLevel(percent: number): number {
+  return Math.log(percent / 100) / Math.log(1.2);
+}
 
 const BROWSER_WINDOW_DEFAULT_OPTIONS: BrowserWindowConstructorOptions = {
   titleBarStyle: "hidden",
@@ -79,5 +93,29 @@ export class Window {
     } else {
       this.#window.maximize();
     }
+  }
+
+  /** Steps UI (chrome) zoom up to the next ladder stop and notifies the renderer. */
+  zoomIn(): void {
+    const current = zoomLevelToPercent(this.#window.webContents.getZoomLevel());
+    const next = ZOOM_PERCENTS.find((percent) => percent > current + 1);
+    this.#setZoomPercent(next ?? ZOOM_PERCENTS[ZOOM_PERCENTS.length - 1]!);
+  }
+
+  /** Steps UI (chrome) zoom down to the previous ladder stop and notifies the renderer. */
+  zoomOut(): void {
+    const current = zoomLevelToPercent(this.#window.webContents.getZoomLevel());
+    const previous = [...ZOOM_PERCENTS].reverse().find((percent) => percent < current - 1);
+    this.#setZoomPercent(previous ?? ZOOM_PERCENTS[0]!);
+  }
+
+  /** Restores UI (chrome) zoom to 100% and notifies the renderer. */
+  resetZoom(): void {
+    this.#setZoomPercent(100);
+  }
+
+  #setZoomPercent(percent: number): void {
+    this.#window.webContents.setZoomLevel(percentToZoomLevel(percent));
+    ipc.send(this.#window.webContents, "ui.zoomChanged", percent);
   }
 }

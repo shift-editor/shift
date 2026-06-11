@@ -9,5 +9,8 @@ export type CommandId =
   | "window.close"
   | "window.minimise"
   | "window.maximise"
+  | "ui.zoomIn"
+  | "ui.zoomOut"
+  | "ui.zoomReset"
   | "font.new"
   | "font.load";

@@ -30,4 +30,18 @@ export interface ShiftHost {
      */
     connect: () => Promise<void>;
   };
+  /** App-shell UI events owned by the main process. */
+  ui: {
+    /**
+     * Subscribes to UI (chrome) zoom changes driven by the View menu.
+     *
+     * @returns an unsubscribe function.
+     */
+    onZoomChanged: (callback: (percent: number) => void) => () => void;
+  };
+  /** System clipboard access (Electron's clipboard module, no IPC). */
+  clipboard: {
+    writeText: (text: string) => void;
+    readText: () => string;
+  };
 }
