@@ -34,11 +34,13 @@ export {
 
 export type {
   AnchorData,
+  AppliedChange,
   Axis,
   AxisTent,
   BridgeApi,
   ComponentData,
   ContourData,
+  FontIntent,
   FontMetadata,
   FontMetrics,
   GlyphChangedEntities,
@@ -51,6 +53,7 @@ export type {
   GlyphStructureChange,
   GlyphValueChange,
   GlyphVariationData,
+  LayerReplaced,
   Location,
   PointData,
   PointType,

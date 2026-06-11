@@ -10,8 +10,9 @@ use shift_font::{
 };
 use shift_wire::{
   bridges::napi::{
-    NapiAxis, NapiFontMetadata, NapiFontMetrics, NapiGlyphRecord, NapiGlyphState,
-    NapiGlyphStructure, NapiGlyphStructureChange, NapiGlyphValueChange, NapiPointType, NapiSource,
+    NapiAppliedChange, NapiAxis, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
+    NapiGlyphRecord, NapiGlyphState, NapiGlyphStructure, NapiGlyphStructureChange,
+    NapiGlyphValueChange, NapiLayerReplaced, NapiPointType, NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
   state::apply_state_to_layer,
@@ -333,6 +334,99 @@ impl Bridge {
     self.mark_font_changed();
 
     Ok(())
+  }
+
+  /// CS0 walking skeleton: applies a small intent set through the existing
+  /// workspace verbs and answers with pure replace-grade state. CS1 replaces
+  /// the stringly intent match with `Font::apply_intents` over per-variant
+  /// structs.
+  #[napi]
+  pub fn apply(
+    &mut self,
+    intents: Vec<NapiFontIntent>,
+    label: Option<String>,
+  ) -> errors::Result<NapiAppliedChange> {
+    // The ledger lands in CS1b; the label is part of the wire contract now.
+    let _ = label;
+
+    let mut layers: Vec<NapiLayerReplaced> = Vec::new();
+    let mut glyphs_changed = false;
+
+    for intent in intents {
+      match intent.kind.as_str() {
+        "createGlyph" => {
+          let name = intent.name.ok_or(BridgeError::InvalidInput {
+            kind: "intent",
+            value: "createGlyph requires name".to_string(),
+          })?;
+          let unicodes = intent.unicodes.unwrap_or_default();
+
+          let source_id = self
+            .font()?
+            .default_source_id()
+            .or_else(|| self.font().ok()?.sources().first().map(|s| s.id()))
+            .ok_or(BridgeError::InvalidInput {
+              kind: "intent",
+              value: "createGlyph requires a font with at least one source".to_string(),
+            })?;
+
+          let glyph = self.workspace_mut()?.create_glyph(name, unicodes)?;
+          let layer = self
+            .workspace_mut()?
+            .create_glyph_layer(glyph.id(), source_id)?;
+
+          layers.push(NapiLayerReplaced {
+            layer_id: layer.id().to_string(),
+            structure: Some(GlyphStructure::from(&layer).into()),
+            values: shift_wire::values_from_layer(&layer).into(),
+            changed: GlyphChangedEntities::default().into(),
+          });
+          glyphs_changed = true;
+        }
+        "setXAdvance" => {
+          let layer_id = intent.layer_id.ok_or(BridgeError::InvalidInput {
+            kind: "intent",
+            value: "setXAdvance requires layerId".to_string(),
+          })?;
+          let width = intent.width.ok_or(BridgeError::InvalidInput {
+            kind: "intent",
+            value: "setXAdvance requires width".to_string(),
+          })?;
+
+          let layer_id = parse::<LayerId>(&layer_id)?;
+          let layer = self.workspace_mut()?.set_x_advance(layer_id, width)?;
+          let change = GlyphValueChange::from_layer(&layer, GlyphChangedEntities::default());
+
+          layers.push(NapiLayerReplaced {
+            layer_id: layer.id().to_string(),
+            structure: None,
+            values: change.values.into(),
+            changed: change.changed.into(),
+          });
+        }
+        other => {
+          return Err(BridgeError::InvalidInput {
+            kind: "intent",
+            value: format!("unknown intent kind \"{other}\""),
+          })
+        }
+      }
+    }
+
+    self.mark_font_changed();
+
+    let glyphs = if glyphs_changed {
+      Some(self.get_glyphs()?)
+    } else {
+      None
+    };
+
+    Ok(NapiAppliedChange {
+      layers,
+      glyphs,
+      // Dependent-composite invalidation lands with the interpreter in CS1.
+      dependents: Vec::new(),
+    })
   }
 
   #[napi]
@@ -872,6 +966,80 @@ mod tests {
   }
 
   static TEST_ID: AtomicUsize = AtomicUsize::new(0);
+
+  fn skeleton_intent(kind: &str) -> NapiFontIntent {
+    NapiFontIntent {
+      kind: kind.to_string(),
+      name: None,
+      unicodes: None,
+      layer_id: None,
+      width: None,
+    }
+  }
+
+  #[test]
+  fn apply_create_glyph_returns_records_and_replace_grade_layer() {
+    let mut bridge = bridge_with_workspace();
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          name: Some("A".to_string()),
+          unicodes: Some(vec![65]),
+          ..skeleton_intent("createGlyph")
+        }],
+        Some("Add Glyph".to_string()),
+      )
+      .unwrap();
+
+    let glyphs = applied.glyphs.expect("createGlyph must echo records");
+    assert_eq!(glyphs.len(), 1);
+    assert_eq!(glyphs[0].name, "A");
+    assert_eq!(applied.layers.len(), 1);
+    assert!(applied.layers[0].structure.is_some());
+  }
+
+  #[test]
+  fn apply_set_x_advance_echoes_values_without_structure() {
+    let mut bridge = bridge_with_workspace();
+    let created = bridge
+      .apply(
+        vec![NapiFontIntent {
+          name: Some("A".to_string()),
+          unicodes: Some(vec![65]),
+          ..skeleton_intent("createGlyph")
+        }],
+        None,
+      )
+      .unwrap();
+    let layer_id = created.layers[0].layer_id.clone();
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          layer_id: Some(layer_id.clone()),
+          width: Some(642.0),
+          ..skeleton_intent("setXAdvance")
+        }],
+        None,
+      )
+      .unwrap();
+
+    assert!(applied.glyphs.is_none());
+    assert_eq!(applied.layers[0].layer_id, layer_id);
+    assert!(applied.layers[0].structure.is_none());
+    // canonical values layout: x advance is slot 0
+    assert_eq!(applied.layers[0].values[0], 642.0);
+  }
+
+  #[test]
+  fn apply_rejects_unknown_intent_kinds() {
+    let mut bridge = bridge_with_workspace();
+
+    assert!(bridge
+      .apply(vec![skeleton_intent("explodeFont")], None)
+      .is_err());
+  }
 
   fn test_paths(label: &str) -> (String, String) {
     let id = TEST_ID.fetch_add(1, Ordering::Relaxed);

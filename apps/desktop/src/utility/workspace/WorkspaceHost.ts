@@ -72,6 +72,7 @@ export class WorkspaceHost {
       "workspace.create": () => this.#create(),
       "workspace.snapshot": () =>
         this.#documentId === null ? null : this.#snapshot(this.#documentId),
+      "workspace.apply": ({ intents, label }) => this.#bridge.apply(intents, label),
     });
   }
 

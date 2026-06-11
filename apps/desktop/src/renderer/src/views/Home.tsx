@@ -4,11 +4,13 @@ import { LeftSidebar } from "@/components/home/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogContext";
+import { SkeletonPanel } from "@/components/debug/SkeletonPanel";
 
 export const Home = () => (
   <GlyphCatalogProvider>
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
       <Toolbar />
+      <SkeletonPanel />
       <ResizablePanelGroup
         direction="horizontal"
         autoSaveId="shift:home-layout"

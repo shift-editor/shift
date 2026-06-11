@@ -27,6 +27,13 @@ export interface BridgeApi {
   getGlyphCount(): number
   getGlyphs(): Array<GlyphRecord>
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
+  /**
+   * CS0 walking skeleton: applies a small intent set through the existing
+   * workspace verbs and answers with pure replace-grade state. CS1 replaces
+   * the stringly intent match with `Font::apply_intents` over per-variant
+   * structs.
+   */
+  apply(intents: Array<FontIntent>, label?: string | undefined | null): AppliedChange
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): GlyphState | null
   isVariable(): boolean
   getAxes(): Array<Axis>
@@ -78,6 +85,14 @@ export interface AnchorData {
   name?: string
 }
 
+/** Pure-state response to `apply`: no change records cross to the renderer. */
+export interface AppliedChange {
+  layers: Array<LayerReplaced>
+  /** Full records list when glyph identity changed; absent when untouched. */
+  glyphs?: Array<GlyphRecord>
+  dependents: Array<GlyphName>
+}
+
 export interface Axis {
   tag: string
   name: string
@@ -103,6 +118,19 @@ export interface ContourData {
   id: ContourId
   points: Array<PointData>
   closed: boolean
+}
+
+/**
+ * CS0 walking-skeleton intent. A stringly union covering exactly the two
+ * skeleton kinds; CS1 replaces this with per-variant intent structs.
+ */
+export interface FontIntent {
+  /** "createGlyph" | "setXAdvance" */
+  kind: string
+  name?: GlyphName
+  unicodes?: Array<Unicode>
+  layerId?: LayerId
+  width?: number
 }
 
 export interface FontMetadata {
@@ -187,6 +215,18 @@ export interface GlyphVariationData {
   regions: Array<Array<AxisTent>>
   /** Deltas are flattened in `GlyphState::values` order. */
   deltas: Array<Float64Array>
+}
+
+/**
+ * Replace-grade state for one touched layer; the renderer folds by
+ * substitution, never by interpreting changes.
+ */
+export interface LayerReplaced {
+  layerId: LayerId
+  /** Present only when the layer's structure changed. */
+  structure?: GlyphStructure
+  values: Float64Array
+  changed: GlyphChangedEntities
 }
 
 export interface Location {

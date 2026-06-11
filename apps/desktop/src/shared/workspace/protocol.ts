@@ -1,4 +1,11 @@
-import type { FontMetadata, FontMetrics, GlyphRecord, Source } from "@shift/types";
+import type {
+  AppliedChange,
+  FontIntent,
+  FontMetadata,
+  FontMetrics,
+  GlyphRecord,
+  Source,
+} from "@shift/types";
 
 /**
  * Point-in-time view of the open workspace: identity and records, no geometry.
@@ -36,6 +43,15 @@ export type ShellEventMap = { ready: void };
 export type SyncCallMap = {
   "workspace.create": { request: void; response: WorkspaceSnapshot };
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
+  /**
+   * The one mutation verb. Requests carry intents; the response is pure
+   * replace-grade state (never change records — the renderer substitutes,
+   * it does not interpret).
+   */
+  "workspace.apply": {
+    request: { intents: FontIntent[]; label?: string };
+    response: AppliedChange;
+  };
 };
 
 export type SyncEventMap = Record<string, never>;

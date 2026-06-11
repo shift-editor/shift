@@ -487,3 +487,40 @@ impl From<GlyphMaster> for NapiGlyphMaster {
         }
     }
 }
+
+/// CS0 walking-skeleton intent. A stringly union covering exactly the two
+/// skeleton kinds; CS1 replaces this with per-variant intent structs.
+#[napi(object)]
+pub struct NapiFontIntent {
+    /// "createGlyph" | "setXAdvance"
+    pub kind: String,
+    #[napi(ts_type = "GlyphName")]
+    pub name: Option<String>,
+    #[napi(ts_type = "Array<Unicode>")]
+    pub unicodes: Option<Vec<u32>>,
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: Option<String>,
+    pub width: Option<f64>,
+}
+
+/// Replace-grade state for one touched layer; the renderer folds by
+/// substitution, never by interpreting changes.
+#[napi(object)]
+pub struct NapiLayerReplaced {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    /// Present only when the layer's structure changed.
+    pub structure: Option<NapiGlyphStructure>,
+    pub values: Float64Array,
+    pub changed: NapiGlyphChangedEntities,
+}
+
+/// Pure-state response to `apply`: no change records cross to the renderer.
+#[napi(object)]
+pub struct NapiAppliedChange {
+    pub layers: Vec<NapiLayerReplaced>,
+    /// Full records list when glyph identity changed; absent when untouched.
+    pub glyphs: Option<Vec<NapiGlyphRecord>>,
+    #[napi(ts_type = "Array<GlyphName>")]
+    pub dependents: Vec<String>,
+}

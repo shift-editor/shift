@@ -119,4 +119,77 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     await expect(second.call("workspace.snapshot", undefined)).resolves.toEqual(created);
   });
+
+  it("apply createGlyph echoes records and a structural layer", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+
+    const applied = await sync.call("workspace.apply", {
+      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+      label: "Add Glyph",
+    });
+
+    expect(applied.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(applied.layers).toHaveLength(1);
+    expect(applied.layers[0].structure).toBeDefined();
+
+    const snapshot = await sync.call("workspace.snapshot", undefined);
+    expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+  });
+
+  it("apply setXAdvance echoes values without structure or records", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+    const created = await sync.call("workspace.apply", {
+      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+    });
+    const layerId = created.layers[0].layerId;
+
+    const applied = await sync.call("workspace.apply", {
+      intents: [{ kind: "setXAdvance", layerId, width: 642 }],
+    });
+
+    expect(applied.glyphs).toBeUndefined();
+    expect(applied.layers[0].layerId).toBe(layerId);
+    expect(applied.layers[0].structure).toBeUndefined();
+    expect(applied.layers[0].values[0]).toBe(642);
+  });
+
+  it("apply rejects unknown intent kinds with a channel error", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+
+    await expect(
+      sync.call("workspace.apply", { intents: [{ kind: "explodeFont" }] }),
+    ).rejects.toThrow("explodeFont");
+  });
+
+  it("CS0 skeleton: measures the apply round trip through the full stack", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+    const created = await sync.call("workspace.apply", {
+      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+    });
+    const layerId = created.layers[0].layerId;
+
+    const samples: number[] = [];
+    for (let i = 0; i < 100; i++) {
+      const start = performance.now();
+      await sync.call("workspace.apply", {
+        intents: [{ kind: "setXAdvance", layerId, width: 500 + i }],
+      });
+      samples.push(performance.now() - start);
+    }
+
+    samples.sort((a, b) => a - b);
+    const p50 = samples[49];
+    const p99 = samples[98];
+    console.info(
+      `[CS0] apply round trip (channel+NAPI+SQLite): p50=${p50.toFixed(2)}ms p99=${p99.toFixed(2)}ms`,
+    );
+
+    // Generous bound — guards order-of-magnitude regressions, not jitter.
+    // The recorded numbers live in the CS ticket.
+    expect(p99).toBeLessThan(50);
+  });
 });

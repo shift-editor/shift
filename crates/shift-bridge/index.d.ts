@@ -22,6 +22,13 @@ export declare class Bridge {
   getGlyphCount(): number
   getGlyphs(): Array<NapiGlyphRecord>
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
+  /**
+   * CS0 walking skeleton: applies a small intent set through the existing
+   * workspace verbs and answers with pure replace-grade state. CS1 replaces
+   * the stringly intent match with `Font::apply_intents` over per-variant
+   * structs.
+   */
+  apply(intents: Array<NapiFontIntent>, label?: string | undefined | null): NapiAppliedChange
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): NapiGlyphState | null
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
@@ -73,6 +80,14 @@ export interface NapiAnchorData {
   name?: string
 }
 
+/** Pure-state response to `apply`: no change records cross to the renderer. */
+export interface NapiAppliedChange {
+  layers: Array<NapiLayerReplaced>
+  /** Full records list when glyph identity changed; absent when untouched. */
+  glyphs?: Array<NapiGlyphRecord>
+  dependents: Array<GlyphName>
+}
+
 export interface NapiAxis {
   tag: string
   name: string
@@ -98,6 +113,19 @@ export interface NapiContourData {
   id: ContourId
   points: Array<NapiPointData>
   closed: boolean
+}
+
+/**
+ * CS0 walking-skeleton intent. A stringly union covering exactly the two
+ * skeleton kinds; CS1 replaces this with per-variant intent structs.
+ */
+export interface NapiFontIntent {
+  /** "createGlyph" | "setXAdvance" */
+  kind: string
+  name?: GlyphName
+  unicodes?: Array<Unicode>
+  layerId?: LayerId
+  width?: number
 }
 
 export interface NapiFontMetadata {
@@ -182,6 +210,18 @@ export interface NapiGlyphVariationData {
   regions: Array<Array<NapiAxisTent>>
   /** Deltas are flattened in `GlyphState::values` order. */
   deltas: Array<Float64Array>
+}
+
+/**
+ * Replace-grade state for one touched layer; the renderer folds by
+ * substitution, never by interpreting changes.
+ */
+export interface NapiLayerReplaced {
+  layerId: LayerId
+  /** Present only when the layer's structure changed. */
+  structure?: NapiGlyphStructure
+  values: Float64Array
+  changed: NapiGlyphChangedEntities
 }
 
 export interface NapiLocation {

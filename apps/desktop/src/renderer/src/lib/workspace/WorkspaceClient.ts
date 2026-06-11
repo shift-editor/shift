@@ -1,6 +1,7 @@
 import { Channel, domPortTransport } from "@shared/workspace/channel";
 import type { SyncCallMap, SyncEventMap, WorkspaceSnapshot } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
+import type { AppliedChange, FontIntent } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
 /**
@@ -47,6 +48,27 @@ export class WorkspaceClient {
     await this.connected();
 
     this.$workspace.set(await this.#require().call("workspace.create", undefined));
+  }
+
+  /**
+   * Applies an intent set; the response is pure replace-grade state.
+   *
+   * @remarks
+   * The record fold happens here (directory follows `$workspace`); layer
+   * folds belong to the glyph model and land with the CS3 ChangeWriter —
+   * callers receive the AppliedChange to fold geometry themselves until then.
+   */
+  async apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
+    await this.connected();
+
+    const applied = await this.#require().call("workspace.apply", { intents, label });
+
+    const current = this.$workspace.peek();
+    if (applied.glyphs && current) {
+      this.$workspace.set({ ...current, glyphs: applied.glyphs });
+    }
+
+    return applied;
   }
 
   async #connect(): Promise<void> {
