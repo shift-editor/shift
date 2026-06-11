@@ -359,6 +359,11 @@ impl Bridge {
       "setContourClosed",
       "movePoints",
       "setPointSmooth",
+      "removePoints",
+      "reverseContour",
+      "translatePoints",
+      "setXAdvance",
+      "applyBooleanOp",
     ];
     if intents
       .iter()
@@ -400,27 +405,6 @@ impl Bridge {
             changed: GlyphChangedEntities::default().into(),
           });
           glyphs_changed = true;
-        }
-        "setXAdvance" => {
-          let layer_id = intent.layer_id.ok_or(BridgeError::InvalidInput {
-            kind: "intent",
-            value: "setXAdvance requires layerId".to_string(),
-          })?;
-          let width = intent.width.ok_or(BridgeError::InvalidInput {
-            kind: "intent",
-            value: "setXAdvance requires width".to_string(),
-          })?;
-
-          let layer_id = parse::<LayerId>(&layer_id)?;
-          let layer = self.workspace_mut()?.set_x_advance(layer_id, width)?;
-          let change = GlyphValueChange::from_layer(&layer, GlyphChangedEntities::default());
-
-          layers.push(NapiLayerReplaced {
-            layer_id: layer.id().to_string(),
-            structure: None,
-            values: change.values.into(),
-            changed: change.changed.into(),
-          });
         }
         other => {
           return Err(BridgeError::InvalidInput {
@@ -1135,9 +1119,77 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         smooth: payload.smooth,
       })
     }
+    "removePoints" => {
+      let payload = intent
+        .remove_points
+        .ok_or_else(|| missing("removePoints"))?;
+      Ok(FontIntent::RemovePoints {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        point_ids: payload
+          .point_ids
+          .iter()
+          .map(|id| parse::<PointId>(id))
+          .collect::<errors::Result<Vec<_>>>()?,
+      })
+    }
+    "reverseContour" => {
+      let payload = intent
+        .reverse_contour
+        .ok_or_else(|| missing("reverseContour"))?;
+      Ok(FontIntent::ReverseContour {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        contour_id: parse::<ContourId>(&payload.contour_id)?,
+      })
+    }
+    "translatePoints" => {
+      let payload = intent
+        .translate_points
+        .ok_or_else(|| missing("translatePoints"))?;
+      Ok(FontIntent::TranslatePoints {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        point_ids: payload
+          .point_ids
+          .iter()
+          .map(|id| parse::<PointId>(id))
+          .collect::<errors::Result<Vec<_>>>()?,
+        dx: payload.dx,
+        dy: payload.dy,
+      })
+    }
+    "setXAdvance" => {
+      let payload = intent.set_x_advance.ok_or_else(|| missing("setXAdvance"))?;
+      Ok(FontIntent::SetXAdvance {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        width: payload.width,
+      })
+    }
+    "applyBooleanOp" => {
+      let payload = intent
+        .apply_boolean_op
+        .ok_or_else(|| missing("applyBooleanOp"))?;
+      Ok(FontIntent::ApplyBooleanOp {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        contour_id_a: parse::<ContourId>(&payload.contour_id_a)?,
+        contour_id_b: parse::<ContourId>(&payload.contour_id_b)?,
+        operation: parse_boolean_op(&payload.operation)?,
+      })
+    }
     other => Err(BridgeError::InvalidInput {
       kind: "intent",
       value: format!("unknown intent kind \"{other}\""),
+    }),
+  }
+}
+
+fn parse_boolean_op(operation: &str) -> errors::Result<BooleanOp> {
+  match operation {
+    "union" => Ok(BooleanOp::Union),
+    "subtract" => Ok(BooleanOp::Subtract),
+    "intersect" => Ok(BooleanOp::Intersect),
+    "difference" => Ok(BooleanOp::Difference),
+    other => Err(BridgeError::InvalidInput {
+      kind: "intent",
+      value: format!("unknown boolean operation \"{other}\""),
     }),
   }
 }
@@ -1157,7 +1209,8 @@ mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
     NapiAddContourIntent, NapiAddPointsIntent, NapiMovePointsIntent, NapiPointSeed,
-    NapiSetContourClosedIntent, NapiSetPointSmoothIntent,
+    NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
+    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1178,10 +1231,13 @@ mod tests {
       set_contour_closed: None,
       move_points: None,
       set_point_smooth: None,
+      remove_points: None,
+      reverse_contour: None,
+      translate_points: None,
+      set_x_advance: None,
+      apply_boolean_op: None,
       name: None,
       unicodes: None,
-      layer_id: None,
-      width: None,
     }
   }
 
@@ -1225,8 +1281,10 @@ mod tests {
     let applied = bridge
       .apply(
         vec![NapiFontIntent {
-          layer_id: Some(layer_id.clone()),
-          width: Some(642.0),
+          set_x_advance: Some(NapiSetXAdvanceIntent {
+            layer_id: layer_id.clone(),
+            width: 642.0,
+          }),
           ..skeleton_intent("setXAdvance")
         }],
         None,
@@ -1574,6 +1632,91 @@ mod tests {
 
     assert!(bridge.redo().unwrap().is_none());
     assert_eq!(contour_point_count(&bridge), 1);
+  }
+
+  #[test]
+  fn apply_remove_translate_and_reverse_intents() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+    let p2 = shift_font::PointId::new().to_string();
+    let p3 = shift_font::PointId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![
+            seed(&p1, 0.0, 0.0),
+            seed(&p2, 100.0, 0.0),
+            seed(&p3, 50.0, 80.0),
+          ],
+        )],
+        None,
+      )
+      .unwrap();
+
+    // translate two of three points by an affine delta (O(ids) wire)
+    let translated = bridge
+      .apply(
+        vec![NapiFontIntent {
+          translate_points: Some(NapiTranslatePointsIntent {
+            layer_id: layer_id.clone(),
+            point_ids: vec![p1.clone(), p2.clone()],
+            dx: 10.0,
+            dy: 5.0,
+          }),
+          ..skeleton_intent("translatePoints")
+        }],
+        None,
+      )
+      .unwrap();
+    assert!(translated.layers[0].structure.is_none());
+    assert_eq!(translated.layers[0].values[1], 10.0);
+    assert_eq!(translated.layers[0].values[2], 5.0);
+
+    // reverse the contour: same point ids, reversed order, structural echo
+    let reversed = bridge
+      .apply(
+        vec![NapiFontIntent {
+          reverse_contour: Some(NapiReverseContourIntent {
+            layer_id: layer_id.clone(),
+            contour_id: contour_id.clone(),
+          }),
+          ..skeleton_intent("reverseContour")
+        }],
+        None,
+      )
+      .unwrap();
+    let ids: Vec<&str> = reversed.layers[0].structure.as_ref().unwrap().contours[0]
+      .points
+      .iter()
+      .map(|p| p.id.as_str())
+      .collect();
+    assert_eq!(ids, vec![p3.as_str(), p2.as_str(), p1.as_str()]);
+
+    // remove one point; undo restores it (ledger covers the new kinds)
+    bridge
+      .apply(
+        vec![NapiFontIntent {
+          remove_points: Some(NapiRemovePointsIntent {
+            layer_id: layer_id.clone(),
+            point_ids: vec![p2.clone()],
+          }),
+          ..skeleton_intent("removePoints")
+        }],
+        None,
+      )
+      .unwrap();
+    assert_eq!(contour_point_count(&bridge), 2);
+
+    bridge
+      .undo()
+      .unwrap()
+      .expect("removePoints must be undoable");
+    assert_eq!(contour_point_count(&bridge), 3);
   }
 
   fn test_paths(label: &str) -> (String, String) {

@@ -140,6 +140,14 @@ export interface AxisTent {
   upper: number
 }
 
+export interface BooleanOpIntent {
+  layerId: LayerId
+  contourIdA: ContourId
+  contourIdB: ContourId
+  /** "union" | "subtract" | "intersect" | "difference" */
+  operation: string
+}
+
 export interface ComponentData {
   id: ComponentId
   baseGlyphName: GlyphName
@@ -157,10 +165,11 @@ export interface ContourData {
  */
 export interface FontIntent {
   /**
-   * Discriminator naming the populated payload field. Pen vocabulary:
+   * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-   * "setPointSmooth". Skeleton leftovers until their real homes land
-   * (CS4): "createGlyph" | "setXAdvance".
+   * "setPointSmooth" | "removePoints" | "reverseContour" |
+   * "translatePoints" | "setXAdvance" | "applyBooleanOp".
+   * Skeleton leftover until font-level verbs land: "createGlyph".
    */
   kind: string
   addPoints?: AddPointsIntent
@@ -168,10 +177,13 @@ export interface FontIntent {
   setContourClosed?: SetContourClosedIntent
   movePoints?: MovePointsIntent
   setPointSmooth?: SetPointSmoothIntent
+  removePoints?: RemovePointsIntent
+  reverseContour?: ReverseContourIntent
+  translatePoints?: TranslatePointsIntent
+  setXAdvance?: SetXAdvanceIntent
+  applyBooleanOp?: BooleanOpIntent
   name?: GlyphName
   unicodes?: Array<Unicode>
-  layerId?: LayerId
-  width?: number
 }
 
 export interface FontMetadata {
@@ -302,6 +314,16 @@ export interface PointSeed {
 
 export type PointType = "onCurve" | "offCurve";
 
+export interface RemovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+}
+
+export interface ReverseContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+}
+
 export interface SetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
@@ -314,9 +336,22 @@ export interface SetPointSmoothIntent {
   smooth: boolean
 }
 
+export interface SetXAdvanceIntent {
+  layerId: LayerId
+  width: number
+}
+
 export interface Source {
   id: SourceId
   name: string
   location: Location
   filename?: string
+}
+
+/** Affine move: O(selection-ids) wire instead of O(N) coords. */
+export interface TranslatePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  dx: number
+  dy: number
 }

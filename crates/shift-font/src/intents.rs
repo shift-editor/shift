@@ -9,7 +9,8 @@
 use crate::changes::{FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
-    Contour, ContourId, Font, GlyphId, GlyphLayer, GlyphName, LayerId, PointId, PointType,
+    BooleanOp, Contour, ContourId, Font, GlyphId, GlyphLayer, GlyphName, LayerId, PointId,
+    PointType,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 
@@ -56,6 +57,33 @@ pub enum FontIntent {
         point_id: PointId,
         smooth: bool,
     },
+    RemovePoints {
+        layer_id: LayerId,
+        point_ids: Vec<PointId>,
+    },
+    ReverseContour {
+        layer_id: LayerId,
+        contour_id: ContourId,
+    },
+    /// Affine move: O(selection-ids) wire instead of O(N) coords.
+    TranslatePoints {
+        layer_id: LayerId,
+        point_ids: Vec<PointId>,
+        dx: f64,
+        dy: f64,
+    },
+    SetXAdvance {
+        layer_id: LayerId,
+        width: f64,
+    },
+    /// Rust-only computation: the echo is the same replace-grade shape as
+    /// every other intent — remote changes are not a special case.
+    ApplyBooleanOp {
+        layer_id: LayerId,
+        contour_id_a: ContourId,
+        contour_id_b: ContourId,
+        operation: BooleanOp,
+    },
 }
 
 impl FontIntent {
@@ -65,14 +93,22 @@ impl FontIntent {
             | Self::AddContour { layer_id, .. }
             | Self::SetContourClosed { layer_id, .. }
             | Self::MovePoints { layer_id, .. }
-            | Self::SetPointSmooth { layer_id, .. } => layer_id,
+            | Self::SetPointSmooth { layer_id, .. }
+            | Self::RemovePoints { layer_id, .. }
+            | Self::ReverseContour { layer_id, .. }
+            | Self::TranslatePoints { layer_id, .. }
+            | Self::SetXAdvance { layer_id, .. }
+            | Self::ApplyBooleanOp { layer_id, .. } => layer_id,
         }
     }
 
     /// Whether applying this intent changes layer structure (vs values only).
     /// Smooth flags live in structure, so they count.
     fn structural(&self) -> bool {
-        !matches!(self, Self::MovePoints { .. })
+        !matches!(
+            self,
+            Self::MovePoints { .. } | Self::TranslatePoints { .. } | Self::SetXAdvance { .. }
+        )
     }
 }
 
@@ -277,6 +313,71 @@ impl Font {
                     point_id.clone(),
                     *smooth,
                 ))
+            }
+            FontIntent::RemovePoints {
+                layer_id,
+                point_ids,
+            } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.remove_points(point_ids)?;
+
+                Ok(FontChange::layer_geometry_replaced(layer))
+            }
+            FontIntent::ReverseContour {
+                layer_id,
+                contour_id,
+            } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.reverse_contour(contour_id.clone())?;
+
+                Ok(FontChange::layer_geometry_replaced(layer))
+            }
+            FontIntent::TranslatePoints {
+                layer_id,
+                point_ids,
+                dx,
+                dy,
+            } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.move_points(point_ids, *dx, *dy)?;
+
+                let positions = point_ids
+                    .iter()
+                    .map(|point_id| {
+                        let contour_id = layer.contour_of_point(point_id.clone())?;
+                        let point = layer
+                            .contour(contour_id)
+                            .and_then(|contour| contour.get_point(point_id.clone()))
+                            .ok_or(CoreError::PointNotFound(point_id.clone()))?;
+                        Ok(PointPosition {
+                            point_id: point_id.clone(),
+                            x: point.x(),
+                            y: point.y(),
+                        })
+                    })
+                    .collect::<CoreResult<Vec<_>>>()?;
+
+                Ok(FontChange::point_positions_changed(
+                    layer_id.clone(),
+                    positions,
+                ))
+            }
+            FontIntent::SetXAdvance { layer_id, width } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.set_x_advance(*width);
+
+                Ok(FontChange::layer_metrics_changed(layer))
+            }
+            FontIntent::ApplyBooleanOp {
+                layer_id,
+                contour_id_a,
+                contour_id_b,
+                operation,
+            } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.apply_boolean_op(contour_id_a.clone(), contour_id_b.clone(), *operation)?;
+
+                Ok(FontChange::layer_geometry_replaced(layer))
             }
         }
     }

@@ -100,7 +100,9 @@ export function SkeletonPanel() {
     const samples: number[] = [];
     for (let i = 0; i < 100; i++) {
       const start = performance.now();
-      await getWorkspace().apply([{ kind: "setXAdvance", layerId, width: 500 + i }]);
+      await getWorkspace().apply([
+        { kind: "setXAdvance", setXAdvance: { layerId, width: 500 + i } },
+      ]);
       samples.push(performance.now() - start);
     }
 

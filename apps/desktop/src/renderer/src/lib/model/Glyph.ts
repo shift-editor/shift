@@ -8,7 +8,6 @@ import type {
   GlyphState,
   GlyphStructure,
   GlyphStructureChange,
-  GlyphValueChange,
   GlyphVariationData,
   LayerId,
   PointId,
@@ -121,7 +120,10 @@ class GlyphEditSession {
   }
 
   setXAdvance(width: number): void {
-    this.#applyValueChange(this.#font.bridge.setXAdvance(this.#layerId, width));
+    this.#push(
+      { kind: "setXAdvance", setXAdvance: { layerId: this.#layerId, width } },
+      "Set Advance Width",
+    );
   }
 
   applyPositionPatch(updates: SourcePositions): void {
@@ -158,7 +160,17 @@ class GlyphEditSession {
   }
 
   translateLayer(dx: number, dy: number): void {
-    this.#applyValueChange(this.#font.bridge.translateLayer(this.#layerId, dx, dy));
+    // Affine over every confirmed point: O(ids) wire, Rust does the math.
+    const pointIds = this.geometry.allPoints.map((point) => point.id);
+    if (pointIds.length === 0) return;
+
+    this.#push(
+      {
+        kind: "translatePoints",
+        translatePoints: { layerId: this.#layerId, pointIds, dx, dy },
+      },
+      "Move Points",
+    );
   }
 
   previewPositionPatch(updates: SourcePositions): void {
@@ -243,7 +255,10 @@ class GlyphEditSession {
   }
 
   reverseContour(contourId: ContourId): void {
-    this.#applyStructureChange(this.#font.bridge.reverseContour(this.#layerId, contourId));
+    this.#push(
+      { kind: "reverseContour", reverseContour: { layerId: this.#layerId, contourId } },
+      "Reverse Contour",
+    );
   }
 
   applyBooleanOp(
@@ -251,14 +266,31 @@ class GlyphEditSession {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    this.#applyStructureChange(
-      this.#font.bridge.applyBooleanOp(this.#layerId, contourIdA, contourIdB, operation),
+    // Rust-only computation; the echo folds like any other intent.
+    this.#push(
+      {
+        kind: "applyBooleanOp",
+        applyBooleanOp: {
+          layerId: this.#layerId,
+          contourIdA,
+          contourIdB,
+          operation,
+        },
+      },
+      "Boolean Operation",
     );
   }
 
   removePoints(pointIds: readonly PointId[]): void {
     if (pointIds.length === 0) return;
-    this.#applyStructureChange(this.#font.bridge.removePoints(this.#layerId, [...pointIds]));
+
+    this.#push(
+      {
+        kind: "removePoints",
+        removePoints: { layerId: this.#layerId, pointIds: [...pointIds] },
+      },
+      "Delete Points",
+    );
   }
 
   toggleSmooth(pointId: PointId): void {
@@ -304,10 +336,6 @@ class GlyphEditSession {
       structure: change.structure,
       values: change.values,
     });
-  }
-
-  #applyValueChange(change: GlyphValueChange): void {
-    this.#state.state.replaceValues(change.values);
   }
 }
 

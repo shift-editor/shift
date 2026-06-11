@@ -135,6 +135,14 @@ export interface NapiAxisTent {
   upper: number
 }
 
+export interface NapiBooleanOpIntent {
+  layerId: LayerId
+  contourIdA: ContourId
+  contourIdB: ContourId
+  /** "union" | "subtract" | "intersect" | "difference" */
+  operation: string
+}
+
 export interface NapiComponentData {
   id: ComponentId
   baseGlyphName: GlyphName
@@ -152,10 +160,11 @@ export interface NapiContourData {
  */
 export interface NapiFontIntent {
   /**
-   * Discriminator naming the populated payload field. Pen vocabulary:
+   * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-   * "setPointSmooth". Skeleton leftovers until their real homes land
-   * (CS4): "createGlyph" | "setXAdvance".
+   * "setPointSmooth" | "removePoints" | "reverseContour" |
+   * "translatePoints" | "setXAdvance" | "applyBooleanOp".
+   * Skeleton leftover until font-level verbs land: "createGlyph".
    */
   kind: string
   addPoints?: NapiAddPointsIntent
@@ -163,10 +172,13 @@ export interface NapiFontIntent {
   setContourClosed?: NapiSetContourClosedIntent
   movePoints?: NapiMovePointsIntent
   setPointSmooth?: NapiSetPointSmoothIntent
+  removePoints?: NapiRemovePointsIntent
+  reverseContour?: NapiReverseContourIntent
+  translatePoints?: NapiTranslatePointsIntent
+  setXAdvance?: NapiSetXAdvanceIntent
+  applyBooleanOp?: NapiBooleanOpIntent
   name?: GlyphName
   unicodes?: Array<Unicode>
-  layerId?: LayerId
-  width?: number
 }
 
 export interface NapiFontMetadata {
@@ -300,6 +312,16 @@ export declare const enum NapiPointType {
   OffCurve = 'offCurve'
 }
 
+export interface NapiRemovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+}
+
+export interface NapiReverseContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+}
+
 export interface NapiSetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
@@ -312,9 +334,22 @@ export interface NapiSetPointSmoothIntent {
   smooth: boolean
 }
 
+export interface NapiSetXAdvanceIntent {
+  layerId: LayerId
+  width: number
+}
+
 export interface NapiSource {
   id: SourceId
   name: string
   location: NapiLocation
   filename?: string
+}
+
+/** Affine move: O(selection-ids) wire instead of O(N) coords. */
+export interface NapiTranslatePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  dx: number
+  dy: number
 }

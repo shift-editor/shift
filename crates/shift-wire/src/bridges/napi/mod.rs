@@ -495,23 +495,26 @@ impl From<GlyphMaster> for NapiGlyphMaster {
 /// skeleton kinds; CS1 replaces this with per-variant intent structs.
 #[napi(object)]
 pub struct NapiFontIntent {
-    /// Discriminator naming the populated payload field. Pen vocabulary:
+    /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-    /// "setPointSmooth". Skeleton leftovers until their real homes land
-    /// (CS4): "createGlyph" | "setXAdvance".
+    /// "setPointSmooth" | "removePoints" | "reverseContour" |
+    /// "translatePoints" | "setXAdvance" | "applyBooleanOp".
+    /// Skeleton leftover until font-level verbs land: "createGlyph".
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
     pub add_contour: Option<NapiAddContourIntent>,
     pub set_contour_closed: Option<NapiSetContourClosedIntent>,
     pub move_points: Option<NapiMovePointsIntent>,
     pub set_point_smooth: Option<NapiSetPointSmoothIntent>,
+    pub remove_points: Option<NapiRemovePointsIntent>,
+    pub reverse_contour: Option<NapiReverseContourIntent>,
+    pub translate_points: Option<NapiTranslatePointsIntent>,
+    pub set_x_advance: Option<NapiSetXAdvanceIntent>,
+    pub apply_boolean_op: Option<NapiBooleanOpIntent>,
     #[napi(ts_type = "GlyphName")]
     pub name: Option<String>,
     #[napi(ts_type = "Array<Unicode>")]
     pub unicodes: Option<Vec<u32>>,
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: Option<String>,
-    pub width: Option<f64>,
 }
 
 /// Replace-grade state for one touched layer; the renderer folds by
@@ -597,4 +600,50 @@ pub struct NapiSetPointSmoothIntent {
     #[napi(ts_type = "PointId")]
     pub point_id: String,
     pub smooth: bool,
+}
+
+#[napi(object)]
+pub struct NapiRemovePointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<PointId>")]
+    pub point_ids: Vec<String>,
+}
+
+#[napi(object)]
+pub struct NapiReverseContourIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+}
+
+/// Affine move: O(selection-ids) wire instead of O(N) coords.
+#[napi(object)]
+pub struct NapiTranslatePointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<PointId>")]
+    pub point_ids: Vec<String>,
+    pub dx: f64,
+    pub dy: f64,
+}
+
+#[napi(object)]
+pub struct NapiSetXAdvanceIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    pub width: f64,
+}
+
+#[napi(object)]
+pub struct NapiBooleanOpIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id_a: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id_b: String,
+    /// "union" | "subtract" | "intersect" | "difference"
+    pub operation: String,
 }

@@ -151,7 +151,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const layerId = created.layers[0].layerId;
 
     const applied = await sync.call("workspace.apply", {
-      intents: [{ kind: "setXAdvance", layerId, width: 642 }],
+      intents: [{ kind: "setXAdvance", setXAdvance: { layerId, width: 642 } }],
     });
 
     expect(applied.glyphs).toBeUndefined();
@@ -279,7 +279,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     for (let i = 0; i < 100; i++) {
       const start = performance.now();
       await sync.call("workspace.apply", {
-        intents: [{ kind: "setXAdvance", layerId, width: 500 + i }],
+        intents: [{ kind: "setXAdvance", setXAdvance: { layerId, width: 500 + i } }],
       });
       samples.push(performance.now() - start);
     }
