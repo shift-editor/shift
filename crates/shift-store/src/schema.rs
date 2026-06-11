@@ -136,7 +136,30 @@ CREATE TABLE IF NOT EXISTS source_locations (
 );
 "#;
 
+pub(crate) const SCHEMA_VERSION: i64 = 1;
+
+/// Applies migrations up to [`SCHEMA_VERSION`] and stamps `user_version`.
+///
+/// Version 0 covers both fresh databases and pre-versioning stores (the
+/// CREATE TABLE IF NOT EXISTS batch is idempotent over them). A database
+/// from a NEWER app version is refused rather than silently mangled.
 pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreError> {
-    conn.execute_batch(SCHEMA_V1)?;
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+
+    if version > SCHEMA_VERSION {
+        return Err(StoreError::UnsupportedSchemaVersion {
+            found: version,
+            supported: SCHEMA_VERSION,
+        });
+    }
+
+    if version == 0 {
+        conn.execute_batch(SCHEMA_V1)?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+
+    // Future migrations slot in here as `if version < N { migrate_n(conn)?; }`
+    // steps, each stamping user_version as it lands.
+
     Ok(())
 }

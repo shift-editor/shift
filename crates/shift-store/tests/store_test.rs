@@ -618,3 +618,71 @@ fn contour_with_point(x: f64, y: f64) -> shift_font::Contour {
     contour.add_point(x, y, shift_font::PointType::OnCurve, false);
     contour
 }
+
+fn temp_store_path(label: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("shift-store-{label}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    dir.join("store.sqlite")
+}
+
+#[test]
+fn file_stores_run_wal_with_verified_pragmas() {
+    let path = temp_store_path("pragmas");
+    let _store = ShiftStore::open(&path).expect("file store should open");
+
+    let conn = rusqlite::Connection::open(&path).expect("reopen raw");
+    let journal: String = conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .expect("journal_mode");
+    assert_eq!(journal, "wal");
+
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("user_version");
+    assert_eq!(version, 1);
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn reopen_preserves_written_contents_and_integrity() {
+    let path = temp_store_path("reopen");
+
+    {
+        let mut store = ShiftStore::open(&path).expect("open");
+        store
+            .set_font_info(open_sans_font_info())
+            .expect("write font info");
+    }
+
+    let store = ShiftStore::open(&path).expect("reopen");
+    let loaded = store
+        .get_font_info()
+        .expect("query")
+        .expect("font info must survive reopen");
+    assert_eq!(loaded, open_sans_font_info());
+
+    let conn = rusqlite::Connection::open(&path).expect("raw open");
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .expect("integrity_check");
+    assert_eq!(integrity, "ok");
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn refuses_stores_from_newer_schema_versions() {
+    let path = temp_store_path("future");
+
+    {
+        let conn = rusqlite::Connection::open(&path).expect("raw create");
+        conn.pragma_update(None, "user_version", 999)
+            .expect("stamp future");
+    }
+
+    let result = ShiftStore::open(&path);
+    assert!(result.is_err(), "a future-versioned store must be refused");
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
