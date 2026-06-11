@@ -1,4 +1,4 @@
-import { Channel, domPortTransport } from "@shared/workspace/channel";
+import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
 import type { SyncCallMap, SyncEventMap, WorkspaceSnapshot } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AppliedChange, FontIntent, GlyphId, GlyphState, SourceId } from "@shift/types";
@@ -13,15 +13,25 @@ import { signal } from "@/lib/signals/signal";
  * disconnected/empty/crashed — it becomes a tagged union when recovery lands,
  * so do not derive connectedness from it.
  */
+export type WorkspaceClientOptions = {
+  /**
+   * Test seam: supplies the sync-lane transport directly (in-process
+   * WorkspaceHost over node ports). Production uses the preload port relay.
+   */
+  transport?: () => Promise<Transport>;
+};
+
 export class WorkspaceClient {
   readonly $workspace = signal<WorkspaceSnapshot | null>(null);
 
-  readonly #host: ShiftHost;
+  readonly #host: ShiftHost | null;
+  readonly #transport: (() => Promise<Transport>) | null;
   #channel: Channel<SyncCallMap, SyncEventMap> | null = null;
   #connected: Promise<void> | null = null;
 
-  constructor(host: ShiftHost) {
+  constructor(host: ShiftHost | null, options: WorkspaceClientOptions = {}) {
     this.#host = host;
+    this.#transport = options.transport ?? null;
   }
 
   /**
@@ -97,6 +107,16 @@ export class WorkspaceClient {
   }
 
   async #connect(): Promise<void> {
+    if (this.#transport) {
+      this.#channel = new Channel<SyncCallMap, SyncEventMap>(await this.#transport());
+      this.$workspace.set(await this.#channel.call("workspace.snapshot", undefined));
+      return;
+    }
+
+    if (!this.#host) {
+      throw new Error("WorkspaceClient needs a ShiftHost or a transport option");
+    }
+
     // Install the port listener before asking main to post the port.
     const port = this.#nextWorkspacePort();
 

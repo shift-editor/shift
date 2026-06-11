@@ -553,8 +553,9 @@ pub struct NapiPointSeed {
 pub struct NapiAddPointsIntent {
     #[napi(ts_type = "LayerId")]
     pub layer_id: String,
+    /// Absent when `before` carries the anchor; Rust derives the contour.
     #[napi(ts_type = "ContourId")]
-    pub contour_id: String,
+    pub contour_id: Option<String>,
     /// Insert before this point; append when absent.
     #[napi(ts_type = "PointId")]
     pub before: Option<String>,

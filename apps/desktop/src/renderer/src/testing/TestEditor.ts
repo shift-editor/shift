@@ -15,10 +15,9 @@ import { Editor } from "@/lib/editor/Editor";
 import type { GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { Font } from "@/lib/model/Font";
-import { signal } from "@/lib/signals/signal";
-import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
+import type { GlyphName } from "@shift/types";
 import type { SystemClipboard } from "@/lib/clipboard";
+import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -39,15 +38,61 @@ class InMemorySystemClipboard implements SystemClipboard {
 
 export class TestEditor extends Editor {
   readonly #clipboard: InMemorySystemClipboard;
+  readonly #stack: WorkspaceStack;
 
   constructor() {
+    const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({
-      font: new Font(signal<WorkspaceSnapshot | null>(null)),
-      clipboard,
-    });
+    super({ font: stack.font, clipboard });
+    this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
+  }
+
+  /**
+   * Creates a real workspace, a glyph, and opens an editable session on it —
+   * the production pipe end to end (intents → NAPI → SQLite → echo → fold).
+   */
+  async startSession(name = "A", unicode: number | null = 65): Promise<this> {
+    await this.#stack.client.create();
+
+    const applied = await this.#stack.client.apply(
+      [
+        {
+          kind: "createGlyph",
+          name: name as GlyphName,
+          unicodes: unicode === null ? [] : [unicode],
+        },
+      ],
+      "Add Glyph",
+    );
+    const record = applied.glyphs?.find((glyph) => glyph.name === name);
+    if (!record) throw new Error("createGlyph did not echo the new record");
+
+    const source = this.font.defaultSource;
+    const glyph = await this.font.openGlyph(record.id, source);
+    if (!glyph) throw new Error("openGlyph returned null for a created glyph");
+
+    this.openGlyphSource(glyph.handle, source.id);
+    return this;
+  }
+
+  /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
+  async settle(): Promise<this> {
+    await this.font.writer.settled();
+    return this;
+  }
+
+  /** Undo through the one authority (workspace ledger), settled. */
+  async undoAndSettle(): Promise<this> {
+    await this.font.writer.undo();
+    return this;
+  }
+
+  /** Redo through the workspace ledger, settled. */
+  async redoAndSettle(): Promise<this> {
+    await this.font.writer.redo();
+    return this;
   }
 
   get clipboardBuffer(): string {

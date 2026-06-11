@@ -1083,7 +1083,10 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
       let payload = intent.add_points.ok_or_else(|| missing("addPoints"))?;
       Ok(FontIntent::AddPoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
-        contour_id: parse::<ContourId>(&payload.contour_id)?,
+        contour_id: payload
+          .contour_id
+          .map(|id| parse::<ContourId>(&id))
+          .transpose()?,
         before: payload.before.map(|id| parse::<PointId>(&id)).transpose()?,
         points: payload
           .points
@@ -1296,7 +1299,7 @@ mod tests {
     NapiFontIntent {
       add_points: Some(NapiAddPointsIntent {
         layer_id: layer_id.to_string(),
-        contour_id: contour_id.to_string(),
+        contour_id: Some(contour_id.to_string()),
         before,
         points,
       }),

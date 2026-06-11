@@ -7,6 +7,7 @@ import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import { Anchor, Handles } from "./types";
 
 export class PenStroke {
+  #pendingHandles: SourcePositions | null = null;
   readonly #editor: Editor;
   readonly #geometry: GlyphInstanceGeometry;
   readonly #edit: GlyphInstanceEdit;
@@ -140,6 +141,16 @@ export class PenStroke {
       });
     }
 
-    this.#edit.applyPositionPatch(positions);
+    // Live drag: local preview only; durability happens once at gesture end.
+    this.#pendingHandles = positions;
+    this.#edit.previewPositionPatch(positions);
+  }
+
+  /** Commits the last previewed handle positions as one durable move. */
+  commitHandles(): void {
+    if (!this.#pendingHandles) return;
+
+    this.#edit.commitPositionPatch(this.#pendingHandles);
+    this.#pendingHandles = null;
   }
 }

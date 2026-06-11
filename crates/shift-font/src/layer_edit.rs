@@ -560,6 +560,10 @@ impl GlyphLayer {
         Ok(())
     }
 
+    pub fn contour_of_point(&self, point_id: PointId) -> CoreResult<ContourId> {
+        self.point_contour_or_err(point_id)
+    }
+
     pub fn has_point(&self, point_id: PointId) -> bool {
         self.point_contour_or_err(point_id).is_ok()
     }

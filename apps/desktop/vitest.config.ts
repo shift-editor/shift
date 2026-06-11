@@ -21,6 +21,7 @@ export default defineConfig({
       "@components": path.resolve(__dirname, "src/renderer/src/components"),
       "@types": path.resolve(__dirname, "src/renderer/src/types"),
       "@data": path.resolve(__dirname, "src/renderer/src/charsets"),
+      "@shared": path.resolve(__dirname, "src/shared"),
     },
   },
 });

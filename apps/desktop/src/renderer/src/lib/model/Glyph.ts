@@ -2,6 +2,8 @@ import type {
   AnchorId,
   ContourData,
   ContourId,
+  FontIntent,
+  GlyphId,
   GlyphName,
   GlyphState,
   GlyphStructure,
@@ -10,9 +12,11 @@ import type {
   GlyphVariationData,
   LayerId,
   PointId,
+  PointSeed,
   Source,
   Unicode,
 } from "@shift/types";
+import { mintContourId, mintPointId } from "@shift/types";
 import type { GlyphHandle } from "@shift/bridge";
 import { computed, keyedCache, signal, type ComputedSignal, type Signal } from "@/lib/signals";
 import { interpolate, normalize } from "@/lib/interpolation/interpolate";
@@ -132,7 +136,25 @@ class GlyphEditSession {
     const patch = SourcePositionPatch.from(updates);
     if (patch.isEmpty) return;
 
-    this.#font.bridge.applyPositionPatch(this.#layerId, ...patch.toBridgePayload());
+    const pointIds: PointId[] = [];
+    const coords: number[] = [];
+    for (const position of patch.positions) {
+      if (position.kind !== "point") {
+        // Anchor moves have no intent vocabulary yet (CS4).
+        this.#font.bridge.applyPositionPatch(this.#layerId, ...patch.toBridgePayload());
+        return;
+      }
+      pointIds.push(position.id);
+      coords.push(position.x, position.y);
+    }
+
+    this.#push(
+      {
+        kind: "movePoints",
+        movePoints: { layerId: this.#layerId, pointIds, coords },
+      },
+      "Move Points",
+    );
   }
 
   translateLayer(dx: number, dy: number): void {
@@ -149,52 +171,75 @@ class GlyphEditSession {
   }
 
   addContour(): ContourId {
-    const change = this.#font.bridge.addContour(this.#layerId);
-    this.#applyStructureChange(change);
-    const contourId = change.changed.contourIds[0];
-    if (!contourId) throw new Error("Bridge did not return a created contour ID");
+    const contourId = mintContourId();
+
+    this.#push(
+      {
+        kind: "addContour",
+        addContour: { layerId: this.#layerId, contourId, closed: false },
+      },
+      "Add Contour",
+    );
+
     return contourId;
   }
 
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
-    const change = this.#font.bridge.addPoint(
-      this.#layerId,
-      contourId,
-      edit.x,
-      edit.y,
-      edit.pointType,
-      edit.smooth,
+    const pointId = mintPointId();
+
+    this.#push(
+      {
+        kind: "addPoints",
+        addPoints: {
+          layerId: this.#layerId,
+          contourId,
+          points: [this.#seed(pointId, edit)],
+        },
+      },
+      "Add Point",
     );
-
-    this.#applyStructureChange(change);
-
-    const pointId = change.changed.pointIds[0];
-    if (!pointId) throw new Error("Bridge did not return a created point ID");
 
     return pointId;
   }
 
   insertPointBefore(beforePointId: PointId, edit: NewPoint): PointId {
-    const change = this.#font.bridge.insertPointBefore(
-      this.#layerId,
-      beforePointId,
-      edit.x,
-      edit.y,
-      edit.pointType,
-      edit.smooth,
+    const pointId = mintPointId();
+
+    // No contourId: Rust derives the contour from the anchor point — the
+    // renderer never bookkeeps pending point→contour maps.
+    this.#push(
+      {
+        kind: "addPoints",
+        addPoints: {
+          layerId: this.#layerId,
+          before: beforePointId,
+          points: [this.#seed(pointId, edit)],
+        },
+      },
+      "Add Point",
     );
-    this.#applyStructureChange(change);
-    const pointId = change.changed.pointIds[0];
-    if (!pointId) throw new Error("Bridge did not return a created point ID");
+
     return pointId;
   }
 
   openContour(contourId: ContourId): void {
-    this.#applyStructureChange(this.#font.bridge.openContour(this.#layerId, contourId));
+    this.#push(
+      {
+        kind: "setContourClosed",
+        setContourClosed: { layerId: this.#layerId, contourId, closed: false },
+      },
+      "Open Contour",
+    );
   }
 
   closeContour(contourId: ContourId): void {
-    this.#applyStructureChange(this.#font.bridge.closeContour(this.#layerId, contourId));
+    this.#push(
+      {
+        kind: "setContourClosed",
+        setContourClosed: { layerId: this.#layerId, contourId, closed: true },
+      },
+      "Close Contour",
+    );
   }
 
   reverseContour(contourId: ContourId): void {
@@ -217,13 +262,40 @@ class GlyphEditSession {
   }
 
   toggleSmooth(pointId: PointId): void {
-    this.#applyStructureChange(this.#font.bridge.toggleSmooth(this.#layerId, pointId));
+    // Reading CONFIRMED state to compute the next value is describing, not
+    // applying; an unconfirmed same-tick point cannot be toggled yet.
+    const point = this.geometry.allPoints.find((candidate) => candidate.id === pointId);
+    if (!point) {
+      throw new Error(`cannot toggle smooth: point ${pointId} is not in confirmed state`);
+    }
+
+    this.#push(
+      {
+        kind: "setPointSmooth",
+        setPointSmooth: { layerId: this.#layerId, pointId, smooth: !point.smooth },
+      },
+      "Toggle Smooth",
+    );
   }
 
   restore(state: GlyphState): void {
     this.#applyStructureChange(
       this.#font.bridge.restoreState(this.#layerId, state.structure, state.values),
     );
+  }
+
+  #push(intent: FontIntent, label: string): void {
+    this.#font.writer.push(intent, label);
+  }
+
+  #seed(id: PointId, edit: NewPoint): PointSeed {
+    return {
+      id,
+      x: edit.x,
+      y: edit.y,
+      pointType: edit.pointType,
+      smooth: edit.smooth,
+    };
   }
 
   #applyStructureChange(change: GlyphStructureChange): void {
@@ -1633,7 +1705,13 @@ export class Glyph {
   readonly #instances = new WeakMap<Signal<AxisLocation>, GlyphInstance>();
   readonly #outlines = new WeakMap<Signal<AxisLocation>, GlyphOutline>();
 
-  constructor(font: Font, handle: GlyphHandle, source: Source, state: GlyphState) {
+  constructor(
+    font: Font,
+    handle: GlyphHandle,
+    source: Source,
+    state: GlyphState,
+    glyphId?: GlyphId,
+  ) {
     this.handle = handle;
     this.#font = font;
     this.#source = source;
@@ -1649,6 +1727,15 @@ export class Glyph {
       state: this.#sourceState,
       geometry: this.#geometry,
     });
+
+    if (glyphId) {
+      // Echoes (apply/undo/redo) fold into this session's state by layerId.
+      font.writer.register(state.layerId, {
+        state: this.#sourceState,
+        glyphId,
+        sourceId: source.id,
+      });
+    }
   }
 
   get name(): GlyphName {

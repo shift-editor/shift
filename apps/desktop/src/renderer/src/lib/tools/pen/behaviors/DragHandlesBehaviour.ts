@@ -31,12 +31,23 @@ export class HandleBehavior implements PenBehavior {
       PenStroke.active(ctx.editor)?.commitAnchor(state.anchor);
     }
 
+    if (state.type === "dragging") {
+      PenStroke.active(ctx.editor)?.commitHandles();
+    }
+
     ctx.setState({ type: "ready" });
     return true;
   }
 
   onDragCancel(state: PenState, ctx: ToolContext<PenState>): boolean {
     if (state.type !== "anchored" && state.type !== "dragging") return false;
+
+    // Matches prior observable behavior: handle moves were durable per
+    // move, so cancel never reverted them. True revert-on-escape can come
+    // with the overlay rework.
+    if (state.type === "dragging") {
+      PenStroke.active(ctx.editor)?.commitHandles();
+    }
 
     ctx.setState({ type: "ready" });
     return true;

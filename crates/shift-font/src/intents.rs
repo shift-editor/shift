@@ -27,7 +27,10 @@ pub struct PointSeed {
 pub enum FontIntent {
     AddPoints {
         layer_id: LayerId,
-        contour_id: ContourId,
+        /// Target contour; when `None`, derived from `before` (Rust owns
+        /// identity resolution — the renderer never bookkeeps pending
+        /// point→contour maps).
+        contour_id: Option<ContourId>,
         /// Insert before this point; append when `None`.
         before: Option<PointId>,
         points: Vec<PointSeed>,
@@ -144,9 +147,19 @@ impl Font {
                     }
                 }
 
+                let contour_id = match (contour_id, before) {
+                    (Some(contour_id), _) => contour_id.clone(),
+                    (None, Some(before_id)) => layer.contour_of_point(before_id.clone())?,
+                    (None, None) => {
+                        return Err(CoreError::InvalidContourId(
+                            "addPoints requires a contour or a before anchor".to_string(),
+                        ));
+                    }
+                };
+
                 let contour = layer
                     .contour_mut(contour_id.clone())
-                    .ok_or(CoreError::ContourNotFound(contour_id.clone()))?;
+                    .ok_or(CoreError::ContourNotFound(contour_id))?;
 
                 let insert_at = match before {
                     Some(before_id) => Some(

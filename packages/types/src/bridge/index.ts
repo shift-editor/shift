@@ -22,6 +22,7 @@ export type {
   LayerReplaced,
   Location,
   PointData,
+  PointSeed,
   PointType,
   Source,
   Unicode,

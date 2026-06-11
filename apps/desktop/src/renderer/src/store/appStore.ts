@@ -4,6 +4,7 @@ import { registerBuiltInTools } from "@/lib/tools/tools";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { Font } from "@/lib/model/Font";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
+import { ChangeWriter } from "@/lib/workspace/ChangeWriter";
 import { getShiftHost } from "@/host/shiftHost";
 
 let instance: GlyphInfo | null = null;
@@ -13,7 +14,8 @@ export function getGlyphInfo(): GlyphInfo {
 }
 
 const workspace = new WorkspaceClient(getShiftHost());
-const font = new Font(workspace.$workspace);
+const writer = new ChangeWriter(workspace);
+const font = new Font(workspace.$workspace, writer);
 const editor = new Editor({ font, clipboard: electronSystemClipboard });
 registerBuiltInTools(editor);
 

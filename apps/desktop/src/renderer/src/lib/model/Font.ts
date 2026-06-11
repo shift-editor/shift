@@ -3,6 +3,7 @@ import type {
   FontMetadata,
   Axis,
   Source,
+  GlyphId,
   GlyphRecord,
   GlyphState,
   GlyphName,
@@ -10,6 +11,7 @@ import type {
   Unicode,
 } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals/signal";
+import type { ChangeWriter } from "@/lib/workspace/ChangeWriter";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { Glyph, type GlyphSource } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
@@ -247,7 +249,10 @@ export class Font {
 
   readonly #directory: Signal<GlyphDirectory>;
   readonly #glyphs = new Map<GlyphName, Glyph>();
+  /** Open glyph models keyed by stable id; survives directory re-keys. */
+  readonly #glyphsById = new Map<GlyphId, Glyph>();
   readonly #glyphSources = new Map<GlyphSourceKey, GlyphSource>();
+  readonly #writer: ChangeWriter | null;
   #cachesKeyedTo: GlyphDirectory | null = null;
 
   /**
@@ -257,7 +262,8 @@ export class Font {
    *   `WorkspaceClient`. There is no load: every derived value follows this
    *   signal, and `null` means no font is open.
    */
-  constructor($workspace: Signal<WorkspaceSnapshot | null>) {
+  constructor($workspace: Signal<WorkspaceSnapshot | null>, writer?: ChangeWriter) {
+    this.#writer = writer ?? null;
     this.#$loaded = computed(() => $workspace.value !== null);
     this.#$metrics = computed(() => $workspace.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#$metadata = computed(() => $workspace.value?.metadata ?? {});
@@ -488,6 +494,15 @@ export class Font {
     const cached = this.#glyphs.get(handle.name);
     if (cached) return cached;
 
+    // Open models survive directory re-keys under their stable id; re-link
+    // the name cache after #syncCaches cleared it.
+    const record = this.#directory.peek().recordForName(handle.name);
+    const openModel = record ? this.#glyphsById.get(record.id) : undefined;
+    if (openModel) {
+      this.#glyphs.set(handle.name, openModel);
+      return openModel;
+    }
+
     const source = this.defaultSource;
     const state = this.glyphState(handle, source);
     if (!state) return null;
@@ -663,6 +678,47 @@ export class Font {
    */
   get bridge(): ShiftBridge {
     throw new Error("editing is not wired to the workspace yet");
+  }
+
+  /**
+   * The renderer's single durable-write path; editing verbs push intents
+   * through it.
+   *
+   * @throws {Error} when constructed without a workspace (pure projection
+   *   tests) — same not-wired contract as the legacy bridge getter.
+   */
+  get writer(): ChangeWriter {
+    if (!this.#writer) {
+      throw new Error("editing is not wired to the workspace yet");
+    }
+
+    return this.#writer;
+  }
+
+  /**
+   * Opens (or returns the cached) editable glyph model, pulling
+   * replace-grade state from the workspace.
+   *
+   * @remarks
+   * Models are cached by stable GlyphId, so open sessions survive directory
+   * re-keys and renames. Returns null when the glyph or layer is missing.
+   */
+  async openGlyph(glyphId: GlyphId, source: Source): Promise<Glyph | null> {
+    const cached = this.#glyphsById.get(glyphId);
+    if (cached) return cached;
+
+    const record = this.#directory.peek().records.find((entry) => entry.id === glyphId);
+    if (!record) return null;
+
+    const state = await this.writer.glyph(glyphId, source.id);
+    if (!state) return null;
+
+    const handle = this.#directory.peek().glyphHandleForName(record.name);
+    const glyph = new Glyph(this, handle, source, state, glyphId);
+
+    this.#glyphsById.set(glyphId, glyph);
+    this.#glyphs.set(record.name, glyph);
+    return glyph;
   }
 
   /** @knipclassignore — used by VariationPanel component */

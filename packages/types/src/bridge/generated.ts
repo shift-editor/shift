@@ -103,7 +103,8 @@ export interface AddContourIntent {
 
 export interface AddPointsIntent {
   layerId: LayerId
-  contourId: ContourId
+  /** Absent when `before` carries the anchor; Rust derives the contour. */
+  contourId?: ContourId
   /** Insert before this point; append when absent. */
   before?: PointId
   points: Array<PointSeed>

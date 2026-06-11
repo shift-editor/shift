@@ -829,11 +829,12 @@ export class Editor {
   }
 
   public undo() {
-    this.#commandHistory.undo();
+    // One undo authority: the workspace ledger (state-pair replay).
+    void this.font.writer.undo();
   }
 
   public redo() {
-    this.#commandHistory.redo();
+    void this.font.writer.redo();
   }
 
   public setCameraRect(rect: Rect2D) {
