@@ -196,6 +196,10 @@ export function isValidSourceId(id: unknown): id is SourceId {
   return typeof id === "string" && id.length > 0;
 }
 
+// Web Crypto's global, present in both the renderer and node >= 19. The
+// shared lib config deliberately includes neither DOM nor node types.
+declare const crypto: { randomUUID(): string };
+
 /**
  * Mints a new point id. Client-minted ids let editing verbs return identity
  * synchronously; Rust honors them and rejects duplicates.
