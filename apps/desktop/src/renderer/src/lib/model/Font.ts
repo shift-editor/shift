@@ -15,7 +15,7 @@ import type { ChangeWriter } from "@/lib/workspace/ChangeWriter";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { Glyph, type GlyphSource } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
-import type { GlyphHandle, ShiftBridge } from "@shift/bridge";
+import type { GlyphHandle } from "@shift/bridge";
 import {
   axisLocationDistanceSquared,
   axisLocationFromLocation,
@@ -668,16 +668,6 @@ export class Font {
     // in the workspace protocol. Must stay false: the variable path routes
     // into the throwing bridge getter.
     return false;
-  }
-
-  /**
-   * Native bridge access for glyph editing.
-   *
-   * @throws {Error} always — editing is rebuilt on top of the workspace
-   *   protocol in a later milestone. Kept so `Glyph.ts` compiles.
-   */
-  get bridge(): ShiftBridge {
-    throw new Error("editing is not wired to the workspace yet");
   }
 
   /**

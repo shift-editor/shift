@@ -7,7 +7,6 @@ import type {
   GlyphName,
   GlyphState,
   GlyphStructure,
-  GlyphStructureChange,
   GlyphVariationData,
   LayerId,
   PointId,
@@ -127,13 +126,10 @@ class GlyphEditSession {
   }
 
   applyPositionPatch(updates: SourcePositions): void {
-    const patch = SourcePositionPatch.from(updates);
-    if (patch.isEmpty) return;
-
     // One-shot edits persist through the same movePoints intent as drag
     // commits; the local apply keeps reads synchronous until the echo folds.
-    this.commitPositionPatch(patch.positions);
-    this.#applyPositionPatchLocally(patch.positions);
+    this.commitPositionPatch(updates);
+    this.#applyPositionPatchLocally(updates);
   }
 
   commitPositionPatch(updates: SourcePositions): void {
@@ -144,9 +140,7 @@ class GlyphEditSession {
     const coords: number[] = [];
     for (const position of patch.positions) {
       if (position.kind !== "point") {
-        // Anchor moves have no intent vocabulary yet (CS4).
-        this.#font.bridge.applyPositionPatch(this.#layerId, ...patch.toBridgePayload());
-        return;
+        throw new Error("anchor moves have no intent vocabulary yet");
       }
       pointIds.push(position.id);
       coords.push(position.x, position.y);
@@ -312,12 +306,6 @@ class GlyphEditSession {
     );
   }
 
-  restore(state: GlyphState): void {
-    this.#applyStructureChange(
-      this.#font.bridge.restoreState(this.#layerId, state.structure, state.values),
-    );
-  }
-
   #push(intent: FontIntent, label: string): void {
     this.#font.writer.push(intent, label);
   }
@@ -330,14 +318,6 @@ class GlyphEditSession {
       pointType: edit.pointType,
       smooth: edit.smooth,
     };
-  }
-
-  #applyStructureChange(change: GlyphStructureChange): void {
-    this.#state.state.replace({
-      layerId: this.#layerId,
-      structure: change.structure,
-      values: change.values,
-    });
   }
 }
 
@@ -688,16 +668,6 @@ export class GlyphSource {
   }
 
   /**
-   * Translates points by a relative delta.
-   *
-   * @param pointIds - Points to translate together.
-   * @param delta - Relative movement in glyph-local UPM units.
-   */
-  translate(pointIds: readonly PointId[], delta: Point2D): void {
-    this.movePoints(pointIds, delta);
-  }
-
-  /**
    * Moves a point selection so an anchor position reaches a target position.
    *
    * @param pointIds - Points participating in the move.
@@ -789,18 +759,6 @@ export class GlyphSource {
       ),
     );
   }
-
-  /**
-   * Replace this source's editable state.
-   *
-   * Used by undo/redo and command rollback. This mutates the source model and
-   * syncs the native glyph layer back to the restored state.
-   *
-   * @param state - Source state snapshot to restore.
-   */
-  restore(state: GlyphState): void {
-    this.#edit.restore(state);
-  }
 }
 
 /**
@@ -816,7 +774,6 @@ export class GlyphSource {
 export class GlyphInstance {
   readonly #location: Signal<AxisLocation>;
   readonly #source: ComputedSignal<GlyphSource | null>;
-  readonly #edit: ComputedSignal<GlyphInstanceEdit | null>;
   readonly geometry: GlyphInstanceGeometry;
   readonly render: GlyphRenderModel;
 
@@ -831,13 +788,6 @@ export class GlyphInstance {
 
     this.#source = computed(() => glyph.sourceAt(location.value), {
       name: "glyphInstance.source",
-    });
-
-    this.#edit = computed(() => {
-      const source = this.#source.value;
-      if (!source) return null;
-
-      return new GlyphInstanceEdit(source);
     });
 
     this.geometry = new InstanceGeometry(glyph, location);
@@ -860,10 +810,10 @@ export class GlyphInstance {
   /**
    * Returns mutation capability for this instance location.
    *
-   * @returns An edit wrapper for exact source locations, or `null` for interpolated locations.
+   * @returns The editable source for exact source locations, or `null` for interpolated locations.
    */
-  get edit(): GlyphInstanceEdit | null {
-    return this.#edit.peek();
+  get edit(): GlyphSource | null {
+    return this.source;
   }
 
   get editable(): boolean {
@@ -893,321 +843,6 @@ export class GlyphInstance {
    */
   get hasSource(): boolean {
     return this.source !== null;
-  }
-}
-
-/**
- * Mutates the authored source behind a glyph instance.
- *
- * @remarks
- * Instances expose this object only when their designspace location resolves to
- * an authored source. Geometry and rendering stay available on non-editable
- * interpolated instances through {@link GlyphInstance.geometry} and
- * {@link GlyphInstance.render}.
- */
-export class GlyphInstanceEdit {
-  readonly #source: GlyphSource;
-
-  /**
-   * Creates an edit capability for an authored source.
-   *
-   * @param source - Source that receives all mutation commands.
-   */
-  constructor(source: GlyphSource) {
-    this.#source = source;
-  }
-
-  /**
-   * Returns the current authored source state snapshot.
-   *
-   * @returns Source state owned by this editable instance.
-   */
-  get state(): GlyphState {
-    return this.#source.state;
-  }
-
-  /**
-   * Reads source positions for a sparse set of editable targets.
-   *
-   * @param targets - Points or anchors whose current source coordinates are required.
-   * @returns Fresh position records suitable for later patching or draft baselines.
-   */
-  positionsFor(targets: readonly SourcePositionTarget[]): SourcePosition[] {
-    return this.#source.positionsFor(targets);
-  }
-
-  /**
-   * Sets the horizontal advance of this editable source.
-   *
-   * @param width - New advance width in UPM units.
-   */
-  setXAdvance(width: number): void {
-    this.#source.setXAdvance(width);
-  }
-
-  /**
-   * Applies a committed sparse coordinate patch to this editable source.
-   *
-   * @param updates - Point and anchor positions to write into the source.
-   */
-  applyPositionPatch(updates: SourcePositions): void {
-    this.#source.applyPositionPatch(updates);
-  }
-
-  /**
-   * Commits a sparse coordinate patch through the source edit pipeline.
-   *
-   * @param updates - Final point and anchor positions to persist.
-   */
-  commitPositionPatch(updates: SourcePositions): void {
-    this.#source.commitPositionPatch(updates);
-  }
-
-  /**
-   * Translates every coordinate in the editable source layer.
-   *
-   * @param dx - Horizontal movement in UPM units.
-   * @param dy - Vertical movement in UPM units.
-   */
-  translateLayer(dx: number, dy: number): void {
-    this.#source.translateLayer(dx, dy);
-  }
-
-  /**
-   * Previews a sparse coordinate patch without committing command history.
-   *
-   * @param updates - Point and anchor positions to show for the current interaction frame.
-   */
-  previewPositionPatch(updates: SourcePositions): void {
-    this.#source.previewPositionPatch(updates);
-  }
-
-  /**
-   * Adds an empty contour to the editable source.
-   *
-   * @returns ID of the created contour.
-   */
-  addContour(): ContourId {
-    return this.#source.addContour();
-  }
-
-  /**
-   * Adds a point to an existing contour.
-   *
-   * @param contourId - Contour that receives the point.
-   * @param edit - Point construction data to append.
-   * @returns ID of the created point.
-   */
-  addPoint(contourId: ContourId, edit: NewPoint): PointId {
-    return this.#source.addPoint(contourId, edit);
-  }
-
-  /**
-   * Adds a corner on-curve point to an existing contour.
-   *
-   * @param contourId - Contour that receives the point.
-   * @param position - Point position in glyph-local UPM units.
-   * @returns ID of the created point.
-   */
-  addOnCurvePoint(contourId: ContourId, position: Point2D): PointId {
-    return this.#source.addOnCurvePoint(contourId, position);
-  }
-
-  /**
-   * Adds a smooth on-curve point to an existing contour.
-   *
-   * @param contourId - Contour that receives the point.
-   * @param position - Point position in glyph-local UPM units.
-   * @returns ID of the created point.
-   */
-  addSmoothPoint(contourId: ContourId, position: Point2D): PointId {
-    return this.#source.addSmoothPoint(contourId, position);
-  }
-
-  /**
-   * Adds an off-curve control point to an existing contour.
-   *
-   * @param contourId - Contour that receives the point.
-   * @param position - Point position in glyph-local UPM units.
-   * @returns ID of the created point.
-   */
-  addOffCurvePoint(contourId: ContourId, position: Point2D): PointId {
-    return this.#source.addOffCurvePoint(contourId, position);
-  }
-
-  /**
-   * Inserts a point immediately before an existing point.
-   *
-   * @param pointId - Existing point that determines the insertion position.
-   * @param edit - Point construction data to insert.
-   * @returns ID of the created point.
-   */
-  insertPointBefore(pointId: PointId, edit: NewPoint): PointId {
-    return this.#source.insertPointBefore(pointId, edit);
-  }
-
-  /**
-   * Opens a closed contour in the editable source.
-   *
-   * @param contourId - Contour to mark as open.
-   */
-  openContour(contourId: ContourId): void {
-    this.#source.openContour(contourId);
-  }
-
-  /**
-   * Closes an open contour in the editable source.
-   *
-   * @param contourId - Contour to mark as closed.
-   */
-  closeContour(contourId: ContourId): void {
-    this.#source.closeContour(contourId);
-  }
-
-  /**
-   * Reverses point order for a contour in the editable source.
-   *
-   * @param contourId - Contour whose winding order is reversed.
-   */
-  reverseContour(contourId: ContourId): void {
-    this.#source.reverseContour(contourId);
-  }
-
-  /**
-   * Applies a boolean operation between two contours.
-   *
-   * @param contourIdA - First contour participating in the operation.
-   * @param contourIdB - Second contour participating in the operation.
-   * @param operation - Boolean operation to apply.
-   */
-  applyBooleanOp(
-    contourIdA: ContourId,
-    contourIdB: ContourId,
-    operation: "union" | "subtract" | "intersect" | "difference",
-  ): void {
-    this.#source.applyBooleanOp(contourIdA, contourIdB, operation);
-  }
-
-  /**
-   * Removes points from the editable source.
-   *
-   * @param pointIds - Point IDs to delete; missing IDs are ignored by the source layer.
-   */
-  removePoints(pointIds: readonly PointId[]): void {
-    this.#source.removePoints(pointIds);
-  }
-
-  /**
-   * Toggles smooth/corner state for an on-curve point.
-   *
-   * @param pointId - Point whose smooth flag changes.
-   */
-  toggleSmooth(pointId: PointId): void {
-    this.#source.toggleSmooth(pointId);
-  }
-
-  /**
-   * Moves one point to an absolute glyph-local position.
-   *
-   * @param pointId - Point to move.
-   * @param position - Destination in glyph-local UPM units.
-   */
-  movePointTo(pointId: PointId, position: Point2D): void {
-    this.#source.movePointTo(pointId, position);
-  }
-
-  /**
-   * Moves points by a relative delta.
-   *
-   * @param pointIds - Points to translate together.
-   * @param delta - Relative movement in glyph-local UPM units.
-   */
-  movePoints(pointIds: readonly PointId[], delta: Point2D): void {
-    this.#source.movePoints(pointIds, delta);
-  }
-
-  /**
-   * Translates points by a relative delta.
-   *
-   * @param pointIds - Points to translate together.
-   * @param delta - Relative movement in glyph-local UPM units.
-   */
-  translate(pointIds: readonly PointId[], delta: Point2D): void {
-    this.#source.translate(pointIds, delta);
-  }
-
-  /**
-   * Moves a point selection so an anchor position reaches a target position.
-   *
-   * @param pointIds - Points participating in the move.
-   * @param target - Destination for the anchor point.
-   * @param anchor - Existing anchor position used to compute the delta.
-   */
-  moveSelectionTo(pointIds: readonly PointId[], target: Point2D, anchor: Point2D): void {
-    this.#source.moveSelectionTo(pointIds, target, anchor);
-  }
-
-  /**
-   * Rotates points around an origin.
-   *
-   * @param pointIds - Points to rotate.
-   * @param angle - Rotation angle in radians.
-   * @param origin - Rotation origin in glyph-local UPM units.
-   */
-  rotate(pointIds: readonly PointId[], angle: number, origin: Point2D): void {
-    this.#source.rotate(pointIds, angle, origin);
-  }
-
-  /**
-   * Scales points around an origin.
-   *
-   * @param pointIds - Points to scale.
-   * @param sx - Horizontal scale factor.
-   * @param sy - Vertical scale factor.
-   * @param origin - Scale origin in glyph-local UPM units.
-   */
-  scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
-    this.#source.scale(pointIds, sx, sy, origin);
-  }
-
-  /**
-   * Reflects points across an axis through an origin.
-   *
-   * @param pointIds - Points to reflect.
-   * @param axis - Reflection axis.
-   * @param origin - Axis origin in glyph-local UPM units.
-   */
-  reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
-    this.#source.reflect(pointIds, axis, origin);
-  }
-
-  /**
-   * Aligns points using a geometric alignment rule.
-   *
-   * @param pointIds - Points to align.
-   * @param alignment - Alignment operation to apply.
-   */
-  align(pointIds: readonly PointId[], alignment: AlignmentType): void {
-    this.#source.align(pointIds, alignment);
-  }
-
-  /**
-   * Distributes points according to a spacing rule.
-   *
-   * @param pointIds - Points to distribute.
-   * @param type - Distribution operation to apply.
-   */
-  distribute(pointIds: readonly PointId[], type: DistributeType): void {
-    this.#source.distribute(pointIds, type);
-  }
-
-  /**
-   * Replaces this editable source with a complete source state.
-   *
-   * @param state - Source state snapshot to restore.
-   */
-  restore(state: GlyphState): void {
-    this.#source.restore(state);
   }
 }
 
