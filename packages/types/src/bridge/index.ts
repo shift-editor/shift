@@ -1,3 +1,5 @@
+import type { GlyphName, Unicode } from "./generated";
+
 export type {
   AnchorData,
   AppliedChange,
@@ -10,14 +12,11 @@ export type {
   FontMetadata,
   FontMetrics,
   GlyphChangedEntities,
-  GlyphHandle,
   GlyphMaster,
   GlyphName,
   GlyphRecord,
   GlyphState,
   GlyphStructure,
-  GlyphStructureChange,
-  GlyphValueChange,
   GlyphVariationData,
   LayerReplaced,
   Location,
@@ -27,3 +26,13 @@ export type {
   Source,
   Unicode,
 } from "./generated";
+
+/**
+ * Renderer-side glyph address: a name plus optional unicode. This no longer
+ * crosses the NAPI boundary (id-addressed `getGlyph` replaced the
+ * handle-addressed read), but the renderer still uses it to identify glyphs.
+ */
+export interface GlyphHandle {
+  name: GlyphName;
+  unicode?: Unicode;
+}

@@ -52,8 +52,6 @@ export type {
   GlyphRecord,
   GlyphState,
   GlyphStructure,
-  GlyphStructureChange,
-  GlyphValueChange,
   GlyphVariationData,
   LayerReplaced,
   Location,

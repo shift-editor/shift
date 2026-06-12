@@ -12,7 +12,7 @@
  */
 
 import { Editor } from "@/lib/editor/Editor";
-import type { GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { GlyphName } from "@shift/types";
@@ -56,24 +56,8 @@ export class TestEditor extends Editor {
   async startSession(name = "A", unicode: number | null = 65): Promise<this> {
     await this.#stack.client.create();
 
-    const applied = await this.#stack.client.apply(
-      [
-        {
-          kind: "createGlyph",
-          name: name as GlyphName,
-          unicodes: unicode === null ? [] : [unicode],
-        },
-      ],
-      "Add Glyph",
-    );
-    const record = applied.glyphs?.find((glyph) => glyph.name === name);
-    if (!record) throw new Error("createGlyph did not echo the new record");
-
-    const source = this.font.defaultSource;
-    const glyph = await this.font.openGlyph(record.id, source);
-    if (!glyph) throw new Error("openGlyph returned null for a created glyph");
-
-    this.openGlyphSource(glyph.handle, source.id);
+    const glyph = await this.#createAndOpenGlyph(name, unicode);
+    this.openGlyphSource(glyph.handle, this.font.defaultSource.id);
     return this;
   }
 
@@ -82,6 +66,10 @@ export class TestEditor extends Editor {
    * Font cache — the same create-then-open flow EditorView runs in the app.
    */
   async addGlyph(name: string, unicode: number | null): Promise<void> {
+    await this.#createAndOpenGlyph(name, unicode);
+  }
+
+  async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
     const applied = await this.#stack.client.apply(
       [
         {
@@ -95,7 +83,10 @@ export class TestEditor extends Editor {
 
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
-    await this.font.openGlyph(record.id, this.font.defaultSource);
+
+    const glyph = await this.font.openGlyph(record.id, this.font.defaultSource);
+    if (!glyph) throw new Error("openGlyph returned null for a created glyph");
+    return glyph;
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
@@ -122,14 +113,6 @@ export class TestEditor extends Editor {
 
   get pointCount(): number {
     return this.activeGlyphSource?.allPoints.length ?? 0;
-  }
-
-  get currentEdit(): GlyphSource | null {
-    return this.activeGlyphSource;
-  }
-
-  get currentGlyphInstance(): GlyphInstance | null {
-    return this.glyphInstance;
   }
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use shift_font::{LayerId, error::CoreError};
+use shift_font::{FontIntent, FontIntentSet, LayerId, error::CoreError};
 use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 #[test]
@@ -146,8 +146,14 @@ fn save_as_assigns_a_shift_package_save_target() {
     workspace.save().unwrap();
 }
 
+fn set_x_advance_intents(layer_id: LayerId, width: f64) -> FontIntentSet {
+    FontIntentSet {
+        intents: vec![FontIntent::SetXAdvance { layer_id, width }],
+    }
+}
+
 #[test]
-fn set_x_advance_updates_existing_layer() {
+fn apply_set_x_advance_updates_existing_layer() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
@@ -156,22 +162,25 @@ fn set_x_advance_updates_existing_layer() {
     let layer = workspace.create_glyph_layer(glyph.id(), source_id).unwrap();
     let layer_id = layer.id();
 
-    let edited_layer = workspace.set_x_advance(layer_id.clone(), 640.0).unwrap();
+    let outcome = workspace
+        .apply(set_x_advance_intents(layer_id.clone(), 640.0), None)
+        .unwrap();
 
-    assert_eq!(edited_layer.width(), 640.0);
+    assert_eq!(outcome.layers[0].layer.width(), 640.0);
     assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
 }
 
 #[test]
-fn set_x_advance_rejects_missing_layer() {
+fn apply_set_x_advance_rejects_missing_layer() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let layer_id = LayerId::new();
 
-    let error = workspace
-        .set_x_advance(layer_id.clone(), 640.0)
-        .unwrap_err();
+    let error = match workspace.apply(set_x_advance_intents(layer_id.clone(), 640.0), None) {
+        Ok(_) => panic!("apply should reject a missing layer id"),
+        Err(error) => error,
+    };
 
     assert!(matches!(
         error,

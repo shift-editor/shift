@@ -13,15 +13,10 @@ import type {
 export declare class Bridge {
   constructor()
   createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
-  closeWorkspace(): void
-  saveWorkspace(): number
-  saveWorkspaceAs(path: string): number
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
-  getGlyphCount(): number
   getGlyphs(): Array<NapiGlyphRecord>
-  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
   /**
    * Applies one intent set as a single atomic workspace apply.
    *
@@ -41,41 +36,11 @@ export declare class Bridge {
    * redo stack is empty.
    */
   redo(): NapiAppliedChange | null
-  /**
-   * Id-addressed glyph state: the stable-identity twin of
-   * `get_glyph_state`. References survive renames; no name lookup.
-   */
+  /** Id-addressed glyph state. References survive renames; no name lookup. */
   getGlyph(glyphId: GlyphId, sourceId: SourceId): NapiGlyphState | null
-  getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): NapiGlyphState | null
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
-  getPersistedVersion(): number
-  isDirty(): boolean
-  createGlyph(name: GlyphName, unicodes: Array<Unicode>): GlyphId
-  createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId
-  setXAdvance(layerId: LayerId, width: number): NapiGlyphValueChange
-  translateLayer(layerId: LayerId, dx: number, dy: number): NapiGlyphValueChange
-  addPoint(layerId: LayerId, contourId: ContourId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange
-  insertPointBefore(layerId: LayerId, beforePointId: PointId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange
-  addContour(layerId: LayerId): NapiGlyphStructureChange
-  openContour(layerId: LayerId, contourId: ContourId): NapiGlyphStructureChange
-  closeContour(layerId: LayerId, contourId: ContourId): NapiGlyphStructureChange
-  reverseContour(layerId: LayerId, contourId: ContourId): NapiGlyphStructureChange
-  applyBooleanOp(layerId: LayerId, contourIdA: ContourId, contourIdB: ContourId, operation: string): NapiGlyphStructureChange
-  removePoints(layerId: LayerId, pointIds: Array<PointId>): NapiGlyphStructureChange
-  toggleSmooth(layerId: LayerId, pointId: PointId): NapiGlyphStructureChange
-  /**
-   * Bulk position sync. IDs are stable typed strings from the current glyph state.
-   * Coords are interleaved [x0, y0, x1, y1, ...].
-   */
-  applyPositionPatch(layerId: LayerId, pointIds?: Array<PointId> | null, pointCoords?: Float64Array | undefined | null, anchorIds?: Array<AnchorId> | null, anchorCoords?: Float64Array | undefined | null): void
-  restoreState(layerId: LayerId, structure: NapiGlyphStructure, values: Float64Array): NapiGlyphStructureChange
-}
-
-export interface GlyphHandle {
-  name: GlyphName
-  unicode?: Unicode
 }
 
 export interface NapiFontExportRequest {
@@ -248,17 +213,6 @@ export interface NapiGlyphStructure {
   contours: Array<NapiContourData>
   anchors: Array<NapiAnchorData>
   components: Array<NapiComponentData>
-}
-
-export interface NapiGlyphStructureChange {
-  structure: NapiGlyphStructure
-  values: Float64Array
-  changed: NapiGlyphChangedEntities
-}
-
-export interface NapiGlyphValueChange {
-  values: Float64Array
-  changed: NapiGlyphChangedEntities
 }
 
 export interface NapiGlyphVariationData {

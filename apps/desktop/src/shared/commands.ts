@@ -11,6 +11,4 @@ export type CommandId =
   | "window.maximise"
   | "ui.zoomIn"
   | "ui.zoomOut"
-  | "ui.zoomReset"
-  | "font.new"
-  | "font.load";
+  | "ui.zoomReset";

@@ -372,40 +372,6 @@ impl GlyphChangedEntities {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphValueChange {
-    pub values: GlyphValues,
-    pub changed: GlyphChangedEntities,
-}
-
-impl GlyphValueChange {
-    pub fn from_layer(layer: &GlyphLayer, changed: GlyphChangedEntities) -> Self {
-        Self {
-            values: values_from_layer(layer),
-            changed,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GlyphStructureChange {
-    pub structure: GlyphStructure,
-    pub values: GlyphValues,
-    pub changed: GlyphChangedEntities,
-}
-
-impl GlyphStructureChange {
-    pub fn from_layer(layer: &GlyphLayer, changed: GlyphChangedEntities) -> Self {
-        Self {
-            structure: GlyphStructure::from(layer),
-            values: values_from_layer(layer),
-            changed,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Location {
     pub values: HashMap<String, f64>,
 }

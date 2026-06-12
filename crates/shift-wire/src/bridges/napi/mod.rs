@@ -6,9 +6,8 @@ use shift_font::PointType as IrPointType;
 
 use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure,
-    GlyphStructureChange, GlyphValueChange, GlyphVariationData, Location, PointData, PointType,
-    Source,
+    GlyphChangedEntities, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure, GlyphVariationData,
+    Location, PointData, PointType, Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -378,38 +377,6 @@ impl From<GlyphChangedEntities> for NapiGlyphChangedEntities {
                 .into_iter()
                 .map(|id| id.to_string())
                 .collect(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiGlyphValueChange {
-    pub values: Float64Array,
-    pub changed: NapiGlyphChangedEntities,
-}
-
-impl From<GlyphValueChange> for NapiGlyphValueChange {
-    fn from(change: GlyphValueChange) -> Self {
-        Self {
-            values: change.values.into(),
-            changed: change.changed.into(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiGlyphStructureChange {
-    pub structure: NapiGlyphStructure,
-    pub values: Float64Array,
-    pub changed: NapiGlyphChangedEntities,
-}
-
-impl From<GlyphStructureChange> for NapiGlyphStructureChange {
-    fn from(change: GlyphStructureChange) -> Self {
-        Self {
-            structure: change.structure.into(),
-            values: change.values.into(),
-            changed: change.changed.into(),
         }
     }
 }
