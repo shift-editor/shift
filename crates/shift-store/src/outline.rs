@@ -19,6 +19,16 @@ pub struct PointRecord {
     pub smooth: bool,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnchorRecord {
+    pub id: String,
+    pub layer_id: LayerId,
+    pub name: Option<String>,
+    pub x: f64,
+    pub y: f64,
+    pub order_index: i64,
+}
+
 impl ShiftStore {
     pub fn list_contours_for_layer(
         &self,
@@ -55,6 +65,24 @@ impl ShiftStore {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }
+
+    pub fn list_anchors_for_layer(
+        &self,
+        layer_id: &LayerId,
+    ) -> Result<Vec<AnchorRecord>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "
+            SELECT id, layer_id, name, x, y, order_index
+            FROM glyph_layer_anchors
+            WHERE layer_id = ?1
+            ORDER BY order_index
+            ",
+        )?;
+
+        let rows = stmt.query_map([layer_id.as_str()], map_anchor_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
 }
 
 fn map_contour_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ContourRecord> {
@@ -75,5 +103,16 @@ fn map_point_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PointRecord> {
         y: row.get(4)?,
         point_type: row.get(5)?,
         smooth: row.get(6)?,
+    })
+}
+
+fn map_anchor_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AnchorRecord> {
+    Ok(AnchorRecord {
+        id: row.get(0)?,
+        layer_id: LayerId::new(row.get::<_, String>(1)?),
+        name: row.get(2)?,
+        x: row.get(3)?,
+        y: row.get(4)?,
+        order_index: row.get(5)?,
     })
 }

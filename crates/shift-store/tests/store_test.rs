@@ -382,6 +382,110 @@ fn applies_layer_geometry_replacement() {
 }
 
 #[test]
+fn layer_geometry_replacement_round_trips_anchors() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let (glyph, layer, anchor_id) = store_layer_with_anchor();
+    create_regular_source_with_id(&mut store, layer.source_id());
+
+    store
+        .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
+        .expect("change set should apply");
+
+    let anchors = store
+        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
+        .expect("anchor query should succeed");
+
+    assert_eq!(anchors.len(), 1);
+    assert_eq!(anchors[0].id, anchor_id.to_string());
+    assert_eq!(anchors[0].name.as_deref(), Some("top"));
+    assert_eq!((anchors[0].x, anchors[0].y), (250.0, 700.0));
+    assert_eq!(anchors[0].order_index, 0);
+}
+
+#[test]
+fn applies_anchor_position_changes() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let (glyph, layer, anchor_id) = store_layer_with_anchor();
+    create_regular_source_with_id(&mut store, layer.source_id());
+    store
+        .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
+        .expect("change set should apply");
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::anchor_positions_changed(
+                layer.id(),
+                vec![shift_font::AnchorPosition {
+                    anchor_id: anchor_id.clone(),
+                    x: 300.0,
+                    y: 650.0,
+                }],
+            ),
+        ]))
+        .expect("anchor positions should apply");
+
+    let anchors = store
+        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
+        .expect("anchor query should succeed");
+    assert_eq!((anchors[0].x, anchors[0].y), (300.0, 650.0));
+}
+
+#[test]
+fn rejects_anchor_position_change_for_missing_anchor_row() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let (glyph, layer, _) = store_layer_with_anchor();
+    create_regular_source_with_id(&mut store, layer.source_id());
+    store
+        .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
+        .expect("change set should apply");
+    let missing_anchor_id = shift_font::AnchorId::new();
+
+    let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::anchor_positions_changed(
+            layer.id(),
+            vec![shift_font::AnchorPosition {
+                anchor_id: missing_anchor_id.clone(),
+                x: 1.0,
+                y: 2.0,
+            }],
+        ),
+    ]));
+
+    assert!(
+        result
+            .expect_err("missing anchor should reject")
+            .to_string()
+            .contains(&missing_anchor_id.to_string())
+    );
+}
+
+#[test]
+fn reopen_preserves_layer_anchors() {
+    let path = temp_store_path("anchors-reopen");
+    let (glyph, layer, anchor_id) = store_layer_with_anchor();
+
+    {
+        let mut store = ShiftStore::open(&path).expect("open");
+        create_regular_source_with_id(&mut store, layer.source_id());
+        store
+            .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
+            .expect("change set should apply");
+    }
+
+    let store = ShiftStore::open(&path).expect("reopen");
+    let anchors = store
+        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
+        .expect("anchor query should succeed");
+
+    assert_eq!(anchors.len(), 1);
+    assert_eq!(anchors[0].id, anchor_id.to_string());
+    assert_eq!(anchors[0].name.as_deref(), Some("top"));
+    assert_eq!((anchors[0].x, anchors[0].y), (250.0, 700.0));
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
 fn rejects_incremental_change_for_missing_point_row() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, _, _) = store_layer_with_contour();
@@ -611,6 +715,39 @@ fn store_layer_with_contour() -> (
         shift_font::ContourValue::from(&contour),
         point_id,
     )
+}
+
+fn store_layer_with_anchor() -> (
+    shift_font::Glyph,
+    shift_font::GlyphLayer,
+    shift_font::AnchorId,
+) {
+    let glyph = shift_font::Glyph::with_unicode("A", 65);
+    let source_id = shift_font::SourceId::new();
+    let mut layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id, 500.0);
+    let anchor_id = layer.add_anchor(shift_font::Anchor::new(
+        Some("top".to_string()),
+        250.0,
+        700.0,
+    ));
+
+    (glyph, layer, anchor_id)
+}
+
+fn anchored_layer_change_set(
+    glyph: &shift_font::Glyph,
+    layer: &shift_font::GlyphLayer,
+) -> shift_font::FontChangeSet {
+    shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::glyph_created(glyph),
+        shift_font::FontChange::glyph_layer_created(
+            glyph.id(),
+            Some(glyph.glyph_name().clone()),
+            layer,
+        ),
+        shift_font::FontChange::layer_geometry_replaced(layer),
+    ])
 }
 
 fn contour_with_point(x: f64, y: f64) -> shift_font::Contour {

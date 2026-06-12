@@ -11,6 +11,9 @@ pub enum CoreError {
     #[error("contour id {0} already exists")]
     DuplicateContourId(ContourId),
 
+    #[error("anchor id {0} already exists")]
+    DuplicateAnchorId(AnchorId),
+
     #[error("invalid contour id {0}")]
     InvalidContourId(String),
 

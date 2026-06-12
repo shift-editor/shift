@@ -506,6 +506,25 @@ impl GlyphLayer {
 
         Ok(())
     }
+
+    pub fn has_anchor(&self, anchor_id: AnchorId) -> bool {
+        self.anchor(anchor_id).is_some()
+    }
+
+    pub fn remove_anchors(&mut self, anchor_ids: &[AnchorId]) -> CoreResult<()> {
+        for anchor_id in anchor_ids {
+            if !self.has_anchor(anchor_id.clone()) {
+                return Err(CoreError::AnchorNotFound(anchor_id.clone()));
+            }
+        }
+
+        for anchor_id in anchor_ids {
+            self.remove_anchor(anchor_id.clone())
+                .ok_or(CoreError::AnchorNotFound(anchor_id.clone()))?;
+        }
+
+        Ok(())
+    }
 }
 
 impl GlyphLayer {

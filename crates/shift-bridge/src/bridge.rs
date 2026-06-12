@@ -5,12 +5,12 @@ use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
 use shift_font::{
-  BooleanOp, ContourId, Font, FontIntent, FontIntentSet, Glyph, GlyphId, LayerId, PointId,
-  PointSeed, SourceId,
+  AnchorId, AnchorSeed, BooleanOp, ContourId, Font, FontIntent, FontIntentSet, Glyph, GlyphId,
+  LayerId, PointId, PointSeed, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
-    NapiAppliedChange, NapiAxis, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
+    NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
     NapiGlyphRecord, NapiGlyphState, NapiLayerReplaced, NapiPointSeed, NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
@@ -596,6 +596,34 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
       })
     }
+    "addAnchors" => {
+      let payload = intent.add_anchors.ok_or_else(|| missing("addAnchors"))?;
+      Ok(FontIntent::AddAnchors {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        anchors: payload
+          .anchors
+          .into_iter()
+          .map(map_anchor_seed)
+          .collect::<errors::Result<Vec<_>>>()?,
+      })
+    }
+    "moveAnchors" => {
+      let payload = intent.move_anchors.ok_or_else(|| missing("moveAnchors"))?;
+      Ok(FontIntent::MoveAnchors {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
+        coords: payload.coords,
+      })
+    }
+    "removeAnchors" => {
+      let payload = intent
+        .remove_anchors
+        .ok_or_else(|| missing("removeAnchors"))?;
+      Ok(FontIntent::RemoveAnchors {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
+      })
+    }
     "reverseContour" => {
       let payload = intent
         .reverse_contour
@@ -664,11 +692,21 @@ fn map_point_seed(seed: NapiPointSeed) -> errors::Result<PointSeed> {
   })
 }
 
+fn map_anchor_seed(seed: NapiAnchorSeed) -> errors::Result<AnchorSeed> {
+  Ok(AnchorSeed {
+    id: parse::<AnchorId>(&seed.id)?,
+    name: seed.name,
+    x: seed.x,
+    y: seed.y,
+  })
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
-    NapiAddContourIntent, NapiAddPointsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
+    NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiMoveAnchorsIntent,
+    NapiMovePointsIntent, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
     NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
     NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
   };
@@ -685,6 +723,9 @@ mod tests {
       move_points: None,
       set_point_smooth: None,
       remove_points: None,
+      add_anchors: None,
+      move_anchors: None,
+      remove_anchors: None,
       reverse_contour: None,
       translate_points: None,
       set_x_advance: None,
@@ -984,6 +1025,231 @@ mod tests {
     // atomicity: the valid point from the rejected set must NOT exist
     let state = glyph_state(&bridge, "A");
     assert_eq!(state.structure.contours[0].points.len(), 1);
+  }
+
+  fn anchor_seed(id: &str, name: Option<&str>, x: f64, y: f64) -> NapiAnchorSeed {
+    NapiAnchorSeed {
+      id: id.to_string(),
+      name: name.map(str::to_owned),
+      x,
+      y,
+    }
+  }
+
+  fn add_anchors_intent(layer_id: &str, anchors: Vec<NapiAnchorSeed>) -> NapiFontIntent {
+    NapiFontIntent {
+      add_anchors: Some(NapiAddAnchorsIntent {
+        layer_id: layer_id.to_string(),
+        anchors,
+      }),
+      ..skeleton_intent("addAnchors")
+    }
+  }
+
+  #[test]
+  fn apply_add_anchors_echoes_structure_and_values_with_minted_ids() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, _) = pen_setup(&mut bridge);
+    let a1 = shift_font::AnchorId::new().to_string();
+    let a2 = shift_font::AnchorId::new().to_string();
+
+    let applied = bridge
+      .apply(
+        vec![add_anchors_intent(
+          &layer_id,
+          vec![
+            anchor_seed(&a1, Some("top"), 250.0, 700.0),
+            anchor_seed(&a2, None, 250.0, -10.0),
+          ],
+        )],
+        Some("Add Anchors".to_string()),
+      )
+      .unwrap();
+
+    assert_eq!(applied.layers.len(), 1);
+    let structure = applied.layers[0].structure.as_ref().unwrap();
+    let ids: Vec<&str> = structure.anchors.iter().map(|a| a.id.as_str()).collect();
+    assert_eq!(ids, vec![a1.as_str(), a2.as_str()]);
+    assert_eq!(structure.anchors[0].name.as_deref(), Some("top"));
+    assert_eq!(structure.anchors[1].name, None);
+    // canonical values: [xAdvance, point coords…, anchor coords…]; the
+    // contour is empty, so anchors start at slot 1
+    assert_eq!(
+      &applied.layers[0].values[1..],
+      &[250.0, 700.0, 250.0, -10.0]
+    );
+  }
+
+  #[test]
+  fn apply_move_anchors_echoes_values_without_structure() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, _) = pen_setup(&mut bridge);
+    let a1 = shift_font::AnchorId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_anchors_intent(
+          &layer_id,
+          vec![anchor_seed(&a1, Some("top"), 250.0, 700.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          move_anchors: Some(NapiMoveAnchorsIntent {
+            layer_id: layer_id.clone(),
+            anchor_ids: vec![a1.clone()],
+            coords: vec![300.0, 650.0],
+          }),
+          ..skeleton_intent("moveAnchors")
+        }],
+        None,
+      )
+      .unwrap();
+
+    assert_eq!(applied.layers.len(), 1);
+    assert!(applied.layers[0].structure.is_none());
+    assert_eq!(&applied.layers[0].values[1..], &[300.0, 650.0]);
+  }
+
+  #[test]
+  fn apply_remove_anchors_with_points_in_one_atomic_set() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let p1 = shift_font::PointId::new().to_string();
+    let a1 = shift_font::AnchorId::new().to_string();
+
+    // mixed same-set point+anchor adds apply atomically: one echo
+    let applied = bridge
+      .apply(
+        vec![
+          add_points_intent(&layer_id, &contour_id, None, vec![seed(&p1, 10.0, 20.0)]),
+          add_anchors_intent(&layer_id, vec![anchor_seed(&a1, Some("top"), 250.0, 700.0)]),
+        ],
+        None,
+      )
+      .unwrap();
+    assert_eq!(applied.layers.len(), 1);
+
+    // a same-set failure must reject the whole set: the valid removePoints
+    // must not survive a missing-anchor removeAnchors
+    let missing = shift_font::AnchorId::new().to_string();
+    let result = bridge.apply(
+      vec![
+        NapiFontIntent {
+          remove_points: Some(NapiRemovePointsIntent {
+            layer_id: layer_id.clone(),
+            point_ids: vec![p1.clone()],
+          }),
+          ..skeleton_intent("removePoints")
+        },
+        NapiFontIntent {
+          remove_anchors: Some(NapiRemoveAnchorsIntent {
+            layer_id: layer_id.clone(),
+            anchor_ids: vec![missing],
+          }),
+          ..skeleton_intent("removeAnchors")
+        },
+      ],
+      None,
+    );
+    assert!(result.is_err());
+    let state = glyph_state(&bridge, "A");
+    assert_eq!(state.structure.contours[0].points.len(), 1);
+    assert_eq!(state.structure.anchors.len(), 1);
+
+    // the valid mixed removal applies atomically
+    let removed = bridge
+      .apply(
+        vec![
+          NapiFontIntent {
+            remove_points: Some(NapiRemovePointsIntent {
+              layer_id: layer_id.clone(),
+              point_ids: vec![p1.clone()],
+            }),
+            ..skeleton_intent("removePoints")
+          },
+          NapiFontIntent {
+            remove_anchors: Some(NapiRemoveAnchorsIntent {
+              layer_id: layer_id.clone(),
+              anchor_ids: vec![a1.clone()],
+            }),
+            ..skeleton_intent("removeAnchors")
+          },
+        ],
+        None,
+      )
+      .unwrap();
+    assert_eq!(removed.layers.len(), 1);
+    let state = glyph_state(&bridge, "A");
+    assert_eq!(state.structure.contours[0].points.len(), 0);
+    assert!(state.structure.anchors.is_empty());
+  }
+
+  #[test]
+  fn undo_after_add_anchors_removes_them_and_redo_restores() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, _) = pen_setup(&mut bridge);
+    let a1 = shift_font::AnchorId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_anchors_intent(
+          &layer_id,
+          vec![anchor_seed(&a1, Some("top"), 250.0, 700.0)],
+        )],
+        Some("Add Anchor".to_string()),
+      )
+      .unwrap();
+    assert_eq!(glyph_state(&bridge, "A").structure.anchors.len(), 1);
+
+    let undone = bridge.undo().unwrap().expect("one entry to undo");
+    assert_eq!(undone.layers.len(), 1);
+    assert!(glyph_state(&bridge, "A").structure.anchors.is_empty());
+
+    let redone = bridge.redo().unwrap().expect("one entry to redo");
+    assert_eq!(redone.layers.len(), 1);
+    let state = glyph_state(&bridge, "A");
+    assert_eq!(state.structure.anchors.len(), 1);
+    assert_eq!(state.structure.anchors[0].id, a1);
+    assert_eq!(state.structure.anchors[0].name.as_deref(), Some("top"));
+    assert_eq!(&state.values[1..], &[250.0, 700.0]);
+  }
+
+  #[test]
+  fn apply_add_anchors_rejects_duplicate_ids_atomically() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, _) = pen_setup(&mut bridge);
+    let a1 = shift_font::AnchorId::new().to_string();
+
+    bridge
+      .apply(
+        vec![add_anchors_intent(
+          &layer_id,
+          vec![anchor_seed(&a1, Some("top"), 0.0, 0.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let fresh = shift_font::AnchorId::new().to_string();
+    let result = bridge.apply(
+      vec![add_anchors_intent(
+        &layer_id,
+        vec![
+          anchor_seed(&fresh, None, 1.0, 1.0),
+          anchor_seed(&a1, None, 2.0, 2.0),
+        ],
+      )],
+      None,
+    );
+    assert!(result.is_err());
+
+    // atomicity: the valid anchor from the rejected set must NOT exist
+    assert_eq!(glyph_state(&bridge, "A").structure.anchors.len(), 1);
   }
 
   fn glyph_state(bridge: &Bridge, name: &str) -> NapiGlyphState {

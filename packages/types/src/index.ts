@@ -31,6 +31,7 @@ export {
   isValidLayerId,
   isValidSourceId,
   mintContourId,
+  mintAnchorId,
   mintPointId,
 } from "./ids";
 

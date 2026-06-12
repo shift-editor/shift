@@ -208,3 +208,8 @@ export function mintPointId(): PointId {
 export function mintContourId(): ContourId {
   return `contour_${crypto.randomUUID()}` as ContourId;
 }
+
+/** Mints a new anchor id. See {@link mintPointId}. */
+export function mintAnchorId(): AnchorId {
+  return `anchor_${crypto.randomUUID()}` as AnchorId;
+}

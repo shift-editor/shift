@@ -14,7 +14,7 @@ import type {
   Source,
   Unicode,
 } from "@shift/types";
-import { mintContourId, mintPointId } from "@shift/types";
+import { mintAnchorId, mintContourId, mintPointId } from "@shift/types";
 import type { GlyphHandle } from "@shift/bridge";
 import { computed, keyedCache, signal, type ComputedSignal, type Signal } from "@/lib/signals";
 import { interpolate, normalize } from "@/lib/interpolation/interpolate";
@@ -137,22 +137,40 @@ class GlyphEditSession {
     if (patch.isEmpty) return;
 
     const pointIds: PointId[] = [];
-    const coords: number[] = [];
+    const pointCoords: number[] = [];
+    const anchorIds: AnchorId[] = [];
+    const anchorCoords: number[] = [];
     for (const position of patch.positions) {
-      if (position.kind !== "point") {
-        throw new Error("anchor moves have no intent vocabulary yet");
+      if (position.kind === "point") {
+        pointIds.push(position.id);
+        pointCoords.push(position.x, position.y);
+      } else {
+        anchorIds.push(position.id);
+        anchorCoords.push(position.x, position.y);
       }
-      pointIds.push(position.id);
-      coords.push(position.x, position.y);
     }
 
-    this.#push(
-      {
-        kind: "movePoints",
-        movePoints: { layerId: this.#layerId, pointIds, coords },
-      },
-      "Move Points",
-    );
+    // Mixed patches push two intents in the same tick; the writer coalesces
+    // them into one apply and therefore one undo step.
+    if (pointIds.length > 0) {
+      this.#push(
+        {
+          kind: "movePoints",
+          movePoints: { layerId: this.#layerId, pointIds, coords: pointCoords },
+        },
+        "Move Points",
+      );
+    }
+
+    if (anchorIds.length > 0) {
+      this.#push(
+        {
+          kind: "moveAnchors",
+          moveAnchors: { layerId: this.#layerId, anchorIds, coords: anchorCoords },
+        },
+        "Move Anchors",
+      );
+    }
   }
 
   translateLayer(dx: number, dy: number): void {
@@ -286,6 +304,37 @@ class GlyphEditSession {
         removePoints: { layerId: this.#layerId, pointIds: [...pointIds] },
       },
       "Delete Points",
+    );
+  }
+
+  addAnchor(name: string | null, position: Point2D): AnchorId {
+    const anchorId = mintAnchorId();
+
+    this.#push(
+      {
+        kind: "addAnchors",
+        addAnchors: {
+          layerId: this.#layerId,
+          anchors: [
+            { id: anchorId, x: position.x, y: position.y, ...(name === null ? {} : { name }) },
+          ],
+        },
+      },
+      "Add Anchor",
+    );
+
+    return anchorId;
+  }
+
+  removeAnchors(anchorIds: readonly AnchorId[]): void {
+    if (anchorIds.length === 0) return;
+
+    this.#push(
+      {
+        kind: "removeAnchors",
+        removeAnchors: { layerId: this.#layerId, anchorIds: [...anchorIds] },
+      },
+      "Delete Anchors",
     );
   }
 
@@ -630,6 +679,26 @@ export class GlyphSource {
    */
   removePoints(pointIds: readonly PointId[]): void {
     this.#edit.removePoints(pointIds);
+  }
+
+  /**
+   * Adds an anchor to this source.
+   *
+   * @param name - Anchor name, or null for an unnamed anchor.
+   * @param position - Anchor position in glyph-local UPM units.
+   * @returns ID of the created anchor.
+   */
+  addAnchor(name: string | null, position: Point2D): AnchorId {
+    return this.#edit.addAnchor(name, position);
+  }
+
+  /**
+   * Removes anchors from this source.
+   *
+   * @param anchorIds - Anchor IDs to delete.
+   */
+  removeAnchors(anchorIds: readonly AnchorId[]): void {
+    this.#edit.removeAnchors(anchorIds);
   }
 
   /**

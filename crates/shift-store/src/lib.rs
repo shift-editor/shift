@@ -16,7 +16,7 @@ pub use error::StoreError;
 pub use font::FontInfo;
 pub use glyph::{GlyphRecord, NewGlyph};
 pub use layer::{GlyphLayerRecord, NewGlyphLayer};
-pub use outline::{ContourRecord, PointRecord};
+pub use outline::{AnchorRecord, ContourRecord, PointRecord};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};
 pub use store::ShiftStore;
 pub use types::{AxisId, ComponentId, GlyphId, LayerId, RevisionId, SourceId};

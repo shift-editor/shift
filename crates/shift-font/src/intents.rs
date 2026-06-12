@@ -6,11 +6,11 @@
 //! post-mutation snapshots for the store. CS1 covers the pen scope; later
 //! milestones add variants alongside the tools that emit them.
 
-use crate::changes::{FontChange, FontChangeSet, PointPosition};
+use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
-    BooleanOp, Contour, ContourId, Font, GlyphId, GlyphLayer, GlyphName, LayerId, PointId,
-    PointType,
+    Anchor, AnchorId, BooleanOp, Contour, ContourId, Font, GlyphId, GlyphLayer, GlyphName, LayerId,
+    PointId, PointType,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 
@@ -22,6 +22,15 @@ pub struct PointSeed {
     pub y: f64,
     pub point_type: PointType,
     pub smooth: bool,
+}
+
+/// An anchor to create, with its caller-minted id.
+#[derive(Clone, Debug)]
+pub struct AnchorSeed {
+    pub id: AnchorId,
+    pub name: Option<String>,
+    pub x: f64,
+    pub y: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +70,20 @@ pub enum FontIntent {
         layer_id: LayerId,
         point_ids: Vec<PointId>,
     },
+    AddAnchors {
+        layer_id: LayerId,
+        anchors: Vec<AnchorSeed>,
+    },
+    MoveAnchors {
+        layer_id: LayerId,
+        anchor_ids: Vec<AnchorId>,
+        /// Interleaved absolute coordinates: x0, y0, x1, y1, …
+        coords: Vec<f64>,
+    },
+    RemoveAnchors {
+        layer_id: LayerId,
+        anchor_ids: Vec<AnchorId>,
+    },
     ReverseContour {
         layer_id: LayerId,
         contour_id: ContourId,
@@ -95,6 +118,9 @@ impl FontIntent {
             | Self::MovePoints { layer_id, .. }
             | Self::SetPointSmooth { layer_id, .. }
             | Self::RemovePoints { layer_id, .. }
+            | Self::AddAnchors { layer_id, .. }
+            | Self::MoveAnchors { layer_id, .. }
+            | Self::RemoveAnchors { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
@@ -107,7 +133,10 @@ impl FontIntent {
     fn structural(&self) -> bool {
         !matches!(
             self,
-            Self::MovePoints { .. } | Self::TranslatePoints { .. } | Self::SetXAdvance { .. }
+            Self::MovePoints { .. }
+                | Self::MoveAnchors { .. }
+                | Self::TranslatePoints { .. }
+                | Self::SetXAdvance { .. }
         )
     }
 }
@@ -320,6 +349,72 @@ impl Font {
             } => {
                 let layer = self.layer_mut_or_err(layer_id)?;
                 layer.remove_points(point_ids)?;
+
+                Ok(FontChange::layer_geometry_replaced(layer))
+            }
+            FontIntent::AddAnchors { layer_id, anchors } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+
+                for seed in anchors {
+                    if layer.has_anchor(seed.id.clone()) {
+                        return Err(CoreError::DuplicateAnchorId(seed.id.clone()));
+                    }
+                }
+
+                for seed in anchors {
+                    layer.add_anchor(Anchor::with_id(
+                        seed.id.clone(),
+                        seed.name.clone(),
+                        seed.x,
+                        seed.y,
+                    ));
+                }
+
+                Ok(FontChange::layer_geometry_replaced(layer))
+            }
+            FontIntent::MoveAnchors {
+                layer_id,
+                anchor_ids,
+                coords,
+            } => {
+                if coords.len() != anchor_ids.len() * 2 {
+                    return Err(CoreError::InvalidAnchorId(format!(
+                        "moveAnchors expects {} coords for {} anchors, got {}",
+                        anchor_ids.len() * 2,
+                        anchor_ids.len(),
+                        coords.len()
+                    )));
+                }
+
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.apply_bulk_node_positions(BulkNodePositionUpdates {
+                    point_ids: None,
+                    point_coords: None,
+                    anchor_ids: Some(anchor_ids),
+                    anchor_coords: Some(coords),
+                })?;
+
+                let positions = anchor_ids
+                    .iter()
+                    .zip(coords.chunks_exact(2))
+                    .map(|(anchor_id, xy)| AnchorPosition {
+                        anchor_id: anchor_id.clone(),
+                        x: xy[0],
+                        y: xy[1],
+                    })
+                    .collect();
+
+                Ok(FontChange::anchor_positions_changed(
+                    layer_id.clone(),
+                    positions,
+                ))
+            }
+            FontIntent::RemoveAnchors {
+                layer_id,
+                anchor_ids,
+            } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.remove_anchors(anchor_ids)?;
 
                 Ok(FontChange::layer_geometry_replaced(layer))
             }

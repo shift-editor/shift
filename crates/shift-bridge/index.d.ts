@@ -57,6 +57,11 @@ export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
 }
+export interface NapiAddAnchorsIntent {
+  layerId: LayerId
+  anchors: Array<NapiAnchorSeed>
+}
+
 export interface NapiAddContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -75,6 +80,17 @@ export interface NapiAddPointsIntent {
 export interface NapiAnchorData {
   id: AnchorId
   name?: string
+}
+
+/**
+ * An anchor to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface NapiAnchorSeed {
+  id: AnchorId
+  name?: string
+  x: number
+  y: number
 }
 
 /** Pure-state response to `apply`: no change records cross to the renderer. */
@@ -129,8 +145,9 @@ export interface NapiFontIntent {
   /**
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-   * "setPointSmooth" | "removePoints" | "reverseContour" |
-   * "translatePoints" | "setXAdvance" | "applyBooleanOp".
+   * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
+   * "removeAnchors" | "reverseContour" | "translatePoints" |
+   * "setXAdvance" | "applyBooleanOp".
    * Skeleton leftover until font-level verbs land: "createGlyph".
    */
   kind: string
@@ -140,6 +157,9 @@ export interface NapiFontIntent {
   movePoints?: NapiMovePointsIntent
   setPointSmooth?: NapiSetPointSmoothIntent
   removePoints?: NapiRemovePointsIntent
+  addAnchors?: NapiAddAnchorsIntent
+  moveAnchors?: NapiMoveAnchorsIntent
+  removeAnchors?: NapiRemoveAnchorsIntent
   reverseContour?: NapiReverseContourIntent
   translatePoints?: NapiTranslatePointsIntent
   setXAdvance?: NapiSetXAdvanceIntent
@@ -238,6 +258,13 @@ export interface NapiLocation {
   values: Record<string, number>
 }
 
+export interface NapiMoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
 export interface NapiMovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
@@ -266,6 +293,11 @@ export interface NapiPointSeed {
 export declare const enum NapiPointType {
   OnCurve = 'onCurve',
   OffCurve = 'offCurve'
+}
+
+export interface NapiRemoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
 }
 
 export interface NapiRemovePointsIntent {

@@ -62,6 +62,11 @@ export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
 }
+export interface AddAnchorsIntent {
+  layerId: LayerId
+  anchors: Array<AnchorSeed>
+}
+
 export interface AddContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -80,6 +85,17 @@ export interface AddPointsIntent {
 export interface AnchorData {
   id: AnchorId
   name?: string
+}
+
+/**
+ * An anchor to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface AnchorSeed {
+  id: AnchorId
+  name?: string
+  x: number
+  y: number
 }
 
 /** Pure-state response to `apply`: no change records cross to the renderer. */
@@ -134,8 +150,9 @@ export interface FontIntent {
   /**
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-   * "setPointSmooth" | "removePoints" | "reverseContour" |
-   * "translatePoints" | "setXAdvance" | "applyBooleanOp".
+   * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
+   * "removeAnchors" | "reverseContour" | "translatePoints" |
+   * "setXAdvance" | "applyBooleanOp".
    * Skeleton leftover until font-level verbs land: "createGlyph".
    */
   kind: string
@@ -145,6 +162,9 @@ export interface FontIntent {
   movePoints?: MovePointsIntent
   setPointSmooth?: SetPointSmoothIntent
   removePoints?: RemovePointsIntent
+  addAnchors?: AddAnchorsIntent
+  moveAnchors?: MoveAnchorsIntent
+  removeAnchors?: RemoveAnchorsIntent
   reverseContour?: ReverseContourIntent
   translatePoints?: TranslatePointsIntent
   setXAdvance?: SetXAdvanceIntent
@@ -243,6 +263,13 @@ export interface Location {
   values: Record<string, number>
 }
 
+export interface MoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
 export interface MovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
@@ -269,6 +296,11 @@ export interface PointSeed {
 }
 
 export type PointType = "onCurve" | "offCurve";
+
+export interface RemoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+}
 
 export interface RemovePointsIntent {
   layerId: LayerId

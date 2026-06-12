@@ -464,8 +464,9 @@ impl From<GlyphMaster> for NapiGlyphMaster {
 pub struct NapiFontIntent {
     /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-    /// "setPointSmooth" | "removePoints" | "reverseContour" |
-    /// "translatePoints" | "setXAdvance" | "applyBooleanOp".
+    /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
+    /// "removeAnchors" | "reverseContour" | "translatePoints" |
+    /// "setXAdvance" | "applyBooleanOp".
     /// Skeleton leftover until font-level verbs land: "createGlyph".
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -474,6 +475,9 @@ pub struct NapiFontIntent {
     pub move_points: Option<NapiMovePointsIntent>,
     pub set_point_smooth: Option<NapiSetPointSmoothIntent>,
     pub remove_points: Option<NapiRemovePointsIntent>,
+    pub add_anchors: Option<NapiAddAnchorsIntent>,
+    pub move_anchors: Option<NapiMoveAnchorsIntent>,
+    pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
     pub reverse_contour: Option<NapiReverseContourIntent>,
     pub translate_points: Option<NapiTranslatePointsIntent>,
     pub set_x_advance: Option<NapiSetXAdvanceIntent>,
@@ -575,6 +579,42 @@ pub struct NapiRemovePointsIntent {
     pub layer_id: String,
     #[napi(ts_type = "Array<PointId>")]
     pub point_ids: Vec<String>,
+}
+
+/// An anchor to create, carrying its caller-minted id (decision 6: ids are
+/// client-minted so verbs return identity synchronously).
+#[napi(object)]
+pub struct NapiAnchorSeed {
+    #[napi(ts_type = "AnchorId")]
+    pub id: String,
+    pub name: Option<String>,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[napi(object)]
+pub struct NapiAddAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    pub anchors: Vec<NapiAnchorSeed>,
+}
+
+#[napi(object)]
+pub struct NapiMoveAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<AnchorId>")]
+    pub anchor_ids: Vec<String>,
+    /// Interleaved absolute coordinates: x0, y0, x1, y1, …
+    pub coords: Vec<f64>,
+}
+
+#[napi(object)]
+pub struct NapiRemoveAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<AnchorId>")]
+    pub anchor_ids: Vec<String>,
 }
 
 #[napi(object)]

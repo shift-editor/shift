@@ -20,6 +20,7 @@ impl ShiftStore {
 
         tx.execute("DELETE FROM glyph_layer_points", [])?;
         tx.execute("DELETE FROM glyph_layer_contours", [])?;
+        tx.execute("DELETE FROM glyph_layer_anchors", [])?;
         tx.execute("DELETE FROM glyph_components", [])?;
         tx.execute("DELETE FROM glyph_layers", [])?;
         tx.execute("DELETE FROM glyph_unicodes", [])?;
@@ -136,6 +137,21 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                     params![point.point_id.to_string(), point.x, point.y],
                 )?;
                 require_changed(rows_changed, "point", point.point_id.to_string())?;
+            }
+            Ok(())
+        }
+        font::FontChange::AnchorPositionsChanged(change) => {
+            require_layer_exists(tx, &change.layer_id)?;
+            for anchor in &change.anchors {
+                let rows_changed = tx.execute(
+                    "
+                    UPDATE glyph_layer_anchors
+                    SET x = ?2, y = ?3
+                    WHERE id = ?1
+                    ",
+                    params![anchor.anchor_id.to_string(), anchor.x, anchor.y],
+                )?;
+                require_changed(rows_changed, "anchor", anchor.anchor_id.to_string())?;
             }
             Ok(())
         }
@@ -259,6 +275,18 @@ fn replace_layer_geometry(
         insert_contour(tx, layer_id, order_index, contour)?;
     }
 
+    tx.execute(
+        "
+        DELETE FROM glyph_layer_anchors
+        WHERE layer_id = ?1
+        ",
+        [layer_row_id(layer_id)],
+    )?;
+
+    for anchor in &layer.anchors {
+        insert_anchor(tx, layer_id, anchor)?;
+    }
+
     Ok(())
 }
 
@@ -348,6 +376,35 @@ fn insert_point(
             point.y,
             point_type_name(point.point_type),
             point.smooth,
+        ],
+    )?;
+    Ok(())
+}
+
+fn insert_anchor(
+    tx: &Transaction<'_>,
+    layer_id: &font::LayerId,
+    anchor: &font::AnchorValue,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "
+        INSERT INTO glyph_layer_anchors (
+            id,
+            layer_id,
+            name,
+            x,
+            y,
+            order_index
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ",
+        params![
+            anchor.id.to_string(),
+            layer_row_id(layer_id),
+            anchor.name,
+            anchor.x,
+            anchor.y,
+            anchor.order_index as i64,
         ],
     )?;
     Ok(())

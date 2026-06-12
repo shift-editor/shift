@@ -1,6 +1,6 @@
 use crate::{
-    Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Point, PointId, PointType,
-    SourceId,
+    Anchor, AnchorId, Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Point,
+    PointId, PointType, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -40,6 +40,7 @@ pub enum FontChange {
     PointsDeleted(PointsDeleted),
     PointSmoothChanged(PointSmoothChanged),
     PointPositionsChanged(PointPositionsChanged),
+    AnchorPositionsChanged(AnchorPositionsChanged),
     LayerGeometryReplaced(LayerGeometryReplaced),
 }
 
@@ -113,6 +114,10 @@ impl FontChange {
 
     pub fn point_positions_changed(layer_id: LayerId, points: Vec<PointPosition>) -> Self {
         Self::PointPositionsChanged(PointPositionsChanged { layer_id, points })
+    }
+
+    pub fn anchor_positions_changed(layer_id: LayerId, anchors: Vec<AnchorPosition>) -> Self {
+        Self::AnchorPositionsChanged(AnchorPositionsChanged { layer_id, anchors })
     }
 
     pub fn layer_geometry_replaced(layer: &GlyphLayer) -> Self {
@@ -237,6 +242,19 @@ pub struct PointPosition {
 }
 
 #[derive(Clone, Debug)]
+pub struct AnchorPositionsChanged {
+    pub layer_id: LayerId,
+    pub anchors: Vec<AnchorPosition>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AnchorPosition {
+    pub anchor_id: AnchorId,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Clone, Debug)]
 pub struct LayerGeometryReplaced {
     pub layer_id: LayerId,
     pub layer: GlyphLayerValue,
@@ -247,6 +265,7 @@ pub struct GlyphLayerValue {
     pub width: f64,
     pub height: Option<f64>,
     pub contours: Vec<ContourValue>,
+    pub anchors: Vec<AnchorValue>,
 }
 
 impl From<&GlyphLayer> for GlyphLayerValue {
@@ -255,6 +274,11 @@ impl From<&GlyphLayer> for GlyphLayerValue {
             width: layer.width(),
             height: layer.height(),
             contours: layer.contours_iter().map(ContourValue::from).collect(),
+            anchors: layer
+                .anchors_iter()
+                .enumerate()
+                .map(|(order_index, anchor)| AnchorValue::from_anchor(order_index, anchor))
+                .collect(),
         }
     }
 }
@@ -277,6 +301,27 @@ impl From<&Contour> for ContourValue {
                 .enumerate()
                 .map(|(order_index, point)| PointValue::from_point(order_index, point))
                 .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AnchorValue {
+    pub id: AnchorId,
+    pub order_index: usize,
+    pub name: Option<String>,
+    pub x: f64,
+    pub y: f64,
+}
+
+impl AnchorValue {
+    pub fn from_anchor(order_index: usize, anchor: &Anchor) -> Self {
+        Self {
+            id: anchor.id(),
+            order_index,
+            name: anchor.name().map(str::to_owned),
+            x: anchor.x(),
+            y: anchor.y(),
         }
     }
 }

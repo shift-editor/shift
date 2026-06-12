@@ -12,8 +12,6 @@ import type { Glyph, GlyphSource } from "./Glyph";
  * MutatorSans fixture, so each test draws what it asserts on.
  *
  * Not restored yet (blocked on workspace vocabulary):
- * - `restore(state)` round-trip — restoreState still routes through the
- *   not-wired bridge getter; undo authority moved to the workspace ledger.
  * - "Glyph variation interpolation" — needs multi-source/axes vocabulary.
  */
 async function addTriangle(editor: TestEditor, layer: GlyphSource): Promise<readonly Point[]> {
@@ -96,6 +94,80 @@ describe("Glyph", () => {
 
     expect(pointX).toBe(33);
     subscription.dispose();
+  });
+});
+
+describe("anchors edit through the workspace", () => {
+  let editor: TestEditor;
+  let layer: GlyphSource;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    layer = editor.activeGlyphSource!;
+  });
+
+  it("addAnchor echoes a named anchor into confirmed geometry", async () => {
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+
+    const anchor = layer.anchor(anchorId);
+    expect(anchor?.name).toBe("top");
+    expect(anchor).toMatchObject({ x: 250, y: 700 });
+    expect(layer.anchors.length).toBe(1);
+  });
+
+  it("commits anchor moves through the moveAnchors intent", async () => {
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+
+    layer.commitPositionPatch([{ kind: "anchor", id: anchorId, x: 300, y: 650 }]);
+    await editor.settle();
+
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
+  });
+
+  it("mixed point and anchor commits coalesce into one undo step", async () => {
+    const contourId = layer.addContour();
+    layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+    const pointId = layer.allPoints[0]!.id;
+
+    layer.commitPositionPatch([
+      { kind: "point", id: pointId, x: 10, y: 20 },
+      { kind: "anchor", id: anchorId, x: 300, y: 650 },
+    ]);
+    await editor.settle();
+    expect(layer.point(pointId)).toMatchObject({ x: 10, y: 20 });
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
+
+    await editor.undoAndSettle();
+    expect(layer.point(pointId)).toMatchObject({ x: 0, y: 0 });
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 250, y: 700 });
+  });
+
+  it("undo removes an added anchor and redo restores it", async () => {
+    const anchorId = layer.addAnchor(null, { x: 100, y: 100 });
+    await editor.settle();
+    expect(layer.anchors.length).toBe(1);
+
+    await editor.undoAndSettle();
+    expect(layer.anchors.length).toBe(0);
+
+    await editor.redoAndSettle();
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 100, y: 100 });
+  });
+
+  it("removeAnchors deletes through the workspace", async () => {
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+
+    layer.removeAnchors([anchorId]);
+    await editor.settle();
+
+    expect(layer.anchors.length).toBe(0);
+    expect(layer.anchor(anchorId)).toBeNull();
   });
 });
 
