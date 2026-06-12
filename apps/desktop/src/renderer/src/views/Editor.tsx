@@ -8,7 +8,7 @@ import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { GlyphFinder } from "@/components/editor/GlyphFinder";
 import { EditorView } from "@/components/editor/EditorView";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -79,24 +79,6 @@ export const Editor = () => {
     const editor = getEditor();
     editor.setZone(activeZone);
   }, [activeZone]);
-
-  useEffect(() => {
-    const editor = getEditor();
-    if (!window.electronAPI) return () => {};
-
-    const { onMenuUndo, onMenuRedo, onMenuDelete } = window.electronAPI;
-
-    const unsubscribeUndo = onMenuUndo(() => editor.undo());
-    const unsubscribeRedo = onMenuRedo(() => editor.redo());
-    const unsubscribeDelete = onMenuDelete(() => {
-      editor.deleteSelectedPoints();
-    });
-    return () => {
-      unsubscribeUndo();
-      unsubscribeRedo();
-      unsubscribeDelete();
-    };
-  }, []);
 
   if (!glyphId && !glyphName) return null;
 

@@ -1,26 +1,16 @@
 // Core command infrastructure
-export {
-  type Command,
-  type CommandContext,
-  BaseCommand,
-  CompositeCommand,
-  CommandHistory,
-  type CommandHistoryOptions,
-} from "./core";
+export { type Command, type CommandContext, CommandRunner } from "./core";
 
 // Primitive commands (point, bezier operations)
 export {
-  AddPointCommand,
   DrawRectangleCommand,
   ToggleSmoothCommand,
-  CloseContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
   BooleanOperationCommand,
   type BooleanOperation,
-  ApplyPositionPatchCommand,
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,

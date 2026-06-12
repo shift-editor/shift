@@ -1,163 +1,81 @@
-import { describe, expect, it } from "vitest";
-import { ReflectPointsCommand, RotatePointsCommand, ScalePointsCommand } from "./TransformCommands";
-import { addContour, addPoint, commandSourceFixture, point } from "../testUtils";
+import { describe, expect, it, beforeEach } from "vitest";
+import { TestEditor } from "@/testing/TestEditor";
+import {
+  MoveSelectionToCommand,
+  ReflectPointsCommand,
+  RotatePointsCommand,
+  ScalePointsCommand,
+} from "./TransformCommands";
 
-describe("RotatePointsCommand", () => {
-  it("rotates points around origin", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 1, y: 0 });
-    const command = new RotatePointsCommand([pointId], Math.PI / 2, { x: 0, y: 0 });
+// Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
+// the workspace stack: transforms persist through the movePoints intent and
+// undo through the workspace ledger.
+describe("transform commands through the workspace", () => {
+  let editor: TestEditor;
 
-    command.execute(ctx);
-
-    expect(point(source, pointId).x).toBeCloseTo(0, 5);
-    expect(point(source, pointId).y).toBeCloseTo(1, 5);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(0, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(100, 0);
+    await editor.settle();
   });
 
-  it("does not change state with empty point array", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 1, y: 0 });
-    const command = new RotatePointsCommand([], Math.PI / 2, { x: 0, y: 0 });
+  const source = () => editor.activeGlyphSource!;
+  const pointIds = () => source().allPoints.map((point) => point.id);
+  const positions = () => source().allPoints.map(({ x, y }) => ({ x, y }));
 
-    command.execute(ctx);
+  it("rotates points around an origin", async () => {
+    editor.commands.run(new RotatePointsCommand(pointIds(), Math.PI / 2, { x: 0, y: 0 }));
+    await editor.settle();
 
-    expect(point(source, pointId)).toMatchObject({ x: 1, y: 0 });
+    const [first, second] = positions();
+    expect(first!.x).toBeCloseTo(0);
+    expect(first!.y).toBeCloseTo(0);
+    expect(second!.x).toBeCloseTo(0);
+    expect(second!.y).toBeCloseTo(100);
   });
 
-  it("restores original positions on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
-    const command = new RotatePointsCommand([pointId], Math.PI, { x: 0, y: 0 });
+  it("scales points relative to an origin", async () => {
+    editor.commands.run(new ScalePointsCommand(pointIds(), 2, 1, { x: 0, y: 0 }));
+    await editor.settle();
 
-    command.execute(ctx);
-    command.undo(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 100, y: 200 });
+    expect(positions()).toEqual([
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    ]);
   });
 
-  it("reapplies rotation on redo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 1, y: 0 });
-    const command = new RotatePointsCommand([pointId], Math.PI / 2, { x: 0, y: 0 });
+  it("reflects points across a vertical axis through an origin", async () => {
+    editor.commands.run(new ReflectPointsCommand(pointIds(), "vertical", { x: 50, y: 0 }));
+    await editor.settle();
 
-    command.execute(ctx);
-    command.undo(ctx);
-    command.redo(ctx);
-
-    expect(point(source, pointId).x).toBeCloseTo(0, 5);
-    expect(point(source, pointId).y).toBeCloseTo(1, 5);
+    expect(positions()).toEqual([
+      { x: 100, y: 0 },
+      { x: 0, y: 0 },
+    ]);
   });
 
-  it("has the correct name", () => {
-    const command = new RotatePointsCommand([], 0, { x: 0, y: 0 });
-    expect(command.name).toBe("Rotate Points");
-  });
-});
+  it("moves the selection so the anchor lands on the target", async () => {
+    editor.commands.run(new MoveSelectionToCommand(pointIds(), { x: 10, y: 5 }, { x: 0, y: 0 }));
+    await editor.settle();
 
-describe("ScalePointsCommand", () => {
-  it("scales points from origin", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new ScalePointsCommand([pointId], 2, 2, { x: 0, y: 0 });
-
-    command.execute(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 20, y: 40 });
+    expect(positions()).toEqual([
+      { x: 10, y: 5 },
+      { x: 110, y: 5 },
+    ]);
   });
 
-  it("scales non-uniformly", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new ScalePointsCommand([pointId], 2, 3, { x: 0, y: 0 });
+  it("restores all positions with one ledger undo", async () => {
+    editor.commands.run(new RotatePointsCommand(pointIds(), Math.PI / 4, { x: 50, y: 50 }));
+    await editor.settle();
 
-    command.execute(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 20, y: 60 });
-  });
-
-  it("does not change state with empty point array", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new ScalePointsCommand([], 2, 2, { x: 0, y: 0 });
-
-    command.execute(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 10, y: 20 });
-  });
-
-  it("restores original positions on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
-    const command = new ScalePointsCommand([pointId], 2, 2, { x: 0, y: 0 });
-
-    command.execute(ctx);
-    command.undo(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 100, y: 200 });
-  });
-
-  it("has the correct name", () => {
-    const command = new ScalePointsCommand([], 1, 1, { x: 0, y: 0 });
-    expect(command.name).toBe("Scale Points");
-  });
-});
-
-describe("ReflectPointsCommand", () => {
-  it("reflects points horizontally", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new ReflectPointsCommand([pointId], "horizontal", { x: 0, y: 0 });
-
-    command.execute(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 10, y: -20 });
-  });
-
-  it("reflects points vertically", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new ReflectPointsCommand([pointId], "vertical", { x: 0, y: 0 });
-
-    command.execute(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: -10, y: 20 });
-  });
-
-  it("does not change state with empty point array", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new ReflectPointsCommand([], "horizontal", { x: 0, y: 0 });
-
-    command.execute(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 10, y: 20 });
-  });
-
-  it("restores original positions on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
-    const command = new ReflectPointsCommand([pointId], "horizontal", { x: 0, y: 0 });
-
-    command.execute(ctx);
-    command.undo(ctx);
-
-    expect(point(source, pointId)).toMatchObject({ x: 100, y: 200 });
-  });
-
-  it("has the correct name", () => {
-    const command = new ReflectPointsCommand([], "horizontal", { x: 0, y: 0 });
-    expect(command.name).toBe("Reflect Points");
+    await editor.undoAndSettle();
+    expect(positions()).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ]);
   });
 });

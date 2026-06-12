@@ -1,18 +1,16 @@
 import type { SystemClipboard } from "./types";
+import { getShiftHost } from "@/host/shiftHost";
 
 /**
- * Production {@link SystemClipboard} backed by Electron's preload-exposed
- * clipboard IPC (`window.electronAPI.clipboard*`). Throws if `electronAPI`
- * is missing so misconfiguration surfaces loudly instead of silently
- * dropping clipboard ops.
+ * Production {@link SystemClipboard} backed by the preload-exposed Shift host
+ * (Electron's clipboard module, no IPC round trip). Resolves the host lazily
+ * per call so importing this module never requires the preload bridge.
  */
 export const electronSystemClipboard: SystemClipboard = {
   writeText(text: string): void {
-    if (!window.electronAPI) throw new Error("electronAPI is not available");
-    window.electronAPI.clipboardWriteText(text);
+    getShiftHost().clipboard.writeText(text);
   },
   readText(): string {
-    if (!window.electronAPI) throw new Error("electronAPI is not available");
-    return window.electronAPI.clipboardReadText();
+    return getShiftHost().clipboard.readText();
   },
 };

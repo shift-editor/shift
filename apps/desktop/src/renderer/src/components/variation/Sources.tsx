@@ -1,7 +1,7 @@
 import { Button } from "@shift/ui";
 import { useSources } from "@/hooks/useSources";
 import { useEditSourceId } from "@/hooks/useEditSourceId";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 
 export const Sources = () => {
   const sources = useSources();

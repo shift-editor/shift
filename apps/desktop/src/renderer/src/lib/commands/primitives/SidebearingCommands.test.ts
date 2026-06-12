@@ -1,90 +1,73 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
+import { TestEditor } from "@/testing/TestEditor";
 import {
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
   SetXAdvanceCommand,
 } from "./SidebearingCommands";
-import { addContour, addPoint, commandSourceFixture, point } from "../testUtils";
 
-describe("SetXAdvanceCommand", () => {
-  it("sets xAdvance on execute", () => {
-    const { source, ctx } = commandSourceFixture();
-    const command = new SetXAdvanceCommand(500, 530);
+// Restored from the WS6 behavioral inventory (git show ef037c6e^).
+describe("sidebearing commands through the workspace", () => {
+  let editor: TestEditor;
+  let initialAdvance: number;
 
-    command.execute(ctx);
-
-    expect(source.geometry.xAdvance).toBe(530);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(100, 200);
+    await editor.settle();
+    initialAdvance = editor.activeGlyphSource!.xAdvance;
   });
 
-  it("restores xAdvance on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const command = new SetXAdvanceCommand(500, 530);
+  const source = () => editor.activeGlyphSource!;
 
-    command.execute(ctx);
-    command.undo(ctx);
+  describe("SetXAdvanceCommand", () => {
+    it("sets the advance width", async () => {
+      editor.commands.run(new SetXAdvanceCommand(530));
+      await editor.settle();
 
-    expect(source.geometry.xAdvance).toBe(500);
-  });
-});
+      expect(source().xAdvance).toBe(530);
+    });
 
-describe("SetRightSidebearingCommand", () => {
-  it("sets xAdvance on execute", () => {
-    const { source, ctx } = commandSourceFixture();
-    const command = new SetRightSidebearingCommand(500, 530);
+    it("restores the advance through ledger undo", async () => {
+      editor.commands.run(new SetXAdvanceCommand(530));
+      await editor.settle();
 
-    command.execute(ctx);
-
-    expect(source.geometry.xAdvance).toBe(530);
+      await editor.undoAndSettle();
+      expect(source().xAdvance).toBe(initialAdvance);
+    });
   });
 
-  it("restores xAdvance on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const command = new SetRightSidebearingCommand(500, 530);
+  describe("SetRightSidebearingCommand", () => {
+    it("sets the advance width", async () => {
+      editor.commands.run(new SetRightSidebearingCommand(530));
+      await editor.settle();
 
-    command.execute(ctx);
-    command.undo(ctx);
-
-    expect(source.geometry.xAdvance).toBe(500);
-  });
-});
-
-describe("SetLeftSidebearingCommand", () => {
-  it("translates geometry then sets advance on execute", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
-    const command = new SetLeftSidebearingCommand(500, 520, 20);
-
-    command.execute(ctx);
-
-    expect(source.geometry.xAdvance).toBe(520);
-    expect(point(source, pointId).x).toBe(120);
+      expect(source().xAdvance).toBe(530);
+    });
   });
 
-  it("reverts advance and translation on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
-    const command = new SetLeftSidebearingCommand(500, 520, 20);
+  describe("SetLeftSidebearingCommand", () => {
+    it("translates geometry and sets the advance", async () => {
+      const pointId = source().allPoints[0]!.id;
 
-    command.execute(ctx);
-    command.undo(ctx);
+      editor.commands.run(new SetLeftSidebearingCommand(520, 20));
+      await editor.settle();
 
-    expect(source.geometry.xAdvance).toBe(500);
-    expect(point(source, pointId).x).toBe(100);
-  });
+      expect(source().xAdvance).toBe(520);
+      expect(source().point(pointId)).toMatchObject({ x: 120, y: 200 });
+    });
 
-  it("reapplies translation and advance on redo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
-    const command = new SetLeftSidebearingCommand(500, 520, 20);
+    it("reverts translation and advance with one ledger undo", async () => {
+      const pointId = source().allPoints[0]!.id;
 
-    command.execute(ctx);
-    command.undo(ctx);
-    command.redo(ctx);
+      editor.commands.run(new SetLeftSidebearingCommand(520, 20));
+      await editor.settle();
 
-    expect(source.geometry.xAdvance).toBe(520);
-    expect(point(source, pointId).x).toBe(120);
+      await editor.undoAndSettle();
+      expect(source().xAdvance).toBe(initialAdvance);
+      expect(source().point(pointId)).toMatchObject({ x: 100, y: 200 });
+    });
   });
 });

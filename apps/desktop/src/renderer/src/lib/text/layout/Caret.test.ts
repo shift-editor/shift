@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach } from "vitest";
 import type { Font } from "@/lib/model/Font";
 import { Caret } from "./Caret";
 import { glyphTextItem as glyph, lineBreakTextItem } from "./types";
-import { loadTestFont, makeLayout } from "./testUtils";
+import { layoutTestFont, makeLayout } from "./testUtils";
 
 describe("Caret", () => {
   let font: Font;
 
-  beforeEach(() => {
-    font = loadTestFont();
+  beforeEach(async () => {
+    font = await layoutTestFont();
   });
 
   // atCluster preserves the cluster index.

@@ -4,7 +4,7 @@ import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
 import { effect } from "@/lib/signals/signal";
 import { useSignalState } from "@/lib/signals";
-import { getEditor } from "@/store/store";
+import { getEditor, getWorkspace } from "@/store/appStore";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
@@ -53,18 +53,41 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId, glyphName }) => {
       : handleFromGlyphId(glyphId);
     if (!handle) return undefined;
 
-    const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation());
-
-    editor.openGlyph(handle);
-    editor.openGlyphSource(handle, source.id);
-
-    editor.updateMetricsFromFont();
-
+    let cancelled = false;
     const toolManager = editor.toolManager;
-    const activeToolId = editor.getActiveTool();
-    toolManager.activate(activeToolId);
+
+    void (async () => {
+      const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation());
+
+      // Glyph-name-first: opening a cell that has no committed record yet
+      // creates the glyph in the workspace, then opens it.
+      let record = editor.font.recordForName(handle.name);
+      if (!record) {
+        const applied = await getWorkspace().apply([
+          {
+            kind: "createGlyph",
+            name: handle.name,
+            unicodes: handle.unicode === undefined ? [] : [handle.unicode],
+          },
+        ]);
+        record = applied.glyphs?.find((glyph) => glyph.name === handle.name) ?? null;
+      }
+      if (!record || cancelled) return;
+
+      // Pull replace-grade state and materialize the editable model before
+      // the session opens; folds keep it current afterwards.
+      const glyph = await editor.font.openGlyph(record.id, source);
+      if (!glyph || cancelled) return;
+
+      editor.openGlyph(handle);
+      editor.openGlyphSource(handle, source.id);
+
+      editor.updateMetricsFromFont();
+      toolManager.activate(editor.getActiveTool());
+    })();
 
     return () => {
+      cancelled = true;
       toolManager.reset();
       editor.close();
     };

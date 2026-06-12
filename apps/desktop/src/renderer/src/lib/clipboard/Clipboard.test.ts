@@ -1,19 +1,25 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 
+// Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
+// the workspace stack with explicit settles around the echo round trip.
 describe("Clipboard (via Editor)", () => {
   let editor: TestEditor;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     editor = new TestEditor();
-    editor.startSession();
+    await editor.startSession();
     editor.selectTool("pen");
 
     // Draw a small rectangle: 4 points.
     editor.click(100, 100);
+    await editor.settle();
     editor.click(200, 100);
+    await editor.settle();
     editor.click(200, 200);
+    await editor.settle();
     editor.click(100, 200);
+    await editor.settle();
   });
 
   it("copy on empty selection returns false", async () => {
@@ -43,6 +49,7 @@ describe("Clipboard (via Editor)", () => {
 
     await editor.copy();
     await editor.paste();
+    await editor.settle();
 
     expect(editor.pointCount).toBe(pointsBefore * 2);
   });
@@ -52,6 +59,7 @@ describe("Clipboard (via Editor)", () => {
     expect(editor.pointCount).toBeGreaterThan(0);
 
     await editor.cut();
+    await editor.settle();
 
     expect(editor.pointCount).toBe(0);
   });
@@ -61,6 +69,7 @@ describe("Clipboard (via Editor)", () => {
     const pointsBefore = editor.pointCount;
 
     await editor.paste();
+    await editor.settle();
 
     expect(editor.pointCount).toBe(pointsBefore);
   });
@@ -70,6 +79,7 @@ describe("Clipboard (via Editor)", () => {
     await editor.copy();
     await editor.paste();
     await editor.paste();
+    await editor.settle();
 
     const contours = (editor.activeGlyphSource?.contours ?? []).filter(
       (contour) => !contour.isEmpty,

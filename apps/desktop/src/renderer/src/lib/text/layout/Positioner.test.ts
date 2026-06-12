@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Font } from "@/lib/model/Font";
+import type { Unicode } from "@shift/types";
 import { Positioner } from "./Positioner";
 import { glyphTextItem as glyph } from "./types";
-import { loadTestFont, ltrRun } from "./testUtils";
+import { layoutTestFont, ltrRun } from "./testUtils";
 import { signal } from "@/lib/signals/signal";
 
 describe("Positioner", () => {
   let font: Font;
 
-  beforeEach(() => {
-    font = loadTestFont();
+  beforeEach(async () => {
+    font = await layoutTestFont();
   });
 
   // Levien invariant: positioned.advance === sum of xAdvance.
@@ -41,9 +42,8 @@ describe("Positioner", () => {
     const run = ltrRun([a]);
 
     const positioned = positioner.position(run, font, signal(font.defaultLocation()));
-    const source = font.defaultSource;
     const expectedBounds = font
-      .glyph({ name: "A" }, source)
+      .glyph(font.glyphHandleForUnicode(65 as Unicode))
       ?.outline(signal(font.defaultLocation())).bounds;
 
     expect(positioned.glyphs[0].bounds).toEqual(expectedBounds);

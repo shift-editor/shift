@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 
+// Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("Hand tool", () => {
   let editor: TestEditor;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     editor = new TestEditor();
-    editor.startSession();
+    await editor.startSession();
     editor.selectTool("hand");
   });
 

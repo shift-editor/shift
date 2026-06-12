@@ -37,7 +37,7 @@ function useZoomToastListener(onZoomChange: (percent: number) => void) {
   }, []);
 
   useEffect(() => {
-    const onZoom = window.electronAPI?.onUiZoomChanged;
+    const onZoom = window.shiftHost?.ui.onZoomChanged;
     if (!onZoom) return undefined;
 
     const unsubscribe = onZoom((zoomPercent: number) => {

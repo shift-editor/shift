@@ -2,16 +2,17 @@ import { Vec2, type Point2D } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import type { ContourId, PointId } from "@shift/types";
 import type { Editor } from "@/lib/editor/Editor";
-import type { GlyphInstanceEdit, GlyphInstanceGeometry, SourcePositions } from "@/lib/model/Glyph";
+import type { GlyphSource, GlyphInstanceGeometry, SourcePositions } from "@/lib/model/Glyph";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import { Anchor, Handles } from "./types";
 
 export class PenStroke {
+  #pendingHandles: SourcePositions | null = null;
   readonly #editor: Editor;
   readonly #geometry: GlyphInstanceGeometry;
-  readonly #edit: GlyphInstanceEdit;
+  readonly #edit: GlyphSource;
 
-  private constructor(editor: Editor, geometry: GlyphInstanceGeometry, edit: GlyphInstanceEdit) {
+  private constructor(editor: Editor, geometry: GlyphInstanceGeometry, edit: GlyphSource) {
     this.#editor = editor;
     this.#geometry = geometry;
     this.#edit = edit;
@@ -140,6 +141,16 @@ export class PenStroke {
       });
     }
 
-    this.#edit.applyPositionPatch(positions);
+    // Live drag: local preview only; durability happens once at gesture end.
+    this.#pendingHandles = positions;
+    this.#edit.previewPositionPatch(positions);
+  }
+
+  /** Commits the last previewed handle positions as one durable move. */
+  commitHandles(): void {
+    if (!this.#pendingHandles) return;
+
+    this.#edit.commitPositionPatch(this.#pendingHandles);
+    this.#pendingHandles = null;
   }
 }

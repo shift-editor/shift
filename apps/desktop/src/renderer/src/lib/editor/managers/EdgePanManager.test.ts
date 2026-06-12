@@ -13,12 +13,13 @@ const canvasBounds: Rect2D = {
   bottom: 600,
 };
 
+// Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("EdgePanManager", () => {
   let editor: TestEditor;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     editor = new TestEditor();
-    editor.startSession();
+    await editor.startSession();
     editor.selectTool("hand");
   });
 

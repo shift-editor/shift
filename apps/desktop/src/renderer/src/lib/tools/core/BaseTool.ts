@@ -141,12 +141,6 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
     this.editor.setActiveToolState(next);
   }
 
-  /** Execute `fn` inside a named command batch. Automatically rolls back on exception. */
-  /** @knipclassignore — command batching helper for tool subclasses. */
-  protected batch<T>(name: string, fn: () => T): T {
-    return this.editor.commands.withBatch(name, fn);
-  }
-
   #runBehaviors(state: S, event: ToolEvent): { state: S; handled: boolean } {
     if (state.type === "idle") {
       return { state, handled: false };

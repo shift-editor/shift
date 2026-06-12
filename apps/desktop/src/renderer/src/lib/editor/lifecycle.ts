@@ -9,13 +9,7 @@
  * Lifecycle events are for one-shot imperative actions: "a font was loaded",
  * "the editor is being destroyed", etc.
  */
-import type { Font } from "../model/Font";
-
 export interface LifecycleEventMap {
-  /** A new font file was loaded. Subsystems should clear caches and reset state. */
-  fontLoaded: { font: Font };
-  /** The font was saved to disk. */
-  fontSaved: { path: string };
   /** The editor is being torn down. Subsystems should dispose resources. */
   destroying: undefined;
 }

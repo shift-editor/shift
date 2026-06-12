@@ -11,7 +11,7 @@ import {
   X,
   cn,
 } from "@shift/ui";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 
 interface FontInfoDialogProps {
   open: boolean;

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { useState } from "react";
 import type { AnchorId } from "@shift/types";

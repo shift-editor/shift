@@ -1,7 +1,9 @@
 /**
  * Command Pattern Infrastructure
  *
- * Commands encapsulate source mutations as undoable actions.
+ * Commands are verb scripts over the active glyph source. They carry no undo
+ * machinery: every verb pushes intents that coalesce into one workspace
+ * ledger entry per tick, so a command IS one undo step.
  */
 
 import type { GlyphSource } from "@/lib/model/Glyph";
@@ -17,44 +19,4 @@ export interface CommandContext {
 export interface Command<TResult = void> {
   readonly name: string;
   execute(ctx: CommandContext): TResult;
-  undo(ctx: CommandContext): void;
-  redo(ctx: CommandContext): TResult;
-}
-
-export abstract class BaseCommand<TResult = void> implements Command<TResult> {
-  abstract readonly name: string;
-  abstract execute(ctx: CommandContext): TResult;
-  abstract undo(ctx: CommandContext): void;
-
-  redo(ctx: CommandContext): TResult {
-    return this.execute(ctx);
-  }
-}
-
-export class CompositeCommand implements Command<void> {
-  readonly name: string;
-  #commands: Command<unknown>[];
-
-  constructor(name: string, commands: Command<unknown>[]) {
-    this.name = name;
-    this.#commands = commands;
-  }
-
-  execute(ctx: CommandContext): void {
-    for (const cmd of this.#commands) {
-      cmd.execute(ctx);
-    }
-  }
-
-  undo(ctx: CommandContext): void {
-    for (const cmd of [...this.#commands].reverse()) {
-      cmd.undo(ctx);
-    }
-  }
-
-  redo(ctx: CommandContext): void {
-    for (const cmd of this.#commands) {
-      cmd.redo(ctx);
-    }
-  }
 }

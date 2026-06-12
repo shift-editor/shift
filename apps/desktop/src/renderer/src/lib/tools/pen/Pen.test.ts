@@ -1,18 +1,25 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 
+/**
+ * Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt
+ * on the workspace stack: every gesture flows intents → real NAPI → SQLite
+ * → echo → fold. `settle()` awaits the echo so assertions read confirmed
+ * truth, the same state a user sees one frame later.
+ */
 describe("Pen tool", () => {
   let editor: TestEditor;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     editor = new TestEditor();
-    editor.startSession();
+    await editor.startSession();
     editor.selectTool("pen");
   });
 
   describe("point creation", () => {
-    it("adds a point on click", () => {
+    it("adds a point on click", async () => {
       editor.click(100, 200);
+      await editor.settle();
 
       const contour = editor.getActiveContour();
       expect(contour?.points.length).toBe(1);
@@ -20,63 +27,114 @@ describe("Pen tool", () => {
   });
 
   describe("creating segments", () => {
-    it("adding two points creates a line segment", () => {
+    it("adding two points creates a line segment", async () => {
       editor.click(100, 200);
+      await editor.settle();
       editor.click(300, 200);
+      await editor.settle();
 
       const segment = editor.getActiveContour()?.segments()[0];
 
       expect(segment?.type).toBe("line");
     });
 
-    it("adding three points creates two line segments", () => {
+    it("adding three points creates two line segments", async () => {
       editor.click(100, 200);
+      await editor.settle();
       editor.click(300, 200);
+      await editor.settle();
       editor.click(500, 200);
+      await editor.settle();
 
       const contour = editor.getActiveContour();
       expect(contour?.segments().length).toBe(2);
 
-      const segmentOne = editor.getActiveContour()?.segments()[0];
-      const segmentTwo = editor.getActiveContour()?.segments()[1];
-
-      expect(segmentOne?.type).toBe("line");
-      expect(segmentTwo?.type).toBe("line");
+      expect(contour?.segments()[0]?.type).toBe("line");
+      expect(contour?.segments()[1]?.type).toBe("line");
     });
 
-    it("adding three points and then pointer down on the first point should close the contour and set the active contour to null", () => {});
+    it("clicking the first point closes the contour and ends the stroke", async () => {
+      editor.click(100, 200);
+      await editor.settle();
+      editor.click(300, 200);
+      await editor.settle();
+      editor.click(200, 100);
+      await editor.settle();
 
-    it("adding a pointand then dragging should create a cubic curve", () => {
+      editor.click(100, 200); // back on the first point
+      await editor.settle();
+
+      const contour = editor.activeGlyphSource?.geometry.contours[0];
+      expect(contour?.closed).toBe(true);
+      expect(contour?.points.length).toBe(3);
+      expect(editor.getActiveContour()).toBeNull();
+    });
+
+    it("two consecutive curve drags create two cubic segments joined by a smooth point", async () => {
+      editor.click(100, 100);
+      await editor.settle();
+
+      editor.pointerDown(300, 100);
+      editor.pointerMove(380, 140);
+      editor.pointerMove(380, 160);
+      editor.pointerMove(380, 180);
+      editor.pointerUp(380, 180);
+      await editor.settle();
+
+      editor.pointerDown(500, 100);
+      editor.pointerMove(580, 140);
+      editor.pointerMove(580, 160);
+      editor.pointerMove(580, 180);
+      editor.pointerUp(580, 180);
+      await editor.settle();
+
+      const contour = editor.getActiveContour();
+      expect(contour?.segments().map((segment) => segment.type)).toEqual(["cubic", "cubic"]);
+
+      const junction = contour?.segments()[0]?.asCubic()?.end;
+      expect(junction?.smooth).toBe(true);
+    });
+
+    it("adding a point and then dragging should create a cubic curve", async () => {
       editor.click(200, -800);
+      await editor.settle();
       editor.pointerDown(200, -800);
       editor.pointerMove(400, 120);
       editor.pointerMove(400, 140);
       editor.pointerMove(400, 160);
       editor.pointerUp(200, -200);
+      await editor.settle();
 
       const contour = editor.getActiveContour();
       expect(contour?.segments().length).toBe(1);
+      expect(contour?.segments()[0]?.type).toBe("cubic");
+    });
+  });
 
-      const segment = editor.getActiveContour()?.segments()[0];
-      expect(segment?.type).toBe("cubic");
+  describe("durability and undo through the workspace", () => {
+    it("a click-placed point survives as one undoable ledger entry", async () => {
+      editor.click(100, 200);
+      await editor.settle();
+      expect(editor.pointCount).toBe(1);
+
+      await editor.undoAndSettle();
+      expect(editor.pointCount).toBe(0);
+
+      await editor.redoAndSettle();
+      expect(editor.pointCount).toBe(1);
     });
 
-    it("creating two cubic curves should create two cubic segments, with a smooth point at their junction", () => {});
-  });
+    it("first click coalesces contour + point into a single undo step", async () => {
+      // The first pen click creates the contour AND the point in one tick —
+      // one apply, one undo step.
+      editor.click(100, 200);
+      await editor.settle();
+      expect(editor.pointCount).toBe(1);
 
-  describe("pointer down on segment when no contour is active", () => {
-    it("pointer down on the last point of the segment, sets that contour as active and contour");
-    it(
-      "pointer down on the first point of the segment, sets that contour as active and reverses the contour",
-    );
-    it(
-      "pointer down between the first and last point on the segment, splits the segment at that point",
-    );
-  });
+      await editor.undoAndSettle();
 
-  describe("pen cursors", () => {
-    it("active cursor");
-    it("continue cursor");
-    it("split cursor");
+      expect(editor.pointCount).toBe(0);
+      expect(editor.activeGlyphSource?.geometry.contours.length).toBe(0);
+    });
   });
 });

@@ -1,23 +1,23 @@
 /**
- * TestEditor — a real Editor with a NAPI backend for testing.
+ * TestEditor — a real Editor with input simulation for testing.
  *
  * Usage:
  *   const editor = new TestEditor();
- *   editor.startSession();
  *   editor.selectTool("pen");
  *   editor.click(100, 200);
  *   expect(editor.pointCount).toBe(1);
+ *
+ * Editing sessions return when glyph mutations flow through workspace
+ * change sets; until then the editor surface under test is tool/input state.
  */
 
-import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import { Editor } from "@/lib/editor/Editor";
-import type { GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { createBridge } from "@shift/bridge";
+import type { GlyphName } from "@shift/types";
 import type { SystemClipboard } from "@/lib/clipboard";
-import { MUTATORSANS_DESIGNSPACE } from "./fixtures";
-import { testStorePath } from "./workspacePaths";
+import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -38,12 +38,70 @@ class InMemorySystemClipboard implements SystemClipboard {
 
 export class TestEditor extends Editor {
   readonly #clipboard: InMemorySystemClipboard;
+  readonly #stack: WorkspaceStack;
 
   constructor() {
+    const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ bridge: createBridge(), clipboard });
+    super({ font: stack.font, clipboard });
+    this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
+  }
+
+  /**
+   * Creates a real workspace, a glyph, and opens an editable session on it —
+   * the production pipe end to end (intents → NAPI → SQLite → echo → fold).
+   */
+  async startSession(name = "A", unicode: number | null = 65): Promise<this> {
+    await this.#stack.client.create();
+
+    const glyph = await this.#createAndOpenGlyph(name, unicode);
+    this.openGlyphSource(glyph.handle, this.font.defaultSource.id);
+    return this;
+  }
+
+  /**
+   * Adds another glyph to the workspace font and pulls its model into the
+   * Font cache — the same create-then-open flow EditorView runs in the app.
+   */
+  async addGlyph(name: string, unicode: number | null): Promise<void> {
+    await this.#createAndOpenGlyph(name, unicode);
+  }
+
+  async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
+    const applied = await this.#stack.client.apply([
+      {
+        kind: "createGlyph",
+        name: name as GlyphName,
+        unicodes: unicode === null ? [] : [unicode],
+      },
+    ]);
+
+    const record = applied.glyphs?.find((glyph) => glyph.name === name);
+    if (!record) throw new Error("createGlyph did not echo the new record");
+
+    const glyph = await this.font.openGlyph(record.id, this.font.defaultSource);
+    if (!glyph) throw new Error("openGlyph returned null for a created glyph");
+    return glyph;
+  }
+
+  /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
+  async settle(): Promise<this> {
+    await this.font.writer.settled();
+    return this;
+  }
+
+  /** Undo through the one authority (workspace ledger), settled. */
+  async undoAndSettle(): Promise<this> {
+    await this.font.writer.undo();
+    return this;
+  }
+
+  /** Redo through the workspace ledger, settled. */
+  async redoAndSettle(): Promise<this> {
+    await this.font.writer.redo();
+    return this;
   }
 
   get clipboardBuffer(): string {
@@ -54,32 +112,21 @@ export class TestEditor extends Editor {
     return this.activeGlyphSource?.allPoints.length ?? 0;
   }
 
-  get currentEdit(): GlyphSource | null {
-    return this.activeGlyphSource;
-  }
-
-  get currentGlyphInstance(): GlyphInstance | null {
-    return this.glyphInstance;
-  }
-
-  startSession(handle: GlyphHandle = { name: "A", unicode: 65 }): this {
-    if (!this.font.loaded) {
-      this.loadFont(MUTATORSANS_DESIGNSPACE, testStorePath("session"));
-    }
-
-    const source = this.font.defaultSource;
-    const glyphSource = this.openGlyphSource(handle, source.id);
-    if (glyphSource) {
-      glyphSource.removePoints(glyphSource.allPoints.map((point) => point.id));
-    }
-    return this;
-  }
-
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
     this.toolManager.handlePointerDown({ x, y }, mods);
     this.toolManager.handlePointerUp({ x, y });
     return this;
+  }
+
+  /**
+   * Click at glyph-local (UPM) coordinates, projecting through the camera.
+   * Use when a test asserts exact point positions; plain {@link click} takes
+   * screen coordinates, which the viewport y-flips.
+   */
+  clickGlyphLocal(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    const { screen } = this.fromGlyphLocal({ x, y });
+    return this.click(screen.x, screen.y, options);
   }
 
   pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {

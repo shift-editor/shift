@@ -1,69 +1,40 @@
-import { describe, expect, it } from "vitest";
-import type { ContourId } from "@shift/types";
-import { AddPointCommand, ToggleSmoothCommand } from "./PointCommands";
-import { addContour, addPoint, commandSourceFixture, contourPoints, point } from "../testUtils";
+import { describe, expect, it, beforeEach } from "vitest";
+import { TestEditor } from "@/testing/TestEditor";
+import { ToggleSmoothCommand } from "./PointCommands";
 
-describe("AddPointCommand", () => {
-  it("adds a point at specified coordinates", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const command = new AddPointCommand(100, 200, "onCurve", false, contourId);
-
-    const pointId = command.execute(ctx);
-
-    expect(contourPoints(source, contourId).length).toBe(1);
-    expect(point(source, pointId)).toMatchObject({ x: 100, y: 200, pointType: "onCurve" });
-  });
-
-  it("adds a smooth point", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const command = new AddPointCommand(50, 75, "onCurve", true, contourId);
-
-    const pointId = command.execute(ctx);
-
-    expect(point(source, pointId).smooth).toBe(true);
-  });
-
-  it("adds an off-curve point", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const command = new AddPointCommand(30, 40, "offCurve", false, contourId);
-
-    const pointId = command.execute(ctx);
-
-    expect(point(source, pointId).pointType).toBe("offCurve");
-  });
-
-  it("removes the point on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const command = new AddPointCommand(100, 200, "onCurve", false, contourId);
-
-    command.execute(ctx);
-    expect(contourPoints(source, contourId).length).toBe(1);
-
-    command.undo(ctx);
-    expect(contourPoints(source, contourId).length).toBe(0);
-  });
-
-  it("has the correct name", () => {
-    const command = new AddPointCommand(0, 0, "onCurve", false, 0 as ContourId);
-    expect(command.name).toBe("Add Point");
-  });
-});
-
+// Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
+// the workspace stack: commands run through CommandRunner, undo through the
+// workspace ledger.
 describe("ToggleSmoothCommand", () => {
-  it("toggles smooth and toggles back on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const pointId = addPoint(source, contourId, { x: 100, y: 200, smooth: false });
-    const command = new ToggleSmoothCommand(pointId);
+  let editor: TestEditor;
 
-    command.execute(ctx);
-    expect(point(source, pointId).smooth).toBe(true);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.click(100, 200);
+    await editor.settle();
+  });
 
-    command.undo(ctx);
-    expect(point(source, pointId).smooth).toBe(false);
+  const source = () => editor.activeGlyphSource!;
+
+  it("toggles a corner point smooth", async () => {
+    const pointId = source().allPoints[0]!.id;
+
+    editor.commands.run(new ToggleSmoothCommand(pointId));
+    await editor.settle();
+
+    expect(source().point(pointId)?.smooth).toBe(true);
+  });
+
+  it("toggles back through the workspace ledger on undo", async () => {
+    const pointId = source().allPoints[0]!.id;
+
+    editor.commands.run(new ToggleSmoothCommand(pointId));
+    await editor.settle();
+    expect(source().point(pointId)?.smooth).toBe(true);
+
+    await editor.undoAndSettle();
+    expect(source().point(pointId)?.smooth).toBe(false);
   });
 });

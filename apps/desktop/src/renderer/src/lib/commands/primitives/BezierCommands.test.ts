@@ -1,263 +1,232 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import type { PointId } from "@shift/types";
-import { CloseContourCommand, NudgePointsCommand, SplitSegmentCommand } from "./BezierCommands";
-import { Segment, type CubicSegment, type QuadSegment } from "@shift/glyph-state";
-import { addContour, addPoint, commandSourceFixture, contourPoints, point } from "../testUtils";
+import { TestEditor } from "@/testing/TestEditor";
+import {
+  NudgePointsCommand,
+  ReverseContourCommand,
+  SplitSegmentCommand,
+  UpgradeLineToCubicCommand,
+} from "./BezierCommands";
 
-describe("CloseContourCommand", () => {
-  it("closes the contour", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    addPoint(source, contourId, { x: 0, y: 0 });
-    const command = new CloseContourCommand(contourId);
+// Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
+// the workspace stack: geometry is drawn through editor verbs, commands run
+// through CommandRunner, and undo goes through the workspace ledger.
+describe("NudgePointsCommand", () => {
+  let editor: TestEditor;
 
-    command.execute(ctx);
-
-    expect(source.contour(contourId)?.closed).toBe(true);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(10, 20);
+    await editor.settle();
+    editor.clickGlyphLocal(30, 40);
+    await editor.settle();
   });
 
-  it("does not reopen an already closed contour on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    addPoint(source, contourId, { x: 0, y: 0 });
-    source.closeContour(contourId);
-    const command = new CloseContourCommand(contourId);
+  const source = () => editor.activeGlyphSource!;
 
-    command.execute(ctx);
-    command.undo(ctx);
+  it("moves points by the nudge delta", async () => {
+    const ids = source().allPoints.map((point) => point.id);
 
-    expect(source.contour(contourId)?.closed).toBe(true);
+    editor.commands.run(new NudgePointsCommand(ids, 1, 0));
+    await editor.settle();
+
+    expect(source().allPoints.map(({ x }) => x)).toEqual([11, 31]);
   });
 
-  it("has the correct name", () => {
-    const command = new CloseContourCommand(0 as never);
-    expect(command.name).toBe("Close Contour");
+  it("restores both points with one ledger undo", async () => {
+    const ids = source().allPoints.map((point) => point.id);
+
+    editor.commands.run(new NudgePointsCommand(ids, 5, -10));
+    await editor.settle();
+
+    await editor.undoAndSettle();
+    expect(source().allPoints.map(({ x, y }) => ({ x, y }))).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+  });
+
+  it("does not change state with an empty point list", async () => {
+    editor.commands.run(new NudgePointsCommand([], 5, 5));
+    await editor.settle();
+
+    expect(source().allPoints.map(({ x, y }) => ({ x, y }))).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
   });
 });
 
-describe("NudgePointsCommand", () => {
-  it("moves points by the nudge delta", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const p1 = addPoint(source, contourId, { x: 10, y: 20 });
-    const p2 = addPoint(source, contourId, { x: 30, y: 40 });
-    const command = new NudgePointsCommand([p1, p2], 1, 0);
+describe("ReverseContourCommand", () => {
+  let editor: TestEditor;
 
-    command.execute(ctx);
-
-    expect(point(source, p1).x).toBe(11);
-    expect(point(source, p2).x).toBe(31);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.click(0, 0);
+    await editor.settle();
+    editor.click(100, 0);
+    await editor.settle();
+    editor.click(200, 0);
+    await editor.settle();
   });
 
-  it("moves points back on undo", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const p1 = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new NudgePointsCommand([p1], 5, -10);
+  const source = () => editor.activeGlyphSource!;
 
-    command.execute(ctx);
-    command.undo(ctx);
+  it("reverses the point order", async () => {
+    const contour = source().contours[0]!;
+    expect(contour.points.map(({ x }) => x)).toEqual([0, 100, 200]);
 
-    expect(point(source, p1)).toMatchObject({ x: 10, y: 20 });
+    editor.commands.run(new ReverseContourCommand(contour.id));
+    await editor.settle();
+
+    expect(source().contours[0]!.points.map(({ x }) => x)).toEqual([200, 100, 0]);
   });
 
-  it("does not change state with empty array", () => {
-    const { source, ctx } = commandSourceFixture();
-    const contourId = addContour(source);
-    const p1 = addPoint(source, contourId, { x: 10, y: 20 });
-    const command = new NudgePointsCommand([], 5, 5);
+  it("restores the original winding through ledger undo", async () => {
+    editor.commands.run(new ReverseContourCommand(source().contours[0]!.id));
+    await editor.settle();
 
-    command.execute(ctx);
-
-    expect(point(source, p1)).toMatchObject({ x: 10, y: 20 });
-  });
-
-  it("has the correct name", () => {
-    const command = new NudgePointsCommand([], 0, 0);
-    expect(command.name).toBe("Nudge Points");
+    await editor.undoAndSettle();
+    expect(source().contours[0]!.points.map(({ x }) => x)).toEqual([0, 100, 200]);
   });
 });
 
 describe("SplitSegmentCommand", () => {
-  function makeLineSegment(
-    source: ReturnType<typeof commandSourceFixture>["source"],
-    sourcePoint1: PointId,
-    sourcePoint2: PointId,
-  ): Segment {
-    return new Segment({
-      type: "line",
-      points: {
-        anchor1: point(source, sourcePoint1),
-        anchor2: point(source, sourcePoint2),
-      },
-    });
-  }
+  let editor: TestEditor;
 
-  function fixture() {
-    const result = commandSourceFixture();
-    const contourId = addContour(result.source);
-    return { ...result, contourId };
-  }
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+  });
+
+  const source = () => editor.activeGlyphSource!;
 
   describe("line segment", () => {
-    it("inserts a single on-curve point at t=0.5", () => {
-      const { source, ctx, contourId } = fixture();
-      const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-      const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-      const command = new SplitSegmentCommand(makeLineSegment(source, p1, p2), 0.5);
-
-      const result = command.execute(ctx);
-
-      expect(contourPoints(source, contourId).length).toBe(3);
-      expect(command.splitPointId).toBe(result);
-      expect(point(source, result)).toMatchObject({ x: 50, y: 0, pointType: "onCurve" });
+    beforeEach(async () => {
+      editor.clickGlyphLocal(0, 0);
+      await editor.settle();
+      editor.clickGlyphLocal(100, 0);
+      await editor.settle();
     });
 
-    it("inserts point at correct position for t=0.25", () => {
-      const { source, ctx, contourId } = fixture();
-      const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-      const p2 = addPoint(source, contourId, { x: 100, y: 100 });
-      const command = new SplitSegmentCommand(makeLineSegment(source, p1, p2), 0.25);
+    it("inserts a single on-curve point at t=0.5", async () => {
+      const segment = source().contours[0]!.segments()[0]!;
 
-      command.execute(ctx);
+      const splitId = editor.commands.run(new SplitSegmentCommand(segment, 0.5));
+      await editor.settle();
 
-      expect(point(source, command.splitPointId!)).toMatchObject({ x: 25, y: 25 });
+      expect(source().allPoints.length).toBe(3);
+      expect(source().point(splitId)).toMatchObject({ x: 50, y: 0, pointType: "onCurve" });
     });
 
-    it("removes inserted point on undo", () => {
-      const { source, ctx, contourId } = fixture();
-      const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-      const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-      const command = new SplitSegmentCommand(makeLineSegment(source, p1, p2), 0.5);
+    it("removes the inserted point with one ledger undo", async () => {
+      const segment = source().contours[0]!.segments()[0]!;
 
-      command.execute(ctx);
-      expect(contourPoints(source, contourId).length).toBe(3);
+      editor.commands.run(new SplitSegmentCommand(segment, 0.5));
+      await editor.settle();
+      expect(source().allPoints.length).toBe(3);
 
-      command.undo(ctx);
-      expect(contourPoints(source, contourId).length).toBe(2);
+      await editor.undoAndSettle();
+      expect(source().allPoints.length).toBe(2);
     });
   });
 
-  describe("quadratic segment", () => {
-    it("inserts mid point and new control for quad split", () => {
-      const { source, ctx, contourId } = fixture();
-      const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-      const c1 = addPoint(source, contourId, { x: 50, y: 100, pointType: "offCurve" });
-      const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-      const segment: QuadSegment = {
-        type: "quad",
-        points: {
-          anchor1: point(source, p1),
-          control: point(source, c1),
-          anchor2: point(source, p2),
-        },
-      };
-      const command = new SplitSegmentCommand(new Segment(segment), 0.5);
+  it("inserts the point at the parametric position for t=0.25", async () => {
+    editor.clickGlyphLocal(0, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(100, 100);
+    await editor.settle();
 
-      command.execute(ctx);
+    const segment = source().contours[0]!.segments()[0]!;
+    const splitId = editor.commands.run(new SplitSegmentCommand(segment, 0.25));
+    await editor.settle();
 
-      expect(contourPoints(source, contourId).length).toBe(5);
-      expect(point(source, command.splitPointId!)).toMatchObject({
-        pointType: "onCurve",
-        smooth: true,
-      });
-    });
-
-    it("restores original state on undo", () => {
-      const { source, ctx, contourId } = fixture();
-      const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-      const c1 = addPoint(source, contourId, { x: 50, y: 100, pointType: "offCurve" });
-      const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-      const segment: QuadSegment = {
-        type: "quad",
-        points: {
-          anchor1: point(source, p1),
-          control: point(source, c1),
-          anchor2: point(source, p2),
-        },
-      };
-      const command = new SplitSegmentCommand(new Segment(segment), 0.5);
-
-      command.execute(ctx);
-      command.undo(ctx);
-
-      expect(contourPoints(source, contourId).length).toBe(3);
-      expect(point(source, c1)).toMatchObject({ x: 50, y: 100 });
-    });
+    expect(source().point(splitId)).toMatchObject({ x: 25, y: 25 });
   });
 
   describe("cubic segment", () => {
-    it("inserts three points for cubic split", () => {
-      const { source, ctx, contourId } = fixture();
-      const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-      const c1 = addPoint(source, contourId, { x: 25, y: 100, pointType: "offCurve" });
-      const c2 = addPoint(source, contourId, { x: 75, y: 100, pointType: "offCurve" });
-      const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-      const segment: CubicSegment = {
-        type: "cubic",
-        points: {
-          anchor1: point(source, p1),
-          control1: point(source, c1),
-          control2: point(source, c2),
-          anchor2: point(source, p2),
-        },
-      };
-      const command = new SplitSegmentCommand(new Segment(segment), 0.5);
+    let c1: PointId;
+    let c2: PointId;
 
-      const result = command.execute(ctx);
-
-      expect(contourPoints(source, contourId).length).toBe(7);
-      expect(result).toBe(command.splitPointId);
-      expect(point(source, command.splitPointId!)).toMatchObject({
-        pointType: "onCurve",
-        smooth: true,
-      });
+    beforeEach(async () => {
+      const contourId = source().addContour();
+      source().addOnCurvePoint(contourId, { x: 0, y: 0 });
+      c1 = source().addOffCurvePoint(contourId, { x: 25, y: 100 });
+      c2 = source().addOffCurvePoint(contourId, { x: 75, y: 100 });
+      source().addOnCurvePoint(contourId, { x: 100, y: 0 });
+      await editor.settle();
     });
 
-    it("restores both control positions on undo", () => {
-      const { source, ctx, contourId } = fixture();
-      const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-      const c1 = addPoint(source, contourId, { x: 25, y: 100, pointType: "offCurve" });
-      const c2 = addPoint(source, contourId, { x: 75, y: 100, pointType: "offCurve" });
-      const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-      const segment: CubicSegment = {
-        type: "cubic",
-        points: {
-          anchor1: point(source, p1),
-          control1: point(source, c1),
-          control2: point(source, c2),
-          anchor2: point(source, p2),
-        },
-      };
-      const command = new SplitSegmentCommand(new Segment(segment), 0.5);
+    it("inserts three points and a smooth on-curve at the split", async () => {
+      const segment = source().contours[0]!.segments()[0]!;
+      expect(segment.type).toBe("cubic");
 
-      command.execute(ctx);
-      command.undo(ctx);
+      const splitId = editor.commands.run(new SplitSegmentCommand(segment, 0.5));
+      await editor.settle();
 
-      expect(contourPoints(source, contourId).length).toBe(4);
-      expect(point(source, c1)).toMatchObject({ x: 25, y: 100 });
-      expect(point(source, c2)).toMatchObject({ x: 75, y: 100 });
+      expect(source().allPoints.length).toBe(7);
+      expect(source().point(splitId)).toMatchObject({ pointType: "onCurve", smooth: true });
+    });
+
+    it("restores both control positions with one ledger undo", async () => {
+      const segment = source().contours[0]!.segments()[0]!;
+
+      editor.commands.run(new SplitSegmentCommand(segment, 0.5));
+      await editor.settle();
+      expect(source().allPoints.length).toBe(7);
+
+      await editor.undoAndSettle();
+      expect(source().allPoints.length).toBe(4);
+      expect(source().point(c1)).toMatchObject({ x: 25, y: 100 });
+      expect(source().point(c2)).toMatchObject({ x: 75, y: 100 });
     });
   });
+});
 
-  it("clears state and re-executes on redo", () => {
-    const { source, ctx, contourId } = fixture();
-    const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-    const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-    const command = new SplitSegmentCommand(makeLineSegment(source, p1, p2), 0.5);
+describe("UpgradeLineToCubicCommand", () => {
+  let editor: TestEditor;
 
-    command.execute(ctx);
-    command.undo(ctx);
-    command.redo(ctx);
-
-    expect(contourPoints(source, contourId).length).toBe(3);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(0, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(90, 30);
+    await editor.settle();
   });
 
-  it("has the correct name", () => {
-    const { source, contourId } = fixture();
-    const p1 = addPoint(source, contourId, { x: 0, y: 0 });
-    const p2 = addPoint(source, contourId, { x: 100, y: 0 });
-    const command = new SplitSegmentCommand(makeLineSegment(source, p1, p2), 0.5);
-    expect(command.name).toBe("Split Segment");
+  const source = () => editor.activeGlyphSource!;
+
+  it("converts the line into a shape-preserving cubic", async () => {
+    const line = source().contours[0]!.segments()[0]!.asLine()!;
+
+    editor.commands.run(new UpgradeLineToCubicCommand(line));
+    await editor.settle();
+
+    const segment = source().contours[0]!.segments()[0]!;
+    expect(segment.type).toBe("cubic");
+    expect(source().allPoints.length).toBe(4);
+
+    const cubic = segment.asCubic()!;
+    expect(cubic.controlStart).toMatchObject({ x: 30, y: 10 });
+    expect(cubic.controlEnd).toMatchObject({ x: 60, y: 20 });
+  });
+
+  it("removes both controls with one ledger undo", async () => {
+    const line = source().contours[0]!.segments()[0]!.asLine()!;
+
+    editor.commands.run(new UpgradeLineToCubicCommand(line));
+    await editor.settle();
+    expect(source().allPoints.length).toBe(4);
+
+    await editor.undoAndSettle();
+    expect(source().allPoints.length).toBe(2);
+    expect(source().contours[0]!.segments()[0]!.type).toBe("line");
   });
 });

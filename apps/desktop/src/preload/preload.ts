@@ -2,73 +2,29 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 const { contextBridge, ipcRenderer, clipboard } = require("electron");
-const os = require("os");
-import { createBridge, type BridgeApi } from "@shift/bridge";
-import type { IpcEvents, IpcCommands } from "../shared/ipc/channels";
-import type { ElectronAPI } from "../shared/ipc/electronAPI";
-import { listener, command } from "../shared/ipc/preload";
+import type { IpcRendererEvent } from "electron";
+import type { ShiftHost } from "../shared/host/ShiftHost";
+import { invoke, listen } from "../shared/ipc/renderer";
 
-const bridge = createBridge();
-
-function buildContextBridgeApi<T extends object>(instance: T): T {
-  const api: Record<string, unknown> = {};
-  const target = instance as Record<string, unknown>;
-  const proto = Object.getPrototypeOf(instance);
-  for (const name of Object.getOwnPropertyNames(proto)) {
-    if (name === "constructor" || typeof target[name] !== "function") continue;
-    api[name] = (...args: unknown[]) => (target[name] as Function)(...args);
-  }
-  return api as T;
-}
-
-const bridgeApi = buildContextBridgeApi<BridgeApi>(bridge);
-
-// Expose to renderer via contextBridge
-contextBridge.exposeInMainWorld("shiftBridge", bridgeApi);
-
-const on = <K extends keyof IpcEvents>(ch: K) => listener(ipcRenderer, ch);
-const invoke = <K extends keyof IpcCommands>(ch: K) => command(ipcRenderer, ch);
-
-const electronAPI: ElectronAPI = {
-  // Commands
-  openFontDialog: invoke("dialog:openFont"),
-  getTheme: invoke("theme:get"),
-  setTheme: invoke("theme:set"),
-  closeWindow: invoke("window:close"),
-  minimizeWindow: invoke("window:minimize"),
-  maximizeWindow: invoke("window:maximize"),
-  isWindowMaximized: invoke("window:isMaximized"),
-  setDocumentDirty: invoke("document:setDirty"),
-  setDocumentFilePath: invoke("document:setFilePath"),
-  saveCompleted: invoke("document:saveCompleted"),
-  getDebug: invoke("debug:getState"),
-  pathsExist: invoke("fs:pathsExist"),
-
-  // Events
-  onDocumentNew: on("document:new"),
-  onMenuOpenFont: on("menu:open-font"),
-  onExternalOpenFont: on("external:open-font"),
-  onMenuSaveFont: on("menu:save-font"),
-  onMenuExportFont: on("menu:export-font"),
-  onMenuUndo: on("menu:undo"),
-  onMenuRedo: on("menu:redo"),
-  onMenuDelete: on("menu:delete"),
-  onMenuSelectAll: on("menu:select-all"),
-  onSetTheme: on("theme:set"),
-  onUiZoomChanged: on("ui:zoom-changed"),
-  onDevToolsToggled: on("devtools-toggled"),
-  onDebugReactScan: on("debug:react-scan"),
-  onDebugPanel: on("debug:panel"),
-  onDebugDumpSnapshot: on("debug:dump-snapshot"),
-  onDebugDumpSelectionPatterns: on("debug:dump-selection-patterns"),
-  onDebugOverlays: on("debug:overlays"),
-
-  // System
-  homePath: os.homedir() as string,
-
-  // Clipboard (direct, no IPC)
-  clipboardReadText: (): string => clipboard.readText(),
-  clipboardWriteText: (text: string): void => clipboard.writeText(text),
+const shiftHost: ShiftHost = {
+  commands: {
+    run: invoke(ipcRenderer, "commands.run"),
+  },
+  workspace: {
+    connect: invoke(ipcRenderer, "workspace.connect"),
+  },
+  ui: {
+    onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),
+  },
+  clipboard: {
+    writeText: (text: string): void => clipboard.writeText(text),
+    readText: (): string => clipboard.readText(),
+  },
 };
 
-contextBridge.exposeInMainWorld("electronAPI", electronAPI);
+contextBridge.exposeInMainWorld("shiftHost", shiftHost);
+
+// MessagePorts cannot cross the context bridge; relay them into the page.
+ipcRenderer.on("workspace.port", (event: IpcRendererEvent) => {
+  window.postMessage({ type: "workspace.port" }, window.location.origin, event.ports);
+});

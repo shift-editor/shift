@@ -2,7 +2,7 @@ import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
-import { getEditor, getGlyphInfo } from "@/store/store";
+import { getEditor, getGlyphInfo } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals";
 import { useGlyphSidebearings } from "@/hooks/useGlyphSidebearings";
 import { useGlyphXAdvance } from "@/hooks/useGlyphXAdvance";

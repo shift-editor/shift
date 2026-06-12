@@ -67,7 +67,7 @@ export class Resize implements SelectBehavior {
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "resizing") return false;
 
-    this.#draft?.commit("Scale Points");
+    this.#draft?.commit();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });

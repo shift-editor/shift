@@ -5,9 +5,10 @@ import { glyphTextItem, lineBreakTextItem } from "@/lib/text/layout";
 describe("Editor", () => {
   let editor: TestEditor;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     editor = new TestEditor();
-    editor.startSession();
+    await editor.startSession();
+    await editor.addGlyph("S", 83);
   });
 
   // editableGlyphVisible rule:

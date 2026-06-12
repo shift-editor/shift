@@ -2,7 +2,7 @@ import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/model/Font";
 import type { Glyph } from "@/lib/model/Glyph";
 import { useSignalState } from "@/lib/signals";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import type { GlyphHandle } from "@shift/bridge";
 
 export const CELL_HEIGHT = 75;

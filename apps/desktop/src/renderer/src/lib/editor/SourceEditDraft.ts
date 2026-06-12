@@ -1,8 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphSource, SourcePositions } from "@/lib/model/Glyph";
 import { SourcePositionList, type SourcePositionSubject } from "@/lib/model/SourcePositionList";
-import { ApplyPositionPatchCommand } from "@/lib/commands/primitives/ApplyPositionPatchCommand";
-import type { CommandHistory } from "@/lib/commands/core/CommandHistory";
 
 export type SourceEditSubject = SourcePositionSubject;
 
@@ -17,25 +15,17 @@ export class SourceEditDraft {
   readonly glyphSource: GlyphSource;
   readonly subject: SourceEditSubject;
 
-  readonly #commandHistory: CommandHistory;
-
   #base: SourcePositionList;
   #preview: SourcePositionList | null = null;
   #closed = false;
 
-  constructor(
-    glyphSource: GlyphSource,
-    commandHistory: CommandHistory,
-    subject: SourceEditSubject,
-  ) {
+  constructor(glyphSource: GlyphSource, subject: SourceEditSubject) {
     this.glyphSource = glyphSource;
 
     this.subject = {
       points: subject.points ? [...subject.points] : [],
       anchors: subject.anchors ? [...subject.anchors] : [],
     };
-
-    this.#commandHistory = commandHistory;
     this.#base = SourcePositionList.fromSubject(glyphSource, this.subject);
   }
 
@@ -67,16 +57,14 @@ export class SourceEditDraft {
     this.previewPositionPatch(positions.positions);
   }
 
-  commit(label: string): void {
+  commit(): void {
     if (this.#closed) return;
     this.#closed = true;
 
     if (!this.#preview || this.#preview.positions.length === 0) return;
 
+    // The movePoints intent from commitPositionPatch IS the ledger entry.
     this.glyphSource.commitPositionPatch(this.#preview.positions);
-    this.#commandHistory.record(
-      new ApplyPositionPatchCommand(label, this.#base.positions, this.#preview.positions),
-    );
   }
 
   discard(): void {

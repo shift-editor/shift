@@ -1,27 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { createBridge } from "@shift/bridge";
+import { describe, expect, it, beforeEach } from "vitest";
 import type { PointId } from "@shift/types";
-import { signal } from "@/lib/signals/signal";
-import { CommandHistory } from "@/lib/commands/core/CommandHistory";
-import { Font } from "@/lib/model/Font";
 import type { GlyphSource } from "@/lib/model/Glyph";
-import { MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
+import { TestEditor } from "@/testing/TestEditor";
 import { SourceEditDraft } from "./SourceEditDraft";
 
-function editableSource(): GlyphSource {
-  const bridge = createBridge();
-  const font = new Font(bridge);
-  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("source-edit-draft"));
-
-  const handle = { name: "A", unicode: 65 };
-  const source = font.defaultSource;
-
-  const glyphSource = font.glyphSource(handle, source);
-  if (!glyphSource) throw new Error("Expected editable glyph source");
-
-  return glyphSource;
-}
-
+// Restored from the WS6 behavioral inventory (git show ef037c6e^); drafts no
+// longer record commands — the movePoints intent from commit IS the ledger
+// entry, so undo goes through the workspace.
 function pointPosition(source: GlyphSource, pointId: PointId): { x: number; y: number } {
   const point = source.point(pointId);
   if (!point) throw new Error("Expected point");
@@ -39,102 +24,85 @@ function pointBase(draft: SourceEditDraft, pointId: PointId): { x: number; y: nu
 }
 
 describe("source edit drafts preserve committed preview bases", () => {
-  it("previews, commits, and undoes a source edit through the real glyph source", () => {
-    const source = editableSource();
-    const point = source.allPoints[0];
-    if (!point) throw new Error("Expected point");
+  let editor: TestEditor;
 
-    const start = pointPosition(source, point.id);
-    const history = new CommandHistory(signal<GlyphSource | null>(source));
-    const draft = new SourceEditDraft(source, history, { points: [point.id] });
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(100, 100);
+    await editor.settle();
+    editor.clickGlyphLocal(300, 200);
+    await editor.settle();
+  });
+
+  const source = () => editor.activeGlyphSource!;
+
+  it("previews, commits, and undoes a source edit through the real glyph source", async () => {
+    const point = source().allPoints[0]!;
+    const start = pointPosition(source(), point.id);
+    const draft = new SourceEditDraft(source(), { points: [point.id] });
 
     draft.previewTranslate({ x: 25, y: -10 });
-    expect(pointPosition(source, point.id)).toEqual({
-      x: start.x + 25,
-      y: start.y - 10,
-    });
+    expect(pointPosition(source(), point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
 
-    draft.commit("Move Point");
-    expect(pointPosition(source, point.id)).toEqual({
-      x: start.x + 25,
-      y: start.y - 10,
-    });
+    draft.commit();
+    await editor.settle();
+    expect(pointPosition(source(), point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
 
-    history.undo();
-    expect(pointPosition(source, point.id)).toEqual(start);
+    await editor.undoAndSettle();
+    expect(pointPosition(source(), point.id)).toEqual(start);
   });
 
   it("discards rule-driven previews that include points outside the initial subject", () => {
-    const source = editableSource();
-    const [first, second] = source.allPoints;
-    if (!first || !second) throw new Error("Expected points");
-
-    const firstStart = pointPosition(source, first.id);
-    const secondStart = pointPosition(source, second.id);
-    const history = new CommandHistory(signal<GlyphSource | null>(source));
-    const draft = new SourceEditDraft(source, history, { points: [first.id] });
+    const [first, second] = source().allPoints;
+    const firstStart = pointPosition(source(), first!.id);
+    const secondStart = pointPosition(source(), second!.id);
+    const draft = new SourceEditDraft(source(), { points: [first!.id] });
 
     draft.previewPositionPatch([
-      { kind: "point", id: first.id, x: firstStart.x + 10, y: firstStart.y },
-      { kind: "point", id: second.id, x: secondStart.x + 20, y: secondStart.y },
+      { kind: "point", id: first!.id, x: firstStart.x + 10, y: firstStart.y },
+      { kind: "point", id: second!.id, x: secondStart.x + 20, y: secondStart.y },
     ]);
 
-    expect(pointPosition(source, first.id).x).toBe(firstStart.x + 10);
-    expect(pointPosition(source, second.id).x).toBe(secondStart.x + 20);
+    expect(pointPosition(source(), first!.id).x).toBe(firstStart.x + 10);
+    expect(pointPosition(source(), second!.id).x).toBe(secondStart.x + 20);
 
     draft.discard();
 
-    expect(pointPosition(source, first.id)).toEqual(firstStart);
-    expect(pointPosition(source, second.id)).toEqual(secondStart);
+    expect(pointPosition(source(), first!.id)).toEqual(firstStart);
+    expect(pointPosition(source(), second!.id)).toEqual(secondStart);
   });
 
-  it("starts the next draft from a committed preview position", () => {
-    const source = editableSource();
-    const point = source.allPoints[0];
-    if (!point) throw new Error("Expected point");
-
-    const start = pointPosition(source, point.id);
-    const history = new CommandHistory(signal<GlyphSource | null>(source));
-    const firstDraft = new SourceEditDraft(source, history, {
-      points: [point.id],
-    });
+  it("starts the next draft from a committed preview position", async () => {
+    const point = source().allPoints[0]!;
+    const start = pointPosition(source(), point.id);
+    const firstDraft = new SourceEditDraft(source(), { points: [point.id] });
 
     firstDraft.previewTranslate({ x: 25, y: -10 });
-    firstDraft.commit("Move Point");
+    firstDraft.commit();
+    await editor.settle();
 
-    const secondDraft = new SourceEditDraft(source, history, {
-      points: [point.id],
-    });
+    const secondDraft = new SourceEditDraft(source(), { points: [point.id] });
 
-    expect(pointBase(secondDraft, point.id)).toEqual({
-      x: start.x + 25,
-      y: start.y - 10,
-    });
+    expect(pointBase(secondDraft, point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
   });
 
-  it("starts later drafts from rule-expanded committed preview positions", () => {
-    const source = editableSource();
-    const [first, second] = source.allPoints;
-    if (!first || !second) throw new Error("Expected points");
-
-    const firstStart = pointPosition(source, first.id);
-    const secondStart = pointPosition(source, second.id);
-    const history = new CommandHistory(signal<GlyphSource | null>(source));
-    const draft = new SourceEditDraft(source, history, { points: [first.id] });
+  it("starts later drafts from rule-expanded committed preview positions", async () => {
+    const [first, second] = source().allPoints;
+    const firstStart = pointPosition(source(), first!.id);
+    const secondStart = pointPosition(source(), second!.id);
+    const draft = new SourceEditDraft(source(), { points: [first!.id] });
 
     draft.previewPositionPatch([
-      { kind: "point", id: first.id, x: firstStart.x + 10, y: firstStart.y },
-      { kind: "point", id: second.id, x: secondStart.x + 20, y: secondStart.y },
+      { kind: "point", id: first!.id, x: firstStart.x + 10, y: firstStart.y },
+      { kind: "point", id: second!.id, x: secondStart.x + 20, y: secondStart.y },
     ]);
-    draft.commit("Move Connected Points");
+    draft.commit();
+    await editor.settle();
 
-    const nextDraft = new SourceEditDraft(source, history, {
-      points: [second.id],
-    });
+    const nextDraft = new SourceEditDraft(source(), { points: [second!.id] });
 
-    expect(pointBase(nextDraft, second.id)).toEqual({
-      x: secondStart.x + 20,
-      y: secondStart.y,
-    });
+    expect(pointBase(nextDraft, second!.id)).toEqual({ x: secondStart.x + 20, y: secondStart.y });
   });
 });

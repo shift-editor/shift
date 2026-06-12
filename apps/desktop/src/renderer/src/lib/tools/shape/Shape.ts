@@ -81,6 +81,6 @@ export class Shape extends BaseTool<ShapeState> {
     const rect = this.getRect(state);
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 
-    this.editor.commandHistory.execute(new DrawRectangleCommand(rect));
+    this.editor.commands.run(new DrawRectangleCommand(rect));
   }
 }

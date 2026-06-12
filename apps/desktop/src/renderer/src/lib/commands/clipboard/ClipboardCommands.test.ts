@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CommandHistory } from "../core/CommandHistory";
+import type { PointId } from "@shift/types";
+import { TestEditor } from "@/testing/TestEditor";
 import { CutCommand, PasteCommand } from "./ClipboardCommands";
 import type { ClipboardContent } from "../../clipboard/types";
-import type { ContourId } from "@shift/types";
-import type { GlyphSource } from "@/lib/model/Glyph";
-import { addContour, addPoint, commandSourceFixture, contourPoints, point } from "../testUtils";
 
+// Restored from the WS6 behavioral inventory (git show ef037c6e^); the old
+// CommandHistory plumbing is gone, so commands run through CommandRunner and
+// undo through the workspace ledger.
 function createTestContent(points: Array<{ x: number; y: number }>): ClipboardContent {
   return {
     contours: [
@@ -23,197 +24,89 @@ function createTestContent(points: Array<{ x: number; y: number }>): ClipboardCo
 }
 
 describe("CutCommand", () => {
-  let source: GlyphSource;
-  let contourId: ContourId;
-  let history: CommandHistory;
+  let editor: TestEditor;
+  let p1: PointId;
+  let p2: PointId;
 
-  beforeEach(() => {
-    const fixture = commandSourceFixture();
-    source = fixture.source;
-    contourId = addContour(source);
-    history = new CommandHistory(fixture.$source);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(100, 100);
+    await editor.settle();
+    editor.clickGlyphLocal(200, 200);
+    await editor.settle();
+    [p1, p2] = editor.activeGlyphSource!.allPoints.map((point) => point.id) as [PointId, PointId];
   });
 
-  it("removes points on execute", () => {
-    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
-    const p2 = addPoint(source, contourId, { x: 200, y: 200 });
-    expect(contourPoints(source, contourId).length).toBe(2);
+  const source = () => editor.activeGlyphSource!;
 
-    history.execute(new CutCommand([p1]));
+  it("removes the cut points and keeps the rest", async () => {
+    editor.commands.run(new CutCommand([p1]));
+    await editor.settle();
 
-    expect(contourPoints(source, contourId).length).toBe(1);
-    expect(point(source, p2).x).toBe(200);
+    expect(source().allPoints.length).toBe(1);
+    expect(source().point(p2)).toMatchObject({ x: 200, y: 200 });
   });
 
-  it("restores points on undo", () => {
-    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
+  it("restores the cut points through ledger undo", async () => {
+    editor.commands.run(new CutCommand([p1]));
+    await editor.settle();
+    expect(source().allPoints.length).toBe(1);
 
-    history.execute(new CutCommand([p1]));
-    expect(contourPoints(source, contourId).length).toBe(0);
-
-    history.undo();
-
-    expect(contourPoints(source, contourId).length).toBe(1);
-    expect(point(source, p1)).toMatchObject({ x: 100, y: 100 });
-  });
-
-  it("removes same points on redo", () => {
-    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
-
-    history.execute(new CutCommand([p1]));
-    history.undo();
-    expect(contourPoints(source, contourId).length).toBe(1);
-
-    history.redo();
-
-    expect(contourPoints(source, contourId).length).toBe(0);
-  });
-
-  it("handles multiple points", () => {
-    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
-    const p2 = addPoint(source, contourId, { x: 200, y: 200 });
-    const p3 = addPoint(source, contourId, { x: 300, y: 300 });
-
-    history.execute(new CutCommand([p1, p2]));
-
-    expect(contourPoints(source, contourId).length).toBe(1);
-    expect(point(source, p3).x).toBe(300);
-  });
-
-  it("has the correct name", () => {
-    expect(new CutCommand([]).name).toBe("Cut");
+    await editor.undoAndSettle();
+    expect(source().allPoints.length).toBe(2);
+    expect(source().point(p1)).toMatchObject({ x: 100, y: 100 });
   });
 });
 
 describe("PasteCommand", () => {
-  let source: GlyphSource;
-  let history: CommandHistory;
+  let editor: TestEditor;
 
-  beforeEach(() => {
-    const fixture = commandSourceFixture();
-    source = fixture.source;
-    addContour(source);
-    history = new CommandHistory(fixture.$source);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
   });
 
-  it("creates points on execute", () => {
-    const start = source.allPoints.length;
-    const content = createTestContent([
-      { x: 100, y: 100 },
-      { x: 200, y: 200 },
-    ]);
-    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
+  const source = () => editor.activeGlyphSource!;
 
-    history.execute(command);
+  it("creates points offset from the clipboard content", async () => {
+    const command = new PasteCommand(createTestContent([{ x: 100, y: 100 }]), {
+      offset: { x: 20, y: -20 },
+    });
 
-    expect(source.allPoints.length).toBe(start + 2);
-    expect(command.createdPointIds.length).toBe(2);
+    editor.commands.run(command);
+    await editor.settle();
+
+    expect(command.createdPointIds).toHaveLength(1);
+    expect(source().point(command.createdPointIds[0]!)).toMatchObject({ x: 120, y: 80 });
   });
 
-  it("applies offset to pasted points", () => {
-    const content = createTestContent([{ x: 100, y: 100 }]);
-    const command = new PasteCommand(content, { offset: { x: 20, y: -20 } });
-
-    history.execute(command);
-
-    expect(point(source, command.createdPointIds[0]!)).toMatchObject({ x: 120, y: 80 });
-  });
-
-  it("removes points on undo", () => {
-    const start = source.allPoints.length;
-    const content = createTestContent([{ x: 100, y: 100 }]);
-    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-
-    history.execute(command);
-    expect(source.allPoints.length).toBe(start + 1);
-
-    history.undo();
-
-    expect(source.allPoints.length).toBe(start);
-  });
-
-  it("restores same state on redo", () => {
-    const start = source.allPoints.length;
-    const content = createTestContent([{ x: 100, y: 100 }]);
-    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-
-    history.execute(command);
-    const originalIds = [...command.createdPointIds];
-    history.undo();
-    history.redo();
-
-    expect(command.createdPointIds).toEqual(originalIds);
-    expect(source.allPoints.length).toBe(start + 1);
-  });
-
-  it("handles multiple contours", () => {
+  it("creates one contour per clipboard contour", async () => {
     const content: ClipboardContent = {
       contours: [
-        {
-          points: [{ x: 0, y: 0, pointType: "onCurve", smooth: false }],
-          closed: false,
-        },
-        {
-          points: [{ x: 100, y: 100, pointType: "onCurve", smooth: false }],
-          closed: false,
-        },
+        { points: [{ x: 0, y: 0, pointType: "onCurve", smooth: false }], closed: false },
+        { points: [{ x: 100, y: 100, pointType: "onCurve", smooth: false }], closed: false },
       ],
     };
     const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
 
-    history.execute(command);
+    editor.commands.run(command);
+    await editor.settle();
 
-    expect(command.createdContourIds.length).toBe(2);
+    expect(command.createdContourIds).toHaveLength(2);
+    expect(source().contours).toHaveLength(2);
   });
 
-  it("has the correct name", () => {
-    const content = createTestContent([]);
-    expect(new PasteCommand(content, { offset: { x: 0, y: 0 } }).name).toBe("Paste");
-  });
-});
-
-describe("Cut + Paste integration", () => {
-  let source: GlyphSource;
-  let contourId: ContourId;
-  let history: CommandHistory;
-
-  beforeEach(() => {
-    const fixture = commandSourceFixture();
-    source = fixture.source;
-    contourId = addContour(source);
-    history = new CommandHistory(fixture.$source);
-  });
-
-  it("supports cut then paste workflow", () => {
-    const start = source.allPoints.length;
-    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
-
-    history.execute(new CutCommand([p1]));
-    expect(source.allPoints.length).toBe(start);
-
-    const content = createTestContent([{ x: 100, y: 100 }]);
-    const pasteCommand = new PasteCommand(content, { offset: { x: 20, y: 20 } });
-    history.execute(pasteCommand);
-
-    expect(source.allPoints.length).toBe(start + 1);
-    expect(point(source, pasteCommand.createdPointIds[0]!)).toMatchObject({ x: 120, y: 120 });
-  });
-
-  it("undoes cut and paste separately", () => {
-    const start = source.allPoints.length;
-    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
-
-    history.execute(new CutCommand([p1]));
-    history.execute(
+  it("removes all pasted geometry with one ledger undo", async () => {
+    editor.commands.run(
       new PasteCommand(createTestContent([{ x: 100, y: 100 }]), { offset: { x: 0, y: 0 } }),
     );
+    await editor.settle();
+    expect(source().allPoints.length).toBe(1);
 
-    expect(history.undoCount.value).toBe(2);
-    history.undo();
-    expect(source.allPoints.length).toBe(start);
-
-    history.undo();
-    expect(source.allPoints.length).toBe(start + 1);
-    expect(point(source, p1)).toMatchObject({ x: 100, y: 100 });
+    await editor.undoAndSettle();
+    expect(source().allPoints.length).toBe(0);
+    expect(source().contours.length).toBe(0);
   });
 });

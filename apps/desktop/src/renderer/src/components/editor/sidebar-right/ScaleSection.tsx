@@ -3,7 +3,7 @@ import { SidebarSection } from "./SidebarSection";
 import { TransformGrid } from "./TransformGrid";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { Bounds } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";

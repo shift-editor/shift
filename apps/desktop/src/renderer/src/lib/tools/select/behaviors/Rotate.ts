@@ -41,7 +41,7 @@ export class Rotate implements SelectBehavior {
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "rotating") return false;
 
-    this.#draft?.commit("Rotate Points");
+    this.#draft?.commit();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });

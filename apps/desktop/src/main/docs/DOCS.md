@@ -6,7 +6,7 @@ Electron main process: application lifecycle, window management, menus, document
 
 - **Architecture Invariant:** All managers receive dependencies via constructor injection in `main.ts`. `DocumentState` is the root dependency; `WindowManager` depends on it; `MenuManager` depends on both; `AppLifecycle` depends on all three.
 - **Architecture Invariant:** `DocumentState` is the single source of truth for dirty state and file path. All save/close dialogs flow through `DocumentState.confirmClose`. No manager may show its own save dialog.
-- **Architecture Invariant:** IPC channels are type-safe. All `ipcMain.handle` calls use the typed `ipc.handle` wrapper from `shared/ipc/main`, and all `webContents.send` calls use the typed `ipc.send` wrapper. Channel names and payload types are defined in `IpcCommands` (renderer-to-main) and `IpcEvents` (main-to-renderer).
+- **Architecture Invariant:** IPC channels are type-safe. All `ipcMain.handle` calls use the typed `ipc.handle` wrapper from `shared/ipc/main`, and all `webContents.send` calls use the typed `ipc.send` wrapper. Channel names and payload types are defined in `RendererToMain` and `MainToRenderer`.
 - **Architecture Invariant: CRITICAL:** `main.ts` enforces a single-instance lock via `app.requestSingleInstanceLock()`. The second instance forwards its argv to the first instance via the `second-instance` event and then quits. Removing this breaks file-association double-click on all platforms.
 - **Architecture Invariant: CRITICAL:** The `before-quit` handler in `AppLifecycle` must call `event.preventDefault()` before the async `confirmClose` check. If the guard is removed, the app quits before the save dialog can appear.
 - **Architecture Invariant:** `.shift` is the only direct writable source format (`DocumentState.isWritableFormat`). Imported font formats can be opened, but saving them triggers Save As to a `.shift` package. Export is a separate workflow.
@@ -31,8 +31,8 @@ src/main/
 - `ThemeName` -- `"light" | "dark" | "system"`, stored in `MenuManager.currentTheme`
 - `Debug` -- aggregates `reactScanEnabled`, `debugPanelOpen`, and `DebugOverlays`; only used in dev builds
 - `DebugOverlays` -- per-overlay booleans (`tightBounds`, `hitRadii`, `segmentBounds`, `glyphBbox`)
-- `IpcCommands` -- renderer-to-main request/response channels (invoke/handle)
-- `IpcEvents` -- main-to-renderer broadcast channels (send/on)
+- `RendererToMain` -- renderer-to-main request/response channels (invoke/handle)
+- `MainToRenderer` -- main-to-renderer broadcast channels (send/on)
 - `SUPPORTED_FONT_EXTENSIONS` -- the set of file extensions accepted for opening (`.shift`, `.ufo`, `.ttf`, `.otf`, `.glyphs`, `.glyphspackage`, `.designspace`)
 
 ## How it works
@@ -69,20 +69,20 @@ IPC handlers are split across managers. `WindowManager` registers window-control
 
 ### Add a new IPC command (renderer calls main)
 
-1. Add the channel signature to `IpcCommands` in `shared/ipc/channels.ts`.
+1. Add the channel signature to `RendererToMain` in `shared/ipc/contract.ts`.
 2. Add the handler using `ipc.handle(ipcMain, "your:channel", ...)` in whichever manager owns the domain.
 3. Expose it in the preload layer (see preload DOCS.md).
 
 ### Add a new main-to-renderer event
 
-1. Add the channel signature to `IpcEvents` in `shared/ipc/channels.ts`.
+1. Add the channel signature to `MainToRenderer` in `shared/ipc/contract.ts`.
 2. Send via `ipc.send(webContents, "your:channel", ...)` from a manager.
 3. Listen in the renderer via the preload bridge.
 
 ### Add a menu item
 
 1. Add a new entry in `MenuManager.create`'s template array under the appropriate submenu.
-2. If it triggers a renderer action, add a channel to `IpcEvents` and call `this.sendToRenderer(...)`.
+2. If it triggers a renderer action, add a channel to `MainToRenderer` and send it through the typed IPC wrapper.
 3. Call `this.create()` if the menu item state needs to update after clicking (checkboxes, radios).
 
 ### Support a new writable format
@@ -108,7 +108,7 @@ IPC handlers are split across managers. `WindowManager` registers window-control
 
 ## Related
 
-- `IpcCommands`, `IpcEvents` -- type-safe IPC channel definitions in `shared/ipc/channels.ts`
+- `RendererToMain`, `MainToRenderer` -- type-safe IPC channel definitions in `shared/ipc/contract.ts`
 - `ipc.send`, `ipc.handle` -- typed wrappers in `shared/ipc/main.ts`
 - `ThemeName`, `Debug`, `DebugOverlays` -- shared types in `shared/ipc/types.ts`
 - Preload bridge -- exposes IPC to renderer (see preload DOCS.md)

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Source } from "@shift/types";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals";
 
 /**

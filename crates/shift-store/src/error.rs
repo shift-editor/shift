@@ -8,4 +8,7 @@ pub enum StoreError {
 
     #[error("missing {kind}: {id}")]
     MissingEntity { kind: &'static str, id: String },
+
+    #[error("store schema version {found} is newer than supported version {supported}")]
+    UnsupportedSchemaVersion { found: i64, supported: i64 },
 }

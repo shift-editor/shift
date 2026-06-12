@@ -126,6 +126,22 @@ ON glyph_components(layer_id);
 CREATE INDEX IF NOT EXISTS glyph_components_base_glyph_id_idx
 ON glyph_components(base_glyph_id);
 
+CREATE TABLE IF NOT EXISTS glyph_layer_anchors (
+    id TEXT PRIMARY KEY,
+    layer_id TEXT NOT NULL,
+    name TEXT,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_layer_anchors_layer_order_unique
+ON glyph_layer_anchors(layer_id, order_index);
+
+CREATE INDEX IF NOT EXISTS glyph_layer_anchors_layer_id_idx
+ON glyph_layer_anchors(layer_id);
+
 CREATE TABLE IF NOT EXISTS source_locations (
     source_id TEXT NOT NULL,
     axis_id TEXT NOT NULL,
@@ -136,7 +152,27 @@ CREATE TABLE IF NOT EXISTS source_locations (
 );
 "#;
 
+pub(crate) const SCHEMA_VERSION: i64 = 1;
+
+/// Creates the baseline schema and stamps `user_version`.
+///
+/// Pre-release policy: the app has not shipped, so schema changes edit the
+/// baseline batch in place instead of adding migration steps. A database
+/// from a NEWER app version is refused rather than silently mangled.
 pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreError> {
-    conn.execute_batch(SCHEMA_V1)?;
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+
+    if version > SCHEMA_VERSION {
+        return Err(StoreError::UnsupportedSchemaVersion {
+            found: version,
+            supported: SCHEMA_VERSION,
+        });
+    }
+
+    if version < 1 {
+        conn.execute_batch(SCHEMA_V1)?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+
     Ok(())
 }

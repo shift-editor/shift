@@ -4,9 +4,9 @@ import { TestEditor } from "./TestEditor";
 describe("TestEditor", () => {
   let editor: TestEditor;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     editor = new TestEditor();
-    editor.startSession();
+    await editor.startSession();
   });
 
   describe("pointerMove", () => {

@@ -17,48 +17,35 @@ export type GlyphName = string;
 export type Unicode = number;
 
 export interface BridgeApi {
-  createWorkspace(sourcePath: string, storePath: string, options?: NewWorkspace | undefined | null): void
-  openWorkspace(path: string, storePath: string): void
-  saveWorkspace(): number
-  saveWorkspaceAs(path: string): number
+  createUntitledWorkspace(storePath: string, options?: NewWorkspace | undefined | null): void
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
-  getGlyphCount(): number
   getGlyphs(): Array<GlyphRecord>
-  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
-  getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): GlyphState | null
-  getGlyphVariationReport(glyphRef: GlyphHandle): GlyphVariationReport | null
-  getVariationReports(): Array<GlyphVariationReport>
+  /**
+   * Applies one intent set as a single atomic workspace apply.
+   *
+   * Editing kinds decode through `map_intent` into `Font::apply_intents`.
+   * Font-level kinds (createGlyph, createAxis, createSource) take the
+   * workspace-verb path and skip the ledger. Sets must be homogeneous:
+   * font-level and editing intents never share a tick.
+   */
+  apply(intents: Array<FontIntent>, label?: string | undefined | null): AppliedChange
+  /**
+   * Replays the most recent ledger entry's pre states; `null` when the
+   * undo stack is empty.
+   */
+  undo(): AppliedChange | null
+  /**
+   * Replays the most recent undone entry's post states; `null` when the
+   * redo stack is empty.
+   */
+  redo(): AppliedChange | null
+  /** Id-addressed glyph state. References survive renames; no name lookup. */
+  getGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphState | null
   isVariable(): boolean
   getAxes(): Array<Axis>
   getSources(): Array<Source>
-  getPersistedVersion(): number
-  isDirty(): boolean
-  createGlyph(name: GlyphName, unicodes: Array<Unicode>): GlyphId
-  createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId
-  setXAdvance(layerId: LayerId, width: number): GlyphValueChange
-  translateLayer(layerId: LayerId, dx: number, dy: number): GlyphValueChange
-  addPoint(layerId: LayerId, contourId: ContourId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
-  insertPointBefore(layerId: LayerId, beforePointId: PointId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
-  addContour(layerId: LayerId): GlyphStructureChange
-  openContour(layerId: LayerId, contourId: ContourId): GlyphStructureChange
-  closeContour(layerId: LayerId, contourId: ContourId): GlyphStructureChange
-  reverseContour(layerId: LayerId, contourId: ContourId): GlyphStructureChange
-  applyBooleanOp(layerId: LayerId, contourIdA: ContourId, contourIdB: ContourId, operation: string): GlyphStructureChange
-  removePoints(layerId: LayerId, pointIds: Array<PointId>): GlyphStructureChange
-  toggleSmooth(layerId: LayerId, pointId: PointId): GlyphStructureChange
-  /**
-   * Bulk position sync. IDs are stable typed strings from the current glyph state.
-   * Coords are interleaved [x0, y0, x1, y1, ...].
-   */
-  applyPositionPatch(layerId: LayerId, pointIds?: Array<PointId> | null, pointCoords?: Float64Array | undefined | null, anchorIds?: Array<AnchorId> | null, anchorCoords?: Float64Array | undefined | null): void
-  restoreState(layerId: LayerId, structure: GlyphStructure, values: Float64Array): GlyphStructureChange
-}
-
-export interface GlyphHandle {
-  name: GlyphName
-  unicode?: Unicode
 }
 
 export interface FontExportRequest {
@@ -71,37 +58,60 @@ export interface FontExportResult {
   format: string
 }
 
-export interface GlyphVariationDiagnostic {
-  glyphName: GlyphName
-  code: string
-  severity: string
-  source?: GlyphVariationDiagnosticSource
-  message: string
-}
-
-export interface GlyphVariationDiagnosticSource {
-  id: SourceId
-  index: number
-  name: string
-}
-
-export interface GlyphVariationReport {
-  glyphName: GlyphName
-  status: string
-  variationDataAvailable: boolean
-  masterCount: number
-  compatibleMasterCount: number
-  skippedMasterCount: number
-  diagnostics: Array<GlyphVariationDiagnostic>
-}
-
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
 }
+export interface AddAnchorsIntent {
+  layerId: LayerId
+  anchors: Array<AnchorSeed>
+}
+
+export interface AddContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+export interface AddPointsIntent {
+  layerId: LayerId
+  /** Absent when `before` carries the anchor; Rust derives the contour. */
+  contourId?: ContourId
+  /** Insert before this point; append when absent. */
+  before?: PointId
+  points: Array<PointSeed>
+}
+
 export interface AnchorData {
   id: AnchorId
   name?: string
+}
+
+/**
+ * An anchor to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface AnchorSeed {
+  id: AnchorId
+  name?: string
+  x: number
+  y: number
+}
+
+/** Pure-state response to `apply`: no change records cross to the renderer. */
+export interface AppliedChange {
+  layers: Array<LayerReplaced>
+  /** Full records list when glyph identity changed; absent when untouched. */
+  glyphs?: Array<GlyphRecord>
+  /** Full axes list when font-level axis structure changed; absent otherwise. */
+  axes?: Array<Axis>
+  /**
+   * Full sources list when font-level source structure changed (createAxis
+   * reshapes locations, createSource adds one); absent otherwise.
+   */
+  sources?: Array<Source>
+  /** Stable ids: references survive renames without re-indexing. */
+  dependents: Array<GlyphId>
 }
 
 export interface Axis {
@@ -120,6 +130,14 @@ export interface AxisTent {
   upper: number
 }
 
+export interface BooleanOpIntent {
+  layerId: LayerId
+  contourIdA: ContourId
+  contourIdB: ContourId
+  /** "union" | "subtract" | "intersect" | "difference" */
+  operation: string
+}
+
 export interface ComponentData {
   id: ComponentId
   baseGlyphName: GlyphName
@@ -129,6 +147,63 @@ export interface ContourData {
   id: ContourId
   points: Array<PointData>
   closed: boolean
+}
+
+/**
+ * Font-level axis creation. Rust mints no id for axes; the tag is the
+ * identity and must be unique within the font.
+ */
+export interface CreateAxisIntent {
+  tag: string
+  name: string
+  min: number
+  default: number
+  max: number
+  hidden: boolean
+}
+
+/**
+ * Font-level source creation. Rust mints the source id; the echo's
+ * `sources` list carries it back.
+ */
+export interface CreateSourceIntent {
+  name: string
+  /** Axis tag → design-space value for the new source. */
+  location: Location
+}
+
+/**
+ * CS0 walking-skeleton intent. A stringly union covering exactly the two
+ * skeleton kinds; CS1 replaces this with per-variant intent structs.
+ */
+export interface FontIntent {
+  /**
+   * Discriminator naming the populated payload field. Editing kinds:
+   * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
+   * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
+   * "removeAnchors" | "reverseContour" | "translatePoints" |
+   * "setXAdvance" | "applyBooleanOp".
+   * Font-level kinds (never share a set with editing kinds, not undoable):
+   * "createGlyph" | "createAxis" | "createSource".
+   */
+  kind: string
+  addPoints?: AddPointsIntent
+  addContour?: AddContourIntent
+  setContourClosed?: SetContourClosedIntent
+  movePoints?: MovePointsIntent
+  setPointSmooth?: SetPointSmoothIntent
+  removePoints?: RemovePointsIntent
+  addAnchors?: AddAnchorsIntent
+  moveAnchors?: MoveAnchorsIntent
+  removeAnchors?: RemoveAnchorsIntent
+  reverseContour?: ReverseContourIntent
+  translatePoints?: TranslatePointsIntent
+  setXAdvance?: SetXAdvanceIntent
+  applyBooleanOp?: BooleanOpIntent
+  createAxis?: CreateAxisIntent
+  createSource?: CreateSourceIntent
+  name?: GlyphName
+  unicodes?: Array<Unicode>
 }
 
 export interface FontMetadata {
@@ -178,6 +253,7 @@ export interface GlyphMaster {
 }
 
 export interface GlyphRecord {
+  id: GlyphId
   name: GlyphName
   unicodes: Array<Unicode>
   componentBaseGlyphNames: Array<GlyphName>
@@ -197,17 +273,6 @@ export interface GlyphStructure {
   components: Array<ComponentData>
 }
 
-export interface GlyphStructureChange {
-  structure: GlyphStructure
-  values: Float64Array
-  changed: GlyphChangedEntities
-}
-
-export interface GlyphValueChange {
-  values: Float64Array
-  changed: GlyphChangedEntities
-}
-
 export interface GlyphVariationData {
   /** One entry per region. Inner = tents on the axes the region depends on. */
   regions: Array<Array<AxisTent>>
@@ -215,8 +280,34 @@ export interface GlyphVariationData {
   deltas: Array<Float64Array>
 }
 
+/**
+ * Replace-grade state for one touched layer; the renderer folds by
+ * substitution, never by interpreting changes.
+ */
+export interface LayerReplaced {
+  layerId: LayerId
+  /** Present only when the layer's structure changed. */
+  structure?: GlyphStructure
+  values: Float64Array
+  changed: GlyphChangedEntities
+}
+
 export interface Location {
   values: Record<string, number>
+}
+
+export interface MoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
+export interface MovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
 }
 
 export interface PointData {
@@ -225,11 +316,63 @@ export interface PointData {
   smooth: boolean
 }
 
+/**
+ * A point to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface PointSeed {
+  id: PointId
+  x: number
+  y: number
+  pointType: PointType
+  smooth: boolean
+}
+
 export type PointType = "onCurve" | "offCurve";
+
+export interface RemoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+}
+
+export interface RemovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+}
+
+export interface ReverseContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+}
+
+export interface SetContourClosedIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+export interface SetPointSmoothIntent {
+  layerId: LayerId
+  pointId: PointId
+  smooth: boolean
+}
+
+export interface SetXAdvanceIntent {
+  layerId: LayerId
+  width: number
+}
 
 export interface Source {
   id: SourceId
   name: string
   location: Location
   filename?: string
+}
+
+/** Affine move: O(selection-ids) wire instead of O(N) coords. */
+export interface TranslatePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  dx: number
+  dy: number
 }

@@ -1,22 +1,19 @@
 import type { PointId } from "@shift/types";
-import type { Point2D } from "@shift/geo";
-import { BaseCommand, type CommandContext } from "../core/Command";
+import type { Command, CommandContext } from "../core/Command";
 import type { AlignmentType, DistributeType } from "@/types/transform";
 
 /**
  * Aligns selected points along one edge or center of the selection's own
  * bounding box (not the glyph bounds). Supports left, right, top, bottom,
- * horizontal center, and vertical center. Captures original positions for undo.
+ * horizontal center, and vertical center.
  */
-export class AlignPointsCommand extends BaseCommand<void> {
+export class AlignPointsCommand implements Command<void> {
   readonly name: string;
 
-  #pointIds: PointId[];
-  #alignment: AlignmentType;
-  #originalPositions: Map<PointId, Point2D> = new Map();
+  readonly #pointIds: PointId[];
+  readonly #alignment: AlignmentType;
 
   constructor(pointIds: PointId[], alignment: AlignmentType) {
-    super();
     this.#pointIds = [...pointIds];
     this.#alignment = alignment;
     this.name = `Align ${alignment}`;
@@ -25,25 +22,6 @@ export class AlignPointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = ctx.source.points(this.#pointIds);
-    if (points.length === 0) return;
-
-    if (this.#originalPositions.size === 0) {
-      for (const p of points) {
-        this.#originalPositions.set(p.id, { x: p.x, y: p.y });
-      }
-    }
-
-    ctx.source.align(this.#pointIds, this.#alignment);
-  }
-
-  undo(ctx: CommandContext): void {
-    for (const [id, pos] of this.#originalPositions) {
-      ctx.source.movePointTo(id, pos);
-    }
-  }
-
-  override redo(ctx: CommandContext): void {
     ctx.source.align(this.#pointIds, this.#alignment);
   }
 }
@@ -51,17 +29,15 @@ export class AlignPointsCommand extends BaseCommand<void> {
 /**
  * Evenly distributes selected points along the horizontal or vertical axis.
  * Requires at least 3 points; the outermost points remain fixed while inner
- * points are spaced equally between them. Captures original positions for undo.
+ * points are spaced equally between them.
  */
-export class DistributePointsCommand extends BaseCommand<void> {
+export class DistributePointsCommand implements Command<void> {
   readonly name: string;
 
-  #pointIds: PointId[];
-  #type: DistributeType;
-  #originalPositions: Map<PointId, Point2D> = new Map();
+  readonly #pointIds: PointId[];
+  readonly #type: DistributeType;
 
   constructor(pointIds: PointId[], type: DistributeType) {
-    super();
     this.#pointIds = [...pointIds];
     this.#type = type;
     this.name = `Distribute ${type}`;
@@ -70,25 +46,6 @@ export class DistributePointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length < 3) return;
 
-    const points = ctx.source.points(this.#pointIds);
-    if (points.length < 3) return;
-
-    if (this.#originalPositions.size === 0) {
-      for (const p of points) {
-        this.#originalPositions.set(p.id, { x: p.x, y: p.y });
-      }
-    }
-
-    ctx.source.distribute(this.#pointIds, this.#type);
-  }
-
-  undo(ctx: CommandContext): void {
-    for (const [id, pos] of this.#originalPositions) {
-      ctx.source.movePointTo(id, pos);
-    }
-  }
-
-  override redo(ctx: CommandContext): void {
     ctx.source.distribute(this.#pointIds, this.#type);
   }
 }

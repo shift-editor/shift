@@ -1,64 +1,29 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createBridge, type ShiftBridge } from "@shift/bridge";
-import { effect, signal } from "@/lib/signals/signal";
-import {
-  axisLocationFromLocation,
-  defaultAxisLocation,
-  withAxisValue,
-} from "@/lib/variation/location";
-import type { AxisLocation } from "@/types/variation";
-import { MUTATORSANS_DESIGNSPACE, testStorePath } from "@/testing";
-import { Font } from "./Font";
 import type { PointId } from "@shift/types";
-import type { Glyph, GlyphSource } from "./Glyph";
 import type { Point } from "@shift/glyph-state";
+import { effect } from "@/lib/signals/signal";
+import { axisLocationFromLocation } from "@/lib/variation/location";
+import { TestEditor } from "@/testing/TestEditor";
+import type { Glyph, GlyphSource } from "./Glyph";
 
-function editGlyph(): {
-  bridge: ShiftBridge;
-  font: Font;
-  glyph: Glyph;
-  layer: GlyphSource;
-} {
-  const bridge = createBridge();
-  const font = new Font(bridge);
-  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("glyph-edit"));
-
-  const handle = { name: "A" };
-  const source = font.defaultSource;
-
-  const glyph = font.glyph(handle);
-  if (!glyph) throw new Error("Expected edit glyph");
-  const layer = font.glyphSource(handle, source);
-  if (!layer) throw new Error("Expected edit glyph source");
-
-  return { bridge, font, glyph, layer };
-}
-
-function addTriangle(layer: GlyphSource): readonly Point[] {
+/**
+ * Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
+ * the workspace stack: geometry is authored through intents instead of a
+ * MutatorSans fixture, so each test draws what it asserts on.
+ *
+ * Not restored yet (blocked on workspace vocabulary):
+ * - "Glyph variation interpolation" — needs multi-source/axes vocabulary.
+ */
+async function addTriangle(editor: TestEditor, layer: GlyphSource): Promise<readonly Point[]> {
   const contourId = layer.addContour();
 
-  layer.addPoint(contourId, {
-    x: 0,
-    y: 0,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.addPoint(contourId, {
-    x: 100,
-    y: 0,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.addPoint(contourId, {
-    x: 50,
-    y: 100,
-    pointType: "onCurve",
-    smooth: false,
-  });
-
+  layer.addPoint(contourId, { x: 0, y: 0, pointType: "onCurve", smooth: false });
+  layer.addPoint(contourId, { x: 100, y: 0, pointType: "onCurve", smooth: false });
+  layer.addPoint(contourId, { x: 50, y: 100, pointType: "onCurve", smooth: false });
   layer.closeContour(contourId);
+  await editor.settle();
 
-  const contour = layer.contours.at(-1);
+  const contour = layer.contour(contourId);
   if (!contour) throw new Error("Expected created contour");
   return contour.points;
 }
@@ -77,47 +42,28 @@ function sourcePosition(layer: GlyphSource, pointId: PointId): { x: number; y: n
   return { x: position.x, y: position.y };
 }
 
-function loadMutatorSans(): Font {
-  const font = new Font(createBridge());
-  font.load(MUTATORSANS_DESIGNSPACE, testStorePath("glyph-load"));
-
-  return font;
-}
-
-function locationOverride(font: Font, override: Record<string, number>): AxisLocation {
-  let location = defaultAxisLocation(font.getAxes());
-  for (const axis of font.getAxes()) {
-    if (override[axis.tag] !== undefined) {
-      location = withAxisValue(location, axis, override[axis.tag]);
-    }
-  }
-
-  return location;
-}
-
 describe("Glyph", () => {
+  let editor: TestEditor;
   let glyph: Glyph;
   let layer: GlyphSource;
 
-  beforeEach(() => {
-    const { glyph: nextGlyph, layer: nextLayer } = editGlyph();
-
-    glyph = nextGlyph;
-    layer = nextLayer;
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    layer = editor.activeGlyphSource!;
+    glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
   });
 
-  it("hydrates state from the native glyph layer", () => {
+  it("hydrates identity and state from the workspace", () => {
     expect(glyph.name).toBe("A");
-    expect(glyph.unicode).toBeNull();
-    expect(glyph.xAdvance).toBeGreaterThan(0);
-    expect(glyph.contours.length).toBeGreaterThan(0);
+    expect(glyph.unicode).toBe(65);
+    expect(glyph.contours.length).toBe(0);
   });
 
-  it("applies structural edits returned by the bridge", () => {
-    const points = addTriangle(layer);
+  it("applies structural edits echoed by the workspace", async () => {
+    const points = await addTriangle(editor, layer);
 
     expect(layer.contours.at(-1)?.closed).toBe(true);
-
     expect(points.map((point) => [point.x, point.y])).toEqual([
       [0, 0],
       [100, 0],
@@ -125,210 +71,195 @@ describe("Glyph", () => {
     ]);
   });
 
-  it("updates positions through the packed position patch path", () => {
-    const [first] = addTriangle(layer);
+  it("updates positions synchronously and keeps them after the echo folds", async () => {
+    const [first] = await addTriangle(editor, layer);
 
-    layer.applyPositionPatch([{ kind: "point", id: first.id, x: 25, y: 75 }]);
+    layer.applyPositionPatch([{ kind: "point", id: first!.id, x: 25, y: 75 }]);
+    expect(glyph.point(first!.id)).toMatchObject({ x: 25, y: 75 });
 
-    expect(glyph.point(first.id)).toMatchObject({ x: 25, y: 75 });
+    await editor.settle();
+    expect(glyph.point(first!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
-  it("exposes glyph sources as the authored geometry surface", () => {
-    const font = loadMutatorSans();
-    const source = font.defaultSource;
-
-    const glyph = font.glyph({ name: "A" });
-
-    expect(glyph).not.toBeNull();
-
-    const glyphSource = font.glyphSource({ name: "A" }, source);
-    if (!glyphSource) throw new Error("Expected glyph source");
-    expect(glyphSource.source).toBe(source);
-
-    const geometry = glyph!.geometryAt(font.defaultLocation());
-    expect(glyphSource.geometry.xAdvance).toBe(geometry.xAdvance);
-  });
-
-  it("feeds consumers that track source coordinate changes before reading geometry", () => {
-    const { glyph, layer } = editGlyph();
-    const first = glyph.allPoints[0];
-    if (!first) throw new Error("Expected point");
-    let pointX = first.x;
+  it("feeds consumers that track source coordinate changes before reading geometry", async () => {
+    const [first] = await addTriangle(editor, layer);
+    let pointX = first!.x;
 
     const subscription = effect(() => {
       layer.coordinateBuffersChangedCell.value;
-      pointX = glyph.point(first.id)?.x ?? pointX;
+      pointX = glyph.point(first!.id)?.x ?? pointX;
     });
 
-    layer.applyPositionPatch([{ kind: "point", id: first.id, x: 33, y: 44 }]);
+    layer.applyPositionPatch([{ kind: "point", id: first!.id, x: 33, y: 44 }]);
 
     expect(pointX).toBe(33);
     subscription.dispose();
   });
+});
 
-  it("returns a serializable state for restore", () => {
-    const [first] = addTriangle(layer);
-    const state = glyph.toState();
+describe("anchors edit through the workspace", () => {
+  let editor: TestEditor;
+  let layer: GlyphSource;
 
-    layer.applyPositionPatch([{ kind: "point", id: first.id, x: 300, y: 400 }]);
-    layer.restore(state);
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    layer = editor.activeGlyphSource!;
+  });
 
-    expect(glyph.point(first.id)).toMatchObject({ x: 0, y: 0 });
+  it("addAnchor echoes a named anchor into confirmed geometry", async () => {
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+
+    const anchor = layer.anchor(anchorId);
+    expect(anchor?.name).toBe("top");
+    expect(anchor).toMatchObject({ x: 250, y: 700 });
+    expect(layer.anchors.length).toBe(1);
+  });
+
+  it("commits anchor moves through the moveAnchors intent", async () => {
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+
+    layer.commitPositionPatch([{ kind: "anchor", id: anchorId, x: 300, y: 650 }]);
+    await editor.settle();
+
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
+  });
+
+  it("mixed point and anchor commits coalesce into one undo step", async () => {
+    const contourId = layer.addContour();
+    layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+    const pointId = layer.allPoints[0]!.id;
+
+    layer.commitPositionPatch([
+      { kind: "point", id: pointId, x: 10, y: 20 },
+      { kind: "anchor", id: anchorId, x: 300, y: 650 },
+    ]);
+    await editor.settle();
+    expect(layer.point(pointId)).toMatchObject({ x: 10, y: 20 });
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
+
+    await editor.undoAndSettle();
+    expect(layer.point(pointId)).toMatchObject({ x: 0, y: 0 });
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 250, y: 700 });
+  });
+
+  it("undo removes an added anchor and redo restores it", async () => {
+    const anchorId = layer.addAnchor(null, { x: 100, y: 100 });
+    await editor.settle();
+    expect(layer.anchors.length).toBe(1);
+
+    await editor.undoAndSettle();
+    expect(layer.anchors.length).toBe(0);
+
+    await editor.redoAndSettle();
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 100, y: 100 });
+  });
+
+  it("removeAnchors deletes through the workspace", async () => {
+    const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
+    await editor.settle();
+
+    layer.removeAnchors([anchorId]);
+    await editor.settle();
+
+    expect(layer.anchors.length).toBe(0);
+    expect(layer.anchor(anchorId)).toBeNull();
   });
 });
 
 describe("glyph sources keep public geometry coherent across position edits", () => {
+  let editor: TestEditor;
   let glyph: Glyph;
   let layer: GlyphSource;
 
-  beforeEach(() => {
-    const { glyph: nextGlyph, layer: nextLayer } = editGlyph();
-
-    glyph = nextGlyph;
-    layer = nextLayer;
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    layer = editor.activeGlyphSource!;
+    glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
   });
 
-  it("previews point patches through every public source geometry view", () => {
-    const [, second] = addTriangle(layer);
+  it("previews point patches through every public source geometry view", async () => {
+    const [, second] = await addTriangle(editor, layer);
 
-    layer.previewPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
+    layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
 
-    expect(sourcePosition(layer, second.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second.id)).toEqual({ x: 25, y: 75 });
+    expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
     expect(layer.contours.at(-1)?.points[1]).toMatchObject({ x: 25, y: 75 });
-    expect(layer.allPoints.find((point) => point.id === second.id)).toMatchObject({
+    expect(layer.allPoints.find((point) => point.id === second!.id)).toMatchObject({
       x: 25,
       y: 75,
     });
     expect(layer.bounds).toEqual(glyph.bounds);
   });
 
-  it("applies bridge-backed point patches to the source and owning glyph geometry", () => {
-    const [, second] = addTriangle(layer);
+  it("applies committed point patches to the source and owning glyph geometry", async () => {
+    const [, second] = await addTriangle(editor, layer);
 
-    layer.applyPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
+    layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
+    await editor.settle();
 
-    expect(sourcePosition(layer, second.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second.id)).toEqual({ x: 25, y: 75 });
-    expect(glyph.point(second.id)).toMatchObject({ x: 25, y: 75 });
+    expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(glyph.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
-  it("commits a preview without stale geometry or double-applying local positions", () => {
-    const [, second] = addTriangle(layer);
+  it("commits a preview without stale geometry or double-applying local positions", async () => {
+    const [, second] = await addTriangle(editor, layer);
 
-    layer.previewPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
-    layer.commitPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
+    layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
+    layer.commitPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
+    await editor.settle();
 
-    expect(sourcePosition(layer, second.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second.id)).toEqual({ x: 25, y: 75 });
+    expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
 
-    const committed = layer.positionsFor([{ kind: "point", id: second.id }])[0];
+    const committed = layer.positionsFor([{ kind: "point", id: second!.id }])[0];
     if (!committed) throw new Error("Expected committed position");
 
     layer.previewPositionPatch([
-      { kind: "point", id: second.id, x: committed.x + 10, y: committed.y + 5 },
+      { kind: "point", id: second!.id, x: committed.x + 10, y: committed.y + 5 },
     ]);
 
-    expect(pointPosition(layer, second.id)).toEqual({ x: 35, y: 80 });
+    expect(pointPosition(layer, second!.id)).toEqual({ x: 35, y: 80 });
   });
 
-  it("keeps source-backed instance geometry contours fresh after position edits", () => {
-    const [, second] = addTriangle(layer);
+  it("keeps source-backed instance geometry contours fresh after position edits", async () => {
+    const [, second] = await addTriangle(editor, layer);
     const instance = glyph.instanceAt(axisLocationFromLocation(layer.source.location));
 
-    layer.applyPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
+    layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
+    await editor.settle();
 
-    expect(instance.geometry.point(second.id)).toMatchObject({ x: 25, y: 75 });
-    expect(instance.geometry.allPoints.find((point) => point.id === second.id)).toMatchObject({
+    expect(instance.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(instance.geometry.allPoints.find((point) => point.id === second!.id)).toMatchObject({
       x: 25,
       y: 75,
     });
     expect(
-      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second.id),
-    ).toMatchObject({
-      x: 25,
-      y: 75,
-    });
-  });
-
-  it("invalidates source-backed instance contours that were read before a position edit", () => {
-    const [, second] = addTriangle(layer);
-    const instance = glyph.instanceAt(axisLocationFromLocation(layer.source.location));
-
-    expect(
-      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second.id),
-    ).toMatchObject({ x: 100, y: 0 });
-
-    layer.applyPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
-
-    expect(instance.geometry.point(second.id)).toMatchObject({ x: 25, y: 75 });
-    expect(
-      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second.id),
+      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
     ).toMatchObject({ x: 25, y: 75 });
   });
-});
 
-describe("Glyph variation interpolation", () => {
-  let font: Font;
-  let glyph: Glyph;
+  it("invalidates source-backed instance contours that were read before a position edit", async () => {
+    const [, second] = await addTriangle(editor, layer);
+    const instance = glyph.instanceAt(axisLocationFromLocation(layer.source.location));
 
-  beforeEach(() => {
-    font = loadMutatorSans();
+    expect(
+      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+    ).toMatchObject({ x: 100, y: 0 });
 
-    const nextGlyph = font.glyph({ name: "A" });
-    if (!nextGlyph) throw new Error("Expected glyph");
-    glyph = nextGlyph;
-  });
+    layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
+    await editor.settle();
 
-  it("returns glyph sources for matching font sources", () => {
-    const sources = font.sources;
-    expect(sources.length).toBeGreaterThan(0);
-
-    const resolved = [];
-    for (const source of sources) {
-      const glyphSource = font.glyphSource(glyph.handle, source);
-      if (glyphSource) resolved.push(glyphSource);
-    }
-
-    expect(resolved.length).toBeGreaterThan(0);
-    expect(resolved.every((glyphSource) => glyphSource.source.id === glyphSource.id)).toBe(true);
-  });
-
-  it("root glyph svgPath changes when the variation location moves", () => {
-    const location = signal(font.defaultLocation());
-    const atDefault = glyph!.outline(location).svgPath;
-    const axes = font.getAxes();
-    location.set(locationOverride(font, Object.fromEntries(axes.map((a) => [a.tag, a.maximum]))));
-
-    expect(glyph!.outline(location).svgPath).not.toBe(atDefault);
-  });
-
-  it("returns concrete shapes at requested design locations", () => {
-    const axes = font.getAxes();
-    const atDefault = glyph!.instanceAt(font.defaultLocation()).geometry;
-    const atMaximum = glyph!.instanceAt(
-      locationOverride(font, Object.fromEntries(axes.map((axis) => [axis.tag, axis.maximum]))),
-    ).geometry;
-
-    expect(atMaximum.xAdvance).not.toBe(atDefault.xAdvance);
-    expect(atMaximum.contours.flatMap((contour) => contour.points)).not.toEqual(
-      atDefault.contours.flatMap((contour) => contour.points),
-    );
-  });
-
-  it("pure composites include component geometry in svgPath", () => {
-    const font = loadMutatorSans();
-
-    const glyph = font.glyph({ name: "Aacute" });
-    expect(glyph).not.toBeNull();
-
-    const location = signal(font.defaultLocation());
-    const atDefault = glyph!.outline(location).svgPath;
-    const axes = font.getAxes();
-    location.set(locationOverride(font, Object.fromEntries(axes.map((a) => [a.tag, a.maximum]))));
-
-    expect(glyph!.contours).toEqual([]);
-    expect(atDefault.length).toBeGreaterThan(0);
-    expect(glyph!.outline(location).svgPath).not.toEqual(atDefault);
+    expect(instance.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(
+      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+    ).toMatchObject({ x: 25, y: 75 });
   });
 });

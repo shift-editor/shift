@@ -1,7 +1,7 @@
 import { createContext, useEffect, useState, ReactNode } from "react";
 import { ThemeTokens, lightTheme, applyThemeToCss } from "@/lib/styles/theme";
 
-import type { ThemeName } from "@shared/ipc/types";
+import type { ThemeName } from "@/types/uiState";
 export type { ThemeName };
 
 interface ThemeContextValue {
@@ -59,22 +59,6 @@ export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProvide
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, [themeName]);
-
-  useEffect(() => {
-    const unsubscribe = window.electronAPI?.onSetTheme((newTheme) => {
-      setThemeName(newTheme);
-    });
-
-    window.electronAPI?.getTheme().then((savedTheme) => {
-      if (savedTheme) {
-        setThemeName(savedTheme);
-      }
-    });
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, []);
 
   return (
     <ThemeContext.Provider value={{ themeName, theme, setThemeName }}>

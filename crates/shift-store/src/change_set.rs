@@ -20,6 +20,7 @@ impl ShiftStore {
 
         tx.execute("DELETE FROM glyph_layer_points", [])?;
         tx.execute("DELETE FROM glyph_layer_contours", [])?;
+        tx.execute("DELETE FROM glyph_layer_anchors", [])?;
         tx.execute("DELETE FROM glyph_components", [])?;
         tx.execute("DELETE FROM glyph_layers", [])?;
         tx.execute("DELETE FROM glyph_unicodes", [])?;
@@ -28,8 +29,23 @@ impl ShiftStore {
         tx.execute("DELETE FROM sources", [])?;
         tx.execute("DELETE FROM axes", [])?;
 
+        for axis in font.axes() {
+            insert_axis(&tx, &font::AxisCreated::from(axis))?;
+        }
+
         for source in font.sources() {
             upsert_source(&tx, &source.id(), Some(source.name()))?;
+
+            for (axis_tag, value) in source.location().iter() {
+                // Location entries on undefined axes have no row to reference.
+                if font
+                    .axes()
+                    .iter()
+                    .any(|axis| axis.tag() == axis_tag.as_str())
+                {
+                    upsert_source_location(&tx, &source.id(), axis_tag, *value)?;
+                }
+            }
         }
 
         for glyph in font.glyphs() {
@@ -57,6 +73,21 @@ impl ShiftStore {
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
+        font::FontChange::AxisCreated(change) => insert_axis(tx, change),
+        font::FontChange::SourceCreated(change) => {
+            upsert_source(tx, &change.source_id, Some(&change.name))?;
+
+            for axis_value in &change.location {
+                upsert_source_location(
+                    tx,
+                    &change.source_id,
+                    &axis_value.axis_tag,
+                    axis_value.value,
+                )?;
+            }
+
+            Ok(())
+        }
         font::FontChange::GlyphCreated(change) => {
             upsert_glyph(tx, &change.glyph_id, &change.name)?;
             replace_glyph_unicodes(tx, &change.glyph_id, &change.unicodes)
@@ -139,11 +170,64 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             }
             Ok(())
         }
+        font::FontChange::AnchorPositionsChanged(change) => {
+            require_layer_exists(tx, &change.layer_id)?;
+            for anchor in &change.anchors {
+                let rows_changed = tx.execute(
+                    "
+                    UPDATE glyph_layer_anchors
+                    SET x = ?2, y = ?3
+                    WHERE id = ?1
+                    ",
+                    params![anchor.anchor_id.to_string(), anchor.x, anchor.y],
+                )?;
+                require_changed(rows_changed, "anchor", anchor.anchor_id.to_string())?;
+            }
+            Ok(())
+        }
         font::FontChange::LayerGeometryReplaced(change) => {
             require_layer_exists(tx, &change.layer_id)?;
             replace_layer_geometry(tx, &change.layer_id, &change.layer)
         }
     }
+}
+
+/// Axes carry no separate id in the IR; the unique tag doubles as the row id,
+/// which keeps `source_locations.axis_id` joinable on the tag.
+fn insert_axis(tx: &Transaction<'_>, axis: &font::AxisCreated) -> Result<(), StoreError> {
+    tx.execute(
+        "
+        INSERT INTO axes (id, tag, name, min_value, default_value, max_value, hidden)
+        VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?6)
+        ",
+        params![
+            axis.tag,
+            axis.name,
+            axis.minimum,
+            axis.default,
+            axis.maximum,
+            axis.hidden,
+        ],
+    )?;
+    Ok(())
+}
+
+fn upsert_source_location(
+    tx: &Transaction<'_>,
+    source_id: &font::SourceId,
+    axis_tag: &str,
+    value: f64,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "
+        INSERT INTO source_locations (source_id, axis_id, value)
+        VALUES (?1, ?2, ?3)
+        ON CONFLICT(source_id, axis_id) DO UPDATE SET
+            value = excluded.value
+        ",
+        params![source_id.to_string(), axis_tag, value],
+    )?;
+    Ok(())
 }
 
 fn upsert_source(
@@ -259,6 +343,18 @@ fn replace_layer_geometry(
         insert_contour(tx, layer_id, order_index, contour)?;
     }
 
+    tx.execute(
+        "
+        DELETE FROM glyph_layer_anchors
+        WHERE layer_id = ?1
+        ",
+        [layer_row_id(layer_id)],
+    )?;
+
+    for anchor in &layer.anchors {
+        insert_anchor(tx, layer_id, anchor)?;
+    }
+
     Ok(())
 }
 
@@ -348,6 +444,35 @@ fn insert_point(
             point.y,
             point_type_name(point.point_type),
             point.smooth,
+        ],
+    )?;
+    Ok(())
+}
+
+fn insert_anchor(
+    tx: &Transaction<'_>,
+    layer_id: &font::LayerId,
+    anchor: &font::AnchorValue,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "
+        INSERT INTO glyph_layer_anchors (
+            id,
+            layer_id,
+            name,
+            x,
+            y,
+            order_index
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ",
+        params![
+            anchor.id.to_string(),
+            layer_row_id(layer_id),
+            anchor.name,
+            anchor.x,
+            anchor.y,
+            anchor.order_index as i64,
         ],
     )?;
     Ok(())

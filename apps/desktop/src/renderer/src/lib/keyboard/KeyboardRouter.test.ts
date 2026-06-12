@@ -38,9 +38,9 @@ describe("KeyboardRouter", () => {
   let canvasActive: boolean;
   let router: KeyboardRouter;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     editor = new TestEditor();
-    editor.startSession();
+    await editor.startSession();
     // setActiveTool short-circuits if the target matches the current $activeTool,
     // and $activeTool defaults to "select" without actually activating a tool
     // instance. Force activation directly so primaryTool is populated.
@@ -141,12 +141,16 @@ describe("KeyboardRouter", () => {
   });
 
   describe("clipboard shortcuts", () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       editor.selectTool("pen");
       editor.click(100, 100);
+      await editor.settle();
       editor.click(200, 100);
+      await editor.settle();
       editor.click(200, 200);
+      await editor.settle();
       editor.click(100, 200);
+      await editor.settle();
       editor.selectTool("select");
       editor.selectAll();
     });
@@ -158,9 +162,10 @@ describe("KeyboardRouter", () => {
       const e = createKeyboardEvent({ key: "v", ctrlKey: true });
 
       const handled = router.handleKeyDown(e);
-      // Clipboard paste is async; wait for the microtask to settle.
+      // Clipboard paste is async; wait for the read + apply echo to settle.
       await Promise.resolve();
       await Promise.resolve();
+      await editor.settle();
 
       expect(handled).toBe(true);
       expect(editor.pointCount).toBeGreaterThan(pointsBefore);
@@ -174,6 +179,7 @@ describe("KeyboardRouter", () => {
 
       router.handleKeyDown(e);
       await Promise.resolve();
+      await editor.settle();
 
       expect(editor.pointCount).toBe(pointsBefore);
     });

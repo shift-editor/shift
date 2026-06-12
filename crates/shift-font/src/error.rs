@@ -5,6 +5,15 @@ pub enum CoreError {
     #[error("point {0} not found")]
     PointNotFound(PointId),
 
+    #[error("point id {0} already exists")]
+    DuplicatePointId(PointId),
+
+    #[error("contour id {0} already exists")]
+    DuplicateContourId(ContourId),
+
+    #[error("anchor id {0} already exists")]
+    DuplicateAnchorId(AnchorId),
+
     #[error("invalid contour id {0}")]
     InvalidContourId(String),
 

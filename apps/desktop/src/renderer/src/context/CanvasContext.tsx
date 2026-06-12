@@ -1,6 +1,6 @@
 import { createContext, useEffect, useRef } from "react";
 
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { CanvasRef } from "@/types/graphics";
 import { Canvas2DSurface, MarkerCanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
 
@@ -68,14 +68,9 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       observer.observe(sceneCanvas);
       observer.observe(backgroundCanvas);
 
-      const unsubscribeZoom = window.electronAPI?.onUiZoomChanged(() => {
-        scheduleResizeCanvases();
-      });
-
       return () => {
         if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
         observer.disconnect();
-        if (unsubscribeZoom) unsubscribeZoom();
         editor.clearMarkerCanvas();
       };
     };

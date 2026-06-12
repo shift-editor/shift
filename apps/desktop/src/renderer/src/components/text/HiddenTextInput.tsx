@@ -6,7 +6,7 @@
  * feed into `editor.textRun`; rendering updates reactively via signals.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getEditor } from "@/store/store";
+import { getEditor } from "@/store/appStore";
 import { effect } from "@/lib/signals/signal";
 import { lineBreakTextItem } from "@/lib/text/layout";
 

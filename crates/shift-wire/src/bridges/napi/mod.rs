@@ -6,9 +6,8 @@ use shift_font::PointType as IrPointType;
 
 use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure,
-    GlyphStructureChange, GlyphValueChange, GlyphVariationData, Location, PointData, PointType,
-    Source,
+    GlyphChangedEntities, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure, GlyphVariationData,
+    Location, PointData, PointType, Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -156,6 +155,8 @@ impl From<Source> for NapiSource {
 
 #[napi(object)]
 pub struct NapiGlyphRecord {
+    #[napi(ts_type = "GlyphId")]
+    pub id: String,
     #[napi(ts_type = "GlyphName")]
     pub name: String,
     #[napi(ts_type = "Array<Unicode>")]
@@ -167,6 +168,7 @@ pub struct NapiGlyphRecord {
 impl From<GlyphRecord> for NapiGlyphRecord {
     fn from(record: GlyphRecord) -> Self {
         Self {
+            id: record.id.to_string(),
             name: record.name.to_string(),
             unicodes: record.unicodes,
             component_base_glyph_names: record
@@ -380,38 +382,6 @@ impl From<GlyphChangedEntities> for NapiGlyphChangedEntities {
 }
 
 #[napi(object)]
-pub struct NapiGlyphValueChange {
-    pub values: Float64Array,
-    pub changed: NapiGlyphChangedEntities,
-}
-
-impl From<GlyphValueChange> for NapiGlyphValueChange {
-    fn from(change: GlyphValueChange) -> Self {
-        Self {
-            values: change.values.into(),
-            changed: change.changed.into(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiGlyphStructureChange {
-    pub structure: NapiGlyphStructure,
-    pub values: Float64Array,
-    pub changed: NapiGlyphChangedEntities,
-}
-
-impl From<GlyphStructureChange> for NapiGlyphStructureChange {
-    fn from(change: GlyphStructureChange) -> Self {
-        Self {
-            structure: change.structure.into(),
-            values: change.values.into(),
-            changed: change.changed.into(),
-        }
-    }
-}
-
-#[napi(object)]
 pub struct NapiLocation {
     pub values: HashMap<String, f64>,
 }
@@ -486,4 +456,230 @@ impl From<GlyphMaster> for NapiGlyphMaster {
             values: master.values.into(),
         }
     }
+}
+
+/// CS0 walking-skeleton intent. A stringly union covering exactly the two
+/// skeleton kinds; CS1 replaces this with per-variant intent structs.
+#[napi(object)]
+pub struct NapiFontIntent {
+    /// Discriminator naming the populated payload field. Editing kinds:
+    /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
+    /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
+    /// "removeAnchors" | "reverseContour" | "translatePoints" |
+    /// "setXAdvance" | "applyBooleanOp".
+    /// Font-level kinds (never share a set with editing kinds, not undoable):
+    /// "createGlyph" | "createAxis" | "createSource".
+    pub kind: String,
+    pub add_points: Option<NapiAddPointsIntent>,
+    pub add_contour: Option<NapiAddContourIntent>,
+    pub set_contour_closed: Option<NapiSetContourClosedIntent>,
+    pub move_points: Option<NapiMovePointsIntent>,
+    pub set_point_smooth: Option<NapiSetPointSmoothIntent>,
+    pub remove_points: Option<NapiRemovePointsIntent>,
+    pub add_anchors: Option<NapiAddAnchorsIntent>,
+    pub move_anchors: Option<NapiMoveAnchorsIntent>,
+    pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
+    pub reverse_contour: Option<NapiReverseContourIntent>,
+    pub translate_points: Option<NapiTranslatePointsIntent>,
+    pub set_x_advance: Option<NapiSetXAdvanceIntent>,
+    pub apply_boolean_op: Option<NapiBooleanOpIntent>,
+    pub create_axis: Option<NapiCreateAxisIntent>,
+    pub create_source: Option<NapiCreateSourceIntent>,
+    #[napi(ts_type = "GlyphName")]
+    pub name: Option<String>,
+    #[napi(ts_type = "Array<Unicode>")]
+    pub unicodes: Option<Vec<u32>>,
+}
+
+/// Font-level axis creation. Rust mints no id for axes; the tag is the
+/// identity and must be unique within the font.
+#[napi(object)]
+pub struct NapiCreateAxisIntent {
+    pub tag: String,
+    pub name: String,
+    pub min: f64,
+    pub default: f64,
+    pub max: f64,
+    pub hidden: bool,
+}
+
+/// Font-level source creation. Rust mints the source id; the echo's
+/// `sources` list carries it back.
+#[napi(object)]
+pub struct NapiCreateSourceIntent {
+    pub name: String,
+    /// Axis tag → design-space value for the new source.
+    pub location: NapiLocation,
+}
+
+/// Replace-grade state for one touched layer; the renderer folds by
+/// substitution, never by interpreting changes.
+#[napi(object)]
+pub struct NapiLayerReplaced {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    /// Present only when the layer's structure changed.
+    pub structure: Option<NapiGlyphStructure>,
+    pub values: Float64Array,
+    pub changed: NapiGlyphChangedEntities,
+}
+
+/// Pure-state response to `apply`: no change records cross to the renderer.
+#[napi(object)]
+pub struct NapiAppliedChange {
+    pub layers: Vec<NapiLayerReplaced>,
+    /// Full records list when glyph identity changed; absent when untouched.
+    pub glyphs: Option<Vec<NapiGlyphRecord>>,
+    /// Full axes list when font-level axis structure changed; absent otherwise.
+    pub axes: Option<Vec<NapiAxis>>,
+    /// Full sources list when font-level source structure changed (createAxis
+    /// reshapes locations, createSource adds one); absent otherwise.
+    pub sources: Option<Vec<NapiSource>>,
+    /// Stable ids: references survive renames without re-indexing.
+    #[napi(ts_type = "Array<GlyphId>")]
+    pub dependents: Vec<String>,
+}
+
+/// A point to create, carrying its caller-minted id (decision 6: ids are
+/// client-minted so verbs return identity synchronously).
+#[napi(object)]
+pub struct NapiPointSeed {
+    #[napi(ts_type = "PointId")]
+    pub id: String,
+    pub x: f64,
+    pub y: f64,
+    pub point_type: NapiPointType,
+    pub smooth: bool,
+}
+
+#[napi(object)]
+pub struct NapiAddPointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    /// Absent when `before` carries the anchor; Rust derives the contour.
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: Option<String>,
+    /// Insert before this point; append when absent.
+    #[napi(ts_type = "PointId")]
+    pub before: Option<String>,
+    pub points: Vec<NapiPointSeed>,
+}
+
+#[napi(object)]
+pub struct NapiAddContourIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+    pub closed: bool,
+}
+
+#[napi(object)]
+pub struct NapiSetContourClosedIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+    pub closed: bool,
+}
+
+#[napi(object)]
+pub struct NapiMovePointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<PointId>")]
+    pub point_ids: Vec<String>,
+    /// Interleaved absolute coordinates: x0, y0, x1, y1, …
+    pub coords: Vec<f64>,
+}
+
+#[napi(object)]
+pub struct NapiSetPointSmoothIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "PointId")]
+    pub point_id: String,
+    pub smooth: bool,
+}
+
+#[napi(object)]
+pub struct NapiRemovePointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<PointId>")]
+    pub point_ids: Vec<String>,
+}
+
+/// An anchor to create, carrying its caller-minted id (decision 6: ids are
+/// client-minted so verbs return identity synchronously).
+#[napi(object)]
+pub struct NapiAnchorSeed {
+    #[napi(ts_type = "AnchorId")]
+    pub id: String,
+    pub name: Option<String>,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[napi(object)]
+pub struct NapiAddAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    pub anchors: Vec<NapiAnchorSeed>,
+}
+
+#[napi(object)]
+pub struct NapiMoveAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<AnchorId>")]
+    pub anchor_ids: Vec<String>,
+    /// Interleaved absolute coordinates: x0, y0, x1, y1, …
+    pub coords: Vec<f64>,
+}
+
+#[napi(object)]
+pub struct NapiRemoveAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<AnchorId>")]
+    pub anchor_ids: Vec<String>,
+}
+
+#[napi(object)]
+pub struct NapiReverseContourIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+}
+
+/// Affine move: O(selection-ids) wire instead of O(N) coords.
+#[napi(object)]
+pub struct NapiTranslatePointsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<PointId>")]
+    pub point_ids: Vec<String>,
+    pub dx: f64,
+    pub dy: f64,
+}
+
+#[napi(object)]
+pub struct NapiSetXAdvanceIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    pub width: f64,
+}
+
+#[napi(object)]
+pub struct NapiBooleanOpIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id_a: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id_b: String,
+    /// "union" | "subtract" | "intersect" | "difference"
+    pub operation: String,
 }
