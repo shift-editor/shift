@@ -24,7 +24,8 @@
         "vite.preload.config.ts",
         "vite.renderer.config.ts",
         "playwright.config.ts",
-        "e2e/**/*.ts"
+        "e2e/**/*.ts",
+        "src/**/*.bench.ts"
       ],
       "project": ["src/**/*.{ts,tsx}", "*.config.ts", "e2e/**/*.ts", "!src/**/*.d.ts"]
     },
