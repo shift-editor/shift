@@ -46,7 +46,7 @@ describe("source edit drafts preserve committed preview bases", () => {
     draft.previewTranslate({ x: 25, y: -10 });
     expect(pointPosition(source(), point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
 
-    draft.commit("Move Point");
+    draft.commit();
     await editor.settle();
     expect(pointPosition(source(), point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
 
@@ -80,7 +80,7 @@ describe("source edit drafts preserve committed preview bases", () => {
     const firstDraft = new SourceEditDraft(source(), { points: [point.id] });
 
     firstDraft.previewTranslate({ x: 25, y: -10 });
-    firstDraft.commit("Move Point");
+    firstDraft.commit();
     await editor.settle();
 
     const secondDraft = new SourceEditDraft(source(), { points: [point.id] });
@@ -98,7 +98,7 @@ describe("source edit drafts preserve committed preview bases", () => {
       { kind: "point", id: first!.id, x: firstStart.x + 10, y: firstStart.y },
       { kind: "point", id: second!.id, x: secondStart.x + 20, y: secondStart.y },
     ]);
-    draft.commit("Move Connected Points");
+    draft.commit();
     await editor.settle();
 
     const nextDraft = new SourceEditDraft(source(), { points: [second!.id] });

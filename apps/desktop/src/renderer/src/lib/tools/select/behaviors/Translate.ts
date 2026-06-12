@@ -303,7 +303,7 @@ class TranslateDrag {
   }
 
   commit(): void {
-    this.#draft.commit("Move Selection");
+    this.#draft.commit();
   }
 
   discard(): void {

@@ -92,7 +92,7 @@ export class BendCurve implements SelectBehavior {
     if (state.type !== "bending") return false;
 
     if (this.#hasChanges) {
-      this.#draft?.commit("Bend curve");
+      this.#draft?.commit();
     } else {
       this.#draft?.discard();
     }

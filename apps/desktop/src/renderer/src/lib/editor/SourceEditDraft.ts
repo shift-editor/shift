@@ -57,15 +57,13 @@ export class SourceEditDraft {
     this.previewPositionPatch(positions.positions);
   }
 
-  commit(label: string): void {
+  commit(): void {
     if (this.#closed) return;
     this.#closed = true;
 
     if (!this.#preview || this.#preview.positions.length === 0) return;
 
-    // The movePoints intent from commitPositionPatch IS the ledger entry;
-    // the label rides the writer's coalescing window.
-    void label;
+    // The movePoints intent from commitPositionPatch IS the ledger entry.
     this.glyphSource.commitPositionPatch(this.#preview.positions);
   }
 

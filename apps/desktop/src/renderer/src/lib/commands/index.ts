@@ -1,5 +1,5 @@
 // Core command infrastructure
-export { type Command, type CommandContext, BaseCommand, CommandRunner } from "./core";
+export { type Command, type CommandContext, CommandRunner } from "./core";
 
 // Primitive commands (point, bezier operations)
 export {

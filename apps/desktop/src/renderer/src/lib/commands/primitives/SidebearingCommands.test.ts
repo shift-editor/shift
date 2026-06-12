@@ -24,14 +24,14 @@ describe("sidebearing commands through the workspace", () => {
 
   describe("SetXAdvanceCommand", () => {
     it("sets the advance width", async () => {
-      editor.commands.run(new SetXAdvanceCommand(initialAdvance, 530));
+      editor.commands.run(new SetXAdvanceCommand(530));
       await editor.settle();
 
       expect(source().xAdvance).toBe(530);
     });
 
     it("restores the advance through ledger undo", async () => {
-      editor.commands.run(new SetXAdvanceCommand(initialAdvance, 530));
+      editor.commands.run(new SetXAdvanceCommand(530));
       await editor.settle();
 
       await editor.undoAndSettle();
@@ -41,7 +41,7 @@ describe("sidebearing commands through the workspace", () => {
 
   describe("SetRightSidebearingCommand", () => {
     it("sets the advance width", async () => {
-      editor.commands.run(new SetRightSidebearingCommand(initialAdvance, 530));
+      editor.commands.run(new SetRightSidebearingCommand(530));
       await editor.settle();
 
       expect(source().xAdvance).toBe(530);
@@ -52,7 +52,7 @@ describe("sidebearing commands through the workspace", () => {
     it("translates geometry and sets the advance", async () => {
       const pointId = source().allPoints[0]!.id;
 
-      editor.commands.run(new SetLeftSidebearingCommand(initialAdvance, 520, 20));
+      editor.commands.run(new SetLeftSidebearingCommand(520, 20));
       await editor.settle();
 
       expect(source().xAdvance).toBe(520);
@@ -62,7 +62,7 @@ describe("sidebearing commands through the workspace", () => {
     it("reverts translation and advance with one ledger undo", async () => {
       const pointId = source().allPoints[0]!.id;
 
-      editor.commands.run(new SetLeftSidebearingCommand(initialAdvance, 520, 20));
+      editor.commands.run(new SetLeftSidebearingCommand(520, 20));
       await editor.settle();
 
       await editor.undoAndSettle();

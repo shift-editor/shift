@@ -853,7 +853,7 @@ export class Editor {
 
     if (instance.xAdvance === width) return;
 
-    this.#commands.run(new SetXAdvanceCommand(instance.xAdvance, width));
+    this.#commands.run(new SetXAdvanceCommand(width));
   }
 
   /**
@@ -871,10 +871,7 @@ export class Editor {
     const delta = Math.round(value) - Math.round(bbox.min.x);
     if (delta === 0) return;
 
-    const beforeXAdvance = instance.xAdvance;
-    this.#commands.run(
-      new SetLeftSidebearingCommand(beforeXAdvance, beforeXAdvance + delta, delta),
-    );
+    this.#commands.run(new SetLeftSidebearingCommand(instance.xAdvance + delta, delta));
   }
 
   /**
@@ -893,8 +890,7 @@ export class Editor {
     const delta = Math.round(value) - Math.round(currentRsb);
     if (delta === 0) return;
 
-    const beforeXAdvance = instance.xAdvance;
-    this.#commands.run(new SetRightSidebearingCommand(beforeXAdvance, beforeXAdvance + delta));
+    this.#commands.run(new SetRightSidebearingCommand(instance.xAdvance + delta));
   }
 
   public updateMetricsFromFont(): void {

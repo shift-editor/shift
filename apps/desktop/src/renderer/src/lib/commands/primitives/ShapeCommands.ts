@@ -1,23 +1,19 @@
 import { Vec2, type Rect2D } from "@shift/geo";
-import type { ContourId, PointId } from "@shift/types";
+import type { ContourId } from "@shift/types";
 import { Point } from "@shift/glyph-state";
-import { BaseCommand, type CommandContext } from "../core/Command";
+import type { Command, CommandContext } from "../core/Command";
 
-export class DrawRectangleCommand extends BaseCommand<ContourId> {
+export class DrawRectangleCommand implements Command<ContourId> {
   readonly name = "Draw Rectangle";
 
   readonly #rect: Rect2D;
-  #contourId: ContourId | null = null;
-  #pointIds: PointId[] = [];
 
   constructor(rect: Rect2D) {
-    super();
     this.#rect = rect;
   }
 
   execute(ctx: CommandContext): ContourId {
-    this.#pointIds = [];
-    this.#contourId = ctx.source.addContour();
+    const contourId = ctx.source.addContour();
 
     const origin = Vec2.create(this.#rect.x, this.#rect.y);
     const topLeft = origin;
@@ -25,24 +21,13 @@ export class DrawRectangleCommand extends BaseCommand<ContourId> {
     const bottomRight = Vec2.add(origin, Vec2.create(this.#rect.width, this.#rect.height));
     const bottomLeft = Vec2.add(origin, Vec2.create(0, this.#rect.height));
 
-    const topLeftPoint = Point.onCurve(topLeft);
-    const topRightPoint = Point.onCurve(topRight);
-    const bottomRightPoint = Point.onCurve(bottomRight);
-    const bottomLeftPoint = Point.onCurve(bottomLeft);
+    ctx.source.addPoint(contourId, Point.onCurve(topLeft));
+    ctx.source.addPoint(contourId, Point.onCurve(topRight));
+    ctx.source.addPoint(contourId, Point.onCurve(bottomRight));
+    ctx.source.addPoint(contourId, Point.onCurve(bottomLeft));
 
-    this.#pointIds.push(ctx.source.addPoint(this.#contourId, topLeftPoint));
-    this.#pointIds.push(ctx.source.addPoint(this.#contourId, topRightPoint));
-    this.#pointIds.push(ctx.source.addPoint(this.#contourId, bottomRightPoint));
-    this.#pointIds.push(ctx.source.addPoint(this.#contourId, bottomLeftPoint));
+    ctx.source.closeContour(contourId);
 
-    ctx.source.closeContour(this.#contourId);
-
-    return this.#contourId;
-  }
-
-  undo(ctx: CommandContext): void {
-    if (this.#pointIds.length > 0) {
-      ctx.source.removePoints(this.#pointIds);
-    }
+    return contourId;
   }
 }

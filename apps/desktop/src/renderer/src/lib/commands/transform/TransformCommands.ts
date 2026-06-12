@@ -1,61 +1,27 @@
 import type { PointId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
-import { BaseCommand, type CommandContext } from "../core/Command";
+import type { Command, CommandContext } from "../core/Command";
 import type { ReflectAxis } from "@/types/transform";
-
-abstract class BaseTransformCommand extends BaseCommand<void> {
-  abstract override readonly name: string;
-
-  protected readonly pointIds: PointId[];
-  #originalPositions: Map<PointId, Point2D> = new Map();
-
-  constructor(pointIds: PointId[]) {
-    super();
-    this.pointIds = [...pointIds];
-  }
-
-  protected captureOriginalPositions(ctx: CommandContext): void {
-    if (this.#originalPositions.size > 0 || this.pointIds.length === 0) return;
-
-    for (const point of ctx.source.points(this.pointIds)) {
-      this.#originalPositions.set(point.id, { x: point.x, y: point.y });
-    }
-  }
-
-  protected restoreOriginalPositions(ctx: CommandContext): void {
-    for (const [id, pos] of this.#originalPositions) {
-      ctx.source.movePointTo(id, pos);
-    }
-  }
-}
 
 /**
  * Rotates selected points by a given angle (radians) around an origin.
  * Used by the rotate handle on the bounding box and keyboard shortcuts.
  */
-export class RotatePointsCommand extends BaseTransformCommand {
+export class RotatePointsCommand implements Command<void> {
   readonly name = "Rotate Points";
 
-  #angle: number;
-  #origin: Point2D;
+  readonly #pointIds: PointId[];
+  readonly #angle: number;
+  readonly #origin: Point2D;
 
   constructor(pointIds: PointId[], angle: number, origin: Point2D) {
-    super(pointIds);
+    this.#pointIds = [...pointIds];
     this.#angle = angle;
     this.#origin = origin;
   }
 
   execute(ctx: CommandContext): void {
-    this.captureOriginalPositions(ctx);
-    ctx.source.rotate(this.pointIds, this.#angle, this.#origin);
-  }
-
-  undo(ctx: CommandContext): void {
-    this.restoreOriginalPositions(ctx);
-  }
-
-  override redo(ctx: CommandContext): void {
-    ctx.source.rotate(this.pointIds, this.#angle, this.#origin);
+    ctx.source.rotate(this.#pointIds, this.#angle, this.#origin);
   }
 }
 
@@ -63,31 +29,23 @@ export class RotatePointsCommand extends BaseTransformCommand {
  * Scales selected points by independent x/y factors relative to an origin.
  * Drives bounding-box resize handles.
  */
-export class ScalePointsCommand extends BaseTransformCommand {
+export class ScalePointsCommand implements Command<void> {
   readonly name = "Scale Points";
 
-  #sx: number;
-  #sy: number;
-  #origin: Point2D;
+  readonly #pointIds: PointId[];
+  readonly #sx: number;
+  readonly #sy: number;
+  readonly #origin: Point2D;
 
   constructor(pointIds: PointId[], sx: number, sy: number, origin: Point2D) {
-    super(pointIds);
+    this.#pointIds = [...pointIds];
     this.#sx = sx;
     this.#sy = sy;
     this.#origin = origin;
   }
 
   execute(ctx: CommandContext): void {
-    this.captureOriginalPositions(ctx);
-    ctx.source.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
-  }
-
-  undo(ctx: CommandContext): void {
-    this.restoreOriginalPositions(ctx);
-  }
-
-  override redo(ctx: CommandContext): void {
-    ctx.source.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
+    ctx.source.scale(this.#pointIds, this.#sx, this.#sy, this.#origin);
   }
 }
 
@@ -95,29 +53,21 @@ export class ScalePointsCommand extends BaseTransformCommand {
  * Mirrors selected points across a horizontal or vertical axis through an
  * origin. Used for flip-horizontal / flip-vertical menu actions.
  */
-export class ReflectPointsCommand extends BaseTransformCommand {
+export class ReflectPointsCommand implements Command<void> {
   readonly name = "Reflect Points";
 
-  #axis: ReflectAxis;
-  #origin: Point2D;
+  readonly #pointIds: PointId[];
+  readonly #axis: ReflectAxis;
+  readonly #origin: Point2D;
 
   constructor(pointIds: PointId[], axis: ReflectAxis, origin: Point2D) {
-    super(pointIds);
+    this.#pointIds = [...pointIds];
     this.#axis = axis;
     this.#origin = origin;
   }
 
   execute(ctx: CommandContext): void {
-    this.captureOriginalPositions(ctx);
-    ctx.source.reflect(this.pointIds, this.#axis, this.#origin);
-  }
-
-  undo(ctx: CommandContext): void {
-    this.restoreOriginalPositions(ctx);
-  }
-
-  override redo(ctx: CommandContext): void {
-    ctx.source.reflect(this.pointIds, this.#axis, this.#origin);
+    ctx.source.reflect(this.#pointIds, this.#axis, this.#origin);
   }
 }
 
@@ -126,28 +76,20 @@ export class ReflectPointsCommand extends BaseTransformCommand {
  * target position. Computes the delta internally. Used for move-to-position
  * and alignment workflows where the destination is absolute.
  */
-export class MoveSelectionToCommand extends BaseTransformCommand {
+export class MoveSelectionToCommand implements Command<void> {
   readonly name = "Move Selection To";
 
-  #target: Point2D;
-  #anchor: Point2D;
+  readonly #pointIds: PointId[];
+  readonly #target: Point2D;
+  readonly #anchor: Point2D;
 
   constructor(pointIds: PointId[], target: Point2D, anchor: Point2D) {
-    super(pointIds);
+    this.#pointIds = [...pointIds];
     this.#target = target;
     this.#anchor = anchor;
   }
 
   execute(ctx: CommandContext): void {
-    this.captureOriginalPositions(ctx);
-    ctx.source.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
-  }
-
-  undo(ctx: CommandContext): void {
-    this.restoreOriginalPositions(ctx);
-  }
-
-  override redo(ctx: CommandContext): void {
-    ctx.source.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
+    ctx.source.moveSelectionTo(this.#pointIds, this.#target, this.#anchor);
   }
 }
