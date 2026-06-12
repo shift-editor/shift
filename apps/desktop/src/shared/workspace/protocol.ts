@@ -1,5 +1,6 @@
 import type {
   AppliedChange,
+  Axis,
   FontIntent,
   FontMetadata,
   FontMetrics,
@@ -19,6 +20,7 @@ export type WorkspaceSnapshot = {
   metrics: FontMetrics;
   glyphs: GlyphRecord[];
   sources: Source[];
+  axes: Axis[];
 };
 
 /**

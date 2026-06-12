@@ -244,6 +244,7 @@ export class Font {
   readonly #$metrics: Signal<FontMetrics>;
   readonly #$metadata: Signal<FontMetadata>;
   readonly #$sources: Signal<Source[]>;
+  readonly #$axes: Signal<Axis[]>;
   readonly #$unicodes: Signal<Unicode[]>;
   readonly #$glyphRecords: Signal<readonly GlyphRecord[]>;
 
@@ -268,6 +269,7 @@ export class Font {
     this.#$metrics = computed(() => $workspace.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#$metadata = computed(() => $workspace.value?.metadata ?? {});
     this.#$sources = computed(() => $workspace.value?.sources ?? []);
+    this.#$axes = computed(() => $workspace.value?.axes ?? []);
     this.#directory = computed(() => GlyphDirectory.fromRecords($workspace.value?.glyphs ?? []));
     this.#$unicodes = computed(() => [...this.#directory.value.unicodes]);
     this.#$glyphRecords = computed(() => this.#directory.value.records);
@@ -664,10 +666,7 @@ export class Font {
 
   /** @knipclassignore — used by VariationPanel component */
   isVariable(): boolean {
-    // Untitled workspaces are static; real detection returns when axes land
-    // in the workspace protocol. Must stay false: the variable path routes
-    // into the throwing bridge getter.
-    return false;
+    return this.getAxes().length > 0;
   }
 
   /**
@@ -713,10 +712,7 @@ export class Font {
 
   /** @knipclassignore — used by VariationPanel component */
   getAxes(): Axis[] {
-    // Axes are not part of the workspace snapshot yet; an untitled font is
-    // static. Must not touch the throwing bridge getter: sourceAt/defaultSource
-    // call this on the glyph-grid render path.
-    return [];
+    return this.#$axes.peek();
   }
 
   /** @knipclassignore — used by VariationPanel component */

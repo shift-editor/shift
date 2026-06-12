@@ -93,6 +93,7 @@ export class WorkspaceHost {
       metrics: this.#bridge.getMetrics(),
       glyphs: this.#bridge.getGlyphs(),
       sources: this.#bridge.getSources(),
+      axes: this.#bridge.getAxes(),
     };
   }
 }

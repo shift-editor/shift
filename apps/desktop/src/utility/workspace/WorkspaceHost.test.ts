@@ -98,6 +98,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(snapshot.glyphs).toEqual([]);
     expect(snapshot.metrics.unitsPerEm).toBe(1000);
     expect(snapshot.sources.length).toBeGreaterThan(0);
+    expect(snapshot.axes).toEqual([]);
   });
 
   it("writes the sqlite store under the documents root", async () => {
