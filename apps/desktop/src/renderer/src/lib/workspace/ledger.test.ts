@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import type { GlyphName } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 
 /**
@@ -66,11 +67,15 @@ describe("workspace ledger semantics (via TestEditor)", () => {
     expect(source().allPoints.map(({ x }) => x)).toEqual([10, 30]);
   });
 
-  it("undo on an empty ledger leaves state untouched", async () => {
+  it("undoes the session's glyph creation, then stops at the empty ledger", async () => {
     await editor.undoAndSettle();
+    expect(editor.font.recordForName("A" as GlyphName)).toBe(null);
 
-    expect(editor.pointCount).toBe(0);
-    expect(editor.activeGlyphSource).not.toBe(null);
+    await editor.undoAndSettle();
+    expect(editor.font.recordForName("A" as GlyphName)).toBe(null);
+
+    await editor.redoAndSettle();
+    expect(editor.font.recordForName("A" as GlyphName)).not.toBe(null);
   });
 
   it("coalesces every intent in one tick into a single entry", async () => {

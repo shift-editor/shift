@@ -1,5 +1,5 @@
 import type { CursorType, ToolRegistryItem } from "@/types/editor";
-import type { PointId, ContourId, Source, SourceId, GlyphName } from "@shift/types";
+import type { PointId, ContourId, Source, SourceId, GlyphName, GlyphRecord } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
 import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
@@ -556,16 +556,13 @@ export class Editor {
   }
 
   /**
-   * Creates an empty committed glyph in the loaded font.
-   *
-   * @remarks
-   * This is the editor-level entry point for quick-add flows. It delegates
-   * naming and bridge commit semantics to {@link Font.createGlyph}.
+   * Creates an empty glyph in the loaded font.
    *
    * @param name - Preferred glyph name. Existing names are auto-incremented.
-   * @returns The handle for the glyph that was actually created.
+   * @returns The record for the glyph that was actually created.
+   * @see {@link Font.createGlyph}
    */
-  public createGlyph(name: GlyphName): GlyphHandle {
+  public createGlyph(name: GlyphName): GlyphRecord {
     return this.font.createGlyph(name);
   }
 

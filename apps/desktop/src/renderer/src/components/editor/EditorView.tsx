@@ -4,7 +4,7 @@ import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
 import { effect } from "@/lib/signals/signal";
 import { useSignalState } from "@/lib/signals";
-import { getEditor, getWorkspace } from "@/store/appStore";
+import { getEditor } from "@/store/appStore";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
@@ -61,18 +61,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId, glyphName }) => {
 
       // Glyph-name-first: opening a cell that has no committed record yet
       // creates the glyph in the workspace, then opens it.
-      let record = editor.font.recordForName(handle.name);
-      if (!record) {
-        const applied = await getWorkspace().apply([
-          {
-            kind: "createGlyph",
-            name: handle.name,
-            unicodes: handle.unicode === undefined ? [] : [handle.unicode],
-          },
-        ]);
-        record = applied.glyphs?.find((glyph) => glyph.name === handle.name) ?? null;
-      }
-      if (!record || cancelled) return;
+      const record = editor.font.recordForName(handle.name) ?? editor.createGlyph(handle.name);
 
       // Pull replace-grade state and materialize the editable model before
       // the session opens; folds keep it current afterwards.

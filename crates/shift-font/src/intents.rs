@@ -9,10 +9,14 @@
 use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
-    Anchor, AnchorId, BooleanOp, Contour, ContourId, Font, GlyphId, GlyphLayer, GlyphName, LayerId,
-    PointId, PointType,
+    Anchor, AnchorId, Axis, BooleanOp, Contour, ContourId, Font, Glyph, GlyphId, GlyphLayer,
+    GlyphName, LayerId, Location, PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
+
+/// Advance width for layers minted by create intents, before any metrics
+/// edit lands.
+const DEFAULT_LAYER_WIDTH: f64 = 500.0;
 
 /// A point to create, with its caller-minted id.
 #[derive(Clone, Debug)]
@@ -107,10 +111,29 @@ pub enum FontIntent {
         contour_id_b: ContourId,
         operation: BooleanOp,
     },
+    /// Creates the glyph plus one layer per source (eager: every
+    /// (glyphId, sourceId) pair must resolve a layer).
+    CreateGlyph {
+        /// Caller-minted id so the verb returns identity synchronously;
+        /// `None` mints Rust-side.
+        glyph_id: Option<GlyphId>,
+        name: String,
+        unicodes: Vec<u32>,
+    },
+    CreateAxis {
+        axis: Axis,
+    },
+    /// Creates the source plus one eager layer per existing glyph.
+    CreateSource {
+        name: String,
+        location: Location,
+    },
 }
 
 impl FontIntent {
-    pub fn layer_id(&self) -> &LayerId {
+    /// The targeted layer for editing intents; `None` for create intents,
+    /// whose layers do not exist until the intent applies.
+    pub fn layer_id(&self) -> Option<&LayerId> {
         match self {
             Self::AddPoints { layer_id, .. }
             | Self::AddContour { layer_id, .. }
@@ -124,7 +147,9 @@ impl FontIntent {
             | Self::ReverseContour { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
-            | Self::ApplyBooleanOp { layer_id, .. } => layer_id,
+            | Self::ApplyBooleanOp { layer_id, .. } => Some(layer_id),
+
+            Self::CreateGlyph { .. } | Self::CreateAxis { .. } | Self::CreateSource { .. } => None,
         }
     }
 
@@ -169,17 +194,30 @@ impl Font {
         let mut changes = FontChangeSet::default();
         let mut touched: Vec<(LayerId, bool)> = Vec::new();
 
+        let touch =
+            |touched: &mut Vec<(LayerId, bool)>, layer_id: LayerId, structural| match touched
+                .iter_mut()
+                .find(|(id, _)| *id == layer_id)
+            {
+                Some((_, flag)) => *flag |= structural,
+                None => touched.push((layer_id, structural)),
+            };
+
         for intent in &set.intents {
-            let layer_id = intent.layer_id().clone();
+            let Some(layer_id) = intent.layer_id() else {
+                for layer_id in self.apply_create_intent(intent, &mut changes)? {
+                    touch(&mut touched, layer_id, true);
+                }
+                continue;
+            };
+
+            let layer_id = layer_id.clone();
             let structural = intent.structural();
 
             let change = self.apply_intent(intent)?;
             changes.push(change);
 
-            match touched.iter_mut().find(|(id, _)| *id == layer_id) {
-                Some((_, flag)) => *flag |= structural,
-                None => touched.push((layer_id, structural)),
-            }
+            touch(&mut touched, layer_id, structural);
         }
 
         let layers = touched
@@ -194,6 +232,135 @@ impl Font {
             .collect::<CoreResult<Vec<_>>>()?;
 
         Ok(AppliedIntents { changes, layers })
+    }
+
+    /// Applies one create intent, pushing every change it produces.
+    /// Returns the created layer ids so the caller can mark them touched.
+    fn apply_create_intent(
+        &mut self,
+        intent: &FontIntent,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<Vec<LayerId>> {
+        match intent {
+            FontIntent::CreateGlyph {
+                glyph_id,
+                name,
+                unicodes,
+            } => self.apply_create_glyph(glyph_id.clone(), name, unicodes.clone(), changes),
+            FontIntent::CreateAxis { axis } => {
+                self.apply_create_axis(axis, changes)?;
+                Ok(Vec::new())
+            }
+            FontIntent::CreateSource { name, location } => {
+                self.apply_create_source(name, location, changes)
+            }
+            _ => unreachable!("editing intents take the layer path"),
+        }
+    }
+
+    fn apply_create_glyph(
+        &mut self,
+        glyph_id: Option<GlyphId>,
+        name: &str,
+        unicodes: Vec<u32>,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<Vec<LayerId>> {
+        let name = name.trim();
+        let glyph_name =
+            GlyphName::new(name).map_err(|_| CoreError::InvalidGlyphName(name.to_string()))?;
+        if self.glyph_id_by_name(name).is_some() {
+            return Err(CoreError::DuplicateGlyphName(glyph_name));
+        }
+
+        let source_ids: Vec<SourceId> = self.sources().iter().map(Source::id).collect();
+        if source_ids.is_empty() {
+            return Err(CoreError::GlyphNeedsSource);
+        }
+
+        let glyph_id = glyph_id.unwrap_or_default();
+        let mut glyph = Glyph::with_id(glyph_id, glyph_name.clone());
+        glyph.set_unicodes(unicodes);
+        let glyph_id = glyph.id();
+        changes.push(FontChange::glyph_created(&glyph));
+
+        let mut layer_ids = Vec::with_capacity(source_ids.len());
+        for source_id in source_ids {
+            let layer = GlyphLayer::with_width(LayerId::new(), source_id, DEFAULT_LAYER_WIDTH);
+            layer_ids.push(layer.id());
+            changes.push(FontChange::glyph_layer_created(
+                glyph_id.clone(),
+                Some(glyph_name.clone()),
+                &layer,
+            ));
+            glyph.set_layer(layer);
+        }
+
+        self.insert_glyph(glyph)?;
+        Ok(layer_ids)
+    }
+
+    fn apply_create_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
+        if self
+            .axes()
+            .iter()
+            .any(|existing| existing.tag() == axis.tag())
+        {
+            return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
+        }
+
+        changes.push(FontChange::axis_created(axis));
+        self.add_axis(axis.clone());
+        Ok(())
+    }
+
+    fn apply_create_source(
+        &mut self,
+        name: &str,
+        location: &Location,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<Vec<LayerId>> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CoreError::InvalidSourceName(name.to_string()));
+        }
+        if self.sources().iter().any(|source| source.name() == name) {
+            return Err(CoreError::DuplicateSourceName(name.to_string()));
+        }
+
+        for (axis_tag, _) in location.iter() {
+            if !self
+                .axes()
+                .iter()
+                .any(|axis| axis.tag() == axis_tag.as_str())
+            {
+                return Err(CoreError::AxisNotFound(axis_tag.clone()));
+            }
+        }
+
+        let source = Source::new(name.to_string(), location.clone());
+        let source_id = source.id();
+        changes.push(FontChange::source_created(&source));
+        self.add_source(source);
+
+        let glyphs: Vec<(GlyphId, GlyphName)> = self
+            .glyphs()
+            .map(|glyph| (glyph.id(), glyph.glyph_name().clone()))
+            .collect();
+
+        let mut layer_ids = Vec::with_capacity(glyphs.len());
+        for (glyph_id, glyph_name) in glyphs {
+            let layer =
+                GlyphLayer::with_width(LayerId::new(), source_id.clone(), DEFAULT_LAYER_WIDTH);
+            layer_ids.push(layer.id());
+            changes.push(FontChange::glyph_layer_created(
+                glyph_id.clone(),
+                Some(glyph_name),
+                &layer,
+            ));
+            self.insert_glyph_layer(glyph_id, layer)?;
+        }
+
+        Ok(layer_ids)
     }
 
     fn apply_intent(&mut self, intent: &FontIntent) -> CoreResult<FontChange> {
@@ -473,6 +640,11 @@ impl Font {
                 layer.apply_boolean_op(contour_id_a.clone(), contour_id_b.clone(), *operation)?;
 
                 Ok(FontChange::layer_geometry_replaced(layer))
+            }
+            FontIntent::CreateGlyph { .. }
+            | FontIntent::CreateAxis { .. }
+            | FontIntent::CreateSource { .. } => {
+                unreachable!("create intents take the apply_create_intent path")
             }
         }
     }

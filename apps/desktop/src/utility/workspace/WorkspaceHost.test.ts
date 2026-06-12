@@ -4,7 +4,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Channel, nodePortTransport, type Transport } from "../../shared/workspace/channel";
-import { mintContourId, mintPointId, type GlyphId, type PointType } from "@shift/types";
+import {
+  mintContourId,
+  mintGlyphId,
+  mintPointId,
+  type GlyphId,
+  type GlyphName,
+  type PointType,
+  type Unicode,
+} from "@shift/types";
 import type {
   ShellCallMap,
   ShellEventMap,
@@ -14,6 +22,15 @@ import type {
 import { WorkspaceHost } from "./WorkspaceHost";
 
 type ShellChannel = Channel<ShellCallMap, ShellEventMap>;
+
+const createGlyphA = () => ({
+  kind: "createGlyph",
+  createGlyph: {
+    glyphId: mintGlyphId(),
+    name: "A" as GlyphName,
+    unicodes: [65 as Unicode],
+  },
+});
 type SyncChannel = Channel<SyncCallMap, SyncEventMap>;
 
 describe("WorkspaceHost serves the workspace over transferred ports", () => {
@@ -131,7 +148,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await sync.call("workspace.create", undefined);
 
     const applied = await sync.call("workspace.apply", {
-      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+      intents: [createGlyphA()],
       label: "Add Glyph",
     });
 
@@ -143,11 +160,34 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
   });
 
+  it("undo and redo createGlyph update glyph records", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await sync.call("workspace.create", undefined);
+    const sourceId = snapshot.sources[0].id;
+
+    const created = await sync.call("workspace.apply", {
+      intents: [createGlyphA()],
+      label: "Add Glyph",
+    });
+    const glyphId = created.glyphs?.[0].id;
+    if (!glyphId) throw new Error("createGlyph must echo the record id");
+
+    const undone = await sync.call("workspace.undo", undefined);
+    expect(undone?.glyphs?.map((glyph) => glyph.name)).toEqual([]);
+    expect(undone?.layers).toEqual([]);
+    await expect(sync.call("workspace.glyph", { glyphId, sourceId })).resolves.toBeNull();
+
+    const redone = await sync.call("workspace.redo", undefined);
+    expect(redone?.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(redone?.layers).toHaveLength(1);
+    await expect(sync.call("workspace.glyph", { glyphId, sourceId })).resolves.not.toBeNull();
+  });
+
   it("apply setXAdvance echoes values without structure or records", async () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
     const created = await sync.call("workspace.apply", {
-      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+      intents: [createGlyphA()],
     });
     const layerId = created.layers[0].layerId;
 
@@ -174,7 +214,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
     const created = await sync.call("workspace.apply", {
-      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+      intents: [createGlyphA()],
     });
     const layerId = created.layers[0].layerId;
 
@@ -214,7 +254,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
     const created = await sync.call("workspace.apply", {
-      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+      intents: [createGlyphA()],
     });
     const layerId = created.layers[0].layerId;
     const contourId = mintContourId();
@@ -255,7 +295,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const snapshot = await sync.call("workspace.create", undefined);
     const sourceId = snapshot.sources[0].id;
     const created = await sync.call("workspace.apply", {
-      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+      intents: [createGlyphA()],
     });
     const glyphId = created.glyphs?.[0].id;
     if (!glyphId) throw new Error("createGlyph must echo the record id");
@@ -272,7 +312,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
     const created = await sync.call("workspace.apply", {
-      intents: [{ kind: "createGlyph", name: "A", unicodes: [65] }],
+      intents: [createGlyphA()],
     });
     const layerId = created.layers[0].layerId;
 

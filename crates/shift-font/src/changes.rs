@@ -31,8 +31,11 @@ impl From<FontChange> for FontChangeSet {
 #[derive(Clone, Debug)]
 pub enum FontChange {
     AxisCreated(AxisCreated),
+    AxisDeleted(AxisDeleted),
     SourceCreated(SourceCreated),
+    SourceDeleted(SourceDeleted),
     GlyphCreated(GlyphCreated),
+    GlyphDeleted(GlyphDeleted),
     GlyphIdentityChanged(GlyphIdentityChanged),
     GlyphLayerCreated(GlyphLayerCreated),
     LayerMetricsChanged(LayerMetricsChanged),
@@ -51,12 +54,24 @@ impl FontChange {
         Self::AxisCreated(AxisCreated::from(axis))
     }
 
+    pub fn axis_deleted(tag: impl Into<String>) -> Self {
+        Self::AxisDeleted(AxisDeleted { tag: tag.into() })
+    }
+
     pub fn source_created(source: &Source) -> Self {
         Self::SourceCreated(SourceCreated::from(source))
     }
 
+    pub fn source_deleted(source_id: SourceId) -> Self {
+        Self::SourceDeleted(SourceDeleted { source_id })
+    }
+
     pub fn glyph_created(glyph: &Glyph) -> Self {
         Self::GlyphCreated(GlyphCreated::from(glyph))
+    }
+
+    pub fn glyph_deleted(glyph_id: GlyphId) -> Self {
+        Self::GlyphDeleted(GlyphDeleted { glyph_id })
     }
 
     pub fn glyph_identity_changed(
@@ -185,6 +200,17 @@ impl From<&Source> for SourceCreated {
     }
 }
 
+/// Axis rows are keyed by tag (the IR mints no axis id).
+#[derive(Clone, Debug)]
+pub struct AxisDeleted {
+    pub tag: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceDeleted {
+    pub source_id: SourceId,
+}
+
 #[derive(Clone, Debug)]
 pub struct SourceAxisValue {
     pub axis_tag: String,
@@ -206,6 +232,11 @@ impl From<&Glyph> for GlyphCreated {
             unicodes: glyph.unicodes().to_vec(),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphDeleted {
+    pub glyph_id: GlyphId,
 }
 
 #[derive(Clone, Debug)]

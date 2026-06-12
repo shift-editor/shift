@@ -217,3 +217,8 @@ export function mintContourId(): ContourId {
 export function mintAnchorId(): AnchorId {
   return `anchor_${crypto.randomUUID()}` as AnchorId;
 }
+
+/** Mints a new glyph id. See {@link mintPointId}. */
+export function mintGlyphId(): GlyphId {
+  return `glyph_${crypto.randomUUID()}` as GlyphId;
+}

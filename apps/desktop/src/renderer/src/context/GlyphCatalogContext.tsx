@@ -116,12 +116,12 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     selectedSubCategoryKey,
     setQuery,
     createQuickGlyph: () => {
-      const handle = getEditor().createGlyph("newGlyph");
+      const record = getEditor().createGlyph("newGlyph" as GlyphName);
       setQuery("");
       setSelectedCategory(null);
       setSelectedSubCategoryKey(null);
 
-      return handle.name;
+      return record.name;
     },
     selectAll: () => {
       setSelectedCategory(null);

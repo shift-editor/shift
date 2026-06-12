@@ -10,6 +10,7 @@ import type {
   SourceId,
   Unicode,
 } from "@shift/types";
+import { mintGlyphId } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals/signal";
 import type { ChangeWriter } from "@/lib/workspace/ChangeWriter";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
@@ -429,12 +430,32 @@ export class Font {
   }
 
   /**
-   * Creates an empty committed glyph at the default source.
+   * Creates an empty glyph with one layer per source and returns its
+   * identity immediately.
    *
-   * @throws {Error} always — glyph mutations return with workspace change sets.
+   * @remarks
+   * The durable commit happens asynchronously; the committed record folds
+   * into the font's directory when the workspace echo lands. Reads that
+   * resolve glyph state (e.g. {@link openGlyph}) serialize behind pending
+   * writes, so they may follow this call without awaiting anything.
+   *
+   * @param name - Preferred glyph name. Existing names are auto-incremented
+   *   (`base`, `base.1`, …); Unicode assignment is inferred from the
+   *   resolved name.
+   * @returns The created glyph's record, carrying its freshly minted id.
    */
-  createGlyph(_name: GlyphName): GlyphHandle {
-    throw new Error("editing is not wired to the workspace yet");
+  createGlyph(name: GlyphName): GlyphRecord {
+    const finalName = this.nextAvailableGlyphName(name);
+    const handle = this.glyphHandleForName(finalName);
+    const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
+    const glyphId = mintGlyphId();
+
+    this.writer.push({
+      kind: "createGlyph",
+      createGlyph: { glyphId, name: finalName, unicodes },
+    });
+
+    return { id: glyphId, name: finalName, unicodes, componentBaseGlyphNames: [] };
   }
 
   /**

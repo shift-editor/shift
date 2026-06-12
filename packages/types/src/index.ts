@@ -33,6 +33,7 @@ export {
   mintContourId,
   mintAnchorId,
   mintPointId,
+  mintGlyphId,
 } from "./ids";
 
 export type {

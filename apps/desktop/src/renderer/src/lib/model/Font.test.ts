@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GlyphName, SourceId, Unicode } from "@shift/types";
+import { mintGlyphId, type GlyphName, type SourceId, type Unicode } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { signal } from "@/lib/signals/signal";
 import { Font } from "./Font";
@@ -92,7 +92,10 @@ describe("font-level intents make the font variable", () => {
     const stack = createWorkspaceStack();
     await stack.client.create();
     await stack.client.apply([
-      { kind: "createGlyph", name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      {
+        kind: "createGlyph",
+        createGlyph: { glyphId: mintGlyphId(), name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      },
     ]);
     expect(stack.font.isVariable()).toBe(false);
 

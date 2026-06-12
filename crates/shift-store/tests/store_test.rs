@@ -289,6 +289,43 @@ fn applies_glyph_identity_change_set() {
 }
 
 #[test]
+fn applies_glyph_delete_change_set_and_cascades_layers() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let glyph = shift_font::Glyph::with_unicode("A", 65);
+    let glyph_id = glyph.id();
+    let source_id = shift_font::SourceId::new();
+    let layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
+    create_regular_source_with_id(&mut store, source_id);
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::glyph_created(&glyph),
+            shift_font::FontChange::glyph_layer_created(
+                glyph.id(),
+                Some(glyph.glyph_name().clone()),
+                &layer,
+            ),
+            shift_font::FontChange::glyph_deleted(glyph.id()),
+        ]))
+        .expect("change set should apply");
+
+    let stored = store
+        .get_glyph(&GlyphId::new(glyph_id.to_string()))
+        .expect("glyph query should succeed");
+    let layers = store
+        .list_glyph_layers_for_glyph(&GlyphId::new(glyph_id.to_string()))
+        .expect("layer query should succeed");
+    let unicodes = store
+        .list_glyph_unicodes(&GlyphId::new(glyph_id.to_string()))
+        .expect("unicode query should succeed");
+
+    assert!(stored.is_none());
+    assert!(layers.is_empty());
+    assert!(unicodes.is_empty());
+}
+
+#[test]
 fn applies_layer_metrics_and_contour_point_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, contour, point_id) = store_layer_with_contour();

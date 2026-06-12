@@ -73,6 +73,24 @@ pub enum CoreError {
 
     #[error("glyph storage key {key} does not match glyph id {glyph_id}")]
     MismatchedGlyphId { key: GlyphId, glyph_id: GlyphId },
+
+    #[error("invalid glyph name {0:?}")]
+    InvalidGlyphName(String),
+
+    #[error("creating a glyph requires a font with at least one source")]
+    GlyphNeedsSource,
+
+    #[error("axis tag {0} already exists")]
+    DuplicateAxisTag(String),
+
+    #[error("axis {0} not found")]
+    AxisNotFound(String),
+
+    #[error("invalid source name {0:?}")]
+    InvalidSourceName(String),
+
+    #[error("source name {0} already exists")]
+    DuplicateSourceName(String),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

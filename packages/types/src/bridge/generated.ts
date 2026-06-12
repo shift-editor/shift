@@ -23,12 +23,10 @@ export interface BridgeApi {
   getMetrics(): FontMetrics
   getGlyphs(): Array<GlyphRecord>
   /**
-   * Applies one intent set as a single atomic workspace apply.
-   *
-   * Editing kinds decode through `map_intent` into `Font::apply_intents`.
-   * Font-level kinds (createGlyph, createAxis, createSource) take the
-   * workspace-verb path and skip the ledger. Sets must be homogeneous:
-   * font-level and editing intents never share a tick.
+   * Applies one intent set as a single atomic workspace apply: every kind
+   * — editing and create alike — decodes through `map_intent` into one
+   * `FontWorkspace::apply` call. One call = one SQLite transaction = one
+   * undo step, however many intents the set batches.
    */
   apply(intents: Array<FontIntent>, label?: string | undefined | null): AppliedChange
   /**
@@ -163,6 +161,17 @@ export interface CreateAxisIntent {
 }
 
 /**
+ * Font-level glyph creation. The glyph id is client-minted (decision 6:
+ * verbs return identity synchronously); Rust honors it and rejects
+ * duplicates.
+ */
+export interface CreateGlyphIntent {
+  glyphId: GlyphId
+  name: GlyphName
+  unicodes: Array<Unicode>
+}
+
+/**
  * Font-level source creation. Rust mints the source id; the echo's
  * `sources` list carries it back.
  */
@@ -183,8 +192,8 @@ export interface FontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds (never share a set with editing kinds, not undoable):
-   * "createGlyph" | "createAxis" | "createSource".
+   * Create kinds: "createGlyph" | "createAxis" | "createSource". Every
+   * kind shares the same apply path; one set = one undo step.
    */
   kind: string
   addPoints?: AddPointsIntent
@@ -200,10 +209,9 @@ export interface FontIntent {
   translatePoints?: TranslatePointsIntent
   setXAdvance?: SetXAdvanceIntent
   applyBooleanOp?: BooleanOpIntent
+  createGlyph?: CreateGlyphIntent
   createAxis?: CreateAxisIntent
   createSource?: CreateSourceIntent
-  name?: GlyphName
-  unicodes?: Array<Unicode>
 }
 
 export interface FontMetadata {
