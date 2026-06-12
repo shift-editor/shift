@@ -25,10 +25,9 @@ export async function layoutTestFont(): Promise<Font> {
   await stack.client.create();
 
   for (const [name, unicode, advance] of GLYPHS) {
-    const applied = await stack.client.apply(
-      [{ kind: "createGlyph", name: name as GlyphName, unicodes: [unicode] }],
-      "Add Glyph",
-    );
+    const applied = await stack.client.apply([
+      { kind: "createGlyph", name: name as GlyphName, unicodes: [unicode] },
+    ]);
     const layerId = applied.layers[0]?.layerId;
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!layerId || !record) throw new Error(`createGlyph did not echo ${name}`);

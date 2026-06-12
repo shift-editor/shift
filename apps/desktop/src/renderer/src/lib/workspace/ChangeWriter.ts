@@ -35,7 +35,6 @@ export class ChangeWriter {
   readonly #$settled = signal(true);
 
   #queue: FontIntent[] = [];
-  #label: string | undefined;
   #flushQueued = false;
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
@@ -58,9 +57,8 @@ export class ChangeWriter {
   }
 
   /** Queues one intent; everything in the same microtask becomes one apply. */
-  push(intent: FontIntent, label?: string): void {
+  push(intent: FontIntent): void {
     this.#queue.push(intent);
-    this.#label ??= label;
     this.#$settled.set(false);
 
     if (!this.#flushQueued) {
@@ -108,13 +106,11 @@ export class ChangeWriter {
     if (this.#queue.length === 0) return;
 
     const intents = this.#queue;
-    const label = this.#label;
     this.#queue = [];
-    this.#label = undefined;
 
     void this.#serialize(async () => {
       try {
-        this.#fold(await this.#workspace.apply(intents, label));
+        this.#fold(await this.#workspace.apply(intents));
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
         await this.#resync();

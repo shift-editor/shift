@@ -63,16 +63,13 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId, glyphName }) => {
       // creates the glyph in the workspace, then opens it.
       let record = editor.font.recordForName(handle.name);
       if (!record) {
-        const applied = await getWorkspace().apply(
-          [
-            {
-              kind: "createGlyph",
-              name: handle.name,
-              unicodes: handle.unicode === undefined ? [] : [handle.unicode],
-            },
-          ],
-          "Add Glyph",
-        );
+        const applied = await getWorkspace().apply([
+          {
+            kind: "createGlyph",
+            name: handle.name,
+            unicodes: handle.unicode === undefined ? [] : [handle.unicode],
+          },
+        ]);
         record = applied.glyphs?.find((glyph) => glyph.name === handle.name) ?? null;
       }
       if (!record || cancelled) return;

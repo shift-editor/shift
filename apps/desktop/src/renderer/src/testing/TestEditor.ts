@@ -70,16 +70,13 @@ export class TestEditor extends Editor {
   }
 
   async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
-    const applied = await this.#stack.client.apply(
-      [
-        {
-          kind: "createGlyph",
-          name: name as GlyphName,
-          unicodes: unicode === null ? [] : [unicode],
-        },
-      ],
-      "Add Glyph",
-    );
+    const applied = await this.#stack.client.apply([
+      {
+        kind: "createGlyph",
+        name: name as GlyphName,
+        unicodes: unicode === null ? [] : [unicode],
+      },
+    ]);
 
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");

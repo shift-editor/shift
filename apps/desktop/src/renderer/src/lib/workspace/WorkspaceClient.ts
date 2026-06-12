@@ -68,10 +68,10 @@ export class WorkspaceClient {
    * folds belong to the glyph model and land with the CS3 ChangeWriter —
    * callers receive the AppliedChange to fold geometry themselves until then.
    */
-  async apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
+  async apply(intents: FontIntent[]): Promise<AppliedChange> {
     await this.connected();
 
-    return this.#fold(await this.#require().call("workspace.apply", { intents, label }));
+    return this.#fold(await this.#require().call("workspace.apply", { intents }));
   }
 
   /** Replays the latest ledger entry; null when nothing is undoable. */

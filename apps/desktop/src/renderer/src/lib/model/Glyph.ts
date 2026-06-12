@@ -2,7 +2,6 @@ import type {
   AnchorId,
   ContourData,
   ContourId,
-  FontIntent,
   GlyphId,
   GlyphName,
   GlyphState,
@@ -60,6 +59,7 @@ import {
   type SourceCoordinateBuffers,
 } from "./GlyphSourceState";
 import type { Font } from "./Font";
+import { LayerIntents } from "@/lib/workspace/LayerIntents";
 
 export {
   GlyphGeometry,
@@ -100,13 +100,11 @@ export interface GlyphInstanceGeometry {
 }
 
 class GlyphEditSession {
-  readonly #font: Font;
-  readonly #layerId: LayerId;
+  readonly #intents: LayerIntents;
   readonly #state: GlyphEditState;
 
   constructor(font: Font, layerId: LayerId, state: GlyphEditState) {
-    this.#font = font;
-    this.#layerId = layerId;
+    this.#intents = new LayerIntents(font.writer, layerId);
     this.#state = state;
   }
 
@@ -119,10 +117,7 @@ class GlyphEditSession {
   }
 
   setXAdvance(width: number): void {
-    this.#push(
-      { kind: "setXAdvance", setXAdvance: { layerId: this.#layerId, width } },
-      "Set Advance Width",
-    );
+    this.#intents.setXAdvance({ width });
   }
 
   applyPositionPatch(updates: SourcePositions): void {
@@ -153,23 +148,11 @@ class GlyphEditSession {
     // Mixed patches push two intents in the same tick; the writer coalesces
     // them into one apply and therefore one undo step.
     if (pointIds.length > 0) {
-      this.#push(
-        {
-          kind: "movePoints",
-          movePoints: { layerId: this.#layerId, pointIds, coords: pointCoords },
-        },
-        "Move Points",
-      );
+      this.#intents.movePoints({ pointIds, coords: pointCoords });
     }
 
     if (anchorIds.length > 0) {
-      this.#push(
-        {
-          kind: "moveAnchors",
-          moveAnchors: { layerId: this.#layerId, anchorIds, coords: anchorCoords },
-        },
-        "Move Anchors",
-      );
+      this.#intents.moveAnchors({ anchorIds, coords: anchorCoords });
     }
   }
 
@@ -178,13 +161,7 @@ class GlyphEditSession {
     const pointIds = this.geometry.allPoints.map((point) => point.id);
     if (pointIds.length === 0) return;
 
-    this.#push(
-      {
-        kind: "translatePoints",
-        translatePoints: { layerId: this.#layerId, pointIds, dx, dy },
-      },
-      "Move Points",
-    );
+    this.#intents.translatePoints({ pointIds, dx, dy });
   }
 
   previewPositionPatch(updates: SourcePositions): void {
@@ -199,13 +176,7 @@ class GlyphEditSession {
   addContour(): ContourId {
     const contourId = mintContourId();
 
-    this.#push(
-      {
-        kind: "addContour",
-        addContour: { layerId: this.#layerId, contourId, closed: false },
-      },
-      "Add Contour",
-    );
+    this.#intents.addContour({ contourId, closed: false });
 
     return contourId;
   }
@@ -213,17 +184,7 @@ class GlyphEditSession {
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
     const pointId = mintPointId();
 
-    this.#push(
-      {
-        kind: "addPoints",
-        addPoints: {
-          layerId: this.#layerId,
-          contourId,
-          points: [this.#seed(pointId, edit)],
-        },
-      },
-      "Add Point",
-    );
+    this.#intents.addPoints({ contourId, points: [this.#seed(pointId, edit)] });
 
     return pointId;
   }
@@ -233,46 +194,21 @@ class GlyphEditSession {
 
     // No contourId: Rust derives the contour from the anchor point — the
     // renderer never bookkeeps pending point→contour maps.
-    this.#push(
-      {
-        kind: "addPoints",
-        addPoints: {
-          layerId: this.#layerId,
-          before: beforePointId,
-          points: [this.#seed(pointId, edit)],
-        },
-      },
-      "Add Point",
-    );
+    this.#intents.addPoints({ before: beforePointId, points: [this.#seed(pointId, edit)] });
 
     return pointId;
   }
 
   openContour(contourId: ContourId): void {
-    this.#push(
-      {
-        kind: "setContourClosed",
-        setContourClosed: { layerId: this.#layerId, contourId, closed: false },
-      },
-      "Open Contour",
-    );
+    this.#intents.setContourClosed({ contourId, closed: false });
   }
 
   closeContour(contourId: ContourId): void {
-    this.#push(
-      {
-        kind: "setContourClosed",
-        setContourClosed: { layerId: this.#layerId, contourId, closed: true },
-      },
-      "Close Contour",
-    );
+    this.#intents.setContourClosed({ contourId, closed: true });
   }
 
   reverseContour(contourId: ContourId): void {
-    this.#push(
-      { kind: "reverseContour", reverseContour: { layerId: this.#layerId, contourId } },
-      "Reverse Contour",
-    );
+    this.#intents.reverseContour({ contourId });
   }
 
   applyBooleanOp(
@@ -281,47 +217,21 @@ class GlyphEditSession {
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
     // Rust-only computation; the echo folds like any other intent.
-    this.#push(
-      {
-        kind: "applyBooleanOp",
-        applyBooleanOp: {
-          layerId: this.#layerId,
-          contourIdA,
-          contourIdB,
-          operation,
-        },
-      },
-      "Boolean Operation",
-    );
+    this.#intents.applyBooleanOp({ contourIdA, contourIdB, operation });
   }
 
   removePoints(pointIds: readonly PointId[]): void {
     if (pointIds.length === 0) return;
 
-    this.#push(
-      {
-        kind: "removePoints",
-        removePoints: { layerId: this.#layerId, pointIds: [...pointIds] },
-      },
-      "Delete Points",
-    );
+    this.#intents.removePoints({ pointIds: [...pointIds] });
   }
 
   addAnchor(name: string | null, position: Point2D): AnchorId {
     const anchorId = mintAnchorId();
 
-    this.#push(
-      {
-        kind: "addAnchors",
-        addAnchors: {
-          layerId: this.#layerId,
-          anchors: [
-            { id: anchorId, x: position.x, y: position.y, ...(name === null ? {} : { name }) },
-          ],
-        },
-      },
-      "Add Anchor",
-    );
+    this.#intents.addAnchors({
+      anchors: [{ id: anchorId, x: position.x, y: position.y, ...(name === null ? {} : { name }) }],
+    });
 
     return anchorId;
   }
@@ -329,13 +239,7 @@ class GlyphEditSession {
   removeAnchors(anchorIds: readonly AnchorId[]): void {
     if (anchorIds.length === 0) return;
 
-    this.#push(
-      {
-        kind: "removeAnchors",
-        removeAnchors: { layerId: this.#layerId, anchorIds: [...anchorIds] },
-      },
-      "Delete Anchors",
-    );
+    this.#intents.removeAnchors({ anchorIds: [...anchorIds] });
   }
 
   toggleSmooth(pointId: PointId): void {
@@ -346,17 +250,7 @@ class GlyphEditSession {
       throw new Error(`cannot toggle smooth: point ${pointId} is not in confirmed state`);
     }
 
-    this.#push(
-      {
-        kind: "setPointSmooth",
-        setPointSmooth: { layerId: this.#layerId, pointId, smooth: !point.smooth },
-      },
-      "Toggle Smooth",
-    );
-  }
-
-  #push(intent: FontIntent, label: string): void {
-    this.#font.writer.push(intent, label);
+    this.#intents.setPointSmooth({ pointId, smooth: !point.smooth });
   }
 
   #seed(id: PointId, edit: NewPoint): PointSeed {
