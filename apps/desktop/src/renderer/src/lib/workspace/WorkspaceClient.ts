@@ -99,8 +99,15 @@ export class WorkspaceClient {
 
   #fold(applied: AppliedChange): AppliedChange {
     const current = this.$workspace.peek();
-    if (applied.glyphs && current) {
-      this.$workspace.set({ ...current, glyphs: applied.glyphs });
+    if (!current) return applied;
+
+    if (applied.glyphs || applied.axes || applied.sources) {
+      this.$workspace.set({
+        ...current,
+        glyphs: applied.glyphs ?? current.glyphs,
+        axes: applied.axes ?? current.axes,
+        sources: applied.sources ?? current.sources,
+      });
     }
 
     return applied;

@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
-    AppliedIntents, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, SourceId, TouchedLayer, error::CoreError,
+    AppliedIntents, Axis, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId, GlyphLayer,
+    GlyphName, LayerId, Location, Source, SourceId, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
@@ -159,6 +159,77 @@ impl FontWorkspace {
 
             Ok((created_glyph, change_set))
         })
+    }
+
+    pub fn create_axis(&mut self, axis: Axis) -> Result<Axis, WorkspaceError> {
+        self.commit_edit(|font| {
+            if font
+                .axes()
+                .iter()
+                .any(|existing| existing.tag() == axis.tag())
+            {
+                return Err(WorkspaceError::InvalidInput {
+                    kind: "axis tag",
+                    value: format!("{} already exists", axis.tag()),
+                });
+            }
+
+            let change_set = FontChange::axis_created(&axis).into();
+            font.add_axis(axis.clone());
+
+            Ok((axis, change_set))
+        })
+    }
+
+    /// Adds a source and eagerly creates one layer per existing glyph, so
+    /// every (glyphId, sourceId) pair resolves a layer.
+    pub fn create_source(
+        &mut self,
+        name: String,
+        location: Location,
+    ) -> Result<(Source, Vec<GlyphLayer>), WorkspaceError> {
+        let source = self.commit_edit(|font| {
+            let name = name.trim();
+            if name.is_empty() {
+                return Err(WorkspaceError::InvalidInput {
+                    kind: "source name",
+                    value: name.to_string(),
+                });
+            }
+            if font.sources().iter().any(|source| source.name() == name) {
+                return Err(WorkspaceError::InvalidInput {
+                    kind: "source name",
+                    value: format!("{name} already exists"),
+                });
+            }
+
+            for (axis_tag, _) in location.iter() {
+                if !font
+                    .axes()
+                    .iter()
+                    .any(|axis| axis.tag() == axis_tag.as_str())
+                {
+                    return Err(WorkspaceError::InvalidInput {
+                        kind: "axis tag",
+                        value: format!("{axis_tag} is not a font axis"),
+                    });
+                }
+            }
+
+            let source = Source::new(name.to_string(), location.clone());
+            let change_set = FontChange::source_created(&source).into();
+            font.add_source(source.clone());
+
+            Ok((source, change_set))
+        })?;
+
+        let glyph_ids: Vec<GlyphId> = self.font.glyphs().map(Glyph::id).collect();
+        let mut layers = Vec::with_capacity(glyph_ids.len());
+        for glyph_id in glyph_ids {
+            layers.push(self.create_glyph_layer(glyph_id, source.id())?);
+        }
+
+        Ok((source, layers))
     }
 
     pub fn create_glyph_layer(

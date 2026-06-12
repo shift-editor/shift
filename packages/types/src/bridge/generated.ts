@@ -25,10 +25,10 @@ export interface BridgeApi {
   /**
    * Applies one intent set as a single atomic workspace apply.
    *
-   * Editing kinds decode through `map_intent` into `Font::apply_intents`;
-   * `createGlyph` keeps its workspace-verb path until font-level verbs get
-   * intent homes (CS4 tail). Sets must be homogeneous: font-level and
-   * editing intents never share a tick.
+   * Editing kinds decode through `map_intent` into `Font::apply_intents`.
+   * Font-level kinds (createGlyph, createAxis, createSource) take the
+   * workspace-verb path and skip the ledger. Sets must be homogeneous:
+   * font-level and editing intents never share a tick.
    */
   apply(intents: Array<FontIntent>, label?: string | undefined | null): AppliedChange
   /**
@@ -103,6 +103,13 @@ export interface AppliedChange {
   layers: Array<LayerReplaced>
   /** Full records list when glyph identity changed; absent when untouched. */
   glyphs?: Array<GlyphRecord>
+  /** Full axes list when font-level axis structure changed; absent otherwise. */
+  axes?: Array<Axis>
+  /**
+   * Full sources list when font-level source structure changed (createAxis
+   * reshapes locations, createSource adds one); absent otherwise.
+   */
+  sources?: Array<Source>
   /** Stable ids: references survive renames without re-indexing. */
   dependents: Array<GlyphId>
 }
@@ -143,6 +150,29 @@ export interface ContourData {
 }
 
 /**
+ * Font-level axis creation. Rust mints no id for axes; the tag is the
+ * identity and must be unique within the font.
+ */
+export interface CreateAxisIntent {
+  tag: string
+  name: string
+  min: number
+  default: number
+  max: number
+  hidden: boolean
+}
+
+/**
+ * Font-level source creation. Rust mints the source id; the echo's
+ * `sources` list carries it back.
+ */
+export interface CreateSourceIntent {
+  name: string
+  /** Axis tag → design-space value for the new source. */
+  location: Location
+}
+
+/**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
  */
@@ -153,7 +183,8 @@ export interface FontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Skeleton leftover until font-level verbs land: "createGlyph".
+   * Font-level kinds (never share a set with editing kinds, not undoable):
+   * "createGlyph" | "createAxis" | "createSource".
    */
   kind: string
   addPoints?: AddPointsIntent
@@ -169,6 +200,8 @@ export interface FontIntent {
   translatePoints?: TranslatePointsIntent
   setXAdvance?: SetXAdvanceIntent
   applyBooleanOp?: BooleanOpIntent
+  createAxis?: CreateAxisIntent
+  createSource?: CreateSourceIntent
   name?: GlyphName
   unicodes?: Array<Unicode>
 }

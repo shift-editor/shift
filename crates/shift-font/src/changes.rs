@@ -1,6 +1,6 @@
 use crate::{
-    Anchor, AnchorId, Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Point,
-    PointId, PointType, SourceId,
+    Anchor, AnchorId, Axis, Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
+    Point, PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -30,6 +30,8 @@ impl From<FontChange> for FontChangeSet {
 
 #[derive(Clone, Debug)]
 pub enum FontChange {
+    AxisCreated(AxisCreated),
+    SourceCreated(SourceCreated),
     GlyphCreated(GlyphCreated),
     GlyphIdentityChanged(GlyphIdentityChanged),
     GlyphLayerCreated(GlyphLayerCreated),
@@ -45,6 +47,14 @@ pub enum FontChange {
 }
 
 impl FontChange {
+    pub fn axis_created(axis: &Axis) -> Self {
+        Self::AxisCreated(AxisCreated::from(axis))
+    }
+
+    pub fn source_created(source: &Source) -> Self {
+        Self::SourceCreated(SourceCreated::from(source))
+    }
+
     pub fn glyph_created(glyph: &Glyph) -> Self {
         Self::GlyphCreated(GlyphCreated::from(glyph))
     }
@@ -126,6 +136,59 @@ impl FontChange {
             layer: GlyphLayerValue::from(layer),
         })
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct AxisCreated {
+    pub tag: String,
+    pub name: String,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+    pub hidden: bool,
+}
+
+impl From<&Axis> for AxisCreated {
+    fn from(axis: &Axis) -> Self {
+        Self {
+            tag: axis.tag().to_string(),
+            name: axis.name().to_string(),
+            minimum: axis.minimum(),
+            default: axis.default(),
+            maximum: axis.maximum(),
+            hidden: axis.is_hidden(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceCreated {
+    pub source_id: SourceId,
+    pub name: String,
+    pub location: Vec<SourceAxisValue>,
+}
+
+impl From<&Source> for SourceCreated {
+    fn from(source: &Source) -> Self {
+        Self {
+            source_id: source.id(),
+            name: source.name().to_string(),
+            location: source
+                .location()
+                .iter()
+                .map(|(axis_tag, value)| SourceAxisValue {
+                    axis_tag: axis_tag.clone(),
+                    value: *value,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceAxisValue {
+    pub axis_tag: String,
+    pub value: f64,
 }
 
 #[derive(Clone, Debug)]

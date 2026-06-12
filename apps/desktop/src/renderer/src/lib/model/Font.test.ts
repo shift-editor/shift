@@ -3,6 +3,7 @@ import type { GlyphName, SourceId, Unicode } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { signal } from "@/lib/signals/signal";
 import { Font } from "./Font";
+import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 const SNAPSHOT: WorkspaceSnapshot = {
   documentId: "11111111-2222-3333-4444-555555555555",
@@ -22,6 +23,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
       location: { values: {} },
     },
   ],
+  axes: [],
 };
 
 describe("Font projects the workspace snapshot", () => {
@@ -82,5 +84,38 @@ describe("Font projects the workspace snapshot", () => {
     expect(font.loaded).toBe(true);
     expect(font.glyphRecords()).toEqual([]);
     expect(font.unicodes).toEqual([]);
+  });
+});
+
+describe("font-level intents make the font variable", () => {
+  it("createAxis and createSource project into axes, sources, and eager layers", async () => {
+    const stack = createWorkspaceStack();
+    await stack.client.create();
+    await stack.client.apply([
+      { kind: "createGlyph", name: "A" as GlyphName, unicodes: [65 as Unicode] },
+    ]);
+    expect(stack.font.isVariable()).toBe(false);
+
+    await stack.client.apply([
+      {
+        kind: "createAxis",
+        createAxis: {
+          tag: "wght",
+          name: "Weight",
+          min: 100,
+          default: 400,
+          max: 900,
+          hidden: false,
+        },
+      },
+    ]);
+    expect(stack.font.getAxes().map((axis) => axis.tag)).toEqual(["wght"]);
+    expect(stack.font.isVariable()).toBe(true);
+
+    const applied = await stack.client.apply([
+      { kind: "createSource", createSource: { name: "Bold", location: { values: { wght: 700 } } } },
+    ]);
+    expect(stack.font.sources.map((source) => source.name)).toContain("Bold");
+    expect(applied.layers.length).toBe(1); // eager layer for the existing glyph
   });
 });

@@ -467,7 +467,8 @@ pub struct NapiFontIntent {
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Skeleton leftover until font-level verbs land: "createGlyph".
+    /// Font-level kinds (never share a set with editing kinds, not undoable):
+    /// "createGlyph" | "createAxis" | "createSource".
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
     pub add_contour: Option<NapiAddContourIntent>,
@@ -482,10 +483,33 @@ pub struct NapiFontIntent {
     pub translate_points: Option<NapiTranslatePointsIntent>,
     pub set_x_advance: Option<NapiSetXAdvanceIntent>,
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
+    pub create_axis: Option<NapiCreateAxisIntent>,
+    pub create_source: Option<NapiCreateSourceIntent>,
     #[napi(ts_type = "GlyphName")]
     pub name: Option<String>,
     #[napi(ts_type = "Array<Unicode>")]
     pub unicodes: Option<Vec<u32>>,
+}
+
+/// Font-level axis creation. Rust mints no id for axes; the tag is the
+/// identity and must be unique within the font.
+#[napi(object)]
+pub struct NapiCreateAxisIntent {
+    pub tag: String,
+    pub name: String,
+    pub min: f64,
+    pub default: f64,
+    pub max: f64,
+    pub hidden: bool,
+}
+
+/// Font-level source creation. Rust mints the source id; the echo's
+/// `sources` list carries it back.
+#[napi(object)]
+pub struct NapiCreateSourceIntent {
+    pub name: String,
+    /// Axis tag → design-space value for the new source.
+    pub location: NapiLocation,
 }
 
 /// Replace-grade state for one touched layer; the renderer folds by
@@ -506,6 +530,11 @@ pub struct NapiAppliedChange {
     pub layers: Vec<NapiLayerReplaced>,
     /// Full records list when glyph identity changed; absent when untouched.
     pub glyphs: Option<Vec<NapiGlyphRecord>>,
+    /// Full axes list when font-level axis structure changed; absent otherwise.
+    pub axes: Option<Vec<NapiAxis>>,
+    /// Full sources list when font-level source structure changed (createAxis
+    /// reshapes locations, createSource adds one); absent otherwise.
+    pub sources: Option<Vec<NapiSource>>,
     /// Stable ids: references survive renames without re-indexing.
     #[napi(ts_type = "Array<GlyphId>")]
     pub dependents: Vec<String>,

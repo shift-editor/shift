@@ -29,8 +29,23 @@ impl ShiftStore {
         tx.execute("DELETE FROM sources", [])?;
         tx.execute("DELETE FROM axes", [])?;
 
+        for axis in font.axes() {
+            insert_axis(&tx, &font::AxisCreated::from(axis))?;
+        }
+
         for source in font.sources() {
             upsert_source(&tx, &source.id(), Some(source.name()))?;
+
+            for (axis_tag, value) in source.location().iter() {
+                // Location entries on undefined axes have no row to reference.
+                if font
+                    .axes()
+                    .iter()
+                    .any(|axis| axis.tag() == axis_tag.as_str())
+                {
+                    upsert_source_location(&tx, &source.id(), axis_tag, *value)?;
+                }
+            }
         }
 
         for glyph in font.glyphs() {
@@ -58,6 +73,21 @@ impl ShiftStore {
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
+        font::FontChange::AxisCreated(change) => insert_axis(tx, change),
+        font::FontChange::SourceCreated(change) => {
+            upsert_source(tx, &change.source_id, Some(&change.name))?;
+
+            for axis_value in &change.location {
+                upsert_source_location(
+                    tx,
+                    &change.source_id,
+                    &axis_value.axis_tag,
+                    axis_value.value,
+                )?;
+            }
+
+            Ok(())
+        }
         font::FontChange::GlyphCreated(change) => {
             upsert_glyph(tx, &change.glyph_id, &change.name)?;
             replace_glyph_unicodes(tx, &change.glyph_id, &change.unicodes)
@@ -160,6 +190,44 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             replace_layer_geometry(tx, &change.layer_id, &change.layer)
         }
     }
+}
+
+/// Axes carry no separate id in the IR; the unique tag doubles as the row id,
+/// which keeps `source_locations.axis_id` joinable on the tag.
+fn insert_axis(tx: &Transaction<'_>, axis: &font::AxisCreated) -> Result<(), StoreError> {
+    tx.execute(
+        "
+        INSERT INTO axes (id, tag, name, min_value, default_value, max_value, hidden)
+        VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?6)
+        ",
+        params![
+            axis.tag,
+            axis.name,
+            axis.minimum,
+            axis.default,
+            axis.maximum,
+            axis.hidden,
+        ],
+    )?;
+    Ok(())
+}
+
+fn upsert_source_location(
+    tx: &Transaction<'_>,
+    source_id: &font::SourceId,
+    axis_tag: &str,
+    value: f64,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "
+        INSERT INTO source_locations (source_id, axis_id, value)
+        VALUES (?1, ?2, ?3)
+        ON CONFLICT(source_id, axis_id) DO UPDATE SET
+            value = excluded.value
+        ",
+        params![source_id.to_string(), axis_tag, value],
+    )?;
+    Ok(())
 }
 
 fn upsert_source(

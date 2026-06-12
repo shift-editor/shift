@@ -809,6 +809,94 @@ fn reopen_preserves_written_contents_and_integrity() {
 }
 
 #[test]
+fn applies_axis_and_source_created_change_set_and_survives_reopen() {
+    let path = temp_store_path("axis-source-reopen");
+
+    let mut location = shift_font::Location::new();
+    location.set("wght".to_string(), 700.0);
+    let source = shift_font::Source::new("Bold".to_string(), location);
+    let source_id = SourceId::new(source.id().to_string());
+
+    {
+        let mut store = ShiftStore::open(&path).expect("open");
+        let axis = shift_font::Axis::new(
+            "wght".to_string(),
+            "Weight".to_string(),
+            100.0,
+            400.0,
+            900.0,
+        );
+        let change_set = shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::axis_created(&axis),
+            shift_font::FontChange::source_created(&source),
+        ]);
+        store
+            .apply_change_set(&change_set)
+            .expect("apply change set");
+    }
+
+    let store = ShiftStore::open(&path).expect("reopen");
+
+    let axis = store
+        .get_axis(&AxisId::new("wght"))
+        .expect("axis query should succeed")
+        .expect("axis must survive reopen");
+    assert_eq!(axis.tag, "wght");
+    assert_eq!(axis.name, "Weight");
+    assert_eq!(axis.min_value, 100.0);
+    assert_eq!(axis.default_value, 400.0);
+    assert_eq!(axis.max_value, 900.0);
+    assert!(!axis.hidden);
+
+    let sources = store.list_sources().expect("sources query should succeed");
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].id, source_id);
+    assert_eq!(sources[0].name.as_deref(), Some("Bold"));
+
+    let locations = store
+        .get_source_locations(&source_id)
+        .expect("locations query should succeed");
+    assert_eq!(locations.len(), 1);
+    assert_eq!(locations[0].axis_id, AxisId::new("wght"));
+    assert_eq!(locations[0].value, 700.0);
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn replace_font_state_persists_axes_and_source_locations() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let mut font = shift_font::Font::new();
+    font.add_axis(shift_font::Axis::new(
+        "wght".to_string(),
+        "Weight".to_string(),
+        100.0,
+        400.0,
+        900.0,
+    ));
+    let mut location = shift_font::Location::new();
+    location.set("wght".to_string(), 700.0);
+    let source = shift_font::Source::new("Bold".to_string(), location);
+    let source_id = SourceId::new(source.id().to_string());
+    font.add_source(source);
+
+    store.replace_font_state(&font).expect("replace font state");
+
+    let axis = store
+        .get_axis(&AxisId::new("wght"))
+        .expect("axis query should succeed")
+        .expect("axis should be persisted");
+    assert_eq!(axis.tag, "wght");
+
+    let locations = store
+        .get_source_locations(&source_id)
+        .expect("locations query should succeed");
+    assert_eq!(locations.len(), 1);
+    assert_eq!(locations[0].value, 700.0);
+}
+
+#[test]
 fn refuses_stores_from_newer_schema_versions() {
     let path = temp_store_path("future");
 
