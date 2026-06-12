@@ -710,6 +710,33 @@ export class Font {
     return glyph;
   }
 
+  /**
+   * Opens (or returns the cached) editable glyph source at any source,
+   * pulling replace-grade state from the workspace.
+   *
+   * @remarks
+   * This is the async entry point for non-primary sources; once opened, the
+   * sync {@link glyphSource} resolves from cache (instance resolution,
+   * tools). Echoes for the source's layer fold into the opened state.
+   */
+  async openGlyphSource(glyphId: GlyphId, source: Source): Promise<GlyphSource | null> {
+    const glyph =
+      this.#glyphsById.get(glyphId) ?? (await this.openGlyph(glyphId, this.defaultSource));
+    if (!glyph) return null;
+
+    const cached = this.glyphSource(glyph.handle, source);
+    if (cached) return cached;
+
+    const state = await this.writer.glyph(glyphId, source.id);
+    if (!state) return null;
+
+    const glyphSource = glyph.createGlyphSource(source, state);
+    if (!glyphSource) return null;
+
+    this.#glyphSources.set(glyphSourceKey(glyph.handle.name, source.id), glyphSource);
+    return glyphSource;
+  }
+
   /** @knipclassignore — used by VariationPanel component */
   getAxes(): Axis[] {
     return this.#$axes.peek();

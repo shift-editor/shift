@@ -1325,6 +1325,7 @@ export class Glyph {
 
   readonly #sourceState: GlyphSourceState;
   readonly #variationData: GlyphVariationData | null;
+  readonly #glyphId: GlyphId | null;
 
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
@@ -1343,6 +1344,7 @@ export class Glyph {
     this.handle = handle;
     this.#font = font;
     this.#source = source;
+    this.#glyphId = glyphId ?? null;
 
     this.#sourceState = new GlyphSourceState(state);
     this.#variationData = state.variationData ?? null;
@@ -1527,6 +1529,16 @@ export class Glyph {
       state: sourceState,
       geometry,
     });
+
+    if (this.#glyphId) {
+      // Echoes for this source's layer fold here, same as the primary.
+      this.#font.writer.register(state.layerId, {
+        state: sourceState,
+        glyphId: this.#glyphId,
+        sourceId: source.id,
+      });
+    }
+
     return new GlyphSource(source, edit);
   }
 
