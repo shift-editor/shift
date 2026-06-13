@@ -1,16 +1,41 @@
 //! Undo ledger: state-pair entries replayed through the normal apply path.
 //!
-//! Each applied intent set records pre/post `GlyphLayer` snapshots for every
-//! touched layer. Undo restores the pre states, redo the post states — no
+//! One entry corresponds to one apply request and holds the request's steps
+//! in application order. Every step is a state pair — undo applies the `pre`
+//! side of each step in reverse order, redo the `post` side in order — no
 //! per-variant inversion algebra. The ledger is in-memory: history survives
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
-use shift_font::GlyphLayer;
+use shift_font::{Axis, Glyph, GlyphId, GlyphLayer, Source};
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
 /// oldest entries fall off first.
 const MAX_ENTRIES: usize = 100;
+
+#[derive(Clone)]
+pub enum LedgerStep {
+    /// Edits to existing layers; pairs replay by substitution.
+    Layers(Vec<LayerPair>),
+    /// Glyph existence/identity: created (`pre` None), deleted (`post`
+    /// None), or replaced. Snapshots carry the glyph's layers.
+    Glyph {
+        pre: Option<Glyph>,
+        post: Option<Glyph>,
+    },
+    Axis {
+        pre: Option<Axis>,
+        post: Option<Axis>,
+    },
+    /// Source existence plus the eager per-glyph layers minted with it.
+    /// Layers owned by glyphs created in the same entry ride their
+    /// [`LedgerStep::Glyph`] snapshots instead.
+    Source {
+        pre: Option<Source>,
+        post: Option<Source>,
+        layers: Vec<(GlyphId, GlyphLayer)>,
+    },
+}
 
 #[derive(Clone)]
 pub struct LayerPair {
@@ -21,7 +46,7 @@ pub struct LayerPair {
 #[derive(Clone)]
 pub struct LedgerEntry {
     pub label: Option<String>,
-    pub layers: Vec<LayerPair>,
+    pub steps: Vec<LedgerStep>,
 }
 
 #[derive(Default)]

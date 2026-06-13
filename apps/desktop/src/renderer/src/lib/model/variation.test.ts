@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import type { GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
-import { mintContourId, mintPointId } from "@shift/types";
+import { mintContourId, mintGlyphId, mintPointId } from "@shift/types";
 import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
@@ -55,7 +55,10 @@ async function variableFont(): Promise<{
   await stack.client.create();
 
   const created = await stack.client.apply([
-    { kind: "createGlyph", name: "A" as GlyphName, unicodes: [65 as Unicode] },
+    {
+      kind: "createGlyph",
+      createGlyph: { glyphId: mintGlyphId(), name: "A" as GlyphName, unicodes: [65 as Unicode] },
+    },
   ]);
   const glyphId = created.glyphs![0]!.id;
   const regularLayerId = created.layers[0]!.layerId;

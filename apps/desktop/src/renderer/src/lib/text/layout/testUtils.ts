@@ -6,7 +6,7 @@
  * outline bounds flow through positioning. No fakes; tests assert against
  * values read back from the workspace, not hardcoded advances.
  */
-import type { GlyphName, Unicode } from "@shift/types";
+import { mintGlyphId, type GlyphName, type Unicode } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 import type { Font } from "@/lib/model/Font";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
@@ -26,7 +26,10 @@ export async function layoutTestFont(): Promise<Font> {
 
   for (const [name, unicode, advance] of GLYPHS) {
     const applied = await stack.client.apply([
-      { kind: "createGlyph", name: name as GlyphName, unicodes: [unicode] },
+      {
+        kind: "createGlyph",
+        createGlyph: { glyphId: mintGlyphId(), name: name as GlyphName, unicodes: [unicode] },
+      },
     ]);
     const layerId = applied.layers[0]?.layerId;
     const record = applied.glyphs?.find((glyph) => glyph.name === name);

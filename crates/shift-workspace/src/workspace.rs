@@ -3,19 +3,16 @@ use std::path::{Path, PathBuf};
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
     AppliedIntents, Axis, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, Location, Source, SourceId, TouchedLayer, error::CoreError,
+    Source, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
 
 use crate::NewWorkspace;
-use crate::ledger::{LayerPair, Ledger, LedgerEntry};
+use crate::ledger::{LayerPair, Ledger, LedgerEntry, LedgerStep};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
-    #[error("invalid {kind}: {value}")]
-    InvalidInput { kind: &'static str, value: String },
-
     #[error(transparent)]
     Font(#[from] CoreError),
 
@@ -125,141 +122,10 @@ impl FontWorkspace {
             .map_err(WorkspaceError::from)
     }
 
-    pub fn create_glyph(
-        &mut self,
-        name: String,
-        unicodes: Vec<u32>,
-    ) -> Result<Glyph, WorkspaceError> {
-        self.commit_edit(|font| {
-            let name = name.trim();
-            if name.is_empty() {
-                return Err(WorkspaceError::InvalidInput {
-                    kind: "glyph name",
-                    value: name.to_string(),
-                });
-            }
-            if font.glyph_id_by_name(name).is_some() {
-                return Err(WorkspaceError::InvalidInput {
-                    kind: "glyph name",
-                    value: format!("{name} already exists"),
-                });
-            }
-
-            let glyph_name =
-                GlyphName::new(name.to_string()).map_err(|_| WorkspaceError::InvalidInput {
-                    kind: "glyph name",
-                    value: name.to_string(),
-                })?;
-            let mut glyph = Glyph::new(glyph_name);
-            glyph.set_unicodes(unicodes);
-            let created_glyph = glyph.clone();
-            let change_set = FontChange::glyph_created(&glyph).into();
-
-            font.insert_glyph(glyph)?;
-
-            Ok((created_glyph, change_set))
-        })
-    }
-
-    pub fn create_axis(&mut self, axis: Axis) -> Result<Axis, WorkspaceError> {
-        self.commit_edit(|font| {
-            if font
-                .axes()
-                .iter()
-                .any(|existing| existing.tag() == axis.tag())
-            {
-                return Err(WorkspaceError::InvalidInput {
-                    kind: "axis tag",
-                    value: format!("{} already exists", axis.tag()),
-                });
-            }
-
-            let change_set = FontChange::axis_created(&axis).into();
-            font.add_axis(axis.clone());
-
-            Ok((axis, change_set))
-        })
-    }
-
-    /// Adds a source and eagerly creates one layer per existing glyph, so
-    /// every (glyphId, sourceId) pair resolves a layer.
-    pub fn create_source(
-        &mut self,
-        name: String,
-        location: Location,
-    ) -> Result<(Source, Vec<GlyphLayer>), WorkspaceError> {
-        let source = self.commit_edit(|font| {
-            let name = name.trim();
-            if name.is_empty() {
-                return Err(WorkspaceError::InvalidInput {
-                    kind: "source name",
-                    value: name.to_string(),
-                });
-            }
-            if font.sources().iter().any(|source| source.name() == name) {
-                return Err(WorkspaceError::InvalidInput {
-                    kind: "source name",
-                    value: format!("{name} already exists"),
-                });
-            }
-
-            for (axis_tag, _) in location.iter() {
-                if !font
-                    .axes()
-                    .iter()
-                    .any(|axis| axis.tag() == axis_tag.as_str())
-                {
-                    return Err(WorkspaceError::InvalidInput {
-                        kind: "axis tag",
-                        value: format!("{axis_tag} is not a font axis"),
-                    });
-                }
-            }
-
-            let source = Source::new(name.to_string(), location.clone());
-            let change_set = FontChange::source_created(&source).into();
-            font.add_source(source.clone());
-
-            Ok((source, change_set))
-        })?;
-
-        let glyph_ids: Vec<GlyphId> = self.font.glyphs().map(Glyph::id).collect();
-        let mut layers = Vec::with_capacity(glyph_ids.len());
-        for glyph_id in glyph_ids {
-            layers.push(self.create_glyph_layer(glyph_id, source.id())?);
-        }
-
-        Ok((source, layers))
-    }
-
-    pub fn create_glyph_layer(
-        &mut self,
-        glyph_id: GlyphId,
-        source_id: SourceId,
-    ) -> Result<GlyphLayer, WorkspaceError> {
-        self.commit_edit(|font| {
-            let glyph = font
-                .glyph(glyph_id.clone())
-                .ok_or(CoreError::GlyphNotFound(glyph_id.clone()))?;
-            let glyph_name = glyph.glyph_name().clone();
-            let layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 500.0);
-            let layer_id = layer.id();
-
-            font.insert_glyph_layer(glyph_id.clone(), layer)?;
-            let layer = font
-                .layer(layer_id.clone())
-                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?
-                .clone();
-            let change_set =
-                FontChange::glyph_layer_created(glyph_id.clone(), Some(glyph_name), &layer).into();
-
-            Ok((layer, change_set))
-        })
-    }
-
     /// Applies a renderer intent set: validate + mutate via shift-font,
     /// persist the canonical records, swap the live font, record one ledger
-    /// entry. One call = one SQLite transaction = one undo step.
+    /// entry. One call = one SQLite transaction = one undo step — including
+    /// sets that batch several create intents.
     pub fn apply(
         &mut self,
         set: FontIntentSet,
@@ -267,7 +133,9 @@ impl FontWorkspace {
     ) -> Result<AppliedIntents, WorkspaceError> {
         let mut pre: Vec<GlyphLayer> = Vec::new();
         for intent in &set.intents {
-            let layer_id = intent.layer_id();
+            let Some(layer_id) = intent.layer_id() else {
+                continue;
+            };
             if pre.iter().any(|layer| layer.id() == *layer_id) {
                 continue;
             }
@@ -282,7 +150,17 @@ impl FontWorkspace {
             Ok((outcome, changes))
         })?;
 
-        let layers = outcome
+        let steps = self.ledger_steps(&pre, &outcome);
+        self.ledger.push(LedgerEntry { label, steps });
+        Ok(outcome)
+    }
+
+    /// Derives the entry's state-pair steps from the applied change set,
+    /// snapshotting post states from the committed font.
+    fn ledger_steps(&self, pre: &[GlyphLayer], outcome: &AppliedIntents) -> Vec<LedgerStep> {
+        let mut steps = Vec::new();
+
+        let pairs: Vec<LayerPair> = outcome
             .layers
             .iter()
             .filter_map(|touched| {
@@ -295,30 +173,88 @@ impl FontWorkspace {
                     })
             })
             .collect();
+        if !pairs.is_empty() {
+            steps.push(LedgerStep::Layers(pairs));
+        }
 
-        self.ledger.push(LedgerEntry { label, layers });
-        Ok(outcome)
+        let mut created_glyphs: Vec<GlyphId> = Vec::new();
+        for change in &outcome.changes.changes {
+            match change {
+                FontChange::GlyphCreated(change) => {
+                    created_glyphs.push(change.glyph_id.clone());
+                    steps.push(LedgerStep::Glyph {
+                        pre: None,
+                        post: self.font.glyph(change.glyph_id.clone()).cloned(),
+                    });
+                }
+                FontChange::AxisCreated(change) => steps.push(LedgerStep::Axis {
+                    pre: None,
+                    post: self
+                        .font
+                        .axes()
+                        .iter()
+                        .find(|axis| axis.tag() == change.tag)
+                        .cloned(),
+                }),
+                FontChange::SourceCreated(change) => steps.push(LedgerStep::Source {
+                    pre: None,
+                    post: self
+                        .font
+                        .sources()
+                        .iter()
+                        .find(|source| source.id() == change.source_id)
+                        .cloned(),
+                    layers: Vec::new(),
+                }),
+                FontChange::GlyphLayerCreated(change) => {
+                    // A created glyph's layers ride its Glyph snapshot; the
+                    // rest are eager layers belonging to a source step.
+                    if created_glyphs.contains(&change.glyph_id) {
+                        continue;
+                    }
+                    let Some(layer) = self.font.layer(change.layer_id.clone()) else {
+                        continue;
+                    };
+                    for step in steps.iter_mut().rev() {
+                        if let LedgerStep::Source {
+                            post: Some(source),
+                            layers,
+                            ..
+                        } = step
+                            && source.id() == change.source_id
+                        {
+                            layers.push((change.glyph_id.clone(), layer.clone()));
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        steps
     }
 
-    /// Replays the most recent entry's pre states. `None` when the undo
-    /// stack is empty. The echo is the same replace-grade shape as `apply`.
+    /// Replays the most recent entry's pre states in reverse step order.
+    /// `None` when the undo stack is empty. The echo is the same
+    /// replace-grade shape as `apply`.
     pub fn undo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
         let Some(entry) = self.ledger.pop_undo() else {
             return Ok(None);
         };
 
-        let outcome = self.replay(&entry, |pair| &pair.pre)?;
+        let outcome = self.replay(&entry, ReplaySide::Pre)?;
         self.ledger.record_undone(entry);
         Ok(Some(outcome))
     }
 
-    /// Replays the most recent undone entry's post states.
+    /// Replays the most recent undone entry's post states in step order.
     pub fn redo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
         let Some(entry) = self.ledger.pop_redo() else {
             return Ok(None);
         };
 
-        let outcome = self.replay(&entry, |pair| &pair.post)?;
+        let outcome = self.replay(&entry, ReplaySide::Post)?;
         self.ledger.record_redone(entry);
         Ok(Some(outcome))
     }
@@ -326,35 +262,40 @@ impl FontWorkspace {
     fn replay(
         &mut self,
         entry: &LedgerEntry,
-        side: impl Fn(&LayerPair) -> &GlyphLayer,
+        side: ReplaySide,
     ) -> Result<AppliedIntents, WorkspaceError> {
-        let restored: Vec<GlyphLayer> =
-            entry.layers.iter().map(|pair| side(pair).clone()).collect();
+        let mut steps = entry.steps.clone();
+        if side == ReplaySide::Pre {
+            steps.reverse();
+        }
 
         self.commit_edit(move |font| {
             let mut changes = FontChangeSet::default();
-            let mut layers = Vec::with_capacity(restored.len());
+            let mut touched: Vec<TouchedLayer> = Vec::new();
 
-            for replacement in restored {
-                let layer_id = replacement.id();
-                let layer = font
-                    .layer_mut(layer_id.clone())
-                    .ok_or(CoreError::LayerNotFound(layer_id))?;
-                *layer = replacement;
-
-                // Geometry replace persists contours only; metrics ride their
-                // own change so width/height restores reach SQLite too.
-                changes.push(FontChange::layer_geometry_replaced(layer));
-                changes.push(FontChange::layer_metrics_changed(layer));
-                layers.push(TouchedLayer {
-                    layer: layer.clone(),
-                    structural: true,
-                });
+            for step in steps {
+                match step {
+                    LedgerStep::Layers(pairs) => {
+                        replay_layer_pairs(font, pairs, side, &mut changes, &mut touched)?;
+                    }
+                    LedgerStep::Glyph { pre, post } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_glyph(font, from, to, &mut changes, &mut touched)?;
+                    }
+                    LedgerStep::Axis { pre, post } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_axis(font, from, to, &mut changes)?;
+                    }
+                    LedgerStep::Source { pre, post, layers } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_source(font, from, to, layers, &mut changes, &mut touched)?;
+                    }
+                }
             }
 
             let outcome = AppliedIntents {
                 changes: changes.clone(),
-                layers,
+                layers: touched,
             };
             Ok((outcome, changes))
         })
@@ -450,6 +391,153 @@ impl FontWorkspace {
     pub fn font_info(&self) -> Result<Option<shift_store::FontInfo>, WorkspaceError> {
         self.store.get_font_info().map_err(WorkspaceError::from)
     }
+}
+
+/// Which side of every state pair a replay applies: undo restores `Pre`,
+/// redo restores `Post`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReplaySide {
+    Pre,
+    Post,
+}
+
+impl ReplaySide {
+    /// Orients a state pair into (from, to) for this side.
+    fn orient<T>(self, pre: Option<T>, post: Option<T>) -> (Option<T>, Option<T>) {
+        match self {
+            Self::Pre => (post, pre),
+            Self::Post => (pre, post),
+        }
+    }
+}
+
+fn replay_layer_pairs(
+    font: &mut shift_font::Font,
+    pairs: Vec<LayerPair>,
+    side: ReplaySide,
+    changes: &mut FontChangeSet,
+    touched: &mut Vec<TouchedLayer>,
+) -> Result<(), WorkspaceError> {
+    for pair in pairs {
+        let replacement = match side {
+            ReplaySide::Pre => pair.pre,
+            ReplaySide::Post => pair.post,
+        };
+        let layer_id = replacement.id();
+        let layer = font
+            .layer_mut(layer_id.clone())
+            .ok_or(CoreError::LayerNotFound(layer_id))?;
+        *layer = replacement;
+
+        // Geometry replace persists contours only; metrics ride their
+        // own change so width/height restores reach SQLite too.
+        changes.push(FontChange::layer_geometry_replaced(layer));
+        changes.push(FontChange::layer_metrics_changed(layer));
+        touched.push(TouchedLayer {
+            layer: layer.clone(),
+            structural: true,
+        });
+    }
+
+    Ok(())
+}
+
+fn replay_glyph(
+    font: &mut shift_font::Font,
+    from: Option<Glyph>,
+    to: Option<Glyph>,
+    changes: &mut FontChangeSet,
+    touched: &mut Vec<TouchedLayer>,
+) -> Result<(), WorkspaceError> {
+    if let Some(glyph) = from {
+        font.remove_glyph(glyph.id())
+            .ok_or(CoreError::GlyphNotFound(glyph.id()))?;
+        changes.push(FontChange::glyph_deleted(glyph.id()));
+    }
+
+    if let Some(glyph) = to {
+        font.insert_glyph(glyph.clone())?;
+        changes.push(FontChange::glyph_created(&glyph));
+
+        for layer in glyph.layers().values() {
+            let layer = layer.as_ref().clone();
+            changes.push(FontChange::glyph_layer_created(
+                glyph.id(),
+                Some(glyph.glyph_name().clone()),
+                &layer,
+            ));
+            touched.push(TouchedLayer {
+                layer,
+                structural: true,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn replay_axis(
+    font: &mut shift_font::Font,
+    from: Option<Axis>,
+    to: Option<Axis>,
+    changes: &mut FontChangeSet,
+) -> Result<(), WorkspaceError> {
+    if let Some(axis) = from {
+        font.remove_axis(axis.tag())
+            .ok_or_else(|| CoreError::AxisNotFound(axis.tag().to_string()))?;
+        changes.push(FontChange::axis_deleted(axis.tag()));
+    }
+
+    if let Some(axis) = to {
+        changes.push(FontChange::axis_created(&axis));
+        font.add_axis(axis);
+    }
+
+    Ok(())
+}
+
+fn replay_source(
+    font: &mut shift_font::Font,
+    from: Option<Source>,
+    to: Option<Source>,
+    eager_layers: Vec<(GlyphId, GlyphLayer)>,
+    changes: &mut FontChangeSet,
+    touched: &mut Vec<TouchedLayer>,
+) -> Result<(), WorkspaceError> {
+    if let Some(source) = from {
+        // Layers go first so the layer index never points at a missing
+        // source; the store side cascades them off the source row.
+        for (_, layer) in &eager_layers {
+            font.remove_glyph_layer(layer.id())?;
+        }
+
+        font.remove_source(source.id())
+            .ok_or(CoreError::SourceNotFound(source.id()))?;
+        changes.push(FontChange::source_deleted(source.id()));
+    }
+
+    if let Some(source) = to {
+        changes.push(FontChange::source_created(&source));
+        font.add_source(source);
+
+        for (glyph_id, layer) in eager_layers {
+            let glyph_name = font
+                .glyph(glyph_id.clone())
+                .map(|glyph| glyph.glyph_name().clone());
+            changes.push(FontChange::glyph_layer_created(
+                glyph_id.clone(),
+                glyph_name,
+                &layer,
+            ));
+            font.insert_glyph_layer(glyph_id, layer.clone())?;
+            touched.push(TouchedLayer {
+                layer,
+                structural: true,
+            });
+        }
+    }
+
+    Ok(())
 }
 
 fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {

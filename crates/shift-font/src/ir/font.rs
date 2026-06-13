@@ -359,6 +359,12 @@ impl Font {
         self.data_mut().axes.push(axis);
     }
 
+    pub fn remove_axis(&mut self, tag: &str) -> Option<Axis> {
+        let data = self.data_mut();
+        let index = data.axes.iter().position(|axis| axis.tag() == tag)?;
+        Some(data.axes.remove(index))
+    }
+
     pub fn sources(&self) -> &[Source] {
         &self.data().sources
     }
@@ -371,6 +377,23 @@ impl Font {
         }
         data.sources.push(source);
         source_id
+    }
+
+    /// Removes a source record only; the caller removes the source's glyph
+    /// layers first so the layer index never points at a missing source.
+    pub fn remove_source(&mut self, source_id: SourceId) -> Option<Source> {
+        let data = self.data_mut();
+        let index = data
+            .sources
+            .iter()
+            .position(|source| source.id() == source_id)?;
+        let source = data.sources.remove(index);
+
+        if data.default_source_id == Some(source_id) {
+            data.default_source_id = data.sources.first().map(Source::id);
+        }
+
+        Some(source)
     }
 
     pub fn clear_sources(&mut self) {

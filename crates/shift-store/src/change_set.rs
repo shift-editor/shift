@@ -74,6 +74,12 @@ impl ShiftStore {
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
         font::FontChange::AxisCreated(change) => insert_axis(tx, change),
+        font::FontChange::AxisDeleted(change) => {
+            // The axis row id doubles as the tag; source_locations cascade.
+            let rows_changed = tx.execute("DELETE FROM axes WHERE id = ?1", [&change.tag])?;
+            require_changed(rows_changed, "axis", change.tag.clone())?;
+            Ok(())
+        }
         font::FontChange::SourceCreated(change) => {
             upsert_source(tx, &change.source_id, Some(&change.name))?;
 
@@ -88,9 +94,26 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
 
             Ok(())
         }
+        font::FontChange::SourceDeleted(change) => {
+            // glyph_layers and source_locations cascade on the source row.
+            let rows_changed = tx.execute(
+                "DELETE FROM sources WHERE id = ?1",
+                [change.source_id.to_string()],
+            )?;
+            require_changed(rows_changed, "source", change.source_id.to_string())?;
+            Ok(())
+        }
         font::FontChange::GlyphCreated(change) => {
             upsert_glyph(tx, &change.glyph_id, &change.name)?;
             replace_glyph_unicodes(tx, &change.glyph_id, &change.unicodes)
+        }
+        font::FontChange::GlyphDeleted(change) => {
+            let rows_changed = tx.execute(
+                "DELETE FROM glyphs WHERE id = ?1",
+                [change.glyph_id.to_string()],
+            )?;
+            require_changed(rows_changed, "glyph", change.glyph_id.to_string())?;
+            Ok(())
         }
         font::FontChange::GlyphIdentityChanged(change) => {
             upsert_glyph(tx, &change.glyph_id, &change.to_name)?;

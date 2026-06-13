@@ -5,8 +5,8 @@ use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
 use shift_font::{
-  AnchorId, AnchorSeed, Axis as FontAxis, BooleanOp, ContourId, Font, FontIntent, FontIntentSet,
-  Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, PointId, PointSeed, SourceId,
+  AnchorId, AnchorSeed, Axis as FontAxis, BooleanOp, ContourId, Font, FontChange, FontIntent,
+  FontIntentSet, Glyph, GlyphId, LayerId, Location as FontLocation, PointId, PointSeed, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
@@ -256,154 +256,12 @@ impl Bridge {
     Ok(records)
   }
 
-  /// Applies one intent set as a single atomic workspace apply.
-  ///
-  /// Editing kinds decode through `map_intent` into `Font::apply_intents`.
-  /// Font-level kinds (createGlyph, createAxis, createSource) take the
-  /// workspace-verb path and skip the ledger. Sets must be homogeneous:
-  /// font-level and editing intents never share a tick.
+  /// Applies one intent set as a single atomic workspace apply: every kind
+  /// — editing and create alike — decodes through `map_intent` into one
+  /// `FontWorkspace::apply` call. One call = one SQLite transaction = one
+  /// undo step, however many intents the set batches.
   #[napi]
   pub fn apply(
-    &mut self,
-    intents: Vec<NapiFontIntent>,
-    label: Option<String>,
-  ) -> errors::Result<NapiAppliedChange> {
-    let (font_level, edits): (Vec<_>, Vec<_>) = intents.into_iter().partition(is_font_level);
-
-    if !font_level.is_empty() && !edits.is_empty() {
-      return Err(BridgeError::InvalidInput {
-        kind: "intent",
-        value: "font-level intents cannot share a set with editing intents".to_string(),
-      });
-    }
-
-    if font_level.is_empty() {
-      return self.apply_editing_intents(edits, label);
-    }
-
-    // Font-level verbs are not in the ledger; the label is part of the
-    // wire contract now.
-    let _ = label;
-
-    let mut layers = Vec::new();
-    let mut glyphs_changed = false;
-    let mut axes_changed = false;
-    let mut sources_changed = false;
-
-    for intent in font_level {
-      match intent.kind.as_str() {
-        "createGlyph" => {
-          layers.extend(self.apply_create_glyph(intent)?);
-          glyphs_changed = true;
-        }
-        "createAxis" => {
-          self.apply_create_axis(intent)?;
-          axes_changed = true;
-          // Axis creation reshapes every source location's design space.
-          sources_changed = true;
-        }
-        "createSource" => {
-          layers.extend(self.apply_create_source(intent)?);
-          sources_changed = true;
-        }
-        other => {
-          return Err(BridgeError::InvalidInput {
-            kind: "intent",
-            value: format!("unknown font-level intent kind \"{other}\""),
-          });
-        }
-      }
-    }
-
-    self.mark_font_changed();
-
-    Ok(NapiAppliedChange {
-      layers,
-      glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
-      axes: axes_changed.then(|| self.get_axes()).transpose()?,
-      sources: sources_changed.then(|| self.get_sources()).transpose()?,
-      // Composites cannot depend on structure that did not exist yet.
-      dependents: Vec::new(),
-    })
-  }
-
-  /// Creates the glyph plus one layer per source (eager: every
-  /// (glyphId, sourceId) pair must resolve a layer).
-  fn apply_create_glyph(
-    &mut self,
-    intent: NapiFontIntent,
-  ) -> errors::Result<Vec<NapiLayerReplaced>> {
-    let name = intent.name.ok_or(BridgeError::InvalidInput {
-      kind: "intent",
-      value: "createGlyph requires name".to_string(),
-    })?;
-    let unicodes = intent.unicodes.unwrap_or_default();
-
-    let source_ids: Vec<SourceId> = self
-      .font()?
-      .sources()
-      .iter()
-      .map(|source| source.id())
-      .collect();
-    if source_ids.is_empty() {
-      return Err(BridgeError::InvalidInput {
-        kind: "intent",
-        value: "createGlyph requires a font with at least one source".to_string(),
-      });
-    }
-
-    let glyph = self.workspace_mut()?.create_glyph(name, unicodes)?;
-
-    let mut layers = Vec::with_capacity(source_ids.len());
-    for source_id in source_ids {
-      let layer = self
-        .workspace_mut()?
-        .create_glyph_layer(glyph.id(), source_id)?;
-      layers.push(layer_replaced(&layer));
-    }
-
-    Ok(layers)
-  }
-
-  fn apply_create_axis(&mut self, intent: NapiFontIntent) -> errors::Result<()> {
-    let payload = intent.create_axis.ok_or(BridgeError::InvalidInput {
-      kind: "intent",
-      value: "createAxis requires its payload field".to_string(),
-    })?;
-
-    let mut axis = FontAxis::new(
-      payload.tag,
-      payload.name,
-      payload.min,
-      payload.default,
-      payload.max,
-    );
-    axis.set_hidden(payload.hidden);
-
-    self.workspace_mut()?.create_axis(axis)?;
-    Ok(())
-  }
-
-  /// Creates the source plus one eager layer per existing glyph; echoes the
-  /// new layers replace-grade.
-  fn apply_create_source(
-    &mut self,
-    intent: NapiFontIntent,
-  ) -> errors::Result<Vec<NapiLayerReplaced>> {
-    let payload = intent.create_source.ok_or(BridgeError::InvalidInput {
-      kind: "intent",
-      value: "createSource requires its payload field".to_string(),
-    })?;
-
-    let location = FontLocation::from_map(payload.location.values);
-    let (_, layers) = self
-      .workspace_mut()?
-      .create_source(payload.name, location)?;
-
-    Ok(layers.iter().map(layer_replaced).collect())
-  }
-
-  fn apply_editing_intents(
     &mut self,
     intents: Vec<NapiFontIntent>,
     label: Option<String>,
@@ -430,8 +288,28 @@ impl Bridge {
   }
 
   /// Assembles the pure-state echo for an applied outcome: replace-grade
-  /// layers plus dependent composites. Shared by apply/undo/redo.
+  /// layers plus dependent composites. Shared by apply/undo/redo. The
+  /// records grain (glyphs/axes/sources lists) rides along whenever the
+  /// change set touched that structure.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
+    let mut glyphs_changed = false;
+    let mut axes_changed = false;
+    let mut sources_changed = false;
+    for change in &outcome.changes.changes {
+      match change {
+        FontChange::GlyphCreated(_)
+        | FontChange::GlyphDeleted(_)
+        | FontChange::GlyphIdentityChanged(_) => glyphs_changed = true,
+        // Axis structure reshapes every source location's design space.
+        FontChange::AxisCreated(_) | FontChange::AxisDeleted(_) => {
+          axes_changed = true;
+          sources_changed = true;
+        }
+        FontChange::SourceCreated(_) | FontChange::SourceDeleted(_) => sources_changed = true,
+        _ => {}
+      }
+    }
+
     let touched_layer_ids: Vec<LayerId> = outcome
       .layers
       .iter()
@@ -459,9 +337,9 @@ impl Bridge {
 
     Ok(NapiAppliedChange {
       layers,
-      glyphs: None,
-      axes: None,
-      sources: None,
+      glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
+      axes: axes_changed.then(|| self.get_axes()).transpose()?,
+      sources: sources_changed.then(|| self.get_sources()).transpose()?,
       dependents,
     })
   }
@@ -604,21 +482,6 @@ fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
   ids.iter().map(|id| parse::<T>(id)).collect()
 }
 
-const FONT_LEVEL_KINDS: [&str; 3] = ["createGlyph", "createAxis", "createSource"];
-
-fn is_font_level(intent: &NapiFontIntent) -> bool {
-  FONT_LEVEL_KINDS.contains(&intent.kind.as_str())
-}
-
-fn layer_replaced(layer: &GlyphLayer) -> NapiLayerReplaced {
-  NapiLayerReplaced {
-    layer_id: layer.id().to_string(),
-    structure: Some(GlyphStructure::from(layer).into()),
-    values: shift_wire::values_from_layer(layer).into(),
-    changed: GlyphChangedEntities::default().into(),
-  }
-}
-
 fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
   let missing = |kind: &str| BridgeError::InvalidInput {
     kind: "intent",
@@ -753,6 +616,35 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         operation: parse_boolean_op(&payload.operation)?,
       })
     }
+    "createGlyph" => {
+      let payload = intent.create_glyph.ok_or_else(|| missing("createGlyph"))?;
+      Ok(FontIntent::CreateGlyph {
+        glyph_id: Some(parse::<GlyphId>(&payload.glyph_id)?),
+        name: payload.name,
+        unicodes: payload.unicodes,
+      })
+    }
+    "createAxis" => {
+      let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
+      let mut axis = FontAxis::new(
+        payload.tag,
+        payload.name,
+        payload.min,
+        payload.default,
+        payload.max,
+      );
+      axis.set_hidden(payload.hidden);
+      Ok(FontIntent::CreateAxis { axis })
+    }
+    "createSource" => {
+      let payload = intent
+        .create_source
+        .ok_or_else(|| missing("createSource"))?;
+      Ok(FontIntent::CreateSource {
+        name: payload.name,
+        location: FontLocation::from_map(payload.location.values),
+      })
+    }
     other => Err(BridgeError::InvalidInput {
       kind: "intent",
       value: format!("unknown intent kind \"{other}\""),
@@ -797,10 +689,10 @@ mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
     NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCreateAxisIntent,
-    NapiCreateSourceIntent, NapiLocation, NapiMoveAnchorsIntent, NapiMovePointsIntent,
-    NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent, NapiRemovePointsIntent,
-    NapiReverseContourIntent, NapiSetContourClosedIntent, NapiSetPointSmoothIntent,
-    NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
+    NapiCreateGlyphIntent, NapiCreateSourceIntent, NapiLocation, NapiMoveAnchorsIntent,
+    NapiMovePointsIntent, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
+    NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
+    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -822,10 +714,20 @@ mod tests {
       translate_points: None,
       set_x_advance: None,
       apply_boolean_op: None,
+      create_glyph: None,
       create_axis: None,
       create_source: None,
-      name: None,
-      unicodes: None,
+    }
+  }
+
+  fn create_glyph_napi(name: &str, unicodes: Vec<u32>) -> NapiFontIntent {
+    NapiFontIntent {
+      create_glyph: Some(NapiCreateGlyphIntent {
+        glyph_id: GlyphId::new().to_string(),
+        name: name.to_string(),
+        unicodes,
+      }),
+      ..skeleton_intent("createGlyph")
     }
   }
 
@@ -835,11 +737,7 @@ mod tests {
 
     let applied = bridge
       .apply(
-        vec![NapiFontIntent {
-          name: Some("A".to_string()),
-          unicodes: Some(vec![65]),
-          ..skeleton_intent("createGlyph")
-        }],
+        vec![create_glyph_napi("A", vec![65])],
         Some("Add Glyph".to_string()),
       )
       .unwrap();
@@ -855,14 +753,7 @@ mod tests {
   fn apply_set_x_advance_echoes_values_without_structure() {
     let mut bridge = bridge_with_workspace();
     let created = bridge
-      .apply(
-        vec![NapiFontIntent {
-          name: Some("A".to_string()),
-          unicodes: Some(vec![65]),
-          ..skeleton_intent("createGlyph")
-        }],
-        None,
-      )
+      .apply(vec![create_glyph_napi("A", vec![65])], None)
       .unwrap();
     let layer_id = created.layers[0].layer_id.clone();
 
@@ -897,14 +788,7 @@ mod tests {
 
   fn pen_setup(bridge: &mut Bridge) -> (String, String) {
     let created = bridge
-      .apply(
-        vec![NapiFontIntent {
-          name: Some("A".to_string()),
-          unicodes: Some(vec![65]),
-          ..skeleton_intent("createGlyph")
-        }],
-        None,
-      )
+      .apply(vec![create_glyph_napi("A", vec![65])], None)
       .unwrap();
     let layer_id = created.layers[0].layer_id.clone();
 
@@ -1551,9 +1435,7 @@ mod tests {
   }
 
   fn create_default_glyph_layer(bridge: &mut Bridge, name: &str, unicode: Option<u32>) -> String {
-    let mut intent = skeleton_intent("createGlyph");
-    intent.name = Some(name.to_string());
-    intent.unicodes = Some(unicode.into_iter().collect());
+    let intent = create_glyph_napi(name, unicode.into_iter().collect());
 
     let applied = bridge.apply(vec![intent], None).unwrap();
     applied.layers[0].layer_id.clone()
@@ -1707,14 +1589,7 @@ mod tests {
       .unwrap();
 
     let applied = bridge
-      .apply(
-        vec![NapiFontIntent {
-          name: Some("A".to_string()),
-          unicodes: Some(vec![65]),
-          ..skeleton_intent("createGlyph")
-        }],
-        None,
-      )
+      .apply(vec![create_glyph_napi("A", vec![65])], None)
       .unwrap();
 
     assert_eq!(applied.layers.len(), 2);
@@ -1732,26 +1607,35 @@ mod tests {
   }
 
   #[test]
-  fn apply_rejects_editing_intents_mixed_with_font_level_kinds() {
+  fn apply_mixes_editing_and_create_intents_as_one_undo_step() {
     let mut bridge = bridge_with_workspace();
     let (layer_id, _) = pen_setup(&mut bridge);
 
-    let result = bridge.apply(
-      vec![
-        weight_axis_intent(),
-        NapiFontIntent {
-          set_x_advance: Some(NapiSetXAdvanceIntent {
-            layer_id,
-            width: 600.0,
-          }),
-          ..skeleton_intent("setXAdvance")
-        },
-      ],
-      None,
-    );
+    let applied = bridge
+      .apply(
+        vec![
+          weight_axis_intent(),
+          NapiFontIntent {
+            set_x_advance: Some(NapiSetXAdvanceIntent {
+              layer_id: layer_id.clone(),
+              width: 600.0,
+            }),
+            ..skeleton_intent("setXAdvance")
+          },
+        ],
+        Some("Add Weight".to_string()),
+      )
+      .unwrap();
 
-    assert!(result.is_err());
+    assert_eq!(applied.axes.expect("createAxis must echo axes").len(), 1);
+    assert!(applied
+      .layers
+      .iter()
+      .any(|layer| layer.layer_id == layer_id));
+
+    let undone = bridge.undo().unwrap().expect("mixed set should undo");
     assert!(bridge.get_axes().unwrap().is_empty());
+    assert_eq!(undone.axes.expect("undo must echo axes").len(), 0);
   }
 
   #[test]

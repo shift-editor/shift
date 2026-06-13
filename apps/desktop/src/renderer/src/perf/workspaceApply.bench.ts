@@ -1,6 +1,6 @@
 import { bench, describe } from "vitest";
 import type { GlyphName, PointType, Unicode } from "@shift/types";
-import { mintContourId, mintPointId } from "@shift/types";
+import { mintContourId, mintGlyphId, mintPointId } from "@shift/types";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 /**
@@ -13,7 +13,10 @@ const stack = createWorkspaceStack();
 await stack.client.create();
 
 const created = await stack.client.apply([
-  { kind: "createGlyph", name: "A" as GlyphName, unicodes: [65 as Unicode] },
+  {
+    kind: "createGlyph",
+    createGlyph: { glyphId: mintGlyphId(), name: "A" as GlyphName, unicodes: [65 as Unicode] },
+  },
 ]);
 const layerId = created.layers[0]!.layerId;
 const glyphId = created.glyphs![0]!.id;

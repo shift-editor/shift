@@ -28,7 +28,9 @@ describe("Bridge", () => {
   }
 
   function createGlyphLayer(name = "A", unicodes = [65]) {
-    const applied = bridge.apply([{ kind: "createGlyph", name, unicodes }]);
+    const applied = bridge.apply([
+      { kind: "createGlyph", createGlyph: { glyphId: mintId("glyph"), name, unicodes } },
+    ]);
     return applied.layers[0].layerId;
   }
 

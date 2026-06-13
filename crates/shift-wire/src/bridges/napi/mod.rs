@@ -467,8 +467,8 @@ pub struct NapiFontIntent {
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Font-level kinds (never share a set with editing kinds, not undoable):
-    /// "createGlyph" | "createAxis" | "createSource".
+    /// Create kinds: "createGlyph" | "createAxis" | "createSource". Every
+    /// kind shares the same apply path; one set = one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
     pub add_contour: Option<NapiAddContourIntent>,
@@ -483,12 +483,22 @@ pub struct NapiFontIntent {
     pub translate_points: Option<NapiTranslatePointsIntent>,
     pub set_x_advance: Option<NapiSetXAdvanceIntent>,
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
+    pub create_glyph: Option<NapiCreateGlyphIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
+}
+
+/// Font-level glyph creation. The glyph id is client-minted (decision 6:
+/// verbs return identity synchronously); Rust honors it and rejects
+/// duplicates.
+#[napi(object)]
+pub struct NapiCreateGlyphIntent {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
     #[napi(ts_type = "GlyphName")]
-    pub name: Option<String>,
+    pub name: String,
     #[napi(ts_type = "Array<Unicode>")]
-    pub unicodes: Option<Vec<u32>>,
+    pub unicodes: Vec<u32>,
 }
 
 /// Font-level axis creation. Rust mints no id for axes; the tag is the

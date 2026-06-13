@@ -222,8 +222,14 @@ impl GlyphLayer {
 
 impl Glyph {
     pub fn new(name: impl Into<GlyphName>) -> Self {
+        Self::with_id(GlyphId::new(), name)
+    }
+
+    /// Constructs with a caller-minted id, so creating callers can hold the
+    /// glyph's identity before the glyph exists.
+    pub fn with_id(id: GlyphId, name: impl Into<GlyphName>) -> Self {
         Self {
-            id: GlyphId::new(),
+            id,
             name: name.into(),
             unicodes: Vec::new(),
             layers: HashMap::new(),
