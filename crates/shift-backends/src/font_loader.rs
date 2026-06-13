@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use shift_font::Font;
+use shift_source::ShiftSourcePackage;
 
 use crate::designspace::{DesignspaceReader, DesignspaceWriter};
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
@@ -20,6 +21,19 @@ pub trait FontAdaptor {
 struct UfoFontAdaptor;
 struct GlyphsFontAdaptor;
 struct DesignspaceFontAdaptor;
+struct ShiftFontAdaptor;
+
+impl FontAdaptor for ShiftFontAdaptor {
+    fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
+        ShiftSourcePackage::load_font(path).map_err(FormatBackendError::from)
+    }
+
+    fn write_font(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
+        ShiftSourcePackage::save_font(path, font)
+            .map(|_| ())
+            .map_err(FormatBackendError::from)
+    }
+}
 
 impl FontAdaptor for UfoFontAdaptor {
     fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
@@ -63,6 +77,7 @@ impl Default for FontLoader {
 
 fn format_from_extension(ext: &str) -> BackendResult<FontFormat> {
     match ext.to_ascii_lowercase().as_str() {
+        "shift" => Ok(FontFormat::Shift),
         "ufo" => Ok(FontFormat::Ufo),
         "glyphs" => Ok(FontFormat::Glyphs),
         "glyphspackage" => Ok(FontFormat::Glyphs),
@@ -89,6 +104,7 @@ fn extension_from_path(path: &Path) -> BackendResult<&str> {
 impl FontLoader {
     pub fn new() -> Self {
         let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
+        adaptors.insert(FontFormat::Shift, Box::new(ShiftFontAdaptor));
         adaptors.insert(FontFormat::Ufo, Box::new(UfoFontAdaptor));
         adaptors.insert(FontFormat::Glyphs, Box::new(GlyphsFontAdaptor));
         adaptors.insert(FontFormat::Designspace, Box::new(DesignspaceFontAdaptor));
@@ -125,7 +141,7 @@ impl FontLoader {
         let format = format_from_extension(ext)?;
 
         match format {
-            FontFormat::Ufo | FontFormat::Designspace => {}
+            FontFormat::Ufo | FontFormat::Designspace | FontFormat::Shift => {}
             _ => {
                 return Err(BackendError::UnsupportedWriteFormat {
                     extension: ext.to_string(),
@@ -173,8 +189,20 @@ mod tests {
     }
 
     #[test]
+    fn supports_shift_extension() {
+        assert!(matches!(
+            format_from_extension("shift"),
+            Ok(FontFormat::Shift)
+        ));
+    }
+
+    #[test]
     fn extension_matching_is_case_insensitive() {
         assert!(matches!(format_from_extension("UFO"), Ok(FontFormat::Ufo)));
+        assert!(matches!(
+            format_from_extension("SHIFT"),
+            Ok(FontFormat::Shift)
+        ));
         assert!(matches!(
             format_from_extension("GLYPHS"),
             Ok(FontFormat::Glyphs)

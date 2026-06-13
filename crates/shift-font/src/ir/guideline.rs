@@ -19,6 +19,24 @@ pub struct Guideline {
 }
 
 impl Guideline {
+    pub fn with_id(
+        id: GuidelineId,
+        x: Option<f64>,
+        y: Option<f64>,
+        angle: Option<f64>,
+        name: Option<String>,
+        color: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            x,
+            y,
+            angle,
+            name,
+            color,
+        }
+    }
+
     pub fn horizontal(y: f64) -> Self {
         Self {
             id: GuidelineId::new(),

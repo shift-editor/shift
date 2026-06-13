@@ -30,6 +30,20 @@ impl Source {
         }
     }
 
+    pub fn with_id(
+        id: SourceId,
+        name: String,
+        location: Location,
+        filename: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            location,
+            filename,
+        }
+    }
+
     pub fn id(&self) -> SourceId {
         self.id.clone()
     }
