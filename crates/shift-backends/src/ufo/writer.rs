@@ -79,7 +79,7 @@ impl UfoWriter {
     fn convert_component(component: &shift_font::Component) -> norad::Component {
         let matrix = component.matrix();
         norad::Component::new(
-            Name::new(component.base_glyph()).unwrap(),
+            Name::new(component.base_glyph_name()).unwrap(),
             norad::AffineTransform {
                 x_scale: matrix.xx,
                 xy_scale: matrix.xy,

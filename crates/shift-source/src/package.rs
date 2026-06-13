@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use shift_font::{
-    Anchor, Axis, Component, ComponentId, Contour, DecomposedTransform, FeatureData, Font,
+    Anchor, Axis, AxisId, Component, ComponentId, Contour, DecomposedTransform, FeatureData, Font,
     FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, Guideline, KerningData, KerningPair,
     KerningSide, LibData, LibValue, Location, Point, PointType, Source, SourceId,
 };
@@ -240,6 +240,7 @@ struct AxesDoc {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AxisDoc {
+    id: String,
     tag: String,
     name: String,
     minimum: f64,
@@ -317,7 +318,8 @@ struct PointDoc {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ComponentDoc {
-    base_glyph: String,
+    base_glyph_id: String,
+    base_glyph_name: String,
     transform: TransformDoc,
 }
 
@@ -469,7 +471,7 @@ pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
     let mut glyph_entries = font
         .glyphs()
         .map(|glyph| {
-            let glyph_doc = GlyphDoc::try_from(glyph)?;
+            let glyph_doc = GlyphDoc::from_glyph(font, glyph)?;
             let path = format!("{GLYPHS_DIR}/{}.json", glyph.id());
             json_entry(&path, &glyph_doc)
         })
@@ -515,8 +517,10 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     for axis_doc in axes_doc.axes {
         font.add_axis(Axis::try_from(axis_doc)?);
     }
+    let axis_ids = font.axes().iter().map(Axis::id).collect::<HashSet<_>>();
 
     for source_doc in sources_doc.sources {
+        validate_source_axis_references(&source_doc, &axis_ids)?;
         font.add_source(Source::try_from(source_doc)?);
     }
 
@@ -542,10 +546,19 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     }
     glyph_entries.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-    for (path, bytes) in glyph_entries {
-        let glyph_doc: GlyphDoc = from_json(&path, &bytes)?;
-        validate_glyph_path_id(&path, &glyph_doc.id)?;
-        validate_glyph_source_references(&glyph_doc, &source_ids)?;
+    let glyph_docs = glyph_entries
+        .into_iter()
+        .map(|(path, bytes)| {
+            let glyph_doc: GlyphDoc = from_json(&path, &bytes)?;
+            validate_glyph_path_id(&path, &glyph_doc.id)?;
+            validate_glyph_source_references(&glyph_doc, &source_ids)?;
+            Ok((path, glyph_doc))
+        })
+        .collect::<Result<Vec<_>, SourcePackageError>>()?;
+    let glyph_names_by_id = glyph_doc_names_by_id(&glyph_docs)?;
+
+    for (_, glyph_doc) in glyph_docs {
+        validate_glyph_component_references(&glyph_doc, &glyph_names_by_id)?;
         let mut glyph = Glyph::try_from(glyph_doc)?;
         if let Some(module_doc) = &mut lib_module_doc {
             apply_lib_module_to_glyph(&mut glyph, module_doc)?;
@@ -709,6 +722,54 @@ fn validate_glyph_source_references(
     for source_id in glyph_doc.layers.keys() {
         let parsed_source_id = parse_id("source", source_id)?;
         validate_source_reference(source_ids, &parsed_source_id, "glyph.layers.sourceId")?;
+    }
+
+    Ok(())
+}
+
+fn validate_source_axis_references(
+    source_doc: &SourceDoc,
+    axis_ids: &HashSet<AxisId>,
+) -> Result<(), SourcePackageError> {
+    for axis_id in source_doc.location.keys() {
+        let parsed_axis_id = parse_id("axis", axis_id)?;
+        if !axis_ids.contains(&parsed_axis_id) {
+            return Err(SourcePackageError::DanglingReference {
+                field: "sources.location.axisId",
+                id: axis_id.clone(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn glyph_doc_names_by_id(
+    glyph_docs: &[(String, GlyphDoc)],
+) -> Result<HashMap<String, GlyphName>, SourcePackageError> {
+    glyph_docs
+        .iter()
+        .map(|(_, glyph_doc)| {
+            let name = GlyphName::new(glyph_doc.name.clone())
+                .map_err(|_| SourcePackageError::InvalidGlyphName(glyph_doc.name.clone()))?;
+            Ok((glyph_doc.id.clone(), name))
+        })
+        .collect()
+}
+
+fn validate_glyph_component_references(
+    glyph_doc: &GlyphDoc,
+    names_by_id: &HashMap<String, GlyphName>,
+) -> Result<(), SourcePackageError> {
+    for layer_doc in glyph_doc.layers.values() {
+        for component_doc in layer_doc.components.values() {
+            glyph_name_from_ref(
+                component_doc.base_glyph_id.clone(),
+                component_doc.base_glyph_name.clone(),
+                names_by_id,
+                "glyph.layers.components.baseGlyphId",
+            )?;
+        }
     }
 
     Ok(())
@@ -1406,6 +1467,7 @@ impl TryFrom<&Axis> for AxisDoc {
 
     fn try_from(axis: &Axis) -> Result<Self, Self::Error> {
         let doc = Self {
+            id: axis.id().to_string(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
             minimum: ensure_finite("axes[].minimum", axis.minimum())?,
@@ -1426,7 +1488,14 @@ impl TryFrom<AxisDoc> for Axis {
         ensure_finite("axes[].default", doc.default)?;
         ensure_finite("axes[].maximum", doc.maximum)?;
         ensure_axis_range(&doc)?;
-        let mut axis = Axis::new(doc.tag, doc.name, doc.minimum, doc.default, doc.maximum);
+        let mut axis = Axis::with_id(
+            parse_id("axis", &doc.id)?,
+            doc.tag,
+            doc.name,
+            doc.minimum,
+            doc.default,
+            doc.maximum,
+        );
         axis.set_hidden(doc.hidden);
         Ok(axis)
     }
@@ -1438,10 +1507,10 @@ impl TryFrom<&Source> for SourceDoc {
     fn try_from(source: &Source) -> Result<Self, Self::Error> {
         let id = source.id().to_string();
         let mut location = BTreeMap::new();
-        for (tag, value) in source.location().iter() {
+        for (axis_id, value) in source.location().iter() {
             location.insert(
-                tag.clone(),
-                ensure_finite(format!("sources[{id}].location[{tag}]"), *value)?,
+                axis_id.to_string(),
+                ensure_finite(format!("sources[{id}].location[{axis_id}]"), *value)?,
             );
         }
 
@@ -1459,10 +1528,11 @@ impl TryFrom<SourceDoc> for Source {
 
     fn try_from(doc: SourceDoc) -> Result<Self, Self::Error> {
         let mut location = HashMap::new();
-        for (tag, value) in doc.location {
+        for (axis_id, value) in doc.location {
+            let parsed_axis_id = parse_id("axis", &axis_id)?;
             location.insert(
-                tag.clone(),
-                ensure_finite(format!("sources[{}].location[{tag}]", doc.id), value)?,
+                parsed_axis_id,
+                ensure_finite(format!("sources[{}].location[{axis_id}]", doc.id), value)?,
             );
         }
 
@@ -1475,15 +1545,13 @@ impl TryFrom<SourceDoc> for Source {
     }
 }
 
-impl TryFrom<&Glyph> for GlyphDoc {
-    type Error = SourcePackageError;
-
-    fn try_from(glyph: &Glyph) -> Result<Self, Self::Error> {
+impl GlyphDoc {
+    fn from_glyph(font: &Font, glyph: &Glyph) -> Result<Self, SourcePackageError> {
         let mut layers = BTreeMap::new();
         for layer in glyph.layers().values() {
             layers.insert(
                 layer.source_id().to_string(),
-                LayerDoc::try_from(layer.as_ref())?,
+                LayerDoc::from_layer(font, layer.as_ref())?,
             );
         }
 
@@ -1522,10 +1590,8 @@ impl TryFrom<GlyphDoc> for Glyph {
     }
 }
 
-impl TryFrom<&GlyphLayer> for LayerDoc {
-    type Error = SourcePackageError;
-
-    fn try_from(layer: &GlyphLayer) -> Result<Self, Self::Error> {
+impl LayerDoc {
+    fn from_layer(font: &Font, layer: &GlyphLayer) -> Result<Self, SourcePackageError> {
         Ok(Self {
             id: layer.id().to_string(),
             advance: ensure_finite("glyph.layers[].advance", layer.width())?,
@@ -1538,7 +1604,7 @@ impl TryFrom<&GlyphLayer> for LayerDoc {
                 .components()
                 .iter()
                 .map(|(id, component)| {
-                    ComponentDoc::try_from(component).map(|doc| (id.to_string(), doc))
+                    ComponentDoc::from_component(font, component).map(|doc| (id.to_string(), doc))
                 })
                 .collect::<Result<BTreeMap<_, _>, _>>()?,
             anchors: layer
@@ -1552,9 +1618,7 @@ impl TryFrom<&GlyphLayer> for LayerDoc {
                 .collect::<Result<Vec<_>, _>>()?,
         })
     }
-}
 
-impl LayerDoc {
     fn into_layer(self, source_id: SourceId) -> Result<GlyphLayer, SourcePackageError> {
         let mut layer = GlyphLayer::with_width(
             parse_id("layer", &self.id)?,
@@ -1655,24 +1719,30 @@ impl TryFrom<PointDoc> for Point {
     }
 }
 
-impl TryFrom<&Component> for ComponentDoc {
-    type Error = SourcePackageError;
+impl ComponentDoc {
+    fn from_component(font: &Font, component: &Component) -> Result<Self, SourcePackageError> {
+        let base_glyph_id = component.base_glyph_id();
+        let base_glyph = font.glyph(base_glyph_id.clone()).ok_or_else(|| {
+            SourcePackageError::DanglingReference {
+                field: "glyph.layers.components.baseGlyphId",
+                id: base_glyph_id.to_string(),
+            }
+        })?;
 
-    fn try_from(component: &Component) -> Result<Self, Self::Error> {
         Ok(Self {
-            base_glyph: component.base_glyph().as_str().to_string(),
+            base_glyph_id: base_glyph_id.to_string(),
+            base_glyph_name: base_glyph.name().to_string(),
             transform: TransformDoc::try_from(*component.transform())?,
         })
     }
-}
 
-impl ComponentDoc {
     fn into_component(self, id: ComponentId) -> Result<Component, SourcePackageError> {
-        let base_glyph = GlyphName::new(self.base_glyph.clone())
-            .map_err(|_| SourcePackageError::InvalidGlyphName(self.base_glyph.clone()))?;
+        let base_glyph_name = GlyphName::new(self.base_glyph_name.clone())
+            .map_err(|_| SourcePackageError::InvalidGlyphName(self.base_glyph_name.clone()))?;
         Ok(Component::with_id(
             id,
-            base_glyph,
+            parse_id("glyph", &self.base_glyph_id)?,
+            base_glyph_name,
             DecomposedTransform::try_from(self.transform)?,
         ))
     }

@@ -327,13 +327,9 @@ impl Font {
             return Err(CoreError::DuplicateSourceName(name.to_string()));
         }
 
-        for (axis_tag, _) in location.iter() {
-            if !self
-                .axes()
-                .iter()
-                .any(|axis| axis.tag() == axis_tag.as_str())
-            {
-                return Err(CoreError::AxisNotFound(axis_tag.clone()));
+        for (axis_id, _) in location.iter() {
+            if !self.axes().iter().any(|axis| axis.id() == *axis_id) {
+                return Err(CoreError::AxisNotFound(axis_id.clone()));
             }
         }
 
@@ -654,7 +650,7 @@ impl Font {
     /// edit. Stable ids (not names): references survive renames. Sorted,
     /// deduplicated, excludes the touched glyphs themselves.
     pub fn dependents_of_layers(&self, layer_ids: &[LayerId]) -> Vec<GlyphId> {
-        let touched: Vec<&GlyphName> = self
+        let touched: Vec<GlyphId> = self
             .glyphs()
             .filter(|glyph| {
                 glyph
@@ -662,17 +658,17 @@ impl Font {
                     .keys()
                     .any(|layer_id| layer_ids.contains(layer_id))
             })
-            .map(|glyph| glyph.glyph_name())
+            .map(|glyph| glyph.id())
             .collect();
 
         let mut dependents: Vec<GlyphId> = self
             .glyphs()
-            .filter(|glyph| !touched.contains(&glyph.glyph_name()))
+            .filter(|glyph| !touched.contains(&glyph.id()))
             .filter(|glyph| {
                 glyph.layers().values().any(|layer| {
                     layer
                         .components_iter()
-                        .any(|component| touched.contains(&component.base_glyph()))
+                        .any(|component| touched.contains(&component.base_glyph_id()))
                 })
             })
             .map(|glyph| glyph.id())

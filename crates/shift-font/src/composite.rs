@@ -17,7 +17,8 @@
 
 use crate::curve::segment_bounds;
 use crate::{
-    Contour, CurveSegment, CurveSegmentIter, Font, Glyph, GlyphLayer, Point, PointId, Transform,
+    Contour, CurveSegment, CurveSegmentIter, Font, Glyph, GlyphId, GlyphLayer, Point, PointId,
+    Transform,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -27,8 +28,11 @@ use std::collections::HashSet;
 /// Implementations can provide different visibility rules (for example,
 /// session-local edited layers vs. persisted font layers).
 pub trait GlyphLayerProvider {
-    /// Returns the layer used for composite resolution for a given glyph name.
-    fn glyph_layer(&self, glyph_name: &str) -> Option<&GlyphLayer>;
+    /// Returns the layer used for composite resolution for a given glyph id.
+    fn glyph_layer(&self, glyph_id: &GlyphId) -> Option<&GlyphLayer>;
+
+    /// Returns the current glyph name for display/provenance.
+    fn glyph_name(&self, glyph_id: &GlyphId) -> Option<&str>;
 }
 
 /// [`GlyphLayerProvider`] that resolves layers directly from a [`Font`].
@@ -47,10 +51,14 @@ impl<'a> FontLayerProvider<'a> {
 }
 
 impl GlyphLayerProvider for FontLayerProvider<'_> {
-    fn glyph_layer(&self, glyph_name: &str) -> Option<&GlyphLayer> {
+    fn glyph_layer(&self, glyph_id: &GlyphId) -> Option<&GlyphLayer> {
         self.font
-            .glyph_by_name(glyph_name)
+            .glyph(glyph_id.clone())
             .and_then(preferred_layer_for_glyph)
+    }
+
+    fn glyph_name(&self, glyph_id: &GlyphId) -> Option<&str> {
+        self.font.glyph(glyph_id.clone()).map(Glyph::name)
     }
 }
 
@@ -183,14 +191,14 @@ fn append_component_anchors(
 /// 2. `_name` anchor attachment offset,
 fn resolve_component_transform(
     provider: &impl GlyphLayerProvider,
-    component_base_glyph: &str,
+    component_base_glyph_id: &GlyphId,
     explicit_transform: Transform,
     placed_anchors: &[PlacedAnchor],
 ) -> Transform {
     // Precedence:
     // 1) explicit component transform
     // 2) explicit + primary `_name` anchor attachment offset
-    let Some(component_layer) = provider.glyph_layer(component_base_glyph) else {
+    let Some(component_layer) = provider.glyph_layer(component_base_glyph_id) else {
         return explicit_transform;
     };
 
@@ -211,17 +219,17 @@ fn resolve_component_transform(
 /// Cycles are skipped branch-locally using `visiting`.
 fn flatten_component_named(
     provider: &impl GlyphLayerProvider,
-    glyph_name: &str,
+    glyph_id: &GlyphId,
     transform: Transform,
-    visiting: &mut HashSet<String>,
+    visiting: &mut HashSet<GlyphId>,
     out: &mut Vec<ResolvedContour>,
 ) {
     // Branch-local cycle guard: skip only the cyclic branch.
-    if !visiting.insert(glyph_name.to_string()) {
+    if !visiting.insert(glyph_id.clone()) {
         return;
     }
 
-    if let Some(layer) = provider.glyph_layer(glyph_name) {
+    if let Some(layer) = provider.glyph_layer(glyph_id) {
         for contour in layer.contours_iter() {
             out.push(transform_contour_points(contour, transform));
         }
@@ -231,18 +239,18 @@ fn flatten_component_named(
             let explicit_transform = component.matrix();
             let component_transform = resolve_component_transform(
                 provider,
-                component.base_glyph(),
+                &component.base_glyph_id(),
                 explicit_transform,
                 &placed_anchors,
             );
 
-            if let Some(component_layer) = provider.glyph_layer(component.base_glyph()) {
+            if let Some(component_layer) = provider.glyph_layer(&component.base_glyph_id()) {
                 append_component_anchors(component_layer, component_transform, &mut placed_anchors);
             }
 
             flatten_component_named(
                 provider,
-                component.base_glyph(),
+                &component.base_glyph_id(),
                 compose_transform(transform, component_transform),
                 visiting,
                 out,
@@ -250,7 +258,7 @@ fn flatten_component_named(
         }
     }
 
-    visiting.remove(glyph_name);
+    visiting.remove(glyph_id);
 }
 
 /// Flattens all component contours for `layer`, rooted at `root_glyph_name`.
@@ -264,9 +272,9 @@ fn flatten_component_named(
 pub fn flatten_component_contours_for_layer(
     provider: &impl GlyphLayerProvider,
     layer: &GlyphLayer,
-    root_glyph_name: &str,
+    root_glyph_id: &GlyphId,
 ) -> Vec<ResolvedContour> {
-    resolve_component_instances_for_layer(provider, layer, root_glyph_name)
+    resolve_component_instances_for_layer(provider, layer, root_glyph_id)
         .into_iter()
         .flat_map(|instance| instance.contours)
         .collect()
@@ -281,37 +289,40 @@ pub fn flatten_component_contours_for_layer(
 pub fn resolve_component_instances_for_layer(
     provider: &impl GlyphLayerProvider,
     layer: &GlyphLayer,
-    root_glyph_name: &str,
+    root_glyph_id: &GlyphId,
 ) -> Vec<ResolvedComponentInstance> {
     let mut out = Vec::new();
     let mut visiting = HashSet::new();
-    visiting.insert(root_glyph_name.to_string());
+    visiting.insert(root_glyph_id.clone());
 
     let mut placed_anchors = Vec::new();
     for component in layer.components_iter() {
         let explicit_transform = component.matrix();
         let component_transform = resolve_component_transform(
             provider,
-            component.base_glyph(),
+            &component.base_glyph_id(),
             explicit_transform,
             &placed_anchors,
         );
 
-        if let Some(component_layer) = provider.glyph_layer(component.base_glyph()) {
+        if let Some(component_layer) = provider.glyph_layer(&component.base_glyph_id()) {
             append_component_anchors(component_layer, component_transform, &mut placed_anchors);
         }
 
         let mut contours = Vec::new();
         flatten_component_named(
             provider,
-            component.base_glyph(),
+            &component.base_glyph_id(),
             component_transform,
             &mut visiting,
             &mut contours,
         );
 
         out.push(ResolvedComponentInstance {
-            component_glyph_name: component.base_glyph().to_string(),
+            component_glyph_name: provider
+                .glyph_name(&component.base_glyph_id())
+                .unwrap_or_else(|| component.base_glyph_name().as_str())
+                .to_string(),
             contours,
         });
     }
@@ -466,7 +477,7 @@ fn compose_transform(outer: Transform, inner: Transform) -> Transform {
 mod tests {
     use super::*;
     use crate::{
-        Anchor, Component, Contour, Font, Glyph, GlyphLayer, LayerId, PointType, SourceId,
+        Anchor, Component, Contour, Font, Glyph, GlyphId, GlyphLayer, LayerId, PointType, SourceId,
         Transform,
     };
 
@@ -487,15 +498,17 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         let mut base = Glyph::new("base".to_string());
+        let base_id = base.id();
         let mut base_layer = test_layer(source_id.clone(), 500.0);
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 10.0));
         base.set_layer(base_layer);
         font.insert_glyph(base).unwrap();
 
         let mut composite = Glyph::new("comp".to_string());
+        let composite_id = composite.id();
         let mut composite_layer = test_layer(source_id.clone(), 500.0);
         let composite_layer_id = composite_layer.id();
-        composite_layer.add_component(Component::new("base".to_string()));
+        composite_layer.add_component(Component::new(base_id, "base".to_string()));
         composite.set_layer(composite_layer);
         font.insert_glyph(composite).unwrap();
 
@@ -504,7 +517,7 @@ mod tests {
             .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(composite_layer_id))
             .unwrap();
-        let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
+        let resolved = flatten_component_contours_for_layer(&provider, layer, &composite_id);
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].points.len(), 2);
@@ -516,21 +529,24 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         let mut a = Glyph::new("A".to_string());
+        let a_id = a.id();
+        let b_id = GlyphId::new();
+        let c_id = GlyphId::new();
         let mut a_layer = test_layer(source_id.clone(), 500.0);
         let a_layer_id = a_layer.id();
-        a_layer.add_component(Component::new("B".to_string()));
-        a_layer.add_component(Component::new("C".to_string()));
+        a_layer.add_component(Component::new(b_id.clone(), "B".to_string()));
+        a_layer.add_component(Component::new(c_id.clone(), "C".to_string()));
         a.set_layer(a_layer);
         font.insert_glyph(a).unwrap();
 
-        let mut b = Glyph::new("B".to_string());
+        let mut b = Glyph::with_id(b_id, "B".to_string());
         let mut b_layer = test_layer(source_id.clone(), 500.0);
         b_layer.add_contour(two_point_contour(0.0, 0.0, 20.0, 20.0));
-        b_layer.add_component(Component::new("A".to_string()));
+        b_layer.add_component(Component::new(a_id.clone(), "A".to_string()));
         b.set_layer(b_layer);
         font.insert_glyph(b).unwrap();
 
-        let mut c = Glyph::new("C".to_string());
+        let mut c = Glyph::with_id(c_id, "C".to_string());
         let mut c_layer = test_layer(source_id.clone(), 500.0);
         c_layer.add_contour(two_point_contour(10.0, 0.0, 30.0, 20.0));
         c.set_layer(c_layer);
@@ -541,7 +557,7 @@ mod tests {
             .glyph_by_name("A")
             .and_then(|glyph| glyph.layer(a_layer_id))
             .unwrap();
-        let resolved = flatten_component_contours_for_layer(&provider, layer, "A");
+        let resolved = flatten_component_contours_for_layer(&provider, layer, &a_id);
 
         assert_eq!(resolved.len(), 2);
     }
@@ -552,6 +568,7 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         let mut base = Glyph::new("base".to_string());
+        let base_id = base.id();
         let mut base_layer = test_layer(source_id.clone(), 500.0);
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
@@ -559,6 +576,7 @@ mod tests {
         font.insert_glyph(base).unwrap();
 
         let mut mark = Glyph::new("mark".to_string());
+        let mark_id = mark.id();
         let mut mark_layer = test_layer(source_id.clone(), 500.0);
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
@@ -566,10 +584,11 @@ mod tests {
         font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
+        let comp_id = comp.id();
         let mut comp_layer = test_layer(source_id.clone(), 500.0);
         let comp_layer_id = comp_layer.id();
-        comp_layer.add_component(Component::new("base".to_string()));
-        comp_layer.add_component(Component::new("mark".to_string()));
+        comp_layer.add_component(Component::new(base_id, "base".to_string()));
+        comp_layer.add_component(Component::new(mark_id, "mark".to_string()));
         comp.set_layer(comp_layer);
         font.insert_glyph(comp).unwrap();
 
@@ -578,7 +597,7 @@ mod tests {
             .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
-        let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
+        let resolved = flatten_component_contours_for_layer(&provider, layer, &comp_id);
 
         assert_eq!(resolved.len(), 2);
         let mark_contour = &resolved[1];
@@ -594,6 +613,7 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         let mut mark = Glyph::new("mark".to_string());
+        let mark_id = mark.id();
         let mut mark_layer = test_layer(source_id.clone(), 500.0);
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark_layer.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 0.0));
@@ -601,10 +621,11 @@ mod tests {
         font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
+        let comp_id = comp.id();
         let mut comp_layer = test_layer(source_id.clone(), 500.0);
         let comp_layer_id = comp_layer.id();
         let matrix = Transform::translate(30.0, 40.0);
-        comp_layer.add_component(Component::with_matrix("mark".to_string(), &matrix));
+        comp_layer.add_component(Component::with_matrix(mark_id, "mark".to_string(), &matrix));
         comp.set_layer(comp_layer);
         font.insert_glyph(comp).unwrap();
 
@@ -613,7 +634,7 @@ mod tests {
             .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
-        let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
+        let resolved = flatten_component_contours_for_layer(&provider, layer, &comp_id);
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].points[0].x(), 30.0);
@@ -628,6 +649,7 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         let mut base = Glyph::new("base".to_string());
+        let base_id = base.id();
         let mut base_layer = test_layer(source_id.clone(), 500.0);
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
@@ -635,6 +657,7 @@ mod tests {
         font.insert_glyph(base).unwrap();
 
         let mut mark = Glyph::new("mark".to_string());
+        let mark_id = mark.id();
         let mut mark_layer = test_layer(source_id.clone(), 500.0);
         mark_layer.add_anchor(Anchor::new(Some("top_extra".to_string()), 5.0, 0.0));
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
@@ -642,11 +665,12 @@ mod tests {
         font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
+        let comp_id = comp.id();
         let mut comp_layer = test_layer(source_id.clone(), 500.0);
         let comp_layer_id = comp_layer.id();
         comp_layer.add_anchor(Anchor::new(Some("parent_top".to_string()), 0.0, 0.0));
-        comp_layer.add_component(Component::new("base".to_string()));
-        comp_layer.add_component(Component::new("mark".to_string()));
+        comp_layer.add_component(Component::new(base_id, "base".to_string()));
+        comp_layer.add_component(Component::new(mark_id, "mark".to_string()));
         comp.set_layer(comp_layer);
         font.insert_glyph(comp).unwrap();
 
@@ -655,7 +679,7 @@ mod tests {
             .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
-        let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
+        let resolved = flatten_component_contours_for_layer(&provider, layer, &comp_id);
 
         assert_eq!(resolved.len(), 2);
         let mark_contour = &resolved[1];
@@ -671,6 +695,7 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         let mut base = Glyph::new("base".to_string());
+        let base_id = base.id();
         let mut base_layer = test_layer(source_id.clone(), 500.0);
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
@@ -678,6 +703,7 @@ mod tests {
         font.insert_glyph(base).unwrap();
 
         let mut mark = Glyph::new("mark".to_string());
+        let mark_id = mark.id();
         let mut mark_layer = test_layer(source_id.clone(), 500.0);
         mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
         mark_layer.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 20.0));
@@ -686,11 +712,12 @@ mod tests {
         font.insert_glyph(mark).unwrap();
 
         let mut comp = Glyph::new("comp".to_string());
+        let comp_id = comp.id();
         let mut comp_layer = test_layer(source_id.clone(), 500.0);
         let comp_layer_id = comp_layer.id();
-        comp_layer.add_component(Component::new("base".to_string()));
-        comp_layer.add_component(Component::new("mark".to_string()));
-        comp_layer.add_component(Component::new("mark".to_string()));
+        comp_layer.add_component(Component::new(base_id, "base".to_string()));
+        comp_layer.add_component(Component::new(mark_id.clone(), "mark".to_string()));
+        comp_layer.add_component(Component::new(mark_id, "mark".to_string()));
         comp.set_layer(comp_layer);
         font.insert_glyph(comp).unwrap();
 
@@ -699,7 +726,7 @@ mod tests {
             .glyph_by_name("comp")
             .and_then(|glyph| glyph.layer(comp_layer_id))
             .unwrap();
-        let resolved = flatten_component_contours_for_layer(&provider, layer, "comp");
+        let resolved = flatten_component_contours_for_layer(&provider, layer, &comp_id);
 
         assert_eq!(resolved.len(), 3);
         let first_mark = &resolved[1];

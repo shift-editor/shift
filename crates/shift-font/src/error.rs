@@ -1,4 +1,4 @@
-use crate::{AnchorId, ContourId, GlyphId, GlyphName, LayerId, PointId, SourceId};
+use crate::{AnchorId, AxisId, ContourId, GlyphId, GlyphName, LayerId, PointId, SourceId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -25,6 +25,9 @@ pub enum CoreError {
 
     #[error("invalid component id {0}")]
     InvalidComponentId(String),
+
+    #[error("invalid glyph id {0}")]
+    InvalidGlyphId(String),
 
     #[error("contour {0} not found")]
     ContourNotFound(ContourId),
@@ -84,7 +87,7 @@ pub enum CoreError {
     DuplicateAxisTag(String),
 
     #[error("axis {0} not found")]
-    AxisNotFound(String),
+    AxisNotFound(AxisId),
 
     #[error("invalid source name {0:?}")]
     InvalidSourceName(String),

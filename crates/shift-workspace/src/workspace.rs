@@ -193,7 +193,7 @@ impl FontWorkspace {
                         .font
                         .axes()
                         .iter()
-                        .find(|axis| axis.tag() == change.tag)
+                        .find(|axis| axis.id() == change.axis_id)
                         .cloned(),
                 }),
                 FontChange::SourceCreated(change) => steps.push(LedgerStep::Source {
@@ -483,9 +483,9 @@ fn replay_axis(
     changes: &mut FontChangeSet,
 ) -> Result<(), WorkspaceError> {
     if let Some(axis) = from {
-        font.remove_axis(axis.tag())
-            .ok_or_else(|| CoreError::AxisNotFound(axis.tag().to_string()))?;
-        changes.push(FontChange::axis_deleted(axis.tag()));
+        font.remove_axis(axis.id())
+            .ok_or_else(|| CoreError::AxisNotFound(axis.id()))?;
+        changes.push(FontChange::axis_deleted(axis.id()));
     }
 
     if let Some(axis) = to {

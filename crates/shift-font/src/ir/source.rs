@@ -72,14 +72,16 @@ impl Source {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AxisId;
 
     #[test]
     fn source_creation() {
         let mut location = Location::new();
-        location.set("wght".to_string(), 400.0);
+        let axis_id = AxisId::from_raw("wght");
+        location.set(axis_id.clone(), 400.0);
 
         let source = Source::new("Regular".to_string(), location);
         assert_eq!(source.name(), "Regular");
-        assert_eq!(source.location().get("wght"), Some(400.0));
+        assert_eq!(source.location().get(&axis_id), Some(400.0));
     }
 }

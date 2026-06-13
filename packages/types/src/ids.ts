@@ -12,6 +12,7 @@
 declare const PointIdBrand: unique symbol;
 declare const ContourIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
+declare const AxisIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
@@ -37,6 +38,12 @@ export type ContourId = string & {
  * Branded string type - can't be confused with PointId/ContourId or plain strings.
  */
 export type AnchorId = string & { readonly [AnchorIdBrand]: typeof AnchorIdBrand };
+
+/**
+ * An axis identifier from Rust.
+ * Branded string type - can't be confused with OpenType axis tags.
+ */
+export type AxisId = string & { readonly [AxisIdBrand]: typeof AxisIdBrand };
 
 /**
  * A component identifier from Rust.
@@ -90,6 +97,14 @@ export function asContourId(id: string): ContourId {
  */
 export function asAnchorId(id: string): AnchorId {
   return id as AnchorId;
+}
+
+/**
+ * Convert a string ID from Rust to a typed AxisId.
+ * Use this when receiving IDs from Rust snapshots.
+ */
+export function asAxisId(id: string): AxisId {
+  return id as AxisId;
 }
 
 /**
@@ -157,6 +172,14 @@ export function isValidAnchorId(id: unknown): id is AnchorId {
 }
 
 /**
+ * Type guard to check if a value is a valid AxisId.
+ * Useful for runtime validation in debug builds.
+ */
+export function isValidAxisId(id: unknown): id is AxisId {
+  return typeof id === "string" && id.length > 0;
+}
+
+/**
  * Type guard to check if a value is a valid ComponentId.
  * Useful for runtime validation in debug builds.
  */
@@ -216,6 +239,11 @@ export function mintContourId(): ContourId {
 /** Mints a new anchor id. See {@link mintPointId}. */
 export function mintAnchorId(): AnchorId {
   return `anchor_${crypto.randomUUID()}` as AnchorId;
+}
+
+/** Mints a new axis id. See {@link mintPointId}. */
+export function mintAxisId(): AxisId {
+  return `axis_${crypto.randomUUID()}` as AxisId;
 }
 
 /** Mints a new glyph id. See {@link mintPointId}. */

@@ -43,7 +43,7 @@ impl DesignspaceWriter {
         axes.iter()
             .map(|axis| Dimension {
                 name: axis.name().to_string(),
-                xvalue: Some(location.get(axis.tag()).unwrap_or(axis.default()) as f32),
+                xvalue: Some(location.get(&axis.id()).unwrap_or(axis.default()) as f32),
                 ..Default::default()
             })
             .collect()

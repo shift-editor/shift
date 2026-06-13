@@ -1,5 +1,5 @@
 use crate::axis::{Axis, Location};
-use crate::entity::{GlyphId, LayerId, SourceId};
+use crate::entity::{AxisId, GlyphId, LayerId, SourceId};
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
 use crate::glyph::{Glyph, GlyphLayer};
@@ -359,10 +359,22 @@ impl Font {
         self.data_mut().axes.push(axis);
     }
 
-    pub fn remove_axis(&mut self, tag: &str) -> Option<Axis> {
+    pub fn remove_axis(&mut self, axis_id: AxisId) -> Option<Axis> {
         let data = self.data_mut();
-        let index = data.axes.iter().position(|axis| axis.tag() == tag)?;
+        let index = data.axes.iter().position(|axis| axis.id() == axis_id)?;
         Some(data.axes.remove(index))
+    }
+
+    pub fn axis(&self, axis_id: AxisId) -> Option<&Axis> {
+        self.data().axes.iter().find(|axis| axis.id() == axis_id)
+    }
+
+    pub fn axis_id_by_tag(&self, tag: &str) -> Option<AxisId> {
+        self.data()
+            .axes
+            .iter()
+            .find(|axis| axis.tag() == tag)
+            .map(Axis::id)
     }
 
     pub fn sources(&self) -> &[Source] {

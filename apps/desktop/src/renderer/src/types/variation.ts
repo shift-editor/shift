@@ -1,4 +1,3 @@
-declare const AxisTagBrand: unique symbol;
+import type { AxisId } from "@shift/types";
 
-export type AxisTag = string & { readonly [AxisTagBrand]: true };
-export type AxisLocation = ReadonlyMap<AxisTag, number>;
+export type AxisLocation = ReadonlyMap<AxisId, number>;

@@ -11,6 +11,12 @@ use std::path::Path;
 
 pub struct UfoReader;
 
+struct PendingComponent {
+    layer_id: LayerId,
+    base_glyph_name: String,
+    matrix: Transform,
+}
+
 impl UfoReader {
     pub fn new() -> Self {
         Self
@@ -42,16 +48,19 @@ impl UfoReader {
         shift_contour
     }
 
-    fn convert_component(component: &norad::Component) -> Component {
-        let matrix = Transform {
-            xx: component.transform.x_scale,
-            xy: component.transform.xy_scale,
-            yx: component.transform.yx_scale,
-            yy: component.transform.y_scale,
-            dx: component.transform.x_offset,
-            dy: component.transform.y_offset,
-        };
-        Component::with_matrix(component.base.to_string(), &matrix)
+    fn convert_component(layer_id: LayerId, component: &norad::Component) -> PendingComponent {
+        PendingComponent {
+            layer_id,
+            base_glyph_name: component.base.to_string(),
+            matrix: Transform {
+                xx: component.transform.x_scale,
+                xy: component.transform.xy_scale,
+                yx: component.transform.yx_scale,
+                yy: component.transform.y_scale,
+                dx: component.transform.x_offset,
+                dy: component.transform.y_offset,
+            },
+        }
     }
 
     fn convert_anchor(anchor: &norad::Anchor) -> Anchor {
@@ -103,8 +112,10 @@ impl UfoReader {
         norad_glyph: &norad::Glyph,
         layer_id: LayerId,
         source_id: SourceId,
-    ) -> Glyph {
+    ) -> (Glyph, Vec<PendingComponent>) {
         let mut glyph_layer = GlyphLayer::with_width(layer_id, source_id, norad_glyph.width);
+        let layer_id = glyph_layer.id();
+        let mut pending_components = Vec::new();
         if norad_glyph.height != 0.0 {
             glyph_layer.set_height(Some(norad_glyph.height));
         }
@@ -114,7 +125,7 @@ impl UfoReader {
         }
 
         for component in &norad_glyph.components {
-            glyph_layer.add_component(Self::convert_component(component));
+            pending_components.push(Self::convert_component(layer_id.clone(), component));
         }
 
         for anchor in &norad_glyph.anchors {
@@ -139,7 +150,7 @@ impl UfoReader {
         }
 
         glyph.set_layer(glyph_layer);
-        glyph
+        (glyph, pending_components)
     }
 
     fn convert_kerning(norad_font: &NoradFont) -> KerningData {
@@ -194,6 +205,35 @@ impl UfoReader {
             FeatureData::new()
         }
     }
+
+    fn resolve_components(
+        font: &mut Font,
+        pending_components: Vec<PendingComponent>,
+    ) -> FormatBackendResult<()> {
+        for pending in pending_components {
+            let base_glyph_id =
+                font.glyph_id_by_name(&pending.base_glyph_name)
+                    .ok_or_else(|| {
+                        FormatBackendError::Ufo(format!(
+                            "component base glyph {:?} does not exist",
+                            pending.base_glyph_name
+                        ))
+                    })?;
+            let layer = font.layer_mut(pending.layer_id.clone()).ok_or_else(|| {
+                FormatBackendError::Ufo(format!(
+                    "component target layer {} does not exist",
+                    pending.layer_id
+                ))
+            })?;
+            layer.add_component(Component::with_matrix(
+                base_glyph_id,
+                pending.base_glyph_name,
+                &pending.matrix,
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for UfoReader {
@@ -246,6 +286,7 @@ impl FontReader for UfoReader {
         font.metrics_mut().italic_angle = norad_font.font_info.italic_angle;
 
         let norad_default_layer_name = norad_font.layers.default_layer().name().clone();
+        let mut pending_components = Vec::new();
         for layer in norad_font.layers.iter() {
             let source_id = if layer.name() == &norad_default_layer_name {
                 default_source_id.clone()
@@ -254,8 +295,9 @@ impl FontReader for UfoReader {
             };
 
             for norad_glyph in layer.iter() {
-                let glyph =
+                let (glyph, glyph_components) =
                     Self::convert_glyph_layer(norad_glyph, LayerId::new(), source_id.clone());
+                pending_components.extend(glyph_components);
 
                 if let Some(glyph_id) = font.glyph_id_by_name(glyph.name()) {
                     for layer_data in glyph.layers().values() {
@@ -266,6 +308,7 @@ impl FontReader for UfoReader {
                 }
             }
         }
+        Self::resolve_components(&mut font, pending_components)?;
 
         *font.kerning_mut() = Self::convert_kerning(&norad_font);
         *font.features_mut() = Self::load_features(ufo_path);

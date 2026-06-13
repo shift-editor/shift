@@ -1,16 +1,12 @@
-import type { Axis, Location } from "@shift/types";
-import type { AxisLocation, AxisTag } from "@/types/variation";
-
-export function axisTag(tag: string): AxisTag {
-  return tag as AxisTag;
-}
+import { asAxisId, type Axis, type Location } from "@shift/types";
+import type { AxisLocation } from "@/types/variation";
 
 export function emptyAxisLocation(): AxisLocation {
-  return new Map<AxisTag, number>();
+  return new Map();
 }
 
 export function axisLocationFromRecord(values: Readonly<Record<string, number>>): AxisLocation {
-  return new Map(Object.entries(values).map(([tag, value]) => [axisTag(tag), value]));
+  return new Map(Object.entries(values).map(([axisId, value]) => [asAxisId(axisId), value]));
 }
 
 export function axisLocationFromLocation(location: Location): AxisLocation {
@@ -18,16 +14,16 @@ export function axisLocationFromLocation(location: Location): AxisLocation {
 }
 
 export function defaultAxisLocation(axes: readonly Axis[]): AxisLocation {
-  return new Map(axes.map((axis) => [axisTag(axis.tag), axis.default]));
+  return new Map(axes.map((axis) => [axis.id, axis.default]));
 }
 
 export function axisValue(location: AxisLocation, axis: Axis): number {
-  return location.get(axisTag(axis.tag)) ?? axis.default;
+  return location.get(axis.id) ?? axis.default;
 }
 
 export function withAxisValue(location: AxisLocation, axis: Axis, value: number): AxisLocation {
   const next = new Map(location);
-  next.set(axisTag(axis.tag), value);
+  next.set(axis.id, value);
   return next;
 }
 

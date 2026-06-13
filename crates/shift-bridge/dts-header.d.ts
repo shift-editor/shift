@@ -2,6 +2,7 @@ import type {
   ContourId,
   PointId,
   AnchorId,
+  AxisId,
   ComponentId,
   GuidelineId,
   GlyphId,

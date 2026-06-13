@@ -1,9 +1,9 @@
 use std::fs::File;
 
 use shift_font::{
-    Anchor, AnchorId, Axis, Component, ComponentId, Contour, ContourId, DecomposedTransform, Font,
-    Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair, KerningSide, LayerId,
-    LibValue, Location, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, Component, ComponentId, Contour, ContourId,
+    DecomposedTransform, Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair,
+    KerningSide, LayerId, LibValue, Location, Point, PointId, PointType, Source, SourceId,
 };
 use shift_source::{
     AXES_FILE, FEATURES_FILE, FONT_FILE, GLYPHS_DIR, KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE,
@@ -45,7 +45,9 @@ fn sample_font() -> Font {
         LibValue::String("font note".to_string()),
     );
 
-    let mut weight = Axis::new(
+    let weight_id = AxisId::from_raw("weight");
+    let mut weight = Axis::with_id(
+        weight_id.clone(),
         "wght".to_string(),
         "Weight".to_string(),
         100.0,
@@ -58,7 +60,7 @@ fn sample_font() -> Font {
     let regular_id = SourceId::from_raw("regular");
     let bold_id = SourceId::from_raw("bold");
     let mut bold_location = Location::new();
-    bold_location.set("wght".to_string(), 900.0);
+    bold_location.set(weight_id, 900.0);
     font.add_source(Source::with_id(
         regular_id.clone(),
         "Regular".to_string(),
@@ -72,6 +74,15 @@ fn sample_font() -> Font {
         None,
     ));
     font.set_default_source_id(regular_id.clone());
+
+    let acute_id = GlyphId::from_raw("acute");
+    let mut acute = Glyph::with_id(acute_id.clone(), "acute");
+    acute.set_layer(GlyphLayer::with_width(
+        LayerId::from_raw("acute_regular"),
+        regular_id.clone(),
+        200.0,
+    ));
+    font.insert_glyph(acute).unwrap();
 
     let glyph_id = GlyphId::from_raw("A");
     let mut glyph = Glyph::with_id(glyph_id, "A");
@@ -112,6 +123,7 @@ fn sample_font() -> Font {
     ));
     regular_layer.add_component(Component::with_id(
         ComponentId::from_raw("acute_component"),
+        acute_id,
         "acute",
         DecomposedTransform {
             translate_x: 10.0,
@@ -266,7 +278,8 @@ fn roundtrips_geometry_font_through_zip_package() {
     let component = regular_layer
         .component(ComponentId::from_raw("acute_component"))
         .unwrap();
-    assert_eq!(component.base_glyph().as_str(), "acute");
+    assert_eq!(component.base_glyph_id(), GlyphId::from_raw("acute"));
+    assert_eq!(component.base_glyph_name().as_str(), "acute");
     assert_eq!(component.transform().translate_x, 10.0);
 
     let bold_layer = glyph.layer(LayerId::from_raw("A_bold")).unwrap();
@@ -295,7 +308,8 @@ fn serializes_same_font_to_byte_identical_tree() {
             FEATURES_FILE,
             KERNING_FILE,
             LIB_MODULE_FILE,
-            &format!("{GLYPHS_DIR}/glyph_A.json")
+            &format!("{GLYPHS_DIR}/glyph_A.json"),
+            &format!("{GLYPHS_DIR}/glyph_acute.json")
         ]
     );
 }
@@ -440,8 +454,17 @@ fn rejects_non_finite_metric_values_before_json_serialization() {
 #[test]
 fn rejects_non_finite_source_location_values() {
     let mut font = Font::empty();
+    let axis_id = AxisId::from_raw("weight");
+    font.add_axis(Axis::with_id(
+        axis_id.clone(),
+        "wght".to_string(),
+        "Weight".to_string(),
+        100.0,
+        400.0,
+        900.0,
+    ));
     let mut location = Location::new();
-    location.set("wght".to_string(), f64::INFINITY);
+    location.set(axis_id, f64::INFINITY);
     font.add_source(Source::with_id(
         SourceId::from_raw("bad"),
         "Bad".to_string(),
@@ -454,7 +477,7 @@ fn rejects_non_finite_source_location_values() {
     assert!(matches!(
         error,
         SourcePackageError::NonFiniteNumber { field }
-            if field == "sources[source_bad].location[wght]"
+            if field == "sources[source_bad].location[axis_weight]"
     ));
 }
 
@@ -468,6 +491,7 @@ fn rejects_invalid_axis_ranges_on_load() {
     axes_entry.1 = br#"{
   "axes": [
     {
+      "id": "axis_weight",
       "tag": "wght",
       "name": "Weight",
       "minimum": 900.0,

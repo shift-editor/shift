@@ -5,13 +5,14 @@ use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
 use shift_font::{
-  AnchorId, AnchorSeed, Axis as FontAxis, BooleanOp, ContourId, Font, FontChange, FontIntent,
-  FontIntentSet, Glyph, GlyphId, LayerId, Location as FontLocation, PointId, PointSeed, SourceId,
+  AnchorId, AnchorSeed, Axis as FontAxis, AxisId, BooleanOp, ContourId, Font, FontChange,
+  FontIntent, FontIntentSet, Glyph, GlyphId, LayerId, Location as FontLocation, PointId, PointSeed,
+  SourceId,
 };
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
-    NapiGlyphRecord, NapiGlyphState, NapiLayerReplaced, NapiPointSeed, NapiSource,
+    NapiGlyphRecord, NapiGlyphState, NapiLayerReplaced, NapiLocation, NapiPointSeed, NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
@@ -626,7 +627,8 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
     }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
-      let mut axis = FontAxis::new(
+      let mut axis = FontAxis::with_id(
+        parse::<AxisId>(&payload.axis_id)?,
         payload.tag,
         payload.name,
         payload.min,
@@ -642,7 +644,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         .ok_or_else(|| missing("createSource"))?;
       Ok(FontIntent::CreateSource {
         name: payload.name,
-        location: FontLocation::from_map(payload.location.values),
+        location: map_location(payload.location)?,
       })
     }
     other => Err(BridgeError::InvalidInput {
@@ -682,6 +684,15 @@ fn map_anchor_seed(seed: NapiAnchorSeed) -> errors::Result<AnchorSeed> {
     x: seed.x,
     y: seed.y,
   })
+}
+
+fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
+  let values = location
+    .values
+    .into_iter()
+    .map(|(axis_id, value)| Ok((parse::<AxisId>(&axis_id)?, value)))
+    .collect::<errors::Result<_>>()?;
+  Ok(FontLocation::from_map(values))
 }
 
 #[cfg(test)]
@@ -1441,9 +1452,17 @@ mod tests {
     applied.layers[0].layer_id.clone()
   }
 
-  fn create_axis_intent(tag: &str, name: &str, min: f64, default: f64, max: f64) -> NapiFontIntent {
+  fn create_axis_intent(
+    axis_id: &str,
+    tag: &str,
+    name: &str,
+    min: f64,
+    default: f64,
+    max: f64,
+  ) -> NapiFontIntent {
     NapiFontIntent {
       create_axis: Some(NapiCreateAxisIntent {
+        axis_id: axis_id.to_string(),
         tag: tag.to_string(),
         name: name.to_string(),
         min,
@@ -1471,7 +1490,7 @@ mod tests {
   }
 
   fn weight_axis_intent() -> NapiFontIntent {
-    create_axis_intent("wght", "Weight", 100.0, 400.0, 900.0)
+    create_axis_intent("axis_weight", "wght", "Weight", 100.0, 400.0, 900.0)
   }
 
   #[test]
@@ -1500,7 +1519,14 @@ mod tests {
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
     let result = bridge.apply(
-      vec![create_axis_intent("wght", "Weight Again", 0.0, 50.0, 100.0)],
+      vec![create_axis_intent(
+        "axis_weight_again",
+        "wght",
+        "Weight Again",
+        0.0,
+        50.0,
+        100.0,
+      )],
       None,
     );
 
@@ -1515,7 +1541,10 @@ mod tests {
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
     let applied = bridge
-      .apply(vec![create_source_intent("Bold", &[("wght", 700.0)])], None)
+      .apply(
+        vec![create_source_intent("Bold", &[("axis_weight", 700.0)])],
+        None,
+      )
       .unwrap();
 
     let sources = applied.sources.expect("createSource must echo sources");
@@ -1524,7 +1553,7 @@ mod tests {
       .iter()
       .find(|source| source.name == "Bold")
       .expect("new source must be in the echo");
-    assert_eq!(bold.location.values.get("wght"), Some(&700.0));
+    assert_eq!(bold.location.values.get("axis_weight"), Some(&700.0));
     // one eager layer per existing glyph, replace-grade
     assert_eq!(applied.layers.len(), 1);
     assert!(applied.layers[0].structure.is_some());
@@ -1538,7 +1567,10 @@ mod tests {
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
     let applied = bridge
-      .apply(vec![create_source_intent("Bold", &[("wght", 700.0)])], None)
+      .apply(
+        vec![create_source_intent("Bold", &[("axis_weight", 700.0)])],
+        None,
+      )
       .unwrap();
 
     let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
@@ -1558,11 +1590,14 @@ mod tests {
   }
 
   #[test]
-  fn apply_create_source_rejects_unknown_axis_tags() {
+  fn apply_create_source_rejects_unknown_axis_ids() {
     let mut bridge = bridge_with_workspace();
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
-    let result = bridge.apply(vec![create_source_intent("Wide", &[("wdth", 125.0)])], None);
+    let result = bridge.apply(
+      vec![create_source_intent("Wide", &[("axis_width", 125.0)])],
+      None,
+    );
 
     assert!(result.is_err());
     assert_eq!(bridge.get_sources().unwrap().len(), 1);
@@ -1585,7 +1620,10 @@ mod tests {
     let mut bridge = bridge_with_workspace();
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
     bridge
-      .apply(vec![create_source_intent("Bold", &[("wght", 700.0)])], None)
+      .apply(
+        vec![create_source_intent("Bold", &[("axis_weight", 700.0)])],
+        None,
+      )
       .unwrap();
 
     let applied = bridge

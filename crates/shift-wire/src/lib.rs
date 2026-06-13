@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use shift_font::{
-    Anchor as IrAnchor, AnchorId, Axis as IrAxis, Component as IrComponent, ComponentId,
+    Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, Component as IrComponent, ComponentId,
     Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
     GlyphLayer, GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
@@ -107,6 +107,7 @@ impl From<&IrFontMetrics> for FontMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Axis {
+    pub id: AxisId,
     pub tag: String,
     pub name: String,
     pub minimum: f64,
@@ -118,6 +119,7 @@ pub struct Axis {
 impl From<&IrAxis> for Axis {
     fn from(axis: &IrAxis) -> Self {
         Self {
+            id: axis.id(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
             minimum: axis.minimum(),
@@ -154,25 +156,25 @@ pub struct GlyphRecord {
     pub id: GlyphId,
     pub name: GlyphName,
     pub unicodes: Vec<u32>,
-    pub component_base_glyph_names: Vec<GlyphName>,
+    pub component_base_glyph_ids: Vec<GlyphId>,
 }
 
 impl From<&IrGlyph> for GlyphRecord {
     fn from(glyph: &IrGlyph) -> Self {
-        let mut component_base_glyph_names: Vec<_> = glyph
+        let mut component_base_glyph_ids: Vec<_> = glyph
             .layers()
             .values()
             .flat_map(|layer| layer.components_iter())
-            .map(|component| component.base_glyph().clone())
+            .map(|component| component.base_glyph_id())
             .collect();
-        component_base_glyph_names.sort();
-        component_base_glyph_names.dedup();
+        component_base_glyph_ids.sort();
+        component_base_glyph_ids.dedup();
 
         Self {
             id: glyph.id(),
             name: glyph.glyph_name().clone(),
             unicodes: glyph.unicodes().to_vec(),
-            component_base_glyph_names,
+            component_base_glyph_ids,
         }
     }
 }
@@ -297,6 +299,7 @@ impl From<&IrAnchor> for AnchorData {
 #[serde(rename_all = "camelCase")]
 pub struct ComponentData {
     pub id: String,
+    pub base_glyph_id: GlyphId,
     pub base_glyph_name: GlyphName,
 }
 
@@ -304,7 +307,8 @@ impl From<&IrComponent> for ComponentData {
     fn from(component: &IrComponent) -> Self {
         Self {
             id: component.id().to_string(),
-            base_glyph_name: component.base_glyph().clone(),
+            base_glyph_id: component.base_glyph_id(),
+            base_glyph_name: component.base_glyph_name().clone(),
         }
     }
 }
@@ -373,7 +377,7 @@ impl GlyphChangedEntities {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
-    pub values: HashMap<String, f64>,
+    pub values: HashMap<AxisId, f64>,
 }
 
 impl From<&IrLocation> for Location {
@@ -381,7 +385,7 @@ impl From<&IrLocation> for Location {
         Self {
             values: location
                 .iter()
-                .map(|(tag, value)| (tag.clone(), *value))
+                .map(|(axis_id, value)| (axis_id.clone(), *value))
                 .collect(),
         }
     }

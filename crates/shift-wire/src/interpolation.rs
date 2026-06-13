@@ -104,7 +104,7 @@ fn check_compatibility(a: &GlyphStructure, b: &GlyphStructure) -> Result<(), Str
         }
     }
 
-    // Components contribute transform values, keyed structurally by base glyph.
+    // Components contribute transform values, keyed structurally by base glyph id.
     if a.components.len() != b.components.len() {
         return Err(format!(
             "component count mismatch: {} vs {}",
@@ -114,10 +114,10 @@ fn check_compatibility(a: &GlyphStructure, b: &GlyphStructure) -> Result<(), Str
     }
 
     for (i, (ca, cb)) in a.components.iter().zip(b.components.iter()).enumerate() {
-        if ca.base_glyph_name != cb.base_glyph_name {
+        if ca.base_glyph_id != cb.base_glyph_id {
             return Err(format!(
-                "component {i} base glyph mismatch: {} vs {}",
-                ca.base_glyph_name, cb.base_glyph_name
+                "component {i} base glyph mismatch: {} ({}) vs {} ({})",
+                ca.base_glyph_name, ca.base_glyph_id, cb.base_glyph_name, cb.base_glyph_id
             ));
         }
     }
@@ -131,7 +131,7 @@ fn to_fd_wire_location(location: &Location, axes: &[Axis]) -> NormalizedLocation
     for axis in axes {
         let value = location
             .values
-            .get(axis.tag())
+            .get(&axis.id())
             .copied()
             .unwrap_or(axis.default());
         let normalized = axis.normalize(value);
@@ -263,7 +263,11 @@ mod tests {
     use crate::{ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType};
 
     use super::build_glyph_variation_data;
-    use shift_font::Axis;
+    use shift_font::{Axis, AxisId};
+
+    fn weight_axis_id() -> AxisId {
+        AxisId::from_raw("axis_weight")
+    }
 
     fn structure_with_smooth(smooth: bool) -> GlyphStructure {
         GlyphStructure {
@@ -300,7 +304,7 @@ mod tests {
             source_name: source_name.to_string(),
             is_default_source,
             location: Location {
-                values: HashMap::from([("wght".to_string(), location_value)]),
+                values: HashMap::from([(weight_axis_id(), location_value)]),
             },
             structure: structure_with_smooth(smooth),
             values: vec![500.0, x_offset, 0.0, 100.0 + x_offset, 0.0],
@@ -309,7 +313,8 @@ mod tests {
 
     #[test]
     fn smooth_point_mismatch_does_not_make_masters_incompatible() {
-        let axes = vec![Axis::new(
+        let axes = vec![Axis::with_id(
+            weight_axis_id(),
             "wght".to_string(),
             "Weight".to_string(),
             0.0,

@@ -41,6 +41,25 @@ Family.shift
 
 `glyphs/<glyphId>.json` must contain the same `id`; a mismatch is a load error.
 
+## Implemented Source Contract
+
+This crate implements the compact v1 source package contract used by the app
+and `FontLoader`:
+
+- `axis_*`, `source_*`, `glyph_*`, and layer/component IDs are stable identity.
+- Axis tags and glyph names are labels. They are written for humans and
+  external format interop, but they are not reference keys.
+- `axes.json` stores each axis `id` plus its OpenType `tag`, name, range, and
+  hidden flag.
+- `sources.json` stores source locations as `axisId -> design-space value`.
+- Each glyph file is `glyphs/<glyphId>.json`; glyph layers are keyed by
+  `sourceId`.
+- Components store `baseGlyphId` as the canonical reference and
+  `baseGlyphName` as a label cache.
+- Load rejects non-finite metrics/coordinates/transforms/location values,
+  invalid axis ranges, mismatched glyph file IDs, dangling source/layer/axis
+  references, and component base caches that do not match the referenced glyph.
+
 Font-level guidelines live in `font.json`. Layer guidelines live in the owning
 `glyphs/<glyphId>.json` entry so a future loose-directory writer can still keep
 guideline edits narrow.
@@ -67,7 +86,9 @@ not grow arbitrary `lib` fields.
 
 ## Backend Integration
 
-`shift-source` intentionally does not depend on `shift-backends`. To expose `.shift` through `FontLoader`, add a thin `shift-backends` adaptor that delegates to `ShiftSourcePackage::load_font` and `ShiftSourcePackage::save_font`.
+`shift-source` intentionally does not depend on `shift-backends`. `shift-backends`
+owns the `FontLoader` adaptor that delegates `.shift` reads and writes to
+`ShiftSourcePackage::load_font` and `ShiftSourcePackage::save_font`.
 
 ## Verification
 
