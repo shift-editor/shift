@@ -7,7 +7,7 @@ use shift_font::{
 };
 use shift_source::{
     AXES_FILE, FEATURES_FILE, FONT_FILE, GLYPHS_DIR, KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE,
-    SOURCES_FILE, ShiftSourcePackage, SourcePackageError, font_to_tree, tree_to_font,
+    PackageTree, SOURCES_FILE, ShiftSourcePackage, SourcePackageError, font_to_tree, tree_to_font,
     write_tree_atomic,
 };
 use zip::{CompressionMethod, ZipArchive};
@@ -161,6 +161,19 @@ fn sample_font() -> Font {
     font
 }
 
+fn replace_tree_entry(tree: &mut PackageTree, path: &str, from: &str, to: &str) {
+    let entry = tree
+        .iter_mut()
+        .find(|(entry_path, _)| entry_path == path)
+        .unwrap_or_else(|| panic!("missing tree entry {path}"));
+    let json = String::from_utf8(entry.1.clone()).unwrap();
+    assert!(
+        json.contains(from),
+        "tree entry {path} did not contain {from:?}"
+    );
+    entry.1 = json.replacen(from, to, 1).into_bytes();
+}
+
 #[test]
 fn creates_zip_package_with_manifest_first_and_stored() {
     let temp = tempfile::tempdir().unwrap();
@@ -282,7 +295,7 @@ fn serializes_same_font_to_byte_identical_tree() {
             FEATURES_FILE,
             KERNING_FILE,
             LIB_MODULE_FILE,
-            &format!("{GLYPHS_DIR}/glyph_glyph_A.json")
+            &format!("{GLYPHS_DIR}/glyph_A.json")
         ]
     );
 }
@@ -407,7 +420,110 @@ fn rejects_glyph_file_id_mismatch() {
     assert!(matches!(
         error,
         SourcePackageError::MismatchedGlyphFileId { path, id }
-            if path == "glyphs/glyph_glyph_A.json" && id == "glyph_B"
+            if path == "glyphs/glyph_A.json" && id == "glyph_B"
+    ));
+}
+
+#[test]
+fn rejects_non_finite_metric_values_before_json_serialization() {
+    let mut font = sample_font();
+    font.metrics_mut().ascender = f64::NAN;
+
+    let error = font_to_tree(&font).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SourcePackageError::NonFiniteNumber { field } if field == "font.metrics.ascender"
+    ));
+}
+
+#[test]
+fn rejects_non_finite_source_location_values() {
+    let mut font = Font::empty();
+    let mut location = Location::new();
+    location.set("wght".to_string(), f64::INFINITY);
+    font.add_source(Source::with_id(
+        SourceId::from_raw("bad"),
+        "Bad".to_string(),
+        location,
+        None,
+    ));
+
+    let error = font_to_tree(&font).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SourcePackageError::NonFiniteNumber { field }
+            if field == "sources[source_bad].location[wght]"
+    ));
+}
+
+#[test]
+fn rejects_invalid_axis_ranges_on_load() {
+    let mut tree = font_to_tree(&Font::new()).unwrap();
+    let axes_entry = tree
+        .iter_mut()
+        .find(|(path, _)| path == AXES_FILE)
+        .expect("axes entry");
+    axes_entry.1 = br#"{
+  "axes": [
+    {
+      "tag": "wght",
+      "name": "Weight",
+      "minimum": 900.0,
+      "default": 400.0,
+      "maximum": 100.0,
+      "hidden": false
+    }
+  ]
+}
+"#
+    .to_vec();
+
+    let error = tree_to_font(tree).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SourcePackageError::InvalidAxisRange { tag, .. } if tag == "wght"
+    ));
+}
+
+#[test]
+fn rejects_dangling_default_source_id() {
+    let mut tree = font_to_tree(&sample_font()).unwrap();
+    replace_tree_entry(
+        &mut tree,
+        MANIFEST_FILE,
+        r#""defaultSourceId": "source_regular""#,
+        r#""defaultSourceId": "source_missing""#,
+    );
+
+    let error = tree_to_font(tree).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SourcePackageError::DanglingReference { field, id }
+            if field == "manifest.defaultSourceId" && id == "source_missing"
+    ));
+}
+
+#[test]
+fn rejects_glyph_layers_that_reference_missing_sources() {
+    let mut tree = font_to_tree(&sample_font()).unwrap();
+    let glyph_path = format!("{GLYPHS_DIR}/glyph_A.json");
+    replace_tree_entry(
+        &mut tree,
+        &glyph_path,
+        r#""source_regular": {"#,
+        r#""source_missing": {"#,
+    );
+
+    let error = tree_to_font(tree).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SourcePackageError::DanglingReference { field, id }
+            if field == "glyph.layers.sourceId" && id == "source_missing"
     ));
 }
 

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::{self, File},
     io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -84,6 +84,19 @@ pub enum SourcePackageError {
 
     #[error("dangling {field} reference to {id}")]
     DanglingReference { field: &'static str, id: String },
+
+    #[error("non-finite number in {field}")]
+    NonFiniteNumber { field: String },
+
+    #[error(
+        "invalid axis range for {tag}: expected minimum <= default <= maximum, got {minimum} <= {default} <= {maximum}"
+    )]
+    InvalidAxisRange {
+        tag: String,
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    },
 
     #[error("unexpected source package entry: {0}")]
     UnexpectedEntry(String),
@@ -410,16 +423,28 @@ pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
 
     let font_doc = FontDoc {
         metadata: MetadataDoc::from(font.metadata()),
-        metrics: MetricsDoc::from(*font.metrics()),
-        guidelines: font.guidelines().iter().map(GuidelineDoc::from).collect(),
+        metrics: MetricsDoc::try_from(*font.metrics())?,
+        guidelines: font
+            .guidelines()
+            .iter()
+            .map(GuidelineDoc::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
     };
 
     let axes_doc = AxesDoc {
-        axes: font.axes().iter().map(AxisDoc::from).collect(),
+        axes: font
+            .axes()
+            .iter()
+            .map(AxisDoc::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
     };
 
     let sources_doc = SourcesDoc {
-        sources: font.sources().iter().map(SourceDoc::from).collect(),
+        sources: font
+            .sources()
+            .iter()
+            .map(SourceDoc::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
     };
 
     let mut tree = vec![
@@ -444,8 +469,8 @@ pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
     let mut glyph_entries = font
         .glyphs()
         .map(|glyph| {
-            let glyph_doc = GlyphDoc::from(glyph);
-            let path = format!("{GLYPHS_DIR}/glyph_{}.json", glyph.id());
+            let glyph_doc = GlyphDoc::try_from(glyph)?;
+            let path = format!("{GLYPHS_DIR}/{}.json", glyph.id());
             json_entry(&path, &glyph_doc)
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -474,7 +499,7 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
 
     let mut font = Font::empty();
     *font.metadata_mut() = FontMetadata::from(font_doc.metadata);
-    *font.metrics_mut() = FontMetrics::from(font_doc.metrics);
+    *font.metrics_mut() = FontMetrics::try_from(font_doc.metrics)?;
     let mut feature_data = FeatureData::new();
     feature_data.set_fea_source(features);
     *font.features_mut() = feature_data;
@@ -488,15 +513,23 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     }
 
     for axis_doc in axes_doc.axes {
-        font.add_axis(Axis::from(axis_doc));
+        font.add_axis(Axis::try_from(axis_doc)?);
     }
 
     for source_doc in sources_doc.sources {
         font.add_source(Source::try_from(source_doc)?);
     }
 
+    let source_ids = font
+        .sources()
+        .iter()
+        .map(Source::id)
+        .collect::<HashSet<_>>();
+
     if let Some(default_source_id) = manifest.default_source_id {
-        font.set_default_source_id(parse_id("source", &default_source_id)?);
+        let source_id = parse_id("source", &default_source_id)?;
+        validate_source_reference(&source_ids, &source_id, "manifest.defaultSourceId")?;
+        font.set_default_source_id(source_id);
     }
 
     let mut glyph_entries = Vec::new();
@@ -512,6 +545,7 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     for (path, bytes) in glyph_entries {
         let glyph_doc: GlyphDoc = from_json(&path, &bytes)?;
         validate_glyph_path_id(&path, &glyph_doc.id)?;
+        validate_glyph_source_references(&glyph_doc, &source_ids)?;
         let mut glyph = Glyph::try_from(glyph_doc)?;
         if let Some(module_doc) = &mut lib_module_doc {
             apply_lib_module_to_glyph(&mut glyph, module_doc)?;
@@ -642,13 +676,70 @@ fn validate_manifest(manifest: &ManifestDoc) -> Result<(), SourcePackageError> {
 }
 
 fn validate_glyph_path_id(path: &str, id: &str) -> Result<(), SourcePackageError> {
-    let expected_path = format!("{GLYPHS_DIR}/glyph_{id}.json");
+    let expected_path = format!("{GLYPHS_DIR}/{id}.json");
     if path == expected_path {
         Ok(())
     } else {
         Err(SourcePackageError::MismatchedGlyphFileId {
             path: path.to_string(),
             id: id.to_string(),
+        })
+    }
+}
+
+fn validate_source_reference(
+    source_ids: &HashSet<SourceId>,
+    source_id: &SourceId,
+    field: &'static str,
+) -> Result<(), SourcePackageError> {
+    if source_ids.contains(source_id) {
+        Ok(())
+    } else {
+        Err(SourcePackageError::DanglingReference {
+            field,
+            id: source_id.to_string(),
+        })
+    }
+}
+
+fn validate_glyph_source_references(
+    glyph_doc: &GlyphDoc,
+    source_ids: &HashSet<SourceId>,
+) -> Result<(), SourcePackageError> {
+    for source_id in glyph_doc.layers.keys() {
+        let parsed_source_id = parse_id("source", source_id)?;
+        validate_source_reference(source_ids, &parsed_source_id, "glyph.layers.sourceId")?;
+    }
+
+    Ok(())
+}
+
+fn ensure_finite(field: impl Into<String>, value: f64) -> Result<f64, SourcePackageError> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(SourcePackageError::NonFiniteNumber {
+            field: field.into(),
+        })
+    }
+}
+
+fn ensure_optional_finite(
+    field: impl Into<String>,
+    value: Option<f64>,
+) -> Result<Option<f64>, SourcePackageError> {
+    value.map(|value| ensure_finite(field, value)).transpose()
+}
+
+fn ensure_axis_range(doc: &AxisDoc) -> Result<(), SourcePackageError> {
+    if doc.minimum <= doc.default && doc.default <= doc.maximum {
+        Ok(())
+    } else {
+        Err(SourcePackageError::InvalidAxisRange {
+            tag: doc.tag.clone(),
+            minimum: doc.minimum,
+            default: doc.default,
+            maximum: doc.maximum,
         })
     }
 }
@@ -1047,7 +1138,7 @@ impl KerningPairDoc {
         Ok(Self {
             first: KerningSideDoc::from_side(font, &pair.first, "kerning.pairs.first")?,
             second: KerningSideDoc::from_side(font, &pair.second, "kerning.pairs.second")?,
-            value: pair.value,
+            value: ensure_finite("kerning.pairs.value", pair.value)?,
         })
     }
 }
@@ -1124,7 +1215,7 @@ fn kerning_from_doc(doc: KerningDoc, font: &Font) -> Result<KerningData, SourceP
             pair_doc
                 .second
                 .into_side(&names_by_id, "kerning.pairs.second")?,
-            pair_doc.value,
+            ensure_finite("kerning.pairs.value", pair_doc.value)?,
         ));
     }
 
@@ -1190,16 +1281,18 @@ fn glyph_name_from_ref(
     Ok(glyph_name.clone())
 }
 
-impl From<&Guideline> for GuidelineDoc {
-    fn from(guideline: &Guideline) -> Self {
-        Self {
+impl TryFrom<&Guideline> for GuidelineDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(guideline: &Guideline) -> Result<Self, Self::Error> {
+        Ok(Self {
             id: guideline.id().to_string(),
-            x: guideline.x(),
-            y: guideline.y(),
-            angle: guideline.angle(),
+            x: ensure_optional_finite("guideline.x", guideline.x())?,
+            y: ensure_optional_finite("guideline.y", guideline.y())?,
+            angle: ensure_optional_finite("guideline.angle", guideline.angle())?,
             name: guideline.name().map(str::to_string),
             color: guideline.color().map(str::to_string),
-        }
+        })
     }
 }
 
@@ -1209,9 +1302,9 @@ impl TryFrom<GuidelineDoc> for Guideline {
     fn try_from(doc: GuidelineDoc) -> Result<Self, Self::Error> {
         Ok(Self::with_id(
             parse_id("guideline", &doc.id)?,
-            doc.x,
-            doc.y,
-            doc.angle,
+            ensure_optional_finite("guideline.x", doc.x)?,
+            ensure_optional_finite("guideline.y", doc.y)?,
+            ensure_optional_finite("guideline.angle", doc.angle)?,
             doc.name,
             doc.color,
         ))
@@ -1260,71 +1353,104 @@ impl From<MetadataDoc> for FontMetadata {
     }
 }
 
-impl From<FontMetrics> for MetricsDoc {
-    fn from(metrics: FontMetrics) -> Self {
-        Self {
-            units_per_em: metrics.units_per_em,
-            ascender: metrics.ascender,
-            descender: metrics.descender,
-            cap_height: metrics.cap_height,
-            x_height: metrics.x_height,
-            line_gap: metrics.line_gap,
-            italic_angle: metrics.italic_angle,
-            underline_position: metrics.underline_position,
-            underline_thickness: metrics.underline_thickness,
-        }
+impl TryFrom<FontMetrics> for MetricsDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(metrics: FontMetrics) -> Result<Self, Self::Error> {
+        Ok(Self {
+            units_per_em: ensure_finite("font.metrics.unitsPerEm", metrics.units_per_em)?,
+            ascender: ensure_finite("font.metrics.ascender", metrics.ascender)?,
+            descender: ensure_finite("font.metrics.descender", metrics.descender)?,
+            cap_height: ensure_optional_finite("font.metrics.capHeight", metrics.cap_height)?,
+            x_height: ensure_optional_finite("font.metrics.xHeight", metrics.x_height)?,
+            line_gap: ensure_optional_finite("font.metrics.lineGap", metrics.line_gap)?,
+            italic_angle: ensure_optional_finite("font.metrics.italicAngle", metrics.italic_angle)?,
+            underline_position: ensure_optional_finite(
+                "font.metrics.underlinePosition",
+                metrics.underline_position,
+            )?,
+            underline_thickness: ensure_optional_finite(
+                "font.metrics.underlineThickness",
+                metrics.underline_thickness,
+            )?,
+        })
     }
 }
 
-impl From<MetricsDoc> for FontMetrics {
-    fn from(doc: MetricsDoc) -> Self {
-        Self {
-            units_per_em: doc.units_per_em,
-            ascender: doc.ascender,
-            descender: doc.descender,
-            cap_height: doc.cap_height,
-            x_height: doc.x_height,
-            line_gap: doc.line_gap,
-            italic_angle: doc.italic_angle,
-            underline_position: doc.underline_position,
-            underline_thickness: doc.underline_thickness,
-        }
+impl TryFrom<MetricsDoc> for FontMetrics {
+    type Error = SourcePackageError;
+
+    fn try_from(doc: MetricsDoc) -> Result<Self, Self::Error> {
+        Ok(Self {
+            units_per_em: ensure_finite("font.metrics.unitsPerEm", doc.units_per_em)?,
+            ascender: ensure_finite("font.metrics.ascender", doc.ascender)?,
+            descender: ensure_finite("font.metrics.descender", doc.descender)?,
+            cap_height: ensure_optional_finite("font.metrics.capHeight", doc.cap_height)?,
+            x_height: ensure_optional_finite("font.metrics.xHeight", doc.x_height)?,
+            line_gap: ensure_optional_finite("font.metrics.lineGap", doc.line_gap)?,
+            italic_angle: ensure_optional_finite("font.metrics.italicAngle", doc.italic_angle)?,
+            underline_position: ensure_optional_finite(
+                "font.metrics.underlinePosition",
+                doc.underline_position,
+            )?,
+            underline_thickness: ensure_optional_finite(
+                "font.metrics.underlineThickness",
+                doc.underline_thickness,
+            )?,
+        })
     }
 }
 
-impl From<&Axis> for AxisDoc {
-    fn from(axis: &Axis) -> Self {
-        Self {
+impl TryFrom<&Axis> for AxisDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(axis: &Axis) -> Result<Self, Self::Error> {
+        let doc = Self {
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
-            minimum: axis.minimum(),
-            default: axis.default(),
-            maximum: axis.maximum(),
+            minimum: ensure_finite("axes[].minimum", axis.minimum())?,
+            default: ensure_finite("axes[].default", axis.default())?,
+            maximum: ensure_finite("axes[].maximum", axis.maximum())?,
             hidden: axis.is_hidden(),
-        }
+        };
+        ensure_axis_range(&doc)?;
+        Ok(doc)
     }
 }
 
-impl From<AxisDoc> for Axis {
-    fn from(doc: AxisDoc) -> Self {
+impl TryFrom<AxisDoc> for Axis {
+    type Error = SourcePackageError;
+
+    fn try_from(doc: AxisDoc) -> Result<Self, Self::Error> {
+        ensure_finite("axes[].minimum", doc.minimum)?;
+        ensure_finite("axes[].default", doc.default)?;
+        ensure_finite("axes[].maximum", doc.maximum)?;
+        ensure_axis_range(&doc)?;
         let mut axis = Axis::new(doc.tag, doc.name, doc.minimum, doc.default, doc.maximum);
         axis.set_hidden(doc.hidden);
-        axis
+        Ok(axis)
     }
 }
 
-impl From<&Source> for SourceDoc {
-    fn from(source: &Source) -> Self {
-        Self {
+impl TryFrom<&Source> for SourceDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(source: &Source) -> Result<Self, Self::Error> {
+        let id = source.id().to_string();
+        let mut location = BTreeMap::new();
+        for (tag, value) in source.location().iter() {
+            location.insert(
+                tag.clone(),
+                ensure_finite(format!("sources[{id}].location[{tag}]"), *value)?,
+            );
+        }
+
+        Ok(Self {
             id: source.id().to_string(),
             name: source.name().to_string(),
-            location: source
-                .location()
-                .iter()
-                .map(|(tag, value)| (tag.clone(), *value))
-                .collect(),
+            location,
             filename: source.filename().map(str::to_string),
-        }
+        })
     }
 }
 
@@ -1332,26 +1458,36 @@ impl TryFrom<SourceDoc> for Source {
     type Error = SourcePackageError;
 
     fn try_from(doc: SourceDoc) -> Result<Self, Self::Error> {
+        let mut location = HashMap::new();
+        for (tag, value) in doc.location {
+            location.insert(
+                tag.clone(),
+                ensure_finite(format!("sources[{}].location[{tag}]", doc.id), value)?,
+            );
+        }
+
         Ok(Self::with_id(
             parse_id("source", &doc.id)?,
             doc.name,
-            Location::from_map(doc.location.into_iter().collect()),
+            Location::from_map(location),
             doc.filename,
         ))
     }
 }
 
-impl From<&Glyph> for GlyphDoc {
-    fn from(glyph: &Glyph) -> Self {
+impl TryFrom<&Glyph> for GlyphDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(glyph: &Glyph) -> Result<Self, Self::Error> {
         let mut layers = BTreeMap::new();
         for layer in glyph.layers().values() {
             layers.insert(
                 layer.source_id().to_string(),
-                LayerDoc::from(layer.as_ref()),
+                LayerDoc::try_from(layer.as_ref())?,
             );
         }
 
-        Self {
+        Ok(Self {
             id: glyph.id().to_string(),
             name: glyph.name().to_string(),
             unicodes: glyph
@@ -1360,7 +1496,7 @@ impl From<&Glyph> for GlyphDoc {
                 .map(|u| unicode_to_hex(*u))
                 .collect(),
             layers,
-        }
+        })
     }
 }
 
@@ -1386,29 +1522,49 @@ impl TryFrom<GlyphDoc> for Glyph {
     }
 }
 
-impl From<&GlyphLayer> for LayerDoc {
-    fn from(layer: &GlyphLayer) -> Self {
-        Self {
+impl TryFrom<&GlyphLayer> for LayerDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(layer: &GlyphLayer) -> Result<Self, Self::Error> {
+        Ok(Self {
             id: layer.id().to_string(),
-            advance: layer.width(),
-            height: layer.height(),
-            contours: layer.contours_iter().map(ContourDoc::from).collect(),
+            advance: ensure_finite("glyph.layers[].advance", layer.width())?,
+            height: ensure_optional_finite("glyph.layers[].height", layer.height())?,
+            contours: layer
+                .contours_iter()
+                .map(ContourDoc::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
             components: layer
                 .components()
                 .iter()
-                .map(|(id, component)| (id.to_string(), ComponentDoc::from(component)))
-                .collect(),
-            anchors: layer.anchors_iter().map(AnchorDoc::from).collect(),
-            guidelines: layer.guidelines().iter().map(GuidelineDoc::from).collect(),
-        }
+                .map(|(id, component)| {
+                    ComponentDoc::try_from(component).map(|doc| (id.to_string(), doc))
+                })
+                .collect::<Result<BTreeMap<_, _>, _>>()?,
+            anchors: layer
+                .anchors_iter()
+                .map(AnchorDoc::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+            guidelines: layer
+                .guidelines()
+                .iter()
+                .map(GuidelineDoc::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
     }
 }
 
 impl LayerDoc {
     fn into_layer(self, source_id: SourceId) -> Result<GlyphLayer, SourcePackageError> {
-        let mut layer =
-            GlyphLayer::with_width(parse_id("layer", &self.id)?, source_id, self.advance);
-        layer.set_height(self.height);
+        let mut layer = GlyphLayer::with_width(
+            parse_id("layer", &self.id)?,
+            source_id,
+            ensure_finite("glyph.layers[].advance", self.advance)?,
+        );
+        layer.set_height(ensure_optional_finite(
+            "glyph.layers[].height",
+            self.height,
+        )?);
 
         for contour_doc in self.contours {
             layer.add_contour(Contour::try_from(contour_doc)?);
@@ -1432,13 +1588,19 @@ impl LayerDoc {
     }
 }
 
-impl From<&Contour> for ContourDoc {
-    fn from(contour: &Contour) -> Self {
-        Self {
+impl TryFrom<&Contour> for ContourDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(contour: &Contour) -> Result<Self, Self::Error> {
+        Ok(Self {
             id: contour.id().to_string(),
             closed: contour.is_closed(),
-            points: contour.points().iter().map(PointDoc::from).collect(),
-        }
+            points: contour
+                .points()
+                .iter()
+                .map(PointDoc::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
     }
 }
 
@@ -1459,15 +1621,17 @@ impl TryFrom<ContourDoc> for Contour {
     }
 }
 
-impl From<&Point> for PointDoc {
-    fn from(point: &Point) -> Self {
-        Self {
+impl TryFrom<&Point> for PointDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(point: &Point) -> Result<Self, Self::Error> {
+        Ok(Self {
             id: point.id().to_string(),
-            x: point.x(),
-            y: point.y(),
+            x: ensure_finite("glyph.layers[].contours[].points[].x", point.x())?,
+            y: ensure_finite("glyph.layers[].contours[].points[].y", point.y())?,
             point_type: point_type_name(point.point_type()).to_string(),
             smooth: point.is_smooth(),
-        }
+        })
     }
 }
 
@@ -1477,8 +1641,8 @@ impl TryFrom<PointDoc> for Point {
     fn try_from(doc: PointDoc) -> Result<Self, Self::Error> {
         Ok(Point::new(
             parse_id("point", &doc.id)?,
-            doc.x,
-            doc.y,
+            ensure_finite("glyph.layers[].contours[].points[].x", doc.x)?,
+            ensure_finite("glyph.layers[].contours[].points[].y", doc.y)?,
             doc.point_type
                 .parse()
                 .map_err(|message| SourcePackageError::InvalidId {
@@ -1491,12 +1655,14 @@ impl TryFrom<PointDoc> for Point {
     }
 }
 
-impl From<&Component> for ComponentDoc {
-    fn from(component: &Component) -> Self {
-        Self {
+impl TryFrom<&Component> for ComponentDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(component: &Component) -> Result<Self, Self::Error> {
+        Ok(Self {
             base_glyph: component.base_glyph().as_str().to_string(),
-            transform: TransformDoc::from(*component.transform()),
-        }
+            transform: TransformDoc::try_from(*component.transform())?,
+        })
     }
 }
 
@@ -1504,50 +1670,60 @@ impl ComponentDoc {
     fn into_component(self, id: ComponentId) -> Result<Component, SourcePackageError> {
         let base_glyph = GlyphName::new(self.base_glyph.clone())
             .map_err(|_| SourcePackageError::InvalidGlyphName(self.base_glyph.clone()))?;
-        Ok(Component::with_id(id, base_glyph, self.transform.into()))
+        Ok(Component::with_id(
+            id,
+            base_glyph,
+            DecomposedTransform::try_from(self.transform)?,
+        ))
     }
 }
 
-impl From<DecomposedTransform> for TransformDoc {
-    fn from(transform: DecomposedTransform) -> Self {
-        Self {
-            translate_x: transform.translate_x,
-            translate_y: transform.translate_y,
-            rotation: transform.rotation,
-            scale_x: transform.scale_x,
-            scale_y: transform.scale_y,
-            skew_x: transform.skew_x,
-            skew_y: transform.skew_y,
-            t_center_x: transform.t_center_x,
-            t_center_y: transform.t_center_y,
-        }
+impl TryFrom<DecomposedTransform> for TransformDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(transform: DecomposedTransform) -> Result<Self, Self::Error> {
+        Ok(Self {
+            translate_x: ensure_finite("component.transform.translateX", transform.translate_x)?,
+            translate_y: ensure_finite("component.transform.translateY", transform.translate_y)?,
+            rotation: ensure_finite("component.transform.rotation", transform.rotation)?,
+            scale_x: ensure_finite("component.transform.scaleX", transform.scale_x)?,
+            scale_y: ensure_finite("component.transform.scaleY", transform.scale_y)?,
+            skew_x: ensure_finite("component.transform.skewX", transform.skew_x)?,
+            skew_y: ensure_finite("component.transform.skewY", transform.skew_y)?,
+            t_center_x: ensure_finite("component.transform.tCenterX", transform.t_center_x)?,
+            t_center_y: ensure_finite("component.transform.tCenterY", transform.t_center_y)?,
+        })
     }
 }
 
-impl From<TransformDoc> for DecomposedTransform {
-    fn from(doc: TransformDoc) -> Self {
-        Self {
-            translate_x: doc.translate_x,
-            translate_y: doc.translate_y,
-            rotation: doc.rotation,
-            scale_x: doc.scale_x,
-            scale_y: doc.scale_y,
-            skew_x: doc.skew_x,
-            skew_y: doc.skew_y,
-            t_center_x: doc.t_center_x,
-            t_center_y: doc.t_center_y,
-        }
+impl TryFrom<TransformDoc> for DecomposedTransform {
+    type Error = SourcePackageError;
+
+    fn try_from(doc: TransformDoc) -> Result<Self, Self::Error> {
+        Ok(Self {
+            translate_x: ensure_finite("component.transform.translateX", doc.translate_x)?,
+            translate_y: ensure_finite("component.transform.translateY", doc.translate_y)?,
+            rotation: ensure_finite("component.transform.rotation", doc.rotation)?,
+            scale_x: ensure_finite("component.transform.scaleX", doc.scale_x)?,
+            scale_y: ensure_finite("component.transform.scaleY", doc.scale_y)?,
+            skew_x: ensure_finite("component.transform.skewX", doc.skew_x)?,
+            skew_y: ensure_finite("component.transform.skewY", doc.skew_y)?,
+            t_center_x: ensure_finite("component.transform.tCenterX", doc.t_center_x)?,
+            t_center_y: ensure_finite("component.transform.tCenterY", doc.t_center_y)?,
+        })
     }
 }
 
-impl From<&Anchor> for AnchorDoc {
-    fn from(anchor: &Anchor) -> Self {
-        Self {
+impl TryFrom<&Anchor> for AnchorDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(anchor: &Anchor) -> Result<Self, Self::Error> {
+        Ok(Self {
             id: anchor.id().to_string(),
             name: anchor.name().map(str::to_string),
-            x: anchor.x(),
-            y: anchor.y(),
-        }
+            x: ensure_finite("glyph.layers[].anchors[].x", anchor.x())?,
+            y: ensure_finite("glyph.layers[].anchors[].y", anchor.y())?,
+        })
     }
 }
 
@@ -1558,8 +1734,8 @@ impl TryFrom<AnchorDoc> for Anchor {
         Ok(Anchor::with_id(
             parse_id("anchor", &doc.id)?,
             doc.name,
-            doc.x,
-            doc.y,
+            ensure_finite("glyph.layers[].anchors[].x", doc.x)?,
+            ensure_finite("glyph.layers[].anchors[].y", doc.y)?,
         ))
     }
 }

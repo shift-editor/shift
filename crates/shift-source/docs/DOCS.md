@@ -34,15 +34,15 @@ Family.shift
   features.fea                    # optional verbatim OpenType feature text
   kerning.json                    # optional, glyph references use stable glyph ids
   glyphs/
-    glyph_<id>.json
+    <glyphId>.json
   modules/
     shift.libData.json            # optional Shift-owned compatibility module for IR lib data
 ```
 
-`glyphs/glyph_<id>.json` must contain the same `id`; a mismatch is a load error.
+`glyphs/<glyphId>.json` must contain the same `id`; a mismatch is a load error.
 
 Font-level guidelines live in `font.json`. Layer guidelines live in the owning
-`glyphs/glyph_<id>.json` entry so a future loose-directory writer can still keep
+`glyphs/<glyphId>.json` entry so a future loose-directory writer can still keep
 guideline edits narrow.
 
 `features.fea` is stored as text, not JSON, and is absent when the font has no
