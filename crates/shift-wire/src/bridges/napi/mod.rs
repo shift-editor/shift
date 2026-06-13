@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
-use shift_font::PointType as IrPointType;
+use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
@@ -112,6 +112,8 @@ impl From<FontMetrics> for NapiFontMetrics {
 
 #[napi(object)]
 pub struct NapiAxis {
+    #[napi(ts_type = "AxisId")]
+    pub id: String,
     pub tag: String,
     pub name: String,
     pub minimum: f64,
@@ -123,6 +125,7 @@ pub struct NapiAxis {
 impl From<Axis> for NapiAxis {
     fn from(axis: Axis) -> Self {
         Self {
+            id: axis.id.to_string(),
             tag: axis.tag,
             name: axis.name,
             minimum: axis.minimum,
@@ -161,8 +164,8 @@ pub struct NapiGlyphRecord {
     pub name: String,
     #[napi(ts_type = "Array<Unicode>")]
     pub unicodes: Vec<u32>,
-    #[napi(ts_type = "Array<GlyphName>")]
-    pub component_base_glyph_names: Vec<String>,
+    #[napi(ts_type = "Array<GlyphId>")]
+    pub component_base_glyph_ids: Vec<String>,
 }
 
 impl From<GlyphRecord> for NapiGlyphRecord {
@@ -171,10 +174,10 @@ impl From<GlyphRecord> for NapiGlyphRecord {
             id: record.id.to_string(),
             name: record.name.to_string(),
             unicodes: record.unicodes,
-            component_base_glyph_names: record
-                .component_base_glyph_names
+            component_base_glyph_ids: record
+                .component_base_glyph_ids
                 .into_iter()
-                .map(|name| name.to_string())
+                .map(|id| id.to_string())
                 .collect(),
         }
     }
@@ -313,6 +316,8 @@ impl From<NapiAnchorData> for AnchorData {
 pub struct NapiComponentData {
     #[napi(ts_type = "ComponentId")]
     pub id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub base_glyph_id: String,
     #[napi(ts_type = "GlyphName")]
     pub base_glyph_name: String,
 }
@@ -321,6 +326,7 @@ impl From<ComponentData> for NapiComponentData {
     fn from(component: ComponentData) -> Self {
         Self {
             id: component.id,
+            base_glyph_id: component.base_glyph_id.to_string(),
             base_glyph_name: component.base_glyph_name.to_string(),
         }
     }
@@ -330,6 +336,7 @@ impl From<NapiComponentData> for ComponentData {
     fn from(component: NapiComponentData) -> Self {
         Self {
             id: component.id,
+            base_glyph_id: GlyphId::from_raw(component.base_glyph_id),
             base_glyph_name: component.base_glyph_name.into(),
         }
     }
@@ -383,13 +390,18 @@ impl From<GlyphChangedEntities> for NapiGlyphChangedEntities {
 
 #[napi(object)]
 pub struct NapiLocation {
+    #[napi(ts_type = "Record<AxisId, number>")]
     pub values: HashMap<String, f64>,
 }
 
 impl From<Location> for NapiLocation {
     fn from(location: Location) -> Self {
         Self {
-            values: location.values,
+            values: location
+                .values
+                .into_iter()
+                .map(|(axis_id, value)| (axis_id.to_string(), value))
+                .collect(),
         }
     }
 }
@@ -501,10 +513,12 @@ pub struct NapiCreateGlyphIntent {
     pub unicodes: Vec<u32>,
 }
 
-/// Font-level axis creation. Rust mints no id for axes; the tag is the
-/// identity and must be unique within the font.
+/// Font-level axis creation. The axis id is client-minted; the tag is an
+/// OpenType label and must be unique within the font.
 #[napi(object)]
 pub struct NapiCreateAxisIntent {
+    #[napi(ts_type = "AxisId")]
+    pub axis_id: String,
     pub tag: String,
     pub name: String,
     pub min: f64,
@@ -518,7 +532,7 @@ pub struct NapiCreateAxisIntent {
 #[napi(object)]
 pub struct NapiCreateSourceIntent {
     pub name: String,
-    /// Axis tag → design-space value for the new source.
+    /// Axis id → design-space value for the new source.
     pub location: NapiLocation,
 }
 

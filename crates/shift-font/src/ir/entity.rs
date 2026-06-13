@@ -112,6 +112,7 @@ typed_id!(GuidelineId, "guideline");
 typed_id!(LayerId, "layer");
 typed_id!(GlyphId, "glyph");
 typed_id!(SourceId, "source");
+typed_id!(AxisId, "axis");
 
 #[cfg(test)]
 mod tests {

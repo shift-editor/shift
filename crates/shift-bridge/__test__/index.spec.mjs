@@ -87,7 +87,7 @@ describe("Bridge", () => {
     expect(glyphs[0].id).toMatch(/^glyph_/);
     expect(glyphs[0].name).toBe("A");
     expect(glyphs[0].unicodes).toEqual([65]);
-    expect(glyphs[0].componentBaseGlyphNames).toEqual([]);
+    expect(glyphs[0].componentBaseGlyphIds).toEqual([]);
   });
 
   it("exports the live workspace font through an explicit export path", async () => {

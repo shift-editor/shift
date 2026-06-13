@@ -7,7 +7,7 @@ Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge 
 - **Architecture Invariant: CRITICAL:** `src/bridge/generated.ts` is generated from `crates/shift-bridge/index.d.ts` by `scripts/generate-bridge-types.mjs`. Never edit it manually.
 - **Architecture Invariant: CRITICAL:** `@shift/types` is the canonical TypeScript DTO facade for the native bridge. It strips `Napi*` prefixes and exports type-only DTOs.
 - **Architecture Invariant:** Editor/domain snapshot types do not live here.
-- **Architecture Invariant:** `PointId`, `ContourId`, and `AnchorId` are branded string types. TypeScript never generates IDs -- they originate from Rust. Use `asPointId()` / `asContourId()` / `asAnchorId()` to cast raw strings into branded types.
+- **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types.
 - **Architecture Invariant:** This package ships raw `.ts` source. `package.json` points `main` and `types` directly at `src/index.ts`.
 
 ## Codemap
@@ -27,7 +27,7 @@ Import from `@shift/types`.
 
 - `BridgeApi` -- type-only native bridge API surface.
 - `FontMetadata` / `FontMetrics` -- font-level DTOs returned by `Bridge`.
-- `GlyphRecord` -- committed glyph list record: name, unicodes, component base names.
+- `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
 - `GlyphStructureChange` -- structural edit result: new structure, `Float64Array` values, changed IDs.
 - `GlyphValueChange` -- hot-path value edit result: `Float64Array` values, changed IDs.

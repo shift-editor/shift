@@ -55,41 +55,45 @@ class GlyphDirectory {
   readonly unicodes: readonly Unicode[];
 
   readonly recordsByName: ReadonlyMap<GlyphName, GlyphRecord> = new Map();
+  readonly nameById: ReadonlyMap<GlyphId, GlyphName> = new Map();
   readonly nameByUnicode: ReadonlyMap<Unicode, GlyphName> = new Map();
-  readonly componentBasesByName: ReadonlyMap<GlyphName, readonly GlyphName[]> = new Map();
-  readonly dependentsByName: ReadonlyMap<GlyphName, ReadonlySet<GlyphName>> = new Map();
+  readonly componentBasesById: ReadonlyMap<GlyphId, readonly GlyphId[]> = new Map();
+  readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>> = new Map();
 
   private constructor(records: readonly GlyphRecord[]) {
     const recordsByName = new Map<GlyphName, GlyphRecord>();
+    const nameById = new Map<GlyphId, GlyphName>();
     const nameByUnicode = new Map<Unicode, GlyphName>();
-    const componentBasesByName = new Map<GlyphName, readonly GlyphName[]>();
-    const dependentsByName = new Map<GlyphName, Set<GlyphName>>();
+    const componentBasesById = new Map<GlyphId, readonly GlyphId[]>();
+    const dependentsById = new Map<GlyphId, Set<GlyphId>>();
 
     for (const record of records) {
       recordsByName.set(record.name, record);
+      nameById.set(record.id, record.name);
 
       for (const unicode of record.unicodes) {
         if (!nameByUnicode.has(unicode)) {
           nameByUnicode.set(unicode, record.name);
         }
       }
-      componentBasesByName.set(record.name, record.componentBaseGlyphNames);
-      for (const baseName of record.componentBaseGlyphNames) {
-        let dependents = dependentsByName.get(baseName);
+      componentBasesById.set(record.id, record.componentBaseGlyphIds);
+      for (const baseId of record.componentBaseGlyphIds) {
+        let dependents = dependentsById.get(baseId);
         if (!dependents) {
-          dependents = new Set<GlyphName>();
-          dependentsByName.set(baseName, dependents);
+          dependents = new Set<GlyphId>();
+          dependentsById.set(baseId, dependents);
         }
-        dependents.add(record.name);
+        dependents.add(record.id);
       }
     }
 
     this.records = [...records];
     this.unicodes = [...nameByUnicode.keys()].sort((a, b) => a - b);
     this.recordsByName = recordsByName;
+    this.nameById = nameById;
     this.nameByUnicode = nameByUnicode;
-    this.componentBasesByName = componentBasesByName;
-    this.dependentsByName = dependentsByName;
+    this.componentBasesById = componentBasesById;
+    this.dependentsById = dependentsById;
   }
 
   /**
@@ -174,7 +178,11 @@ class GlyphDirectory {
    * @returns Base glyph names from the committed record; empty when absent.
    */
   componentBaseNamesForName(name: GlyphName): readonly GlyphName[] {
-    return this.componentBasesByName.get(name) ?? [];
+    const record = this.recordForName(name);
+    if (!record) return [];
+    return (this.componentBasesById.get(record.id) ?? [])
+      .map((glyphId) => this.nameById.get(glyphId))
+      .filter((baseName): baseName is GlyphName => baseName !== undefined);
   }
 
   /**
@@ -184,7 +192,12 @@ class GlyphDirectory {
    * @returns Sorted dependent glyph names; empty when no committed glyph references it.
    */
   dependentNamesForName(name: GlyphName): readonly GlyphName[] {
-    return [...(this.dependentsByName.get(name) ?? [])].sort();
+    const record = this.recordForName(name);
+    if (!record) return [];
+    return [...(this.dependentsById.get(record.id) ?? [])]
+      .map((glyphId) => this.nameById.get(glyphId))
+      .filter((dependentName): dependentName is GlyphName => dependentName !== undefined)
+      .sort();
   }
 
   /**
@@ -455,7 +468,7 @@ export class Font {
       createGlyph: { glyphId, name: finalName, unicodes },
     });
 
-    return { id: glyphId, name: finalName, unicodes, componentBaseGlyphNames: [] };
+    return { id: glyphId, name: finalName, unicodes, componentBaseGlyphIds: [] };
   }
 
   /**

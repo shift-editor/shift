@@ -102,7 +102,7 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
         .expect("Aacute glyph should exist");
     let component_bases: Vec<_> = main_layer(aacute)
         .components_iter()
-        .map(|component| component.base_glyph().as_str())
+        .map(|component| component.base_glyph_name().as_str())
         .collect();
     assert_eq!(component_bases.len(), 2);
     assert!(component_bases.contains(&"A"));
@@ -172,7 +172,7 @@ fn loads_glyphs_file_features_kerning_components_and_anchors() {
         .expect("Aacute glyph should exist");
     let component_bases: Vec<_> = main_layer(aacute)
         .components_iter()
-        .map(|component| component.base_glyph().as_str())
+        .map(|component| component.base_glyph_name().as_str())
         .collect();
     assert_eq!(component_bases.len(), 2);
     assert!(component_bases.contains(&"A"));
@@ -198,8 +198,15 @@ fn loads_variable_glyphs_sources_and_compatible_layers() {
     assert_eq!(font.axes()[0].minimum(), 100.0);
     assert_eq!(font.axes()[0].maximum(), 900.0);
     assert_eq!(font.sources().len(), 2);
-    assert_eq!(font.sources()[0].location().get("wght"), Some(100.0));
-    assert_eq!(font.sources()[1].location().get("wght"), Some(900.0));
+    let weight_axis_id = font.axis_id_by_tag("wght").expect("wght axis id");
+    assert_eq!(
+        font.sources()[0].location().get(&weight_axis_id),
+        Some(100.0)
+    );
+    assert_eq!(
+        font.sources()[1].location().get(&weight_axis_id),
+        Some(900.0)
+    );
 
     let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     let layers: Vec<_> = glyph_a.layers().values().collect();
@@ -233,8 +240,10 @@ fn loads_designspace_sources_axes_and_default_metadata() {
     assert_eq!(font.axes()[0].tag(), "wdth");
     assert_eq!(font.axes()[1].tag(), "wght");
     assert_eq!(font.sources().len(), 7);
-    assert_eq!(font.sources()[0].location().get("wdth"), Some(0.0));
-    assert_eq!(font.sources()[0].location().get("wght"), Some(0.0));
+    let width_axis_id = font.axis_id_by_tag("wdth").expect("wdth axis id");
+    let weight_axis_id = font.axis_id_by_tag("wght").expect("wght axis id");
+    assert_eq!(font.sources()[0].location().get(&width_axis_id), Some(0.0));
+    assert_eq!(font.sources()[0].location().get(&weight_axis_id), Some(0.0));
     assert!(font.sources()[0].filename().is_some());
 
     let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");

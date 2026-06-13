@@ -1,11 +1,12 @@
-use crate::entity::ComponentId;
+use crate::entity::{ComponentId, GlyphId};
 use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Component {
     id: ComponentId,
-    base_glyph: GlyphName,
+    base_glyph_id: GlyphId,
+    base_glyph_name: GlyphName,
     transform: DecomposedTransform,
 }
 
@@ -200,41 +201,51 @@ impl Transform {
 }
 
 impl Component {
-    pub fn new(base_glyph: impl Into<GlyphName>) -> Self {
+    pub fn new(base_glyph_id: GlyphId, base_glyph_name: impl Into<GlyphName>) -> Self {
         Self {
             id: ComponentId::new(),
-            base_glyph: base_glyph.into(),
+            base_glyph_id,
+            base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::identity(),
         }
     }
 
     pub fn with_transform(
-        base_glyph: impl Into<GlyphName>,
+        base_glyph_id: GlyphId,
+        base_glyph_name: impl Into<GlyphName>,
         transform: DecomposedTransform,
     ) -> Self {
         Self {
             id: ComponentId::new(),
-            base_glyph: base_glyph.into(),
+            base_glyph_id,
+            base_glyph_name: base_glyph_name.into(),
             transform,
         }
     }
 
     pub fn with_id(
         id: ComponentId,
-        base_glyph: impl Into<GlyphName>,
+        base_glyph_id: GlyphId,
+        base_glyph_name: impl Into<GlyphName>,
         transform: DecomposedTransform,
     ) -> Self {
         Self {
             id,
-            base_glyph: base_glyph.into(),
+            base_glyph_id,
+            base_glyph_name: base_glyph_name.into(),
             transform,
         }
     }
 
-    pub fn with_matrix(base_glyph: impl Into<GlyphName>, matrix: &Transform) -> Self {
+    pub fn with_matrix(
+        base_glyph_id: GlyphId,
+        base_glyph_name: impl Into<GlyphName>,
+        matrix: &Transform,
+    ) -> Self {
         Self {
             id: ComponentId::new(),
-            base_glyph: base_glyph.into(),
+            base_glyph_id,
+            base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::from_matrix(matrix),
         }
     }
@@ -243,8 +254,12 @@ impl Component {
         self.id.clone()
     }
 
-    pub fn base_glyph(&self) -> &GlyphName {
-        &self.base_glyph
+    pub fn base_glyph_id(&self) -> GlyphId {
+        self.base_glyph_id.clone()
+    }
+
+    pub fn base_glyph_name(&self) -> &GlyphName {
+        &self.base_glyph_name
     }
 
     pub fn transform(&self) -> &DecomposedTransform {
@@ -271,8 +286,10 @@ mod tests {
 
     #[test]
     fn component_creation() {
-        let c = Component::new("a".to_string());
-        assert_eq!(c.base_glyph().as_str(), "a");
+        let base_id = GlyphId::from_raw("a");
+        let c = Component::new(base_id.clone(), "a".to_string());
+        assert_eq!(c.base_glyph_id(), base_id);
+        assert_eq!(c.base_glyph_name().as_str(), "a");
         assert!(c.transform().is_identity());
     }
 
@@ -357,7 +374,7 @@ mod tests {
 
     #[test]
     fn component_translate() {
-        let mut c = Component::new("a".to_string());
+        let mut c = Component::new(GlyphId::from_raw("a"), "a".to_string());
         c.translate(10.0, 20.0);
         assert!((c.transform().translate_x - 10.0).abs() < 1e-10);
         assert!((c.transform().translate_y - 20.0).abs() < 1e-10);

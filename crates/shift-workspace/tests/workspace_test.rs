@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use shift_font::{
-    Axis, FontChange, FontIntent, FontIntentSet, GlyphId, LayerId, Location, error::CoreError,
+    Axis, AxisId, FontChange, FontIntent, FontIntentSet, GlyphId, LayerId, Location,
+    error::CoreError,
 };
 use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
@@ -264,14 +265,16 @@ fn mixed_font_level_batch_undoes_axis_source_and_glyph_together() {
     create_glyph(&mut workspace, "A", vec![65]);
     let base_sources = workspace.font().sources().len();
 
+    let axis_id = AxisId::from_raw("axis_weight");
     let mut location = Location::new();
-    location.set("wght".to_string(), 700.0);
+    location.set(axis_id.clone(), 700.0);
     workspace
         .apply(
             FontIntentSet {
                 intents: vec![
                     FontIntent::CreateAxis {
-                        axis: Axis::new(
+                        axis: Axis::with_id(
+                            axis_id,
                             "wght".to_string(),
                             "Weight".to_string(),
                             100.0,

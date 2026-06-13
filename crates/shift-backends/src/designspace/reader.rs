@@ -5,7 +5,7 @@ use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
-use shift_font::{Axis, Font, LayerId, Location, Source, SourceId};
+use shift_font::{Axis, Component, Font, GlyphLayer, LayerId, Location, Source, SourceId};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -101,7 +101,8 @@ impl DesignspaceReader {
         }
 
         // Register the default source.
-        let default_location = location_from_dimensions(&default_ds_source.location, &doc);
+        let default_location =
+            location_from_dimensions(&default_ds_source.location, &doc, font.axes());
         let default_name = source_name(default_ds_source, default_idx);
         let default_source_id = font.add_source(Source::with_filename(
             default_name,
@@ -156,7 +157,7 @@ impl DesignspaceReader {
             };
 
             let name = source_name(ds_source, idx);
-            let location = location_from_dimensions(&ds_source.location, &doc);
+            let location = location_from_dimensions(&ds_source.location, &doc, font.axes());
             let source_id = font.add_source(Source::with_filename(
                 name,
                 location,
@@ -170,7 +171,12 @@ impl DesignspaceReader {
                     if let Some(glyph_id) = font.glyph_id_by_name(source_glyph.name()) {
                         font.insert_glyph_layer(
                             glyph_id,
-                            source_layer.clone_with_identity(LayerId::new(), source_id.clone()),
+                            clone_layer_with_remapped_components(
+                                source_layer,
+                                &font,
+                                LayerId::new(),
+                                source_id.clone(),
+                            )?,
                         )?;
                     }
                 }
@@ -294,7 +300,12 @@ fn load_axisless_designspace(
                 if let Some(glyph_id) = font.glyph_id_by_name(source_glyph.name()) {
                     font.insert_glyph_layer(
                         glyph_id,
-                        source_layer.clone_with_identity(LayerId::new(), source_id.clone()),
+                        clone_layer_with_remapped_components(
+                            source_layer,
+                            &font,
+                            LayerId::new(),
+                            source_id.clone(),
+                        )?,
                     )?;
                 }
             }
@@ -385,12 +396,15 @@ fn source_name(source: &norad::designspace::Source, index: usize) -> String {
 fn location_from_dimensions(
     dimensions: &[norad::designspace::Dimension],
     doc: &DesignSpaceDocument,
+    axes: &[Axis],
 ) -> Location {
     let mut location = Location::new();
     for dim in dimensions {
         let value = dim.xvalue.unwrap_or(0.0) as f64;
         if let Some(axis) = doc.axes.iter().find(|a| a.name == dim.name) {
-            location.set(axis.tag.clone(), value);
+            if let Some(axis) = axes.iter().find(|candidate| candidate.tag() == axis.tag) {
+                location.set(axis.id(), value);
+            }
         }
     }
     location
@@ -452,6 +466,36 @@ fn move_glyph_layers_to_source(
     }
 
     Ok(())
+}
+
+fn clone_layer_with_remapped_components(
+    layer: &GlyphLayer,
+    font: &Font,
+    layer_id: LayerId,
+    source_id: SourceId,
+) -> DesignspaceResult<GlyphLayer> {
+    let mut cloned = layer.clone_with_identity(layer_id, source_id);
+    cloned.clear_components();
+
+    for component in layer.components_iter() {
+        let base_glyph_id = font
+            .glyph_id_by_name(component.base_glyph_name().as_str())
+            .ok_or_else(|| DesignspaceError::LoadUfo {
+                path: std::path::PathBuf::from(component.base_glyph_name().as_str()),
+                details: format!(
+                    "component base glyph {:?} does not exist in default font",
+                    component.base_glyph_name()
+                ),
+            })?;
+        cloned.add_component(Component::with_id(
+            component.id(),
+            base_glyph_id,
+            component.base_glyph_name().clone(),
+            *component.transform(),
+        ));
+    }
+
+    Ok(cloned)
 }
 
 fn remove_glyph_layers_without_source(font: &mut Font) -> DesignspaceResult<()> {

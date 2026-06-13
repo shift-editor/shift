@@ -1,6 +1,6 @@
 use crate::{
-    Anchor, AnchorId, Axis, Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
-    Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName,
+    LayerId, Point, PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -54,8 +54,8 @@ impl FontChange {
         Self::AxisCreated(AxisCreated::from(axis))
     }
 
-    pub fn axis_deleted(tag: impl Into<String>) -> Self {
-        Self::AxisDeleted(AxisDeleted { tag: tag.into() })
+    pub fn axis_deleted(axis_id: AxisId) -> Self {
+        Self::AxisDeleted(AxisDeleted { axis_id })
     }
 
     pub fn source_created(source: &Source) -> Self {
@@ -155,6 +155,7 @@ impl FontChange {
 
 #[derive(Clone, Debug)]
 pub struct AxisCreated {
+    pub axis_id: AxisId,
     pub tag: String,
     pub name: String,
     pub minimum: f64,
@@ -166,6 +167,7 @@ pub struct AxisCreated {
 impl From<&Axis> for AxisCreated {
     fn from(axis: &Axis) -> Self {
         Self {
+            axis_id: axis.id(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
             minimum: axis.minimum(),
@@ -191,8 +193,8 @@ impl From<&Source> for SourceCreated {
             location: source
                 .location()
                 .iter()
-                .map(|(axis_tag, value)| SourceAxisValue {
-                    axis_tag: axis_tag.clone(),
+                .map(|(axis_id, value)| SourceAxisValue {
+                    axis_id: axis_id.clone(),
                     value: *value,
                 })
                 .collect(),
@@ -200,10 +202,9 @@ impl From<&Source> for SourceCreated {
     }
 }
 
-/// Axis rows are keyed by tag (the IR mints no axis id).
 #[derive(Clone, Debug)]
 pub struct AxisDeleted {
-    pub tag: String,
+    pub axis_id: AxisId,
 }
 
 #[derive(Clone, Debug)]
@@ -213,7 +214,7 @@ pub struct SourceDeleted {
 
 #[derive(Clone, Debug)]
 pub struct SourceAxisValue {
-    pub axis_tag: String,
+    pub axis_id: AxisId,
     pub value: f64,
 }
 

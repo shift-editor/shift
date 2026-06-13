@@ -14,8 +14,25 @@
         "crates/shift-bridge/*.node"
       ]
     },
+    "shift-bridge#build": {
+      "inputs": [
+        "src/**",
+        "package.json",
+        "Cargo.toml",
+        "dts-header.d.ts",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["index.js", "index.d.ts", "*.node"]
+    },
     "generate:bridge-types": {
-      "inputs": ["../../crates/shift-bridge/index.d.ts", "../../scripts/generate-bridge-types.mjs"],
+      "inputs": [
+        "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
+        "$TURBO_ROOT$/crates/shift-bridge/dts-header.d.ts",
+        "$TURBO_ROOT$/scripts/generate-bridge-types.mjs"
+      ],
       "outputs": ["src/bridge/generated.ts"]
     },
     "dev": {

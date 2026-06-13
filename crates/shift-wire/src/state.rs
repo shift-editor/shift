@@ -5,8 +5,8 @@ use std::str::FromStr;
 use crate::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Component as IrComponent, ComponentId, Contour as IrContour,
-    ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphLayer, LayerId,
-    PointId, PointType as IrPointType, SourceId,
+    ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphId, GlyphLayer,
+    LayerId, PointId, PointType as IrPointType, SourceId,
 };
 
 pub fn layer_from_state(
@@ -163,9 +163,14 @@ fn restore_components(
     for component_data in components {
         let component_id: ComponentId =
             parse_id(&component_data.id, CoreError::InvalidComponentId)?;
+        let base_glyph_id: GlyphId = parse_id(
+            component_data.base_glyph_id.as_str(),
+            CoreError::InvalidGlyphId,
+        )?;
         let transform = cursor.read_component_transform()?;
         let component = IrComponent::with_id(
             component_id,
+            base_glyph_id,
             component_data.base_glyph_name.clone(),
             transform,
         );
@@ -180,7 +185,7 @@ fn restore_components(
 mod tests {
     use super::*;
     use crate::values_from_layer;
-    use shift_font::{Anchor, Component, DecomposedTransform, LayerId, SourceId};
+    use shift_font::{Anchor, Component, DecomposedTransform, GlyphId, LayerId, SourceId};
 
     fn sample_layer() -> GlyphLayer {
         let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0);
@@ -200,6 +205,7 @@ mod tests {
 
         layer.add_component(Component::with_id(
             ComponentId::from_raw(40),
+            GlyphId::from_raw("base"),
             "base".to_string(),
             DecomposedTransform {
                 translate_x: 7.0,
@@ -264,7 +270,8 @@ mod tests {
         assert_eq!(anchor.position(), (5.0, 6.0));
 
         let component = restored.component(ComponentId::from_raw(40)).unwrap();
-        assert_eq!(component.base_glyph().as_str(), "base");
+        assert_eq!(component.base_glyph_id(), GlyphId::from_raw("base"));
+        assert_eq!(component.base_glyph_name().as_str(), "base");
         assert_eq!(component.transform().translate_x, 7.0);
         assert_eq!(component.transform().t_center_y, 15.0);
 
@@ -276,11 +283,13 @@ mod tests {
         let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
         layer.add_component(Component::with_id(
             ComponentId::from_raw(200),
+            GlyphId::from_raw("later"),
             "later".to_string(),
             DecomposedTransform::identity(),
         ));
         layer.add_component(Component::with_id(
             ComponentId::from_raw(100),
+            GlyphId::from_raw("earlier"),
             "earlier".to_string(),
             DecomposedTransform::identity(),
         ));

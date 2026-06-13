@@ -2,6 +2,7 @@ import type {
   ContourId,
   PointId,
   AnchorId,
+  AxisId,
   ComponentId,
   GuidelineId,
   GlyphId,
@@ -108,6 +109,7 @@ export interface NapiAppliedChange {
 }
 
 export interface NapiAxis {
+  id: AxisId
   tag: string
   name: string
   minimum: number
@@ -133,6 +135,7 @@ export interface NapiBooleanOpIntent {
 
 export interface NapiComponentData {
   id: ComponentId
+  baseGlyphId: GlyphId
   baseGlyphName: GlyphName
 }
 
@@ -143,10 +146,11 @@ export interface NapiContourData {
 }
 
 /**
- * Font-level axis creation. Rust mints no id for axes; the tag is the
- * identity and must be unique within the font.
+ * Font-level axis creation. The axis id is client-minted; the tag is an
+ * OpenType label and must be unique within the font.
  */
 export interface NapiCreateAxisIntent {
+  axisId: AxisId
   tag: string
   name: string
   min: number
@@ -172,7 +176,7 @@ export interface NapiCreateGlyphIntent {
  */
 export interface NapiCreateSourceIntent {
   name: string
-  /** Axis tag → design-space value for the new source. */
+  /** Axis id → design-space value for the new source. */
   location: NapiLocation
 }
 
@@ -259,7 +263,7 @@ export interface NapiGlyphRecord {
   id: GlyphId
   name: GlyphName
   unicodes: Array<Unicode>
-  componentBaseGlyphNames: Array<GlyphName>
+  componentBaseGlyphIds: Array<GlyphId>
 }
 
 export interface NapiGlyphState {
@@ -296,7 +300,7 @@ export interface NapiLayerReplaced {
 }
 
 export interface NapiLocation {
-  values: Record<string, number>
+  values: Record<AxisId, number>
 }
 
 export interface NapiMoveAnchorsIntent {

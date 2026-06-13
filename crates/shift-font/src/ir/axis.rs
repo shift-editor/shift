@@ -1,9 +1,11 @@
+use crate::entity::AxisId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Axis {
+    id: AxisId,
     tag: String,
     name: String,
     minimum: f64,
@@ -14,7 +16,19 @@ pub struct Axis {
 
 impl Axis {
     pub fn new(tag: String, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
+        Self::with_id(AxisId::new(), tag, name, minimum, default, maximum)
+    }
+
+    pub fn with_id(
+        id: AxisId,
+        tag: String,
+        name: String,
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    ) -> Self {
         Self {
+            id,
             tag,
             name,
             minimum,
@@ -36,6 +50,10 @@ impl Axis {
 
     pub fn width() -> Self {
         Self::new("wdth".to_string(), "Width".to_string(), 75.0, 100.0, 125.0)
+    }
+
+    pub fn id(&self) -> AxisId {
+        self.id.clone()
     }
 
     pub fn tag(&self) -> &str {
@@ -97,7 +115,7 @@ impl Axis {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Location {
-    values: HashMap<String, f64>,
+    values: HashMap<AxisId, f64>,
 }
 
 impl Location {
@@ -105,31 +123,31 @@ impl Location {
         Self::default()
     }
 
-    pub fn from_map(values: HashMap<String, f64>) -> Self {
+    pub fn from_map(values: HashMap<AxisId, f64>) -> Self {
         Self { values }
     }
 
-    pub fn get(&self, axis_tag: &str) -> Option<f64> {
-        self.values.get(axis_tag).copied()
+    pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
+        self.values.get(axis_id).copied()
     }
 
-    pub fn set(&mut self, axis_tag: String, value: f64) {
-        self.values.insert(axis_tag, value);
+    pub fn set(&mut self, axis_id: AxisId, value: f64) {
+        self.values.insert(axis_id, value);
     }
 
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&String, &f64)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&AxisId, &f64)> {
         self.values.iter()
     }
 
     pub fn normalize(&self, axes: &[Axis]) -> Location {
         let mut normalized = HashMap::new();
         for axis in axes {
-            if let Some(&value) = self.values.get(axis.tag()) {
-                normalized.insert(axis.tag().to_string(), axis.normalize(value));
+            if let Some(&value) = self.values.get(&axis.id()) {
+                normalized.insert(axis.id(), axis.normalize(value));
             }
         }
         Location::from_map(normalized)
@@ -137,7 +155,7 @@ impl Location {
 
     pub fn is_default_axis(&self, axes: &[Axis]) -> bool {
         axes.iter().all(|axis| {
-            let value = self.get(axis.tag()).unwrap_or(axis.default());
+            let value = self.get(&axis.id()).unwrap_or(axis.default());
             (value - axis.default()).abs() < f64::EPSILON
         })
     }
@@ -168,12 +186,15 @@ mod tests {
 
     #[test]
     fn location_operations() {
+        let weight = AxisId::from_raw("wght");
+        let width = AxisId::from_raw("wdth");
+        let slant = AxisId::from_raw("slnt");
         let mut loc = Location::new();
-        loc.set("wght".to_string(), 700.0);
-        loc.set("wdth".to_string(), 100.0);
+        loc.set(weight.clone(), 700.0);
+        loc.set(width.clone(), 100.0);
 
-        assert_eq!(loc.get("wght"), Some(700.0));
-        assert_eq!(loc.get("wdth"), Some(100.0));
-        assert_eq!(loc.get("slnt"), None);
+        assert_eq!(loc.get(&weight), Some(700.0));
+        assert_eq!(loc.get(&width), Some(100.0));
+        assert_eq!(loc.get(&slant), None);
     }
 }

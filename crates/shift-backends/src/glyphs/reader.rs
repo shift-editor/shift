@@ -16,6 +16,12 @@ const UFO_SIDE2_PREFIX: &str = "public.kern2.";
 
 pub struct GlyphsReader;
 
+struct PendingComponent {
+    layer_id: LayerId,
+    base_glyph_name: String,
+    matrix: Transform,
+}
+
 impl GlyphsReader {
     pub fn new() -> Self {
         Self
@@ -116,6 +122,35 @@ impl GlyphsReader {
 
         kerning
     }
+
+    fn resolve_components(
+        font: &mut Font,
+        pending_components: Vec<PendingComponent>,
+    ) -> FormatBackendResult<()> {
+        for pending in pending_components {
+            let base_glyph_id =
+                font.glyph_id_by_name(&pending.base_glyph_name)
+                    .ok_or_else(|| {
+                        FormatBackendError::Glyphs(format!(
+                            "component base glyph {:?} does not exist",
+                            pending.base_glyph_name
+                        ))
+                    })?;
+            let layer = font.layer_mut(pending.layer_id.clone()).ok_or_else(|| {
+                FormatBackendError::Glyphs(format!(
+                    "component target layer {} does not exist",
+                    pending.layer_id
+                ))
+            })?;
+            layer.add_component(Component::with_matrix(
+                base_glyph_id,
+                pending.base_glyph_name,
+                &pending.matrix,
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for GlyphsReader {
@@ -148,6 +183,7 @@ impl FontReader for GlyphsReader {
         font.metrics_mut().units_per_em = glyphs_font.units_per_em as f64;
 
         // Axes and source locations derived from masters.
+        let mut axis_ids_by_index = Vec::new();
         for (idx, glyphs_axis) in glyphs_font.axes.iter().enumerate() {
             let axis_values: Vec<f64> = glyphs_font
                 .masters
@@ -178,15 +214,16 @@ impl FontReader for GlyphsReader {
                 maximum,
             );
             axis.set_hidden(glyphs_axis.hidden.unwrap_or(false));
+            axis_ids_by_index.push(axis.id());
             font.add_axis(axis);
         }
 
         let mut source_by_master_id = HashMap::new();
         for (master_idx, master) in glyphs_font.masters.iter().enumerate() {
             let mut location = Location::new();
-            for (axis_idx, axis) in glyphs_font.axes.iter().enumerate() {
+            for (axis_idx, axis_id) in axis_ids_by_index.iter().enumerate() {
                 if let Some(value) = master.axes_values.get(axis_idx) {
-                    location.set(axis.tag.clone(), value.into_inner());
+                    location.set(axis_id.clone(), value.into_inner());
                 }
             }
             let source_id = font.add_source(Source::new(master.name.clone(), location));
@@ -196,6 +233,7 @@ impl FontReader for GlyphsReader {
             }
         }
 
+        let mut pending_components = Vec::new();
         for glyph in glyphs_font.glyphs.values() {
             let mut ir_glyph = Glyph::new(glyph.name.to_string());
             for unicode in glyph.unicode.iter() {
@@ -209,6 +247,7 @@ impl FontReader for GlyphsReader {
 
                 let mut ir_layer =
                     GlyphLayer::with_width(LayerId::new(), source_id, layer.width.into_inner());
+                let layer_id = ir_layer.id();
 
                 for shape in &layer.shapes {
                     match shape {
@@ -225,18 +264,18 @@ impl FontReader for GlyphsReader {
                         }
                         Shape::Component(component) => {
                             let coeffs = component.transform.as_coeffs();
-                            let matrix = Transform {
-                                xx: coeffs[0],
-                                xy: coeffs[1],
-                                yx: coeffs[2],
-                                yy: coeffs[3],
-                                dx: coeffs[4],
-                                dy: coeffs[5],
-                            };
-                            ir_layer.add_component(Component::with_matrix(
-                                component.name.to_string(),
-                                &matrix,
-                            ));
+                            pending_components.push(PendingComponent {
+                                layer_id: layer_id.clone(),
+                                base_glyph_name: component.name.to_string(),
+                                matrix: Transform {
+                                    xx: coeffs[0],
+                                    xy: coeffs[1],
+                                    yx: coeffs[2],
+                                    yy: coeffs[3],
+                                    dx: coeffs[4],
+                                    dy: coeffs[5],
+                                },
+                            });
                         }
                     }
                 }
@@ -255,6 +294,7 @@ impl FontReader for GlyphsReader {
 
             font.insert_glyph(ir_glyph)?;
         }
+        Self::resolve_components(&mut font, pending_components)?;
 
         *font.features_mut() = Self::convert_features(&glyphs_font);
         *font.kerning_mut() = Self::convert_kerning(&glyphs_font);

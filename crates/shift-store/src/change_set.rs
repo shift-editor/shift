@@ -36,14 +36,10 @@ impl ShiftStore {
         for source in font.sources() {
             upsert_source(&tx, &source.id(), Some(source.name()))?;
 
-            for (axis_tag, value) in source.location().iter() {
+            for (axis_id, value) in source.location().iter() {
                 // Location entries on undefined axes have no row to reference.
-                if font
-                    .axes()
-                    .iter()
-                    .any(|axis| axis.tag() == axis_tag.as_str())
-                {
-                    upsert_source_location(&tx, &source.id(), axis_tag, *value)?;
+                if font.axes().iter().any(|axis| axis.id() == *axis_id) {
+                    upsert_source_location(&tx, &source.id(), axis_id, *value)?;
                 }
             }
         }
@@ -75,9 +71,12 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
     match change {
         font::FontChange::AxisCreated(change) => insert_axis(tx, change),
         font::FontChange::AxisDeleted(change) => {
-            // The axis row id doubles as the tag; source_locations cascade.
-            let rows_changed = tx.execute("DELETE FROM axes WHERE id = ?1", [&change.tag])?;
-            require_changed(rows_changed, "axis", change.tag.clone())?;
+            // source_locations cascade from the axis row.
+            let rows_changed = tx.execute(
+                "DELETE FROM axes WHERE id = ?1",
+                [change.axis_id.to_string()],
+            )?;
+            require_changed(rows_changed, "axis", change.axis_id.to_string())?;
             Ok(())
         }
         font::FontChange::SourceCreated(change) => {
@@ -87,7 +86,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                 upsert_source_location(
                     tx,
                     &change.source_id,
-                    &axis_value.axis_tag,
+                    &axis_value.axis_id,
                     axis_value.value,
                 )?;
             }
@@ -215,15 +214,14 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
     }
 }
 
-/// Axes carry no separate id in the IR; the unique tag doubles as the row id,
-/// which keeps `source_locations.axis_id` joinable on the tag.
 fn insert_axis(tx: &Transaction<'_>, axis: &font::AxisCreated) -> Result<(), StoreError> {
     tx.execute(
         "
         INSERT INTO axes (id, tag, name, min_value, default_value, max_value, hidden)
-        VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?6)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
         ",
         params![
+            axis.axis_id.to_string(),
             axis.tag,
             axis.name,
             axis.minimum,
@@ -238,7 +236,7 @@ fn insert_axis(tx: &Transaction<'_>, axis: &font::AxisCreated) -> Result<(), Sto
 fn upsert_source_location(
     tx: &Transaction<'_>,
     source_id: &font::SourceId,
-    axis_tag: &str,
+    axis_id: &font::AxisId,
     value: f64,
 ) -> Result<(), StoreError> {
     tx.execute(
@@ -248,7 +246,7 @@ fn upsert_source_location(
         ON CONFLICT(source_id, axis_id) DO UPDATE SET
             value = excluded.value
         ",
-        params![source_id.to_string(), axis_tag, value],
+        params![source_id.to_string(), axis_id.to_string(), value],
     )?;
     Ok(())
 }

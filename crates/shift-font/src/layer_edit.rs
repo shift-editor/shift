@@ -546,7 +546,7 @@ impl GlyphLayer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Anchor, Component, LayerId, SourceId};
+    use crate::{Anchor, Component, GlyphId, LayerId, SourceId};
 
     fn create_session() -> GlyphLayer {
         GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0)
@@ -764,7 +764,7 @@ mod tests {
     #[test]
     fn translate_layer_moves_component_transforms() {
         let mut session = create_session();
-        let component_id = session.add_component(Component::new("base".to_string()));
+        let component_id = session.add_component(Component::new(GlyphId::from_raw("base"), "base"));
 
         session.translate_layer(12.0, -7.0);
 

@@ -2,6 +2,7 @@ import type {
   ContourId,
   PointId,
   AnchorId,
+  AxisId,
   ComponentId,
   GuidelineId,
   GlyphId,
@@ -113,6 +114,7 @@ export interface AppliedChange {
 }
 
 export interface Axis {
+  id: AxisId
   tag: string
   name: string
   minimum: number
@@ -138,6 +140,7 @@ export interface BooleanOpIntent {
 
 export interface ComponentData {
   id: ComponentId
+  baseGlyphId: GlyphId
   baseGlyphName: GlyphName
 }
 
@@ -148,10 +151,11 @@ export interface ContourData {
 }
 
 /**
- * Font-level axis creation. Rust mints no id for axes; the tag is the
- * identity and must be unique within the font.
+ * Font-level axis creation. The axis id is client-minted; the tag is an
+ * OpenType label and must be unique within the font.
  */
 export interface CreateAxisIntent {
+  axisId: AxisId
   tag: string
   name: string
   min: number
@@ -177,7 +181,7 @@ export interface CreateGlyphIntent {
  */
 export interface CreateSourceIntent {
   name: string
-  /** Axis tag → design-space value for the new source. */
+  /** Axis id → design-space value for the new source. */
   location: Location
 }
 
@@ -264,7 +268,7 @@ export interface GlyphRecord {
   id: GlyphId
   name: GlyphName
   unicodes: Array<Unicode>
-  componentBaseGlyphNames: Array<GlyphName>
+  componentBaseGlyphIds: Array<GlyphId>
 }
 
 export interface GlyphState {
@@ -301,7 +305,7 @@ export interface LayerReplaced {
 }
 
 export interface Location {
-  values: Record<string, number>
+  values: Record<AxisId, number>
 }
 
 export interface MoveAnchorsIntent {

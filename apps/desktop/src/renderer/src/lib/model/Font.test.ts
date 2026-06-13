@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { mintGlyphId, type GlyphName, type SourceId, type Unicode } from "@shift/types";
+import {
+  mintAxisId,
+  mintGlyphId,
+  type AxisId,
+  type GlyphId,
+  type GlyphName,
+  type SourceId,
+  type Unicode,
+} from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { signal } from "@/lib/signals/signal";
 import { Font } from "./Font";
@@ -11,9 +19,10 @@ const SNAPSHOT: WorkspaceSnapshot = {
   metrics: { unitsPerEm: 2048, ascender: 1638, descender: -410 },
   glyphs: [
     {
+      id: "glyph_A" as GlyphId,
       name: "A" as GlyphName,
       unicodes: [65 as Unicode],
-      componentBaseGlyphNames: [],
+      componentBaseGlyphIds: [],
     },
   ],
   sources: [
@@ -99,10 +108,12 @@ describe("font-level intents make the font variable", () => {
     ]);
     expect(stack.font.isVariable()).toBe(false);
 
+    const weightAxisId = mintAxisId();
     await stack.client.apply([
       {
         kind: "createAxis",
         createAxis: {
+          axisId: weightAxisId,
           tag: "wght",
           name: "Weight",
           min: 100,
@@ -116,7 +127,13 @@ describe("font-level intents make the font variable", () => {
     expect(stack.font.isVariable()).toBe(true);
 
     const applied = await stack.client.apply([
-      { kind: "createSource", createSource: { name: "Bold", location: { values: { wght: 700 } } } },
+      {
+        kind: "createSource",
+        createSource: {
+          name: "Bold",
+          location: { values: { [weightAxisId]: 700 } as Record<AxisId, number> },
+        },
+      },
     ]);
     expect(stack.font.sources.map((source) => source.name)).toContain("Bold");
     expect(applied.layers.length).toBe(1); // eager layer for the existing glyph

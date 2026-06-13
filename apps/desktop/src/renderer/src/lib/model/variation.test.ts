@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import type { GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
-import { mintContourId, mintGlyphId, mintPointId } from "@shift/types";
+import type { AxisId, GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
+import { mintAxisId, mintContourId, mintGlyphId, mintPointId } from "@shift/types";
 import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
@@ -63,14 +63,29 @@ async function variableFont(): Promise<{
   const glyphId = created.glyphs![0]!.id;
   const regularLayerId = created.layers[0]!.layerId;
 
+  const weightAxisId = mintAxisId();
   await stack.client.apply([
     {
       kind: "createAxis",
-      createAxis: { tag: "wght", name: "Weight", min: 100, default: 400, max: 900, hidden: false },
+      createAxis: {
+        axisId: weightAxisId,
+        tag: "wght",
+        name: "Weight",
+        min: 100,
+        default: 400,
+        max: 900,
+        hidden: false,
+      },
     },
   ]);
   const sourced = await stack.client.apply([
-    { kind: "createSource", createSource: { name: "Bold", location: { values: { wght: 700 } } } },
+    {
+      kind: "createSource",
+      createSource: {
+        name: "Bold",
+        location: { values: { [weightAxisId]: 700 } as Record<AxisId, number> },
+      },
+    },
   ]);
   const boldLayerId = sourced.layers[0]!.layerId;
   const bold = sourced.sources!.find((source) => source.name === "Bold")!;

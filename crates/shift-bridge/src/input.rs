@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use shift_font::{
-  AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
+  AnchorId, AxisId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
 };
 
 use crate::errors::{BridgeError, BridgeResult};
@@ -35,6 +35,10 @@ impl BridgeParse for PointId {
 
 impl BridgeParse for AnchorId {
   const KIND: &'static str = "anchor ID";
+}
+
+impl BridgeParse for AxisId {
+  const KIND: &'static str = "axis ID";
 }
 
 impl BridgeParse for ComponentId {

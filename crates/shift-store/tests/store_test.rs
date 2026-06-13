@@ -849,14 +849,16 @@ fn reopen_preserves_written_contents_and_integrity() {
 fn applies_axis_and_source_created_change_set_and_survives_reopen() {
     let path = temp_store_path("axis-source-reopen");
 
+    let font_axis_id = shift_font::AxisId::from_raw("axis_weight");
     let mut location = shift_font::Location::new();
-    location.set("wght".to_string(), 700.0);
+    location.set(font_axis_id.clone(), 700.0);
     let source = shift_font::Source::new("Bold".to_string(), location);
     let source_id = SourceId::new(source.id().to_string());
 
     {
         let mut store = ShiftStore::open(&path).expect("open");
-        let axis = shift_font::Axis::new(
+        let axis = shift_font::Axis::with_id(
+            font_axis_id,
             "wght".to_string(),
             "Weight".to_string(),
             100.0,
@@ -875,7 +877,7 @@ fn applies_axis_and_source_created_change_set_and_survives_reopen() {
     let store = ShiftStore::open(&path).expect("reopen");
 
     let axis = store
-        .get_axis(&AxisId::new("wght"))
+        .get_axis(&AxisId::new("axis_weight"))
         .expect("axis query should succeed")
         .expect("axis must survive reopen");
     assert_eq!(axis.tag, "wght");
@@ -894,7 +896,7 @@ fn applies_axis_and_source_created_change_set_and_survives_reopen() {
         .get_source_locations(&source_id)
         .expect("locations query should succeed");
     assert_eq!(locations.len(), 1);
-    assert_eq!(locations[0].axis_id, AxisId::new("wght"));
+    assert_eq!(locations[0].axis_id, AxisId::new("axis_weight"));
     assert_eq!(locations[0].value, 700.0);
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
@@ -905,7 +907,9 @@ fn replace_font_state_persists_axes_and_source_locations() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
     let mut font = shift_font::Font::new();
-    font.add_axis(shift_font::Axis::new(
+    let font_axis_id = shift_font::AxisId::from_raw("axis_weight");
+    font.add_axis(shift_font::Axis::with_id(
+        font_axis_id.clone(),
         "wght".to_string(),
         "Weight".to_string(),
         100.0,
@@ -913,7 +917,7 @@ fn replace_font_state_persists_axes_and_source_locations() {
         900.0,
     ));
     let mut location = shift_font::Location::new();
-    location.set("wght".to_string(), 700.0);
+    location.set(font_axis_id, 700.0);
     let source = shift_font::Source::new("Bold".to_string(), location);
     let source_id = SourceId::new(source.id().to_string());
     font.add_source(source);
@@ -921,7 +925,7 @@ fn replace_font_state_persists_axes_and_source_locations() {
     store.replace_font_state(&font).expect("replace font state");
 
     let axis = store
-        .get_axis(&AxisId::new("wght"))
+        .get_axis(&AxisId::new("axis_weight"))
         .expect("axis query should succeed")
         .expect("axis should be persisted");
     assert_eq!(axis.tag, "wght");
@@ -930,6 +934,7 @@ fn replace_font_state_persists_axes_and_source_locations() {
         .get_source_locations(&source_id)
         .expect("locations query should succeed");
     assert_eq!(locations.len(), 1);
+    assert_eq!(locations[0].axis_id, AxisId::new("axis_weight"));
     assert_eq!(locations[0].value, 700.0);
 }
 

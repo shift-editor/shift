@@ -158,7 +158,7 @@ fn preserves_components_anchors_layers_and_kerning() {
         .expect("Aacute should exist");
     let component_bases: Vec<_> = main_layer(aacute)
         .components_iter()
-        .map(|component| component.base_glyph().as_str())
+        .map(|component| component.base_glyph_name().as_str())
         .collect();
     assert_eq!(component_bases.len(), 2);
     assert!(component_bases.contains(&"A"));
