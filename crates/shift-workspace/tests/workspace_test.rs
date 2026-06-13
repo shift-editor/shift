@@ -70,7 +70,7 @@ fn creates_package_workspace_with_source_package_and_working_store() {
         }
     );
     assert_eq!(workspace.save_target(), Some(source_path.as_path()));
-    assert!(source_path.join("manifest.json").is_file());
+    assert!(source_path.is_file());
     assert_eq!(
         workspace
             .font_info()
@@ -165,7 +165,7 @@ fn save_as_assigns_a_shift_package_save_target() {
         }
     );
     assert_eq!(workspace.save_target(), Some(save_path.as_path()));
-    assert!(save_path.join("manifest.json").is_file());
+    assert!(save_path.is_file());
     workspace.save().unwrap();
 }
 

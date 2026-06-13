@@ -66,6 +66,9 @@ pub enum FormatBackendError {
     #[error(transparent)]
     Font(#[from] shift_font::CoreError),
 
+    #[error(transparent)]
+    Shift(#[from] shift_source::SourcePackageError),
+
     #[error("UFO backend error: {0}")]
     Ufo(String),
 

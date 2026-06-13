@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Font, Glyph, GlyphLayer, PointType};
+use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -49,6 +49,22 @@ fn main_layer(glyph: &Glyph) -> &GlyphLayer {
         .values()
         .max_by_key(|layer| layer.contours().len())
         .expect("glyph should have at least one layer")
+}
+
+fn simple_geometry_font() -> Font {
+    let mut font = Font::new();
+    let source_id = font.default_source_id().unwrap();
+    let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
+    let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_regular"), source_id, 640.0);
+    let mut contour = Contour::new();
+    contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+    contour.add_point(320.0, 700.0, PointType::OnCurve, false);
+    contour.add_point(540.0, 0.0, PointType::OnCurve, false);
+    contour.close();
+    layer.add_contour(contour);
+    glyph.set_layer(layer);
+    font.insert_glyph(glyph).unwrap();
+    font
 }
 
 #[test]
@@ -223,4 +239,25 @@ fn loads_designspace_sources_axes_and_default_metadata() {
 
     let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     assert!(glyph_a.layers().len() >= 4);
+}
+
+#[test]
+fn round_trips_shift_source_through_font_loader() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Dogfood.shift");
+    let original = simple_geometry_font();
+
+    FontLoader::new()
+        .write_font(&original, path.to_str().unwrap())
+        .unwrap();
+    let loaded = load_font(&path);
+
+    let glyph = loaded.glyph_by_name("A").expect("A glyph should exist");
+    let layer = main_layer(glyph);
+
+    assert_eq!(glyph.unicodes(), &[0x0041]);
+    assert_eq!(layer.width(), 640.0);
+    assert_eq!(layer.contours().len(), 1);
+    assert!(layer.contours().values().next().unwrap().is_closed());
+    assert_eq!(layer.contours().values().next().unwrap().points().len(), 3);
 }
