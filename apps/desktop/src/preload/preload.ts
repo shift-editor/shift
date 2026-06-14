@@ -16,6 +16,9 @@ const shiftHost: ShiftHost = {
   ui: {
     onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),
   },
+  dialog: {
+    showSave: invoke(ipcRenderer, "dialog.showSave"),
+  },
   clipboard: {
     writeText: (text: string): void => clipboard.writeText(text),
     readText: (): string => clipboard.readText(),

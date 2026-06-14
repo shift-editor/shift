@@ -1,5 +1,7 @@
+import { dialog } from "electron";
 import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
+import * as ipc from "../../shared/ipc/main";
 
 const windowCommands: Command[] = [
   {
@@ -60,7 +62,19 @@ const viewCommands: Command[] = [
   },
 ];
 
-const fileCommands: Command[] = [];
+const fileCommands: Command[] = [
+  {
+    id: "document.save",
+    label: "Save",
+    accelerator: "CmdOrCtrl+S",
+    enabled: (ctx) => ctx.windows.active() !== null,
+    run: (ctx) => {
+      const win = ctx.windows.active();
+      if (!win) return;
+      ipc.send(win.window.webContents, "commands.invoke", "document.save");
+    },
+  },
+];
 const editCommands: Command[] = [];
 
 /**

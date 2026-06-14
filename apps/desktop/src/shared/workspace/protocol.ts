@@ -60,6 +60,8 @@ export type SyncCallMap = {
   /** Replays the most recent ledger entry; null when the stack is empty. */
   "workspace.undo": { request: void; response: AppliedChange | null };
   "workspace.redo": { request: void; response: AppliedChange | null };
+  "workspace.save": { request: void; response: void };
+  "workspace.saveAs": { request: { path: string }; response: void };
   /**
    * Pulls replace-grade glyph state for one source (resync + editor open).
    * Addressed by stable GlyphId — references survive renames.

@@ -61,6 +61,10 @@ export class ApplicationMenu {
         submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }],
       },
       {
+        label: "File",
+        submenu: [...this.#fileMenuItems()],
+      },
+      {
         label: "View",
         submenu: [
           ...this.#viewZoomItems(),
@@ -83,6 +87,10 @@ export class ApplicationMenu {
         submenu: [{ role: "about" }],
       },
     ];
+  }
+
+  #fileMenuItems(): MenuItemConstructorOptions[] {
+    return [this.#commandItem("document.save")];
   }
 
   #viewZoomItems(): MenuItemConstructorOptions[] {

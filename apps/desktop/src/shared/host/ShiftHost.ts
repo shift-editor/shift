@@ -39,6 +39,9 @@ export interface ShiftHost {
      */
     onZoomChanged: (callback: (percent: number) => void) => () => void;
   };
+  dialog: {
+    showSave: () => Promise<string | null>;
+  };
   /** System clipboard access (Electron's clipboard module, no IPC). */
   clipboard: {
     writeText: (text: string) => void;

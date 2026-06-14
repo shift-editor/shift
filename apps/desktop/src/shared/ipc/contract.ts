@@ -15,6 +15,7 @@ export type RendererToMain = {
    * ports cannot travel through `invoke` responses.
    */
   "workspace.connect": () => void;
+  "dialog.showSave": () => string | null;
 };
 
 /**
@@ -27,4 +28,5 @@ export type RendererToMain = {
 export type MainToRenderer = {
   /** UI (chrome) zoom changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
+  "document"
 };

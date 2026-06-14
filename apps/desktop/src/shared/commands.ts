@@ -6,6 +6,7 @@
  * behavior for each command.
  */
 export type CommandId =
+  | "document.save"
   | "window.close"
   | "window.minimise"
   | "window.maximise"

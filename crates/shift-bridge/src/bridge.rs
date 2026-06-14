@@ -369,6 +369,20 @@ impl Bridge {
     Ok(Some(self.applied_echo(outcome)?))
   }
 
+  #[napi]
+  pub fn save(&mut self) -> errors::Result<()> {
+        let  workspace= self.workspace_mut()?;
+        workspace.save()?;
+        Ok(())
+  }
+
+  #[napi]
+  pub fn save_as(&mut self, path: String) -> errors::Result<()> {
+        let  workspace= self.workspace_mut()?;
+        workspace.save_as(path)?;
+        Ok(())
+  }
+
   /// Id-addressed glyph state. References survive renames; no name lookup.
   #[napi]
   pub fn get_glyph(

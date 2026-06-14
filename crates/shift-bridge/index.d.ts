@@ -35,6 +35,8 @@ export declare class Bridge {
    * redo stack is empty.
    */
   redo(): NapiAppliedChange | null
+  save(): void
+  saveAs(path: string): void
   /** Id-addressed glyph state. References survive renames; no name lookup. */
   getGlyph(glyphId: GlyphId, sourceId: SourceId): NapiGlyphState | null
   isVariable(): boolean

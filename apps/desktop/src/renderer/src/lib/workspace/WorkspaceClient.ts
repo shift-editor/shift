@@ -90,6 +90,21 @@ export class WorkspaceClient {
     return applied === null ? null : this.#fold(applied);
   }
 
+  /** Replays the latest undone entry; null when nothing is redoable. */
+  async save(): Promise<void> {
+    await this.connected();
+    await this.#require().call("workspace.save", undefined);
+
+    return;
+  }
+
+  async saveAs(path: string): Promise<void> {
+    await this.connected();
+    await this.#require().call("workspace.saveAs", { path });
+
+    return;
+  }
+
   /** Pulls replace-grade glyph state (resync + editor open); id-addressed. */
   async glyph(glyphId: GlyphId, sourceId: SourceId): Promise<GlyphState | null> {
     await this.connected();

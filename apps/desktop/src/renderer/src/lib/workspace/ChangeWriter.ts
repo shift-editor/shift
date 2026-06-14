@@ -101,6 +101,16 @@ export class ChangeWriter {
     });
   }
 
+  /** Replays the latest redo entry after pending pushes flush. */
+  save(): Promise<AppliedChange | null> {
+    this.#enqueueFlush();
+    return this.#serialize(async () => {
+      const applied = await this.#workspace.save();
+      if (applied) this.#fold(applied);
+      return applied;
+    });
+  }
+
   #enqueueFlush(): void {
     this.#flushQueued = false;
     if (this.#queue.length === 0) return;
