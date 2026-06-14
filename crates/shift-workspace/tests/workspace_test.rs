@@ -4,6 +4,7 @@ use shift_font::{
     Axis, AxisId, FontChange, FontIntent, FontIntentSet, GlyphId, LayerId, Location,
     error::CoreError,
 };
+use shift_source::ShiftSourcePackage;
 use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 fn create_glyph_intent(name: &str, unicodes: Vec<u32>) -> FontIntent {
@@ -168,6 +169,31 @@ fn save_as_assigns_a_shift_package_save_target() {
     assert_eq!(workspace.save_target(), Some(save_path.as_path()));
     assert!(save_path.is_file());
     workspace.save().unwrap();
+}
+
+#[test]
+fn save_and_save_as_write_the_live_font_to_the_source_package() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let save_path = temp.path().join("SavedFont.shift");
+
+    let mut workspace =
+        FontWorkspace::create_untitled(&store_path, NewWorkspace::with_family_name("Saved Font"))
+            .unwrap();
+    create_glyph(&mut workspace, "A", vec![65]);
+
+    workspace.save_as(&save_path).unwrap();
+
+    let saved = ShiftSourcePackage::load_font(&save_path).unwrap();
+    assert_eq!(saved.metadata().family_name.as_deref(), Some("Saved Font"));
+    assert!(saved.glyph_id_by_name("A").is_some());
+
+    create_glyph(&mut workspace, "B", vec![66]);
+    workspace.save().unwrap();
+
+    let saved = ShiftSourcePackage::load_font(&save_path).unwrap();
+    assert!(saved.glyph_id_by_name("A").is_some());
+    assert!(saved.glyph_id_by_name("B").is_some());
 }
 
 fn set_x_advance_intents(layer_id: LayerId, width: f64) -> FontIntentSet {

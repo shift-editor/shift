@@ -12,7 +12,7 @@ import type {
 } from "@shift/types";
 import { mintGlyphId } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals/signal";
-import type { ChangeWriter } from "@/lib/workspace/ChangeWriter";
+import type { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { Glyph, type GlyphSource } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
@@ -267,7 +267,7 @@ export class Font {
   /** Open glyph models keyed by stable id; survives directory re-keys. */
   readonly #glyphsById = new Map<GlyphId, Glyph>();
   readonly #glyphSources = new Map<GlyphSourceKey, GlyphSource>();
-  readonly #writer: ChangeWriter | null;
+  readonly #editQueue: WorkspaceEditQueue | null;
   #cachesKeyedTo: GlyphDirectory | null = null;
 
   /**
@@ -276,9 +276,11 @@ export class Font {
    * @param $workspace - Single source of workspace truth owned by
    *   `WorkspaceClient`. There is no load: every derived value follows this
    *   signal, and `null` means no font is open.
+   * @param editQueue - Optional queue used by editable projections to submit
+   *   committed edits to the utility workspace.
    */
-  constructor($workspace: Signal<WorkspaceSnapshot | null>, writer?: ChangeWriter) {
-    this.#writer = writer ?? null;
+  constructor($workspace: Signal<WorkspaceSnapshot | null>, editQueue?: WorkspaceEditQueue) {
+    this.#editQueue = editQueue ?? null;
     this.#$loaded = computed(() => $workspace.value !== null);
     this.#$metrics = computed(() => $workspace.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#$metadata = computed(() => $workspace.value?.metadata ?? {});
@@ -463,7 +465,7 @@ export class Font {
     const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
     const glyphId = mintGlyphId();
 
-    this.writer.push({
+    this.editQueue.push({
       kind: "createGlyph",
       createGlyph: { glyphId, name: finalName, unicodes },
     });
@@ -704,18 +706,21 @@ export class Font {
   }
 
   /**
-   * The renderer's single durable-write path; editing verbs push intents
-   * through it.
+   * Returns the renderer queue for committed edits awaiting utility echoes.
+   *
+   * @remarks
+   * Save and dirty semantics live in the utility workspace; this queue only
+   * tracks renderer-submitted edits and serializes reads behind them.
    *
    * @throws {Error} when constructed without a workspace (pure projection
    *   tests) — same not-wired contract as the legacy bridge getter.
    */
-  get writer(): ChangeWriter {
-    if (!this.#writer) {
+  get editQueue(): WorkspaceEditQueue {
+    if (!this.#editQueue) {
       throw new Error("editing is not wired to the workspace yet");
     }
 
-    return this.#writer;
+    return this.#editQueue;
   }
 
   /**
@@ -733,7 +738,7 @@ export class Font {
     const record = this.#directory.peek().records.find((entry) => entry.id === glyphId);
     if (!record) return null;
 
-    const state = await this.writer.glyph(glyphId, source.id);
+    const state = await this.editQueue.glyph(glyphId, source.id);
     if (!state) return null;
 
     const handle = this.#directory.peek().glyphHandleForName(record.name);
@@ -761,7 +766,7 @@ export class Font {
     const cached = this.glyphSource(glyph.handle, source);
     if (cached) return cached;
 
-    const state = await this.writer.glyph(glyphId, source.id);
+    const state = await this.editQueue.glyph(glyphId, source.id);
     if (!state) return null;
 
     const glyphSource = glyph.createGlyphSource(source, state);

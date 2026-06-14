@@ -87,6 +87,12 @@ export class CommandRegistry {
  * objects from this context after they finish running.
  */
 export type CommandContext = {
+  document: {
+    /** Saves through main's native document workflow. */
+    save: () => Promise<void>;
+    /** Runs main's native Save As workflow. */
+    saveAs: () => Promise<void>;
+  };
   windows: {
     /**
      * Returns the current working window.

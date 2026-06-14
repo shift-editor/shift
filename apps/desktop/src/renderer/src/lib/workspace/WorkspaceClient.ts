@@ -1,5 +1,10 @@
 import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
-import type { SyncCallMap, SyncEventMap, WorkspaceSnapshot } from "@shared/workspace/protocol";
+import type {
+  SyncCallMap,
+  SyncEventMap,
+  WorkspaceDocumentState,
+  WorkspaceSnapshot,
+} from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AppliedChange, FontIntent, GlyphId, GlyphState, SourceId } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
@@ -65,7 +70,7 @@ export class WorkspaceClient {
    *
    * @remarks
    * The record fold happens here (directory follows `$workspace`); layer
-   * folds belong to the glyph model and land with the CS3 ChangeWriter —
+   * folds belong to the glyph model and land with the CS3 WorkspaceEditQueue —
    * callers receive the AppliedChange to fold geometry themselves until then.
    */
   async apply(intents: FontIntent[]): Promise<AppliedChange> {
@@ -88,6 +93,20 @@ export class WorkspaceClient {
 
     const applied = await this.#require().call("workspace.redo", undefined);
     return applied === null ? null : this.#fold(applied);
+  }
+
+  /** Saves to the current target; rejects when the document still needs a path. */
+  async save(): Promise<WorkspaceDocumentState> {
+    await this.connected();
+
+    return this.#require().call("workspace.save", undefined);
+  }
+
+  /** Saves to `path` and adopts it as the document's target. */
+  async saveAs(path: string): Promise<WorkspaceDocumentState> {
+    await this.connected();
+
+    return this.#require().call("workspace.saveAs", { path });
   }
 
   /** Pulls replace-grade glyph state (resync + editor open); id-addressed. */

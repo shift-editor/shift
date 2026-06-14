@@ -4,7 +4,7 @@ import { registerBuiltInTools } from "@/lib/tools/tools";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { Font } from "@/lib/model/Font";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
-import { ChangeWriter } from "@/lib/workspace/ChangeWriter";
+import { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import { getShiftHost } from "@/host/shiftHost";
 
 let instance: GlyphInfo | null = null;
@@ -14,8 +14,8 @@ export function getGlyphInfo(): GlyphInfo {
 }
 
 const workspace = new WorkspaceClient(getShiftHost());
-const writer = new ChangeWriter(workspace);
-const font = new Font(workspace.$workspace, writer);
+const editQueue = new WorkspaceEditQueue(workspace);
+const font = new Font(workspace.$workspace, editQueue);
 const editor = new Editor({ font, clipboard: electronSystemClipboard });
 registerBuiltInTools(editor);
 
@@ -23,6 +23,15 @@ registerBuiltInTools(editor);
 editor.setActiveTool("select");
 
 void workspace.connected();
+
+// Main resolves the save path, then asks us to issue the save on the edit
+// lane. The queue serializes it behind pending edits; the utility owns the
+// write and reports the result to main via document.changed.
+getShiftHost().document.onSave(({ path }) => {
+  void editQueue.save(path).catch((error) => {
+    console.error("document save failed", error);
+  });
+});
 
 export const getWorkspace = () => workspace;
 export const getEditor = () => editor;

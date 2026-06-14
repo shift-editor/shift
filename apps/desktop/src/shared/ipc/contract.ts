@@ -1,6 +1,19 @@
 import type { CommandId } from "../commands";
 
 /**
+ * Tells the renderer to issue a save on its committed-op lane.
+ *
+ * @remarks
+ * `path` is null for Save (current target) and a filesystem path for Save As —
+ * main owns the dialog and resolves the path before sending. The renderer
+ * enqueues the save behind its edits; main learns the outcome from the
+ * utility's `document.changed` event, so this is one-way (no reply channel).
+ */
+export type DocumentSaveRequest = {
+  path: string | null;
+};
+
+/**
  * Defines request/response channels that the renderer may invoke on main.
  *
  * @remarks
@@ -25,6 +38,8 @@ export type RendererToMain = {
  * merely reflects it.
  */
 export type MainToRenderer = {
+  /** Main resolved the save path; the renderer issues the save on its edit lane. */
+  "document.save": (request: DocumentSaveRequest) => void;
   /** UI (chrome) zoom changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
 };

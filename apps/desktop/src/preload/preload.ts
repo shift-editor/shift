@@ -10,6 +10,9 @@ const shiftHost: ShiftHost = {
   commands: {
     run: invoke(ipcRenderer, "commands.run"),
   },
+  document: {
+    onSave: listen(ipcRenderer, "document.save"),
+  },
   workspace: {
     connect: invoke(ipcRenderer, "workspace.connect"),
   },

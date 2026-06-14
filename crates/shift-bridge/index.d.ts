@@ -15,6 +15,9 @@ export declare class Bridge {
   constructor()
   createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
+  documentState(): NapiDocumentState
+  saveWorkspace(): NapiDocumentState
+  saveWorkspaceAs(path: string): NapiDocumentState
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
   getGlyphs(): Array<NapiGlyphRecord>
@@ -40,6 +43,13 @@ export declare class Bridge {
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
+}
+
+export interface NapiDocumentState {
+  sourceKind: string
+  saveTarget?: string
+  dirty: boolean
+  needsSaveAs: boolean
 }
 
 export interface NapiFontExportRequest {

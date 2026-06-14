@@ -10,6 +10,7 @@ import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 import { WorkspaceProcess } from "../workspace/WorkspaceProcess";
+import { DocumentSession } from "../document/DocumentSession";
 
 const APP_NAME = "Shift";
 
@@ -29,10 +30,19 @@ export class App {
 
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(this.#appIcon.path(), (id) => {
-    void this.#commands.run(id, this.#commandContext());
+    // Menu/accelerator commands run detached, so a failure (e.g. a save that
+    // throws) has nowhere to propagate — catch and surface it here.
+    void this.#commands.run(id, this.#commandContext()).catch((error) => {
+      this.#log.error("menu command failed", id, error);
+    });
   });
 
   #workspace = new WorkspaceProcess();
+  #document = new DocumentSession({
+    workspace: this.#workspace,
+    activeWindow: () => this.#workingWindow,
+    applicationName: () => this.applicationName,
+  });
 
   constructor(log: ShiftLogger = createShiftLogger("app")) {
     this.#log = log;
@@ -72,6 +82,7 @@ export class App {
 
       const documentsRoot = path.join(app.getPath("userData"), "working-documents");
       this.#workspace.start(documentsRoot);
+      this.#workspace.onDocumentChanged((state) => this.#document.acceptState(state));
 
       this.#appIcon.install();
       this.#applicationMenu.install();
@@ -132,6 +143,10 @@ export class App {
 
   #commandContext(): CommandContext {
     return {
+      document: {
+        save: () => this.#document.save(),
+        saveAs: () => this.#document.saveAs(),
+      },
       windows: {
         active: () => this.#workingWindow,
       },

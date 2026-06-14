@@ -18,8 +18,8 @@ use shift_wire::{
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
   Source,
 };
-use shift_workspace::{FontWorkspace, NewWorkspace};
-use std::sync::Arc;
+use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
+use std::{path::Path, sync::Arc};
 
 #[napi(object)]
 #[derive(Clone, Debug)]
@@ -38,6 +38,15 @@ pub struct NapiFontExportResult {
 pub struct NapiNewWorkspace {
   pub family_name: Option<String>,
   pub units_per_em: Option<i64>,
+}
+
+#[napi(object)]
+#[derive(Debug)]
+pub struct NapiDocumentState {
+  pub source_kind: String,
+  pub save_target: Option<String>,
+  pub dirty: bool,
+  pub needs_save_as: bool,
 }
 
 fn new_workspace_from_options(options: Option<NapiNewWorkspace>) -> NewWorkspace {
@@ -196,6 +205,7 @@ impl Task for ExportFontTask {
 pub struct Bridge {
   workspace: Option<FontWorkspace>,
   live_version: DocumentVersion,
+  saved_version: DocumentVersion,
 }
 
 #[napi]
@@ -205,6 +215,7 @@ impl Bridge {
     Self {
       workspace: None,
       live_version: DocumentVersion::default(),
+      saved_version: DocumentVersion::default(),
     }
   }
 
@@ -233,6 +244,25 @@ impl Bridge {
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
       request: request.try_into()?,
     }))
+  }
+
+  #[napi]
+  pub fn document_state(&self) -> errors::Result<NapiDocumentState> {
+    self.document_state_snapshot()
+  }
+
+  #[napi]
+  pub fn save_workspace(&mut self) -> errors::Result<NapiDocumentState> {
+    self.workspace_mut()?.save()?;
+    self.mark_saved();
+    self.document_state_snapshot()
+  }
+
+  #[napi]
+  pub fn save_workspace_as(&mut self, path: String) -> errors::Result<NapiDocumentState> {
+    self.workspace_mut()?.save_as(path)?;
+    self.mark_saved();
+    self.document_state_snapshot()
   }
 
   #[napi]
@@ -466,8 +496,33 @@ impl Bridge {
     Ok(self.workspace()?.font())
   }
 
+  fn document_state_snapshot(&self) -> BridgeResult<NapiDocumentState> {
+    let workspace = self.workspace()?;
+    let source_kind = match workspace.source() {
+      WorkspaceSource::Untitled => "untitled",
+      WorkspaceSource::Package { .. } => "package",
+      WorkspaceSource::Imported { .. } => "imported",
+    };
+    let save_target = workspace.save_target().map(path_to_string).transpose()?;
+    let needs_save_as = !matches!(workspace.source(), WorkspaceSource::Package { .. });
+
+    Ok(NapiDocumentState {
+      source_kind: source_kind.to_string(),
+      save_target,
+      // `live_version`/`saved_version` stay internal: `dirty` is the only
+      // answer callers need, and shipping the raw counters next to it only
+      // invites three fields that must agree.
+      dirty: self.live_version != self.saved_version,
+      needs_save_as,
+    })
+  }
+
   fn mark_font_changed(&mut self) {
     self.bump_live_version();
+  }
+
+  fn mark_saved(&mut self) {
+    self.saved_version = self.live_version;
   }
 
   fn bump_live_version(&mut self) {
@@ -476,7 +531,15 @@ impl Bridge {
 
   fn reset_versions(&mut self) {
     self.live_version = DocumentVersion::default();
+    self.saved_version = DocumentVersion::default();
   }
+}
+
+fn path_to_string(path: &Path) -> BridgeResult<String> {
+  path
+    .to_str()
+    .map(str::to_string)
+    .ok_or_else(|| WorkspaceError::InvalidPathUtf8(path.to_path_buf()).into())
 }
 
 fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
@@ -1439,6 +1502,54 @@ mod tests {
     let (_, store_path) = test_paths("workspace");
     bridge.create_untitled_workspace(store_path, None).unwrap();
     bridge
+  }
+
+  #[test]
+  fn document_state_tracks_dirty_across_edits_and_saves() {
+    let mut bridge = bridge_with_workspace();
+
+    let state = bridge.document_state().unwrap();
+    assert_eq!(state.source_kind, "untitled");
+    assert_eq!(state.save_target, None);
+    assert!(!state.dirty);
+    assert!(state.needs_save_as);
+
+    bridge
+      .apply(vec![create_glyph_napi("A", vec![65])], None)
+      .unwrap();
+
+    assert!(bridge.document_state().unwrap().dirty);
+
+    let (save_path, _) = test_paths("save-as");
+    let state = bridge.save_workspace_as(save_path.clone()).unwrap();
+    assert_eq!(state.source_kind, "package");
+    assert_eq!(state.save_target.as_deref(), Some(save_path.as_str()));
+    assert!(!state.dirty);
+    assert!(!state.needs_save_as);
+
+    bridge
+      .apply(vec![create_glyph_napi("B", vec![66])], None)
+      .unwrap();
+
+    assert!(bridge.document_state().unwrap().dirty);
+
+    let state = bridge.save_workspace().unwrap();
+    assert!(!state.dirty);
+  }
+
+  #[test]
+  fn save_workspace_reports_needs_save_as_for_untitled_documents() {
+    let mut bridge = bridge_with_workspace();
+    bridge
+      .apply(vec![create_glyph_napi("A", vec![65])], None)
+      .unwrap();
+
+    let error = bridge.save_workspace().unwrap_err();
+
+    assert!(error.to_string().contains("workspace needs a save path"));
+    let state = bridge.document_state().unwrap();
+    assert!(state.dirty);
+    assert!(state.needs_save_as);
   }
 
   fn default_source_id(bridge: &Bridge) -> String {

@@ -18,6 +18,7 @@ import type {
   ShellEventMap,
   SyncCallMap,
   SyncEventMap,
+  WorkspaceDocumentState,
 } from "../../shared/workspace/protocol";
 import { WorkspaceHost } from "./WorkspaceHost";
 
@@ -106,6 +107,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toBeNull();
   });
 
+  it("returns null document state before any workspace exists", async () => {
+    await expect(shell.call("document.state", undefined)).resolves.toBeNull();
+  });
+
   it("creates an untitled workspace and returns it as the next state", async () => {
     const sync = await connectSyncLane();
 
@@ -134,6 +139,36 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toEqual(created);
   });
 
+  it("emits utility-owned document state after create and apply", async () => {
+    let latestState: WorkspaceDocumentState | null = null;
+    const unlisten = shell.listen("document.changed", (state) => {
+      latestState = state;
+    });
+    const sync = await connectSyncLane();
+
+    const created = await sync.call("workspace.create", undefined);
+    await shell.call("document.state", undefined);
+    expect(latestState).toMatchObject({
+      documentId: created.documentId,
+      sourceKind: "untitled",
+      saveTarget: null,
+      dirty: false,
+      needsSaveAs: true,
+    });
+
+    await sync.call("workspace.apply", {
+      intents: [createGlyphA()],
+      label: "Add Glyph",
+    });
+    await shell.call("document.state", undefined);
+    expect(latestState).toMatchObject({
+      dirty: true,
+      needsSaveAs: true,
+    });
+
+    unlisten();
+  });
+
   it("a reconnected sync lane still serves the open workspace", async () => {
     const first = await connectSyncLane();
     const created = await first.call("workspace.create", undefined);
@@ -158,6 +193,84 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     const snapshot = await sync.call("workspace.snapshot", undefined);
     expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+  });
+
+  it("workspace.save reports NeedsSaveAs for untitled workspaces", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+    await sync.call("workspace.apply", {
+      intents: [createGlyphA()],
+      label: "Add Glyph",
+    });
+
+    await expect(sync.call("workspace.save", undefined)).rejects.toThrow(
+      "workspace needs a save path",
+    );
+
+    await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
+      dirty: true,
+      needsSaveAs: true,
+    });
+  });
+
+  it("workspace.saveAs writes the package and clears dirty for later saves", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+    await sync.call("workspace.apply", {
+      intents: [createGlyphA()],
+      label: "Add Glyph",
+    });
+
+    const savePath = path.join(tmpRoot, "SavedFont.shift");
+    const saved = await sync.call("workspace.saveAs", { path: savePath });
+
+    expect(saved).toMatchObject({
+      sourceKind: "package",
+      saveTarget: savePath,
+      dirty: false,
+      needsSaveAs: false,
+    });
+    expect(fs.existsSync(savePath)).toBe(true);
+
+    await sync.call("workspace.apply", {
+      intents: [
+        {
+          kind: "createGlyph",
+          createGlyph: {
+            glyphId: mintGlyphId(),
+            name: "B" as GlyphName,
+            unicodes: [66 as Unicode],
+          },
+        },
+      ],
+      label: "Add Glyph",
+    });
+    await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
+      dirty: true,
+    });
+
+    await expect(sync.call("workspace.save", undefined)).resolves.toMatchObject({
+      dirty: false,
+      needsSaveAs: false,
+    });
+  });
+
+  it("serializes a save behind an un-awaited apply on the same lane", async () => {
+    const sync = await connectSyncLane();
+    await sync.call("workspace.create", undefined);
+    const savePath = path.join(tmpRoot, "Ordered.shift");
+
+    // Issue the apply and the save back-to-back without awaiting the apply. The
+    // host serializes both on one queue, so the save observes the glyph — if it
+    // had raced ahead, the doc would read dirty once the apply landed.
+    const apply = sync.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
+    const saved = await sync.call("workspace.saveAs", { path: savePath });
+    await apply;
+
+    expect(saved).toMatchObject({ dirty: false, needsSaveAs: false });
+    await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
+      dirty: false,
+    });
   });
 
   it("undo and redo createGlyph update glyph records", async () => {

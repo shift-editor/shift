@@ -1,4 +1,5 @@
 import type { CommandId } from "../commands";
+import type { DocumentSaveRequest } from "../ipc/contract";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -18,6 +19,16 @@ export interface ShiftHost {
      * @throws {Error} when the preload bridge is unavailable or main rejects the command.
      */
     run: (id: CommandId) => Promise<void>;
+  };
+  /** Narrow document lifecycle hooks owned by main. */
+  document: {
+    /**
+     * Subscribes to main's request to save; the renderer issues the save on its
+     * committed-op lane so it lands behind pending edits.
+     *
+     * @returns an unsubscribe function.
+     */
+    onSave: (callback: (request: DocumentSaveRequest) => void) => () => void;
   };
   /** Connects the renderer to the workspace utility process. */
   workspace: {

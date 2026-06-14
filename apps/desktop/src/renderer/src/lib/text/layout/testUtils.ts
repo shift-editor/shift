@@ -48,7 +48,7 @@ export async function layoutTestFont(): Promise<Font> {
   a.addOnCurvePoint(contourId, { x: 100, y: 0 });
   a.addOnCurvePoint(contourId, { x: 50, y: 100 });
   a.closeContour(contourId);
-  await stack.writer.settled();
+  await stack.editQueue.settled();
 
   return stack.font;
 }
