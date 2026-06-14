@@ -36,6 +36,8 @@ pub mod error;
 pub mod intents;
 pub mod ir;
 pub mod layer_edit;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 
 pub use changes::*;
 pub use error::{CoreError, CoreResult};

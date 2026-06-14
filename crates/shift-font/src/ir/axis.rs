@@ -2,7 +2,7 @@ use crate::entity::AxisId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Axis {
     id: AxisId,
@@ -113,7 +113,7 @@ impl Axis {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Location {
     values: HashMap<AxisId, f64>,
 }

@@ -1,9 +1,7 @@
 use std::fs::File;
 
 use shift_font::{
-    Anchor, AnchorId, Axis, AxisId, Component, ComponentId, Contour, ContourId,
-    DecomposedTransform, Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair,
-    KerningSide, LayerId, LibValue, Location, Point, PointId, PointType, Source, SourceId,
+    Axis, AxisId, Font, KerningPair, Location, Source, SourceId, test_support::sample_font,
 };
 use shift_source::{
     AXES_FILE, FEATURES_FILE, FONT_FILE, GLYPHS_DIR, KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE,
@@ -11,167 +9,6 @@ use shift_source::{
     write_tree_atomic,
 };
 use zip::{CompressionMethod, ZipArchive};
-
-fn sample_font() -> Font {
-    let mut font = Font::empty();
-    font.metadata_mut().family_name = Some("Dogfood Sans".to_string());
-    font.metadata_mut().style_name = Some("Regular".to_string());
-    font.metrics_mut().units_per_em = 2048.0;
-    font.metrics_mut().ascender = 1500.0;
-    font.metrics_mut().descender = -500.0;
-    font.features_mut()
-        .set_fea_source(Some("feature kern { pos A A -80; } kern;".to_string()));
-    font.kerning_mut()
-        .set_group1("public.kern1.A".to_string(), vec!["A".into()]);
-    font.kerning_mut()
-        .set_group2("public.kern2.A".to_string(), vec!["A".into()]);
-    font.kerning_mut().add_pair(KerningPair::new(
-        KerningSide::Group("public.kern1.A".to_string()),
-        KerningSide::Group("public.kern2.A".to_string()),
-        -80.0,
-    ));
-    let mut font_guideline = Guideline::with_id(
-        GuidelineId::from_raw("cap_height"),
-        None,
-        Some(700.0),
-        None,
-        Some("Cap Height".to_string()),
-        Some("blue".to_string()),
-    );
-    font_guideline.set_color(Some("green".to_string()));
-    font.add_guideline(font_guideline);
-    font.lib_mut().set(
-        "com.shift.note".to_string(),
-        LibValue::String("font note".to_string()),
-    );
-
-    let weight_id = AxisId::from_raw("weight");
-    let mut weight = Axis::with_id(
-        weight_id.clone(),
-        "wght".to_string(),
-        "Weight".to_string(),
-        100.0,
-        400.0,
-        900.0,
-    );
-    weight.set_hidden(true);
-    font.add_axis(weight);
-
-    let regular_id = SourceId::from_raw("regular");
-    let bold_id = SourceId::from_raw("bold");
-    let mut bold_location = Location::new();
-    bold_location.set(weight_id, 900.0);
-    font.add_source(Source::with_id(
-        regular_id.clone(),
-        "Regular".to_string(),
-        Location::new(),
-        Some("Regular.ufo".to_string()),
-    ));
-    font.add_source(Source::with_id(
-        bold_id.clone(),
-        "Bold".to_string(),
-        bold_location,
-        None,
-    ));
-    font.set_default_source_id(regular_id.clone());
-
-    let acute_id = GlyphId::from_raw("acute");
-    let mut acute = Glyph::with_id(acute_id.clone(), "acute");
-    acute.set_layer(GlyphLayer::with_width(
-        LayerId::from_raw("acute_regular"),
-        regular_id.clone(),
-        200.0,
-    ));
-    font.insert_glyph(acute).unwrap();
-
-    let glyph_id = GlyphId::from_raw("A");
-    let mut glyph = Glyph::with_id(glyph_id, "A");
-    glyph.set_unicodes(vec![0x0041, 0x00C1]);
-
-    let mut regular_layer =
-        GlyphLayer::with_width(LayerId::from_raw("A_regular"), regular_id, 600.0);
-    regular_layer.set_height(Some(700.0));
-    let mut contour = Contour::with_id(ContourId::from_raw("A_outer"));
-    contour.push_point(Point::new(
-        PointId::from_raw("A_0"),
-        100.0,
-        0.0,
-        PointType::OnCurve,
-        false,
-    ));
-    contour.push_point(Point::new(
-        PointId::from_raw("A_1"),
-        300.0,
-        700.0,
-        PointType::OffCurve,
-        true,
-    ));
-    contour.push_point(Point::new(
-        PointId::from_raw("A_2"),
-        500.0,
-        0.0,
-        PointType::OnCurve,
-        false,
-    ));
-    contour.close();
-    regular_layer.add_contour(contour);
-    regular_layer.add_anchor(Anchor::with_id(
-        AnchorId::from_raw("A_top"),
-        Some("top".to_string()),
-        300.0,
-        700.0,
-    ));
-    regular_layer.add_component(Component::with_id(
-        ComponentId::from_raw("acute_component"),
-        acute_id,
-        "acute",
-        DecomposedTransform {
-            translate_x: 10.0,
-            translate_y: 20.0,
-            rotation: 5.0,
-            scale_x: 1.1,
-            scale_y: 0.9,
-            ..Default::default()
-        },
-    ));
-    regular_layer.add_guideline(Guideline::with_id(
-        GuidelineId::from_raw("baseline"),
-        None,
-        Some(0.0),
-        None,
-        Some("Baseline".to_string()),
-        None,
-    ));
-    regular_layer
-        .lib_mut()
-        .set("com.shift.layer".to_string(), LibValue::Integer(42));
-    glyph.set_layer(regular_layer);
-
-    let mut bold_layer = GlyphLayer::with_width(LayerId::from_raw("A_bold"), bold_id, 650.0);
-    let mut bold_contour = Contour::with_id(ContourId::from_raw("A_bold_outer"));
-    bold_contour.push_point(Point::new(
-        PointId::from_raw("A_bold_0"),
-        90.0,
-        0.0,
-        PointType::OnCurve,
-        false,
-    ));
-    bold_contour.push_point(Point::new(
-        PointId::from_raw("A_bold_1"),
-        310.0,
-        720.0,
-        PointType::OnCurve,
-        false,
-    ));
-    bold_layer.add_contour(bold_contour);
-    glyph.set_layer(bold_layer);
-    glyph
-        .lib_mut()
-        .set("com.shift.glyph".to_string(), LibValue::Boolean(true));
-
-    font.insert_glyph(glyph).unwrap();
-    font
-}
 
 fn replace_tree_entry(tree: &mut PackageTree, path: &str, from: &str, to: &str) {
     let entry = tree
@@ -202,7 +39,7 @@ fn creates_zip_package_with_manifest_first_and_stored() {
 }
 
 #[test]
-fn roundtrips_geometry_font_through_zip_package() {
+fn shift_round_trip_preserves_whole_font() {
     let temp = tempfile::tempdir().unwrap();
     let package_path = temp.path().join("Dogfood.shift");
     let original = sample_font();
@@ -210,81 +47,7 @@ fn roundtrips_geometry_font_through_zip_package() {
     ShiftSourcePackage::save_font(&package_path, &original).unwrap();
     let loaded = ShiftSourcePackage::load_font(&package_path).unwrap();
 
-    assert_eq!(
-        loaded.metadata().family_name.as_deref(),
-        Some("Dogfood Sans")
-    );
-    assert_eq!(loaded.metrics().units_per_em, 2048.0);
-    assert_eq!(loaded.axes().len(), 1);
-    assert_eq!(loaded.axes()[0].tag(), "wght");
-    assert!(loaded.axes()[0].is_hidden());
-    assert_eq!(loaded.kerning().get_kerning("A", "A"), Some(-80.0));
-    assert!(
-        loaded
-            .features()
-            .fea_source()
-            .is_some_and(|source| source.contains("feature kern"))
-    );
-    assert_eq!(loaded.guidelines().len(), 1);
-    assert_eq!(
-        loaded.guidelines()[0].id(),
-        GuidelineId::from_raw("cap_height")
-    );
-    assert_eq!(loaded.guidelines()[0].name(), Some("Cap Height"));
-    assert_eq!(loaded.guidelines()[0].color(), Some("green"));
-    assert!(matches!(
-        loaded.lib().get("com.shift.note"),
-        Some(LibValue::String(value)) if value == "font note"
-    ));
-    assert_eq!(loaded.sources().len(), 2);
-    assert_eq!(
-        loaded.default_source_id(),
-        Some(SourceId::from_raw("regular"))
-    );
-
-    let glyph = loaded.glyph(GlyphId::from_raw("A")).unwrap();
-    assert_eq!(glyph.name(), "A");
-    assert_eq!(glyph.unicodes(), &[0x0041, 0x00C1]);
-    assert!(matches!(
-        glyph.lib().get("com.shift.glyph"),
-        Some(LibValue::Boolean(true))
-    ));
-
-    let regular_layer = glyph.layer(LayerId::from_raw("A_regular")).unwrap();
-    assert_eq!(regular_layer.source_id(), SourceId::from_raw("regular"));
-    assert_eq!(regular_layer.width(), 600.0);
-    assert_eq!(regular_layer.height(), Some(700.0));
-    assert_eq!(regular_layer.contours().len(), 1);
-    assert_eq!(regular_layer.components().len(), 1);
-    assert_eq!(regular_layer.anchors().len(), 1);
-    assert_eq!(regular_layer.guidelines().len(), 1);
-    assert_eq!(
-        regular_layer.guidelines()[0].id(),
-        GuidelineId::from_raw("baseline")
-    );
-    assert!(matches!(
-        regular_layer.lib().get("com.shift.layer"),
-        Some(LibValue::Integer(42))
-    ));
-
-    let contour = regular_layer
-        .contour(ContourId::from_raw("A_outer"))
-        .unwrap();
-    assert!(contour.is_closed());
-    assert_eq!(contour.points().len(), 3);
-    assert_eq!(contour.points()[1].point_type(), PointType::OffCurve);
-    assert!(contour.points()[1].is_smooth());
-
-    let component = regular_layer
-        .component(ComponentId::from_raw("acute_component"))
-        .unwrap();
-    assert_eq!(component.base_glyph_id(), GlyphId::from_raw("acute"));
-    assert_eq!(component.base_glyph_name().as_str(), "acute");
-    assert_eq!(component.transform().translate_x, 10.0);
-
-    let bold_layer = glyph.layer(LayerId::from_raw("A_bold")).unwrap();
-    assert_eq!(bold_layer.source_id(), SourceId::from_raw("bold"));
-    assert_eq!(bold_layer.width(), 650.0);
+    assert_eq!(loaded, original);
 }
 
 #[test]

@@ -2,7 +2,7 @@ use crate::entity::{ComponentId, GlyphId};
 use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Component {
     id: ComponentId,
     base_glyph_id: GlyphId,
@@ -18,7 +18,7 @@ pub struct Component {
 /// | xy  yy  dy |
 /// | 0   0   1  | (implicit)
 /// ```
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Transform {
     pub xx: f64,
     pub xy: f64,
@@ -30,7 +30,7 @@ pub struct Transform {
 
 /// Decomposed 2D transformation with explicit scale, rotation, skew, and translation.
 /// Composition order: translate to center → rotate → scale → skew → translate back
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecomposedTransform {
     pub translate_x: f64,
