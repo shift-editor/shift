@@ -144,6 +144,7 @@ export class App {
   #commandContext(): CommandContext {
     return {
       document: {
+        open: () => this.#document.open(),
         save: () => this.#document.save(),
         saveAs: () => this.#document.saveAs(),
       },

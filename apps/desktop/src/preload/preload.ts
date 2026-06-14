@@ -12,6 +12,7 @@ const shiftHost: ShiftHost = {
   },
   document: {
     onSave: listen(ipcRenderer, "document.save"),
+    onOpen: listen(ipcRenderer, "document.open"),
   },
   workspace: {
     connect: invoke(ipcRenderer, "workspace.connect"),

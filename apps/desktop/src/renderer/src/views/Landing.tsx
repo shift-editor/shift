@@ -1,28 +1,22 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import logo from "@/assets/logo@1024.png";
 import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 import { Titlebar } from "@/components/chrome/Titlebar";
+import { getWorkspace } from "@/store/appStore";
 import { getShiftHost } from "@/host/shiftHost";
-import { getFont, getWorkspace } from "@/store/appStore";
-import { useSignalState } from "@/lib/signals/useSignal";
 
 export const Landing = () => {
-  const navigate = useNavigate();
-  const loaded = useSignalState(getFont().$loaded);
-
-  useEffect(() => {
-    if (!loaded) return;
-
-    navigate("/home");
-    void getShiftHost().commands.run("window.maximise");
-  }, [loaded, navigate]);
+  const host = getShiftHost();
+  const workspace = getWorkspace();
 
   const handleNewFont = () => {
-    getWorkspace()
-      .create()
-      .catch((error) => console.error("creating a new font failed", error));
+    void workspace.create().catch((error) => console.error("creating a new font failed", error));
+  };
+
+  const handleOpenFont = () => {
+    void host.commands
+      .run("file.open")
+      .catch((error) => console.error("opening a font failed", error));
   };
 
   return (
@@ -44,9 +38,12 @@ export const Landing = () => {
             variant="ghost"
           >
             New font
-            <span className="text-sm font-medium text-muted">⌘ + n</span>
           </Button>
-          <Button className="w-full flex justify-between items-center" disabled variant="ghost">
+          <Button
+            className="w-full flex justify-between items-center"
+            onClick={handleOpenFont}
+            variant="ghost"
+          >
             Load font
             <span className="text-sm font-medium text-muted">⌘ + o</span>
           </Button>

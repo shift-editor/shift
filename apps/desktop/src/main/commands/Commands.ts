@@ -62,6 +62,13 @@ const viewCommands: Command[] = [
 
 const fileCommands: Command[] = [
   {
+    id: "file.open",
+    label: "Open…",
+    accelerator: "CmdOrCtrl+O",
+    enabled: (ctx) => ctx.windows.active() !== null,
+    run: (ctx) => ctx.document.open(),
+  },
+  {
     id: "file.save",
     label: "Save",
     accelerator: "CmdOrCtrl+S",

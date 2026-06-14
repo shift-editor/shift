@@ -24,12 +24,20 @@ editor.setActiveTool("select");
 
 void workspace.connected();
 
+const host = getShiftHost();
+
 // Main resolves the save path, then asks us to issue the save on the edit
 // lane. The queue serializes it behind pending edits; the utility owns the
 // write and reports the result to main via document.changed.
-getShiftHost().document.onSave(({ path }) => {
+host.document.onSave(({ path }) => {
   void editQueue.save(path).catch((error) => {
     console.error("document save failed", error);
+  });
+});
+
+host.document.onOpen(({ path }) => {
+  workspace.open(path).catch((error) => {
+    console.error("document open failed", error);
   });
 });
 

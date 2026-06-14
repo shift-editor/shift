@@ -97,6 +97,7 @@ export class WorkspaceHost {
         }),
       // Save rides the edit lane: the same #serialize queue orders it behind
       // every committed apply/undo/redo, so it never writes stale state.
+      "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.glyph": ({ glyphId, sourceId }) =>
@@ -124,6 +125,16 @@ export class WorkspaceHost {
       sources: this.#bridge.getSources(),
       axes: this.#bridge.getAxes(),
     };
+  }
+
+  #open(path: string): WorkspaceSnapshot {
+    const draft = this.#documents.createDraft(); // fresh working store, same as create/open model
+    this.#bridge.openWorkspace(path, draft.storePath);
+    this.#documentId = draft.documentId;
+    const snapshot = this.#snapshot(draft.documentId);
+    this.#emitDocumentChanged();
+
+    return snapshot;
   }
 
   #save(): WorkspaceDocumentState {

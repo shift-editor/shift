@@ -16,6 +16,7 @@ export declare class Bridge {
   createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   documentState(): NapiDocumentState
+  openWorkspace(path: string, storePath: string): void
   saveWorkspace(): NapiDocumentState
   saveWorkspaceAs(path: string): NapiDocumentState
   getMetadata(): NapiFontMetadata

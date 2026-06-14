@@ -1,5 +1,5 @@
 import type { CommandId } from "../commands";
-import type { DocumentSaveRequest } from "../ipc/contract";
+import type { DocumentOpenRequest, DocumentSaveRequest } from "../ipc/contract";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -29,6 +29,7 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onSave: (callback: (request: DocumentSaveRequest) => void) => () => void;
+    onOpen: (callback: (request: DocumentOpenRequest) => void) => () => void;
   };
   /** Connects the renderer to the workspace utility process. */
   workspace: {

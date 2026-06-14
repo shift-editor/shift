@@ -13,11 +13,10 @@ import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
 
-import { codepointToHex } from "@/lib/utils/unicode";
-import type { GlyphName } from "@shift/types";
+import type { GlyphName, Unicode } from "@shift/types";
 
 export const Editor = () => {
-  const { glyphId, glyphName } = useParams();
+  const { glyphName } = useParams();
   const editor = getEditor();
 
   const { activeZone } = useFocusZone();
@@ -41,7 +40,7 @@ export const Editor = () => {
       if (editor.toolManager.activeToolId === "text") {
         editor.insertTextCodepoint(codepoint);
       } else {
-        navigate(`/editor/${codepointToHex(codepoint)}`);
+        navigate(`/editor/${encodeURIComponent(editor.font.nameForUnicode(codepoint as Unicode))}`);
       }
       editor.closeGlyphFinder();
     },
@@ -73,14 +72,14 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [glyphId, glyphName, activeZone]);
+  }, [glyphName, activeZone]);
 
   useEffect(() => {
     const editor = getEditor();
     editor.setZone(activeZone);
   }, [activeZone]);
 
-  if (!glyphId && !glyphName) return null;
+  if (!glyphName) return null;
 
   return (
     <div className="flex h-screen w-screen min-w-[600px] flex-col bg-white">
@@ -106,7 +105,7 @@ export const Editor = () => {
         <ResizableHandle inset="start" />
         <ResizablePanel id="canvas" order={2} minSize={30}>
           <ZoneContainer zone="canvas" className="h-full">
-            <EditorView glyphId={glyphId} glyphName={glyphName as GlyphName | undefined} />
+            <EditorView glyphName={glyphName as GlyphName} />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle inset="end" />

@@ -95,6 +95,14 @@ export class WorkspaceClient {
     return applied === null ? null : this.#fold(applied);
   }
 
+  async open(path: string): Promise<WorkspaceSnapshot> {
+    await this.connected();
+
+    const snapshot = await this.#require().call("workspace.open", { path });
+    this.$workspace.set(snapshot);
+    return snapshot;
+  }
+
   /** Saves to the current target; rejects when the document still needs a path. */
   async save(): Promise<WorkspaceDocumentState> {
     await this.connected();
