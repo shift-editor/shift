@@ -1,28 +1,14 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import logo from "@/assets/logo@1024.png";
 import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 import { Titlebar } from "@/components/chrome/Titlebar";
-import { getShiftHost } from "@/host/shiftHost";
-import { getFont, getWorkspace } from "@/store/appStore";
-import { useSignalState } from "@/lib/signals/useSignal";
+import { getWorkspace } from "@/store/appStore";
 
 export const Landing = () => {
-  const navigate = useNavigate();
-  const loaded = useSignalState(getFont().$loaded);
-
-  useEffect(() => {
-    if (!loaded) return;
-
-    navigate("/home");
-    void getShiftHost().commands.run("window.maximise");
-  }, [loaded, navigate]);
+  const workspace = getWorkspace();
 
   const handleNewFont = () => {
-    getWorkspace()
-      .create()
-      .catch((error) => console.error("creating a new font failed", error));
+    workspace.create().catch((error) => console.error("creating a new font failed", error));
   };
 
   return (

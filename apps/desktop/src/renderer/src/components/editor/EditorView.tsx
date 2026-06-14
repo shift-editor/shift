@@ -12,25 +12,12 @@ import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
 import type { GlyphName } from "@shift/types";
-import type { GlyphHandle } from "@shift/bridge";
-
-const GLYPH_ID_RE = /^[0-9a-f]+$/i;
-
-function handleFromGlyphId(glyphId: string | undefined): GlyphHandle | null {
-  if (!glyphId || !GLYPH_ID_RE.test(glyphId)) return null;
-
-  const parsed = Number.parseInt(glyphId, 16);
-  if (Number.isNaN(parsed)) return null;
-
-  return getEditor().font.glyphHandleForUnicode(parsed);
-}
 
 interface EditorViewProps {
-  glyphId?: string;
-  glyphName?: GlyphName;
+  glyphName: GlyphName;
 }
 
-export const EditorView: FC<EditorViewProps> = ({ glyphId, glyphName }) => {
+export const EditorView: FC<EditorViewProps> = ({ glyphName }) => {
   const editor = getEditor();
   const debug = useDebugSafe();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,9 +35,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId, glyphName }) => {
   useEffect(() => {
     if (!fontLoaded) return undefined;
 
-    const handle = glyphName
-      ? editor.font.glyphHandleForName(glyphName)
-      : handleFromGlyphId(glyphId);
+    const handle = editor.font.glyphHandleForName(glyphName);
     if (!handle) return undefined;
 
     let cancelled = false;
@@ -80,7 +65,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId, glyphName }) => {
       toolManager.reset();
       editor.close();
     };
-  }, [editor, fontLoaded, glyphId, glyphName]);
+  }, [editor, fontLoaded, glyphName]);
 
   useEffect(() => {
     const element = containerRef.current;

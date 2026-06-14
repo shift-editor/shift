@@ -106,7 +106,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
 
   const handleCellClick = useCallback(
     (glyph: GlyphCatalogItem) => {
-      navigate(`/editor/glyph/${encodeURIComponent(glyph.name)}`);
+      navigate(`/editor/${encodeURIComponent(glyph.name)}`);
     },
     [navigate],
   );
