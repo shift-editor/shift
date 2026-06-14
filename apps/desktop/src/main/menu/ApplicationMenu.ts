@@ -102,7 +102,12 @@ export class ApplicationMenu {
   }
 
   #fileItems(): MenuItemConstructorOptions[] {
-    return [this.#commandItem("file.save"), this.#commandItem("file.saveAs")];
+    return [
+      this.#commandItem("file.open"),
+      { type: "separator" },
+      this.#commandItem("file.save"),
+      this.#commandItem("file.saveAs"),
+    ];
   }
 
   /** Builds a menu item from the command registry's metadata. */

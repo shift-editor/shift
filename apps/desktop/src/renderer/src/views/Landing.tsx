@@ -3,12 +3,20 @@ import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 import { Titlebar } from "@/components/chrome/Titlebar";
 import { getWorkspace } from "@/store/appStore";
+import { getShiftHost } from "@/host/shiftHost";
 
 export const Landing = () => {
+  const host = getShiftHost();
   const workspace = getWorkspace();
 
   const handleNewFont = () => {
-    workspace.create().catch((error) => console.error("creating a new font failed", error));
+    void workspace.create().catch((error) => console.error("creating a new font failed", error));
+  };
+
+  const handleOpenFont = () => {
+    void host.commands
+      .run("file.open")
+      .catch((error) => console.error("opening a font failed", error));
   };
 
   return (
@@ -30,9 +38,12 @@ export const Landing = () => {
             variant="ghost"
           >
             New font
-            <span className="text-sm font-medium text-muted">⌘ + n</span>
           </Button>
-          <Button className="w-full flex justify-between items-center" disabled variant="ghost">
+          <Button
+            className="w-full flex justify-between items-center"
+            onClick={handleOpenFont}
+            variant="ghost"
+          >
             Load font
             <span className="text-sm font-medium text-muted">⌘ + o</span>
           </Button>

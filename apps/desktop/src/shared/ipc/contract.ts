@@ -13,6 +13,10 @@ export type DocumentSaveRequest = {
   path: string | null;
 };
 
+export type DocumentOpenRequest = {
+  path: string;
+};
+
 /**
  * Defines request/response channels that the renderer may invoke on main.
  *
@@ -40,6 +44,7 @@ export type RendererToMain = {
 export type MainToRenderer = {
   /** Main resolved the save path; the renderer issues the save on its edit lane. */
   "document.save": (request: DocumentSaveRequest) => void;
+  "document.open": (request: DocumentOpenRequest) => void;
   /** UI (chrome) zoom changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
 };

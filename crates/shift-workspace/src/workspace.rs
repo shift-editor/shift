@@ -328,7 +328,8 @@ impl FontWorkspace {
     ) -> Result<Self, WorkspaceError> {
         let source_package = ShiftSourcePackage::open(source_path)?;
         let mut store = ShiftStore::open(store_path)?;
-        let font = shift_font::Font::new();
+        let font = ShiftSourcePackage::load_font(source_package.path())?;
+        store.set_font_info(font_info_from_font(&font))?;
         store.replace_font_state(&font)?;
 
         Ok(Self {

@@ -91,6 +91,7 @@ export type SyncCallMap = {
    * needs a path. Rides the edit lane so the utility serializes it behind every
    * committed edit — no cross-lane watermark required.
    */
+  "workspace.open": { request: { path: string }; response: WorkspaceSnapshot };
   "workspace.save": { request: void; response: WorkspaceDocumentState };
   /** Saves to `path` (main's Save As dialog choice) and adopts it as target. */
   "workspace.saveAs": { request: { path: string }; response: WorkspaceDocumentState };

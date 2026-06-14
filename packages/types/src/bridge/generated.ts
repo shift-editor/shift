@@ -21,6 +21,7 @@ export interface BridgeApi {
   createUntitledWorkspace(storePath: string, options?: NewWorkspace | undefined | null): void
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
   documentState(): DocumentState
+  openWorkspace(path: string, storePath: string): void
   saveWorkspace(): DocumentState
   saveWorkspaceAs(path: string): DocumentState
   getMetadata(): FontMetadata

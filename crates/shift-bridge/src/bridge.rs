@@ -252,6 +252,13 @@ impl Bridge {
   }
 
   #[napi]
+  pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
+    self.workspace = Some(FontWorkspace::open(path, store_path)?);
+    self.reset_versions();
+    Ok(())
+  }
+
+  #[napi]
   pub fn save_workspace(&mut self) -> errors::Result<NapiDocumentState> {
     self.workspace_mut()?.save()?;
     self.mark_saved();

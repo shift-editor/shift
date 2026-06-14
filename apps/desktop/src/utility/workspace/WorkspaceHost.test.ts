@@ -47,9 +47,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     }).start();
   }
 
-  async function connectSyncLane(): Promise<SyncChannel> {
+  async function connectSyncLane(targetShell: ShellChannel = shell): Promise<SyncChannel> {
     const lane = new MessageChannel();
-    await shell.call("workspace.connect", undefined, [lane.port1]);
+    await targetShell.call("workspace.connect", undefined, [lane.port1]);
 
     const sync: SyncChannel = new Channel(nodePortTransport(lane.port2));
     channels.push(sync);
@@ -137,6 +137,32 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const created = await sync.call("workspace.create", undefined);
 
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toEqual(created);
+  });
+
+  it("opens a package before any workspace exists", async () => {
+    const source = await connectSyncLane();
+    await source.call("workspace.create", undefined);
+    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
+    const savePath = path.join(tmpRoot, "OpenMe.shift");
+    await source.call("workspace.saveAs", { path: savePath });
+
+    const lane = new MessageChannel();
+    const unopenedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
+    channels.push(unopenedShell);
+    startHost(nodePortTransport(lane.port2));
+    const unopened = await connectSyncLane(unopenedShell);
+
+    const opened = await unopened.call("workspace.open", { path: savePath });
+
+    expect(opened.documentId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
+    expect(opened.sources.length).toBeGreaterThan(0);
+    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+    await expect(unopenedShell.call("document.state", undefined)).resolves.toMatchObject({
+      sourceKind: "package",
+      saveTarget: savePath,
+      dirty: false,
+      needsSaveAs: false,
+    });
   });
 
   it("emits utility-owned document state after create and apply", async () => {

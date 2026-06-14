@@ -88,6 +88,7 @@ export class CommandRegistry {
  */
 export type CommandContext = {
   document: {
+    open: () => Promise<void>;
     /** Saves through main's native document workflow. */
     save: () => Promise<void>;
     /** Runs main's native Save As workflow. */
