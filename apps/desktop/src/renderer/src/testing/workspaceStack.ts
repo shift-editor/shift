@@ -6,19 +6,19 @@ import { Channel, nodePortTransport } from "@shared/workspace/channel";
 import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
-import { ChangeWriter } from "@/lib/workspace/ChangeWriter";
+import { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import { Font } from "@/lib/model/Font";
 
 export type WorkspaceStack = {
   client: WorkspaceClient;
-  writer: ChangeWriter;
+  editQueue: WorkspaceEditQueue;
   font: Font;
 };
 
 /**
  * The full production editing stack, in-process: real WorkspaceHost (real
  * NAPI, real SQLite in a temp dir) served over real node MessagePorts, with
- * the real client/writer/font wiring. No Electron, no mocks — the same
+ * the real client/editQueue/font wiring. No Electron, no mocks — the same
  * pattern as WorkspaceHost.test.ts, extended to the renderer side.
  */
 export function createWorkspaceStack(): WorkspaceStack {
@@ -39,8 +39,8 @@ export function createWorkspaceStack(): WorkspaceStack {
       return nodePortTransport(lane.port2);
     },
   });
-  const writer = new ChangeWriter(client);
-  const font = new Font(client.$workspace, writer);
+  const editQueue = new WorkspaceEditQueue(client);
+  const font = new Font(client.$workspace, editQueue);
 
-  return { client, writer, font };
+  return { client, editQueue, font };
 }

@@ -10,6 +10,7 @@ import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 import { WorkspaceProcess } from "../workspace/WorkspaceProcess";
+import { DocumentSession } from "../document/DocumentSession";
 
 const APP_NAME = "Shift";
 
@@ -33,6 +34,11 @@ export class App {
   });
 
   #workspace = new WorkspaceProcess();
+  #document = new DocumentSession({
+    workspace: this.#workspace,
+    activeWindow: () => this.#workingWindow,
+    applicationName: () => this.applicationName,
+  });
 
   constructor(log: ShiftLogger = createShiftLogger("app")) {
     this.#log = log;
@@ -72,6 +78,7 @@ export class App {
 
       const documentsRoot = path.join(app.getPath("userData"), "working-documents");
       this.#workspace.start(documentsRoot);
+      this.#workspace.onDocumentChanged((state) => this.#document.acceptState(state));
 
       this.#appIcon.install();
       this.#applicationMenu.install();
@@ -114,6 +121,9 @@ export class App {
     ipc.handle(ipcMain, "commands.run", (_event, id) => {
       return this.#commands.run(id, this.#commandContext());
     });
+    ipc.handle(ipcMain, "document.flushCompleted", (_event, completion) => {
+      this.#document.completeFlush(completion);
+    });
     ipc.handle(ipcMain, "workspace.connect", async (event) => {
       const { port1, port2 } = new MessageChannelMain();
 
@@ -132,6 +142,10 @@ export class App {
 
   #commandContext(): CommandContext {
     return {
+      document: {
+        save: () => this.#document.save(),
+        saveAs: () => this.#document.saveAs(),
+      },
       windows: {
         active: () => this.#workingWindow,
       },

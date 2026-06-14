@@ -4,7 +4,7 @@ import { registerBuiltInTools } from "@/lib/tools/tools";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { Font } from "@/lib/model/Font";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
-import { ChangeWriter } from "@/lib/workspace/ChangeWriter";
+import { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import { getShiftHost } from "@/host/shiftHost";
 
 let instance: GlyphInfo | null = null;
@@ -14,8 +14,8 @@ export function getGlyphInfo(): GlyphInfo {
 }
 
 const workspace = new WorkspaceClient(getShiftHost());
-const writer = new ChangeWriter(workspace);
-const font = new Font(workspace.$workspace, writer);
+const editQueue = new WorkspaceEditQueue(workspace);
+const font = new Font(workspace.$workspace, editQueue);
 const editor = new Editor({ font, clipboard: electronSystemClipboard });
 registerBuiltInTools(editor);
 
@@ -23,6 +23,21 @@ registerBuiltInTools(editor);
 editor.setActiveTool("select");
 
 void workspace.connected();
+
+getShiftHost().document.onFlushRequested(({ requestId }) => {
+  void editQueue
+    .settled()
+    .then(() => getShiftHost().document.flushCompleted({ requestId }))
+    .catch((error) =>
+      getShiftHost().document.flushCompleted({
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    .catch((error) => {
+      console.error("document flush completion failed", error);
+    });
+});
 
 export const getWorkspace = () => workspace;
 export const getEditor = () => editor;

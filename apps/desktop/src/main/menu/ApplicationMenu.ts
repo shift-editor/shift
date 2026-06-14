@@ -61,6 +61,10 @@ export class ApplicationMenu {
         submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }],
       },
       {
+        label: "File",
+        submenu: this.#fileItems(),
+      },
+      {
         label: "View",
         submenu: [
           ...this.#viewZoomItems(),
@@ -74,6 +78,10 @@ export class ApplicationMenu {
   /** Builds the Windows/Linux app menu. */
   buildWindowsMenu(): MenuItemConstructorOptions[] {
     return [
+      {
+        label: "File",
+        submenu: this.#fileItems(),
+      },
       {
         label: "View",
         submenu: this.#viewZoomItems(),
@@ -91,6 +99,10 @@ export class ApplicationMenu {
       this.#commandItem("ui.zoomOut"),
       this.#commandItem("ui.zoomReset"),
     ];
+  }
+
+  #fileItems(): MenuItemConstructorOptions[] {
+    return [this.#commandItem("file.save"), this.#commandItem("file.saveAs")];
   }
 
   /** Builds a menu item from the command registry's metadata. */

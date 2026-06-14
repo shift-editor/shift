@@ -1,4 +1,5 @@
 import type { CommandId } from "../commands";
+import type { DocumentFlushCompletion, DocumentFlushRequest } from "../ipc/contract";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -18,6 +19,22 @@ export interface ShiftHost {
      * @throws {Error} when the preload bridge is unavailable or main rejects the command.
      */
     run: (id: CommandId) => Promise<void>;
+  };
+  /** Narrow document lifecycle hooks owned by main. */
+  document: {
+    /**
+     * Subscribes to main's request for renderer-only state to settle.
+     *
+     * @returns an unsubscribe function.
+     */
+    onFlushRequested: (callback: (request: DocumentFlushRequest) => void) => () => void;
+    /**
+     * Reports that the renderer has settled or failed a requested flush.
+     *
+     * @param completion - request id plus an optional failure message.
+     * @throws {Error} when main rejects the completion IPC.
+     */
+    flushCompleted: (completion: DocumentFlushCompletion) => Promise<void>;
   };
   /** Connects the renderer to the workspace utility process. */
   workspace: {

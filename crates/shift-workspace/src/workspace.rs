@@ -98,7 +98,7 @@ impl FontWorkspace {
     pub fn save(&mut self) -> Result<(), WorkspaceError> {
         match &self.source {
             WorkspaceSource::Package { path } => {
-                ShiftSourcePackage::open(path)?;
+                ShiftSourcePackage::save_font(path, &self.font)?;
                 Ok(())
             }
             WorkspaceSource::Untitled | WorkspaceSource::Imported { .. } => {
@@ -108,7 +108,7 @@ impl FontWorkspace {
     }
 
     pub fn save_as(&mut self, source_path: impl AsRef<Path>) -> Result<(), WorkspaceError> {
-        let source_package = ShiftSourcePackage::create_empty(source_path)?;
+        let source_package = ShiftSourcePackage::save_font(source_path, &self.font)?;
         self.source = WorkspaceSource::Package {
             path: source_package.path().to_path_buf(),
         };

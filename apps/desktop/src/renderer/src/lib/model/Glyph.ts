@@ -104,7 +104,7 @@ class GlyphEditSession {
   readonly #state: GlyphEditState;
 
   constructor(font: Font, layerId: LayerId, state: GlyphEditState) {
-    this.#intents = new LayerIntents(font.writer, layerId);
+    this.#intents = new LayerIntents(font.editQueue, layerId);
     this.#state = state;
   }
 
@@ -145,7 +145,7 @@ class GlyphEditSession {
       }
     }
 
-    // Mixed patches push two intents in the same tick; the writer coalesces
+    // Mixed patches push two intents in the same tick; the editQueue coalesces
     // them into one apply and therefore one undo step.
     if (pointIds.length > 0) {
       this.#intents.movePoints({ pointIds, coords: pointCoords });
@@ -1360,7 +1360,7 @@ export class Glyph {
 
     if (glyphId) {
       // Echoes (apply/undo/redo) fold into this session's state by layerId.
-      font.writer.register(state.layerId, {
+      font.editQueue.register(state.layerId, {
         state: this.#sourceState,
         glyphId,
         sourceId: source.id,
@@ -1532,7 +1532,7 @@ export class Glyph {
 
     if (this.#glyphId) {
       // Echoes for this source's layer fold here, same as the primary.
-      this.#font.writer.register(state.layerId, {
+      this.#font.editQueue.register(state.layerId, {
         state: sourceState,
         glyphId: this.#glyphId,
         sourceId: source.id,

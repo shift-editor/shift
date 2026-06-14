@@ -5,6 +5,8 @@ import type {
   ShellEventMap,
   SyncCallMap,
   SyncEventMap,
+  WorkspaceDocumentSourceKind,
+  WorkspaceDocumentState,
   WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
 import { DocumentStorage } from "./DocumentStorage";
@@ -36,27 +38,32 @@ export type WorkspaceHostOptions = {
 export class WorkspaceHost {
   readonly #bridge: ShiftBridge;
   readonly #documents: DocumentStorage;
-  readonly #shell: Transport;
+  readonly #shellTransport: Transport;
   readonly #syncTransport: (port: unknown) => Transport;
+  #shell: ChannelServer<ShellEventMap> | null = null;
   #sync: ChannelServer<SyncEventMap> | null = null;
   #documentId: string | null = null;
+  #operations: Promise<void> = Promise.resolve();
 
   constructor(options: WorkspaceHostOptions) {
     this.#bridge = createBridge();
     this.#documents = new DocumentStorage(options.documentsRoot);
-    this.#shell = options.shell;
+    this.#shellTransport = options.shell;
     this.#syncTransport = options.syncTransport;
   }
 
   /** Serves the shell lane and announces readiness. Drafts are retained. */
   start(): void {
-    const shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shell, {
+    this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);
       },
+      "document.state": () => this.#serialize(() => this.#documentState()),
+      "document.save": () => this.#serialize(() => this.#save()),
+      "document.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
     });
 
-    shell.emit("ready", undefined);
+    this.#shell.emit("ready", undefined);
   }
 
   #connectSyncLane(ports: readonly unknown[]): void {
@@ -67,13 +74,31 @@ export class WorkspaceHost {
 
     this.#sync?.dispose();
     this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#syncTransport(port), {
-      "workspace.create": () => this.#create(),
+      "workspace.create": () => this.#serialize(() => this.#create()),
       "workspace.snapshot": () =>
-        this.#documentId === null ? null : this.#snapshot(this.#documentId),
-      "workspace.apply": ({ intents, label }) => this.#bridge.apply(intents, label),
-      "workspace.undo": () => this.#bridge.undo(),
-      "workspace.redo": () => this.#bridge.redo(),
-      "workspace.glyph": ({ glyphId, sourceId }) => this.#bridge.getGlyph(glyphId, sourceId),
+        this.#serialize(() =>
+          this.#documentId === null ? null : this.#snapshot(this.#documentId),
+        ),
+      "workspace.apply": ({ intents, label }) =>
+        this.#serialize(() => {
+          const applied = this.#bridge.apply(intents, label);
+          this.#emitDocumentChanged();
+          return applied;
+        }),
+      "workspace.undo": () =>
+        this.#serialize(() => {
+          const applied = this.#bridge.undo();
+          if (applied) this.#emitDocumentChanged();
+          return applied;
+        }),
+      "workspace.redo": () =>
+        this.#serialize(() => {
+          const applied = this.#bridge.redo();
+          if (applied) this.#emitDocumentChanged();
+          return applied;
+        }),
+      "workspace.glyph": ({ glyphId, sourceId }) =>
+        this.#serialize(() => this.#bridge.getGlyph(glyphId, sourceId)),
     });
   }
 
@@ -83,7 +108,9 @@ export class WorkspaceHost {
     this.#bridge.createUntitledWorkspace(draft.storePath);
     this.#documentId = draft.documentId;
 
-    return this.#snapshot(draft.documentId);
+    const snapshot = this.#snapshot(draft.documentId);
+    this.#emitDocumentChanged();
+    return snapshot;
   }
 
   #snapshot(documentId: string): WorkspaceSnapshot {
@@ -96,4 +123,56 @@ export class WorkspaceHost {
       axes: this.#bridge.getAxes(),
     };
   }
+
+  #save(): WorkspaceDocumentState {
+    this.#bridge.saveWorkspace();
+    return this.#emitDocumentChanged();
+  }
+
+  #saveAs(path: string): WorkspaceDocumentState {
+    this.#bridge.saveWorkspaceAs(path);
+    return this.#emitDocumentChanged();
+  }
+
+  #documentState(): WorkspaceDocumentState | null {
+    if (this.#documentId === null) return null;
+    const state = this.#bridge.documentState();
+
+    return {
+      documentId: this.#documentId,
+      sourceKind: parseDocumentSourceKind(state.sourceKind),
+      saveTarget: state.saveTarget ?? null,
+      revision: state.revision,
+      savedRevision: state.savedRevision,
+      dirty: state.dirty,
+      needsSaveAs: state.needsSaveAs,
+    };
+  }
+
+  #emitDocumentChanged(): WorkspaceDocumentState {
+    const state = this.#documentState();
+    if (!state) {
+      throw new Error("no workspace is open");
+    }
+
+    this.#shell?.emit("document.changed", state);
+    return state;
+  }
+
+  #serialize<T>(operation: () => T | Promise<T>): Promise<T> {
+    const run = this.#operations.then(operation);
+    this.#operations = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+}
+
+function parseDocumentSourceKind(sourceKind: string): WorkspaceDocumentSourceKind {
+  if (sourceKind === "untitled" || sourceKind === "package" || sourceKind === "imported") {
+    return sourceKind;
+  }
+
+  throw new Error(`unknown document source kind: ${sourceKind}`);
 }

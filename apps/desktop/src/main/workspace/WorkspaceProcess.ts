@@ -1,7 +1,11 @@
 import { utilityProcess, type MessagePortMain, type UtilityProcess } from "electron";
 import path from "node:path";
 import { Channel, utilityProcessTransport } from "../../shared/workspace/channel";
-import type { ShellCallMap, ShellEventMap } from "../../shared/workspace/protocol";
+import type {
+  ShellCallMap,
+  ShellEventMap,
+  WorkspaceDocumentState,
+} from "../../shared/workspace/protocol";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
 /**
@@ -17,6 +21,8 @@ export class WorkspaceProcess {
   #process: UtilityProcess | null = null;
   #channel: Channel<ShellCallMap, ShellEventMap> | null = null;
   #ready: Promise<void> | null = null;
+  #unlistenDocumentChanged: (() => void) | null = null;
+  #documentListeners = new Set<(state: WorkspaceDocumentState | null) => void>();
 
   constructor(log: ShiftLogger = createShiftLogger("workspace.process")) {
     this.#log = log;
@@ -41,15 +47,20 @@ export class WorkspaceProcess {
     this.#process = proc;
     this.#channel = channel;
     this.#ready = this.#trackReady(proc, channel);
+    this.#unlistenDocumentChanged = channel.listen("document.changed", (state) => {
+      for (const listener of this.#documentListeners) listener(state);
+    });
     this.#wire(proc, channel);
   }
 
   /** Stops the utility process; in-flight shell-lane calls reject. */
   stop(): void {
-    this.#channel?.dispose();
+    if (this.#unlistenDocumentChanged) this.#unlistenDocumentChanged();
+    if (this.#channel) this.#channel.dispose();
     this.#process = null;
     this.#channel = null;
     this.#ready = null;
+    this.#unlistenDocumentChanged = null;
   }
 
   /**
@@ -69,6 +80,51 @@ export class WorkspaceProcess {
     }
 
     return this.#channel.call("workspace.connect", undefined, [port]);
+  }
+
+  /**
+   * Subscribes to document lifecycle snapshots emitted by the utility process.
+   *
+   * @param listener - called for every utility-owned document state change.
+   * @returns a function that removes this listener.
+   */
+  onDocumentChanged(listener: (state: WorkspaceDocumentState | null) => void): () => void {
+    this.#documentListeners.add(listener);
+
+    return () => {
+      this.#documentListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Reads the current utility-owned document lifecycle state.
+   *
+   * @returns null when no workspace is open in the utility process.
+   * @throws {Error} when the utility process is not running or rejects the call.
+   */
+  documentState(): Promise<WorkspaceDocumentState | null> {
+    return this.#requireChannel().call("document.state", undefined);
+  }
+
+  /**
+   * Saves the open workspace to its current package target.
+   *
+   * @returns the post-save document state snapshot.
+   * @throws {Error} when no workspace is open, no save target exists, or writing fails.
+   */
+  saveDocument(): Promise<WorkspaceDocumentState> {
+    return this.#requireChannel().call("document.save", undefined);
+  }
+
+  /**
+   * Saves the open workspace to a Shift package and makes that path the target.
+   *
+   * @param path - filesystem path selected by main's native Save As dialog.
+   * @returns the post-save document state snapshot.
+   * @throws {Error} when no workspace is open or writing fails.
+   */
+  saveDocumentAs(path: string): Promise<WorkspaceDocumentState> {
+    return this.#requireChannel().call("document.saveAs", { path });
   }
 
   #trackReady(proc: UtilityProcess, channel: Channel<ShellCallMap, ShellEventMap>): Promise<void> {
@@ -103,6 +159,7 @@ export class WorkspaceProcess {
         this.#process = null;
         this.#channel = null;
         this.#ready = null;
+        this.#unlistenDocumentChanged = null;
       }
     });
 
@@ -119,5 +176,13 @@ export class WorkspaceProcess {
       const text = String(chunk).trimEnd();
       if (text) this.#log.error(text);
     });
+  }
+
+  #requireChannel(): Channel<ShellCallMap, ShellEventMap> {
+    if (!this.#channel) {
+      throw new Error("workspace process is not running");
+    }
+
+    return this.#channel;
   }
 }

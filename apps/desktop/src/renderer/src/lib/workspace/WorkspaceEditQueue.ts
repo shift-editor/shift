@@ -18,18 +18,18 @@ type FoldTarget = {
 };
 
 /**
- * The renderer's single durable-write path.
+ * Tracks optimistic renderer edits until the utility workspace echoes them.
  *
  * @remarks
  * Every editing verb pushes one intent; all intents in the same microtask
  * coalesce into ONE `workspace.apply` — one SQLite transaction, one undo
  * step. Echoes fold by substitution only (replace structure, replace
- * values); the writer contains zero change-application semantics. Undo and
- * redo are serialized through the same queue so they can never overtake a
- * pending flush. Tools never hold the writer — they speak domain verbs on
- * `GlyphSource`.
+ * values); the queue contains zero change-application or save semantics.
+ * Undo and redo are serialized through the same queue so they can never
+ * overtake a pending flush. Tools never hold the queue — they speak domain
+ * verbs on `GlyphSource`.
  */
-export class ChangeWriter {
+export class WorkspaceEditQueue {
   readonly #workspace: WorkspaceClient;
   readonly #targets = new Map<LayerId, FoldTarget>();
   readonly #$settled = signal(true);

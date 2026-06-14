@@ -10,6 +10,10 @@ const shiftHost: ShiftHost = {
   commands: {
     run: invoke(ipcRenderer, "commands.run"),
   },
+  document: {
+    onFlushRequested: listen(ipcRenderer, "document.flushRequested"),
+    flushCompleted: invoke(ipcRenderer, "document.flushCompleted"),
+  },
   workspace: {
     connect: invoke(ipcRenderer, "workspace.connect"),
   },

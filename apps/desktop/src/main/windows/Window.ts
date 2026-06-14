@@ -83,6 +83,11 @@ export class Window {
     this.#window.close();
   }
 
+  /** Updates the native window title shown by the operating system. */
+  setTitle(title: string): void {
+    this.#window.setTitle(title);
+  }
+
   minimize(): void {
     this.#window.minimize();
   }

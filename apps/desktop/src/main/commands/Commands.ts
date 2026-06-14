@@ -60,7 +60,22 @@ const viewCommands: Command[] = [
   },
 ];
 
-const fileCommands: Command[] = [];
+const fileCommands: Command[] = [
+  {
+    id: "file.save",
+    label: "Save",
+    accelerator: "CmdOrCtrl+S",
+    enabled: (ctx) => ctx.windows.active() !== null,
+    run: (ctx) => ctx.document.save(),
+  },
+  {
+    id: "file.saveAs",
+    label: "Save As...",
+    accelerator: "CmdOrCtrl+Shift+S",
+    enabled: (ctx) => ctx.windows.active() !== null,
+    run: (ctx) => ctx.document.saveAs(),
+  },
+];
 const editCommands: Command[] = [];
 
 /**

@@ -91,19 +91,19 @@ export class TestEditor extends Editor {
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
   async settle(): Promise<this> {
-    await this.font.writer.settled();
+    await this.font.editQueue.settled();
     return this;
   }
 
   /** Undo through the one authority (workspace ledger), settled. */
   async undoAndSettle(): Promise<this> {
-    await this.font.writer.undo();
+    await this.font.editQueue.undo();
     return this;
   }
 
   /** Redo through the workspace ledger, settled. */
   async redoAndSettle(): Promise<this> {
-    await this.font.writer.redo();
+    await this.font.editQueue.redo();
     return this;
   }
 

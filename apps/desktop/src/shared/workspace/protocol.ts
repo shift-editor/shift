@@ -23,6 +23,25 @@ export type WorkspaceSnapshot = {
   axes: Axis[];
 };
 
+export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
+
+/**
+ * Main-visible document lifecycle state owned by the utility workspace.
+ *
+ * @remarks
+ * Revisions are utility-assigned and monotonic for the open document. Main
+ * treats `dirty` and `needsSaveAs` as derived state, not renderer queue state.
+ */
+export type WorkspaceDocumentState = {
+  documentId: string;
+  sourceKind: WorkspaceDocumentSourceKind;
+  saveTarget: string | null;
+  revision: number;
+  savedRevision: number;
+  dirty: boolean;
+  needsSaveAs: boolean;
+};
+
 /**
  * Shell lane: main ↔ utility. Plumbing only; never font data.
  *
@@ -32,9 +51,15 @@ export type WorkspaceSnapshot = {
  */
 export type ShellCallMap = {
   "workspace.connect": { request: void; response: void };
+  "document.state": { request: void; response: WorkspaceDocumentState | null };
+  "document.save": { request: void; response: WorkspaceDocumentState };
+  "document.saveAs": { request: { path: string }; response: WorkspaceDocumentState };
 };
 
-export type ShellEventMap = { ready: void };
+export type ShellEventMap = {
+  ready: void;
+  "document.changed": WorkspaceDocumentState | null;
+};
 
 /**
  * Sync lane: renderer ↔ utility.

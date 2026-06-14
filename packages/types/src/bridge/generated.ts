@@ -20,6 +20,9 @@ export type Unicode = number;
 export interface BridgeApi {
   createUntitledWorkspace(storePath: string, options?: NewWorkspace | undefined | null): void
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
+  documentState(): DocumentState
+  saveWorkspace(): DocumentState
+  saveWorkspaceAs(path: string): DocumentState
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
   getGlyphs(): Array<GlyphRecord>
@@ -45,6 +48,15 @@ export interface BridgeApi {
   isVariable(): boolean
   getAxes(): Array<Axis>
   getSources(): Array<Source>
+}
+
+export interface DocumentState {
+  sourceKind: string
+  saveTarget?: string
+  revision: number
+  savedRevision: number
+  dirty: boolean
+  needsSaveAs: boolean
 }
 
 export interface FontExportRequest {

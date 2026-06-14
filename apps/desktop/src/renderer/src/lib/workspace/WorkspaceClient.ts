@@ -65,7 +65,7 @@ export class WorkspaceClient {
    *
    * @remarks
    * The record fold happens here (directory follows `$workspace`); layer
-   * folds belong to the glyph model and land with the CS3 ChangeWriter —
+   * folds belong to the glyph model and land with the CS3 WorkspaceEditQueue —
    * callers receive the AppliedChange to fold geometry themselves until then.
    */
   async apply(intents: FontIntent[]): Promise<AppliedChange> {
