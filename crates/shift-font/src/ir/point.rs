@@ -23,7 +23,7 @@ impl std::str::FromStr for PointType {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     id: PointId,
     x: f64,

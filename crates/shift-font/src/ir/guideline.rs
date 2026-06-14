@@ -8,7 +8,7 @@ pub enum GuidelineOrientation {
     Angle,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Guideline {
     id: GuidelineId,
     x: Option<f64>,

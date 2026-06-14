@@ -2,7 +2,7 @@ use crate::axis::Location;
 use crate::entity::SourceId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
     id: SourceId,

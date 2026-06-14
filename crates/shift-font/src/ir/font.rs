@@ -14,7 +14,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontMetadata {
     pub family_name: Option<String>,
@@ -88,7 +88,7 @@ struct FontState {
     index: FontIndex,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct FontData {
     metadata: FontMetadata,
     metrics: FontMetrics,
@@ -244,6 +244,12 @@ impl FontState {
     fn rebuild_index(&mut self) -> CoreResult<()> {
         self.index = FontIndex::from_glyphs(&self.data.glyphs)?;
         Ok(())
+    }
+}
+
+impl PartialEq for Font {
+    fn eq(&self, other: &Self) -> bool {
+        self.state.data == other.state.data
     }
 }
 
@@ -641,7 +647,9 @@ impl Font {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Contour, GlyphLayer, LayerId, PointType};
+    use crate::{
+        test_support::sample_font, Contour, ContourId, GlyphLayer, LayerId, PointId, PointType,
+    };
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -835,6 +843,36 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![glyph_id.clone()]
         );
+    }
+
+    #[test]
+    fn font_equality_detects_field_divergence() {
+        let original = sample_font();
+        let mut changed = original.clone();
+
+        let point = changed
+            .layer_mut(LayerId::from_raw("A_regular"))
+            .unwrap()
+            .contour_mut(ContourId::from_raw("A_outer"))
+            .unwrap()
+            .get_point_mut(PointId::from_raw("A_1"))
+            .unwrap();
+        point.set_position(point.x(), point.y() + 1.0);
+
+        assert_ne!(changed, original);
+    }
+
+    #[test]
+    fn font_equality_ignores_index() {
+        let original = sample_font();
+        let mut reindexed = original.clone();
+        Arc::make_mut(&mut reindexed.state).index = FontIndex::default();
+
+        assert_ne!(
+            reindexed.glyph_id_by_name("A"),
+            original.glyph_id_by_name("A")
+        );
+        assert_eq!(reindexed, original);
     }
 
     #[test]

@@ -37,7 +37,7 @@ impl KerningPair {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct KerningData {
     pairs: Vec<KerningPair>,
     groups1: HashMap<String, Vec<GlyphName>>,

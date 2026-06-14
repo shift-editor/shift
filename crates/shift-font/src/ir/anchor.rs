@@ -1,7 +1,7 @@
 use crate::entity::AnchorId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Anchor {
     id: AnchorId,
     name: Option<String>,

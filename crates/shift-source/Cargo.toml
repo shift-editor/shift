@@ -11,4 +11,5 @@ thiserror = "2"
 zip = { version = "2", default-features = false }
 
 [dev-dependencies]
+shift-font = { workspace = true, features = ["test-support"] }
 tempfile = "3"
