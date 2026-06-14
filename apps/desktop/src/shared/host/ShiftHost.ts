@@ -1,5 +1,5 @@
 import type { CommandId } from "../commands";
-import type { DocumentFlushCompletion, DocumentFlushRequest } from "../ipc/contract";
+import type { DocumentSaveRequest } from "../ipc/contract";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -23,18 +23,12 @@ export interface ShiftHost {
   /** Narrow document lifecycle hooks owned by main. */
   document: {
     /**
-     * Subscribes to main's request for renderer-only state to settle.
+     * Subscribes to main's request to save; the renderer issues the save on its
+     * committed-op lane so it lands behind pending edits.
      *
      * @returns an unsubscribe function.
      */
-    onFlushRequested: (callback: (request: DocumentFlushRequest) => void) => () => void;
-    /**
-     * Reports that the renderer has settled or failed a requested flush.
-     *
-     * @param completion - request id plus an optional failure message.
-     * @throws {Error} when main rejects the completion IPC.
-     */
-    flushCompleted: (completion: DocumentFlushCompletion) => Promise<void>;
+    onSave: (callback: (request: DocumentSaveRequest) => void) => () => void;
   };
   /** Connects the renderer to the workspace utility process. */
   workspace: {

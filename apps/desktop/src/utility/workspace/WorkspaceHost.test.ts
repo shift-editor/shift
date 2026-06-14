@@ -152,8 +152,6 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       documentId: created.documentId,
       sourceKind: "untitled",
       saveTarget: null,
-      revision: 0,
-      savedRevision: 0,
       dirty: false,
       needsSaveAs: true,
     });
@@ -164,8 +162,6 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
     await shell.call("document.state", undefined);
     expect(latestState).toMatchObject({
-      revision: 1,
-      savedRevision: 0,
       dirty: true,
       needsSaveAs: true,
     });
@@ -199,7 +195,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
   });
 
-  it("document.save reports NeedsSaveAs for untitled workspaces", async () => {
+  it("workspace.save reports NeedsSaveAs for untitled workspaces", async () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
     await sync.call("workspace.apply", {
@@ -207,19 +203,17 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph",
     });
 
-    await expect(shell.call("document.save", undefined)).rejects.toThrow(
+    await expect(sync.call("workspace.save", undefined)).rejects.toThrow(
       "workspace needs a save path",
     );
 
     await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
-      revision: 1,
-      savedRevision: 0,
       dirty: true,
       needsSaveAs: true,
     });
   });
 
-  it("document.saveAs updates saved revision and source state", async () => {
+  it("workspace.saveAs writes the package and clears dirty for later saves", async () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
     await sync.call("workspace.apply", {
@@ -228,13 +222,11 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
 
     const savePath = path.join(tmpRoot, "SavedFont.shift");
-    const saved = await shell.call("document.saveAs", { path: savePath });
+    const saved = await sync.call("workspace.saveAs", { path: savePath });
 
     expect(saved).toMatchObject({
       sourceKind: "package",
       saveTarget: savePath,
-      revision: 1,
-      savedRevision: 1,
       dirty: false,
       needsSaveAs: false,
     });
@@ -254,34 +246,30 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph",
     });
     await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
-      revision: 2,
-      savedRevision: 1,
       dirty: true,
     });
 
-    await expect(shell.call("document.save", undefined)).resolves.toMatchObject({
-      revision: 2,
-      savedRevision: 2,
+    await expect(sync.call("workspace.save", undefined)).resolves.toMatchObject({
       dirty: false,
       needsSaveAs: false,
     });
   });
 
-  it("document.saveAs after an applied edit marks that revision saved", async () => {
+  it("serializes a save behind an un-awaited apply on the same lane", async () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
+    const savePath = path.join(tmpRoot, "Ordered.shift");
 
-    await sync.call("workspace.apply", {
-      intents: [createGlyphA()],
-      label: "Add Glyph",
-    });
-    const savePath = path.join(tmpRoot, "OrderedSave.shift");
+    // Issue the apply and the save back-to-back without awaiting the apply. The
+    // host serializes both on one queue, so the save observes the glyph — if it
+    // had raced ahead, the doc would read dirty once the apply landed.
+    const apply = sync.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
+    const saved = await sync.call("workspace.saveAs", { path: savePath });
+    await apply;
 
-    await expect(shell.call("document.saveAs", { path: savePath })).resolves.toMatchObject({
-      revision: 1,
-      savedRevision: 1,
+    expect(saved).toMatchObject({ dirty: false, needsSaveAs: false });
+    await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
       dirty: false,
-      needsSaveAs: false,
     });
   });
 

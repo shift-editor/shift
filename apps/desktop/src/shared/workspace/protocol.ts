@@ -29,15 +29,15 @@ export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
  * Main-visible document lifecycle state owned by the utility workspace.
  *
  * @remarks
- * Revisions are utility-assigned and monotonic for the open document. Main
- * treats `dirty` and `needsSaveAs` as derived state, not renderer queue state.
+ * `dirty` is the single semantic answer to "are there unsaved changes"; the
+ * utility owns the version arithmetic that derives it and never ships the raw
+ * counters. `needsSaveAs` is likewise derived from the source kind. Main
+ * treats both as utility-owned state, not renderer queue state.
  */
 export type WorkspaceDocumentState = {
   documentId: string;
   sourceKind: WorkspaceDocumentSourceKind;
   saveTarget: string | null;
-  revision: number;
-  savedRevision: number;
   dirty: boolean;
   needsSaveAs: boolean;
 };
@@ -47,13 +47,14 @@ export type WorkspaceDocumentState = {
  *
  * @remarks
  * `workspace.connect` carries the renderer's sync-lane port as a transferred
- * port, not as payload.
+ * port, not as payload. Save is NOT here: it rides the sync lane as a committed
+ * operation so FIFO orders it behind edits (see `workspace.save`). Main reads
+ * `document.state` to decide Save vs Save As and learns save outcomes from the
+ * `document.changed` event.
  */
 export type ShellCallMap = {
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
-  "document.save": { request: void; response: WorkspaceDocumentState };
-  "document.saveAs": { request: { path: string }; response: WorkspaceDocumentState };
 };
 
 export type ShellEventMap = {
@@ -85,6 +86,14 @@ export type SyncCallMap = {
   /** Replays the most recent ledger entry; null when the stack is empty. */
   "workspace.undo": { request: void; response: AppliedChange | null };
   "workspace.redo": { request: void; response: AppliedChange | null };
+  /**
+   * Saves to the current package target, or rejects when the document still
+   * needs a path. Rides the edit lane so the utility serializes it behind every
+   * committed edit — no cross-lane watermark required.
+   */
+  "workspace.save": { request: void; response: WorkspaceDocumentState };
+  /** Saves to `path` (main's Save As dialog choice) and adopts it as target. */
+  "workspace.saveAs": { request: { path: string }; response: WorkspaceDocumentState };
   /**
    * Pulls replace-grade glyph state for one source (resync + editor open).
    * Addressed by stable GlyphId — references survive renames.

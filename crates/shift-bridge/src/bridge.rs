@@ -45,8 +45,6 @@ pub struct NapiNewWorkspace {
 pub struct NapiDocumentState {
   pub source_kind: String,
   pub save_target: Option<String>,
-  pub revision: i64,
-  pub saved_revision: i64,
   pub dirty: bool,
   pub needs_save_as: bool,
 }
@@ -96,10 +94,6 @@ pub struct DocumentVersion(u64);
 impl DocumentVersion {
   fn next(self) -> Self {
     Self(self.0 + 1)
-  }
-
-  fn as_i64(self) -> i64 {
-    self.0 as i64
   }
 }
 
@@ -515,8 +509,9 @@ impl Bridge {
     Ok(NapiDocumentState {
       source_kind: source_kind.to_string(),
       save_target,
-      revision: self.live_version.as_i64(),
-      saved_revision: self.saved_version.as_i64(),
+      // `live_version`/`saved_version` stay internal: `dirty` is the only
+      // answer callers need, and shipping the raw counters next to it only
+      // invites three fields that must agree.
       dirty: self.live_version != self.saved_version,
       needs_save_as,
     })
@@ -1510,14 +1505,12 @@ mod tests {
   }
 
   #[test]
-  fn document_state_tracks_dirty_and_saved_revisions() {
+  fn document_state_tracks_dirty_across_edits_and_saves() {
     let mut bridge = bridge_with_workspace();
 
     let state = bridge.document_state().unwrap();
     assert_eq!(state.source_kind, "untitled");
     assert_eq!(state.save_target, None);
-    assert_eq!(state.revision, 0);
-    assert_eq!(state.saved_revision, 0);
     assert!(!state.dirty);
     assert!(state.needs_save_as);
 
@@ -1525,17 +1518,12 @@ mod tests {
       .apply(vec![create_glyph_napi("A", vec![65])], None)
       .unwrap();
 
-    let state = bridge.document_state().unwrap();
-    assert_eq!(state.revision, 1);
-    assert_eq!(state.saved_revision, 0);
-    assert!(state.dirty);
+    assert!(bridge.document_state().unwrap().dirty);
 
     let (save_path, _) = test_paths("save-as");
     let state = bridge.save_workspace_as(save_path.clone()).unwrap();
     assert_eq!(state.source_kind, "package");
     assert_eq!(state.save_target.as_deref(), Some(save_path.as_str()));
-    assert_eq!(state.revision, 1);
-    assert_eq!(state.saved_revision, 1);
     assert!(!state.dirty);
     assert!(!state.needs_save_as);
 
@@ -1543,14 +1531,9 @@ mod tests {
       .apply(vec![create_glyph_napi("B", vec![66])], None)
       .unwrap();
 
-    let state = bridge.document_state().unwrap();
-    assert_eq!(state.revision, 2);
-    assert_eq!(state.saved_revision, 1);
-    assert!(state.dirty);
+    assert!(bridge.document_state().unwrap().dirty);
 
     let state = bridge.save_workspace().unwrap();
-    assert_eq!(state.revision, 2);
-    assert_eq!(state.saved_revision, 2);
     assert!(!state.dirty);
   }
 
@@ -1565,8 +1548,6 @@ mod tests {
 
     assert!(error.to_string().contains("workspace needs a save path"));
     let state = bridge.document_state().unwrap();
-    assert_eq!(state.revision, 1);
-    assert_eq!(state.saved_revision, 0);
     assert!(state.dirty);
     assert!(state.needs_save_as);
   }

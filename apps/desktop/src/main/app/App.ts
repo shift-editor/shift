@@ -30,7 +30,11 @@ export class App {
 
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(this.#appIcon.path(), (id) => {
-    void this.#commands.run(id, this.#commandContext());
+    // Menu/accelerator commands run detached, so a failure (e.g. a save that
+    // throws) has nowhere to propagate — catch and surface it here.
+    void this.#commands.run(id, this.#commandContext()).catch((error) => {
+      this.#log.error("menu command failed", id, error);
+    });
   });
 
   #workspace = new WorkspaceProcess();
@@ -120,9 +124,6 @@ export class App {
   #registerIpcHandlers(): void {
     ipc.handle(ipcMain, "commands.run", (_event, id) => {
       return this.#commands.run(id, this.#commandContext());
-    });
-    ipc.handle(ipcMain, "document.flushCompleted", (_event, completion) => {
-      this.#document.completeFlush(completion);
     });
     ipc.handle(ipcMain, "workspace.connect", async (event) => {
       const { port1, port2 } = new MessageChannelMain();

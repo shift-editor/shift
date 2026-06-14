@@ -53,8 +53,6 @@ export interface BridgeApi {
 export interface DocumentState {
   sourceKind: string
   saveTarget?: string
-  revision: number
-  savedRevision: number
   dirty: boolean
   needsSaveAs: boolean
 }

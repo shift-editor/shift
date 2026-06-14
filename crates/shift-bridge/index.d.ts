@@ -48,8 +48,6 @@ export declare class Bridge {
 export interface NapiDocumentState {
   sourceKind: string
   saveTarget?: string
-  revision: number
-  savedRevision: number
   dirty: boolean
   needsSaveAs: boolean
 }

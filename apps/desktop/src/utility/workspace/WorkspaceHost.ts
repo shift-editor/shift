@@ -59,8 +59,6 @@ export class WorkspaceHost {
         this.#connectSyncLane(context.ports);
       },
       "document.state": () => this.#serialize(() => this.#documentState()),
-      "document.save": () => this.#serialize(() => this.#save()),
-      "document.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
     });
 
     this.#shell.emit("ready", undefined);
@@ -97,6 +95,10 @@ export class WorkspaceHost {
           if (applied) this.#emitDocumentChanged();
           return applied;
         }),
+      // Save rides the edit lane: the same #serialize queue orders it behind
+      // every committed apply/undo/redo, so it never writes stale state.
+      "workspace.save": () => this.#serialize(() => this.#save()),
+      "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.glyph": ({ glyphId, sourceId }) =>
         this.#serialize(() => this.#bridge.getGlyph(glyphId, sourceId)),
     });
@@ -142,8 +144,6 @@ export class WorkspaceHost {
       documentId: this.#documentId,
       sourceKind: parseDocumentSourceKind(state.sourceKind),
       saveTarget: state.saveTarget ?? null,
-      revision: state.revision,
-      savedRevision: state.savedRevision,
       dirty: state.dirty,
       needsSaveAs: state.needsSaveAs,
     };

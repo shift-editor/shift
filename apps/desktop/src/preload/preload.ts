@@ -11,8 +11,7 @@ const shiftHost: ShiftHost = {
     run: invoke(ipcRenderer, "commands.run"),
   },
   document: {
-    onFlushRequested: listen(ipcRenderer, "document.flushRequested"),
-    flushCompleted: invoke(ipcRenderer, "document.flushCompleted"),
+    onSave: listen(ipcRenderer, "document.save"),
   },
   workspace: {
     connect: invoke(ipcRenderer, "workspace.connect"),

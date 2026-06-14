@@ -6,6 +6,7 @@ import type {
   LayerId,
   SourceId,
 } from "@shift/types";
+import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import { signal, type Signal } from "@/lib/signals/signal";
 import type { GlyphSourceState } from "@/lib/model/GlyphSourceState";
 import type { WorkspaceClient } from "./WorkspaceClient";
@@ -25,9 +26,14 @@ type FoldTarget = {
  * coalesce into ONE `workspace.apply` — one SQLite transaction, one undo
  * step. Echoes fold by substitution only (replace structure, replace
  * values); the queue contains zero change-application or save semantics.
- * Undo and redo are serialized through the same queue so they can never
+ * Undo, redo, and save are serialized through the same queue so none can
  * overtake a pending flush. Tools never hold the queue — they speak domain
  * verbs on `GlyphSource`.
+ *
+ * Save ownership lives in the utility. The renderer issues save as one more op
+ * on this queue (see {@link save}); because it shares the FIFO edit lane, the
+ * utility serializes the write behind every committed edit with no cross-lane
+ * watermark.
  */
 export class WorkspaceEditQueue {
   readonly #workspace: WorkspaceClient;
@@ -99,6 +105,18 @@ export class WorkspaceEditQueue {
       if (applied) this.#fold(applied);
       return applied;
     });
+  }
+
+  /**
+   * Issues a save behind every queued and in-flight committed op.
+   *
+   * @param path - target path for Save As, or null to save the current target.
+   */
+  save(path: string | null): Promise<WorkspaceDocumentState> {
+    this.#enqueueFlush();
+    return this.#serialize(() =>
+      path === null ? this.#workspace.save() : this.#workspace.saveAs(path),
+    );
   }
 
   #enqueueFlush(): void {

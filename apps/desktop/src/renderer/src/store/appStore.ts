@@ -24,19 +24,13 @@ editor.setActiveTool("select");
 
 void workspace.connected();
 
-getShiftHost().document.onFlushRequested(({ requestId }) => {
-  void editQueue
-    .settled()
-    .then(() => getShiftHost().document.flushCompleted({ requestId }))
-    .catch((error) =>
-      getShiftHost().document.flushCompleted({
-        requestId,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    )
-    .catch((error) => {
-      console.error("document flush completion failed", error);
-    });
+// Main resolves the save path, then asks us to issue the save on the edit
+// lane. The queue serializes it behind pending edits; the utility owns the
+// write and reports the result to main via document.changed.
+getShiftHost().document.onSave(({ path }) => {
+  void editQueue.save(path).catch((error) => {
+    console.error("document save failed", error);
+  });
 });
 
 export const getWorkspace = () => workspace;

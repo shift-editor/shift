@@ -1,36 +1,21 @@
 import { describe, expect, it } from "vitest";
-import type { DocumentFlushRequest } from "../../shared/ipc/contract";
+import type { DocumentSaveRequest } from "../../shared/ipc/contract";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import type { Window } from "../windows/Window";
 import type { WorkspaceProcess } from "../workspace/WorkspaceProcess";
 import { DocumentSession } from "./DocumentSession";
 
 class TestWorkspace {
-  savedPath: string | null = null;
+  constructor(public state: WorkspaceDocumentState | null) {}
 
-  constructor(public state: WorkspaceDocumentState) {}
-
-  async documentState(): Promise<WorkspaceDocumentState> {
-    return this.state;
-  }
-
-  async saveDocumentAs(path: string): Promise<WorkspaceDocumentState> {
-    this.savedPath = path;
-    this.state = {
-      ...this.state,
-      sourceKind: "package",
-      saveTarget: path,
-      savedRevision: this.state.revision,
-      dirty: false,
-      needsSaveAs: false,
-    };
+  async documentState(): Promise<WorkspaceDocumentState | null> {
     return this.state;
   }
 }
 
 class TestWindow {
   title = "";
-  flushRequest: DocumentFlushRequest | null = null;
+  saveRequest: DocumentSaveRequest | null = null;
 
   readonly window = {
     webContents: {
@@ -43,42 +28,106 @@ class TestWindow {
   }
 }
 
+const openState = (overrides: Partial<WorkspaceDocumentState> = {}): WorkspaceDocumentState => ({
+  documentId: "doc-1",
+  sourceKind: "package",
+  saveTarget: "/tmp/Existing.shift",
+  dirty: true,
+  needsSaveAs: false,
+  ...overrides,
+});
+
 describe("main document save workflow", () => {
-  it("keeps Save As behind the renderer flush barrier", async () => {
+  it("escalates an untitled document to Save As and issues the chosen path", async () => {
     const savePath = "/tmp/SavedFont.shift";
-    const workspace = new TestWorkspace({
-      documentId: "doc-1",
-      sourceKind: "untitled",
-      saveTarget: null,
-      revision: 1,
-      savedRevision: 0,
-      dirty: true,
-      needsSaveAs: true,
-    });
+    const workspace = new TestWorkspace(
+      openState({ sourceKind: "untitled", saveTarget: null, needsSaveAs: true }),
+    );
     const window = new TestWindow();
     const session = new DocumentSession({
       workspace: workspace as unknown as WorkspaceProcess,
       activeWindow: () => window as unknown as Window,
       applicationName: () => "Shift Test",
       saveDialog: async () => savePath,
-      sendFlushRequest: (_window, request) => {
-        window.flushRequest = request;
+      sendSave: (_window, request) => {
+        window.saveRequest = request;
       },
     });
 
-    const save = session.saveAs();
-    await Promise.resolve();
-    await Promise.resolve();
+    await session.save();
 
-    expect(window.flushRequest).toEqual({ requestId: "1" });
-    expect(workspace.savedPath).toBeNull();
+    expect(window.saveRequest).toEqual({ path: savePath });
+  });
 
-    session.completeFlush(window.flushRequest!);
-    await save;
+  it("issues a current-target save when the document already has a path", async () => {
+    const workspace = new TestWorkspace(openState());
+    const window = new TestWindow();
+    const session = new DocumentSession({
+      workspace: workspace as unknown as WorkspaceProcess,
+      activeWindow: () => window as unknown as Window,
+      applicationName: () => "Shift Test",
+      sendSave: (_window, request) => {
+        window.saveRequest = request;
+      },
+    });
 
-    expect(workspace.savedPath).toBe(savePath);
-    expect(workspace.state.dirty).toBe(false);
-    expect(workspace.state.savedRevision).toBe(1);
-    expect(window.title).toBe("SavedFont.shift - Shift Test");
+    await session.save();
+
+    expect(window.saveRequest).toEqual({ path: null });
+    expect(window.title).toBe("Existing.shift * - Shift Test");
+  });
+
+  it("Save As always issues the path the dialog returns", async () => {
+    const savePath = "/tmp/Renamed.shift";
+    const workspace = new TestWorkspace(openState());
+    const window = new TestWindow();
+    const session = new DocumentSession({
+      workspace: workspace as unknown as WorkspaceProcess,
+      activeWindow: () => window as unknown as Window,
+      applicationName: () => "Shift Test",
+      saveDialog: async () => savePath,
+      sendSave: (_window, request) => {
+        window.saveRequest = request;
+      },
+    });
+
+    await session.saveAs();
+
+    expect(window.saveRequest).toEqual({ path: savePath });
+  });
+
+  it("issues nothing when the Save As dialog is cancelled", async () => {
+    const workspace = new TestWorkspace(openState({ needsSaveAs: true }));
+    const window = new TestWindow();
+    const session = new DocumentSession({
+      workspace: workspace as unknown as WorkspaceProcess,
+      activeWindow: () => window as unknown as Window,
+      applicationName: () => "Shift Test",
+      saveDialog: async () => null,
+      sendSave: (_window, request) => {
+        window.saveRequest = request;
+      },
+    });
+
+    await session.save();
+
+    expect(window.saveRequest).toBeNull();
+  });
+
+  it("issues nothing when no document is open", async () => {
+    const workspace = new TestWorkspace(null);
+    const window = new TestWindow();
+    const session = new DocumentSession({
+      workspace: workspace as unknown as WorkspaceProcess,
+      activeWindow: () => window as unknown as Window,
+      applicationName: () => "Shift Test",
+      sendSave: (_window, request) => {
+        window.saveRequest = request;
+      },
+    });
+
+    await session.save();
+
+    expect(window.saveRequest).toBeNull();
   });
 });

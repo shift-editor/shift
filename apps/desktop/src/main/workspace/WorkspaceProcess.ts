@@ -99,32 +99,15 @@ export class WorkspaceProcess {
   /**
    * Reads the current utility-owned document lifecycle state.
    *
+   * @remarks
+   * Save itself rides the renderer's sync lane (see {@link WorkspaceHost}); main
+   * only reads state here to decide Save vs Save As and to update the title.
+   *
    * @returns null when no workspace is open in the utility process.
    * @throws {Error} when the utility process is not running or rejects the call.
    */
   documentState(): Promise<WorkspaceDocumentState | null> {
     return this.#requireChannel().call("document.state", undefined);
-  }
-
-  /**
-   * Saves the open workspace to its current package target.
-   *
-   * @returns the post-save document state snapshot.
-   * @throws {Error} when no workspace is open, no save target exists, or writing fails.
-   */
-  saveDocument(): Promise<WorkspaceDocumentState> {
-    return this.#requireChannel().call("document.save", undefined);
-  }
-
-  /**
-   * Saves the open workspace to a Shift package and makes that path the target.
-   *
-   * @param path - filesystem path selected by main's native Save As dialog.
-   * @returns the post-save document state snapshot.
-   * @throws {Error} when no workspace is open or writing fails.
-   */
-  saveDocumentAs(path: string): Promise<WorkspaceDocumentState> {
-    return this.#requireChannel().call("document.saveAs", { path });
   }
 
   #trackReady(proc: UtilityProcess, channel: Channel<ShellCallMap, ShellEventMap>): Promise<void> {

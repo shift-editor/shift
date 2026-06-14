@@ -1,12 +1,16 @@
 import type { CommandId } from "../commands";
 
-export type DocumentFlushRequest = {
-  requestId: string;
-};
-
-export type DocumentFlushCompletion = {
-  requestId: string;
-  error?: string;
+/**
+ * Tells the renderer to issue a save on its committed-op lane.
+ *
+ * @remarks
+ * `path` is null for Save (current target) and a filesystem path for Save As —
+ * main owns the dialog and resolves the path before sending. The renderer
+ * enqueues the save behind its edits; main learns the outcome from the
+ * utility's `document.changed` event, so this is one-way (no reply channel).
+ */
+export type DocumentSaveRequest = {
+  path: string | null;
 };
 
 /**
@@ -18,7 +22,6 @@ export type DocumentFlushCompletion = {
  */
 export type RendererToMain = {
   "commands.run": (id: CommandId) => void;
-  "document.flushCompleted": (completion: DocumentFlushCompletion) => void;
   /**
    * Asks main to wire a sync lane to the workspace process. The port itself
    * arrives separately on the `workspace.port` postMessage channel because
@@ -35,8 +38,8 @@ export type RendererToMain = {
  * merely reflects it.
  */
 export type MainToRenderer = {
-  /** Main is about to run a document lifecycle operation and needs renderer edits settled. */
-  "document.flushRequested": (request: DocumentFlushRequest) => void;
+  /** Main resolved the save path; the renderer issues the save on its edit lane. */
+  "document.save": (request: DocumentSaveRequest) => void;
   /** UI (chrome) zoom changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
 };
