@@ -4,14 +4,18 @@ pub struct NewGlyphComponent {
     pub id: ComponentId,
     pub layer_id: LayerId,
     pub base_glyph_id: GlyphId,
+    pub base_glyph_name: String,
+    pub transform: shift_font::DecomposedTransform,
     pub order_index: i64,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GlyphComponentRecord {
     pub id: ComponentId,
     pub layer_id: LayerId,
     pub base_glyph_id: GlyphId,
+    pub base_glyph_name: String,
+    pub transform: shift_font::DecomposedTransform,
     pub order_index: i64,
 }
 
@@ -26,14 +30,34 @@ impl ShiftStore {
                 id,
                 layer_id,
                 base_glyph_id,
+                base_glyph_name,
+                translate_x,
+                translate_y,
+                rotation,
+                scale_x,
+                scale_y,
+                skew_x,
+                skew_y,
+                t_center_x,
+                t_center_y,
                 order_index
             )
-            VALUES (?1, ?2, ?3, ?4)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ",
             rusqlite::params![
                 component.id.as_str(),
                 component.layer_id.as_str(),
                 component.base_glyph_id.as_str(),
+                component.base_glyph_name,
+                component.transform.translate_x,
+                component.transform.translate_y,
+                component.transform.rotation,
+                component.transform.scale_x,
+                component.transform.scale_y,
+                component.transform.skew_x,
+                component.transform.skew_y,
+                component.transform.t_center_x,
+                component.transform.t_center_y,
                 component.order_index,
             ],
         )?;
@@ -51,6 +75,16 @@ impl ShiftStore {
                 id,
                 layer_id,
                 base_glyph_id,
+                base_glyph_name,
+                translate_x,
+                translate_y,
+                rotation,
+                scale_x,
+                scale_y,
+                skew_x,
+                skew_y,
+                t_center_x,
+                t_center_y,
                 order_index
             FROM glyph_components
             WHERE id = ?1
@@ -74,6 +108,16 @@ impl ShiftStore {
                 id,
                 layer_id,
                 base_glyph_id,
+                base_glyph_name,
+                translate_x,
+                translate_y,
+                rotation,
+                scale_x,
+                scale_y,
+                skew_x,
+                skew_y,
+                t_center_x,
+                t_center_y,
                 order_index
             FROM glyph_components
             WHERE layer_id = ?1
@@ -92,6 +136,18 @@ fn map_glyph_component_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GlyphCom
         id: ComponentId::new(row.get::<_, String>(0)?),
         layer_id: LayerId::new(row.get::<_, String>(1)?),
         base_glyph_id: GlyphId::new(row.get::<_, String>(2)?),
-        order_index: row.get(3)?,
+        base_glyph_name: row.get(3)?,
+        transform: shift_font::DecomposedTransform {
+            translate_x: row.get(4)?,
+            translate_y: row.get(5)?,
+            rotation: row.get(6)?,
+            scale_x: row.get(7)?,
+            scale_y: row.get(8)?,
+            skew_x: row.get(9)?,
+            skew_y: row.get(10)?,
+            t_center_x: row.get(11)?,
+            t_center_y: row.get(12)?,
+        },
+        order_index: row.get(13)?,
     })
 }

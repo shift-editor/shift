@@ -51,6 +51,15 @@ fn shift_round_trip_preserves_whole_font() {
 }
 
 #[test]
+fn source_tree_round_trip_preserves_whole_font() {
+    let original = sample_font();
+
+    let loaded = tree_to_font(font_to_tree(&original).unwrap()).unwrap();
+
+    assert_eq!(loaded, original);
+}
+
+#[test]
 fn serializes_same_font_to_byte_identical_tree() {
     let font = sample_font();
 

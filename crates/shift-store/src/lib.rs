@@ -3,6 +3,7 @@ mod component;
 mod connection;
 mod error;
 mod font;
+mod font_state;
 mod glyph;
 mod layer;
 mod outline;

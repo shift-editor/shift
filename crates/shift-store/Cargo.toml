@@ -6,7 +6,9 @@ edition = "2024"
 [dependencies]
 shift-font = { workspace = true }
 rusqlite = { version = "0.37.0", features = ["blob", "backup", "limits"] }
+serde_json = "1.0"
 thiserror = "2"
 
 [dev-dependencies]
+shift-font = { workspace = true, features = ["test-support"] }
 tempfile = "3"
