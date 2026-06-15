@@ -6,6 +6,16 @@ import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import type { Window } from "../windows/Window";
 import type { WorkspaceProcess } from "../workspace/WorkspaceProcess";
 
+const OPEN_FONT_EXTENSIONS = [
+  "shift",
+  "ttf",
+  "otf",
+  "glyphs",
+  "glyphspackage",
+  "ufo",
+  "designspace",
+];
+
 export type DocumentSessionOptions = {
   workspace: WorkspaceProcess;
   activeWindow: () => Window | null;
@@ -124,9 +134,15 @@ export class DocumentSession {
 
   async #showOpenDialog(): Promise<string | null> {
     const options: OpenDialogOptions = {
-      title: "Open Shift Document",
-      filters: [{ name: "Shift Source Package", extensions: ["shift"] }],
-      properties: ["openFile"],
+      title: "Open Font",
+      filters: [
+        { name: "Supported Fonts", extensions: OPEN_FONT_EXTENSIONS },
+        { name: "Shift Source Package", extensions: ["shift"] },
+        { name: "TrueType/OpenType", extensions: ["ttf", "otf"] },
+        { name: "Glyphs", extensions: ["glyphs", "glyphspackage"] },
+        { name: "UFO/Designspace", extensions: ["ufo", "designspace"] },
+      ],
+      properties: process.platform === "darwin" ? ["openFile", "openDirectory"] : ["openFile"],
     };
 
     const window = this.#activeWindow();
