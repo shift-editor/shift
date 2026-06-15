@@ -4,9 +4,11 @@ pub(crate) const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS font_info (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     family_name TEXT,
+    style_name TEXT,
     copyright TEXT,
     trademark TEXT,
     description TEXT,
+    note TEXT,
     sample_text TEXT,
     designer TEXT,
     designer_url TEXT,
@@ -17,7 +19,16 @@ CREATE TABLE IF NOT EXISTS font_info (
     vendor_id TEXT,
     version_major INTEGER CHECK (version_major IS NULL OR version_major >= 0),
     version_minor INTEGER CHECK (version_minor IS NULL OR version_minor >= 0),
-    units_per_em INTEGER NOT NULL CHECK (units_per_em > 0)
+    units_per_em REAL NOT NULL CHECK (units_per_em > 0),
+    ascender REAL NOT NULL,
+    descender REAL NOT NULL,
+    cap_height REAL,
+    x_height REAL,
+    line_gap REAL,
+    italic_angle REAL,
+    underline_position REAL,
+    underline_thickness REAL,
+    default_source_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS axes (
@@ -27,7 +38,8 @@ CREATE TABLE IF NOT EXISTS axes (
     min_value REAL NOT NULL,
     default_value REAL NOT NULL,
     max_value REAL NOT NULL,
-    hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))
+    hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+    order_index INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS axes_tag_unique
@@ -38,12 +50,15 @@ CREATE TABLE IF NOT EXISTS sources (
     name TEXT,
     family_name TEXT,
     style_name TEXT,
-    kind TEXT NOT NULL
+    filename TEXT,
+    kind TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS glyphs (
     id TEXT PRIMARY KEY,
-    name TEXT
+    name TEXT,
+    order_index INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS glyphs_name_idx
@@ -112,9 +127,18 @@ CREATE TABLE IF NOT EXISTS glyph_components (
     id TEXT PRIMARY KEY,
     layer_id TEXT NOT NULL,
     base_glyph_id TEXT NOT NULL,
+    base_glyph_name TEXT NOT NULL,
+    translate_x REAL NOT NULL DEFAULT 0,
+    translate_y REAL NOT NULL DEFAULT 0,
+    rotation REAL NOT NULL DEFAULT 0,
+    scale_x REAL NOT NULL DEFAULT 1,
+    scale_y REAL NOT NULL DEFAULT 1,
+    skew_x REAL NOT NULL DEFAULT 0,
+    skew_y REAL NOT NULL DEFAULT 0,
+    t_center_x REAL NOT NULL DEFAULT 0,
+    t_center_y REAL NOT NULL DEFAULT 0,
     order_index INTEGER NOT NULL,
-    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE,
-    FOREIGN KEY (base_glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS glyph_components_layer_order_unique
@@ -142,6 +166,31 @@ ON glyph_layer_anchors(layer_id, order_index);
 CREATE INDEX IF NOT EXISTS glyph_layer_anchors_layer_id_idx
 ON glyph_layer_anchors(layer_id);
 
+CREATE TABLE IF NOT EXISTS font_guidelines (
+    id TEXT PRIMARY KEY,
+    x REAL,
+    y REAL,
+    angle REAL,
+    name TEXT,
+    color TEXT,
+    order_index INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS glyph_layer_guidelines (
+    id TEXT PRIMARY KEY,
+    layer_id TEXT NOT NULL,
+    x REAL,
+    y REAL,
+    angle REAL,
+    name TEXT,
+    color TEXT,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS glyph_layer_guidelines_layer_id_idx
+ON glyph_layer_guidelines(layer_id);
+
 CREATE TABLE IF NOT EXISTS source_locations (
     source_id TEXT NOT NULL,
     axis_id TEXT NOT NULL,
@@ -149,6 +198,56 @@ CREATE TABLE IF NOT EXISTS source_locations (
     PRIMARY KEY (source_id, axis_id),
     FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
     FOREIGN KEY (axis_id) REFERENCES axes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS feature_text (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    fea_source TEXT
+);
+
+CREATE TABLE IF NOT EXISTS kerning_groups (
+    side INTEGER NOT NULL CHECK (side IN (1, 2)),
+    name TEXT NOT NULL,
+    PRIMARY KEY (side, name)
+);
+
+CREATE TABLE IF NOT EXISTS kerning_group_members (
+    side INTEGER NOT NULL CHECK (side IN (1, 2)),
+    group_name TEXT NOT NULL,
+    glyph_name TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    PRIMARY KEY (side, group_name, order_index),
+    FOREIGN KEY (side, group_name) REFERENCES kerning_groups(side, name) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS kerning_pairs (
+    order_index INTEGER PRIMARY KEY,
+    first_kind TEXT NOT NULL CHECK (first_kind IN ('glyph', 'group')),
+    first_value TEXT NOT NULL,
+    second_kind TEXT NOT NULL CHECK (second_kind IN ('glyph', 'group')),
+    second_value TEXT NOT NULL,
+    value REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS font_lib (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS glyph_lib (
+    glyph_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    PRIMARY KEY (glyph_id, key),
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS glyph_layer_lib (
+    layer_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    PRIMARY KEY (layer_id, key),
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
 "#;
 

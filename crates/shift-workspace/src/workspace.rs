@@ -543,11 +543,14 @@ fn replay_source(
 
 fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
     let metadata = font.metadata();
+    let metrics = font.metrics();
     shift_store::FontInfo {
         family_name: metadata.family_name.clone(),
+        style_name: metadata.style_name.clone(),
         copyright: metadata.copyright.clone(),
         trademark: metadata.trademark.clone(),
         description: metadata.description.clone(),
+        note: metadata.note.clone(),
         sample_text: None,
         designer: metadata.designer.clone(),
         designer_url: metadata.designer_url.clone(),
@@ -558,7 +561,16 @@ fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
         vendor_id: None,
         version_major: metadata.version_major.map(i64::from),
         version_minor: metadata.version_minor.map(i64::from),
-        units_per_em: font.metrics().units_per_em as i64,
+        units_per_em: metrics.units_per_em,
+        ascender: metrics.ascender,
+        descender: metrics.descender,
+        cap_height: metrics.cap_height,
+        x_height: metrics.x_height,
+        line_gap: metrics.line_gap,
+        italic_angle: metrics.italic_angle,
+        underline_position: metrics.underline_position,
+        underline_thickness: metrics.underline_thickness,
+        default_source_id: font.default_source_id().map(|id| id.to_string()),
     }
 }
 

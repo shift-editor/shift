@@ -1,3 +1,4 @@
+use shift_font::test_support::sample_font;
 use shift_store::{
     AxisId, ComponentId, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph, NewGlyphComponent,
     NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceKind,
@@ -36,7 +37,7 @@ fn overwrites_font_info() {
     store
         .set_font_info(FontInfo {
             family_name: Some("Shift Sans".to_string()),
-            units_per_em: 1000,
+            units_per_em: 1000.0,
             ..empty_font_info()
         })
         .expect("font info should be overwritten");
@@ -47,7 +48,7 @@ fn overwrites_font_info() {
         .expect("font info should exist");
 
     assert_eq!(loaded.family_name.as_deref(), Some("Shift Sans"));
-    assert_eq!(loaded.units_per_em, 1000);
+    assert_eq!(loaded.units_per_em, 1000.0);
     assert_eq!(loaded.copyright, None);
 }
 
@@ -56,7 +57,7 @@ fn font_info_requires_positive_units_per_em() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
     let result = store.set_font_info(FontInfo {
-        units_per_em: 0,
+        units_per_em: 0.0,
         ..empty_font_info()
     });
 
@@ -231,6 +232,8 @@ fn glyph_component_requires_existing_layer_and_base_glyph() {
         id: ComponentId::new("component-A-B"),
         layer_id: LayerId::new("layer-missing"),
         base_glyph_id: GlyphId::new("glyph-missing"),
+        base_glyph_name: "Missing".to_string(),
+        transform: shift_font::DecomposedTransform::identity(),
         order_index: 0,
     });
 
@@ -591,6 +594,7 @@ fn create_glyph_a(store: &mut ShiftStore) -> GlyphId {
 fn open_sans_font_info() -> FontInfo {
     FontInfo {
         family_name: Some("Open Sans".to_string()),
+        style_name: Some("Regular".to_string()),
         copyright: Some(
             "Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)"
                 .to_string(),
@@ -600,6 +604,7 @@ fn open_sans_font_info() -> FontInfo {
                 .to_string(),
         ),
         description: Some("Designed by Monotype design team.".to_string()),
+        note: Some("source-format fixture".to_string()),
         sample_text: None,
         designer: Some("Monotype Design Team".to_string()),
         designer_url: Some("http://www.monotype.com/studio".to_string()),
@@ -613,16 +618,28 @@ fn open_sans_font_info() -> FontInfo {
         vendor_id: None,
         version_major: Some(3),
         version_minor: Some(3),
-        units_per_em: 2048,
+        units_per_em: 2048.0,
+        ascender: 1500.0,
+        descender: -500.0,
+        cap_height: Some(1456.0),
+        x_height: Some(1012.0),
+        line_gap: Some(42.0),
+        italic_angle: Some(-9.5),
+        underline_position: Some(-175.0),
+        underline_thickness: Some(96.0),
+        default_source_id: Some("source_regular".to_string()),
     }
 }
 
 fn empty_font_info() -> FontInfo {
+    let metrics = shift_font::FontMetrics::default();
     FontInfo {
         family_name: None,
+        style_name: None,
         copyright: None,
         trademark: None,
         description: None,
+        note: None,
         sample_text: None,
         designer: None,
         designer_url: None,
@@ -633,7 +650,16 @@ fn empty_font_info() -> FontInfo {
         vendor_id: None,
         version_major: None,
         version_minor: None,
-        units_per_em: 1000,
+        units_per_em: metrics.units_per_em,
+        ascender: metrics.ascender,
+        descender: metrics.descender,
+        cap_height: metrics.cap_height,
+        x_height: metrics.x_height,
+        line_gap: metrics.line_gap,
+        italic_angle: metrics.italic_angle,
+        underline_position: metrics.underline_position,
+        underline_thickness: metrics.underline_thickness,
+        default_source_id: None,
     }
 }
 
@@ -681,6 +707,8 @@ fn create_default_component(
             id: component_id.clone(),
             layer_id: layer_id.clone(),
             base_glyph_id: base_glyph_id.clone(),
+            base_glyph_name: "B".to_string(),
+            transform: shift_font::DecomposedTransform::identity(),
             order_index: 0,
         })
         .expect("glyph component should be created");
@@ -715,6 +743,7 @@ fn create_regular_source(store: &mut ShiftStore) -> SourceId {
             name: Some("Regular".to_string()),
             family_name: Some("Shift Sans".to_string()),
             style_name: Some("Regular".to_string()),
+            filename: Some("Regular.ufo".to_string()),
             kind: SourceKind::Master,
         })
         .expect("source should be created");
@@ -729,6 +758,7 @@ fn create_regular_source_with_id(store: &mut ShiftStore, source_id: shift_font::
             name: Some("Regular".to_string()),
             family_name: Some("Shift Sans".to_string()),
             style_name: Some("Regular".to_string()),
+            filename: Some("Regular.ufo".to_string()),
             kind: SourceKind::Master,
         })
         .expect("source should be created");
@@ -936,6 +966,19 @@ fn replace_font_state_persists_axes_and_source_locations() {
     assert_eq!(locations.len(), 1);
     assert_eq!(locations[0].axis_id, AxisId::new("axis_weight"));
     assert_eq!(locations[0].value, 700.0);
+}
+
+#[test]
+fn replace_and_load_font_state_preserves_whole_font() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let original = sample_font();
+
+    store
+        .replace_font_state(&original)
+        .expect("replace font state");
+    let loaded = store.load_font_state().expect("load font state");
+
+    assert_eq!(loaded, original);
 }
 
 #[test]

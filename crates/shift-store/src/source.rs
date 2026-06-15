@@ -26,6 +26,7 @@ pub struct NewSource {
     pub name: Option<String>,
     pub family_name: Option<String>,
     pub style_name: Option<String>,
+    pub filename: Option<String>,
     pub kind: SourceKind,
 }
 
@@ -35,6 +36,7 @@ pub struct SourceRecord {
     pub name: Option<String>,
     pub family_name: Option<String>,
     pub style_name: Option<String>,
+    pub filename: Option<String>,
     pub kind: SourceKind,
 }
 
@@ -125,15 +127,17 @@ impl ShiftStore {
                 name,
                 family_name,
                 style_name,
+                filename,
                 kind
             )
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ",
             rusqlite::params![
                 source.id.as_str(),
                 source.name,
                 source.family_name,
                 source.style_name,
+                source.filename,
                 source.kind.as_str(),
             ],
         )?;
@@ -149,6 +153,7 @@ impl ShiftStore {
                 name,
                 family_name,
                 style_name,
+                filename,
                 kind
             FROM sources
             WHERE id = ?1
@@ -170,9 +175,10 @@ impl ShiftStore {
                 name,
                 family_name,
                 style_name,
+                filename,
                 kind
             FROM sources
-            ORDER BY id
+            ORDER BY order_index, id
             ",
         )?;
 
@@ -232,8 +238,8 @@ fn map_axis_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AxisRecord> {
 }
 
 fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRecord> {
-    let kind = SourceKind::parse(row.get(4)?).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(err))
+    let kind = SourceKind::parse(row.get(5)?).map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(err))
     })?;
 
     Ok(SourceRecord {
@@ -241,6 +247,7 @@ fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRecord> {
         name: row.get(1)?,
         family_name: row.get(2)?,
         style_name: row.get(3)?,
+        filename: row.get(4)?,
         kind,
     })
 }
