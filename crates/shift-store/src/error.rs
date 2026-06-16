@@ -18,6 +18,9 @@ pub enum StoreError {
     #[error("invalid lib value: {0}")]
     InvalidLibValue(String),
 
+    #[error("invalid workspace state: {0}")]
+    InvalidWorkspaceState(String),
+
     #[error("missing {kind}: {id}")]
     MissingEntity { kind: &'static str, id: String },
 

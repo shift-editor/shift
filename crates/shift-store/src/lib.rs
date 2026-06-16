@@ -11,6 +11,7 @@ mod schema;
 mod source;
 mod store;
 mod types;
+mod workspace_state;
 
 pub use component::{GlyphComponentRecord, NewGlyphComponent};
 pub use error::StoreError;
@@ -21,3 +22,6 @@ pub use outline::{AnchorRecord, ContourRecord, PointRecord};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};
 pub use store::ShiftStore;
 pub use types::{AxisId, ComponentId, GlyphId, LayerId, RevisionId, SourceId};
+pub use workspace_state::{
+    Evidence, FileIdentity, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState,
+};

@@ -1,7 +1,8 @@
 use shift_font::test_support::sample_font;
 use shift_store::{
-    AxisId, ComponentId, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph, NewGlyphComponent,
-    NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceKind,
+    AxisId, ComponentId, Evidence, FileIdentity, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph,
+    NewGlyphComponent, NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceIdentitySnapshot,
+    SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -24,6 +25,78 @@ fn writes_and_reads_font_info() {
         .expect("font info should exist");
 
     assert_eq!(loaded, font_info);
+}
+
+#[test]
+fn writes_and_reads_workspace_state() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let state = WorkspaceState::untitled(Some("doc-1".to_string()));
+
+    store
+        .set_workspace_state(state.clone())
+        .expect("workspace state should be written");
+
+    let loaded = store
+        .workspace_state()
+        .expect("workspace state query should succeed")
+        .expect("workspace state should exist");
+
+    assert_eq!(loaded, state);
+}
+
+#[test]
+fn applying_change_set_marks_workspace_state_dirty() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let glyph = shift_font::Glyph::with_unicode("A", 65);
+    store
+        .set_workspace_state(WorkspaceState::untitled(Some("doc-1".to_string())))
+        .expect("workspace state should be written");
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::glyph_created(&glyph),
+        ]))
+        .expect("change set should apply");
+
+    let loaded = store
+        .workspace_state()
+        .expect("workspace state query should succeed")
+        .expect("workspace state should exist");
+
+    assert!(loaded.dirty);
+    assert_eq!(loaded.revision, 1);
+    assert_eq!(loaded.saved_revision, 0);
+}
+
+#[test]
+fn source_identity_snapshot_separates_exact_equality_from_match_evidence() {
+    let left = SourceIdentitySnapshot {
+        source_path: Some("Family.shift".into()),
+        canonical_source_path: Some("/fonts/Family.shift".into()),
+        source_package_id: None,
+        source_file_identity: Some(FileIdentity {
+            kind: "unix-dev-inode".to_string(),
+            value: "1:2".to_string(),
+        }),
+        source_size: Some(128),
+        source_mtime_ms: Some(1_000),
+        source_fingerprint: Some("fnv1a64:abc".to_string()),
+    };
+    let moved = SourceIdentitySnapshot {
+        source_path: Some("Renamed.shift".into()),
+        canonical_source_path: Some("/fonts/Renamed.shift".into()),
+        ..left.clone()
+    };
+    let unknown = SourceIdentitySnapshot {
+        source_file_identity: None,
+        source_fingerprint: None,
+        ..left.clone()
+    };
+
+    assert_ne!(left, moved);
+    assert_eq!(left.file_identity_match(&moved), Evidence::Same);
+    assert_eq!(left.canonical_path_match(&moved), Evidence::Different);
+    assert_eq!(left.fingerprint_match(&unknown), Evidence::Unknown);
 }
 
 #[test]

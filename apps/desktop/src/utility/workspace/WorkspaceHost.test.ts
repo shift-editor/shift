@@ -165,6 +165,45 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
   });
 
+  it("opening a package resumes a retained dirty working store", async () => {
+    const source = await connectSyncLane();
+    const created = await source.call("workspace.create", undefined);
+    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
+    const savePath = path.join(tmpRoot, "RecoverMe.shift");
+    await source.call("workspace.saveAs", { path: savePath });
+    await source.call("workspace.apply", {
+      intents: [
+        {
+          kind: "createGlyph",
+          createGlyph: {
+            glyphId: mintGlyphId(),
+            name: "B" as GlyphName,
+            unicodes: [66 as Unicode],
+          },
+        },
+      ],
+      label: "Add Glyph",
+    });
+
+    const lane = new MessageChannel();
+    const restartedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
+    channels.push(restartedShell);
+    startHost(nodePortTransport(lane.port2));
+    const restarted = await connectSyncLane(restartedShell);
+
+    const opened = await restarted.call("workspace.open", { path: savePath });
+
+    expect(opened.documentId).toBe(created.documentId);
+    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A", "B"]);
+    await expect(restartedShell.call("document.state", undefined)).resolves.toMatchObject({
+      documentId: created.documentId,
+      sourceKind: "package",
+      saveTarget: savePath,
+      dirty: true,
+      needsSaveAs: false,
+    });
+  });
+
   it("emits utility-owned document state after create and apply", async () => {
     let latestState: WorkspaceDocumentState | null = null;
     const unlisten = shell.listen("document.changed", (state) => {

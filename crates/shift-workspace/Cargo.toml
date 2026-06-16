@@ -10,5 +10,8 @@ shift-source = { workspace = true }
 shift-store = { workspace = true }
 thiserror = "2"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
+
 [dev-dependencies]
 tempfile = "3"

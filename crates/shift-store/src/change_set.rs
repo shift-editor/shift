@@ -1,7 +1,7 @@
 use rusqlite::{Transaction, params};
 use shift_font as font;
 
-use crate::{ShiftStore, StoreError};
+use crate::{ShiftStore, StoreError, workspace_state::mark_workspace_dirty_in_tx};
 
 impl ShiftStore {
     pub fn apply_change_set(&mut self, change_set: &font::FontChangeSet) -> Result<(), StoreError> {
@@ -10,6 +10,7 @@ impl ShiftStore {
         for change in &change_set.changes {
             apply_change(&tx, change)?;
         }
+        mark_workspace_dirty_in_tx(&tx)?;
 
         tx.commit()?;
         Ok(())
