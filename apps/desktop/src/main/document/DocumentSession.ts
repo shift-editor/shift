@@ -1,10 +1,14 @@
-import { dialog, type OpenDialogOptions, type SaveDialogOptions } from "electron";
+import {
+  dialog,
+  type MessageBoxOptions,
+  type OpenDialogOptions,
+  type SaveDialogOptions,
+} from "electron";
 import path from "node:path";
-import * as ipc from "../../shared/ipc/main";
-import type { DocumentOpenRequest, DocumentSaveRequest } from "../../shared/ipc/contract";
+import { errorToMessage } from "../../shared/errors";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import type { Window } from "../windows/Window";
-import type { WorkspaceProcess } from "../workspace/WorkspaceProcess";
+import type { Document } from "./DocumentClient";
 
 const OPEN_FONT_EXTENSIONS = [
   "shift",
@@ -17,31 +21,41 @@ const OPEN_FONT_EXTENSIONS = [
 ];
 
 export type DocumentSessionOptions = {
-  workspace: WorkspaceProcess;
+  document: Document;
   activeWindow: () => Window | null;
   applicationName: () => string;
 };
+
+export type CloseReason = "window" | "quit" | "replace-document";
+type DirtyDocumentChoice = "save" | "discard" | "cancel";
 
 /**
  * Main-process owner of the native document workflow.
  *
  * @remarks
- * Main owns the shell chrome, native dialogs, and the Save vs Save As decision
- * read from the utility's `document.state`. Document reads and writes belong to
- * the renderer's committed-op lane; main resolves dialog paths, then asks the
- * renderer to issue the open/save request one-way.
+ * Main owns the shell chrome and native dialogs. Document state reads and
+ * writes that affect replacement or save decisions go through the renderer's
+ * committed-op lane so pending edits cannot be bypassed by main-process state
+ * reads.
  */
 export class DocumentSession {
-  readonly #workspace: WorkspaceProcess;
+  readonly #document: Document;
   readonly #activeWindow: () => Window | null;
   readonly #applicationName: () => string;
 
   #state: WorkspaceDocumentState | null = null;
 
   constructor(options: DocumentSessionOptions) {
-    this.#workspace = options.workspace;
+    this.#document = options.document;
     this.#activeWindow = options.activeWindow;
     this.#applicationName = options.applicationName;
+  }
+
+  /** Creates an untitled workspace through the renderer edit lane. */
+  async create(): Promise<void> {
+    if (!(await this.confirmClose("replace-document"))) return;
+
+    await this.#document.create();
   }
 
   /** Runs Open from main with a native open dialog. */
@@ -49,16 +63,41 @@ export class DocumentSession {
     const openPath = await this.#showOpenDialog();
     if (!openPath) return;
 
-    this.#requestOpen({ path: openPath });
+    if (!(await this.confirmClose("replace-document"))) return;
+
+    await this.#requestOpen(openPath);
+  }
+
+  /** Returns whether a close transition needs document confirmation. */
+  shouldConfirmClose(): boolean {
+    return this.#document.connected || this.#state?.dirty === true;
+  }
+
+  /**
+   * Confirms whether the current document may be closed or replaced.
+   *
+   * @param reason - Native transition that would discard or replace the document.
+   * @returns `true` when the transition may continue.
+   * @throws {Error} when the renderer cannot provide a settled document state.
+   */
+  async confirmClose(reason: CloseReason): Promise<boolean> {
+    const state = await this.#closeState();
+    if (!state || !state.dirty) return true;
+
+    const choice = await this.#showDirtyDocumentDialog(state, reason);
+    if (choice === "cancel") return false;
+    if (choice === "discard") return true;
+
+    return this.#saveDirtyDocument(state);
   }
 
   /**
    * Runs Save, escalating to Save As when the document has no target yet.
    *
-   * @throws {Error} when reading utility state fails.
+   * @throws {Error} when the renderer cannot read state or save.
    */
   async save(): Promise<void> {
-    const state = await this.#workspace.documentState();
+    const state = await this.#requestState();
     this.acceptState(state);
     if (!state) return;
 
@@ -67,16 +106,16 @@ export class DocumentSession {
       return;
     }
 
-    this.#requestSave({ path: null });
+    await this.#requestSave(null);
   }
 
   /**
    * Runs Save As from main with a native save dialog.
    *
-   * @throws {Error} when reading utility state fails.
+   * @throws {Error} when the renderer cannot read state or save.
    */
   async saveAs(): Promise<void> {
-    const state = await this.#workspace.documentState();
+    const state = await this.#requestState();
     this.acceptState(state);
     if (!state) return;
 
@@ -93,27 +132,52 @@ export class DocumentSession {
     this.#updateWindowTitle();
   }
 
-  async #saveToNewPath(state: WorkspaceDocumentState): Promise<void> {
+  async #saveToNewPath(state: WorkspaceDocumentState): Promise<WorkspaceDocumentState | null> {
     const savePath = await this.#showSaveDialog(state);
-    if (!savePath) return;
+    if (!savePath) return null;
 
-    this.#requestSave({ path: savePath });
+    return this.#requestSave(savePath);
   }
 
-  /** Asks the active renderer to issue the save on its committed-op lane. */
-  #requestSave(request: DocumentSaveRequest): void {
-    const window = this.#activeWindow();
-    if (!window || window.window.webContents.isDestroyed()) return;
-
-    ipc.send(window.window.webContents, "document.save", request);
+  async #saveDirtyDocument(state: WorkspaceDocumentState): Promise<boolean> {
+    try {
+      const saved = state.needsSaveAs
+        ? await this.#saveToNewPath(state)
+        : await this.#requestSave(null);
+      return saved !== null;
+    } catch (error) {
+      await this.#showSaveFailedDialog(error);
+      return false;
+    }
   }
 
-  /** Asks the active renderer to open the selected document. */
-  #requestOpen(request: DocumentOpenRequest): void {
-    const window = this.#activeWindow();
-    if (!window || window.window.webContents.isDestroyed()) return;
+  async #closeState(): Promise<WorkspaceDocumentState | null> {
+    try {
+      return await this.#requestState();
+    } catch (error) {
+      if (!this.#document.connected && (!this.#state || !this.#state.dirty)) {
+        return null;
+      }
 
-    ipc.send(window.window.webContents, "document.open", request);
+      await this.#showSaveFailedDialog(error);
+      return this.#state;
+    }
+  }
+
+  async #requestState(): Promise<WorkspaceDocumentState | null> {
+    const state = await this.#document.state();
+    this.acceptState(state);
+    return state;
+  }
+
+  async #requestSave(savePath: string | null): Promise<WorkspaceDocumentState> {
+    const state = await this.#document.save(savePath);
+    this.acceptState(state);
+    return state;
+  }
+
+  async #requestOpen(openPath: string): Promise<void> {
+    await this.#document.open(openPath);
   }
 
   async #showSaveDialog(state: WorkspaceDocumentState): Promise<string | null> {
@@ -130,6 +194,59 @@ export class DocumentSession {
       : await dialog.showSaveDialog(options);
 
     return result.canceled ? null : (result.filePath ?? null);
+  }
+
+  async #showDirtyDocumentDialog(
+    state: WorkspaceDocumentState,
+    reason: CloseReason,
+  ): Promise<DirtyDocumentChoice> {
+    const name = state.saveTarget ? path.basename(state.saveTarget) : "Untitled";
+    const options: MessageBoxOptions = {
+      type: "warning",
+      buttons: ["Save", "Don't Save", "Cancel"],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+      title: this.#applicationName(),
+      message: this.#dirtyDocumentMessage(reason, name),
+      detail: "Your changes will be lost if you don't save them.",
+    };
+
+    const window = this.#activeWindow();
+    const result = window
+      ? await dialog.showMessageBox(window.window, options)
+      : await dialog.showMessageBox(options);
+
+    if (result.response === 0) return "save";
+    if (result.response === 1) return "discard";
+    return "cancel";
+  }
+
+  async #showSaveFailedDialog(error: unknown): Promise<void> {
+    const options: MessageBoxOptions = {
+      type: "error",
+      buttons: ["OK"],
+      defaultId: 0,
+      title: this.#applicationName(),
+      message: "The document could not be saved.",
+      detail: errorToMessage(error),
+    };
+
+    const window = this.#activeWindow();
+    if (window) {
+      await dialog.showMessageBox(window.window, options);
+      return;
+    }
+
+    await dialog.showMessageBox(options);
+  }
+
+  #dirtyDocumentMessage(reason: CloseReason, name: string): string {
+    if (reason === "replace-document") {
+      return `Save changes to ${name} before replacing it?`;
+    }
+
+    return `Save changes to ${name} before closing?`;
   }
 
   async #showOpenDialog(): Promise<string | null> {

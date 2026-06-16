@@ -1,21 +1,14 @@
 import type { CommandId } from "../commands";
+import type { WorkspaceDocumentState } from "../workspace/protocol";
 
-/**
- * Tells the renderer to issue a save on its committed-op lane.
- *
- * @remarks
- * `path` is null for Save (current target) and a filesystem path for Save As —
- * main owns the dialog and resolves the path before sending. The renderer
- * enqueues the save behind its edits; main learns the outcome from the
- * utility's `document.changed` event, so this is one-way (no reply channel).
- */
-export type DocumentSaveRequest = {
-  path: string | null;
+export type DocumentCallMap = {
+  "document.state": { request: void; response: WorkspaceDocumentState | null };
+  "document.create": { request: void; response: void };
+  "document.save": { request: { path: string | null }; response: WorkspaceDocumentState };
+  "document.open": { request: { path: string }; response: void };
 };
 
-export type DocumentOpenRequest = {
-  path: string;
-};
+export type DocumentEventMap = Record<string, never>;
 
 /**
  * Defines request/response channels that the renderer may invoke on main.
@@ -26,6 +19,12 @@ export type DocumentOpenRequest = {
  */
 export type RendererToMain = {
   "commands.run": (id: CommandId) => void;
+  /**
+   * Asks main to transfer a document request lane to the renderer. The port
+   * arrives separately on the `document.port` postMessage channel because ports
+   * cannot travel through `invoke` responses.
+   */
+  "document.connect": () => void;
   /**
    * Asks main to wire a sync lane to the workspace process. The port itself
    * arrives separately on the `workspace.port` postMessage channel because
@@ -42,9 +41,6 @@ export type RendererToMain = {
  * merely reflects it.
  */
 export type MainToRenderer = {
-  /** Main resolved the save path; the renderer issues the save on its edit lane. */
-  "document.save": (request: DocumentSaveRequest) => void;
-  "document.open": (request: DocumentOpenRequest) => void;
   /** UI (chrome) zoom changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
 };

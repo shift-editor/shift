@@ -77,6 +77,7 @@ export class WorkspaceHost {
         this.#serialize(() =>
           this.#documentId === null ? null : this.#snapshot(this.#documentId),
         ),
+      "document.state": () => this.#serialize(() => this.#documentState()),
       "workspace.apply": ({ intents, label }) =>
         this.#serialize(() => {
           const applied = this.#bridge.apply(intents, label);

@@ -83,8 +83,7 @@ export class WorkspaceEditQueue {
 
   /** Replays the latest undo entry after pending pushes flush. */
   undo(): Promise<AppliedChange | null> {
-    this.#enqueueFlush();
-    return this.#serialize(async () => {
+    return this.#withFlush(async () => {
       const applied = await this.#workspace.undo();
       if (applied) this.#fold(applied);
       return applied;
@@ -93,18 +92,33 @@ export class WorkspaceEditQueue {
 
   /** Pulls replace-grade glyph state, serialized behind pending writes. */
   glyph(glyphId: GlyphId, sourceId: SourceId): Promise<GlyphState | null> {
-    this.#enqueueFlush();
-    return this.#serialize(() => this.#workspace.glyph(glyphId, sourceId));
+    return this.#withFlush(() => this.#workspace.glyph(glyphId, sourceId));
   }
 
   /** Replays the latest redo entry after pending pushes flush. */
   redo(): Promise<AppliedChange | null> {
-    this.#enqueueFlush();
-    return this.#serialize(async () => {
+    return this.#withFlush(async () => {
       const applied = await this.#workspace.redo();
       if (applied) this.#fold(applied);
       return applied;
     });
+  }
+
+  /** Creates an untitled workspace behind every queued and in-flight edit. */
+  create(): Promise<void> {
+    return this.#withFlush(() => this.#workspace.create());
+  }
+
+  /** Opens a workspace behind every queued and in-flight edit. */
+  open(path: string): Promise<void> {
+    return this.#withFlush(async () => {
+      await this.#workspace.open(path);
+    });
+  }
+
+  /** Reads document state behind every queued and in-flight edit. */
+  state(): Promise<WorkspaceDocumentState | null> {
+    return this.#withFlush(() => this.#workspace.documentState());
   }
 
   /**
@@ -113,10 +127,14 @@ export class WorkspaceEditQueue {
    * @param path - target path for Save As, or null to save the current target.
    */
   save(path: string | null): Promise<WorkspaceDocumentState> {
-    this.#enqueueFlush();
-    return this.#serialize(() =>
+    return this.#withFlush(() =>
       path === null ? this.#workspace.save() : this.#workspace.saveAs(path),
     );
+  }
+
+  #withFlush<T>(job: () => Promise<T>): Promise<T> {
+    this.#enqueueFlush();
+    return this.#serialize(job);
   }
 
   #enqueueFlush(): void {

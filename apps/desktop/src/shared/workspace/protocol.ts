@@ -74,6 +74,7 @@ export type ShellEventMap = {
 export type SyncCallMap = {
   "workspace.create": { request: void; response: WorkspaceSnapshot };
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
+  "document.state": { request: void; response: WorkspaceDocumentState | null };
   /**
    * The one mutation verb. Requests carry intents; the response is pure
    * replace-grade state (never change records — the renderer substitutes,

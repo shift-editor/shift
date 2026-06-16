@@ -1,5 +1,4 @@
 import type { CommandId } from "../commands";
-import type { DocumentOpenRequest, DocumentSaveRequest } from "../ipc/contract";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -20,16 +19,16 @@ export interface ShiftHost {
      */
     run: (id: CommandId) => Promise<void>;
   };
-  /** Narrow document lifecycle hooks owned by main. */
+  /** Connects the renderer to main-owned document requests. */
   document: {
     /**
-     * Subscribes to main's request to save; the renderer issues the save on its
-     * committed-op lane so it lands behind pending edits.
+     * Asks main to transfer a document request lane.
      *
-     * @returns an unsubscribe function.
+     * @remarks
+     * The renderer half arrives via the `document.port` postMessage relay;
+     * install that listener before calling.
      */
-    onSave: (callback: (request: DocumentSaveRequest) => void) => () => void;
-    onOpen: (callback: (request: DocumentOpenRequest) => void) => () => void;
+    connect: () => Promise<void>;
   };
   /** Connects the renderer to the workspace utility process. */
   workspace: {

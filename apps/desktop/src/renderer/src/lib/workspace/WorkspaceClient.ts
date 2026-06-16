@@ -103,6 +103,13 @@ export class WorkspaceClient {
     return snapshot;
   }
 
+  /** Reads utility-owned document state through the renderer sync lane. */
+  async documentState(): Promise<WorkspaceDocumentState | null> {
+    await this.connected();
+
+    return this.#require().call("document.state", undefined);
+  }
+
   /** Saves to the current target; rejects when the document still needs a path. */
   async save(): Promise<WorkspaceDocumentState> {
     await this.connected();

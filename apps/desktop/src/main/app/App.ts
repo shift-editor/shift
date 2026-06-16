@@ -11,6 +11,8 @@ import { ApplicationMenu } from "../menu/ApplicationMenu";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 import { WorkspaceProcess } from "../workspace/WorkspaceProcess";
 import { DocumentSession } from "../document/DocumentSession";
+import { DocumentClient } from "../document/DocumentClient";
+import { AppLifecycle } from "./AppLifecycle";
 
 const APP_NAME = "Shift";
 
@@ -24,6 +26,7 @@ const APP_NAME = "Shift";
  */
 export class App {
   readonly #log: ShiftLogger;
+  readonly #lifecycle: AppLifecycle;
 
   #workingWindow: Window | null = null;
   #commands = new CommandRegistry();
@@ -38,14 +41,19 @@ export class App {
   });
 
   #workspace = new WorkspaceProcess();
+  #documentClient = new DocumentClient();
   #document = new DocumentSession({
-    workspace: this.#workspace,
+    document: this.#documentClient,
     activeWindow: () => this.#workingWindow,
     applicationName: () => this.applicationName,
   });
 
   constructor(log: ShiftLogger = createShiftLogger("app")) {
     this.#log = log;
+    this.#lifecycle = new AppLifecycle({
+      document: this.#document,
+      log: this.#log,
+    });
   }
 
   get applicationName(): string {
@@ -71,6 +79,7 @@ export class App {
 
     this.#registerCommands();
     this.#registerIpcHandlers();
+    this.#lifecycle.start();
     app.setName(this.applicationName);
 
     if (!app.isPackaged) {
@@ -90,13 +99,19 @@ export class App {
       this.#workingWindow = new Window({
         preloadPath: path.join(__dirname, "preload.js"),
       });
+      this.#lifecycle.registerWindow(this.#workingWindow, {
+        onClosed: () => {
+          this.#workingWindow = null;
+          this.#documentClient.dispose();
+        },
+      });
 
       this.#loadRenderer();
 
       this.#log.info("finished when ready callback");
     });
-
     app.on("will-quit", () => {
+      this.#documentClient.dispose();
       this.#workspace.stop();
     });
   }
@@ -125,6 +140,12 @@ export class App {
     ipc.handle(ipcMain, "commands.run", (_event, id) => {
       return this.#commands.run(id, this.#commandContext());
     });
+    ipc.handle(ipcMain, "document.connect", (event) => {
+      const { port1, port2 } = new MessageChannelMain();
+
+      this.#documentClient.connect(port1);
+      event.sender.postMessage("document.port", null, [port2]);
+    });
     ipc.handle(ipcMain, "workspace.connect", async (event) => {
       const { port1, port2 } = new MessageChannelMain();
 
@@ -144,6 +165,7 @@ export class App {
   #commandContext(): CommandContext {
     return {
       document: {
+        create: () => this.#document.create(),
         open: () => this.#document.open(),
         save: () => this.#document.save(),
         saveAs: () => this.#document.saveAs(),

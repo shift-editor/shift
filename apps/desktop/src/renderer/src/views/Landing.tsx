@@ -2,15 +2,15 @@ import logo from "@/assets/logo@1024.png";
 import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 import { Titlebar } from "@/components/chrome/Titlebar";
-import { getWorkspace } from "@/store/appStore";
 import { getShiftHost } from "@/host/shiftHost";
 
 export const Landing = () => {
   const host = getShiftHost();
-  const workspace = getWorkspace();
 
   const handleNewFont = () => {
-    void workspace.create().catch((error) => console.error("creating a new font failed", error));
+    void host.commands
+      .run("file.new")
+      .catch((error) => console.error("creating a new font failed", error));
   };
 
   const handleOpenFont = () => {
