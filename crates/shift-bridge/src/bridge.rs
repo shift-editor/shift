@@ -18,7 +18,9 @@ use shift_wire::{
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
   Source,
 };
-use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
+use shift_workspace::{
+  FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceRecoveryCandidate, WorkspaceSource,
+};
 use std::{path::Path, sync::Arc};
 
 #[napi(object)]
@@ -47,6 +49,20 @@ pub struct NapiDocumentState {
   pub save_target: Option<String>,
   pub dirty: bool,
   pub needs_save_as: bool,
+}
+
+#[napi(object)]
+pub struct NapiWorkspaceRecoveryCandidate {
+  pub document_id: String,
+  pub store_path: String,
+}
+
+#[napi(object)]
+pub struct NapiWorkspaceRecoveryMatch {
+  pub document_id: String,
+  pub store_path: String,
+  pub match_kind: String,
+  pub dirty: bool,
 }
 
 fn new_workspace_from_options(options: Option<NapiNewWorkspace>) -> NewWorkspace {
@@ -256,6 +272,50 @@ impl Bridge {
     self.workspace = Some(FontWorkspace::open(path, store_path)?);
     self.reset_versions();
     Ok(())
+  }
+
+  #[napi]
+  pub fn resume_workspace_for_source(
+    &mut self,
+    store_path: String,
+    source_path: String,
+  ) -> errors::Result<()> {
+    self.workspace = Some(FontWorkspace::resume_for_source(store_path, source_path)?);
+    self.reset_versions();
+    Ok(())
+  }
+
+  #[napi]
+  pub fn set_document_id(&mut self, document_id: String) -> errors::Result<NapiDocumentState> {
+    self.workspace_mut()?.set_document_id(document_id)?;
+    self.document_state_snapshot()
+  }
+
+  #[napi]
+  pub fn find_recoverable_workspace(
+    &self,
+    source_path: String,
+    candidates: Vec<NapiWorkspaceRecoveryCandidate>,
+  ) -> errors::Result<Option<NapiWorkspaceRecoveryMatch>> {
+    let candidates = candidates
+      .into_iter()
+      .map(|candidate| WorkspaceRecoveryCandidate {
+        document_id: candidate.document_id,
+        store_path: candidate.store_path.into(),
+      })
+      .collect::<Vec<_>>();
+    let Some(recovery_match) =
+      FontWorkspace::find_recoverable_package_workspace(source_path, &candidates)?
+    else {
+      return Ok(None);
+    };
+
+    Ok(Some(NapiWorkspaceRecoveryMatch {
+      document_id: recovery_match.document_id,
+      store_path: path_to_string(&recovery_match.store_path)?,
+      match_kind: recovery_match.match_kind.as_str().to_string(),
+      dirty: recovery_match.dirty,
+    }))
   }
 
   #[napi]
@@ -516,10 +576,7 @@ impl Bridge {
     Ok(NapiDocumentState {
       source_kind: source_kind.to_string(),
       save_target,
-      // `live_version`/`saved_version` stay internal: `dirty` is the only
-      // answer callers need, and shipping the raw counters next to it only
-      // invites three fields that must agree.
-      dirty: self.live_version != self.saved_version,
+      dirty: workspace.is_dirty()?,
       needs_save_as,
     })
   }
@@ -1557,6 +1614,44 @@ mod tests {
     let state = bridge.document_state().unwrap();
     assert!(state.dirty);
     assert!(state.needs_save_as);
+  }
+
+  #[test]
+  fn resume_workspace_restores_persisted_dirty_state() {
+    let (save_path, store_path) = test_paths("resume");
+    {
+      let mut bridge = Bridge::new();
+      bridge
+        .create_untitled_workspace(store_path.clone(), None)
+        .unwrap();
+      bridge
+        .apply(vec![create_glyph_napi("A", vec![65])], None)
+        .unwrap();
+      bridge.save_workspace_as(save_path.clone()).unwrap();
+      bridge
+        .apply(vec![create_glyph_napi("B", vec![66])], None)
+        .unwrap();
+      assert!(bridge.document_state().unwrap().dirty);
+    }
+
+    let mut bridge = Bridge::new();
+    bridge
+      .resume_workspace_for_source(store_path, save_path.clone())
+      .unwrap();
+
+    let state = bridge.document_state().unwrap();
+    assert_eq!(state.source_kind, "package");
+    assert_eq!(state.save_target.as_deref(), Some(save_path.as_str()));
+    assert!(state.dirty);
+    assert_eq!(
+      bridge
+        .get_glyphs()
+        .unwrap()
+        .into_iter()
+        .map(|glyph| glyph.name)
+        .collect::<Vec<_>>(),
+      vec!["A".to_string(), "B".to_string()]
+    );
   }
 
   fn default_source_id(bridge: &Bridge) -> String {

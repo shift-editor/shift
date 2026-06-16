@@ -1,7 +1,7 @@
 use shift_font::test_support::sample_font;
 use shift_store::{
     AxisId, ComponentId, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph, NewGlyphComponent,
-    NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceKind,
+    NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -24,6 +24,47 @@ fn writes_and_reads_font_info() {
         .expect("font info should exist");
 
     assert_eq!(loaded, font_info);
+}
+
+#[test]
+fn writes_and_reads_workspace_state() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let state = WorkspaceState::untitled(Some("doc-1".to_string()));
+
+    store
+        .set_workspace_state(state.clone())
+        .expect("workspace state should be written");
+
+    let loaded = store
+        .workspace_state()
+        .expect("workspace state query should succeed")
+        .expect("workspace state should exist");
+
+    assert_eq!(loaded, state);
+}
+
+#[test]
+fn applying_change_set_marks_workspace_state_dirty() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let glyph = shift_font::Glyph::with_unicode("A", 65);
+    store
+        .set_workspace_state(WorkspaceState::untitled(Some("doc-1".to_string())))
+        .expect("workspace state should be written");
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::glyph_created(&glyph),
+        ]))
+        .expect("change set should apply");
+
+    let loaded = store
+        .workspace_state()
+        .expect("workspace state query should succeed")
+        .expect("workspace state should exist");
+
+    assert!(loaded.dirty);
+    assert_eq!(loaded.revision, 1);
+    assert_eq!(loaded.saved_revision, 0);
 }
 
 #[test]

@@ -249,6 +249,25 @@ CREATE TABLE IF NOT EXISTS glyph_layer_lib (
     PRIMARY KEY (layer_id, key),
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS workspace_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    document_id TEXT,
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('untitled', 'package', 'imported')),
+    source_path TEXT,
+    canonical_source_path TEXT,
+    original_import_path TEXT,
+    source_package_id TEXT,
+    source_file_identity_kind TEXT,
+    source_file_identity_value TEXT,
+    source_size INTEGER,
+    source_mtime_ms INTEGER,
+    source_fingerprint TEXT,
+    dirty INTEGER NOT NULL DEFAULT 0 CHECK (dirty IN (0, 1)),
+    revision INTEGER NOT NULL DEFAULT 0,
+    saved_revision INTEGER NOT NULL DEFAULT 0,
+    updated_at_ms INTEGER NOT NULL
+);
 "#;
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;

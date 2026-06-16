@@ -22,6 +22,9 @@ export interface BridgeApi {
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
   documentState(): DocumentState
   openWorkspace(path: string, storePath: string): void
+  resumeWorkspaceForSource(storePath: string, sourcePath: string): void
+  setDocumentId(documentId: string): DocumentState
+  findRecoverableWorkspace(sourcePath: string, candidates: Array<WorkspaceRecoveryCandidate>): WorkspaceRecoveryMatch | null
   saveWorkspace(): DocumentState
   saveWorkspaceAs(path: string): DocumentState
   getMetadata(): FontMetadata
@@ -71,6 +74,18 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+export interface WorkspaceRecoveryCandidate {
+  documentId: string
+  storePath: string
+}
+
+export interface WorkspaceRecoveryMatch {
+  documentId: string
+  storePath: string
+  matchKind: string
+  dirty: boolean
 }
 export interface AddAnchorsIntent {
   layerId: LayerId

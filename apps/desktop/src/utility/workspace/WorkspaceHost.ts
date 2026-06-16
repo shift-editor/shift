@@ -109,6 +109,7 @@ export class WorkspaceHost {
     const draft = this.#documents.createDraft();
 
     this.#bridge.createUntitledWorkspace(draft.storePath);
+    this.#bridge.setDocumentId(draft.documentId);
     this.#documentId = draft.documentId;
 
     const snapshot = this.#snapshot(draft.documentId);
@@ -128,10 +129,18 @@ export class WorkspaceHost {
   }
 
   #open(path: string): WorkspaceSnapshot {
-    const draft = this.#documents.createDraft(); // fresh working store, same as create/open model
-    this.#bridge.openWorkspace(path, draft.storePath);
-    this.#documentId = draft.documentId;
-    const snapshot = this.#snapshot(draft.documentId);
+    const recovery = this.#bridge.findRecoverableWorkspace(path, this.#documents.listDrafts());
+    const document = recovery ?? this.#documents.createDraft();
+
+    if (recovery) {
+      this.#bridge.resumeWorkspaceForSource(recovery.storePath, path);
+    } else {
+      this.#bridge.openWorkspace(path, document.storePath);
+    }
+
+    this.#bridge.setDocumentId(document.documentId);
+    this.#documentId = document.documentId;
+    const snapshot = this.#snapshot(document.documentId);
     this.#emitDocumentChanged();
 
     return snapshot;

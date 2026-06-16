@@ -34,4 +34,25 @@ export class DocumentStorage {
       storePath: path.join(directoryPath, "document.sqlite"),
     };
   }
+
+  /** Lists retained draft stores that can be inspected for recovery. */
+  listDrafts(): DraftAllocation[] {
+    const draftsRoot = path.join(this.#rootPath, "drafts");
+    if (!fs.existsSync(draftsRoot)) return [];
+
+    const drafts: DraftAllocation[] = [];
+    for (const entry of fs.readdirSync(draftsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+
+      const storePath = path.join(draftsRoot, entry.name, "document.sqlite");
+      if (!fs.existsSync(storePath)) continue;
+
+      drafts.push({
+        documentId: entry.name,
+        storePath,
+      });
+    }
+
+    return drafts;
+  }
 }

@@ -17,6 +17,9 @@ export declare class Bridge {
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   documentState(): NapiDocumentState
   openWorkspace(path: string, storePath: string): void
+  resumeWorkspaceForSource(storePath: string, sourcePath: string): void
+  setDocumentId(documentId: string): NapiDocumentState
+  findRecoverableWorkspace(sourcePath: string, candidates: Array<NapiWorkspaceRecoveryCandidate>): NapiWorkspaceRecoveryMatch | null
   saveWorkspace(): NapiDocumentState
   saveWorkspaceAs(path: string): NapiDocumentState
   getMetadata(): NapiFontMetadata
@@ -66,6 +69,18 @@ export interface NapiFontExportResult {
 export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+export interface NapiWorkspaceRecoveryCandidate {
+  documentId: string
+  storePath: string
+}
+
+export interface NapiWorkspaceRecoveryMatch {
+  documentId: string
+  storePath: string
+  matchKind: string
+  dirty: boolean
 }
 export interface NapiAddAnchorsIntent {
   layerId: LayerId
