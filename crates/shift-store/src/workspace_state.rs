@@ -22,7 +22,77 @@ pub struct SourceIdentitySnapshot {
     pub source_size: Option<u64>,
     pub source_mtime_ms: Option<i64>,
     pub source_fingerprint: Option<String>,
-    pub observed_at_ms: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Evidence {
+    Same,
+    Different,
+    Unknown,
+}
+
+impl Evidence {
+    pub fn is_same(self) -> bool {
+        self == Self::Same
+    }
+
+    pub fn is_different(self) -> bool {
+        self == Self::Different
+    }
+}
+
+impl SourceIdentitySnapshot {
+    pub fn source_path_match(&self, other: &Self) -> Evidence {
+        compare_optional(self.source_path.as_ref(), other.source_path.as_ref())
+    }
+
+    pub fn canonical_path_match(&self, other: &Self) -> Evidence {
+        compare_optional(
+            self.canonical_source_path.as_ref(),
+            other.canonical_source_path.as_ref(),
+        )
+    }
+
+    pub fn package_id_match(&self, other: &Self) -> Evidence {
+        compare_optional(
+            self.source_package_id.as_ref(),
+            other.source_package_id.as_ref(),
+        )
+    }
+
+    pub fn file_identity_match(&self, other: &Self) -> Evidence {
+        compare_optional(
+            self.source_file_identity.as_ref(),
+            other.source_file_identity.as_ref(),
+        )
+    }
+
+    pub fn fingerprint_match(&self, other: &Self) -> Evidence {
+        compare_optional(
+            self.source_fingerprint.as_ref(),
+            other.source_fingerprint.as_ref(),
+        )
+    }
+
+    pub fn same_path_as(&self, other: &Self) -> bool {
+        self.canonical_path_match(other).is_same() || self.source_path_match(other).is_same()
+    }
+
+    pub fn fingerprint_changed_from(&self, other: &Self) -> bool {
+        self.fingerprint_match(other).is_different()
+    }
+
+    pub fn source_path_missing(&self) -> bool {
+        self.source_path.as_ref().is_none_or(|path| !path.exists())
+    }
+}
+
+fn compare_optional<T: PartialEq>(left: Option<&T>, right: Option<&T>) -> Evidence {
+    match (left, right) {
+        (Some(left), Some(right)) if left == right => Evidence::Same,
+        (Some(_), Some(_)) => Evidence::Different,
+        _ => Evidence::Unknown,
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -129,7 +199,7 @@ impl WorkspaceState {
             dirty: false,
             revision: 0,
             saved_revision: 0,
-            updated_at_ms: identity.observed_at_ms,
+            updated_at_ms: now_ms(),
         }
     }
 
@@ -142,8 +212,20 @@ impl WorkspaceState {
             source_size: self.source_size,
             source_mtime_ms: self.source_mtime_ms,
             source_fingerprint: self.source_fingerprint.clone(),
-            observed_at_ms: self.updated_at_ms,
         }
+    }
+
+    pub fn set_package_identity(&mut self, identity: SourceIdentitySnapshot) {
+        self.source_kind = WorkspaceSourceKind::Package;
+        self.source_path = identity.source_path;
+        self.canonical_source_path = identity.canonical_source_path;
+        self.original_import_path = None;
+        self.source_package_id = identity.source_package_id;
+        self.source_file_identity = identity.source_file_identity;
+        self.source_size = identity.source_size;
+        self.source_mtime_ms = identity.source_mtime_ms;
+        self.source_fingerprint = identity.source_fingerprint;
+        self.updated_at_ms = now_ms();
     }
 }
 
@@ -330,7 +412,7 @@ impl ShiftStore {
                     ))?,
                 identity.source_mtime_ms,
                 identity.source_fingerprint.as_deref(),
-                identity.observed_at_ms,
+                now_ms(),
             ],
         )?;
         Ok(())

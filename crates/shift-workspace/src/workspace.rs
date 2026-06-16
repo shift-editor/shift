@@ -1,8 +1,6 @@
 use std::{
-    fs::{self, File},
-    io::{self, Read},
+    io,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
@@ -11,12 +9,14 @@ use shift_font::{
     Source, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
-use shift_store::{
-    FileIdentity, ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState,
-};
+use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
 
 use crate::NewWorkspace;
 use crate::ledger::{LayerPair, Ledger, LedgerEntry, LedgerStep};
+use crate::source_identity::{
+    RecoverySelection, WorkspaceRecoveryCandidate, select_recoverable_package_workspace,
+    source_identity_snapshot, validate_source_identity_for_save,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
@@ -47,6 +47,9 @@ pub enum WorkspaceError {
     #[error("source package was modified outside Shift: {0}")]
     SourceExternallyModified(PathBuf),
 
+    #[error("ambiguous recoverable workspaces for source: {0} candidates")]
+    AmbiguousRecoveryCandidates(usize),
+
     #[error("corrupt working store: {0}")]
     CorruptWorkingStore(String),
 
@@ -62,51 +65,6 @@ pub enum WorkspaceSource {
     Untitled,
     Package { path: PathBuf },
     Imported { original_path: PathBuf },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SourceMatchKind {
-    SamePathAndFile,
-    SamePathAndFingerprint,
-    SameFileMoved,
-    SamePath,
-    PossiblePackageMove,
-}
-
-impl SourceMatchKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::SamePathAndFile => "samePathAndFile",
-            Self::SamePathAndFingerprint => "samePathAndFingerprint",
-            Self::SameFileMoved => "sameFileMoved",
-            Self::SamePath => "samePath",
-            Self::PossiblePackageMove => "possiblePackageMove",
-        }
-    }
-
-    fn score(self) -> i64 {
-        match self {
-            Self::SamePathAndFile => 50,
-            Self::SameFileMoved => 45,
-            Self::SamePathAndFingerprint => 40,
-            Self::SamePath => 20,
-            Self::PossiblePackageMove => 10,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WorkspaceRecoveryCandidate {
-    pub document_id: String,
-    pub store_path: PathBuf,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WorkspaceRecoveryMatch {
-    pub document_id: String,
-    pub store_path: PathBuf,
-    pub match_kind: SourceMatchKind,
-    pub dirty: bool,
 }
 
 pub struct FontWorkspace {
@@ -213,44 +171,8 @@ impl FontWorkspace {
     pub fn find_recoverable_package_workspace(
         source_path: impl AsRef<Path>,
         candidates: &[WorkspaceRecoveryCandidate],
-    ) -> Result<Option<WorkspaceRecoveryMatch>, WorkspaceError> {
-        let requested = source_identity_snapshot(source_path)?;
-        let mut best: Option<(WorkspaceRecoveryMatch, i64)> = None;
-
-        for candidate in candidates {
-            let Ok(store) = ShiftStore::open(&candidate.store_path) else {
-                continue;
-            };
-            let Ok(Some(state)) = store.workspace_state() else {
-                continue;
-            };
-            if state.source_kind != WorkspaceSourceKind::Package {
-                continue;
-            }
-            if !state.dirty && source_fingerprint_changed(&state.source_identity(), &requested) {
-                continue;
-            }
-            let Some(match_kind) = classify_source_match(&state, &requested) else {
-                continue;
-            };
-
-            let score = recovery_score(match_kind, &state);
-            let candidate_match = WorkspaceRecoveryMatch {
-                document_id: candidate.document_id.clone(),
-                store_path: candidate.store_path.clone(),
-                match_kind,
-                dirty: state.dirty,
-            };
-
-            if best
-                .as_ref()
-                .is_none_or(|(_, best_score)| score > *best_score)
-            {
-                best = Some((candidate_match, score));
-            }
-        }
-
-        Ok(best.map(|(candidate, _)| candidate))
+    ) -> Result<RecoverySelection, WorkspaceError> {
+        select_recoverable_package_workspace(source_path, candidates)
     }
 
     pub fn export(&self, request: FontExportRequest) -> Result<FontExportResult, WorkspaceError> {
@@ -483,18 +405,9 @@ impl FontWorkspace {
             .store
             .workspace_state()?
             .unwrap_or_else(|| WorkspaceState::package(identity.clone(), None));
-        state.source_kind = WorkspaceSourceKind::Package;
-        state.source_path = identity.source_path.clone();
-        state.canonical_source_path = identity.canonical_source_path.clone();
-        state.original_import_path = None;
-        state.source_package_id = identity.source_package_id.clone();
-        state.source_file_identity = identity.source_file_identity.clone();
-        state.source_size = identity.source_size;
-        state.source_mtime_ms = identity.source_mtime_ms;
-        state.source_fingerprint = identity.source_fingerprint.clone();
+        state.set_package_identity(identity);
         state.dirty = false;
         state.saved_revision = state.revision;
-        state.updated_at_ms = identity.observed_at_ms;
         self.store.set_workspace_state(state)?;
         Ok(())
     }
@@ -510,16 +423,7 @@ impl FontWorkspace {
             .store
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
-        state.source_kind = WorkspaceSourceKind::Package;
-        state.source_path = identity.source_path;
-        state.canonical_source_path = identity.canonical_source_path;
-        state.original_import_path = None;
-        state.source_package_id = identity.source_package_id;
-        state.source_file_identity = identity.source_file_identity;
-        state.source_size = identity.source_size;
-        state.source_mtime_ms = identity.source_mtime_ms;
-        state.source_fingerprint = identity.source_fingerprint;
-        state.updated_at_ms = identity.observed_at_ms;
+        state.set_package_identity(identity);
         self.store.set_workspace_state(state)?;
         self.source = WorkspaceSource::Package { path };
         Ok(())
@@ -817,180 +721,4 @@ fn source_from_workspace_state(state: &WorkspaceState) -> Result<WorkspaceSource
             Ok(WorkspaceSource::Imported { original_path })
         }
     }
-}
-
-fn source_identity_snapshot(
-    path: impl AsRef<Path>,
-) -> Result<SourceIdentitySnapshot, WorkspaceError> {
-    let path = path.as_ref();
-    let metadata = fs::metadata(path).map_err(|err| {
-        if err.kind() == io::ErrorKind::NotFound {
-            WorkspaceError::SourceMissing(path.to_path_buf())
-        } else {
-            WorkspaceError::Io(err)
-        }
-    })?;
-    let canonical_source_path = fs::canonicalize(path).ok();
-    let source_file_identity = file_identity(&metadata);
-    let source_size = Some(metadata.len());
-    let source_mtime_ms = metadata.modified().ok().map(system_time_ms);
-    let source_fingerprint = Some(file_fingerprint(path)?);
-
-    Ok(SourceIdentitySnapshot {
-        source_path: Some(path.to_path_buf()),
-        canonical_source_path,
-        source_package_id: None,
-        source_file_identity,
-        source_size,
-        source_mtime_ms,
-        source_fingerprint,
-        observed_at_ms: now_ms(),
-    })
-}
-
-fn validate_source_identity_for_save(
-    expected: &SourceIdentitySnapshot,
-    current: &SourceIdentitySnapshot,
-    path: &Path,
-) -> Result<(), WorkspaceError> {
-    if let (Some(expected), Some(current)) = (
-        &expected.source_file_identity,
-        &current.source_file_identity,
-    ) && expected != current
-    {
-        return Err(WorkspaceError::SourceIdentityConflict(path.to_path_buf()));
-    }
-
-    if let (Some(expected), Some(current)) = (
-        &expected.canonical_source_path,
-        &current.canonical_source_path,
-    ) && expected != current
-    {
-        return Err(WorkspaceError::SourceIdentityConflict(path.to_path_buf()));
-    }
-
-    if let (Some(expected), Some(current)) =
-        (&expected.source_fingerprint, &current.source_fingerprint)
-        && expected != current
-    {
-        return Err(WorkspaceError::SourceExternallyModified(path.to_path_buf()));
-    }
-
-    Ok(())
-}
-
-fn classify_source_match(
-    state: &WorkspaceState,
-    requested: &SourceIdentitySnapshot,
-) -> Option<SourceMatchKind> {
-    let stored = state.source_identity();
-    let same_path = paths_match(
-        &stored.canonical_source_path,
-        &requested.canonical_source_path,
-    ) || paths_match(&stored.source_path, &requested.source_path);
-    let same_file = identities_match(
-        &stored.source_file_identity,
-        &requested.source_file_identity,
-    );
-    let same_fingerprint = stored.source_fingerprint.is_some()
-        && requested.source_fingerprint.is_some()
-        && stored.source_fingerprint == requested.source_fingerprint;
-    let same_package_id = stored.source_package_id.is_some()
-        && requested.source_package_id.is_some()
-        && stored.source_package_id == requested.source_package_id;
-
-    if same_path && same_file {
-        Some(SourceMatchKind::SamePathAndFile)
-    } else if same_file {
-        Some(SourceMatchKind::SameFileMoved)
-    } else if same_path && same_fingerprint {
-        Some(SourceMatchKind::SamePathAndFingerprint)
-    } else if same_path
-        && stored.source_file_identity.is_none()
-        && stored.source_fingerprint.is_none()
-    {
-        Some(SourceMatchKind::SamePath)
-    } else if (same_package_id || same_fingerprint) && old_source_path_missing(&stored) {
-        Some(SourceMatchKind::PossiblePackageMove)
-    } else {
-        None
-    }
-}
-
-fn recovery_score(match_kind: SourceMatchKind, state: &WorkspaceState) -> i64 {
-    let dirty_bonus = if state.dirty { 1_000 } else { 0 };
-    dirty_bonus + match_kind.score() + state.revision + state.updated_at_ms / 1_000_000_000
-}
-
-fn paths_match(left: &Option<PathBuf>, right: &Option<PathBuf>) -> bool {
-    left.as_ref()
-        .zip(right.as_ref())
-        .is_some_and(|(left, right)| left == right)
-}
-
-fn identities_match(left: &Option<FileIdentity>, right: &Option<FileIdentity>) -> bool {
-    left.as_ref()
-        .zip(right.as_ref())
-        .is_some_and(|(left, right)| left == right)
-}
-
-fn old_source_path_missing(identity: &SourceIdentitySnapshot) -> bool {
-    identity
-        .source_path
-        .as_ref()
-        .is_none_or(|path| !path.exists())
-}
-
-fn source_fingerprint_changed(
-    stored: &SourceIdentitySnapshot,
-    requested: &SourceIdentitySnapshot,
-) -> bool {
-    stored.source_fingerprint.is_some()
-        && requested.source_fingerprint.is_some()
-        && stored.source_fingerprint != requested.source_fingerprint
-}
-
-fn file_fingerprint(path: &Path) -> Result<String, WorkspaceError> {
-    let mut file = File::open(path)?;
-    let mut buffer = [0u8; 8192];
-    let mut hash = 0xcbf29ce484222325u64;
-
-    loop {
-        let bytes_read = file.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        for byte in &buffer[..bytes_read] {
-            hash ^= u64::from(*byte);
-            hash = hash.wrapping_mul(0x100000001b3);
-        }
-    }
-
-    Ok(format!("fnv1a64:{hash:016x}"))
-}
-
-#[cfg(unix)]
-fn file_identity(metadata: &fs::Metadata) -> Option<FileIdentity> {
-    use std::os::unix::fs::MetadataExt;
-
-    Some(FileIdentity {
-        kind: "unix-dev-inode".to_string(),
-        value: format!("{}:{}", metadata.dev(), metadata.ino()),
-    })
-}
-
-#[cfg(not(unix))]
-fn file_identity(_metadata: &fs::Metadata) -> Option<FileIdentity> {
-    None
-}
-
-fn system_time_ms(time: SystemTime) -> i64 {
-    match time.duration_since(UNIX_EPOCH) {
-        Ok(duration) => i64::try_from(duration.as_millis()).unwrap_or(i64::MAX),
-        Err(_) => 0,
-    }
-}
-
-fn now_ms() -> i64 {
-    system_time_ms(SystemTime::now())
 }

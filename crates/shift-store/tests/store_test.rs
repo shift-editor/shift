@@ -1,7 +1,8 @@
 use shift_font::test_support::sample_font;
 use shift_store::{
-    AxisId, ComponentId, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph, NewGlyphComponent,
-    NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceKind, WorkspaceState,
+    AxisId, ComponentId, Evidence, FileIdentity, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph,
+    NewGlyphComponent, NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceIdentitySnapshot,
+    SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -65,6 +66,37 @@ fn applying_change_set_marks_workspace_state_dirty() {
     assert!(loaded.dirty);
     assert_eq!(loaded.revision, 1);
     assert_eq!(loaded.saved_revision, 0);
+}
+
+#[test]
+fn source_identity_snapshot_separates_exact_equality_from_match_evidence() {
+    let left = SourceIdentitySnapshot {
+        source_path: Some("Family.shift".into()),
+        canonical_source_path: Some("/fonts/Family.shift".into()),
+        source_package_id: None,
+        source_file_identity: Some(FileIdentity {
+            kind: "unix-dev-inode".to_string(),
+            value: "1:2".to_string(),
+        }),
+        source_size: Some(128),
+        source_mtime_ms: Some(1_000),
+        source_fingerprint: Some("fnv1a64:abc".to_string()),
+    };
+    let moved = SourceIdentitySnapshot {
+        source_path: Some("Renamed.shift".into()),
+        canonical_source_path: Some("/fonts/Renamed.shift".into()),
+        ..left.clone()
+    };
+    let unknown = SourceIdentitySnapshot {
+        source_file_identity: None,
+        source_fingerprint: None,
+        ..left.clone()
+    };
+
+    assert_ne!(left, moved);
+    assert_eq!(left.file_identity_match(&moved), Evidence::Same);
+    assert_eq!(left.canonical_path_match(&moved), Evidence::Different);
+    assert_eq!(left.fingerprint_match(&unknown), Evidence::Unknown);
 }
 
 #[test]

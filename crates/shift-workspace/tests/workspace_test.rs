@@ -6,8 +6,8 @@ use shift_font::{
 };
 use shift_source::ShiftSourcePackage;
 use shift_workspace::{
-    FontWorkspace, NewWorkspace, SourceMatchKind, WorkspaceError, WorkspaceRecoveryCandidate,
-    WorkspaceSource,
+    FontWorkspace, NewWorkspace, RecoverySelection, SourceMatchKind, WorkspaceError,
+    WorkspaceRecoveryCandidate, WorkspaceSource,
 };
 
 fn create_glyph_intent(name: &str, unicodes: Vec<u32>) -> FontIntent {
@@ -291,15 +291,16 @@ fn moved_package_open_can_recover_dirty_workspace_by_file_identity() {
     }
     fs::rename(&save_path, &moved_path).unwrap();
 
-    let recovery = FontWorkspace::find_recoverable_package_workspace(
+    let RecoverySelection::One(recovery) = FontWorkspace::find_recoverable_package_workspace(
         &moved_path,
         &[WorkspaceRecoveryCandidate {
             document_id: "doc-1".to_string(),
             store_path: store_path.clone(),
         }],
     )
-    .unwrap()
-    .expect("renamed source should match retained dirty store");
+    .unwrap() else {
+        panic!("renamed source should match retained dirty store");
+    };
 
     assert_eq!(recovery.document_id, "doc-1");
     assert_eq!(recovery.match_kind, SourceMatchKind::SameFileMoved);
@@ -330,15 +331,16 @@ fn copied_then_deleted_package_can_recover_dirty_workspace_by_fingerprint() {
     fs::copy(&save_path, &moved_path).unwrap();
     fs::remove_file(&save_path).unwrap();
 
-    let recovery = FontWorkspace::find_recoverable_package_workspace(
+    let RecoverySelection::One(recovery) = FontWorkspace::find_recoverable_package_workspace(
         &moved_path,
         &[WorkspaceRecoveryCandidate {
             document_id: "doc-1".to_string(),
             store_path,
         }],
     )
-    .unwrap()
-    .expect("moved source with new file identity should match by fingerprint");
+    .unwrap() else {
+        panic!("moved source with new file identity should match by fingerprint");
+    };
 
     assert_eq!(recovery.document_id, "doc-1");
     assert_eq!(recovery.match_kind, SourceMatchKind::PossiblePackageMove);
@@ -368,7 +370,7 @@ fn copied_package_does_not_recover_original_dirty_workspace_while_original_exist
     )
     .unwrap();
 
-    assert_eq!(recovery, None);
+    assert_eq!(recovery, RecoverySelection::None);
 }
 
 #[test]
@@ -398,7 +400,7 @@ fn clean_package_workspace_is_not_recovered_after_source_file_changes() {
     )
     .unwrap();
 
-    assert_eq!(recovery, None);
+    assert_eq!(recovery, RecoverySelection::None);
 }
 
 fn set_x_advance_intents(layer_id: LayerId, width: f64) -> FontIntentSet {

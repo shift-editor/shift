@@ -23,5 +23,5 @@ pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind,
 pub use store::ShiftStore;
 pub use types::{AxisId, ComponentId, GlyphId, LayerId, RevisionId, SourceId};
 pub use workspace_state::{
-    FileIdentity, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState,
+    Evidence, FileIdentity, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState,
 };

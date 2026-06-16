@@ -19,7 +19,8 @@ use shift_wire::{
   Source,
 };
 use shift_workspace::{
-  FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceRecoveryCandidate, WorkspaceSource,
+  FontWorkspace, NewWorkspace, RecoverySelection, WorkspaceError, WorkspaceRecoveryCandidate,
+  WorkspaceSource,
 };
 use std::{path::Path, sync::Arc};
 
@@ -304,11 +305,14 @@ impl Bridge {
         store_path: candidate.store_path.into(),
       })
       .collect::<Vec<_>>();
-    let Some(recovery_match) =
-      FontWorkspace::find_recoverable_package_workspace(source_path, &candidates)?
-    else {
-      return Ok(None);
-    };
+    let recovery_match =
+      match FontWorkspace::find_recoverable_package_workspace(source_path, &candidates)? {
+        RecoverySelection::None => return Ok(None),
+        RecoverySelection::One(recovery_match) => recovery_match,
+        RecoverySelection::Ambiguous(matches) => {
+          return Err(WorkspaceError::AmbiguousRecoveryCandidates(matches.len()).into());
+        }
+      };
 
     Ok(Some(NapiWorkspaceRecoveryMatch {
       document_id: recovery_match.document_id,
