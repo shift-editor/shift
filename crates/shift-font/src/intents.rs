@@ -120,6 +120,12 @@ pub enum FontIntent {
         name: String,
         unicodes: Vec<u32>,
     },
+    UpdateGlyph {
+        /// Stable id of the existing glyph to rename.
+        glyph_id: GlyphId,
+        new_name: GlyphName,
+        new_unicodes: Vec<u32>,
+    },
     CreateAxis {
         axis: Axis,
     },
@@ -149,7 +155,10 @@ impl FontIntent {
             | Self::SetXAdvance { layer_id, .. }
             | Self::ApplyBooleanOp { layer_id, .. } => Some(layer_id),
 
-            Self::CreateGlyph { .. } | Self::CreateAxis { .. } | Self::CreateSource { .. } => None,
+            Self::CreateGlyph { .. }
+            | Self::UpdateGlyph { .. }
+            | Self::CreateAxis { .. }
+            | Self::CreateSource { .. } => None,
         }
     }
 
@@ -205,7 +214,7 @@ impl Font {
 
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
-                for layer_id in self.apply_create_intent(intent, &mut changes)? {
+                for layer_id in self.apply_font_intent(intent, &mut changes)? {
                     touch(&mut touched, layer_id, true);
                 }
                 continue;
@@ -234,9 +243,9 @@ impl Font {
         Ok(AppliedIntents { changes, layers })
     }
 
-    /// Applies one create intent, pushing every change it produces.
+    /// Applies one font-level intent, pushing every change it produces.
     /// Returns the created layer ids so the caller can mark them touched.
-    fn apply_create_intent(
+    fn apply_font_intent(
         &mut self,
         intent: &FontIntent,
         changes: &mut FontChangeSet,
@@ -247,6 +256,18 @@ impl Font {
                 name,
                 unicodes,
             } => self.apply_create_glyph(glyph_id.clone(), name, unicodes.clone(), changes),
+            FontIntent::UpdateGlyph {
+                glyph_id,
+                new_name,
+                new_unicodes,
+            } => {
+                changes.push(self.apply_update_glyph(
+                    glyph_id.clone(),
+                    new_name.clone(),
+                    new_unicodes.clone(),
+                )?);
+                Ok(Vec::new())
+            }
             FontIntent::CreateAxis { axis } => {
                 self.apply_create_axis(axis, changes)?;
                 Ok(Vec::new())
@@ -357,6 +378,30 @@ impl Font {
         }
 
         Ok(layer_ids)
+    }
+
+    fn apply_update_glyph(
+        &mut self,
+        glyph_id: GlyphId,
+        new_name: GlyphName,
+        new_unicodes: Vec<u32>,
+    ) -> CoreResult<FontChange> {
+        let old_glyph = self
+            .glyph(glyph_id.clone())
+            .ok_or(CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let old_name = old_glyph.glyph_name().clone();
+        let old_unicodes = old_glyph.unicodes().to_vec();
+
+        self.rename_glyph(glyph_id.clone(), new_name.clone())?;
+        self.set_glyph_unicodes(glyph_id.clone(), new_unicodes.clone())?;
+
+        Ok(FontChange::glyph_identity_changed(
+            glyph_id,
+            old_name,
+            new_name,
+            old_unicodes,
+            new_unicodes,
+        ))
     }
 
     fn apply_intent(&mut self, intent: &FontIntent) -> CoreResult<FontChange> {
@@ -638,9 +683,10 @@ impl Font {
                 Ok(FontChange::layer_geometry_replaced(layer))
             }
             FontIntent::CreateGlyph { .. }
+            | FontIntent::UpdateGlyph { .. }
             | FontIntent::CreateAxis { .. }
             | FontIntent::CreateSource { .. } => {
-                unreachable!("create intents take the apply_create_intent path")
+                unreachable!("font-level intents take the apply_font_intent path")
             }
         }
     }

@@ -65,6 +65,10 @@ export class ApplicationMenu {
         submenu: this.#fileItems(),
       },
       {
+        label: "Edit",
+        submenu: this.#editItems(),
+      },
+      {
         label: "View",
         submenu: [
           ...this.#viewZoomItems(),
@@ -81,6 +85,10 @@ export class ApplicationMenu {
       {
         label: "File",
         submenu: this.#fileItems(),
+      },
+      {
+        label: "Edit",
+        submenu: this.#editItems(),
       },
       {
         label: "View",
@@ -108,6 +116,16 @@ export class ApplicationMenu {
       { type: "separator" },
       this.#commandItem("file.save"),
       this.#commandItem("file.saveAs"),
+    ];
+  }
+
+  #editItems(): MenuItemConstructorOptions[] {
+    return [
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { type: "separator" },
+      { role: "selectAll" },
     ];
   }
 

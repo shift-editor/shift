@@ -440,8 +440,11 @@ export class Font {
    *
    * @throws {Error} always — glyph mutations return with workspace change sets.
    */
-  updateGlyphIdentity(_fromName: GlyphName, _name: GlyphName, _unicodes: readonly Unicode[]): void {
-    throw new Error("editing is not wired to the workspace yet");
+  updateGlyphIdentity(glyphId: GlyphId, newName: GlyphName, newUnicodes: Unicode[]): void {
+    this.editQueue.push({
+      kind: "updateGlyph",
+      updateGlyph: { glyphId, newName, newUnicodes },
+    });
   }
 
   /**

@@ -756,6 +756,14 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         unicodes: payload.unicodes,
       })
     }
+    "updateGlyph" => {
+      let payload = intent.update_glyph.ok_or_else(|| missing("updateGlyph"))?;
+      Ok(FontIntent::UpdateGlyph {
+        glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
+        new_name: payload.new_name.into(),
+        new_unicodes: payload.new_unicodes,
+      })
+    }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
       let mut axis = FontAxis::with_id(
@@ -857,6 +865,7 @@ mod tests {
       set_x_advance: None,
       apply_boolean_op: None,
       create_glyph: None,
+      update_glyph: None,
       create_axis: None,
       create_source: None,
     }

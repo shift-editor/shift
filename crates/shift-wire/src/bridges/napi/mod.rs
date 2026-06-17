@@ -496,6 +496,7 @@ pub struct NapiFontIntent {
     pub set_x_advance: Option<NapiSetXAdvanceIntent>,
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
     pub create_glyph: Option<NapiCreateGlyphIntent>,
+    pub update_glyph: Option<NapiUpdateGlyphIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
 }
@@ -511,6 +512,18 @@ pub struct NapiCreateGlyphIntent {
     pub name: String,
     #[napi(ts_type = "Array<Unicode>")]
     pub unicodes: Vec<u32>,
+}
+
+/// Font-level glyph update. The glyph id targets an existing committed glyph;
+/// names are user-editable labels and are not stable identity.
+#[napi(object)]
+pub struct NapiUpdateGlyphIntent {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "GlyphName")]
+    pub new_name: String,
+    #[napi(ts_type = "Array<Unicode>")]
+    pub new_unicodes: Vec<u32>,
 }
 
 /// Font-level axis creation. The axis id is client-minted; the tag is an
