@@ -1,15 +1,22 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import type { GlyphCategory, GlyphCategoryCatalog, GlyphCategorySummary } from "@shift/glyph-info";
-import type { GlyphName, GlyphRecord } from "@shift/types";
+import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
 import { useSignalState } from "@/lib/signals";
 import { getEditor, getGlyphInfo } from "@/store/appStore";
-import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
 
-export interface GlyphCatalogItem {
-  readonly name: GlyphName;
-  readonly unicode: number | null;
-  readonly exists: boolean;
-}
+export type GlyphCatalogItem =
+  | {
+      readonly id: GlyphId;
+      readonly name: GlyphName;
+      readonly unicode: number | null;
+      readonly exists: true;
+    }
+  | {
+      readonly id: null;
+      readonly name: GlyphName;
+      readonly unicode: number | null;
+      readonly exists: false;
+    };
 
 export interface GlyphCatalogState {
   availableGlyphs: GlyphCatalogItem[];
@@ -49,20 +56,20 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);
 
-  const starterUnicodes = useMemo(
-    () => Object.values(ADOBE_LATIN_1).map((g) => parseInt(g.unicode, 16)),
-    [],
-  );
+  const starterUnicodes = useMemo(() => [], []);
 
   const availableGlyphs = useMemo(
     () =>
       fontLoaded && glyphRecords.length > 0
         ? glyphRecords.map(glyphCatalogItemFromRecord)
-        : starterUnicodes.map((unicode) => ({
-            name: font.nameForUnicode(unicode),
-            unicode,
-            exists: false,
-          })),
+        : starterUnicodes.map(
+            (unicode): GlyphCatalogItem => ({
+              id: null,
+              name: font.nameForUnicode(unicode),
+              unicode,
+              exists: false,
+            }),
+          ),
     [font, fontLoaded, glyphRecords, starterUnicodes],
   );
 
@@ -140,6 +147,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
 
 function glyphCatalogItemFromRecord(record: GlyphRecord): GlyphCatalogItem {
   return {
+    id: record.id,
     name: record.name,
     unicode: record.unicodes[0] ?? null,
     exists: true,

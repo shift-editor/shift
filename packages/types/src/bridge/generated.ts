@@ -240,6 +240,7 @@ export interface FontIntent {
   setXAdvance?: SetXAdvanceIntent
   applyBooleanOp?: BooleanOpIntent
   createGlyph?: CreateGlyphIntent
+  updateGlyph?: UpdateGlyphIntent
   createAxis?: CreateAxisIntent
   createSource?: CreateSourceIntent
 }
@@ -413,4 +414,14 @@ export interface TranslatePointsIntent {
   pointIds: Array<PointId>
   dx: number
   dy: number
+}
+
+/**
+ * Font-level glyph update. The glyph id targets an existing committed glyph;
+ * names are user-editable labels and are not stable identity.
+ */
+export interface UpdateGlyphIntent {
+  glyphId: GlyphId
+  newName: GlyphName
+  newUnicodes: Array<Unicode>
 }

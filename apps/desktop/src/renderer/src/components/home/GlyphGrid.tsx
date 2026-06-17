@@ -177,7 +177,6 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
   const editor = getEditor();
   const glyphInfo = getGlyphInfo();
   const glyphName = glyph.name;
-  const glyphExists = glyph.exists;
   const [draft, setDraft] = useState(glyphName);
 
   useEffect(() => {
@@ -186,7 +185,7 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
 
   const commit = () => {
     const next = draft.trim() as GlyphName;
-    if (!glyphExists || next === glyphName) {
+    if (!glyph.exists || next === glyphName) {
       setDraft(glyphName);
       return;
     }
@@ -197,13 +196,13 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
     }
 
     const resolved = glyphInfo.getGlyphByName(next);
-    editor.font.updateGlyphIdentity(glyphName, next, resolved ? [resolved.codepoint] : []);
+    editor.font.updateGlyphIdentity(glyph.id, next, resolved ? [resolved.codepoint] : []);
   };
 
   return (
     <Input
       value={draft}
-      readOnly={!glyphExists}
+      readOnly={!glyph.exists}
       onChange={(event) => setDraft(event.currentTarget.value as GlyphName)}
       onBlur={commit}
       onKeyDown={(event) => {

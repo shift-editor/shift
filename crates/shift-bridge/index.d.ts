@@ -235,6 +235,7 @@ export interface NapiFontIntent {
   setXAdvance?: NapiSetXAdvanceIntent
   applyBooleanOp?: NapiBooleanOpIntent
   createGlyph?: NapiCreateGlyphIntent
+  updateGlyph?: NapiUpdateGlyphIntent
   createAxis?: NapiCreateAxisIntent
   createSource?: NapiCreateSourceIntent
 }
@@ -411,4 +412,14 @@ export interface NapiTranslatePointsIntent {
   pointIds: Array<PointId>
   dx: number
   dy: number
+}
+
+/**
+ * Font-level glyph update. The glyph id targets an existing committed glyph;
+ * names are user-editable labels and are not stable identity.
+ */
+export interface NapiUpdateGlyphIntent {
+  glyphId: GlyphId
+  newName: GlyphName
+  newUnicodes: Array<Unicode>
 }
