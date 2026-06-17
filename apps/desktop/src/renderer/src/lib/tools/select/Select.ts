@@ -70,6 +70,15 @@ export class Select extends BaseTool<SelectState, Select> {
     return { type: "default" };
   }
 
+  protected override isEditing(state: SelectState): boolean {
+    return (
+      state.type === "translating" ||
+      state.type === "resizing" ||
+      state.type === "rotating" ||
+      state.type === "bending"
+    );
+  }
+
   initialState(): SelectState {
     return { type: "idle" };
   }

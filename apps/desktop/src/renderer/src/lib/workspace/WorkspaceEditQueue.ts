@@ -9,7 +9,9 @@ import type {
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import { signal, type Signal } from "@/lib/signals/signal";
 import type { GlyphSourceState } from "@/lib/model/GlyphSourceState";
-import type { WorkspaceClient } from "./WorkspaceClient";
+import type { WorkspaceSession } from "./WorkspaceSession";
+
+export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
 /** Where one layer's replace-grade echoes fold; registered per open session. */
 type FoldTarget = {
@@ -36,16 +38,19 @@ type FoldTarget = {
  * watermark.
  */
 export class WorkspaceEditQueue {
-  readonly #workspace: WorkspaceClient;
+  readonly #workspace: WorkspaceSession;
   readonly #targets = new Map<LayerId, FoldTarget>();
   readonly #$settled = signal(true);
+  readonly #commitState = signal<WorkspaceCommitState>("idle", {
+    name: "workspace.commitState",
+  });
 
   #queue: FontIntent[] = [];
   #flushQueued = false;
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
 
-  constructor(workspace: WorkspaceClient) {
+  constructor(workspace: WorkspaceSession) {
     this.#workspace = workspace;
   }
 
@@ -57,6 +62,18 @@ export class WorkspaceEditQueue {
     return this.#$settled;
   }
 
+  /**
+   * Returns the renderer commit lifecycle for locally-authored edits.
+   *
+   * @remarks
+   * This is intentionally separate from utility-owned `documentState.dirty`.
+   * It covers the short window after a tool commits an edit locally but before
+   * the utility process has echoed the new dirty state.
+   */
+  get commitStateCell(): Signal<WorkspaceCommitState> {
+    return this.#commitState;
+  }
+
   /** Routes one layer's echoes to its session state. */
   register(layerId: LayerId, target: FoldTarget): void {
     this.#targets.set(layerId, target);
@@ -66,6 +83,9 @@ export class WorkspaceEditQueue {
   push(intent: FontIntent): void {
     this.#queue.push(intent);
     this.#$settled.set(false);
+    if (this.#commitState.peek() === "idle") {
+      this.#commitState.set("queued");
+    }
 
     if (!this.#flushQueued) {
       this.#flushQueued = true;
@@ -83,8 +103,7 @@ export class WorkspaceEditQueue {
 
   /** Replays the latest undo entry after pending pushes flush. */
   undo(): Promise<AppliedChange | null> {
-    this.#enqueueFlush();
-    return this.#serialize(async () => {
+    return this.#withFlush(async () => {
       const applied = await this.#workspace.undo();
       if (applied) this.#fold(applied);
       return applied;
@@ -93,18 +112,33 @@ export class WorkspaceEditQueue {
 
   /** Pulls replace-grade glyph state, serialized behind pending writes. */
   glyph(glyphId: GlyphId, sourceId: SourceId): Promise<GlyphState | null> {
-    this.#enqueueFlush();
-    return this.#serialize(() => this.#workspace.glyph(glyphId, sourceId));
+    return this.#withFlush(() => this.#workspace.glyph(glyphId, sourceId));
   }
 
   /** Replays the latest redo entry after pending pushes flush. */
   redo(): Promise<AppliedChange | null> {
-    this.#enqueueFlush();
-    return this.#serialize(async () => {
+    return this.#withFlush(async () => {
       const applied = await this.#workspace.redo();
       if (applied) this.#fold(applied);
       return applied;
     });
+  }
+
+  /** Creates an untitled workspace behind every queued and in-flight edit. */
+  create(): Promise<void> {
+    return this.#withFlush(() => this.#workspace.create());
+  }
+
+  /** Opens a workspace behind every queued and in-flight edit. */
+  open(path: string): Promise<void> {
+    return this.#withFlush(async () => {
+      await this.#workspace.open(path);
+    });
+  }
+
+  /** Reads document state behind every queued and in-flight edit. */
+  state(): Promise<WorkspaceDocumentState | null> {
+    return this.#withFlush(() => this.#workspace.documentState());
   }
 
   /**
@@ -113,10 +147,14 @@ export class WorkspaceEditQueue {
    * @param path - target path for Save As, or null to save the current target.
    */
   save(path: string | null): Promise<WorkspaceDocumentState> {
-    this.#enqueueFlush();
-    return this.#serialize(() =>
+    return this.#withFlush(() =>
       path === null ? this.#workspace.save() : this.#workspace.saveAs(path),
     );
+  }
+
+  #withFlush<T>(job: () => Promise<T>): Promise<T> {
+    this.#enqueueFlush();
+    return this.#serialize(job);
   }
 
   #enqueueFlush(): void {
@@ -128,7 +166,9 @@ export class WorkspaceEditQueue {
 
     void this.#serialize(async () => {
       try {
-        this.#fold(await this.#workspace.apply(intents));
+        this.#commitState.set("applying");
+        const applied = await this.#workspace.apply(intents);
+        this.#fold(applied);
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
         await this.#resync();
@@ -152,6 +192,7 @@ export class WorkspaceEditQueue {
     this.#busy -= 1;
     if (this.#busy === 0 && this.#queue.length === 0) {
       this.#$settled.set(true);
+      this.#commitState.set("idle");
     }
   }
 

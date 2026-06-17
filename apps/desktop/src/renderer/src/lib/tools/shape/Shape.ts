@@ -39,6 +39,10 @@ export class Shape extends BaseTool<ShapeState> {
     return { type: "crosshair" };
   }
 
+  protected override isEditing(state: ShapeState): boolean {
+    return state.type === "dragging";
+  }
+
   override activate(): void {
     this.state = { type: "ready" };
   }

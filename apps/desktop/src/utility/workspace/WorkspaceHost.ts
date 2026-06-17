@@ -77,23 +77,23 @@ export class WorkspaceHost {
         this.#serialize(() =>
           this.#documentId === null ? null : this.#snapshot(this.#documentId),
         ),
+      "document.state": () => this.#serialize(() => this.#documentState()),
       "workspace.apply": ({ intents, label }) =>
         this.#serialize(() => {
           const applied = this.#bridge.apply(intents, label);
-          this.#emitDocumentChanged();
-          return applied;
+          return { applied, documentState: this.#emitDocumentChanged() };
         }),
       "workspace.undo": () =>
         this.#serialize(() => {
           const applied = this.#bridge.undo();
-          if (applied) this.#emitDocumentChanged();
-          return applied;
+          const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
+          return { applied, documentState };
         }),
       "workspace.redo": () =>
         this.#serialize(() => {
           const applied = this.#bridge.redo();
-          if (applied) this.#emitDocumentChanged();
-          return applied;
+          const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
+          return { applied, documentState };
         }),
       // Save rides the edit lane: the same #serialize queue orders it behind
       // every committed apply/undo/redo, so it never writes stale state.
@@ -176,6 +176,7 @@ export class WorkspaceHost {
     }
 
     this.#shell?.emit("document.changed", state);
+    this.#sync?.emit("document.changed", state);
     return state;
   }
 

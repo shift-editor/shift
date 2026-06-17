@@ -1,5 +1,6 @@
 import type { MessagePortMain, UtilityProcess } from "electron";
 import type { MessagePort as NodeMessagePort } from "node:worker_threads";
+import { errorToMessage } from "../errors";
 
 /** One delivered transport message: structured-clone payload plus transferred ports. */
 export type TransportMessage = { data: unknown; ports: readonly unknown[] };
@@ -211,9 +212,7 @@ export function serveChannel<Calls extends CallMap, Events extends EventMap>(
         kind: "response",
         id: request.id,
         ok: false,
-        error: {
-          message: error instanceof Error ? error.message : String(error),
-        },
+        error: { message: errorToMessage(error) },
       });
     }
   };

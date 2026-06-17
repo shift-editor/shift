@@ -5,12 +5,12 @@ import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker
 import { Channel, nodePortTransport } from "@shared/workspace/channel";
 import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
-import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
+import { WorkspaceSession } from "@/lib/workspace/WorkspaceSession";
 import { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import { Font } from "@/lib/model/Font";
 
 export type WorkspaceStack = {
-  client: WorkspaceClient;
+  client: WorkspaceSession;
   editQueue: WorkspaceEditQueue;
   font: Font;
 };
@@ -32,7 +32,7 @@ export function createWorkspaceStack(): WorkspaceStack {
   }).start();
   const shell = new Channel<ShellCallMap, ShellEventMap>(nodePortTransport(shellLane.port1));
 
-  const client = new WorkspaceClient(null, {
+  const client = new WorkspaceSession(null, {
     transport: async () => {
       const lane = new MessageChannel();
       await shell.call("workspace.connect", undefined, [lane.port1]);
@@ -40,7 +40,7 @@ export function createWorkspaceStack(): WorkspaceStack {
     },
   });
   const editQueue = new WorkspaceEditQueue(client);
-  const font = new Font(client.$workspace, editQueue);
+  const font = new Font(client.workspaceCell, editQueue);
 
   return { client, editQueue, font };
 }

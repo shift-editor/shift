@@ -103,6 +103,7 @@ export class ApplicationMenu {
 
   #fileItems(): MenuItemConstructorOptions[] {
     return [
+      this.#commandItem("file.new"),
       this.#commandItem("file.open"),
       { type: "separator" },
       this.#commandItem("file.save"),

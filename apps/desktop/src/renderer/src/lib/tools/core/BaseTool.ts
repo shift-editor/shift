@@ -40,6 +40,7 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
   /** Ordered behavior list -- first match wins on each event. */
   abstract readonly behaviors: Behavior<S, TTool>[];
   readonly cursorCell: ComputedSignal<CursorType>;
+  readonly isEditingCell: ComputedSignal<boolean>;
   readonly stateCell: Signal<S>;
   readonly #stateCell: WritableSignal<S>;
   state: S;
@@ -58,6 +59,9 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
     this.cursorCell = computed(() => this.getCursor(this.stateCell.value), {
       name: `tool.${this.constructor.name}.cursor`,
     });
+    this.isEditingCell = computed(() => this.isEditing(this.stateCell.value), {
+      name: `tool.${this.constructor.name}.isEditing`,
+    });
   }
 
   getCursor(state: S): CursorType {
@@ -74,6 +78,11 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
 
   defaultSettings(): Settings {
     return {} as Settings;
+  }
+
+  protected isEditing(state: S): boolean {
+    void state;
+    return false;
   }
 
   /** Return a state to short-circuit the behavior loop, or null to continue. */

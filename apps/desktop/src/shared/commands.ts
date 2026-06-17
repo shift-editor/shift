@@ -6,6 +6,7 @@
  * behavior for each command.
  */
 export type CommandId =
+  | "file.new"
   | "file.open"
   | "file.save"
   | "file.saveAs"
