@@ -36,6 +36,7 @@ import {
 } from "../transform";
 import {
   batch,
+  computed,
   effect,
   signal,
   type Effect,
@@ -154,6 +155,7 @@ export class Editor {
   >;
   #activeTool: WritableSignal<ToolName>;
   #activeToolState: WritableSignal<ActiveToolState>;
+  #isEditing: Signal<boolean>;
 
   /**
    * Runtime services with lifecycle or side effects.
@@ -242,9 +244,12 @@ export class Editor {
         name: "editor.tool.state",
       },
     );
-
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
+    this.#isEditing = computed(
+      () => this.#toolManager.activeToolCell.value?.isEditingCell.value ?? false,
+      { name: "editor.isEditing" },
+    );
 
     this.#clipboard = new Clipboard(options.clipboard);
 
@@ -327,6 +332,14 @@ export class Editor {
 
   public get activeToolStateCell(): Signal<ActiveToolState> {
     return this.#activeToolState;
+  }
+
+  public get isEditing(): boolean {
+    return this.#isEditing.peek();
+  }
+
+  public get isEditingCell(): Signal<boolean> {
+    return this.#isEditing;
   }
 
   // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor

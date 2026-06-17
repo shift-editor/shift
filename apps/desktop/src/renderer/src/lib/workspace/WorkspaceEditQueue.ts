@@ -9,7 +9,9 @@ import type {
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import { signal, type Signal } from "@/lib/signals/signal";
 import type { GlyphSourceState } from "@/lib/model/GlyphSourceState";
-import type { WorkspaceClient } from "./WorkspaceClient";
+import type { WorkspaceSession } from "./WorkspaceSession";
+
+export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
 /** Where one layer's replace-grade echoes fold; registered per open session. */
 type FoldTarget = {
@@ -36,16 +38,19 @@ type FoldTarget = {
  * watermark.
  */
 export class WorkspaceEditQueue {
-  readonly #workspace: WorkspaceClient;
+  readonly #workspace: WorkspaceSession;
   readonly #targets = new Map<LayerId, FoldTarget>();
   readonly #$settled = signal(true);
+  readonly #commitState = signal<WorkspaceCommitState>("idle", {
+    name: "workspace.commitState",
+  });
 
   #queue: FontIntent[] = [];
   #flushQueued = false;
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
 
-  constructor(workspace: WorkspaceClient) {
+  constructor(workspace: WorkspaceSession) {
     this.#workspace = workspace;
   }
 
@@ -57,6 +62,18 @@ export class WorkspaceEditQueue {
     return this.#$settled;
   }
 
+  /**
+   * Returns the renderer commit lifecycle for locally-authored edits.
+   *
+   * @remarks
+   * This is intentionally separate from utility-owned `documentState.dirty`.
+   * It covers the short window after a tool commits an edit locally but before
+   * the utility process has echoed the new dirty state.
+   */
+  get commitStateCell(): Signal<WorkspaceCommitState> {
+    return this.#commitState;
+  }
+
   /** Routes one layer's echoes to its session state. */
   register(layerId: LayerId, target: FoldTarget): void {
     this.#targets.set(layerId, target);
@@ -66,6 +83,9 @@ export class WorkspaceEditQueue {
   push(intent: FontIntent): void {
     this.#queue.push(intent);
     this.#$settled.set(false);
+    if (this.#commitState.peek() === "idle") {
+      this.#commitState.set("queued");
+    }
 
     if (!this.#flushQueued) {
       this.#flushQueued = true;
@@ -146,7 +166,9 @@ export class WorkspaceEditQueue {
 
     void this.#serialize(async () => {
       try {
-        this.#fold(await this.#workspace.apply(intents));
+        this.#commitState.set("applying");
+        const applied = await this.#workspace.apply(intents);
+        this.#fold(applied);
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
         await this.#resync();
@@ -170,6 +192,7 @@ export class WorkspaceEditQueue {
     this.#busy -= 1;
     if (this.#busy === 0 && this.#queue.length === 0) {
       this.#$settled.set(true);
+      this.#commitState.set("idle");
     }
   }
 

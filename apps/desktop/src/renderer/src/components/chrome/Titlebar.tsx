@@ -82,7 +82,7 @@ export const Titlebar = () => {
 
   return (
     <div
-      className="titlebar flex items-center gap-2 px-3 py-2"
+      className="titlebar-drag flex items-center gap-2 px-3 py-2"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

@@ -2,6 +2,7 @@ import type { MessagePortMain } from "electron";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import type { DocumentCallMap, DocumentEventMap } from "../../shared/ipc/contract";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
+import { createShiftLogger, type ShiftLogger } from "../logging";
 
 export interface Document {
   readonly connected: boolean;
@@ -20,7 +21,13 @@ export interface Document {
  * mutating the utility process directly.
  */
 export class DocumentClient implements Document {
+  readonly #log: ShiftLogger;
+
   #channel: Channel<DocumentCallMap, DocumentEventMap> | null = null;
+
+  constructor(log: ShiftLogger = createShiftLogger("document.client")) {
+    this.#log = log;
+  }
 
   get connected(): boolean {
     return this.#channel !== null;
@@ -28,6 +35,12 @@ export class DocumentClient implements Document {
 
   /** Replaces the active renderer document lane. */
   connect(port: MessagePortMain): void {
+    if (this.#channel) {
+      this.#log.info("replacing document renderer connection");
+    } else {
+      this.#log.info("document renderer connected");
+    }
+
     this.#channel?.dispose();
     this.#channel = new Channel<DocumentCallMap, DocumentEventMap>(electronPortTransport(port));
   }
@@ -50,6 +63,12 @@ export class DocumentClient implements Document {
 
   /** Disconnects the active renderer document lane. */
   dispose(): void {
+    if (!this.#channel) {
+      this.#log.debug("document renderer already disconnected");
+      return;
+    }
+
+    this.#log.info("document renderer disconnected");
     this.#channel?.dispose();
     this.#channel = null;
   }
@@ -59,6 +78,7 @@ export class DocumentClient implements Document {
     payload: DocumentCallMap[K]["request"],
   ): Promise<DocumentCallMap[K]["response"]> {
     if (!this.#channel) {
+      this.#log.warn("document request failed: renderer is not connected", { type });
       return Promise.reject(new Error("document renderer is not connected"));
     }
 

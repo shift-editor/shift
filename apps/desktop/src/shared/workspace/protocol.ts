@@ -82,11 +82,17 @@ export type SyncCallMap = {
    */
   "workspace.apply": {
     request: { intents: FontIntent[]; label?: string };
-    response: AppliedChange;
+    response: { applied: AppliedChange; documentState: WorkspaceDocumentState };
   };
   /** Replays the most recent ledger entry; null when the stack is empty. */
-  "workspace.undo": { request: void; response: AppliedChange | null };
-  "workspace.redo": { request: void; response: AppliedChange | null };
+  "workspace.undo": {
+    request: void;
+    response: { applied: AppliedChange | null; documentState: WorkspaceDocumentState | null };
+  };
+  "workspace.redo": {
+    request: void;
+    response: { applied: AppliedChange | null; documentState: WorkspaceDocumentState | null };
+  };
   /**
    * Saves to the current package target, or rejects when the document still
    * needs a path. Rides the edit lane so the utility serializes it behind every
@@ -106,4 +112,6 @@ export type SyncCallMap = {
   };
 };
 
-export type SyncEventMap = Record<string, never>;
+export type SyncEventMap = {
+  "document.changed": WorkspaceDocumentState | null;
+};

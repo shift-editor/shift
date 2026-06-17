@@ -45,6 +45,10 @@ export class Pen extends BaseTool<PenState> {
     return { type: "pen" };
   }
 
+  protected override isEditing(state: PenState): boolean {
+    return state.type === "dragging";
+  }
+
   initialState(): PenState {
     return { type: "idle" };
   }

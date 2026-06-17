@@ -3,7 +3,7 @@ import { electronSystemClipboard } from "@/lib/clipboard";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { Font } from "@/lib/model/Font";
-import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
+import { WorkspaceSession } from "@/lib/workspace/WorkspaceSession";
 import { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import { getShiftHost } from "@/host/shiftHost";
 import type { DocumentCallMap, DocumentEventMap } from "@shared/ipc/contract";
@@ -15,9 +15,9 @@ export function getGlyphInfo(): GlyphInfo {
   return instance;
 }
 
-const workspace = new WorkspaceClient(getShiftHost());
+const workspace = new WorkspaceSession(getShiftHost());
 const editQueue = new WorkspaceEditQueue(workspace);
-const font = new Font(workspace.$workspace, editQueue);
+const font = new Font(workspace.workspaceCell, editQueue);
 const editor = new Editor({ font, clipboard: electronSystemClipboard });
 registerBuiltInTools(editor);
 
@@ -78,6 +78,7 @@ function nextDocumentPort(): { received: Promise<MessagePort>; cancel: () => voi
 }
 
 export const getWorkspace = () => workspace;
+export const getEditQueue = () => editQueue;
 export const getEditor = () => editor;
 export const getFont = () => font;
 

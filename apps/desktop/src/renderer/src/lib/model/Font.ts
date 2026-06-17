@@ -274,7 +274,7 @@ export class Font {
    * Projects the renderer's workspace snapshot into the font domain model.
    *
    * @param $workspace - Single source of workspace truth owned by
-   *   `WorkspaceClient`. There is no load: every derived value follows this
+   *   `WorkspaceSession`. There is no load: every derived value follows this
    *   signal, and `null` means no font is open.
    * @param editQueue - Optional queue used by editable projections to submit
    *   committed edits to the utility workspace.

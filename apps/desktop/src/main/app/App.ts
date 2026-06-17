@@ -101,6 +101,7 @@ export class App {
       });
       this.#lifecycle.registerWindow(this.#workingWindow, {
         onClosed: () => {
+          this.#log.info("working window closed");
           this.#workingWindow = null;
           this.#documentClient.dispose();
         },
@@ -111,6 +112,7 @@ export class App {
       this.#log.info("finished when ready callback");
     });
     app.on("will-quit", () => {
+      this.#log.info("will quit: disposing app services");
       this.#documentClient.dispose();
       this.#workspace.stop();
     });
@@ -141,24 +143,29 @@ export class App {
       return this.#commands.run(id, this.#commandContext());
     });
     ipc.handle(ipcMain, "document.connect", (event) => {
+      this.#log.info("document connect requested");
       const { port1, port2 } = new MessageChannelMain();
 
       this.#documentClient.connect(port1);
       event.sender.postMessage("document.port", null, [port2]);
+      this.#log.info("document port sent to renderer");
     });
     ipc.handle(ipcMain, "workspace.connect", async (event) => {
+      this.#log.info("workspace connect requested");
       const { port1, port2 } = new MessageChannelMain();
 
       try {
         await this.#workspace.whenReady();
         await this.#workspace.connectSyncLane(port1);
       } catch (error) {
+        this.#log.error("workspace connect failed", error);
         port1.close();
         port2.close();
         throw error;
       }
 
       event.sender.postMessage("workspace.port", null, [port2]);
+      this.#log.info("workspace port sent to renderer");
     });
   }
 

@@ -9,6 +9,7 @@ import { errorToMessage } from "../../shared/errors";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import type { Window } from "../windows/Window";
 import type { Document } from "./DocumentClient";
+import { createShiftLogger, type ShiftLogger } from "../logging";
 
 const OPEN_FONT_EXTENSIONS = [
   "shift",
@@ -24,6 +25,7 @@ export type DocumentSessionOptions = {
   document: Document;
   activeWindow: () => Window | null;
   applicationName: () => string;
+  log?: ShiftLogger;
 };
 
 export type CloseReason = "window" | "quit" | "replace-document";
@@ -42,6 +44,7 @@ export class DocumentSession {
   readonly #document: Document;
   readonly #activeWindow: () => Window | null;
   readonly #applicationName: () => string;
+  readonly #log: ShiftLogger;
 
   #state: WorkspaceDocumentState | null = null;
 
@@ -49,28 +52,48 @@ export class DocumentSession {
     this.#document = options.document;
     this.#activeWindow = options.activeWindow;
     this.#applicationName = options.applicationName;
+    this.#log = options.log ?? createShiftLogger("document.session");
   }
 
   /** Creates an untitled workspace through the renderer edit lane. */
   async create(): Promise<void> {
-    if (!(await this.confirmClose("replace-document"))) return;
+    this.#log.info("new document requested");
+    if (!(await this.confirmClose("replace-document"))) {
+      this.#log.info("new document canceled by close guard");
+      return;
+    }
 
     await this.#document.create();
+    this.#log.info("new document created");
   }
 
   /** Runs Open from main with a native open dialog. */
   async open(): Promise<void> {
+    this.#log.info("open document requested");
     const openPath = await this.#showOpenDialog();
-    if (!openPath) return;
+    if (!openPath) {
+      this.#log.info("open document canceled before file selection");
+      return;
+    }
 
-    if (!(await this.confirmClose("replace-document"))) return;
+    if (!(await this.confirmClose("replace-document"))) {
+      this.#log.info("open document canceled by close guard", { path: openPath });
+      return;
+    }
 
     await this.#requestOpen(openPath);
+    this.#log.info("open document completed", { path: openPath });
   }
 
   /** Returns whether a close transition needs document confirmation. */
   shouldConfirmClose(): boolean {
-    return this.#document.connected || this.#state?.dirty === true;
+    const shouldConfirm = this.#document.connected || this.#state?.dirty === true;
+    this.#log.debug("close guard availability checked", {
+      connected: this.#document.connected,
+      cachedDirty: this.#state?.dirty ?? null,
+      shouldConfirm,
+    });
+    return shouldConfirm;
   }
 
   /**
@@ -81,14 +104,49 @@ export class DocumentSession {
    * @throws {Error} when the renderer cannot provide a settled document state.
    */
   async confirmClose(reason: CloseReason): Promise<boolean> {
+    this.#log.info("close guard started", {
+      reason,
+      connected: this.#document.connected,
+      cachedDirty: this.#state?.dirty ?? null,
+    });
+
     const state = await this.#closeState();
-    if (!state || !state.dirty) return true;
+    if (!state) {
+      this.#log.info("close guard allowed: no document state", { reason });
+      return true;
+    }
+
+    if (!state.dirty) {
+      this.#log.info("close guard allowed: document is clean", { reason });
+      return true;
+    }
 
     const choice = await this.#showDirtyDocumentDialog(state, reason);
-    if (choice === "cancel") return false;
-    if (choice === "discard") return true;
+    this.#log.info("dirty document dialog completed", {
+      reason,
+      choice,
+      saveTarget: state.saveTarget,
+      needsSaveAs: state.needsSaveAs,
+    });
 
-    return this.#saveDirtyDocument(state);
+    if (choice === "cancel") {
+      this.#log.info("close guard canceled by user", { reason });
+      return false;
+    }
+
+    if (choice === "discard") {
+      this.#log.info("close guard allowed: changes discarded", { reason });
+      return true;
+    }
+
+    const saved = await this.#saveDirtyDocument(state);
+    this.#log.info(
+      saved ? "close guard allowed: document saved" : "close guard blocked: save failed",
+      {
+        reason,
+      },
+    );
+    return saved;
   }
 
   /**
@@ -97,9 +155,13 @@ export class DocumentSession {
    * @throws {Error} when the renderer cannot read state or save.
    */
   async save(): Promise<void> {
+    this.#log.info("save document requested");
     const state = await this.#requestState();
     this.acceptState(state);
-    if (!state) return;
+    if (!state) {
+      this.#log.info("save document skipped: no document state");
+      return;
+    }
 
     if (state.needsSaveAs) {
       await this.#saveToNewPath(state);
@@ -107,6 +169,7 @@ export class DocumentSession {
     }
 
     await this.#requestSave(null);
+    this.#log.info("save document completed", { saveTarget: state.saveTarget });
   }
 
   /**
@@ -115,9 +178,13 @@ export class DocumentSession {
    * @throws {Error} when the renderer cannot read state or save.
    */
   async saveAs(): Promise<void> {
+    this.#log.info("save as requested");
     const state = await this.#requestState();
     this.acceptState(state);
-    if (!state) return;
+    if (!state) {
+      this.#log.info("save as skipped: no document state");
+      return;
+    }
 
     await this.#saveToNewPath(state);
   }
@@ -134,8 +201,12 @@ export class DocumentSession {
 
   async #saveToNewPath(state: WorkspaceDocumentState): Promise<WorkspaceDocumentState | null> {
     const savePath = await this.#showSaveDialog(state);
-    if (!savePath) return null;
+    if (!savePath) {
+      this.#log.info("save as canceled", { saveTarget: state.saveTarget });
+      return null;
+    }
 
+    this.#log.info("save as path selected", { path: savePath });
     return this.#requestSave(savePath);
   }
 
@@ -146,6 +217,7 @@ export class DocumentSession {
         : await this.#requestSave(null);
       return saved !== null;
     } catch (error) {
+      this.#log.warn("dirty document save failed", error);
       await this.#showSaveFailedDialog(error);
       return false;
     }
@@ -156,9 +228,14 @@ export class DocumentSession {
       return await this.#requestState();
     } catch (error) {
       if (!this.#document.connected && (!this.#state || !this.#state.dirty)) {
+        this.#log.warn(
+          "close guard ignored disconnected renderer with no cached dirty document",
+          error,
+        );
         return null;
       }
 
+      this.#log.warn("close guard could not read document state", error);
       await this.#showSaveFailedDialog(error);
       return this.#state;
     }
@@ -171,12 +248,14 @@ export class DocumentSession {
   }
 
   async #requestSave(savePath: string | null): Promise<WorkspaceDocumentState> {
+    this.#log.info("document save sent to renderer", { path: savePath });
     const state = await this.#document.save(savePath);
     this.acceptState(state);
     return state;
   }
 
   async #requestOpen(openPath: string): Promise<void> {
+    this.#log.info("document open sent to renderer", { path: openPath });
     await this.#document.open(openPath);
   }
 

@@ -26,7 +26,7 @@ describe("WorkspaceEditQueue issues save on the committed-op lane", () => {
     editQueue.push(createGlyph("A", 65)); // queued, not yet applied
     const saved = await editQueue.save(savePath()); // flushes the push, then saves behind it
 
-    expect(client.$workspace.peek()?.glyphs).toHaveLength(1); // the apply was folded
+    expect(client.workspaceCell.peek()?.glyphs).toHaveLength(1); // the apply was folded
     expect(saved).toMatchObject({ dirty: false, needsSaveAs: false });
   });
 
@@ -37,7 +37,19 @@ describe("WorkspaceEditQueue issues save on the committed-op lane", () => {
     editQueue.push(createGlyph("B", 66));
     const saved = await editQueue.save(null); // null = save to current target
 
-    expect(client.$workspace.peek()?.glyphs).toHaveLength(1);
+    expect(client.workspaceCell.peek()?.glyphs).toHaveLength(1);
     expect(saved).toMatchObject({ dirty: false });
+  });
+
+  it("marks locally committed edits as queued until the utility echo settles", async () => {
+    const { client, editQueue } = stack;
+    await editQueue.save(savePath());
+
+    editQueue.push(createGlyph("C", 67));
+
+    expect(editQueue.commitStateCell.peek()).toBe("queued");
+    await editQueue.settled();
+    expect(editQueue.commitStateCell.peek()).toBe("idle");
+    expect(client.documentStateCell.peek()).toMatchObject({ dirty: true });
   });
 });
