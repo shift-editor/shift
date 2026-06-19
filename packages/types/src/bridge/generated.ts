@@ -211,6 +211,11 @@ export interface CreateSourceIntent {
   location: Location
 }
 
+/** Font-level axis deletion. Removing an axis also reshapes source locations. */
+export interface DeleteAxisIntent {
+  axisId: AxisId
+}
+
 /**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
@@ -222,7 +227,8 @@ export interface FontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Create kinds: "createGlyph" | "createAxis" | "createSource". Every
+   * Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
+   * kinds: "deleteAxis". Every
    * kind shares the same apply path; one set = one undo step.
    */
   kind: string
@@ -242,6 +248,7 @@ export interface FontIntent {
   createGlyph?: CreateGlyphIntent
   updateGlyph?: UpdateGlyphIntent
   createAxis?: CreateAxisIntent
+  deleteAxis?: DeleteAxisIntent
   createSource?: CreateSourceIntent
 }
 

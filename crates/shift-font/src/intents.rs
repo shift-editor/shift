@@ -9,8 +9,8 @@
 use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
-    Anchor, AnchorId, Axis, BooleanOp, Contour, ContourId, Font, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, Location, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, BooleanOp, Contour, ContourId, Font, Glyph, GlyphId,
+    GlyphLayer, GlyphName, LayerId, Location, PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 
@@ -129,6 +129,9 @@ pub enum FontIntent {
     CreateAxis {
         axis: Axis,
     },
+    DeleteAxis {
+        axis_id: AxisId,
+    },
     /// Creates the source plus one eager layer per existing glyph.
     CreateSource {
         name: String,
@@ -158,6 +161,7 @@ impl FontIntent {
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
             | Self::CreateAxis { .. }
+            | Self::DeleteAxis { .. }
             | Self::CreateSource { .. } => None,
         }
     }
@@ -272,6 +276,10 @@ impl Font {
                 self.apply_create_axis(axis, changes)?;
                 Ok(Vec::new())
             }
+            FontIntent::DeleteAxis { axis_id } => {
+                self.apply_delete_axis(axis_id, changes)?;
+                Ok(Vec::new())
+            }
             FontIntent::CreateSource { name, location } => {
                 self.apply_create_source(name, location, changes)
             }
@@ -331,6 +339,17 @@ impl Font {
 
         changes.push(FontChange::axis_created(axis));
         self.add_axis(axis.clone());
+        Ok(())
+    }
+
+    fn apply_delete_axis(
+        &mut self,
+        axis_id: &AxisId,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<()> {
+        self.remove_axis(axis_id.clone())
+            .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+        changes.push(FontChange::axis_deleted(axis_id.clone()));
         Ok(())
     }
 
@@ -685,6 +704,7 @@ impl Font {
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }
             | FontIntent::CreateAxis { .. }
+            | FontIntent::DeleteAxis { .. }
             | FontIntent::CreateSource { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }

@@ -23,6 +23,7 @@ export type {
   ComponentData,
   ContourData,
   CreateAxisIntent,
+  DeleteAxisIntent,
   CreateSourceIntent,
   FontIntent,
   FontMetadata,

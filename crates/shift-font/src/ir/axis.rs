@@ -135,6 +135,10 @@ impl Location {
         self.values.insert(axis_id, value);
     }
 
+    pub fn remove(&mut self, axis_id: &AxisId) -> Option<f64> {
+        self.values.remove(axis_id)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }

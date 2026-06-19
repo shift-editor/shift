@@ -9,8 +9,9 @@ import type {
   GlyphName,
   SourceId,
   Unicode,
+  AxisId,
 } from "@shift/types";
-import { mintGlyphId } from "@shift/types";
+import { mintAxisId, mintGlyphId } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals/signal";
 import type { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
@@ -320,6 +321,16 @@ export class Font {
   /** @knipclassignore */
   get $unicodes(): Signal<Unicode[]> {
     return this.#$unicodes;
+  }
+
+  /** Reactive committed variation axes for sidebar controls. */
+  get axesCell(): Signal<Axis[]> {
+    return this.#$axes;
+  }
+
+  /** Reactive committed variation sources for sidebar controls. */
+  get sourcesCell(): Signal<Source[]> {
+    return this.#$sources;
   }
 
   /** Reactive committed glyph directory records for UI lists and grids. */
@@ -777,6 +788,32 @@ export class Font {
 
     this.#glyphSources.set(glyphSourceKey(glyph.handle.name, source.id), glyphSource);
     return glyphSource;
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  createAxis(
+    name: string,
+    tag: string,
+    min: number,
+    def: number,
+    max: number,
+    hidden: boolean = false,
+  ): AxisId {
+    const axisId = mintAxisId();
+    this.editQueue.push({
+      kind: "createAxis",
+      createAxis: { axisId, name, tag, min, default: def, max, hidden },
+    });
+
+    return axisId;
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  deleteAxis(axisId: AxisId): void {
+    this.editQueue.push({
+      kind: "deleteAxis",
+      deleteAxis: { axisId },
+    });
   }
 
   /** @knipclassignore — used by VariationPanel component */

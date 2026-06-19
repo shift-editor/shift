@@ -67,6 +67,10 @@ impl Source {
     pub fn set_location(&mut self, location: Location) {
         self.location = location;
     }
+
+    pub fn remove_axis_location(&mut self, axis_id: &crate::AxisId) -> Option<f64> {
+        self.location.remove(axis_id)
+    }
 }
 
 #[cfg(test)]

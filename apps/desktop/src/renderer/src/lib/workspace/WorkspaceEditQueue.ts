@@ -40,7 +40,7 @@ type FoldTarget = {
 export class WorkspaceEditQueue {
   readonly #workspace: WorkspaceSession;
   readonly #targets = new Map<LayerId, FoldTarget>();
-  readonly #$settled = signal(true);
+  readonly #settledCell = signal(true);
   readonly #commitState = signal<WorkspaceCommitState>("idle", {
     name: "workspace.commitState",
   });
@@ -58,8 +58,8 @@ export class WorkspaceEditQueue {
    * False while any intent is queued or in flight. Drives the dirty
    * indicator: un-echoed state must never read as durable.
    */
-  get $settled(): Signal<boolean> {
-    return this.#$settled;
+  get settledCell(): Signal<boolean> {
+    return this.#settledCell;
   }
 
   /**
@@ -82,7 +82,7 @@ export class WorkspaceEditQueue {
   /** Queues one intent; everything in the same microtask becomes one apply. */
   push(intent: FontIntent): void {
     this.#queue.push(intent);
-    this.#$settled.set(false);
+    this.#settledCell.set(false);
     if (this.#commitState.peek() === "idle") {
       this.#commitState.set("queued");
     }
@@ -191,7 +191,7 @@ export class WorkspaceEditQueue {
   #afterJob(): void {
     this.#busy -= 1;
     if (this.#busy === 0 && this.#queue.length === 0) {
-      this.#$settled.set(true);
+      this.#settledCell.set(true);
       this.#commitState.set("idle");
     }
   }

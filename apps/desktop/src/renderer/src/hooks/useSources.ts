@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import type { Source } from "@shift/types";
 import { getEditor } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals";
@@ -10,7 +9,5 @@ import { useSignalState } from "@/lib/signals";
  */
 export const useSources = (): Source[] => {
   const font = getEditor().font;
-  const fontLoaded = useSignalState(font.$loaded);
-
-  return useMemo(() => (fontLoaded ? font.sources : []), [fontLoaded, font]);
+  return useSignalState(font.sourcesCell);
 };
