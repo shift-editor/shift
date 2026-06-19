@@ -9,10 +9,30 @@ export interface InputProps extends React.ComponentProps<typeof BaseInput> {
   iconPosition?: "left" | "right";
 }
 
+type InputKeyDownEvent = Parameters<NonNullable<InputProps["onKeyDown"]>>[0];
+
+function isSelectAllShortcut(event: InputKeyDownEvent): boolean {
+  return (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a";
+}
+
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, labelPosition = "left", icon, iconPosition = "right", ...props }, ref) => {
+  (
+    { className, label, labelPosition = "left", icon, iconPosition = "right", onKeyDown, ...props },
+    ref,
+  ) => {
     const iconOnLeft = iconPosition === "left";
     const labelOnRight = labelPosition === "right";
+
+    const handleKeyDown: InputProps["onKeyDown"] = (event) => {
+      onKeyDown?.(event);
+      if (event.defaultPrevented) return;
+
+      if (isSelectAllShortcut(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.select();
+      }
+    };
 
     return (
       <div className="relative flex items-center">
@@ -39,6 +59,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             icon && !iconOnLeft && "pr-6",
             className,
           )}
+          onKeyDown={handleKeyDown}
           {...props}
         />
         {icon && !iconOnLeft && (

@@ -368,7 +368,11 @@ impl Font {
     pub fn remove_axis(&mut self, axis_id: AxisId) -> Option<Axis> {
         let data = self.data_mut();
         let index = data.axes.iter().position(|axis| axis.id() == axis_id)?;
-        Some(data.axes.remove(index))
+        let axis = data.axes.remove(index);
+        for source in &mut data.sources {
+            source.remove_axis_location(&axis_id);
+        }
+        Some(axis)
     }
 
     pub fn axis(&self, axis_id: AxisId) -> Option<&Axis> {

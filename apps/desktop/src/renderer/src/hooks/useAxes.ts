@@ -1,15 +1,13 @@
-import { useMemo } from "react";
 import type { Axis } from "@shift/types";
 import { getEditor } from "@/store/appStore";
 import { useSignalState } from "@/lib/signals";
 
 /**
  * Active variation axes, or empty array when the font is not variable.
- * Stable reference until the font reloads — components depending only on this
- * do not re-render on slider scrubs.
+ * Stable reference until the committed axis list changes. Slider scrubs update
+ * design location, not the axis list, so they do not re-render subscribers.
  */
 export const useAxes = (): Axis[] => {
   const font = getEditor().font;
-  const fontLoaded = useSignalState(font.$loaded);
-  return useMemo(() => (fontLoaded && font.isVariable() ? font.getAxes() : []), [fontLoaded, font]);
+  return useSignalState(font.axesCell);
 };

@@ -2,6 +2,21 @@ export { Button, type ButtonProps } from "./components/button";
 export { Separator, type SeparatorProps } from "./components/separator";
 export { Input, type InputProps } from "./components/input";
 export { Slider, type SliderProps } from "./components/slider";
+export {
+  Menu,
+  MenuTrigger,
+  MenuPortal,
+  MenuPositioner,
+  MenuPopup,
+  MenuItem,
+  MenuSeparator,
+  type MenuProps,
+  type MenuTriggerProps,
+  type MenuPositionerProps,
+  type MenuPopupProps,
+  type MenuItemProps,
+  type MenuSeparatorProps,
+} from "./components/menu";
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./components/tooltip";
 export {
   ToastProvider,

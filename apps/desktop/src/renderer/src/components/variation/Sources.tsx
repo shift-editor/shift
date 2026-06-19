@@ -1,7 +1,7 @@
-import { Button } from "@shift/ui";
 import { useSources } from "@/hooks/useSources";
 import { useEditSourceId } from "@/hooks/useEditSourceId";
 import { getEditor } from "@/store/appStore";
+import { SidebarActionRow } from "@/components/sidebar";
 
 export const Sources = () => {
   const sources = useSources();
@@ -13,15 +13,14 @@ export const Sources = () => {
   return (
     <div className="flex justify-start items-start flex-col gap-1">
       {sources.map((s) => (
-        <Button
-          className="text-ui w-full items-center justify-start px-2 h-6"
-          variant="ghost"
+        <SidebarActionRow
           key={s.id}
           isActive={s.id === editSourceId}
           onClick={() => editor.selectSource(s.id)}
+          contentClassName="h-6 text-ui"
         >
           {s.name}
-        </Button>
+        </SidebarActionRow>
       ))}
     </div>
   );

@@ -206,6 +206,11 @@ export interface NapiCreateSourceIntent {
   location: NapiLocation
 }
 
+/** Font-level axis deletion. Removing an axis also reshapes source locations. */
+export interface NapiDeleteAxisIntent {
+  axisId: AxisId
+}
+
 /**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
@@ -217,7 +222,8 @@ export interface NapiFontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Create kinds: "createGlyph" | "createAxis" | "createSource". Every
+   * Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
+   * kinds: "deleteAxis". Every
    * kind shares the same apply path; one set = one undo step.
    */
   kind: string
@@ -237,6 +243,7 @@ export interface NapiFontIntent {
   createGlyph?: NapiCreateGlyphIntent
   updateGlyph?: NapiUpdateGlyphIntent
   createAxis?: NapiCreateAxisIntent
+  deleteAxis?: NapiDeleteAxisIntent
   createSource?: NapiCreateSourceIntent
 }
 

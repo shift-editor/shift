@@ -777,6 +777,12 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
       axis.set_hidden(payload.hidden);
       Ok(FontIntent::CreateAxis { axis })
     }
+    "deleteAxis" => {
+      let payload = intent.delete_axis.ok_or_else(|| missing("deleteAxis"))?;
+      Ok(FontIntent::DeleteAxis {
+        axis_id: parse::<AxisId>(&payload.axis_id)?,
+      })
+    }
     "createSource" => {
       let payload = intent
         .create_source
@@ -839,10 +845,11 @@ mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
     NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCreateAxisIntent,
-    NapiCreateGlyphIntent, NapiCreateSourceIntent, NapiLocation, NapiMoveAnchorsIntent,
-    NapiMovePointsIntent, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
-    NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
+    NapiCreateGlyphIntent, NapiCreateSourceIntent, NapiDeleteAxisIntent, NapiLocation,
+    NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
+    NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
+    NapiSetContourClosedIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
+    NapiTranslatePointsIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -867,6 +874,7 @@ mod tests {
       create_glyph: None,
       update_glyph: None,
       create_axis: None,
+      delete_axis: None,
       create_source: None,
     }
   }
@@ -1700,6 +1708,15 @@ mod tests {
     }
   }
 
+  fn delete_axis_intent(axis_id: &str) -> NapiFontIntent {
+    NapiFontIntent {
+      delete_axis: Some(NapiDeleteAxisIntent {
+        axis_id: axis_id.to_string(),
+      }),
+      ..skeleton_intent("deleteAxis")
+    }
+  }
+
   fn create_source_intent(name: &str, location: &[(&str, f64)]) -> NapiFontIntent {
     NapiFontIntent {
       create_source: Some(NapiCreateSourceIntent {
@@ -1758,6 +1775,24 @@ mod tests {
 
     assert!(result.is_err());
     assert_eq!(bridge.get_axes().unwrap().len(), 1);
+  }
+
+  #[test]
+  fn apply_delete_axis_echoes_axes_and_sources() {
+    let mut bridge = bridge_with_workspace();
+    bridge.apply(vec![weight_axis_intent()], None).unwrap();
+
+    let applied = bridge
+      .apply(vec![delete_axis_intent("axis_weight")], None)
+      .unwrap();
+
+    let axes = applied.axes.expect("deleteAxis must echo axes");
+    assert!(axes.is_empty());
+    let sources = applied.sources.expect("deleteAxis must echo sources");
+    assert!(sources
+      .iter()
+      .all(|source| source.location.values.is_empty()));
+    assert!(!bridge.is_variable().unwrap());
   }
 
   #[test]

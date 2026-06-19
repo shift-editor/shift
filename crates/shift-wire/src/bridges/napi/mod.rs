@@ -479,7 +479,8 @@ pub struct NapiFontIntent {
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Create kinds: "createGlyph" | "createAxis" | "createSource". Every
+    /// Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
+    /// kinds: "deleteAxis". Every
     /// kind shares the same apply path; one set = one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -498,6 +499,7 @@ pub struct NapiFontIntent {
     pub create_glyph: Option<NapiCreateGlyphIntent>,
     pub update_glyph: Option<NapiUpdateGlyphIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
+    pub delete_axis: Option<NapiDeleteAxisIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
 }
 
@@ -538,6 +540,13 @@ pub struct NapiCreateAxisIntent {
     pub default: f64,
     pub max: f64,
     pub hidden: bool,
+}
+
+/// Font-level axis deletion. Removing an axis also reshapes source locations.
+#[napi(object)]
+pub struct NapiDeleteAxisIntent {
+    #[napi(ts_type = "AxisId")]
+    pub axis_id: String,
 }
 
 /// Font-level source creation. Rust mints the source id; the echo's
