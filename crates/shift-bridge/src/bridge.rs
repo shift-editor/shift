@@ -401,7 +401,9 @@ impl Bridge {
       match change {
         FontChange::GlyphCreated(_)
         | FontChange::GlyphDeleted(_)
-        | FontChange::GlyphIdentityChanged(_) => glyphs_changed = true,
+        | FontChange::GlyphIdentityChanged(_)
+        | FontChange::GlyphLayerCreated(_)
+        | FontChange::GlyphLayerDeleted(_) => glyphs_changed = true,
         // Axis structure reshapes every source location's design space.
         FontChange::AxisCreated(_) | FontChange::AxisDeleted(_) => {
           axes_changed = true;
@@ -470,21 +472,22 @@ impl Bridge {
     Ok(Some(self.applied_echo(outcome)?))
   }
 
-  /// Id-addressed glyph state. References survive renames; no name lookup.
+  /// Layer-addressed glyph state. LayerId is the stable edit identity.
   #[napi]
-  pub fn get_glyph(
+  pub fn get_layer(
     &self,
-    #[napi(ts_arg_type = "GlyphId")] glyph_id: String,
-    #[napi(ts_arg_type = "SourceId")] source_id: String,
+    #[napi(ts_arg_type = "LayerId")] layer_id: String,
   ) -> errors::Result<Option<NapiGlyphState>> {
-    let glyph_id = parse::<GlyphId>(&glyph_id)?;
-    let source_id = parse::<SourceId>(&source_id)?;
+    let layer_id = parse::<LayerId>(&layer_id)?;
 
     let font = self.font()?;
+    let Some(glyph_id) = font.glyph_id_by_layer(layer_id.clone()) else {
+      return Ok(None);
+    };
     let Some(glyph) = font.glyph(glyph_id) else {
       return Ok(None);
     };
-    let Some(layer) = glyph.layer_for_source(source_id) else {
+    let Some(layer) = font.layer(layer_id) else {
       return Ok(None);
     };
 
@@ -801,6 +804,16 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         location: map_location(payload.location)?,
       })
     }
+    "createGlyphLayer" => {
+      let payload = intent
+        .create_glyph_layer
+        .ok_or_else(|| missing("createGlyphLayer"))?;
+      Ok(FontIntent::CreateGlyphLayer {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
+        source_id: parse::<SourceId>(&payload.source_id)?,
+      })
+    }
     other => Err(BridgeError::InvalidInput {
       kind: "intent",
       value: format!("unknown intent kind \"{other}\""),
@@ -854,11 +867,11 @@ mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
     NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCreateAxisIntent,
-    NapiCreateGlyphIntent, NapiCreateSourceIntent, NapiDeleteAxisIntent, NapiDeleteSourceIntent,
-    NapiLocation, NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
-    NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
-    NapiSetContourClosedIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
-    NapiTranslatePointsIntent,
+    NapiCreateGlyphIntent, NapiCreateGlyphLayerIntent, NapiCreateSourceIntent,
+    NapiDeleteAxisIntent, NapiDeleteSourceIntent, NapiLocation, NapiMoveAnchorsIntent,
+    NapiMovePointsIntent, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
+    NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
+    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -886,6 +899,7 @@ mod tests {
       delete_axis: None,
       create_source: None,
       delete_source: None,
+      create_glyph_layer: None,
     }
   }
 
@@ -900,8 +914,30 @@ mod tests {
     }
   }
 
+  fn create_glyph_napi_with_id(glyph_id: &str, name: &str, unicodes: Vec<u32>) -> NapiFontIntent {
+    NapiFontIntent {
+      create_glyph: Some(NapiCreateGlyphIntent {
+        glyph_id: glyph_id.to_string(),
+        name: name.to_string(),
+        unicodes,
+      }),
+      ..skeleton_intent("createGlyph")
+    }
+  }
+
+  fn create_glyph_layer_intent(layer_id: &str, glyph_id: &str, source_id: &str) -> NapiFontIntent {
+    NapiFontIntent {
+      create_glyph_layer: Some(NapiCreateGlyphLayerIntent {
+        layer_id: layer_id.to_string(),
+        glyph_id: glyph_id.to_string(),
+        source_id: source_id.to_string(),
+      }),
+      ..skeleton_intent("createGlyphLayer")
+    }
+  }
+
   #[test]
-  fn apply_create_glyph_returns_records_and_replace_grade_layer() {
+  fn apply_create_glyph_returns_identity_record_without_layers() {
     let mut bridge = bridge_with_workspace();
 
     let applied = bridge
@@ -914,17 +950,40 @@ mod tests {
     let glyphs = applied.glyphs.expect("createGlyph must echo records");
     assert_eq!(glyphs.len(), 1);
     assert_eq!(glyphs[0].name, "A");
+    assert!(glyphs[0].layers.is_empty());
+    assert!(applied.layers.is_empty());
+  }
+
+  #[test]
+  fn apply_create_glyph_layer_returns_record_membership_and_replace_grade_layer() {
+    let mut bridge = bridge_with_workspace();
+    let glyph_id = GlyphId::new().to_string();
+    let layer_id = LayerId::new().to_string();
+    let source_id = default_source_id(&bridge);
+
+    let applied = bridge
+      .apply(
+        vec![
+          create_glyph_napi_with_id(&glyph_id, "A", vec![65]),
+          create_glyph_layer_intent(&layer_id, &glyph_id, &source_id),
+        ],
+        Some("Add Glyph".to_string()),
+      )
+      .unwrap();
+
+    let glyphs = applied.glyphs.expect("createGlyphLayer must echo records");
+    assert_eq!(glyphs[0].layers.len(), 1);
+    assert_eq!(glyphs[0].layers[0].id, layer_id);
+    assert_eq!(glyphs[0].layers[0].source_id, source_id);
     assert_eq!(applied.layers.len(), 1);
+    assert_eq!(applied.layers[0].layer_id, layer_id);
     assert!(applied.layers[0].structure.is_some());
   }
 
   #[test]
   fn apply_set_x_advance_echoes_values_without_structure() {
     let mut bridge = bridge_with_workspace();
-    let created = bridge
-      .apply(vec![create_glyph_napi("A", vec![65])], None)
-      .unwrap();
-    let layer_id = created.layers[0].layer_id.clone();
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
 
     let applied = bridge
       .apply(
@@ -956,10 +1015,19 @@ mod tests {
   }
 
   fn pen_setup(bridge: &mut Bridge) -> (String, String) {
+    let glyph_id = GlyphId::new().to_string();
+    let layer_id = LayerId::new().to_string();
+    let source_id = default_source_id(bridge);
     let created = bridge
-      .apply(vec![create_glyph_napi("A", vec![65])], None)
+      .apply(
+        vec![
+          create_glyph_napi_with_id(&glyph_id, "A", vec![65]),
+          create_glyph_layer_intent(&layer_id, &glyph_id, &source_id),
+        ],
+        None,
+      )
       .unwrap();
-    let layer_id = created.layers[0].layer_id.clone();
+    assert_eq!(created.layers[0].layer_id, layer_id);
 
     let contour_id = shift_font::ContourId::new().to_string();
     bridge
@@ -1400,16 +1468,23 @@ mod tests {
   }
 
   fn glyph_state(bridge: &Bridge, name: &str) -> NapiGlyphState {
-    let glyph_id = bridge
+    let record = bridge
       .get_glyphs()
       .unwrap()
       .into_iter()
       .find(|record| record.name == name)
-      .expect("glyph record should exist")
-      .id;
+      .expect("glyph record should exist");
+    let source_id = default_source_id(bridge);
+    let layer_id = record
+      .layers
+      .iter()
+      .find(|layer| layer.source_id == source_id)
+      .expect("glyph default layer should exist")
+      .id
+      .clone();
 
     bridge
-      .get_glyph(glyph_id, default_source_id(bridge))
+      .get_layer(layer_id)
       .unwrap()
       .expect("glyph state should be readable")
   }
@@ -1690,10 +1765,20 @@ mod tests {
   }
 
   fn create_default_glyph_layer(bridge: &mut Bridge, name: &str, unicode: Option<u32>) -> String {
-    let intent = create_glyph_napi(name, unicode.into_iter().collect());
-
-    let applied = bridge.apply(vec![intent], None).unwrap();
-    applied.layers[0].layer_id.clone()
+    let glyph_id = GlyphId::new().to_string();
+    let layer_id = LayerId::new().to_string();
+    let source_id = default_source_id(bridge);
+    let applied = bridge
+      .apply(
+        vec![
+          create_glyph_napi_with_id(&glyph_id, name, unicode.into_iter().collect()),
+          create_glyph_layer_intent(&layer_id, &glyph_id, &source_id),
+        ],
+        None,
+      )
+      .unwrap();
+    assert_eq!(applied.layers[0].layer_id, layer_id);
+    layer_id
   }
 
   fn create_axis_intent(
@@ -1816,7 +1901,7 @@ mod tests {
   }
 
   #[test]
-  fn apply_create_source_echoes_sources_and_one_eager_layer_per_glyph() {
+  fn apply_create_source_echoes_sources_without_creating_layers() {
     let mut bridge = bridge_with_workspace();
     create_default_glyph_layer(&mut bridge, "A", Some(65));
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
@@ -1840,19 +1925,18 @@ mod tests {
       .expect("new source must be in the echo");
     assert_eq!(bold.id, "source_bold");
     assert_eq!(bold.location.values.get("axis_weight"), Some(&700.0));
-    // one eager layer per existing glyph, replace-grade
-    assert_eq!(applied.layers.len(), 1);
-    assert!(applied.layers[0].structure.is_some());
+    assert!(applied.layers.is_empty());
     assert!(applied.glyphs.is_none());
+    assert_eq!(bridge.get_glyphs().unwrap()[0].layers.len(), 1);
   }
 
   #[test]
-  fn get_glyph_resolves_eager_layer_for_new_source() {
+  fn apply_create_glyph_layer_resolves_layer_for_new_source() {
     let mut bridge = bridge_with_workspace();
     create_default_glyph_layer(&mut bridge, "A", Some(65));
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
-    let applied = bridge
+    bridge
       .apply(
         vec![create_source_intent(
           "source_bold",
@@ -1864,19 +1948,29 @@ mod tests {
       .unwrap();
 
     let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
-    let bold_id = applied
-      .sources
-      .unwrap()
-      .into_iter()
-      .find(|source| source.name == "Bold")
-      .unwrap()
-      .id;
+    let layer_id = LayerId::new().to_string();
+
+    let applied = bridge
+      .apply(
+        vec![create_glyph_layer_intent(
+          &layer_id,
+          &glyph_id,
+          "source_bold",
+        )],
+        None,
+      )
+      .unwrap();
 
     let state = bridge
-      .get_glyph(glyph_id, bold_id)
+      .get_layer(layer_id.clone())
       .unwrap()
-      .expect("the eager layer must resolve for (glyph, new source)");
-    assert_eq!(state.layer_id, applied.layers[0].layer_id);
+      .expect("the explicit layer must resolve by LayerId");
+    assert_eq!(state.layer_id, layer_id);
+    assert_eq!(applied.layers[0].layer_id, layer_id);
+    let glyphs = applied
+      .glyphs
+      .expect("layer membership must echo glyph records");
+    assert_eq!(glyphs[0].layers.len(), 2);
   }
 
   #[test]
@@ -1960,10 +2054,18 @@ mod tests {
       )
       .unwrap();
     let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
-    assert!(bridge
-      .get_glyph(glyph_id.clone(), "source_bold".to_string())
-      .unwrap()
-      .is_some());
+    let bold_layer_id = LayerId::new().to_string();
+    bridge
+      .apply(
+        vec![create_glyph_layer_intent(
+          &bold_layer_id,
+          &glyph_id,
+          "source_bold",
+        )],
+        None,
+      )
+      .unwrap();
+    assert!(bridge.get_layer(bold_layer_id.clone()).unwrap().is_some());
 
     let applied = bridge
       .apply(vec![delete_source_intent("source_bold")], None)
@@ -1972,14 +2074,14 @@ mod tests {
     let sources = applied.sources.expect("deleteSource must echo sources");
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].name, "Regular");
-    assert!(applied.glyphs.is_none());
+    let glyphs = applied
+      .glyphs
+      .expect("deleteSource layer removal must echo glyph records");
+    assert_eq!(glyphs[0].layers.len(), 1);
     assert!(applied.layers.is_empty());
-    assert!(bridge
-      .get_glyph(glyph_id.clone(), "source_bold".to_string())
-      .unwrap()
-      .is_none());
+    assert!(bridge.get_layer(bold_layer_id).unwrap().is_none());
     let default_state = bridge
-      .get_glyph(glyph_id, default_source_id(&bridge))
+      .get_layer(default_layer_id.clone())
       .unwrap()
       .expect("default source must keep its layer");
     assert_eq!(default_state.layer_id, default_layer_id);
@@ -1997,7 +2099,7 @@ mod tests {
   }
 
   #[test]
-  fn apply_create_glyph_emits_one_layer_per_source() {
+  fn apply_create_glyph_does_not_emit_layers_for_sources() {
     let mut bridge = bridge_with_workspace();
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
     bridge
@@ -2015,18 +2117,9 @@ mod tests {
       .apply(vec![create_glyph_napi("A", vec![65])], None)
       .unwrap();
 
-    assert_eq!(applied.layers.len(), 2);
-
-    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
-    for source in bridge.get_sources().unwrap() {
-      assert!(
-        bridge
-          .get_glyph(glyph_id.clone(), source.id)
-          .unwrap()
-          .is_some(),
-        "every (glyph, source) pair must resolve a layer"
-      );
-    }
+    assert!(applied.layers.is_empty());
+    let glyphs = applied.glyphs.expect("createGlyph must echo records");
+    assert!(glyphs[0].layers.is_empty());
   }
 
   #[test]
@@ -2141,7 +2234,7 @@ mod tests {
   }
 
   #[test]
-  fn get_glyph_reads_applied_edits() {
+  fn get_layer_reads_applied_edits() {
     let mut bridge = bridge_with_workspace();
     let (layer_id, contour_id) = pen_setup(&mut bridge);
     let point_id = shift_font::PointId::new().to_string();
@@ -2166,14 +2259,11 @@ mod tests {
   }
 
   #[test]
-  fn get_glyph_returns_none_for_missing_glyph() {
+  fn get_layer_returns_none_for_missing_layer() {
     let bridge = bridge_with_workspace();
-    let missing_glyph_id = shift_font::GlyphId::new().to_string();
+    let missing_layer_id = shift_font::LayerId::new().to_string();
 
-    assert!(bridge
-      .get_glyph(missing_glyph_id, default_source_id(&bridge))
-      .unwrap()
-      .is_none());
+    assert!(bridge.get_layer(missing_layer_id).unwrap().is_none());
   }
 
   #[test]

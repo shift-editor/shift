@@ -5,8 +5,8 @@ use std::{
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
-    AppliedIntents, Axis, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId, GlyphLayer,
-    Source, TouchedLayer, error::CoreError,
+    AppliedIntents, Axis, FontChange, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId,
+    GlyphLayer, Source, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
@@ -190,16 +190,23 @@ impl FontWorkspace {
         set: FontIntentSet,
         label: Option<String>,
     ) -> Result<AppliedIntents, WorkspaceError> {
-        let mut pre: Vec<GlyphLayer> = Vec::new();
+        let mut pre_layers: Vec<PreLayer> = Vec::new();
+        let mut pre_sources: Vec<Source> = Vec::new();
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
+                capture_font_level_pre_state(&self.font, intent, &mut pre_layers, &mut pre_sources);
                 continue;
             };
-            if pre.iter().any(|layer| layer.id() == *layer_id) {
+            if pre_layers.iter().any(|pre| pre.layer.id() == *layer_id) {
                 continue;
             }
-            if let Some(layer) = self.font.layer(layer_id.clone()) {
-                pre.push(layer.clone());
+            if let Some(layer) = self.font.layer(layer_id.clone())
+                && let Some(glyph_id) = self.font.glyph_id_by_layer(layer_id.clone())
+            {
+                pre_layers.push(PreLayer {
+                    glyph_id,
+                    layer: layer.clone(),
+                });
             }
         }
 
@@ -209,14 +216,19 @@ impl FontWorkspace {
             Ok((outcome, changes))
         })?;
 
-        let steps = self.ledger_steps(&pre, &outcome);
+        let steps = self.ledger_steps(&pre_layers, &pre_sources, &outcome);
         self.ledger.push(LedgerEntry { label, steps });
         Ok(outcome)
     }
 
     /// Derives the entry's state-pair steps from the applied change set,
     /// snapshotting post states from the committed font.
-    fn ledger_steps(&self, pre: &[GlyphLayer], outcome: &AppliedIntents) -> Vec<LedgerStep> {
+    fn ledger_steps(
+        &self,
+        pre_layers: &[PreLayer],
+        pre_sources: &[Source],
+        outcome: &AppliedIntents,
+    ) -> Vec<LedgerStep> {
         let mut steps = Vec::new();
 
         let pairs: Vec<LayerPair> = outcome
@@ -224,10 +236,11 @@ impl FontWorkspace {
             .iter()
             .filter_map(|touched| {
                 let post = touched.layer.clone();
-                pre.iter()
-                    .find(|layer| layer.id() == post.id())
-                    .map(|pre_layer| LayerPair {
-                        pre: pre_layer.clone(),
+                pre_layers
+                    .iter()
+                    .find(|pre| pre.layer.id() == post.id())
+                    .map(|pre| LayerPair {
+                        pre: pre.layer.clone(),
                         post,
                     })
             })
@@ -263,29 +276,42 @@ impl FontWorkspace {
                         .iter()
                         .find(|source| source.id() == change.source_id)
                         .cloned(),
-                    layers: Vec::new(),
+                }),
+                FontChange::SourceDeleted(change) => steps.push(LedgerStep::Source {
+                    pre: pre_sources
+                        .iter()
+                        .find(|source| source.id() == change.source_id)
+                        .cloned(),
+                    post: None,
                 }),
                 FontChange::GlyphLayerCreated(change) => {
-                    // A created glyph's layers ride its Glyph snapshot; the
-                    // rest are eager layers belonging to a source step.
+                    // A created glyph's layers ride its Glyph snapshot.
                     if created_glyphs.contains(&change.glyph_id) {
                         continue;
                     }
                     let Some(layer) = self.font.layer(change.layer_id.clone()) else {
                         continue;
                     };
-                    for step in steps.iter_mut().rev() {
-                        if let LedgerStep::Source {
-                            post: Some(source),
-                            layers,
-                            ..
-                        } = step
-                            && source.id() == change.source_id
-                        {
-                            layers.push((change.glyph_id.clone(), layer.clone()));
-                            break;
-                        }
+                    steps.push(LedgerStep::GlyphLayer {
+                        glyph_id: change.glyph_id.clone(),
+                        pre: None,
+                        post: Some(Box::new(layer.clone())),
+                    });
+                }
+                FontChange::GlyphLayerDeleted(change) => {
+                    if created_glyphs.contains(&change.glyph_id) {
+                        continue;
                     }
+                    steps.push(LedgerStep::GlyphLayer {
+                        glyph_id: change.glyph_id.clone(),
+                        pre: pre_layers
+                            .iter()
+                            .find(|pre| {
+                                pre.glyph_id == change.glyph_id && pre.layer.id() == change.layer_id
+                            })
+                            .map(|pre| Box::new(pre.layer.clone())),
+                        post: None,
+                    });
                 }
                 _ => {}
             }
@@ -345,9 +371,24 @@ impl FontWorkspace {
                         let (from, to) = side.orient(pre, post);
                         replay_axis(font, from, to, &mut changes)?;
                     }
-                    LedgerStep::Source { pre, post, layers } => {
+                    LedgerStep::Source { pre, post } => {
                         let (from, to) = side.orient(pre, post);
-                        replay_source(font, from, to, layers, &mut changes, &mut touched)?;
+                        replay_source(font, from, to, &mut changes)?;
+                    }
+                    LedgerStep::GlyphLayer {
+                        glyph_id,
+                        pre,
+                        post,
+                    } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_glyph_layer(
+                            font,
+                            glyph_id,
+                            from.map(|layer| *layer),
+                            to.map(|layer| *layer),
+                            &mut changes,
+                            &mut touched,
+                        )?;
                     }
                 }
             }
@@ -516,6 +557,43 @@ impl FontWorkspace {
     }
 }
 
+#[derive(Clone)]
+struct PreLayer {
+    glyph_id: GlyphId,
+    layer: GlyphLayer,
+}
+
+fn capture_font_level_pre_state(
+    font: &shift_font::Font,
+    intent: &FontIntent,
+    pre_layers: &mut Vec<PreLayer>,
+    pre_sources: &mut Vec<Source>,
+) {
+    if let FontIntent::DeleteSource { source_id } = intent {
+        if !pre_sources.iter().any(|source| source.id() == *source_id)
+            && let Some(source) = font
+                .sources()
+                .iter()
+                .find(|source| source.id() == *source_id)
+        {
+            pre_sources.push(source.clone());
+        }
+
+        for glyph in font.glyphs() {
+            let Some(layer) = glyph.layer_for_source(source_id.clone()) else {
+                continue;
+            };
+            if pre_layers.iter().any(|pre| pre.layer.id() == layer.id()) {
+                continue;
+            }
+            pre_layers.push(PreLayer {
+                glyph_id: glyph.id(),
+                layer: layer.clone(),
+            });
+        }
+    }
+}
+
 /// Which side of every state pair a replay applies: undo restores `Pre`,
 /// redo restores `Post`.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -623,17 +701,9 @@ fn replay_source(
     font: &mut shift_font::Font,
     from: Option<Source>,
     to: Option<Source>,
-    eager_layers: Vec<(GlyphId, GlyphLayer)>,
     changes: &mut FontChangeSet,
-    touched: &mut Vec<TouchedLayer>,
 ) -> Result<(), WorkspaceError> {
     if let Some(source) = from {
-        // Layers go first so the layer index never points at a missing
-        // source; the store side cascades them off the source row.
-        for (_, layer) in &eager_layers {
-            font.remove_glyph_layer(layer.id())?;
-        }
-
         font.remove_source(source.id())
             .ok_or(CoreError::SourceNotFound(source.id()))?;
         changes.push(FontChange::source_deleted(source.id()));
@@ -642,22 +712,38 @@ fn replay_source(
     if let Some(source) = to {
         changes.push(FontChange::source_created(&source));
         font.add_source(source);
+    }
 
-        for (glyph_id, layer) in eager_layers {
-            let glyph_name = font
-                .glyph(glyph_id.clone())
-                .map(|glyph| glyph.glyph_name().clone());
-            changes.push(FontChange::glyph_layer_created(
-                glyph_id.clone(),
-                glyph_name,
-                &layer,
-            ));
-            font.insert_glyph_layer(glyph_id, layer.clone())?;
-            touched.push(TouchedLayer {
-                layer,
-                structural: true,
-            });
-        }
+    Ok(())
+}
+
+fn replay_glyph_layer(
+    font: &mut shift_font::Font,
+    glyph_id: GlyphId,
+    from: Option<GlyphLayer>,
+    to: Option<GlyphLayer>,
+    changes: &mut FontChangeSet,
+    touched: &mut Vec<TouchedLayer>,
+) -> Result<(), WorkspaceError> {
+    if let Some(layer) = from {
+        font.remove_glyph_layer(layer.id())?;
+        changes.push(FontChange::glyph_layer_deleted(glyph_id.clone(), &layer));
+    }
+
+    if let Some(layer) = to {
+        let glyph_name = font
+            .glyph(glyph_id.clone())
+            .map(|glyph| glyph.glyph_name().clone());
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id.clone(),
+            glyph_name,
+            &layer,
+        ));
+        font.insert_glyph_layer(glyph_id, layer.clone())?;
+        touched.push(TouchedLayer {
+            layer,
+            structural: true,
+        });
     }
 
     Ok(())

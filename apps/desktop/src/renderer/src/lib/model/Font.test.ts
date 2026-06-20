@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mintAxisId,
   mintGlyphId,
+  mintLayerId,
   mintSourceId,
   type AxisId,
   type GlyphId,
@@ -13,6 +14,7 @@ import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { signal } from "@/lib/signals/signal";
 import { Font } from "./Font";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
+import { axisLocationFromLocation } from "@/lib/variation/location";
 
 const SNAPSHOT: WorkspaceSnapshot = {
   documentId: "11111111-2222-3333-4444-555555555555",
@@ -24,6 +26,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
       name: "A" as GlyphName,
       unicodes: [65 as Unicode],
       componentBaseGlyphIds: [],
+      layers: [],
     },
   ],
   sources: [
@@ -98,13 +101,14 @@ describe("Font projects the workspace snapshot", () => {
 });
 
 describe("font-level intents make the font variable", () => {
-  it("createAxis and createSource project into axes, sources, and eager layers", async () => {
+  it("createAxis and createSource project axes and sources without creating glyph layers", async () => {
     const stack = createWorkspaceStack();
     await stack.client.create();
+    const glyphId = mintGlyphId();
     await stack.client.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId: mintGlyphId(), name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
       },
     ]);
     expect(stack.font.isVariable()).toBe(false);
@@ -141,6 +145,93 @@ describe("font-level intents make the font variable", () => {
     const bold = stack.font.sources.find((source) => source.name === "Bold");
     expect(bold?.id).toBe(boldSourceId);
     expect(applied.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
-    expect(applied.layers.length).toBe(1); // eager layer for the existing glyph
+    expect(applied.layers).toEqual([]);
+    expect(stack.font.glyphLayer(glyphId, boldSourceId)).toBeNull();
+  });
+
+  it("createGlyphLayer projects sparse glyph-layer membership", async () => {
+    const stack = createWorkspaceStack();
+    await stack.client.create();
+    const glyphId = mintGlyphId();
+    await stack.client.apply([
+      {
+        kind: "createGlyph",
+        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      },
+    ]);
+
+    const layerId = mintLayerId();
+    const sourceId = stack.font.defaultSource.id;
+    const applied = await stack.client.apply([
+      {
+        kind: "createGlyphLayer",
+        createGlyphLayer: { layerId, glyphId, sourceId },
+      },
+    ]);
+
+    expect(applied.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(stack.font.glyphLayer(glyphId, sourceId)).toEqual({ id: layerId, sourceId });
+  });
+
+  it("exact sources without glyph layers are non-editable and do not render default geometry", async () => {
+    const stack = createWorkspaceStack();
+    await stack.client.create();
+    const glyphId = mintGlyphId();
+    const defaultLayerId = mintLayerId();
+    await stack.client.apply([
+      {
+        kind: "createGlyph",
+        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      },
+      {
+        kind: "createGlyphLayer",
+        createGlyphLayer: {
+          layerId: defaultLayerId,
+          glyphId,
+          sourceId: stack.font.defaultSource.id,
+        },
+      },
+      { kind: "setXAdvance", setXAdvance: { layerId: defaultLayerId, width: 640 } },
+    ]);
+
+    const axisId = mintAxisId();
+    await stack.client.apply([
+      {
+        kind: "createAxis",
+        createAxis: {
+          axisId,
+          tag: "wght",
+          name: "Weight",
+          min: 100,
+          default: 400,
+          max: 900,
+          hidden: false,
+        },
+      },
+    ]);
+    const sourceId = mintSourceId();
+    await stack.client.apply([
+      {
+        kind: "createSource",
+        createSource: {
+          sourceId,
+          name: "Bold",
+          location: { values: { [axisId]: 700 } as Record<AxisId, number> },
+        },
+      },
+    ]);
+
+    const glyph = await stack.font.openGlyph(glyphId, stack.font.defaultSource);
+    if (!glyph) throw new Error("Expected default glyph layer to open");
+    expect(glyph.xAdvance).toBe(640);
+
+    const bold = stack.font.source(sourceId);
+    if (!bold) throw new Error("Expected created source");
+    const instance = glyph.instanceAt(axisLocationFromLocation(bold.location));
+
+    expect(instance.edit).toBeNull();
+    expect(instance.hasSource).toBe(false);
+    expect(instance.xAdvance).toBe(0);
+    expect(instance.geometry.allPoints).toEqual([]);
   });
 });

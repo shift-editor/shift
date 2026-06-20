@@ -15,7 +15,7 @@ import { Editor } from "@/lib/editor/Editor";
 import type { Glyph } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { mintGlyphId, type GlyphName, type Unicode } from "@shift/types";
+import { mintGlyphId, mintLayerId, type GlyphName, type Unicode } from "@shift/types";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 
@@ -70,13 +70,22 @@ export class TestEditor extends Editor {
   }
 
   async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
+    const glyphId = mintGlyphId();
     const applied = await this.#stack.client.apply([
       {
         kind: "createGlyph",
         createGlyph: {
-          glyphId: mintGlyphId(),
+          glyphId,
           name: name as GlyphName,
           unicodes: (unicode === null ? [] : [unicode]) as Unicode[],
+        },
+      },
+      {
+        kind: "createGlyphLayer",
+        createGlyphLayer: {
+          layerId: mintLayerId(),
+          glyphId,
+          sourceId: this.font.defaultSource.id,
         },
       },
     ]);

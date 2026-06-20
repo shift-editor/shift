@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { ContourId, Source, SourceId } from "@shift/types";
+import type { ContourId, LayerId, Source, SourceId } from "@shift/types";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { Coordinates } from "@/types/coordinates";
 import type { AxisLocation } from "@/types/variation";
@@ -240,6 +240,11 @@ export class DesignLocationState {
   }
 }
 
+export interface EditTarget {
+  readonly sourceId: SourceId;
+  readonly layerId: LayerId | null;
+}
+
 /**
  * Resolves the authored glyph source selected for editing.
  *
@@ -252,6 +257,9 @@ export class EditTargetState {
 
   /** Authored font source selected by `sourceId` or by exact design-location fallback. */
   readonly source: Signal<Source | null>;
+
+  /** Selected source with the current glyph's authored layer when one exists. */
+  readonly target: Signal<EditTarget | null>;
 
   /** Editable glyph data for the selected authored source. */
   readonly glyphSource: Signal<GlyphSource | null>;
@@ -271,6 +279,21 @@ export class EditTargetState {
       { name: "editor.glyph.edit.source" },
     );
 
+    this.target = computed(
+      () => {
+        const source = this.source.value;
+        if (!source) return null;
+
+        const glyph = open.glyph.value;
+        if (!glyph) return { sourceId: source.id, layerId: null };
+
+        const record = font.recordForName(glyph.handle.name);
+        const layerId = record ? (font.glyphLayer(record.id, source.id)?.id ?? null) : null;
+        return { sourceId: source.id, layerId };
+      },
+      { name: "editor.glyph.edit.target" },
+    );
+
     this.glyphSource = computed(
       () => {
         const glyph = open.glyph.value;
@@ -278,6 +301,7 @@ export class EditTargetState {
 
         const source = this.source.value;
         if (!source) return null;
+        if (this.target.value?.layerId === null) return null;
 
         return font.glyphSource(glyph.handle, source);
       },

@@ -6,7 +6,7 @@ import type {
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { AppliedChange, FontIntent, GlyphId, GlyphState, SourceId } from "@shift/types";
+import type { AppliedChange, FontIntent, GlyphState, LayerId } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
 /**
@@ -131,11 +131,11 @@ export class WorkspaceSession {
     return this.#setDocumentState(await this.#require().call("workspace.saveAs", { path }));
   }
 
-  /** Pulls replace-grade glyph state (resync + editor open); id-addressed. */
-  async glyph(glyphId: GlyphId, sourceId: SourceId): Promise<GlyphState | null> {
+  /** Pulls replace-grade glyph state by stable layer id. */
+  async layer(layerId: LayerId): Promise<GlyphState | null> {
     await this.connected();
 
-    return this.#require().call("workspace.glyph", { glyphId, sourceId });
+    return this.#require().call("workspace.layer", { layerId });
   }
 
   #fold(applied: AppliedChange): AppliedChange {

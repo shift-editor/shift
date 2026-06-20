@@ -47,8 +47,8 @@ export interface BridgeApi {
    * redo stack is empty.
    */
   redo(): AppliedChange | null
-  /** Id-addressed glyph state. References survive renames; no name lookup. */
-  getGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphState | null
+  /** Layer-addressed glyph state. LayerId is the stable edit identity. */
+  getLayer(layerId: LayerId): GlyphState | null
   isVariable(): boolean
   getAxes(): Array<Axis>
   getSources(): Array<Source>
@@ -201,6 +201,13 @@ export interface CreateGlyphIntent {
   unicodes: Array<Unicode>
 }
 
+/** Creates one sparse glyph layer at an existing source for an existing glyph. */
+export interface CreateGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+}
+
 /**
  * Font-level source creation. The source id is client-minted so verbs can
  * return identity synchronously; Rust honors it and rejects duplicates.
@@ -233,8 +240,8 @@ export interface FontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
-   * kinds: "deleteAxis" | "deleteSource". Every
+   * Create kinds: "createGlyph" | "createAxis" | "createSource" |
+   * "createGlyphLayer". Delete kinds: "deleteAxis" | "deleteSource". Every
    * kind shares the same apply path; one set = one undo step.
    */
   kind: string
@@ -257,6 +264,7 @@ export interface FontIntent {
   deleteAxis?: DeleteAxisIntent
   createSource?: CreateSourceIntent
   deleteSource?: DeleteSourceIntent
+  createGlyphLayer?: CreateGlyphLayerIntent
 }
 
 export interface FontMetadata {
@@ -296,6 +304,11 @@ export interface GlyphChangedEntities {
   componentIds: Array<ComponentId>
 }
 
+export interface GlyphLayerRecord {
+  id: LayerId
+  sourceId: SourceId
+}
+
 export interface GlyphMaster {
   sourceId: SourceId
   sourceName: string
@@ -310,6 +323,7 @@ export interface GlyphRecord {
   name: GlyphName
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
+  layers: Array<GlyphLayerRecord>
 }
 
 export interface GlyphState {

@@ -157,6 +157,7 @@ pub struct GlyphRecord {
     pub name: GlyphName,
     pub unicodes: Vec<u32>,
     pub component_base_glyph_ids: Vec<GlyphId>,
+    pub layers: Vec<GlyphLayerRecord>,
 }
 
 impl From<&IrGlyph> for GlyphRecord {
@@ -169,12 +170,40 @@ impl From<&IrGlyph> for GlyphRecord {
             .collect();
         component_base_glyph_ids.sort();
         component_base_glyph_ids.dedup();
+        let mut layers: Vec<_> = glyph
+            .layers()
+            .values()
+            .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
+            .collect();
+        layers.sort_by(|a, b| {
+            a.source_id
+                .as_str()
+                .cmp(b.source_id.as_str())
+                .then_with(|| a.id.as_str().cmp(b.id.as_str()))
+        });
 
         Self {
             id: glyph.id(),
             name: glyph.glyph_name().clone(),
             unicodes: glyph.unicodes().to_vec(),
             component_base_glyph_ids,
+            layers,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphLayerRecord {
+    pub id: LayerId,
+    pub source_id: SourceId,
+}
+
+impl From<&GlyphLayer> for GlyphLayerRecord {
+    fn from(layer: &GlyphLayer) -> Self {
+        Self {
+            id: layer.id(),
+            source_id: layer.source_id(),
         }
     }
 }

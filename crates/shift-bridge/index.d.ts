@@ -42,8 +42,8 @@ export declare class Bridge {
    * redo stack is empty.
    */
   redo(): NapiAppliedChange | null
-  /** Id-addressed glyph state. References survive renames; no name lookup. */
-  getGlyph(glyphId: GlyphId, sourceId: SourceId): NapiGlyphState | null
+  /** Layer-addressed glyph state. LayerId is the stable edit identity. */
+  getLayer(layerId: LayerId): NapiGlyphState | null
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
@@ -196,6 +196,13 @@ export interface NapiCreateGlyphIntent {
   unicodes: Array<Unicode>
 }
 
+/** Creates one sparse glyph layer at an existing source for an existing glyph. */
+export interface NapiCreateGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+}
+
 /**
  * Font-level source creation. The source id is client-minted so verbs can
  * return identity synchronously; Rust honors it and rejects duplicates.
@@ -228,8 +235,8 @@ export interface NapiFontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
-   * kinds: "deleteAxis" | "deleteSource". Every
+   * Create kinds: "createGlyph" | "createAxis" | "createSource" |
+   * "createGlyphLayer". Delete kinds: "deleteAxis" | "deleteSource". Every
    * kind shares the same apply path; one set = one undo step.
    */
   kind: string
@@ -252,6 +259,7 @@ export interface NapiFontIntent {
   deleteAxis?: NapiDeleteAxisIntent
   createSource?: NapiCreateSourceIntent
   deleteSource?: NapiDeleteSourceIntent
+  createGlyphLayer?: NapiCreateGlyphLayerIntent
 }
 
 export interface NapiFontMetadata {
@@ -291,6 +299,11 @@ export interface NapiGlyphChangedEntities {
   componentIds: Array<ComponentId>
 }
 
+export interface NapiGlyphLayerRecord {
+  id: LayerId
+  sourceId: SourceId
+}
+
 export interface NapiGlyphMaster {
   sourceId: SourceId
   sourceName: string
@@ -305,6 +318,7 @@ export interface NapiGlyphRecord {
   name: GlyphName
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
+  layers: Array<NapiGlyphLayerRecord>
 }
 
 export interface NapiGlyphState {

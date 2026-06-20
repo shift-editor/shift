@@ -100,8 +100,7 @@ export class WorkspaceHost {
       "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
-      "workspace.glyph": ({ glyphId, sourceId }) =>
-        this.#serialize(() => this.#bridge.getGlyph(glyphId, sourceId)),
+      "workspace.layer": ({ layerId }) => this.#serialize(() => this.#bridge.getLayer(layerId)),
     });
   }
 

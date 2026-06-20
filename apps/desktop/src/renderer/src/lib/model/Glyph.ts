@@ -69,6 +69,16 @@ export {
   type SourcePositionTarget,
 };
 
+const EMPTY_GLYPH_STRUCTURE: GlyphStructure = {
+  contours: [],
+  anchors: [],
+  components: [],
+};
+
+function emptyGlyphGeometry(): GlyphGeometry {
+  return new GlyphGeometry(EMPTY_GLYPH_STRUCTURE, new Float64Array([0]));
+}
+
 interface GlyphEditState {
   readonly state: GlyphSourceState;
   readonly geometry: Signal<GlyphGeometry>;
@@ -1362,8 +1372,6 @@ export class Glyph {
       // Echoes (apply/undo/redo) fold into this session's state by layerId.
       font.editQueue.register(state.layerId, {
         state: this.#sourceState,
-        glyphId,
-        sourceId: source.id,
       });
     }
   }
@@ -1456,7 +1464,7 @@ export class Glyph {
 
     const exactSource = this.#font.sourceAt(location);
     if (exactSource) {
-      return this.#font.glyphSource(this.handle, exactSource)?.geometry ?? this.#geometry.peek();
+      return this.#font.glyphSource(this.handle, exactSource)?.geometry ?? emptyGlyphGeometry();
     }
 
     if (!this.#variationData) {
@@ -1534,8 +1542,6 @@ export class Glyph {
       // Echoes for this source's layer fold here, same as the primary.
       this.#font.editQueue.register(state.layerId, {
         state: sourceState,
-        glyphId: this.#glyphId,
-        sourceId: source.id,
       });
     }
 

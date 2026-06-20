@@ -7,10 +7,14 @@ import { Channel, nodePortTransport, type Transport } from "../../shared/workspa
 import {
   mintContourId,
   mintGlyphId,
+  mintLayerId,
   mintPointId,
+  type FontIntent,
   type GlyphId,
   type GlyphName,
+  type LayerId,
   type PointType,
+  type SourceId,
   type Unicode,
 } from "@shift/types";
 import type {
@@ -24,14 +28,37 @@ import { WorkspaceHost } from "./WorkspaceHost";
 
 type ShellChannel = Channel<ShellCallMap, ShellEventMap>;
 
-const createGlyphA = () => ({
+const createGlyphA = (glyphId: GlyphId = mintGlyphId()): FontIntent => ({
   kind: "createGlyph",
   createGlyph: {
-    glyphId: mintGlyphId(),
+    glyphId,
     name: "A" as GlyphName,
     unicodes: [65 as Unicode],
   },
 });
+
+const createGlyphLayer = (
+  glyphId: GlyphId,
+  sourceId: SourceId,
+  layerId: LayerId = mintLayerId(),
+): FontIntent => ({
+  kind: "createGlyphLayer",
+  createGlyphLayer: { layerId, glyphId, sourceId },
+});
+
+function createGlyphALayer(sourceId: SourceId): {
+  glyphId: GlyphId;
+  layerId: LayerId;
+  intents: FontIntent[];
+} {
+  const glyphId = mintGlyphId();
+  const layerId = mintLayerId();
+  return {
+    glyphId,
+    layerId,
+    intents: [createGlyphA(glyphId), createGlyphLayer(glyphId, sourceId, layerId)],
+  };
+}
 type SyncChannel = Channel<SyncCallMap, SyncEventMap>;
 
 describe("WorkspaceHost serves the workspace over transferred ports", () => {
@@ -266,7 +293,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(second.call("workspace.snapshot", undefined)).resolves.toEqual(created);
   });
 
-  it("apply createGlyph echoes records and a structural layer", async () => {
+  it("apply createGlyph echoes identity records without layers", async () => {
     const sync = await connectSyncLane();
     await sync.call("workspace.create", undefined);
 
@@ -276,11 +303,30 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
 
     expect(applied.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(applied.layers).toHaveLength(1);
-    expect(applied.layers[0].structure).toBeDefined();
+    expect(applied.glyphs?.[0]?.layers).toEqual([]);
+    expect(applied.layers).toEqual([]);
 
     const snapshot = await sync.call("workspace.snapshot", undefined);
     expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(snapshot?.glyphs[0]?.layers).toEqual([]);
+  });
+
+  it("apply createGlyphLayer echoes sparse membership and a structural layer", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await sync.call("workspace.create", undefined);
+    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+
+    const applied = await applyWorkspace(sync, {
+      intents,
+      label: "Add Glyph Layer",
+    });
+
+    expect(applied.glyphs?.[0]?.layers).toEqual([
+      { id: layerId, sourceId: snapshot.sources[0].id },
+    ]);
+    expect(applied.layers).toHaveLength(1);
+    expect(applied.layers[0].layerId).toBe(layerId);
+    expect(applied.layers[0].structure).toBeDefined();
   });
 
   it("workspace.save reports NeedsSaveAs for untitled workspaces", async () => {
@@ -363,8 +409,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("undo and redo createGlyph update glyph records", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await sync.call("workspace.create", undefined);
-    const sourceId = snapshot.sources[0].id;
+    await sync.call("workspace.create", undefined);
 
     const created = await applyWorkspace(sync, {
       intents: [createGlyphA()],
@@ -376,21 +421,27 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const undone = await undoWorkspace(sync);
     expect(undone?.glyphs?.map((glyph) => glyph.name)).toEqual([]);
     expect(undone?.layers).toEqual([]);
-    await expect(sync.call("workspace.glyph", { glyphId, sourceId })).resolves.toBeNull();
+    await expect(sync.call("workspace.snapshot", undefined)).resolves.toMatchObject({
+      glyphs: [],
+    });
 
     const redone = await redoWorkspace(sync);
     expect(redone?.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(redone?.layers).toHaveLength(1);
-    await expect(sync.call("workspace.glyph", { glyphId, sourceId })).resolves.not.toBeNull();
+    expect(redone?.glyphs?.[0]?.layers).toEqual([]);
+    expect(redone?.layers).toEqual([]);
+    await expect(sync.call("workspace.snapshot", undefined)).resolves.toMatchObject({
+      glyphs: [{ id: glyphId, name: "A", layers: [] }],
+    });
   });
 
   it("apply setXAdvance echoes values without structure or records", async () => {
     const sync = await connectSyncLane();
-    await sync.call("workspace.create", undefined);
+    const snapshot = await sync.call("workspace.create", undefined);
+    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
     const created = await applyWorkspace(sync, {
-      intents: [createGlyphA()],
+      intents,
     });
-    const layerId = created.layers[0].layerId;
+    expect(created.layers[0].layerId).toBe(layerId);
 
     const applied = await applyWorkspace(sync, {
       intents: [{ kind: "setXAdvance", setXAdvance: { layerId, width: 642 } }],
@@ -413,11 +464,12 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("pen intents apply atomically with client-minted ids through the channel", async () => {
     const sync = await connectSyncLane();
-    await sync.call("workspace.create", undefined);
+    const snapshot = await sync.call("workspace.create", undefined);
+    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
     const created = await applyWorkspace(sync, {
-      intents: [createGlyphA()],
+      intents,
     });
-    const layerId = created.layers[0].layerId;
+    expect(created.layers[0].layerId).toBe(layerId);
 
     const contourId = mintContourId();
     const p1 = mintPointId();
@@ -453,11 +505,12 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("undo and redo replay ledger entries through the channel", async () => {
     const sync = await connectSyncLane();
-    await sync.call("workspace.create", undefined);
+    const snapshot = await sync.call("workspace.create", undefined);
+    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
     const created = await applyWorkspace(sync, {
-      intents: [createGlyphA()],
+      intents,
     });
-    const layerId = created.layers[0].layerId;
+    expect(created.layers[0].layerId).toBe(layerId);
     const contourId = mintContourId();
     const p1 = mintPointId();
 
@@ -491,31 +544,33 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(redoWorkspace(sync)).resolves.toBeNull();
   });
 
-  it("workspace.glyph pulls replace-grade state by stable id", async () => {
+  it("workspace.layer pulls replace-grade state by stable layer id", async () => {
     const sync = await connectSyncLane();
     const snapshot = await sync.call("workspace.create", undefined);
-    const sourceId = snapshot.sources[0].id;
+    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
     const created = await applyWorkspace(sync, {
-      intents: [createGlyphA()],
+      intents,
     });
-    const glyphId = created.glyphs?.[0].id;
-    if (!glyphId) throw new Error("createGlyph must echo the record id");
+    expect(created.glyphs?.[0]?.layers).toEqual([
+      { id: layerId, sourceId: snapshot.sources[0].id },
+    ]);
 
-    const state = await sync.call("workspace.glyph", { glyphId, sourceId });
-    expect(state?.layerId).toBe(created.layers[0].layerId);
+    const state = await sync.call("workspace.layer", { layerId });
+    expect(state?.layerId).toBe(layerId);
     expect(state?.structure.contours).toEqual([]);
 
-    const missing = `glyph_${crypto.randomUUID()}` as GlyphId;
-    await expect(sync.call("workspace.glyph", { glyphId: missing, sourceId })).resolves.toBeNull();
+    const missing = `layer_${crypto.randomUUID()}` as LayerId;
+    await expect(sync.call("workspace.layer", { layerId: missing })).resolves.toBeNull();
   });
 
   it("CS0 skeleton: measures the apply round trip through the full stack", async () => {
     const sync = await connectSyncLane();
-    await sync.call("workspace.create", undefined);
+    const snapshot = await sync.call("workspace.create", undefined);
+    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
     const created = await applyWorkspace(sync, {
-      intents: [createGlyphA()],
+      intents,
     });
-    const layerId = created.layers[0].layerId;
+    expect(created.layers[0].layerId).toBe(layerId);
 
     const samples: number[] = [];
     for (let i = 0; i < 100; i++) {

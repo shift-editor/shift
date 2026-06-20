@@ -38,6 +38,7 @@ export {
   mintAxisId,
   mintPointId,
   mintGlyphId,
+  mintLayerId,
   mintSourceId,
 } from "./ids";
 
@@ -64,6 +65,7 @@ export type {
   ComponentData,
   ContourData,
   CreateAxisIntent,
+  CreateGlyphLayerIntent,
   DeleteAxisIntent,
   DeleteSourceIntent,
   CreateSourceIntent,
@@ -72,6 +74,7 @@ export type {
   FontMetrics,
   GlyphChangedEntities,
   GlyphHandle,
+  GlyphLayerRecord,
   GlyphMaster,
   GlyphName,
   GlyphRecord,

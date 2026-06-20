@@ -1,11 +1,4 @@
-import type {
-  AppliedChange,
-  FontIntent,
-  GlyphId,
-  GlyphState,
-  LayerId,
-  SourceId,
-} from "@shift/types";
+import type { AppliedChange, FontIntent, GlyphState, LayerId } from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import { signal, type Signal } from "@/lib/signals/signal";
 import type { GlyphSourceState } from "@/lib/model/GlyphSourceState";
@@ -16,8 +9,6 @@ export type WorkspaceCommitState = "idle" | "queued" | "applying";
 /** Where one layer's replace-grade echoes fold; registered per open session. */
 type FoldTarget = {
   state: GlyphSourceState;
-  glyphId: GlyphId;
-  sourceId: SourceId;
 };
 
 /**
@@ -110,9 +101,9 @@ export class WorkspaceEditQueue {
     });
   }
 
-  /** Pulls replace-grade glyph state, serialized behind pending writes. */
-  glyph(glyphId: GlyphId, sourceId: SourceId): Promise<GlyphState | null> {
-    return this.#withFlush(() => this.#workspace.glyph(glyphId, sourceId));
+  /** Pulls replace-grade glyph state by layer id, serialized behind pending writes. */
+  layer(layerId: LayerId): Promise<GlyphState | null> {
+    return this.#withFlush(() => this.#workspace.layer(layerId));
   }
 
   /** Replays the latest redo entry after pending pushes flush. */
@@ -217,8 +208,8 @@ export class WorkspaceEditQueue {
   /** Blunt recovery: re-pull truth for every registered layer and stomp. */
   async #resync(): Promise<void> {
     for (const [layerId, target] of this.#targets) {
-      const state = await this.#workspace.glyph(target.glyphId, target.sourceId);
-      if (state && state.layerId === layerId) {
+      const state = await this.#workspace.layer(layerId);
+      if (state) {
         target.state.replace(state);
       }
     }

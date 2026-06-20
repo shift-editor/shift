@@ -156,6 +156,14 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             change.width,
             change.height,
         ),
+        font::FontChange::GlyphLayerDeleted(change) => {
+            let rows_changed = tx.execute(
+                "DELETE FROM glyph_layers WHERE id = ?1",
+                [layer_row_id(&change.layer_id)],
+            )?;
+            require_changed(rows_changed, "glyph layer", layer_row_id(&change.layer_id))?;
+            Ok(())
+        }
         font::FontChange::LayerMetricsChanged(change) => {
             let rows_changed = tx.execute(
                 "
