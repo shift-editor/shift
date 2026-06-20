@@ -559,7 +559,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(state?.layerId).toBe(layerId);
     expect(state?.structure.contours).toEqual([]);
 
-    const missing = `layer_${crypto.randomUUID()}` as LayerId;
+    const missing = mintLayerId();
     await expect(sync.call("workspace.layer", { layerId: missing })).resolves.toBeNull();
   });
 

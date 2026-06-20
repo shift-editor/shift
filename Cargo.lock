@@ -1930,13 +1930,13 @@ name = "shift-font"
 version = "0.1.0"
 dependencies = [
  "fontdrasil 0.4.0",
+ "getrandom",
  "indexmap",
  "kurbo 0.13.0",
  "linesweeper",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "uuid",
 ]
 
 [[package]]

@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+const SHORT_ID_ALPHABET: &[u8; 64] =
+    b"useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+const SHORT_ID_SUFFIX_LENGTH: usize = 10;
+const SHORT_ID_ALPHABET_MASK: u8 = (SHORT_ID_ALPHABET.len() - 1) as u8;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EntityId(String);
 
@@ -101,7 +106,17 @@ impl std::fmt::Display for InvalidEntityId {
 impl std::error::Error for InvalidEntityId {}
 
 fn prefixed_id(prefix: &str) -> String {
-    format!("{prefix}_{}", uuid::Uuid::new_v4().simple())
+    format!("{prefix}_{}", short_id_suffix())
+}
+
+fn short_id_suffix() -> String {
+    let mut bytes = [0; SHORT_ID_SUFFIX_LENGTH];
+    getrandom::fill(&mut bytes).expect("secure random ID generation failed");
+
+    bytes
+        .iter()
+        .map(|byte| SHORT_ID_ALPHABET[(byte & SHORT_ID_ALPHABET_MASK) as usize] as char)
+        .collect()
 }
 
 typed_id!(PointId, "point");
@@ -123,6 +138,17 @@ mod tests {
         let id1 = EntityId::new();
         let id2 = EntityId::new();
         assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn typed_id_new_uses_short_readable_suffix() {
+        let id = SourceId::new();
+        let Some(suffix) = id.as_str().strip_prefix("source_") else {
+            panic!("source id should keep its typed prefix");
+        };
+
+        assert_eq!(suffix.len(), SHORT_ID_SUFFIX_LENGTH);
+        assert!(suffix.bytes().all(|byte| SHORT_ID_ALPHABET.contains(&byte)));
     }
 
     #[test]
