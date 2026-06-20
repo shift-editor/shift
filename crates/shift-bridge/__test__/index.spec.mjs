@@ -7,7 +7,20 @@ import { join } from "path";
 const require = createRequire(import.meta.url);
 const { Bridge } = require("../index.js");
 
-const mintId = (prefix) => `${prefix}_${crypto.randomUUID()}`;
+const shortIdAlphabet = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+const shortIdLength = 10;
+const shortIdAlphabetMask = shortIdAlphabet.length - 1;
+
+function mintId(prefix) {
+  const bytes = new Uint8Array(shortIdLength);
+  crypto.getRandomValues(bytes);
+
+  let suffix = "";
+  for (let i = 0; i < bytes.length; i++) {
+    suffix += shortIdAlphabet[bytes[i] & shortIdAlphabetMask];
+  }
+  return `${prefix}_${suffix}`;
+}
 
 describe("Bridge", () => {
   let bridge;

@@ -2,7 +2,7 @@
  * Branded ID types for type-safe identification of font entities.
  *
  * These types ensure compile-time safety when working with IDs across the
- * TS/Rust boundary. Ids are prefixed strings (`point_<uuid>`). The renderer
+ * TS/Rust boundary. Ids are prefixed strings (`point_<short-id>`). The renderer
  * MINTS ids for entities it creates (client-minted ids: verbs return
  * identity synchronously; Rust validates and honors them); all other ids
  * come from Rust.
@@ -219,44 +219,78 @@ export function isValidSourceId(id: unknown): id is SourceId {
   return typeof id === "string" && id.length > 0;
 }
 
+const SHORT_ID_ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+const SHORT_ID_SUFFIX_LENGTH = 10;
+const SHORT_ID_ALPHABET_MASK = SHORT_ID_ALPHABET.length - 1;
+
+type MintedIdByPrefix = {
+  point: PointId;
+  contour: ContourId;
+  anchor: AnchorId;
+  axis: AxisId;
+  component: ComponentId;
+  guideline: GuidelineId;
+  glyph: GlyphId;
+  layer: LayerId;
+  source: SourceId;
+};
+
 // Web Crypto's global, present in both the renderer and node >= 19. The
 // shared lib config deliberately includes neither DOM nor node types.
-declare const crypto: { randomUUID(): string };
+declare const crypto: { getRandomValues<T extends Uint8Array>(array: T): T };
+
+function mintShortIdSuffix(): string {
+  const bytes = new Uint8Array(SHORT_ID_SUFFIX_LENGTH);
+  crypto.getRandomValues(bytes);
+
+  let suffix = "";
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = bytes[i];
+    suffix += SHORT_ID_ALPHABET[byte & SHORT_ID_ALPHABET_MASK];
+  }
+  return suffix;
+}
+
+function mintPrefixedId<Prefix extends keyof MintedIdByPrefix>(
+  prefix: Prefix,
+): MintedIdByPrefix[Prefix] {
+  return `${prefix}_${mintShortIdSuffix()}` as MintedIdByPrefix[Prefix];
+}
 
 /**
  * Mints a new point id. Client-minted ids let editing verbs return identity
  * synchronously; Rust honors them and rejects duplicates.
  */
 export function mintPointId(): PointId {
-  return `point_${crypto.randomUUID()}` as PointId;
+  return mintPrefixedId("point");
 }
 
 /** Mints a new contour id. See {@link mintPointId}. */
 export function mintContourId(): ContourId {
-  return `contour_${crypto.randomUUID()}` as ContourId;
+  return mintPrefixedId("contour");
 }
 
 /** Mints a new anchor id. See {@link mintPointId}. */
 export function mintAnchorId(): AnchorId {
-  return `anchor_${crypto.randomUUID()}` as AnchorId;
+  return mintPrefixedId("anchor");
 }
 
 /** Mints a new axis id. See {@link mintPointId}. */
 export function mintAxisId(): AxisId {
-  return `axis_${crypto.randomUUID()}` as AxisId;
+  return mintPrefixedId("axis");
 }
 
 /** Mints a new glyph id. See {@link mintPointId}. */
 export function mintGlyphId(): GlyphId {
-  return `glyph_${crypto.randomUUID()}` as GlyphId;
+  return mintPrefixedId("glyph");
 }
 
 /** Mints a new layer id. See {@link mintPointId}. */
 export function mintLayerId(): LayerId {
-  return `layer_${crypto.randomUUID()}` as LayerId;
+  return mintPrefixedId("layer");
 }
 
 /** Mints a new source id. See {@link mintPointId}. */
 export function mintSourceId(): SourceId {
-  return `source_${crypto.randomUUID()}` as SourceId;
+  return mintPrefixedId("source");
 }
