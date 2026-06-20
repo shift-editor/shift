@@ -7,6 +7,7 @@ import {
   cn,
 } from "@shift/ui";
 import type { ReactNode } from "react";
+import { SidebarActionSlot } from "./SidebarActionRow";
 
 export interface CollapsibleSectionProps {
   title: string;
@@ -24,7 +25,7 @@ export const CollapsibleSection = ({
   children,
 }: CollapsibleSectionProps) => (
   <Collapsible defaultOpen={defaultOpen} className={cn("flex flex-col", className)}>
-    <div className="group flex items-center gap-1 rounded transition-colors hover:bg-hover/50">
+    <div className="group grid grid-cols-[minmax(0,1fr)_1.5rem] items-center rounded transition-colors hover:bg-hover/50">
       <CollapsibleTrigger
         render={
           <Button
@@ -37,12 +38,8 @@ export const CollapsibleSection = ({
         <CollapsibleChevron />
         <h3 className="truncate text-ui font-medium text-[#232323]">{title}</h3>
       </CollapsibleTrigger>
-      {actions && (
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          {actions}
-        </div>
-      )}
+      {actions && <SidebarActionSlot>{actions}</SidebarActionSlot>}
     </div>
-    <CollapsiblePanel className="px-2 pt-2">{children}</CollapsiblePanel>
+    <CollapsiblePanel className="pt-2">{children}</CollapsiblePanel>
   </Collapsible>
 );

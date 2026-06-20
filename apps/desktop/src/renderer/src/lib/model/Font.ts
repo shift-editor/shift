@@ -10,8 +10,9 @@ import type {
   SourceId,
   Unicode,
   AxisId,
+  Location,
 } from "@shift/types";
-import { mintAxisId, mintGlyphId } from "@shift/types";
+import { mintAxisId, mintGlyphId, mintSourceId } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals/signal";
 import type { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
@@ -790,6 +791,16 @@ export class Font {
     return glyphSource;
   }
 
+  createSource(name: string, location: Location): SourceId {
+    const sourceId = mintSourceId();
+    this.editQueue.push({
+      kind: "createSource",
+      createSource: { sourceId, name, location },
+    });
+
+    return sourceId;
+  }
+
   /** @knipclassignore — used by VariationPanel component */
   createAxis(
     name: string,
@@ -813,6 +824,13 @@ export class Font {
     this.editQueue.push({
       kind: "deleteAxis",
       deleteAxis: { axisId },
+    });
+  }
+
+  deleteSource(sourceId: SourceId): void {
+    this.editQueue.push({
+      kind: "deleteSource",
+      deleteSource: { sourceId },
     });
   }
 

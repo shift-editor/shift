@@ -197,10 +197,11 @@ export interface NapiCreateGlyphIntent {
 }
 
 /**
- * Font-level source creation. Rust mints the source id; the echo's
- * `sources` list carries it back.
+ * Font-level source creation. The source id is client-minted so verbs can
+ * return identity synchronously; Rust honors it and rejects duplicates.
  */
 export interface NapiCreateSourceIntent {
+  sourceId: SourceId
   name: string
   /** Axis id → design-space value for the new source. */
   location: NapiLocation
@@ -209,6 +210,11 @@ export interface NapiCreateSourceIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface NapiDeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Font-level source deletion. Removing a source also removes its glyph layers. */
+export interface NapiDeleteSourceIntent {
+  sourceId: SourceId
 }
 
 /**
@@ -223,7 +229,7 @@ export interface NapiFontIntent {
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
-   * kinds: "deleteAxis". Every
+   * kinds: "deleteAxis" | "deleteSource". Every
    * kind shares the same apply path; one set = one undo step.
    */
   kind: string
@@ -245,6 +251,7 @@ export interface NapiFontIntent {
   createAxis?: NapiCreateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
   createSource?: NapiCreateSourceIntent
+  deleteSource?: NapiDeleteSourceIntent
 }
 
 export interface NapiFontMetadata {

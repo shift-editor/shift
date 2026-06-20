@@ -24,6 +24,7 @@ export type {
   ContourData,
   CreateAxisIntent,
   DeleteAxisIntent,
+  DeleteSourceIntent,
   CreateSourceIntent,
   FontIntent,
   FontMetadata,

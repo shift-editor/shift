@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mintAxisId,
   mintGlyphId,
+  mintSourceId,
   type AxisId,
   type GlyphId,
   type GlyphName,
@@ -126,16 +127,20 @@ describe("font-level intents make the font variable", () => {
     expect(stack.font.getAxes().map((axis) => axis.tag)).toEqual(["wght"]);
     expect(stack.font.isVariable()).toBe(true);
 
+    const boldSourceId = mintSourceId();
     const applied = await stack.client.apply([
       {
         kind: "createSource",
         createSource: {
+          sourceId: boldSourceId,
           name: "Bold",
           location: { values: { [weightAxisId]: 700 } as Record<AxisId, number> },
         },
       },
     ]);
-    expect(stack.font.sources.map((source) => source.name)).toContain("Bold");
+    const bold = stack.font.sources.find((source) => source.name === "Bold");
+    expect(bold?.id).toBe(boldSourceId);
+    expect(applied.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
     expect(applied.layers.length).toBe(1); // eager layer for the existing glyph
   });
 });

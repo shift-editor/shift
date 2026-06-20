@@ -56,6 +56,9 @@ pub enum CoreError {
     #[error("source {0} not found")]
     SourceNotFound(SourceId),
 
+    #[error("source id {0} already exists")]
+    DuplicateSourceId(SourceId),
+
     #[error("layer {0} not found")]
     LayerNotFound(LayerId),
 
@@ -94,6 +97,9 @@ pub enum CoreError {
 
     #[error("source name {0} already exists")]
     DuplicateSourceName(String),
+
+    #[error("cannot delete the last source")]
+    CannotDeleteLastSource,
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

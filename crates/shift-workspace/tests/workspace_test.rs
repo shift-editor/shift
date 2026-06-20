@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use shift_font::{
-    Axis, AxisId, FontChange, FontIntent, FontIntentSet, GlyphId, LayerId, Location,
+    Axis, AxisId, FontChange, FontIntent, FontIntentSet, GlyphId, LayerId, Location, SourceId,
     error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
@@ -516,6 +516,7 @@ fn mixed_font_level_batch_undoes_axis_source_and_glyph_together() {
                         ),
                     },
                     FontIntent::CreateSource {
+                        source_id: SourceId::from_raw("bold"),
                         name: "Bold".to_string(),
                         location,
                     },

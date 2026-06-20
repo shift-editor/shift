@@ -1,2 +1,2 @@
 export { CollapsibleSection, type CollapsibleSectionProps } from "./CollapsibleSection";
-export { SidebarActionButton, SidebarActionRow } from "./SidebarActionRow";
+export { SidebarActionButton, SidebarActionRow, SidebarActionSlot } from "./SidebarActionRow";

@@ -480,7 +480,7 @@ pub struct NapiFontIntent {
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
     /// Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
-    /// kinds: "deleteAxis". Every
+    /// kinds: "deleteAxis" | "deleteSource". Every
     /// kind shares the same apply path; one set = one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -501,6 +501,7 @@ pub struct NapiFontIntent {
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
+    pub delete_source: Option<NapiDeleteSourceIntent>,
 }
 
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
@@ -549,10 +550,19 @@ pub struct NapiDeleteAxisIntent {
     pub axis_id: String,
 }
 
-/// Font-level source creation. Rust mints the source id; the echo's
-/// `sources` list carries it back.
+/// Font-level source deletion. Removing a source also removes its glyph layers.
+#[napi(object)]
+pub struct NapiDeleteSourceIntent {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+}
+
+/// Font-level source creation. The source id is client-minted so verbs can
+/// return identity synchronously; Rust honors it and rejects duplicates.
 #[napi(object)]
 pub struct NapiCreateSourceIntent {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
     pub name: String,
     /// Axis id → design-space value for the new source.
     pub location: NapiLocation,

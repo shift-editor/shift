@@ -42,11 +42,11 @@ export const AxesPanel = () => {
       {axes.length > 0 &&
         axes.map((axis) => (
           <div key={axis.id} className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between px-2">
               <span className="text-ui text-secondary">{axis.name}</span>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_1.5rem] items-center gap-4 pl-2">
               <EditableSidebarInput
                 value={axisValue(location, axis)}
                 className="w-14"
@@ -102,12 +102,12 @@ const AxisActionsMenu = ({ axis, onReset, onDelete }: AxisActionsMenuProps) => (
         <Button
           variant="ghost"
           size="icon-sm"
-          className="h-6 w-6 p-0"
+          className="h-6 w-6 p-0.5"
           aria-label={`Actions for ${axis.name}`}
         />
       }
     >
-      <VerticalElipsis className="w-4 h-4" />
+      <VerticalElipsis className="h-5 w-5" />
     </MenuTrigger>
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">

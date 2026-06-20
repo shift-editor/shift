@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import type { AxisId, GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
-import { mintAxisId, mintContourId, mintGlyphId, mintPointId } from "@shift/types";
+import { mintAxisId, mintContourId, mintGlyphId, mintPointId, mintSourceId } from "@shift/types";
 import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
@@ -78,10 +78,12 @@ async function variableFont(): Promise<{
       },
     },
   ]);
+  const boldSourceId = mintSourceId();
   const sourced = await stack.client.apply([
     {
       kind: "createSource",
       createSource: {
+        sourceId: boldSourceId,
         name: "Bold",
         location: { values: { [weightAxisId]: 700 } as Record<AxisId, number> },
       },
@@ -89,6 +91,7 @@ async function variableFont(): Promise<{
   ]);
   const boldLayerId = sourced.layers[0]!.layerId;
   const bold = sourced.sources!.find((source) => source.name === "Bold")!;
+  expect(bold.id).toBe(boldSourceId);
 
   // Author both masters before any glyph model opens so the pulled
   // variation deltas cover them.

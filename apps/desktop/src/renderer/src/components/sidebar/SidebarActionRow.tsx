@@ -18,25 +18,36 @@ export const SidebarActionRow = ({
   className,
   contentClassName,
 }: SidebarActionRowProps) => (
-  <div className={cn("group flex min-w-0 items-center gap-1 w-full", className)}>
+  <div
+    className={cn(
+      "group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_1.5rem] items-center rounded transition-colors",
+      "hover:bg-hover/50 data-[active]:bg-hover/50",
+      className,
+    )}
+    data-active={isActive ? true : undefined}
+  >
     {onClick ? (
       <Button
         variant="ghost"
         size="sm"
-        isActive={isActive}
         onClick={onClick}
-        className={cn("min-w-0 flex-1 justify-start px-2", contentClassName)}
+        className={cn(
+          "min-w-0 flex-1 justify-start bg-transparent px-2 hover:bg-transparent data-[active]:bg-transparent",
+          contentClassName,
+        )}
       >
         {children}
       </Button>
     ) : (
       <div className={cn("min-w-0 flex-1 px-2", contentClassName)}>{children}</div>
     )}
-    {actions && (
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        {actions}
-      </div>
-    )}
+    {actions && <SidebarActionSlot>{actions}</SidebarActionSlot>}
+  </div>
+);
+
+export const SidebarActionSlot = ({ children }: { children?: ReactNode }) => (
+  <div className="flex h-6 w-6 shrink-0 items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+    {children}
   </div>
 );
 
@@ -56,7 +67,7 @@ export const SidebarActionButton = ({
     size="icon-sm"
     aria-label={label}
     title={label}
-    className={cn("h-6 w-6 text-muted hover:text-primary", className)}
+    className={cn("h-6 w-6 p-0.5 text-muted hover:text-primary", className)}
     {...props}
   >
     {children}

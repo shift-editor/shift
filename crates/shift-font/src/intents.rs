@@ -132,8 +132,12 @@ pub enum FontIntent {
     DeleteAxis {
         axis_id: AxisId,
     },
+    DeleteSource {
+        source_id: SourceId,
+    },
     /// Creates the source plus one eager layer per existing glyph.
     CreateSource {
+        source_id: SourceId,
         name: String,
         location: Location,
     },
@@ -162,6 +166,7 @@ impl FontIntent {
             | Self::UpdateGlyph { .. }
             | Self::CreateAxis { .. }
             | Self::DeleteAxis { .. }
+            | Self::DeleteSource { .. }
             | Self::CreateSource { .. } => None,
         }
     }
@@ -280,9 +285,15 @@ impl Font {
                 self.apply_delete_axis(axis_id, changes)?;
                 Ok(Vec::new())
             }
-            FontIntent::CreateSource { name, location } => {
-                self.apply_create_source(name, location, changes)
+            FontIntent::DeleteSource { source_id } => {
+                self.apply_delete_source(source_id, changes)?;
+                Ok(Vec::new())
             }
+            FontIntent::CreateSource {
+                source_id,
+                name,
+                location,
+            } => self.apply_create_source(source_id.clone(), name, location, changes),
             _ => unreachable!("editing intents take the layer path"),
         }
     }
@@ -353,8 +364,37 @@ impl Font {
         Ok(())
     }
 
+    fn apply_delete_source(
+        &mut self,
+        source_id: &SourceId,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<()> {
+        if self.sources().len() <= 1 {
+            return Err(CoreError::CannotDeleteLastSource);
+        }
+
+        let layer_ids: Vec<LayerId> = self
+            .glyphs()
+            .filter_map(|glyph| {
+                glyph
+                    .layer_for_source(source_id.clone())
+                    .map(|layer| layer.id())
+            })
+            .collect();
+
+        for layer_id in layer_ids {
+            self.remove_glyph_layer(layer_id)?;
+        }
+
+        self.remove_source(source_id.clone())
+            .ok_or_else(|| CoreError::SourceNotFound(source_id.clone()))?;
+        changes.push(FontChange::source_deleted(source_id.clone()));
+        Ok(())
+    }
+
     fn apply_create_source(
         &mut self,
+        source_id: SourceId,
         name: &str,
         location: &Location,
         changes: &mut FontChangeSet,
@@ -366,6 +406,9 @@ impl Font {
         if self.sources().iter().any(|source| source.name() == name) {
             return Err(CoreError::DuplicateSourceName(name.to_string()));
         }
+        if self.sources().iter().any(|source| source.id() == source_id) {
+            return Err(CoreError::DuplicateSourceId(source_id));
+        }
 
         for (axis_id, _) in location.iter() {
             if !self.axes().iter().any(|axis| axis.id() == *axis_id) {
@@ -373,8 +416,7 @@ impl Font {
             }
         }
 
-        let source = Source::new(name.to_string(), location.clone());
-        let source_id = source.id();
+        let source = Source::with_id(source_id.clone(), name.to_string(), location.clone(), None);
         changes.push(FontChange::source_created(&source));
         self.add_source(source);
 
@@ -705,6 +747,7 @@ impl Font {
             | FontIntent::UpdateGlyph { .. }
             | FontIntent::CreateAxis { .. }
             | FontIntent::DeleteAxis { .. }
+            | FontIntent::DeleteSource { .. }
             | FontIntent::CreateSource { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }
