@@ -31,6 +31,7 @@ Shift aims to redefine font editing by combining the power of Rust for performan
 │  shift-font        live font authoring model                 │
 │  shift-store       SQLite working store                      │
 │  shift-source      .shift source package IO                  │
+│  shift-cli         read-only package inspection CLI          │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -63,6 +64,18 @@ pnpm install
 pnpm build:native
 pnpm dev
 ```
+
+### Command-line inspection
+
+The `shift` CLI can inspect `.shift` source packages without modifying them:
+
+```bash
+cargo run -p shift-cli -- inspect path/to/Family.shift
+cargo run -p shift-cli -- inspect --view axes path/to/Family.shift
+cargo run -p shift-cli -- inspect --json path/to/Family.shift
+```
+
+See [crates/shift-cli/README.md](crates/shift-cli/README.md) for the supported views and development commands.
 
 ## Roadmap
 
