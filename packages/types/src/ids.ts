@@ -250,3 +250,8 @@ export function mintAxisId(): AxisId {
 export function mintGlyphId(): GlyphId {
   return `glyph_${crypto.randomUUID()}` as GlyphId;
 }
+
+/** Mints a new source id. See {@link mintPointId}. */
+export function mintSourceId(): SourceId {
+  return `source_${crypto.randomUUID()}` as SourceId;
+}

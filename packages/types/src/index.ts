@@ -38,6 +38,7 @@ export {
   mintAxisId,
   mintPointId,
   mintGlyphId,
+  mintSourceId,
 } from "./ids";
 
 export type {
@@ -64,6 +65,7 @@ export type {
   ContourData,
   CreateAxisIntent,
   DeleteAxisIntent,
+  DeleteSourceIntent,
   CreateSourceIntent,
   FontIntent,
   FontMetadata,

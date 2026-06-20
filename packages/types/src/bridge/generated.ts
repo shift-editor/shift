@@ -202,10 +202,11 @@ export interface CreateGlyphIntent {
 }
 
 /**
- * Font-level source creation. Rust mints the source id; the echo's
- * `sources` list carries it back.
+ * Font-level source creation. The source id is client-minted so verbs can
+ * return identity synchronously; Rust honors it and rejects duplicates.
  */
 export interface CreateSourceIntent {
+  sourceId: SourceId
   name: string
   /** Axis id → design-space value for the new source. */
   location: Location
@@ -214,6 +215,11 @@ export interface CreateSourceIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface DeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Font-level source deletion. Removing a source also removes its glyph layers. */
+export interface DeleteSourceIntent {
+  sourceId: SourceId
 }
 
 /**
@@ -228,7 +234,7 @@ export interface FontIntent {
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
-   * kinds: "deleteAxis". Every
+   * kinds: "deleteAxis" | "deleteSource". Every
    * kind shares the same apply path; one set = one undo step.
    */
   kind: string
@@ -250,6 +256,7 @@ export interface FontIntent {
   createAxis?: CreateAxisIntent
   deleteAxis?: DeleteAxisIntent
   createSource?: CreateSourceIntent
+  deleteSource?: DeleteSourceIntent
 }
 
 export interface FontMetadata {

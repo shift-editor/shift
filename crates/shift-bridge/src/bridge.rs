@@ -783,11 +783,20 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         axis_id: parse::<AxisId>(&payload.axis_id)?,
       })
     }
+    "deleteSource" => {
+      let payload = intent
+        .delete_source
+        .ok_or_else(|| missing("deleteSource"))?;
+      Ok(FontIntent::DeleteSource {
+        source_id: parse::<SourceId>(&payload.source_id)?,
+      })
+    }
     "createSource" => {
       let payload = intent
         .create_source
         .ok_or_else(|| missing("createSource"))?;
       Ok(FontIntent::CreateSource {
+        source_id: parse::<SourceId>(&payload.source_id)?,
         name: payload.name,
         location: map_location(payload.location)?,
       })
@@ -845,8 +854,8 @@ mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
     NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCreateAxisIntent,
-    NapiCreateGlyphIntent, NapiCreateSourceIntent, NapiDeleteAxisIntent, NapiLocation,
-    NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
+    NapiCreateGlyphIntent, NapiCreateSourceIntent, NapiDeleteAxisIntent, NapiDeleteSourceIntent,
+    NapiLocation, NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
     NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
     NapiSetContourClosedIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
     NapiTranslatePointsIntent,
@@ -876,6 +885,7 @@ mod tests {
       create_axis: None,
       delete_axis: None,
       create_source: None,
+      delete_source: None,
     }
   }
 
@@ -1717,9 +1727,19 @@ mod tests {
     }
   }
 
-  fn create_source_intent(name: &str, location: &[(&str, f64)]) -> NapiFontIntent {
+  fn delete_source_intent(source_id: &str) -> NapiFontIntent {
+    NapiFontIntent {
+      delete_source: Some(NapiDeleteSourceIntent {
+        source_id: source_id.to_string(),
+      }),
+      ..skeleton_intent("deleteSource")
+    }
+  }
+
+  fn create_source_intent(source_id: &str, name: &str, location: &[(&str, f64)]) -> NapiFontIntent {
     NapiFontIntent {
       create_source: Some(NapiCreateSourceIntent {
+        source_id: source_id.to_string(),
         name: name.to_string(),
         location: NapiLocation {
           values: location
@@ -1803,7 +1823,11 @@ mod tests {
 
     let applied = bridge
       .apply(
-        vec![create_source_intent("Bold", &[("axis_weight", 700.0)])],
+        vec![create_source_intent(
+          "source_bold",
+          "Bold",
+          &[("axis_weight", 700.0)],
+        )],
         None,
       )
       .unwrap();
@@ -1814,6 +1838,7 @@ mod tests {
       .iter()
       .find(|source| source.name == "Bold")
       .expect("new source must be in the echo");
+    assert_eq!(bold.id, "source_bold");
     assert_eq!(bold.location.values.get("axis_weight"), Some(&700.0));
     // one eager layer per existing glyph, replace-grade
     assert_eq!(applied.layers.len(), 1);
@@ -1829,7 +1854,11 @@ mod tests {
 
     let applied = bridge
       .apply(
-        vec![create_source_intent("Bold", &[("axis_weight", 700.0)])],
+        vec![create_source_intent(
+          "source_bold",
+          "Bold",
+          &[("axis_weight", 700.0)],
+        )],
         None,
       )
       .unwrap();
@@ -1856,7 +1885,11 @@ mod tests {
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
     let result = bridge.apply(
-      vec![create_source_intent("Wide", &[("axis_width", 125.0)])],
+      vec![create_source_intent(
+        "source_wide",
+        "Wide",
+        &[("axis_width", 125.0)],
+      )],
       None,
     );
 
@@ -1870,7 +1903,94 @@ mod tests {
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
     // the untitled workspace already has a "Regular" source
-    let result = bridge.apply(vec![create_source_intent("Regular", &[])], None);
+    let result = bridge.apply(
+      vec![create_source_intent(
+        "source_regular_duplicate",
+        "Regular",
+        &[],
+      )],
+      None,
+    );
+
+    assert!(result.is_err());
+    assert_eq!(bridge.get_sources().unwrap().len(), 1);
+  }
+
+  #[test]
+  fn apply_create_source_rejects_duplicate_source_ids() {
+    let mut bridge = bridge_with_workspace();
+    bridge.apply(vec![weight_axis_intent()], None).unwrap();
+    bridge
+      .apply(
+        vec![create_source_intent(
+          "source_bold",
+          "Bold",
+          &[("axis_weight", 700.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let result = bridge.apply(
+      vec![create_source_intent(
+        "source_bold",
+        "Bold Again",
+        &[("axis_weight", 800.0)],
+      )],
+      None,
+    );
+
+    assert!(result.is_err());
+    assert_eq!(bridge.get_sources().unwrap().len(), 2);
+  }
+
+  #[test]
+  fn apply_delete_source_echoes_sources_and_removes_layers() {
+    let mut bridge = bridge_with_workspace();
+    let default_layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    bridge.apply(vec![weight_axis_intent()], None).unwrap();
+    bridge
+      .apply(
+        vec![create_source_intent(
+          "source_bold",
+          "Bold",
+          &[("axis_weight", 700.0)],
+        )],
+        None,
+      )
+      .unwrap();
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    assert!(bridge
+      .get_glyph(glyph_id.clone(), "source_bold".to_string())
+      .unwrap()
+      .is_some());
+
+    let applied = bridge
+      .apply(vec![delete_source_intent("source_bold")], None)
+      .unwrap();
+
+    let sources = applied.sources.expect("deleteSource must echo sources");
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].name, "Regular");
+    assert!(applied.glyphs.is_none());
+    assert!(applied.layers.is_empty());
+    assert!(bridge
+      .get_glyph(glyph_id.clone(), "source_bold".to_string())
+      .unwrap()
+      .is_none());
+    let default_state = bridge
+      .get_glyph(glyph_id, default_source_id(&bridge))
+      .unwrap()
+      .expect("default source must keep its layer");
+    assert_eq!(default_state.layer_id, default_layer_id);
+  }
+
+  #[test]
+  fn apply_delete_source_rejects_last_source() {
+    let mut bridge = bridge_with_workspace();
+    let source_id = default_source_id(&bridge);
+
+    let result = bridge.apply(vec![delete_source_intent(&source_id)], None);
 
     assert!(result.is_err());
     assert_eq!(bridge.get_sources().unwrap().len(), 1);
@@ -1882,7 +2002,11 @@ mod tests {
     bridge.apply(vec![weight_axis_intent()], None).unwrap();
     bridge
       .apply(
-        vec![create_source_intent("Bold", &[("axis_weight", 700.0)])],
+        vec![create_source_intent(
+          "source_bold",
+          "Bold",
+          &[("axis_weight", 700.0)],
+        )],
         None,
       )
       .unwrap();
