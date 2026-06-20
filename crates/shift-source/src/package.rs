@@ -25,8 +25,8 @@ pub const GLYPHS_DIR: &str = "glyphs";
 pub const MODULES_DIR: &str = "modules";
 pub const LIB_MODULE_FILE: &str = "modules/shift.libData.json";
 
-const FORMAT_ID: &str = "shift-source";
-const SCHEMA_VERSION: u32 = 1;
+pub const FORMAT_ID: &str = "shift-source";
+pub const SCHEMA_VERSION: u32 = 1;
 const KERNING_SCHEMA_VERSION: u32 = 1;
 const LIB_MODULE_OWNER: &str = "shift";
 const LIB_MODULE_NAME: &str = "libData";
