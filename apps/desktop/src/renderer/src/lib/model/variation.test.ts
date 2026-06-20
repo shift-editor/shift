@@ -1,6 +1,13 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import type { AxisId, GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
-import { mintAxisId, mintContourId, mintGlyphId, mintPointId, mintSourceId } from "@shift/types";
+import {
+  mintAxisId,
+  mintContourId,
+  mintGlyphId,
+  mintLayerId,
+  mintPointId,
+  mintSourceId,
+} from "@shift/types";
 import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
@@ -54,14 +61,26 @@ async function variableFont(): Promise<{
   const stack = createWorkspaceStack();
   await stack.client.create();
 
+  const glyphId = mintGlyphId();
+  const regularLayerId = mintLayerId();
   const created = await stack.client.apply([
     {
       kind: "createGlyph",
-      createGlyph: { glyphId: mintGlyphId(), name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+    },
+    {
+      kind: "createGlyphLayer",
+      createGlyphLayer: {
+        layerId: regularLayerId,
+        glyphId,
+        sourceId: stack.font.defaultSource.id,
+      },
     },
   ]);
-  const glyphId = created.glyphs![0]!.id;
-  const regularLayerId = created.layers[0]!.layerId;
+  expect(created.glyphs![0]!.layers).toContainEqual({
+    id: regularLayerId,
+    sourceId: stack.font.defaultSource.id,
+  });
 
   const weightAxisId = mintAxisId();
   await stack.client.apply([
@@ -89,11 +108,19 @@ async function variableFont(): Promise<{
       },
     },
   ]);
-  const boldLayerId = sourced.layers[0]!.layerId;
   const bold = sourced.sources!.find((source) => source.name === "Bold")!;
   expect(bold.id).toBe(boldSourceId);
+  expect(sourced.layers).toEqual([]);
 
-  // Author both masters before any glyph model opens so the pulled
+  const boldLayerId = mintLayerId();
+  await stack.client.apply([
+    {
+      kind: "createGlyphLayer",
+      createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldSourceId },
+    },
+  ]);
+
+  // Author both layers before any glyph model opens so the pulled
   // variation deltas cover them.
   await drawSquare(stack, regularLayerId, 100);
   await drawSquare(stack, boldLayerId, 200);

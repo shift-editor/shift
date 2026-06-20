@@ -27,13 +27,17 @@ pub enum LedgerStep {
         pre: Option<Axis>,
         post: Option<Axis>,
     },
-    /// Source existence plus the eager per-glyph layers minted with it.
-    /// Layers owned by glyphs created in the same entry ride their
-    /// [`LedgerStep::Glyph`] snapshots instead.
+    /// Source existence. Sparse glyph-layer existence is represented by
+    /// separate [`LedgerStep::GlyphLayer`] entries.
     Source {
         pre: Option<Source>,
         post: Option<Source>,
-        layers: Vec<(GlyphId, GlyphLayer)>,
+    },
+    /// Independent glyph-layer existence for sparse source authoring.
+    GlyphLayer {
+        glyph_id: GlyphId,
+        pre: Option<Box<GlyphLayer>>,
+        post: Option<Box<GlyphLayer>>,
     },
 }
 

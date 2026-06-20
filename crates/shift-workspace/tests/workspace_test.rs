@@ -31,6 +31,27 @@ fn create_glyph(workspace: &mut FontWorkspace, name: &str, unicodes: Vec<u32>) -
     workspace.font().glyph_id_by_name(name).unwrap()
 }
 
+fn create_glyph_layer(
+    workspace: &mut FontWorkspace,
+    glyph_id: GlyphId,
+    source_id: SourceId,
+) -> LayerId {
+    let layer_id = LayerId::new();
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateGlyphLayer {
+                    layer_id: layer_id.clone(),
+                    glyph_id,
+                    source_id,
+                }],
+            },
+            None,
+        )
+        .unwrap();
+    layer_id
+}
+
 #[test]
 fn creates_untitled_workspace_with_working_store_only() {
     let temp = tempfile::tempdir().unwrap();
@@ -416,10 +437,7 @@ fn apply_set_x_advance_updates_existing_layer() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = workspace.font().default_source_id().unwrap();
     let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
-    let layer_id = workspace
-        .font()
-        .layer_id_for_glyph_source(glyph_id, source_id)
-        .unwrap();
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
 
     let outcome = workspace
         .apply(set_x_advance_intents(layer_id.clone(), 640.0), None)
@@ -430,12 +448,10 @@ fn apply_set_x_advance_updates_existing_layer() {
 }
 
 #[test]
-fn create_glyph_undo_redo_removes_and_restores_glyph_with_layers() {
+fn create_glyph_undo_redo_removes_and_restores_glyph_identity() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    let source_count = workspace.font().sources().len();
-
     let applied = workspace
         .apply(
             FontIntentSet {
@@ -447,7 +463,15 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_with_layers() {
     let glyph_id = workspace.font().glyph_id_by_name("A").unwrap();
 
     assert_eq!(workspace.font().glyph_count(), 1);
-    assert_eq!(applied.layers.len(), source_count);
+    assert!(applied.layers.is_empty());
+    assert!(
+        workspace
+            .font()
+            .glyph(glyph_id.clone())
+            .unwrap()
+            .layers()
+            .is_empty()
+    );
 
     let undone = workspace.undo().unwrap().expect("createGlyph should undo");
     assert_eq!(workspace.font().glyph_count(), 0);
@@ -457,8 +481,157 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_with_layers() {
 
     let redone = workspace.redo().unwrap().expect("createGlyph should redo");
     assert_eq!(workspace.font().glyph_count(), 1);
-    assert_eq!(redone.layers.len(), source_count);
+    assert!(redone.layers.is_empty());
     assert!(workspace.font().glyph(glyph_id).is_some());
+}
+
+#[test]
+fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = LayerId::new();
+
+    let applied = workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateGlyphLayer {
+                    layer_id: layer_id.clone(),
+                    glyph_id: glyph_id.clone(),
+                    source_id: source_id.clone(),
+                }],
+            },
+            Some("Create Layer".to_string()),
+        )
+        .unwrap();
+
+    assert_eq!(applied.layers.len(), 1);
+    assert_eq!(
+        workspace
+            .font()
+            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone()),
+        Some(layer_id.clone())
+    );
+
+    let undone = workspace
+        .undo()
+        .unwrap()
+        .expect("createGlyphLayer should undo");
+    assert!(undone.changes.changes.iter().any(
+        |change| matches!(change, FontChange::GlyphLayerDeleted(change) if change.layer_id == layer_id)
+    ));
+    assert_eq!(
+        workspace
+            .font()
+            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone()),
+        None
+    );
+
+    let redone = workspace
+        .redo()
+        .unwrap()
+        .expect("createGlyphLayer should redo");
+    assert_eq!(redone.layers.len(), 1);
+    assert_eq!(
+        workspace
+            .font()
+            .layer_id_for_glyph_source(glyph_id, source_id),
+        Some(layer_id)
+    );
+}
+
+#[test]
+fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let glyph_a = create_glyph(&mut workspace, "A", vec![65]);
+    let glyph_b = create_glyph(&mut workspace, "B", vec![66]);
+    let source_id = SourceId::from_raw("source_alt");
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateSource {
+                    source_id: source_id.clone(),
+                    name: "Alt".to_string(),
+                    location: Location::new(),
+                }],
+            },
+            Some("Create Source".to_string()),
+        )
+        .unwrap();
+    let layer_id = create_glyph_layer(&mut workspace, glyph_a.clone(), source_id.clone());
+    workspace
+        .apply(set_x_advance_intents(layer_id.clone(), 640.0), None)
+        .unwrap();
+    assert_eq!(
+        workspace
+            .font()
+            .layer_id_for_glyph_source(glyph_b.clone(), source_id.clone()),
+        None
+    );
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::DeleteSource {
+                    source_id: source_id.clone(),
+                }],
+            },
+            Some("Delete Source".to_string()),
+        )
+        .unwrap();
+
+    assert!(
+        workspace
+            .font()
+            .sources()
+            .iter()
+            .all(|source| source.id() != source_id)
+    );
+    assert!(workspace.font().layer(layer_id.clone()).is_none());
+
+    let undone = workspace.undo().unwrap().expect("deleteSource should undo");
+    assert!(undone
+        .changes
+        .changes
+        .iter()
+        .any(|change| matches!(change, FontChange::SourceCreated(change) if change.source_id == source_id)));
+    assert!(
+        workspace
+            .font()
+            .sources()
+            .iter()
+            .any(|source| source.id() == source_id)
+    );
+    assert_eq!(
+        workspace.font().layer(layer_id.clone()).unwrap().width(),
+        640.0
+    );
+    assert_eq!(
+        workspace
+            .font()
+            .layer_id_for_glyph_source(glyph_b, source_id.clone()),
+        None
+    );
+
+    let redone = workspace.redo().unwrap().expect("deleteSource should redo");
+    assert!(redone
+        .changes
+        .changes
+        .iter()
+        .any(|change| matches!(change, FontChange::GlyphLayerDeleted(change) if change.layer_id == layer_id)));
+    assert!(
+        workspace
+            .font()
+            .sources()
+            .iter()
+            .all(|source| source.id() != source_id)
+    );
+    assert!(workspace.font().layer(layer_id).is_none());
 }
 
 #[test]
@@ -530,26 +703,24 @@ fn mixed_font_level_batch_undoes_axis_source_and_glyph_together() {
     assert_eq!(workspace.font().axes().len(), 1);
     assert_eq!(workspace.font().sources().len(), base_sources + 1);
     assert_eq!(workspace.font().glyph_count(), 2);
-    // The pre-existing glyph gained an eager layer; the new glyph has one
-    // layer per source.
     let glyph_a = workspace.font().glyph_by_name("A").unwrap();
-    assert_eq!(glyph_a.layers().len(), base_sources + 1);
+    assert_eq!(glyph_a.layers().len(), 0);
     let glyph_b = workspace.font().glyph_by_name("B").unwrap();
-    assert_eq!(glyph_b.layers().len(), base_sources + 1);
+    assert_eq!(glyph_b.layers().len(), 0);
 
     workspace.undo().unwrap().expect("batch should undo");
     assert_eq!(workspace.font().axes().len(), 0);
     assert_eq!(workspace.font().sources().len(), base_sources);
     assert_eq!(workspace.font().glyph_count(), 1);
     let glyph_a = workspace.font().glyph_by_name("A").unwrap();
-    assert_eq!(glyph_a.layers().len(), base_sources);
+    assert_eq!(glyph_a.layers().len(), 0);
 
     workspace.redo().unwrap().expect("batch should redo");
     assert_eq!(workspace.font().axes().len(), 1);
     assert_eq!(workspace.font().sources().len(), base_sources + 1);
     assert_eq!(workspace.font().glyph_count(), 2);
     let glyph_a = workspace.font().glyph_by_name("A").unwrap();
-    assert_eq!(glyph_a.layers().len(), base_sources + 1);
+    assert_eq!(glyph_a.layers().len(), 0);
 }
 
 #[test]

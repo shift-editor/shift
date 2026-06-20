@@ -1,6 +1,6 @@
 import { bench, describe } from "vitest";
 import type { GlyphName, PointType, Unicode } from "@shift/types";
-import { mintContourId, mintGlyphId, mintPointId } from "@shift/types";
+import { mintContourId, mintGlyphId, mintLayerId, mintPointId } from "@shift/types";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 /**
@@ -12,15 +12,21 @@ import { createWorkspaceStack } from "@/testing/workspaceStack";
 const stack = createWorkspaceStack();
 await stack.client.create();
 
+const glyphId = mintGlyphId();
+const layerId = mintLayerId();
 const created = await stack.client.apply([
   {
     kind: "createGlyph",
-    createGlyph: { glyphId: mintGlyphId(), name: "A" as GlyphName, unicodes: [65 as Unicode] },
+    createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+  },
+  {
+    kind: "createGlyphLayer",
+    createGlyphLayer: { layerId, glyphId, sourceId: stack.font.defaultSource.id },
   },
 ]);
-const layerId = created.layers[0]!.layerId;
-const glyphId = created.glyphs![0]!.id;
-const sourceId = stack.font.defaultSource.id;
+if (!created.glyphs![0]!.layers.find((layer) => layer.id === layerId)) {
+  throw new Error("createGlyphLayer did not echo sparse layer membership");
+}
 
 function squareIntents(width: number) {
   const contourId = mintContourId();
@@ -75,6 +81,6 @@ describe("workspace apply round trip (channel + NAPI + SQLite)", () => {
   });
 
   bench("replace-grade glyph state pull", async () => {
-    await stack.client.glyph(glyphId, sourceId);
+    await stack.client.layer(layerId);
   });
 });

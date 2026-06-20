@@ -38,6 +38,7 @@ pub enum FontChange {
     GlyphDeleted(GlyphDeleted),
     GlyphIdentityChanged(GlyphIdentityChanged),
     GlyphLayerCreated(GlyphLayerCreated),
+    GlyphLayerDeleted(GlyphLayerDeleted),
     LayerMetricsChanged(LayerMetricsChanged),
     ContourAdded(ContourAdded),
     ContourOpenClosedChanged(ContourOpenClosedChanged),
@@ -96,6 +97,14 @@ impl FontChange {
         layer: &GlyphLayer,
     ) -> Self {
         Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, name, layer))
+    }
+
+    pub fn glyph_layer_deleted(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
+        Self::GlyphLayerDeleted(GlyphLayerDeleted {
+            glyph_id,
+            source_id: layer.source_id(),
+            layer_id: layer.id(),
+        })
     }
 
     pub fn layer_metrics_changed(layer: &GlyphLayer) -> Self {
@@ -270,6 +279,13 @@ impl GlyphLayerCreated {
             height: layer.height(),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphLayerDeleted {
+    pub glyph_id: GlyphId,
+    pub source_id: SourceId,
+    pub layer_id: LayerId,
 }
 
 #[derive(Clone, Debug)]

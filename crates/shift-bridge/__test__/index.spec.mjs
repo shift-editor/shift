@@ -28,10 +28,18 @@ describe("Bridge", () => {
   }
 
   function createGlyphLayer(name = "A", unicodes = [65]) {
+    const glyphId = mintId("glyph");
+    const layerId = mintId("layer");
     const applied = bridge.apply([
-      { kind: "createGlyph", createGlyph: { glyphId: mintId("glyph"), name, unicodes } },
+      { kind: "createGlyph", createGlyph: { glyphId, name, unicodes } },
+      {
+        kind: "createGlyphLayer",
+        createGlyphLayer: { layerId, glyphId, sourceId: defaultSourceId() },
+      },
     ]);
-    return applied.layers[0].layerId;
+    const record = applied.glyphs.find((glyph) => glyph.id === glyphId);
+    expect(record.layers).toContainEqual({ id: layerId, sourceId: defaultSourceId() });
+    return layerId;
   }
 
   function addContour(layerId) {
@@ -57,7 +65,8 @@ describe("Bridge", () => {
 
   function glyphState(name) {
     const glyph = bridge.getGlyphs().find((record) => record.name === name);
-    return bridge.getGlyph(glyph.id, defaultSourceId());
+    const layer = glyph.layers.find((candidate) => candidate.sourceId === defaultSourceId());
+    return bridge.getLayer(layer.id);
   }
 
   it("creates an untitled workspace with default committed font metadata", () => {
@@ -80,14 +89,26 @@ describe("Bridge", () => {
   });
 
   it("creates a glyph through the createGlyph intent", () => {
-    createGlyphLayer();
+    const glyphId = mintId("glyph");
+    const applied = bridge.apply([
+      { kind: "createGlyph", createGlyph: { glyphId, name: "A", unicodes: [65] } },
+    ]);
 
     const glyphs = bridge.getGlyphs();
+    expect(applied.layers).toEqual([]);
     expect(glyphs).toHaveLength(1);
     expect(glyphs[0].id).toMatch(/^glyph_/);
     expect(glyphs[0].name).toBe("A");
     expect(glyphs[0].unicodes).toEqual([65]);
     expect(glyphs[0].componentBaseGlyphIds).toEqual([]);
+    expect(glyphs[0].layers).toEqual([]);
+  });
+
+  it("creates a glyph layer through the createGlyphLayer intent", () => {
+    const layerId = createGlyphLayer();
+
+    const glyphs = bridge.getGlyphs();
+    expect(glyphs[0].layers).toEqual([{ id: layerId, sourceId: defaultSourceId() }]);
   });
 
   it("exports the live workspace font through an explicit export path", async () => {

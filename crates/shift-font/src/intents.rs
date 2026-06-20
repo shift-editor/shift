@@ -111,8 +111,8 @@ pub enum FontIntent {
         contour_id_b: ContourId,
         operation: BooleanOp,
     },
-    /// Creates the glyph plus one layer per source (eager: every
-    /// (glyphId, sourceId) pair must resolve a layer).
+    /// Creates glyph identity and metadata only. Authored editable data is
+    /// created by explicit `CreateGlyphLayer` intents.
     CreateGlyph {
         /// Caller-minted id so the verb returns identity synchronously;
         /// `None` mints Rust-side.
@@ -135,11 +135,18 @@ pub enum FontIntent {
     DeleteSource {
         source_id: SourceId,
     },
-    /// Creates the source plus one eager layer per existing glyph.
+    /// Creates a global source record only. Glyph layers are authored by
+    /// explicit `CreateGlyphLayer` intents.
     CreateSource {
         source_id: SourceId,
         name: String,
         location: Location,
+    },
+    /// Creates one sparse editable glyph layer at one source.
+    CreateGlyphLayer {
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
     },
 }
 
@@ -167,7 +174,8 @@ impl FontIntent {
             | Self::CreateAxis { .. }
             | Self::DeleteAxis { .. }
             | Self::DeleteSource { .. }
-            | Self::CreateSource { .. } => None,
+            | Self::CreateSource { .. }
+            | Self::CreateGlyphLayer { .. } => None,
         }
     }
 
@@ -294,6 +302,16 @@ impl Font {
                 name,
                 location,
             } => self.apply_create_source(source_id.clone(), name, location, changes),
+            FontIntent::CreateGlyphLayer {
+                layer_id,
+                glyph_id,
+                source_id,
+            } => self.apply_create_glyph_layer(
+                layer_id.clone(),
+                glyph_id.clone(),
+                source_id.clone(),
+                changes,
+            ),
             _ => unreachable!("editing intents take the layer path"),
         }
     }
@@ -312,31 +330,13 @@ impl Font {
             return Err(CoreError::DuplicateGlyphName(glyph_name));
         }
 
-        let source_ids: Vec<SourceId> = self.sources().iter().map(Source::id).collect();
-        if source_ids.is_empty() {
-            return Err(CoreError::GlyphNeedsSource);
-        }
-
         let glyph_id = glyph_id.unwrap_or_default();
         let mut glyph = Glyph::with_id(glyph_id, glyph_name.clone());
         glyph.set_unicodes(unicodes);
-        let glyph_id = glyph.id();
         changes.push(FontChange::glyph_created(&glyph));
 
-        let mut layer_ids = Vec::with_capacity(source_ids.len());
-        for source_id in source_ids {
-            let layer = GlyphLayer::with_width(LayerId::new(), source_id, DEFAULT_LAYER_WIDTH);
-            layer_ids.push(layer.id());
-            changes.push(FontChange::glyph_layer_created(
-                glyph_id.clone(),
-                Some(glyph_name.clone()),
-                &layer,
-            ));
-            glyph.set_layer(layer);
-        }
-
         self.insert_glyph(glyph)?;
-        Ok(layer_ids)
+        Ok(Vec::new())
     }
 
     fn apply_create_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
@@ -373,17 +373,18 @@ impl Font {
             return Err(CoreError::CannotDeleteLastSource);
         }
 
-        let layer_ids: Vec<LayerId> = self
+        let layers: Vec<(GlyphId, GlyphLayer)> = self
             .glyphs()
             .filter_map(|glyph| {
                 glyph
                     .layer_for_source(source_id.clone())
-                    .map(|layer| layer.id())
+                    .map(|layer| (glyph.id(), layer.clone()))
             })
             .collect();
 
-        for layer_id in layer_ids {
-            self.remove_glyph_layer(layer_id)?;
+        for (glyph_id, layer) in layers {
+            changes.push(FontChange::glyph_layer_deleted(glyph_id, &layer));
+            self.remove_glyph_layer(layer.id())?;
         }
 
         self.remove_source(source_id.clone())
@@ -420,25 +421,43 @@ impl Font {
         changes.push(FontChange::source_created(&source));
         self.add_source(source);
 
-        let glyphs: Vec<(GlyphId, GlyphName)> = self
-            .glyphs()
-            .map(|glyph| (glyph.id(), glyph.glyph_name().clone()))
-            .collect();
+        Ok(Vec::new())
+    }
 
-        let mut layer_ids = Vec::with_capacity(glyphs.len());
-        for (glyph_id, glyph_name) in glyphs {
-            let layer =
-                GlyphLayer::with_width(LayerId::new(), source_id.clone(), DEFAULT_LAYER_WIDTH);
-            layer_ids.push(layer.id());
-            changes.push(FontChange::glyph_layer_created(
-                glyph_id.clone(),
-                Some(glyph_name),
-                &layer,
-            ));
-            self.insert_glyph_layer(glyph_id, layer)?;
+    fn apply_create_glyph_layer(
+        &mut self,
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<Vec<LayerId>> {
+        let glyph_name = self
+            .glyph(glyph_id.clone())
+            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?
+            .glyph_name()
+            .clone();
+        if self.glyph_id_by_layer(layer_id.clone()).is_some() {
+            return Err(CoreError::DuplicateLayerId(layer_id));
         }
+        if self
+            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
+            .is_some()
+        {
+            return Err(CoreError::DuplicateGlyphLayer {
+                glyph_id,
+                source_id,
+            });
+        }
+        let layer = GlyphLayer::with_width(layer_id.clone(), source_id, DEFAULT_LAYER_WIDTH);
 
-        Ok(layer_ids)
+        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id,
+            Some(glyph_name),
+            &layer,
+        ));
+
+        Ok(vec![layer_id])
     }
 
     fn apply_update_glyph(
@@ -748,7 +767,8 @@ impl Font {
             | FontIntent::CreateAxis { .. }
             | FontIntent::DeleteAxis { .. }
             | FontIntent::DeleteSource { .. }
-            | FontIntent::CreateSource { .. } => {
+            | FontIntent::CreateSource { .. }
+            | FontIntent::CreateGlyphLayer { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }
         }

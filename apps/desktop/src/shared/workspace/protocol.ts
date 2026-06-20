@@ -4,11 +4,10 @@ import type {
   FontIntent,
   FontMetadata,
   FontMetrics,
-  GlyphId,
   GlyphRecord,
   GlyphState,
+  LayerId,
   Source,
-  SourceId,
 } from "@shift/types";
 
 /**
@@ -103,11 +102,11 @@ export type SyncCallMap = {
   /** Saves to `path` (main's Save As dialog choice) and adopts it as target. */
   "workspace.saveAs": { request: { path: string }; response: WorkspaceDocumentState };
   /**
-   * Pulls replace-grade glyph state for one source (resync + editor open).
-   * Addressed by stable GlyphId — references survive renames.
+   * Pulls replace-grade glyph state for one layer (resync + editor open).
+   * Addressed by stable LayerId — the edit identity.
    */
-  "workspace.glyph": {
-    request: { glyphId: GlyphId; sourceId: SourceId };
+  "workspace.layer": {
+    request: { layerId: LayerId };
     response: GlyphState | null;
   };
 };

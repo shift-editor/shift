@@ -251,6 +251,11 @@ export function mintGlyphId(): GlyphId {
   return `glyph_${crypto.randomUUID()}` as GlyphId;
 }
 
+/** Mints a new layer id. See {@link mintPointId}. */
+export function mintLayerId(): LayerId {
+  return `layer_${crypto.randomUUID()}` as LayerId;
+}
+
 /** Mints a new source id. See {@link mintPointId}. */
 export function mintSourceId(): SourceId {
   return `source_${crypto.randomUUID()}` as SourceId;

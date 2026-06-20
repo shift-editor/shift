@@ -554,11 +554,15 @@ impl Font {
 
     pub fn create_glyph_layer(
         &mut self,
+        layer_id: LayerId,
         glyph_id: GlyphId,
         source_id: SourceId,
-    ) -> CoreResult<LayerId> {
+    ) -> CoreResult<()> {
         if !self.sources().iter().any(|source| source.id() == source_id) {
             return Err(CoreError::SourceNotFound(source_id));
+        }
+        if self.index().layer_owner.contains_key(&layer_id) {
+            return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
             .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
@@ -570,10 +574,9 @@ impl Font {
             });
         }
 
-        let layer = GlyphLayer::new(LayerId::new(), source_id.clone());
-        let layer_id = layer.id();
+        let layer = GlyphLayer::new(layer_id, source_id.clone());
         self.insert_glyph_layer(glyph_id.clone(), layer)?;
-        Ok(layer_id)
+        Ok(())
     }
 
     pub fn insert_glyph_layer(&mut self, glyph_id: GlyphId, layer: GlyphLayer) -> CoreResult<()> {
@@ -884,11 +887,12 @@ mod tests {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
         let glyph_id = font.insert_glyph(Glyph::new("A")).unwrap();
+        let layer_id = LayerId::new();
 
-        font.create_glyph_layer(glyph_id.clone(), source_id.clone())
+        font.create_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id.clone())
             .unwrap();
         let error = font
-            .create_glyph_layer(glyph_id.clone(), source_id.clone())
+            .create_glyph_layer(LayerId::new(), glyph_id.clone(), source_id.clone())
             .unwrap_err();
 
         assert!(matches!(
@@ -905,8 +909,8 @@ mod tests {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
         let glyph_id = font.insert_glyph(Glyph::new("A")).unwrap();
-        let layer_id = font
-            .create_glyph_layer(glyph_id.clone(), source_id.clone())
+        let layer_id = LayerId::new();
+        font.create_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id.clone())
             .unwrap();
 
         assert_eq!(
@@ -1157,8 +1161,8 @@ mod tests {
         let source_id = font.add_source(Source::new("Bold".to_string(), Location::new()));
         let start = Instant::now();
 
-        let layer_id = font
-            .create_glyph_layer(glyph_id.clone(), source_id.clone())
+        let layer_id = LayerId::new();
+        font.create_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id.clone())
             .unwrap();
         let removed = font.remove_glyph_layer(layer_id.clone()).unwrap();
 

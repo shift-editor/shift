@@ -6,8 +6,8 @@ use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure, GlyphVariationData,
-    Location, PointData, PointType, Source,
+    GlyphChangedEntities, GlyphLayerRecord, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure,
+    GlyphVariationData, Location, PointData, PointType, Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -166,6 +166,7 @@ pub struct NapiGlyphRecord {
     pub unicodes: Vec<u32>,
     #[napi(ts_type = "Array<GlyphId>")]
     pub component_base_glyph_ids: Vec<String>,
+    pub layers: Vec<NapiGlyphLayerRecord>,
 }
 
 impl From<GlyphRecord> for NapiGlyphRecord {
@@ -179,6 +180,24 @@ impl From<GlyphRecord> for NapiGlyphRecord {
                 .into_iter()
                 .map(|id| id.to_string())
                 .collect(),
+            layers: record.layers.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphLayerRecord {
+    #[napi(ts_type = "LayerId")]
+    pub id: String,
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+}
+
+impl From<GlyphLayerRecord> for NapiGlyphLayerRecord {
+    fn from(record: GlyphLayerRecord) -> Self {
+        Self {
+            id: record.id.to_string(),
+            source_id: record.source_id.to_string(),
         }
     }
 }
@@ -479,8 +498,8 @@ pub struct NapiFontIntent {
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Create kinds: "createGlyph" | "createAxis" | "createSource". Delete
-    /// kinds: "deleteAxis" | "deleteSource". Every
+    /// Create kinds: "createGlyph" | "createAxis" | "createSource" |
+    /// "createGlyphLayer". Delete kinds: "deleteAxis" | "deleteSource". Every
     /// kind shares the same apply path; one set = one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -502,6 +521,7 @@ pub struct NapiFontIntent {
     pub delete_axis: Option<NapiDeleteAxisIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
     pub delete_source: Option<NapiDeleteSourceIntent>,
+    pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
 }
 
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
@@ -566,6 +586,17 @@ pub struct NapiCreateSourceIntent {
     pub name: String,
     /// Axis id → design-space value for the new source.
     pub location: NapiLocation,
+}
+
+/// Creates one sparse glyph layer at an existing source for an existing glyph.
+#[napi(object)]
+pub struct NapiCreateGlyphLayerIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
 }
 
 /// Replace-grade state for one touched layer; the renderer folds by
