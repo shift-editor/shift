@@ -31,7 +31,7 @@ const SQUARE = (width: number): Array<[number, number]> => [
 async function drawSquare(stack: WorkspaceStack, layerId: LayerId, width: number): Promise<void> {
   const contourId = mintContourId();
 
-  await stack.client.apply([
+  await stack.editCoordinator.apply([
     { kind: "addContour", addContour: { layerId, contourId, closed: false } },
     {
       kind: "addPoints",
@@ -63,7 +63,7 @@ async function variableFont(): Promise<{
 
   const glyphId = mintGlyphId();
   const regularLayerId = mintLayerId();
-  const created = await stack.client.apply([
+  const created = await stack.editCoordinator.apply([
     {
       kind: "createGlyph",
       createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
@@ -83,7 +83,7 @@ async function variableFont(): Promise<{
   });
 
   const weightAxisId = mintAxisId();
-  await stack.client.apply([
+  await stack.editCoordinator.apply([
     {
       kind: "createAxis",
       createAxis: {
@@ -98,7 +98,7 @@ async function variableFont(): Promise<{
     },
   ]);
   const boldSourceId = mintSourceId();
-  const sourced = await stack.client.apply([
+  const sourced = await stack.editCoordinator.apply([
     {
       kind: "createSource",
       createSource: {
@@ -113,7 +113,7 @@ async function variableFont(): Promise<{
   expect(sourced.layers).toEqual([]);
 
   const boldLayerId = mintLayerId();
-  await stack.client.apply([
+  await stack.editCoordinator.apply([
     {
       kind: "createGlyphLayer",
       createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldSourceId },
@@ -124,14 +124,28 @@ async function variableFont(): Promise<{
   // variation deltas cover them.
   await drawSquare(stack, regularLayerId, 100);
   await drawSquare(stack, boldLayerId, 200);
-  await stack.client.apply([
+  await stack.editCoordinator.apply([
     { kind: "setXAdvance", setXAdvance: { layerId: regularLayerId, width: 300 } },
   ]);
-  await stack.client.apply([
+  await stack.editCoordinator.apply([
     { kind: "setXAdvance", setXAdvance: { layerId: boldLayerId, width: 500 } },
   ]);
 
   return { stack, glyphId, regularLayerId, boldLayerId, bold };
+}
+
+async function loadGlyph(stack: WorkspaceStack, glyphId: GlyphId) {
+  await stack.glyphSnapshots.load([glyphId], [stack.font.defaultSource.id]);
+  const glyph = stack.font.glyphById(glyphId);
+  if (!glyph) throw new Error("Expected default glyph layer to load");
+  return glyph;
+}
+
+async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: Source) {
+  await stack.glyphSnapshots.load([glyphId], [stack.font.defaultSource.id, source.id]);
+  const layer = stack.font.glyphLayerById(glyphId, source);
+  if (!layer) throw new Error("Expected glyph layer to load");
+  return layer;
 }
 
 describe("variable editing across sources", () => {
@@ -144,15 +158,14 @@ describe("variable editing across sources", () => {
   });
 
   it("opens an authored glyph layer at a non-default master", async () => {
-    const boldSource = await stack.font.openGlyphLayer(glyphId, bold);
+    const boldSource = await loadGlyphLayer(stack, glyphId, bold);
 
-    expect(boldSource).not.toBeNull();
-    expect(boldSource!.contours.length).toBe(1);
-    expect(boldSource!.xAdvance).toBe(500);
+    expect(boldSource.contours.length).toBe(1);
+    expect(boldSource.xAdvance).toBe(500);
   });
 
   it("folds echoes for edits made on a non-default master", async () => {
-    const boldSource = (await stack.font.openGlyphLayer(glyphId, bold))!;
+    const boldSource = await loadGlyphLayer(stack, glyphId, bold);
     const point = boldSource.allPoints[1]!;
 
     boldSource.commitPositionPatch([{ kind: "point", id: point.id, x: 250, y: 0 }]);
@@ -166,7 +179,7 @@ describe("variable editing across sources", () => {
   });
 
   it("interpolates geometry and metrics between masters", async () => {
-    const glyph = (await stack.font.openGlyph(glyphId, stack.font.defaultSource))!;
+    const glyph = await loadGlyph(stack, glyphId);
     const axis = stack.font.getAxes()[0]!;
 
     // wght 550 is halfway between the masters at 400 and 700.
@@ -181,8 +194,8 @@ describe("variable editing across sources", () => {
   });
 
   it("resolves live layer geometry at exact master locations", async () => {
-    const glyph = (await stack.font.openGlyph(glyphId, stack.font.defaultSource))!;
-    await stack.font.openGlyphLayer(glyphId, bold);
+    const glyph = await loadGlyph(stack, glyphId);
+    await loadGlyphLayer(stack, glyphId, bold);
 
     const axis = stack.font.getAxes()[0]!;
     const atBold = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 700);

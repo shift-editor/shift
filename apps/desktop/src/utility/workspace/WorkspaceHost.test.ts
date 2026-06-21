@@ -613,7 +613,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(redoWorkspace(sync)).resolves.toBeNull();
   });
 
-  it("workspace.layer pulls replace-grade state by stable layer id", async () => {
+  it("workspace.glyphSnapshots pulls bounded source snapshots by stable glyph id", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);
     const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
@@ -624,12 +624,24 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       { id: layerId, sourceId: snapshot.sources[0].id },
     ]);
 
-    const state = await sync.call("workspace.layer", { layerId });
-    expect(state?.layerId).toBe(layerId);
-    expect(state?.structure.contours).toEqual([]);
+    const glyphId = created.glyphs?.[0]?.id;
+    if (!glyphId) throw new Error("createGlyph did not echo glyph id");
 
-    const missing = mintLayerId();
-    await expect(sync.call("workspace.layer", { layerId: missing })).resolves.toBeNull();
+    const snapshots = await sync.call("workspace.glyphSnapshots", {
+      requests: [{ glyphId, sourceIds: [snapshot.sources[0].id] }],
+    });
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].glyphId).toBe(glyphId);
+    expect(snapshots[0].layers).toHaveLength(1);
+    expect(snapshots[0].layers[0].state.layerId).toBe(layerId);
+    expect(snapshots[0].layers[0].state.structure.contours).toEqual([]);
+
+    const missing = mintGlyphId();
+    await expect(
+      sync.call("workspace.glyphSnapshots", {
+        requests: [{ glyphId: missing, sourceIds: [snapshot.sources[0].id] }],
+      }),
+    ).resolves.toEqual([]);
   });
 
   it("CS0 skeleton: measures the apply round trip through the full stack", async () => {

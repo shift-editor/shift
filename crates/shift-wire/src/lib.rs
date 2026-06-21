@@ -215,18 +215,39 @@ pub struct GlyphState {
     pub structure: GlyphStructure,
     /// Numeric glyph state ordered to match `GlyphStructure`.
     pub values: GlyphValues,
-    pub variation_data: Option<GlyphVariationData>,
 }
 
 impl GlyphState {
-    pub fn from_layer(layer: &GlyphLayer, variation_data: Option<GlyphVariationData>) -> Self {
+    pub fn from_layer(layer: &GlyphLayer) -> Self {
         Self {
             layer_id: layer.id(),
             structure: GlyphStructure::from(layer),
             values: values_from_layer(layer),
-            variation_data,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphLayerSnapshot {
+    pub glyph_id: GlyphId,
+    pub source_id: SourceId,
+    pub state: GlyphState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphSnapshotRequest {
+    pub glyph_id: GlyphId,
+    pub source_ids: Vec<SourceId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphSnapshot {
+    pub glyph_id: GlyphId,
+    pub variation_data: Option<GlyphVariationData>,
+    pub layers: Vec<GlyphLayerSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

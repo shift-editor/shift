@@ -78,8 +78,10 @@ describe("Bridge", () => {
 
   function glyphState(name) {
     const glyph = bridge.getGlyphs().find((record) => record.name === name);
-    const layer = glyph.layers.find((candidate) => candidate.sourceId === defaultSourceId());
-    return bridge.getLayer(layer.id);
+    const snapshots = bridge.getGlyphSnapshots([
+      { glyphId: glyph.id, sourceIds: [defaultSourceId()] },
+    ]);
+    return snapshots[0]?.layers[0]?.state;
   }
 
   it("creates an untitled workspace with default committed font metadata", () => {
@@ -160,7 +162,7 @@ describe("Bridge", () => {
     expect(Array.from(layer.values)).toEqual([500, 10, 20]);
   });
 
-  it("moves points and reads them back through the id-addressed glyph state", () => {
+  it("moves points and reads them back through glyph-addressed snapshots", () => {
     const layerId = createGlyphLayer();
     const contourId = addContour(layerId);
     const { pointId } = addPoint(layerId, contourId, 10, 20);

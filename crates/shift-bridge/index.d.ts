@@ -42,8 +42,8 @@ export declare class Bridge {
    * redo stack is empty.
    */
   redo(): NapiAppliedChange | null
-  /** Layer-addressed glyph state. LayerId is the stable edit identity. */
-  getLayer(layerId: LayerId): NapiGlyphState | null
+  /** Glyph-addressed snapshots for renderer-local synchronous font state. */
+  getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
@@ -304,6 +304,12 @@ export interface NapiGlyphLayerRecord {
   sourceId: SourceId
 }
 
+export interface NapiGlyphLayerSnapshot {
+  glyphId: GlyphId
+  sourceId: SourceId
+  state: NapiGlyphState
+}
+
 export interface NapiGlyphMaster {
   sourceId: SourceId
   sourceName: string
@@ -321,12 +327,22 @@ export interface NapiGlyphRecord {
   layers: Array<NapiGlyphLayerRecord>
 }
 
+export interface NapiGlyphSnapshot {
+  glyphId: GlyphId
+  variationData?: NapiGlyphVariationData
+  layers: Array<NapiGlyphLayerSnapshot>
+}
+
+export interface NapiGlyphSnapshotRequest {
+  glyphId: GlyphId
+  sourceIds: SourceId[]
+}
+
 export interface NapiGlyphState {
   layerId: LayerId
   structure: NapiGlyphStructure
   /** Numeric glyph state ordered to match `GlyphStructure`. */
   values: Float64Array
-  variationData?: NapiGlyphVariationData
 }
 
 export interface NapiGlyphStructure {

@@ -21,23 +21,23 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
   });
 
   it("flushes queued edits before the save so the write includes them", async () => {
-    const { client, editCoordinator } = stack;
+    const { store, editCoordinator } = stack;
 
     editCoordinator.push(createGlyph("A", 65)); // queued, not yet applied
     const saved = await editCoordinator.save(savePath()); // flushes the push, then saves behind it
 
-    expect(client.workspaceCell.peek()?.glyphs).toHaveLength(1); // the apply was folded
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(1); // the apply was folded
     expect(saved).toMatchObject({ dirty: false, needsSaveAs: false });
   });
 
   it("a current-target save serializes behind a later edit", async () => {
-    const { client, editCoordinator } = stack;
+    const { store, editCoordinator } = stack;
     await editCoordinator.save(savePath()); // adopt a package target
 
     editCoordinator.push(createGlyph("B", 66));
     const saved = await editCoordinator.save(null); // null = save to current target
 
-    expect(client.workspaceCell.peek()?.glyphs).toHaveLength(1);
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(1);
     expect(saved).toMatchObject({ dirty: false });
   });
 

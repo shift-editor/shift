@@ -20,7 +20,6 @@ import type { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 
 interface BackgroundGlyphFrame {
   readonly item: SceneGlyph;
-  readonly model: Glyph;
   readonly advance: number;
   readonly geometryShown: boolean;
 }
@@ -100,20 +99,24 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
 
     for (const item of scene.items) {
       if (item.kind !== "glyph") continue;
+      const geometryShown = scene.geometryItems.includes(item.id);
+      if (!geometryShown) continue;
+
+      const record = this.#editor.font.recordForId(item.glyphId);
+      if (!record) continue;
 
       const glyph = this.#editor.glyphForItem(item.id);
-      if (!glyph) continue;
-
       const instance = this.#editor.instanceForItem(item.id);
-      if (!instance) continue;
-
-      const xAdvance = instance.xAdvanceCell.value;
-      const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
+      const xAdvance = instance?.xAdvanceCell.value ?? this.#editor.font.defaultXAdvance;
+      const unicode = glyph
+        ? Number.isFinite(glyph.unicode)
+          ? glyph.unicode
+          : null
+        : (record.unicodes[0] ?? null);
       glyphs.push({
         item,
-        model: glyph,
-        advance: displayAdvance(xAdvance, glyph.name, unicode),
-        geometryShown: scene.geometryItems.includes(item.id),
+        advance: displayAdvance(xAdvance, record.name, unicode),
+        geometryShown,
       });
     }
 

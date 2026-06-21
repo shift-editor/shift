@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useSignalState } from "@/lib/signals";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { useEditor, useWorkspace } from "@/workspace/WorkspaceContext";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
@@ -14,12 +14,14 @@ import { Vec2 } from "@shift/geo";
 import { asGlyphId } from "@shift/types";
 
 export const Canvas: FC = () => {
+  const workspace = useWorkspace();
   const editor = useEditor();
   const debug = useDebugSafe();
   const { glyphId: glyphIdParam } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const cursorStyle = useSignalState(editor.cursorCell);
+  const fontLoaded = useSignalState(editor.font.$loaded);
 
   useEffect(() => {
     if (!glyphIdParam) {
@@ -36,10 +38,25 @@ export const Canvas: FC = () => {
     const itemId = editor.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
     editor.scene.setGeometryItems([itemId]);
 
+    let cancelled = false;
+
+    async function loadGlyphSnapshot(): Promise<void> {
+      try {
+        await workspace.glyphSnapshots.load([glyphId], [editor.font.defaultSource.id]);
+        if (cancelled) return;
+        editor.focusGlyph(glyphId, editor.font.defaultLocation());
+      } catch (error) {
+        console.error("failed to load glyph snapshot", error);
+      }
+    }
+
+    void loadGlyphSnapshot();
+
     return () => {
+      cancelled = true;
       editor.scene.clear();
     };
-  }, [glyphIdParam]);
+  }, [editor, fontLoaded, glyphIdParam, workspace]);
 
   useEffect(() => {
     const element = containerRef.current;

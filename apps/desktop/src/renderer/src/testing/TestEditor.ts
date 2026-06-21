@@ -78,7 +78,8 @@ export class TestEditor extends Editor {
 
   async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
     const glyphId = mintGlyphId();
-    const applied = await this.#stack.client.apply([
+    const sourceId = this.font.defaultSource.id;
+    const applied = await this.#stack.editCoordinator.apply([
       {
         kind: "createGlyph",
         createGlyph: {
@@ -92,7 +93,7 @@ export class TestEditor extends Editor {
         createGlyphLayer: {
           layerId: mintLayerId(),
           glyphId,
-          sourceId: this.font.defaultSource.id,
+          sourceId,
         },
       },
     ]);
@@ -100,8 +101,9 @@ export class TestEditor extends Editor {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    const glyph = await this.font.openGlyph(record.id, this.font.defaultSource);
-    if (!glyph) throw new Error("openGlyph returned null for a created glyph");
+    await this.#stack.glyphSnapshots.load([record.id], [sourceId]);
+    const glyph = this.font.glyphById(record.id);
+    if (!glyph) throw new Error("glyphById returned null for a loaded glyph");
     return glyph;
   }
 

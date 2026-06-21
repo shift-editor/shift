@@ -2,12 +2,13 @@ use std::collections::HashMap;
 
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
-use shift_font::{GlyphId, PointType as IrPointType};
+use shift_font::{GlyphId, PointType as IrPointType, SourceId};
 
 use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphLayerRecord, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure,
-    GlyphVariationData, Location, PointData, PointType, Source,
+    GlyphChangedEntities, GlyphLayerRecord, GlyphLayerSnapshot, GlyphMaster, GlyphRecord,
+    GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, GlyphVariationData, Location,
+    PointData, PointType, Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -209,7 +210,6 @@ pub struct NapiGlyphState {
     pub structure: NapiGlyphStructure,
     /// Numeric glyph state ordered to match `GlyphStructure`.
     pub values: Float64Array,
-    pub variation_data: Option<NapiGlyphVariationData>,
 }
 
 impl From<GlyphState> for NapiGlyphState {
@@ -218,7 +218,64 @@ impl From<GlyphState> for NapiGlyphState {
             layer_id: state.layer_id.to_string(),
             structure: state.structure.into(),
             values: state.values.into(),
-            variation_data: state.variation_data.map(Into::into),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphLayerSnapshot {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub state: NapiGlyphState,
+}
+
+impl From<GlyphLayerSnapshot> for NapiGlyphLayerSnapshot {
+    fn from(snapshot: GlyphLayerSnapshot) -> Self {
+        Self {
+            glyph_id: snapshot.glyph_id.to_string(),
+            source_id: snapshot.source_id.to_string(),
+            state: snapshot.state.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphSnapshotRequest {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "SourceId[]")]
+    pub source_ids: Vec<String>,
+}
+
+impl From<NapiGlyphSnapshotRequest> for GlyphSnapshotRequest {
+    fn from(request: NapiGlyphSnapshotRequest) -> Self {
+        Self {
+            glyph_id: GlyphId::from_raw(request.glyph_id),
+            source_ids: request
+                .source_ids
+                .into_iter()
+                .map(SourceId::from_raw)
+                .collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphSnapshot {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    pub variation_data: Option<NapiGlyphVariationData>,
+    pub layers: Vec<NapiGlyphLayerSnapshot>,
+}
+
+impl From<GlyphSnapshot> for NapiGlyphSnapshot {
+    fn from(snapshot: GlyphSnapshot) -> Self {
+        Self {
+            glyph_id: snapshot.glyph_id.to_string(),
+            variation_data: snapshot.variation_data.map(Into::into),
+            layers: snapshot.layers.into_iter().map(Into::into).collect(),
         }
     }
 }

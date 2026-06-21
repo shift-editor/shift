@@ -27,7 +27,7 @@ export async function layoutTestFont(): Promise<Font> {
   for (const [name, unicode, advance] of GLYPHS) {
     const glyphId = mintGlyphId();
     const layerId = mintLayerId();
-    const applied = await stack.client.apply([
+    const applied = await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
         createGlyph: { glyphId, name: name as GlyphName, unicodes: [unicode] },
@@ -44,8 +44,10 @@ export async function layoutTestFont(): Promise<Font> {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error(`createGlyph did not echo ${name}`);
 
-    await stack.client.apply([{ kind: "setXAdvance", setXAdvance: { layerId, width: advance } }]);
-    await stack.font.openGlyph(record.id, stack.font.defaultSource);
+    await stack.editCoordinator.apply([
+      { kind: "setXAdvance", setXAdvance: { layerId, width: advance } },
+    ]);
+    await stack.glyphSnapshots.load([record.id], [stack.font.defaultSource.id]);
   }
 
   const handle = stack.font.glyphHandleForUnicode(65 as Unicode);

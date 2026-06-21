@@ -7,6 +7,7 @@ import type {
   SyncEventMap,
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
+  WorkspaceGlyphSnapshot,
   WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
 import { DocumentStorage } from "./DocumentStorage";
@@ -100,7 +101,8 @@ export class WorkspaceHost {
       // every committed apply/undo/redo, so it never writes stale state.
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
-      "workspace.layer": ({ layerId }) => this.#serialize(() => this.#bridge.getLayer(layerId)),
+      "workspace.glyphSnapshots": ({ requests }) =>
+        this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[]),
     });
   }
 

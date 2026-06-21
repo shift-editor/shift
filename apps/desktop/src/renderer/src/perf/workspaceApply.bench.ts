@@ -14,7 +14,7 @@ await stack.createWorkspace();
 
 const glyphId = mintGlyphId();
 const layerId = mintLayerId();
-const created = await stack.client.apply([
+const created = await stack.editCoordinator.apply([
   {
     kind: "createGlyph",
     createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
@@ -58,29 +58,31 @@ function squareIntents(width: number) {
 }
 
 // Seed one contour so undo/redo and pulls always have real geometry.
-await stack.client.apply([...squareIntents(100)]);
+await stack.editCoordinator.apply([...squareIntents(100)]);
 
 describe("workspace apply round trip (channel + NAPI + SQLite)", () => {
   let width = 0;
 
   bench("values-only apply: setXAdvance", async () => {
     width = (width % 900) + 1;
-    await stack.client.apply([{ kind: "setXAdvance", setXAdvance: { layerId, width } }]);
+    await stack.editCoordinator.apply([{ kind: "setXAdvance", setXAdvance: { layerId, width } }]);
   });
 
   // Paired with its undo so glyph size stays constant across iterations;
   // the number is one structural edit plus one ledger replay.
   bench("structural apply + undo: contour with 4 points", async () => {
-    await stack.client.apply([...squareIntents(200)]);
-    await stack.client.undo();
+    await stack.editCoordinator.apply([...squareIntents(200)]);
+    await stack.editCoordinator.undo();
   });
 
   bench("undo + redo replay of a values entry", async () => {
-    await stack.client.undo();
-    await stack.client.redo();
+    await stack.editCoordinator.undo();
+    await stack.editCoordinator.redo();
   });
 
   bench("replace-grade glyph state pull", async () => {
-    await stack.client.layer(layerId);
+    await stack.editCoordinator.loadGlyphSnapshots([
+      { glyphId, sourceIds: [stack.font.defaultSource.id] },
+    ]);
   });
 });

@@ -1,15 +1,13 @@
-import type { AppliedChange, FontIntent, GlyphState, LayerId } from "@shift/types";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
-import { signal, type Signal } from "@/lib/signals/signal";
-import type { GlyphLayerState } from "@/lib/model/GlyphLayerState";
+import type { AppliedChange, FontIntent } from "@shift/types";
+import type {
+  WorkspaceDocumentState,
+  WorkspaceGlyphSnapshotRequest,
+} from "@shared/workspace/protocol";
+import type { Signal } from "@/lib/signals/signal";
+import type { FontStore, WorkspaceCommitState } from "@/lib/model/FontStore";
 import type { WorkspaceClient } from "./WorkspaceClient";
 
-export type WorkspaceCommitState = "idle" | "queued" | "applying";
-
-/** Where one layer's replace-grade echoes fold; registered per open session. */
-type FoldTarget = {
-  state: GlyphLayerState;
-};
+export type { WorkspaceCommitState } from "@/lib/model/FontStore";
 
 /**
  * Tracks optimistic renderer edits until the utility workspace echoes them.
@@ -19,9 +17,8 @@ type FoldTarget = {
  * coalesce into ONE `workspace.apply` — one SQLite transaction, one undo
  * step. Echoes fold by substitution only (replace structure, replace
  * values); the queue contains zero change-application or save semantics.
- * Undo, redo, and save are serialized through the same queue so none can
- * overtake a pending flush. Tools never hold the queue — they speak domain
- * verbs on `GlyphLayer`.
+ * Undo, redo, snapshot reads, and save are serialized through the same queue so
+ * none can overtake a pending flush.
  *
  * Save ownership lives in the utility. The renderer issues save as one more op
  * on this queue (see {@link save}); because it shares the FIFO edit lane, the
@@ -30,19 +27,15 @@ type FoldTarget = {
  */
 export class WorkspaceEditCoordinator {
   readonly #workspace: WorkspaceClient;
-  readonly #targets = new Map<LayerId, FoldTarget>();
-  readonly #settledCell = signal(true);
-  readonly #commitState = signal<WorkspaceCommitState>("idle", {
-    name: "workspace.commitState",
-  });
+  readonly #store: FontStore;
 
-  #queue: FontIntent[] = [];
   #flushQueued = false;
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
 
-  constructor(workspace: WorkspaceClient) {
+  constructor(workspace: WorkspaceClient, store: FontStore) {
     this.#workspace = workspace;
+    this.#store = store;
   }
 
   /**
@@ -50,7 +43,7 @@ export class WorkspaceEditCoordinator {
    * indicator: un-echoed state must never read as durable.
    */
   get settledCell(): Signal<boolean> {
-    return this.#settledCell;
+    return this.#store.settledCell;
   }
 
   /**
@@ -62,21 +55,12 @@ export class WorkspaceEditCoordinator {
    * the utility process has echoed the new dirty state.
    */
   get commitStateCell(): Signal<WorkspaceCommitState> {
-    return this.#commitState;
-  }
-
-  /** Routes one layer's echoes to its session state. */
-  register(layerId: LayerId, target: FoldTarget): void {
-    this.#targets.set(layerId, target);
+    return this.#store.commitStateCell;
   }
 
   /** Queues one intent; everything in the same microtask becomes one apply. */
   push(intent: FontIntent): void {
-    this.#queue.push(intent);
-    this.#settledCell.set(false);
-    if (this.#commitState.peek() === "idle") {
-      this.#commitState.set("queued");
-    }
+    this.#store.enqueueIntent(intent);
 
     if (!this.#flushQueued) {
       this.#flushQueued = true;
@@ -86,31 +70,44 @@ export class WorkspaceEditCoordinator {
 
   /** Resolves when every queued and in-flight operation has settled. */
   async settled(): Promise<void> {
-    while (this.#queue.length > 0 || this.#busy > 0) {
+    while (this.#store.hasPendingIntents() || this.#busy > 0) {
       this.#enqueueFlush();
       await this.#chain;
     }
+  }
+
+  apply(intents: FontIntent[]): Promise<AppliedChange> {
+    return this.#withFlush(async () => {
+      const applied = await this.#workspace.apply(intents);
+      this.#store.foldAppliedChange(applied);
+      return applied;
+    });
   }
 
   /** Replays the latest undo entry after pending pushes flush. */
   undo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.undo();
-      if (applied) this.#fold(applied);
+      if (applied) this.#store.foldAppliedChange(applied);
       return applied;
     });
   }
 
-  /** Pulls replace-grade glyph state by layer id, serialized behind pending writes. */
-  layer(layerId: LayerId): Promise<GlyphState | null> {
-    return this.#withFlush(() => this.#workspace.layer(layerId));
+  /** Pulls replace-grade glyph snapshots by glyph id, serialized behind pending writes. */
+  async loadGlyphSnapshots(requests: readonly WorkspaceGlyphSnapshotRequest[]): Promise<void> {
+    if (requests.length === 0) return;
+
+    const glyphIds = requests.map((request) => request.glyphId);
+    const generation = this.#store.markSnapshotsLoading(glyphIds);
+    const snapshots = await this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
+    this.#store.applyGlyphSnapshots(glyphIds, snapshots, generation);
   }
 
   /** Replays the latest redo entry after pending pushes flush. */
   redo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.redo();
-      if (applied) this.#fold(applied);
+      if (applied) this.#store.foldAppliedChange(applied);
       return applied;
     });
   }
@@ -138,16 +135,15 @@ export class WorkspaceEditCoordinator {
 
   #enqueueFlush(): void {
     this.#flushQueued = false;
-    if (this.#queue.length === 0) return;
+    if (!this.#store.hasPendingIntents()) return;
 
-    const intents = this.#queue;
-    this.#queue = [];
+    const intents = this.#store.takePendingIntents();
 
     void this.#serialize(async () => {
       try {
-        this.#commitState.set("applying");
+        this.#store.beginApplying();
         const applied = await this.#workspace.apply(intents);
-        this.#fold(applied);
+        this.#store.foldAppliedChange(applied);
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
         await this.#resync();
@@ -169,37 +165,11 @@ export class WorkspaceEditCoordinator {
 
   #afterJob(): void {
     this.#busy -= 1;
-    if (this.#busy === 0 && this.#queue.length === 0) {
-      this.#settledCell.set(true);
-      this.#commitState.set("idle");
-    }
+    this.#store.markSettledIfIdle(this.#busy);
   }
 
-  /** Substitution-only fold: replace structure, replace values, never merge. */
-  #fold(applied: AppliedChange): void {
-    for (const layer of applied.layers) {
-      const target = this.#targets.get(layer.layerId);
-      if (!target) continue; // not materialized; records grain already folded
-
-      if (layer.structure) {
-        target.state.replace({
-          layerId: layer.layerId,
-          structure: layer.structure,
-          values: layer.values,
-        });
-      } else {
-        target.state.replaceValues(layer.values);
-      }
-    }
-  }
-
-  /** Blunt recovery: re-pull truth for every registered layer and stomp. */
+  /** Recovery: discard loaded projections and reload the workspace summary from utility. */
   async #resync(): Promise<void> {
-    for (const [layerId, target] of this.#targets) {
-      const state = await this.#workspace.layer(layerId);
-      if (state) {
-        target.state.replace(state);
-      }
-    }
+    this.#store.replaceWorkspace(await this.#workspace.snapshot());
   }
 }
