@@ -543,6 +543,21 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
 }
 
 #[test]
+fn create_glyph_layer_initializes_width_from_font_upm() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut new_workspace = NewWorkspace::new();
+    new_workspace.units_per_em = 2048;
+    let mut workspace = FontWorkspace::create_untitled(&store_path, new_workspace).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
+
+    assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 1024.0);
+}
+
+#[test]
 fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

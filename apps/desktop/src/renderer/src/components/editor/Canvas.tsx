@@ -1,9 +1,8 @@
-import { FC, useEffect, useRef, useState } from "react";
+import { FC, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
-import { effect } from "@/lib/signals/signal";
 import { useSignalState } from "@/lib/signals";
 import { getEditor } from "@/store/appStore";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
@@ -14,57 +13,33 @@ import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
 import { asGlyphId } from "@shift/types";
 
-export const EditorView: FC = () => {
+export const Canvas: FC = () => {
   const editor = getEditor();
   const debug = useDebugSafe();
-  const { glyphId } = useParams();
+  const { glyphId: glyphIdParam } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
-  const fontLoaded = useSignalState(editor.font.$loaded);
 
-  const [cursorStyle, setCursorStyle] = useState(() => editor.cursor);
-
-  useEffect(() => {
-    const fx = effect(() => {
-      setCursorStyle(editor.cursorCell.value);
-    });
-    return () => fx.dispose();
-  }, [editor]);
+  const cursorStyle = useSignalState(editor.cursorCell);
 
   useEffect(() => {
-    if (!fontLoaded || !glyphId) return undefined;
-
-    const record = editor.font.recordForId(asGlyphId(glyphId));
-    if (!record) {
+    if (!glyphIdParam) {
       editor.scene.clear();
-      return undefined;
+      return;
     }
 
-    let cancelled = false;
-    const toolManager = editor.toolManager;
+    const glyphId = asGlyphId(glyphIdParam);
+    if (!editor.font.hasGlyph(glyphId)) {
+      editor.scene.clear();
+      return;
+    }
 
-    void (async () => {
-      const location = editor.font.defaultLocation();
-      const glyph = editor.focusGlyph(record.id, location);
-      if (!glyph || cancelled) return;
-
-      const itemId = editor.scene.placeGlyph({
-        glyphId: record.id,
-        location,
-        origin: { x: 0, y: 0 },
-      });
-      editor.scene.setGeometryItems([itemId]);
-      if (cancelled) return;
-
-      editor.updateMetricsFromFont();
-      toolManager.activate(editor.getActiveTool());
-    })();
+    const itemId = editor.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
+    editor.scene.setGeometryItems([itemId]);
 
     return () => {
-      cancelled = true;
-      toolManager.reset();
-      editor.close();
+      editor.scene.clear();
     };
-  }, [editor, fontLoaded, glyphId]);
+  }, [glyphIdParam]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -75,6 +50,7 @@ export const EditorView: FC = () => {
     const handleWheel = (e: WheelEvent) => {
       editor.updateMousePosition(e.clientX, e.clientY);
       const screenPos = editor.getScreenMousePosition();
+
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
         const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);

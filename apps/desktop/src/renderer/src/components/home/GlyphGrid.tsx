@@ -191,7 +191,7 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
       return;
     }
 
-    if (!next || editor.font.hasGlyph(next)) {
+    if (!next || editor.font.recordForName(next)) {
       setDraft(glyphName);
       return;
     }

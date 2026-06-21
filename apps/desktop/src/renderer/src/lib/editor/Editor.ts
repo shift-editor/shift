@@ -226,7 +226,7 @@ export class Editor {
 
     this.font = options.font;
     this.scene = new Scene();
-    this.#glyph = new EditorGlyphState(this.font);
+    this.#glyph = new EditorGlyphState(this.font, this.scene.locationCell);
 
     this.#view = new EditorViewState();
     this.input = new EditorInput();
@@ -265,7 +265,7 @@ export class Editor {
 
     this.#clipboard = new Clipboard(options.clipboard);
 
-    this.#textRuns = new TextRuns(this.font, new Positioner(), this.#glyph.design.location);
+    this.#textRuns = new TextRuns(this.font, new Positioner(), this.scene.locationCell);
     this.#text = new TextEditingState(this.#textRuns);
     this.#glyphDisplay = new GlyphDisplay(this.#text, this.#textRuns);
 
@@ -546,7 +546,7 @@ export class Editor {
 
     const handle = this.font.glyphHandleForName(record.name);
     this.#glyph.open.rootHandle.set(handle);
-    this.#glyph.design.set(location);
+    this.scene.setLocation(location);
     this.#glyph.layerEditing.followDesignLocation();
     return this.#focusGlyphHandle(handle);
   }
@@ -611,12 +611,12 @@ export class Editor {
   }
 
   public get $designLocation(): Signal<AxisLocation> {
-    return this.#glyph.design.location;
+    return this.scene.locationCell;
   }
 
   /** Current designspace coordinate used for displayed glyph data. */
   public get designLocation(): AxisLocation {
-    return this.#glyph.design.location.peek();
+    return this.scene.location;
   }
 
   /**
@@ -667,8 +667,7 @@ export class Editor {
    */
   public setDesignLocation(location: AxisLocation): void {
     batch(() => {
-      this.#glyph.design.set(location);
-      this.#updateShownGlyphItemLocations(location);
+      this.scene.setLocation(location);
 
       const source = this.font.sourceAt(location);
       if (source) {
@@ -711,9 +710,8 @@ export class Editor {
 
     batch(() => {
       const location = axisLocationFromLocation(source.location);
-      this.#glyph.design.set(location);
+      this.scene.setLocation(location);
       this.#glyph.layerEditing.selectLayerSource(source.id);
-      this.#updateShownGlyphItemLocations(location);
     });
   }
 
@@ -776,8 +774,10 @@ export class Editor {
   public glyphForItem(itemId: ItemId): Glyph | null {
     const item = this.scene.glyphItem(itemId);
     if (!item) return null;
+
     const record = this.font.recordForId(item.glyphId);
     if (!record) return null;
+
     return this.font.glyph(this.font.glyphHandleForName(record.name));
   }
 
@@ -785,13 +785,13 @@ export class Editor {
     const item = this.scene.glyphItem(itemId);
     const glyph = item ? this.glyphForItem(itemId) : null;
     if (!item || !glyph) return null;
-    return glyph.instance(signal(item.location, { name: `editor.item.${item.id}.location` }));
+    return glyph.instance(this.scene.locationCell);
   }
 
   public layerForItem(itemId: ItemId): GlyphLayer | null {
     const item = this.scene.glyphItem(itemId);
     if (!item) return null;
-    const source = this.font.sourceAt(item.location);
+    const source = this.font.sourceAt(this.scene.location);
     if (!source) return null;
     const record = this.font.recordForId(item.glyphId);
     if (!record) return null;
@@ -1302,12 +1302,6 @@ export class Editor {
     this.#cameraMetricsEffect.dispose();
     this.#renderer.destroy();
     this.#events.dispose();
-  }
-
-  #updateShownGlyphItemLocations(location: AxisLocation): void {
-    for (const itemId of this.scene.geometryItemIds()) {
-      if (this.scene.glyphItem(itemId)) this.scene.updateGlyphItem(itemId, { location });
-    }
   }
 
   #toolStateKey(toolId: string, key: string): string {

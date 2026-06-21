@@ -57,7 +57,9 @@ describe("Font projects the workspace snapshot", () => {
     expect(font.loaded).toBe(true);
     expect(font.metrics.unitsPerEm).toBe(2048);
     expect(font.metadata.familyName).toBe("Untitled Font");
-    expect(font.hasGlyph("A" as GlyphName)).toBe(true);
+    const record = font.recordForName("A" as GlyphName);
+    expect(record).not.toBeNull();
+    expect(font.hasGlyph(record!.id)).toBe(true);
     expect(font.nameForUnicode(65 as Unicode)).toBe("A");
     expect(font.sources.map((source) => source.name)).toEqual(["Regular"]);
   });
@@ -83,7 +85,8 @@ describe("Font projects the workspace snapshot", () => {
 
     expect(font.loaded).toBe(false);
     expect(font.metrics.unitsPerEm).toBe(1000);
-    expect(font.hasGlyph("A" as GlyphName)).toBe(false);
+    const record = font.recordForName("A" as GlyphName);
+    expect(record).toBeNull();
     expect(font.sources).toEqual([]);
   });
 
@@ -171,6 +174,26 @@ describe("font-level intents make the font variable", () => {
 
     expect(applied.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
     expect(stack.font.glyphLayerRecord(glyphId, sourceId)).toEqual({ id: layerId, sourceId });
+  });
+
+  it("createGlyph authors a default layer for fresh glyphs", async () => {
+    const stack = createWorkspaceStack();
+    await stack.client.create();
+
+    const record = stack.font.createGlyph("A" as GlyphName);
+    const source = stack.font.defaultSource;
+
+    expect(record.layers).toHaveLength(1);
+    expect(record.layers[0]?.sourceId).toBe(source.id);
+
+    await stack.editQueue.settled();
+
+    const committed = stack.font.recordForId(record.id);
+    expect(committed?.layers).toEqual(record.layers);
+    expect(stack.font.glyphLayerRecord(record.id, source.id)).toEqual(record.layers[0]);
+
+    const glyph = await stack.font.openGlyph(record.id, source);
+    expect(glyph?.xAdvance).toBe(stack.font.defaultXAdvance);
   });
 
   it("exact sources without glyph layers have no live layer and do not render default geometry", async () => {

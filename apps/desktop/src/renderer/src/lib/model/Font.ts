@@ -143,14 +143,14 @@ class GlyphDirectory {
   }
 
   /**
-   * Reports whether the current font has a committed glyph with this name.
+   * Reports whether the current font has a committed glyph with this id.
    *
-   * @param name - Glyph name to test against committed font records.
-   * @returns `true` only for glyphs present in the loaded font, not database fallbacks.
+   * @param glyphId - Stable glyph identity to test against committed font records.
+   * @returns `true` only for glyphs present in the loaded font.
    * @knipclassignore
    */
-  hasGlyph(name: GlyphName): boolean {
-    return this.recordsByName.has(name);
+  hasGlyph(glyphId: GlyphId): boolean {
+    return this.recordsById.has(glyphId);
   }
 
   /**
@@ -286,6 +286,7 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
  * editor layer API when the caller intends to create or edit authored glyph data.
  */
 export class Font {
+  // TODO: these all need to renamed to have the <name>Cell naming convention
   readonly #$loaded: Signal<boolean>;
   readonly #$metrics: Signal<FontMetrics>;
   readonly #$metadata: Signal<FontMetadata>;
@@ -326,6 +327,10 @@ export class Font {
   /** @knipclassignore */
   get loaded(): boolean {
     return this.#$loaded.peek();
+  }
+
+  get defaultXAdvance(): number {
+    return this.#$metrics.peek().unitsPerEm / 2;
   }
 
   /** @knipclassignore */
@@ -398,14 +403,14 @@ export class Font {
   }
 
   /**
-   * Reports whether the current font has a committed glyph with this name.
+   * Reports whether the current font has a committed glyph with this id.
    *
-   * @param name - Glyph name to test against committed font records.
+   * @param glyphId - Stable glyph identity to test against committed font records.
    * @returns `true` only for glyphs present in the loaded font.
    * @knipclassignore
    */
-  hasGlyph(name: GlyphName): boolean {
-    return this.#directory.peek().hasGlyph(name);
+  hasGlyph(glyphId: GlyphId): boolean {
+    return this.#directory.peek().hasGlyph(glyphId);
   }
 
   /**
@@ -500,31 +505,43 @@ export class Font {
   }
 
   /**
-   * Creates a glyph identity and returns its record immediately.
+   * Creates a glyph and its default authored layer.
    *
    * @remarks
-   * The durable commit happens asynchronously; the committed record folds
-   * into the font's directory when the workspace echo lands. This does not
-   * create authored layer data. Use {@link createGlyphLayer} for authored
-   * glyph data at a source.
+   * The durable commit happens asynchronously; the committed glyph and sparse
+   * layer membership fold into the font's directory when the workspace echo
+   * lands. The layer is authored at the font's default source, and its initial
+   * advance comes from the workspace layer-creation policy.
    *
    * @param name - Preferred glyph name. Existing names are auto-incremented
    *   (`base`, `base.1`, …); Unicode assignment is inferred from the
    *   resolved name.
-   * @returns The created glyph's identity record with no authored layers.
+   * @returns The created glyph record with its optimistic default layer.
    */
   createGlyph(name: GlyphName): GlyphRecord {
     const finalName = this.nextAvailableGlyphName(name);
     const handle = this.glyphHandleForName(finalName);
     const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
     const glyphId = mintGlyphId();
+    const layerId = mintLayerId();
+    const sourceId = this.defaultSource.id;
 
     this.editQueue.push({
       kind: "createGlyph",
       createGlyph: { glyphId, name: finalName, unicodes },
     });
+    this.editQueue.push({
+      kind: "createGlyphLayer",
+      createGlyphLayer: { layerId, glyphId, sourceId },
+    });
 
-    return { id: glyphId, name: finalName, unicodes, componentBaseGlyphIds: [], layers: [] };
+    return {
+      id: glyphId,
+      name: finalName,
+      unicodes,
+      componentBaseGlyphIds: [],
+      layers: [{ id: layerId, sourceId }],
+    };
   }
 
   /**
@@ -532,8 +549,8 @@ export class Font {
    *
    * @remarks
    * The layer id is caller-minted and becomes the stable edit identity for
-   * subsequent geometry intents. This method does not clone, seed, or copy
-   * geometry from another layer.
+   * subsequent geometry intents. The workspace initializes default metrics;
+   * this method does not clone, seed, or copy geometry from another layer.
    *
    * @param glyphId - Committed glyph identity that will own the new layer.
    * @param sourceId - Committed source where the layer is authored.
@@ -567,11 +584,11 @@ export class Font {
    */
   nextAvailableGlyphName(name: GlyphName): GlyphName {
     const baseName = (name.trim() || "newGlyph") as GlyphName;
-    if (!this.hasGlyph(baseName)) return baseName;
+    if (!this.recordForName(baseName)) return baseName;
 
     for (let index = 1; ; index += 1) {
       const candidate = `${baseName}.${index}` as GlyphName;
-      if (!this.hasGlyph(candidate)) return candidate;
+      if (!this.recordForName(candidate)) return candidate;
     }
   }
 

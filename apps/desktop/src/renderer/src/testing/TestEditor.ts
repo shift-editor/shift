@@ -61,9 +61,8 @@ export class TestEditor extends Editor {
     if (!record) throw new Error("created glyph did not appear in the font directory");
     const location = this.font.defaultLocation();
     this.focusGlyph(record.id, location);
-    const itemId = this.scene.placeGlyph({
+    const itemId = this.scene.addGlyph({
       glyphId: record.id,
-      location,
       origin: { x: 0, y: 0 },
     });
     this.scene.setGeometryItems([itemId]);

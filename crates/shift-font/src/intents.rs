@@ -14,10 +14,6 @@ use crate::ir::{
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 
-/// Advance width for layers minted by create intents, before any metrics
-/// edit lands.
-const DEFAULT_LAYER_WIDTH: f64 = 500.0;
-
 /// A point to create, with its caller-minted id.
 #[derive(Clone, Debug)]
 pub struct PointSeed {
@@ -213,6 +209,10 @@ pub struct AppliedIntents {
 }
 
 impl Font {
+    fn default_layer_width(&self) -> f64 {
+        self.metrics().units_per_em * 0.5
+    }
+
     /// Validates and applies an intent set, producing the canonical change
     /// records. All-or-nothing only when the caller applies to a clone and
     /// swaps on success (the workspace's commit pattern).
@@ -448,7 +448,7 @@ impl Font {
                 source_id,
             });
         }
-        let layer = GlyphLayer::with_width(layer_id.clone(), source_id, DEFAULT_LAYER_WIDTH);
+        let layer = GlyphLayer::with_width(layer_id.clone(), source_id, self.default_layer_width());
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
         changes.push(FontChange::glyph_layer_created(

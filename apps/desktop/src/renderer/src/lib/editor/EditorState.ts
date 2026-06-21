@@ -10,7 +10,6 @@ import type { Glyph, GlyphInstance, GlyphLayer } from "../model/Glyph";
 import type { FocusedGlyph } from "../text/TextRun";
 import type { GlyphAnchor } from "../text/layout";
 import type { TextRuns } from "../text/TextRuns";
-import { emptyAxisLocation } from "../variation/location";
 import {
   computed,
   signal,
@@ -213,33 +212,6 @@ export class OpenGlyphState {
   }
 }
 
-/**
- * Stores the current designspace coordinate.
- *
- * The location drives preview geometry and display outlines. Source selection
- * policy is applied by `Editor.setDesignLocation`.
- */
-export class DesignLocationState {
-  /** Reactive designspace location used by preview geometry and outlines. */
-  readonly location: WritableSignal<AxisLocation>;
-
-  constructor() {
-    this.location = signal<AxisLocation>(emptyAxisLocation(), {
-      name: "editor.glyph.design.location",
-    });
-  }
-
-  /**
-   * Set the raw designspace coordinate.
-   *
-   * This updates `location` only. Use `Editor.setDesignLocation` when the edit
-   * source should be synchronized with the new coordinate.
-   */
-  set(location: AxisLocation): void {
-    this.location.set(location);
-  }
-}
-
 export interface GlyphLayerResolution {
   readonly sourceId: SourceId;
   readonly layerId: LayerId | null;
@@ -264,7 +236,7 @@ export class GlyphLayerEditingState {
   /** Authored glyph layer data for the selected source. */
   readonly glyphLayer: Signal<GlyphLayer | null>;
 
-  constructor(font: Font, open: OpenGlyphState, design: DesignLocationState) {
+  constructor(font: Font, open: OpenGlyphState, location: Signal<AxisLocation>) {
     this.selectedSourceId = signal<SourceId | null>(null, {
       name: "editor.glyph.layerEditing.sourceId",
     });
@@ -274,7 +246,7 @@ export class GlyphLayerEditingState {
         const sourceId = this.selectedSourceId.value;
         if (sourceId) return font.source(sourceId);
 
-        return font.sourceAt(design.location.value);
+        return font.sourceAt(location.value);
       },
       { name: "editor.glyph.layerEditing.source" },
     );
@@ -341,13 +313,13 @@ export class PreviewGlyphState {
   /** Glyph resolved at the current design location. */
   readonly instance: Signal<GlyphInstance | null>;
 
-  constructor(open: OpenGlyphState, design: DesignLocationState) {
+  constructor(open: OpenGlyphState, location: Signal<AxisLocation>) {
     this.instance = computed(
       () => {
         const glyph = open.glyph.value;
         if (!glyph) return null;
 
-        return glyph.instance(design.location);
+        return glyph.instance(location);
       },
       { name: "editor.glyph.preview.instance" },
     );
@@ -361,15 +333,13 @@ export class PreviewGlyphState {
  */
 export class EditorGlyphState {
   readonly open: OpenGlyphState;
-  readonly design: DesignLocationState;
   readonly layerEditing: GlyphLayerEditingState;
   readonly preview: PreviewGlyphState;
 
-  constructor(font: Font) {
+  constructor(font: Font, location: Signal<AxisLocation>) {
     this.open = new OpenGlyphState();
-    this.design = new DesignLocationState();
-    this.layerEditing = new GlyphLayerEditingState(font, this.open, this.design);
-    this.preview = new PreviewGlyphState(this.open, this.design);
+    this.layerEditing = new GlyphLayerEditingState(font, this.open, location);
+    this.preview = new PreviewGlyphState(this.open, location);
   }
 }
 

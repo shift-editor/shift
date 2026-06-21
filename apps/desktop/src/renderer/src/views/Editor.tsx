@@ -7,7 +7,7 @@ import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { GlyphFinder } from "@/components/editor/GlyphFinder";
-import { EditorView } from "@/components/editor/EditorView";
+import { Canvas } from "@/components/editor/Canvas";
 import { getEditor } from "@/store/appStore";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { useSignalState } from "@/lib/signals";
@@ -107,7 +107,7 @@ export const Editor = () => {
         <ResizableHandle inset="start" />
         <ResizablePanel id="canvas" order={2} minSize={30}>
           <ZoneContainer zone="canvas" className="h-full">
-            <EditorView />
+            <Canvas />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle inset="end" />
