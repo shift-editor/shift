@@ -264,8 +264,6 @@ class GlyphDirectory {
   }
 }
 
-type GlyphLayerKey = string & { readonly __glyphLayerKey: unique symbol };
-
 const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
   ascender: 800,
@@ -275,12 +273,12 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
 };
 
 /**
- * Reactive domain model for the loaded font.
+ * Reactive facade for the loaded font.
  *
- * `Font` owns font-level metadata, source lookup, glyph identity lookup, and
- * cached glyph models. Getters such as `metrics`, `unicodes`, and `sources`
- * are signal-backed: reading them inside a computed or effect subscribes to
- * later font loads/resets.
+ * `Font` exposes font-level metadata, source lookup, and domain editing verbs
+ * over `FontStore`. Getters such as `metrics`, `unicodes`, and `sources` are
+ * signal-backed: reading them inside a computed or effect subscribes to later
+ * font loads/resets.
  *
  * A glyph handle is only an identity. It may name a glyph that is not committed
  * in the font yet. Use {@link glyph} for existing glyph data, and use the
@@ -298,12 +296,7 @@ export class Font {
 
   readonly #directory: Signal<GlyphDirectory>;
   readonly #store: FontStore;
-  readonly #glyphs = new Map<GlyphName, Glyph>();
-  /** Open glyph models keyed by stable id; survives directory re-keys. */
-  readonly #glyphsById = new Map<GlyphId, Glyph>();
-  readonly #glyphLayers = new Map<GlyphLayerKey, GlyphLayer>();
   readonly #editCoordinator: WorkspaceEditCoordinator | null;
-  #documentId: string | null = null;
 
   /**
    * Projects the renderer's workspace snapshot into the font domain model.
@@ -412,7 +405,7 @@ export class Font {
    * @knipclassignore
    */
   hasGlyph(glyphId: GlyphId): boolean {
-    return this.#directory.peek().hasGlyph(glyphId);
+    return this.#store.hasGlyph(glyphId);
   }
 
   /**
@@ -428,12 +421,7 @@ export class Font {
 
   /** Returns the committed glyph record for a stable glyph id. */
   recordForId(glyphId: GlyphId): GlyphRecord | null {
-    return this.#directory.peek().recordForId(glyphId);
-  }
-
-  /** Returns the committed layer record for an exact glyph/source pair. */
-  layerForGlyphAtSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.#directory.peek().layerForGlyphAtSource(glyphId, sourceId);
+    return this.#store.recordForId(glyphId);
   }
 
   /**
@@ -574,8 +562,8 @@ export class Font {
    * @param sourceId - Source whose authored glyph data is requested.
    * @returns The sparse layer record, or `null` when that source has no layer for the glyph.
    */
-  glyphLayerRecord(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.#directory.peek().layerForGlyphAtSource(glyphId, sourceId);
+  layerRecordForId(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
+    return this.#store.layerRecordForId(glyphId, sourceId);
   }
 
   /**
@@ -615,49 +603,44 @@ export class Font {
   }
 
   /**
-   * Get the cached model for an existing glyph.
+   * Returns the local glyph model for a name-based handle.
    *
-   * This is a read/data access API. It asks the bridge for glyph state at the
-   * font's default source and returns `null` when no state exists. It does not
-   * create missing glyphs or select a layer source.
+   * @remarks
+   * This is a pure local read. It does not request geometry; callers that need
+   * missing snapshots should use the glyph snapshot loader before expecting a
+   * model.
    *
-   * @example
-   * ```ts
-   * const glyph = font.glyph(handle)
-   * const outline = glyph?.outlineAt(location)
-   * ```
-   *
-   * @returns The glyph model, or `null` when the glyph has no state for the default source.
+   * @param handle - glyph identity from a text, catalog, or finder flow.
+   * @returns the glyph model, or null when the glyph is missing or not loaded.
    */
   glyph(handle: GlyphHandle): Glyph | null {
     const record = this.#directory.peek().recordForName(handle.name);
-    return record ? this.glyphById(record.id) : null;
+    return record ? this.glyphForId(record.id) : null;
   }
 
-  glyphById(glyphId: GlyphId): Glyph | null {
+  /**
+   * Returns the local glyph model for a stable glyph id.
+   *
+   * @param glyphId - document glyph identity to resolve.
+   * @returns the id-keyed glyph model, or null when the glyph is missing or not loaded.
+   */
+  glyphForId(glyphId: GlyphId): Glyph | null {
     if (!this.loaded) return null;
 
-    this.#clearDocumentModelsIfNeeded();
-
     const directory = this.#directory.peek();
-    const record = directory.recordForId(glyphId);
+    const record = this.#store.recordForId(glyphId);
     if (!record) return null;
 
-    const cached = this.#glyphsById.get(glyphId);
-    if (cached) return cached;
+    return this.#store.glyphModel(glyphId, () => {
+      const source = this.defaultSource;
+      const layer = directory.layerForGlyphAtSource(glyphId, source.id);
+      if (!layer) return null;
 
-    const source = this.defaultSource;
-    const layer = directory.layerForGlyphAtSource(glyphId, source.id);
-    if (!layer) return null;
+      const state = this.layerState(layer.id);
+      if (!state) return null;
 
-    const state = this.layerState(layer.id);
-    if (!state) return null;
-
-    const handle = directory.glyphHandleForName(record.name);
-    const glyph = new Glyph(this, glyphId, handle, source, state);
-    this.#glyphsById.set(glyphId, glyph);
-    this.#glyphs.set(record.name, glyph);
-    return glyph;
+      return new Glyph(this, glyphId, directory.glyphHandleForName(record.name), source, state);
+    });
   }
 
   /**
@@ -677,29 +660,30 @@ export class Font {
    */
   glyphLayer(handle: GlyphHandle, source: Source): GlyphLayer | null {
     const record = this.#directory.peek().recordForName(handle.name);
-    return record ? this.glyphLayerById(record.id, source) : null;
+    return record ? this.glyphLayerForId(record.id, source.id) : null;
   }
 
-  glyphLayerById(glyphId: GlyphId, source: Source): GlyphLayer | null {
-    if (!this.source(source.id)) return null;
+  /**
+   * Returns local authored layer data for an exact glyph/source pair.
+   *
+   * @param glyphId - document glyph identity to resolve.
+   * @param sourceId - exact source whose authored layer should be loaded.
+   * @returns the id-keyed glyph layer model, or null when record or geometry is unavailable.
+   */
+  glyphLayerForId(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null {
+    const source = this.source(sourceId);
+    if (!source) return null;
 
-    this.#clearDocumentModelsIfNeeded();
-    const layer = this.#directory.peek().layerForGlyphAtSource(glyphId, source.id);
+    const layer = this.#store.layerRecordForId(glyphId, source.id);
     if (!layer) return null;
 
-    const key = glyphLayerModelKey(glyphId, source.id);
-    const cached = this.#glyphLayers.get(key);
-    if (cached) return cached;
+    return this.#store.glyphLayerModel(glyphId, source.id, () => {
+      const glyph = this.glyphForId(glyphId);
+      if (!glyph) return null;
 
-    const glyph = this.glyphById(glyphId);
-    if (!glyph) return null;
-
-    const state = glyph.isPrimarySource(source) ? undefined : this.layerState(layer.id);
-    const glyphLayer = glyph.createGlyphLayer(source, state);
-    if (!glyphLayer) return null;
-
-    this.#glyphLayers.set(key, glyphLayer);
-    return glyphLayer;
+      const state = glyph.isPrimarySource(source) ? undefined : this.layerState(layer.id);
+      return glyph.createGlyphLayer(source, state);
+    });
   }
 
   /**
@@ -715,10 +699,10 @@ export class Font {
   }
 
   /**
-   * Read raw glyph state for an authored layer from the bridge.
+   * Returns the store-owned layer state for loaded glyph geometry.
    *
-   * @param layerId - Stable layer identity to read.
-   * @returns Raw glyph state, or `null` when the bridge cannot provide state.
+   * @param layerId - stable authored layer identity to resolve.
+   * @returns the loaded layer state, or null when its glyph snapshot is not loaded.
    */
   layerState(layerId: LayerId): GlyphLayerState | null {
     return this.#store.layerState(layerId);
@@ -892,24 +876,9 @@ export class Font {
     return this.#$sources.peek();
   }
 
-  #clearDocumentModelsIfNeeded(): void {
-    const workspace = this.#store.workspaceCell.peek();
-    const documentId = workspace?.documentId ?? null;
-    if (this.#documentId !== documentId) {
-      this.#glyphs.clear();
-      this.#glyphsById.clear();
-      this.#glyphLayers.clear();
-      this.#documentId = documentId;
-    }
-  }
-
   defaultLocation(): AxisLocation {
     return this.isVariable() ? defaultAxisLocation(this.getAxes()) : emptyAxisLocation();
   }
-}
-
-function glyphLayerModelKey(glyphId: GlyphId, sourceId: SourceId): GlyphLayerKey {
-  return `${glyphId}:${sourceId}` as GlyphLayerKey;
 }
 
 function glyphLayerKey(glyphId: GlyphId, sourceId: SourceId): string {

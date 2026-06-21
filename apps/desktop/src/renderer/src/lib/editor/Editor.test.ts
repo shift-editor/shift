@@ -28,6 +28,38 @@ describe("Editor", () => {
       expect(itemId && editor.layerForItem(itemId)).not.toBeNull();
     });
 
+    it("opens route glyphs through the editor route session", async () => {
+      const record = editor.font.recordForName("S")!;
+
+      const session = editor.openGlyphRoute(record.id);
+      const itemId = editor.scene.value.items[0]?.id ?? null;
+
+      expect(editor.scene.value.items).toHaveLength(1);
+      expect(editor.scene.item(itemId)).toMatchObject({
+        kind: "glyph",
+        glyphId: record.id,
+        placement: { origin: { x: 0, y: 0 } },
+      });
+      expect(itemId && editor.scene.isGeometryShown(itemId)).toBe(true);
+
+      const glyph = await session.ready;
+
+      expect(glyph?.id).toBe(record.id);
+      expect(editor.glyph.peek()).toBe(glyph);
+      expect(itemId && editor.layerForItem(itemId)).not.toBeNull();
+    });
+
+    it("cancels stale route sessions before they focus", async () => {
+      const record = editor.font.recordForName("S")!;
+
+      const session = editor.openGlyphRoute(record.id);
+      session.close();
+
+      expect(await session.ready).toBeNull();
+      expect(editor.scene.value.items).toEqual([]);
+      expect(editor.glyph.peek()).toBeNull();
+    });
+
     it("can place the same glyph id twice with distinct item ids", async () => {
       const record = editor.font.recordForName("A")!;
       const left = mintItemId();

@@ -47,7 +47,7 @@ export async function layoutTestFont(): Promise<Font> {
     await stack.editCoordinator.apply([
       { kind: "setXAdvance", setXAdvance: { layerId, width: advance } },
     ]);
-    await stack.glyphSnapshots.load([record.id], [stack.font.defaultSource.id]);
+    await stack.glyphSnapshotLoader.load([record.id], { sourceIds: [stack.font.defaultSource.id] });
   }
 
   const handle = stack.font.glyphHandleForUnicode(65 as Unicode);

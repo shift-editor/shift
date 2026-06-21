@@ -43,7 +43,7 @@ export class TestEditor extends Editor {
   constructor() {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ font: stack.font, clipboard });
+    super({ font: stack.font, glyphSnapshotLoader: stack.glyphSnapshotLoader, clipboard });
     this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
@@ -59,19 +59,11 @@ export class TestEditor extends Editor {
     const glyph = await this.#createAndOpenGlyph(name, unicode);
     const record = this.font.recordForName(glyph.handle.name);
     if (!record) throw new Error("created glyph did not appear in the font directory");
-    const location = this.font.defaultLocation();
-    this.focusGlyph(record.id, location);
-    const itemId = this.scene.addGlyph({
-      glyphId: record.id,
-      origin: { x: 0, y: 0 },
-    });
-    this.scene.setGeometryItems([itemId]);
+    await this.openGlyphRoute(record.id).ready;
     return this;
   }
 
-  /**
-   * Adds another glyph to the workspace font and pulls its model into the Font cache.
-   */
+  /** Adds another glyph to the workspace font and loads its local model. */
   async addGlyph(name: string, unicode: number | null): Promise<void> {
     await this.#createAndOpenGlyph(name, unicode);
   }
@@ -101,9 +93,9 @@ export class TestEditor extends Editor {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    await this.#stack.glyphSnapshots.load([record.id], [sourceId]);
-    const glyph = this.font.glyphById(record.id);
-    if (!glyph) throw new Error("glyphById returned null for a loaded glyph");
+    await this.#stack.glyphSnapshotLoader.load([record.id], { sourceIds: [sourceId] });
+    const glyph = this.font.glyphForId(record.id);
+    if (!glyph) throw new Error("glyphForId returned null for a loaded glyph");
     return glyph;
   }
 

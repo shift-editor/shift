@@ -7,7 +7,7 @@ import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
 import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
-import { GlyphSnapshotRequests } from "@/lib/model/GlyphSnapshotRequests";
+import { GlyphSnapshotLoader } from "@/lib/model/GlyphSnapshotLoader";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
 import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
@@ -15,7 +15,7 @@ export type WorkspaceStack = {
   client: WorkspaceClient;
   store: FontStore;
   editCoordinator: WorkspaceEditCoordinator;
-  glyphSnapshots: GlyphSnapshotRequests;
+  glyphSnapshotLoader: GlyphSnapshotLoader;
   font: Font;
   createWorkspace(): Promise<void>;
 };
@@ -46,14 +46,14 @@ export function createWorkspaceStack(): WorkspaceStack {
   });
   const store = new FontStore();
   const editCoordinator = new WorkspaceEditCoordinator(client, store);
-  const glyphSnapshots = new GlyphSnapshotRequests(store, editCoordinator);
+  const glyphSnapshotLoader = new GlyphSnapshotLoader(store, editCoordinator);
   const font = new Font(store, editCoordinator);
 
   return {
     client,
     store,
     editCoordinator,
-    glyphSnapshots,
+    glyphSnapshotLoader,
     font,
     async createWorkspace(): Promise<void> {
       await shell.call("workspace.create", undefined);

@@ -8,6 +8,7 @@ import type { Editor } from "@/lib/editor/Editor";
 import type { GlyphDisplayState } from "@/lib/editor/EditorState";
 import type { SceneGlyph } from "@/lib/editor/Scene";
 import type { AxisLocation } from "@/types/variation";
+import type { GlyphRecord, Unicode } from "@shift/types";
 import { track, type Signal } from "@/lib/signals";
 import { displayAdvance } from "@/lib/utils/unicode";
 import { SCREEN_HIT_RADIUS } from "./constants";
@@ -22,6 +23,12 @@ interface BackgroundGlyphFrame {
   readonly item: SceneGlyph;
   readonly advance: number;
   readonly geometryShown: boolean;
+}
+
+interface GuideAdvanceInput {
+  readonly record: GlyphRecord;
+  readonly model: Glyph | null;
+  readonly xAdvance: number;
 }
 
 export interface BackgroundLayerProps {
@@ -107,15 +114,13 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
 
       const glyph = this.#editor.glyphForItem(item.id);
       const instance = this.#editor.instanceForItem(item.id);
-      const xAdvance = instance?.xAdvanceCell.value ?? this.#editor.font.defaultXAdvance;
-      const unicode = glyph
-        ? Number.isFinite(glyph.unicode)
-          ? glyph.unicode
-          : null
-        : (record.unicodes[0] ?? null);
       glyphs.push({
         item,
-        advance: displayAdvance(xAdvance, record.name, unicode),
+        advance: guideAdvance({
+          record,
+          model: glyph,
+          xAdvance: instance?.xAdvanceCell.value ?? this.#editor.font.defaultXAdvance,
+        }),
         geometryShown,
       });
     }
@@ -135,6 +140,21 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
       });
     }
   }
+}
+
+function guideAdvance(input: GuideAdvanceInput): number {
+  return displayAdvance(
+    input.xAdvance,
+    input.record.name,
+    primaryUnicode(input.model, input.record),
+  );
+}
+
+function primaryUnicode(glyph: Glyph | null, record: GlyphRecord): Unicode | null {
+  const unicode = glyph?.unicode;
+  if (unicode !== null && unicode !== undefined && Number.isFinite(unicode)) return unicode;
+
+  return record.unicodes[0] ?? null;
 }
 
 /**

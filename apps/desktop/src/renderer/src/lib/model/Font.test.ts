@@ -149,7 +149,7 @@ describe("font-level intents make the font variable", () => {
     expect(bold?.id).toBe(boldSourceId);
     expect(applied.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
     expect(applied.layers).toEqual([]);
-    expect(stack.font.glyphLayerRecord(glyphId, boldSourceId)).toBeNull();
+    expect(stack.font.layerRecordForId(glyphId, boldSourceId)).toBeNull();
   });
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
@@ -173,7 +173,7 @@ describe("font-level intents make the font variable", () => {
     ]);
 
     expect(applied.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
-    expect(stack.font.glyphLayerRecord(glyphId, sourceId)).toEqual({ id: layerId, sourceId });
+    expect(stack.font.layerRecordForId(glyphId, sourceId)).toEqual({ id: layerId, sourceId });
   });
 
   it("createGlyph authors a default layer for fresh glyphs", async () => {
@@ -190,11 +190,38 @@ describe("font-level intents make the font variable", () => {
 
     const committed = stack.font.recordForId(record.id);
     expect(committed?.layers).toEqual(record.layers);
-    expect(stack.font.glyphLayerRecord(record.id, source.id)).toEqual(record.layers[0]);
+    expect(stack.font.layerRecordForId(record.id, source.id)).toEqual(record.layers[0]);
 
-    await stack.glyphSnapshots.load([record.id], [source.id]);
-    const glyph = stack.font.glyphById(record.id);
+    await stack.glyphSnapshotLoader.load([record.id], { sourceIds: [source.id] });
+    const glyph = stack.font.glyphForId(record.id);
     expect(glyph?.xAdvance).toBe(stack.font.defaultXAdvance);
+  });
+
+  it("preserves glyph object identity while record names change", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+
+    const record = stack.font.createGlyph("A" as GlyphName);
+    await stack.editCoordinator.settled();
+    await stack.glyphSnapshotLoader.load([record.id]);
+
+    const glyph = stack.font.glyphForId(record.id);
+    if (!glyph) throw new Error("Expected loaded glyph");
+
+    await stack.editCoordinator.apply([
+      {
+        kind: "updateGlyph",
+        updateGlyph: {
+          glyphId: record.id,
+          newName: "A.alt" as GlyphName,
+          newUnicodes: [0xe001 as Unicode],
+        },
+      },
+    ]);
+
+    expect(stack.font.glyphForId(record.id)).toBe(glyph);
+    expect(glyph.name).toBe("A.alt");
+    expect(glyph.unicode).toBe(0xe001);
   });
 
   it("exact sources without glyph layers have no live layer and do not render default geometry", async () => {
@@ -245,8 +272,8 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    await stack.glyphSnapshots.load([glyphId], [stack.font.defaultSource.id]);
-    const glyph = stack.font.glyphById(glyphId);
+    await stack.glyphSnapshotLoader.load([glyphId], { sourceIds: [stack.font.defaultSource.id] });
+    const glyph = stack.font.glyphForId(glyphId);
     if (!glyph) throw new Error("Expected default glyph layer to open");
     expect(glyph.xAdvance).toBe(640);
 
@@ -313,11 +340,11 @@ describe("font-level intents make the font variable", () => {
     const boldSource = stack.font.source(boldSourceId);
     if (!regularSource || !boldSource) throw new Error("Expected both sources");
 
-    const regularLoad = stack.glyphSnapshots.load([glyphId], [defaultSourceId]);
-    const boldLoad = stack.glyphSnapshots.load([glyphId], [boldSourceId]);
+    const regularLoad = stack.glyphSnapshotLoader.load([glyphId], { sourceIds: [defaultSourceId] });
+    const boldLoad = stack.glyphSnapshotLoader.load([glyphId], { sourceIds: [boldSourceId] });
     await Promise.all([regularLoad, boldLoad]);
 
-    expect(stack.font.glyphLayerById(glyphId, regularSource)?.id).toBe(defaultLayerId);
-    expect(stack.font.glyphLayerById(glyphId, boldSource)?.id).toBe(boldLayerId);
+    expect(stack.font.glyphLayerForId(glyphId, regularSource.id)?.id).toBe(defaultLayerId);
+    expect(stack.font.glyphLayerForId(glyphId, boldSource.id)?.id).toBe(boldLayerId);
   });
 });

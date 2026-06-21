@@ -75,6 +75,7 @@ import { TextRuns } from "@/lib/text/TextRuns";
 import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
 import { glyphTextItem, Positioner } from "@/lib/text/layout";
 import type { GlyphAnchor } from "@/lib/text/layout";
+import type { GlyphSnapshotLoader } from "@/lib/model/GlyphSnapshotLoader";
 
 import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
@@ -97,7 +98,23 @@ import {
 
 interface EditorOptions {
   font: Font;
+  glyphSnapshotLoader?: GlyphSnapshotLoader;
   clipboard: SystemClipboard;
+}
+
+/**
+ * Represents one route-owned glyph opening lifecycle.
+ *
+ * @remarks
+ * Closing the session cancels stale async focus work and clears the editor only
+ * while this session is still the active route.
+ */
+export interface GlyphRouteSession {
+  /** Resolves with the focused glyph, or null when the route is missing or cancelled. */
+  readonly ready: Promise<Glyph | null>;
+
+  /** Cancels this route session if it is still current. */
+  close(): void;
 }
 
 /**
@@ -144,6 +161,7 @@ export class Editor {
   readonly hover: Hover;
   readonly font: Font;
   readonly scene: Scene;
+  readonly #glyphSnapshotLoader: GlyphSnapshotLoader | null;
 
   /**
    * Rendering and camera infrastructure.
@@ -197,6 +215,7 @@ export class Editor {
   #textRuns: TextRuns;
 
   #glyphFinderOpen: WritableSignal<boolean>;
+  #glyphRouteGeneration = 0;
 
   #zone: FocusZone = "canvas";
 
@@ -225,6 +244,7 @@ export class Editor {
     this.#camera = new Camera();
 
     this.font = options.font;
+    this.#glyphSnapshotLoader = options.glyphSnapshotLoader ?? null;
     this.scene = new Scene();
     this.#glyph = new EditorGlyphState(this.font, this.scene.locationCell);
 
@@ -545,10 +565,65 @@ export class Editor {
     }
 
     const handle = this.font.glyphHandleForName(record.name);
+    const glyph = this.font.glyphForId(glyphId);
+    if (!glyph) {
+      this.#glyph.open.glyph.set(null);
+      this.#glyph.open.rootHandle.set(handle);
+      return null;
+    }
+
     this.#glyph.open.rootHandle.set(handle);
     this.scene.setLocation(location);
     this.#glyph.layerEditing.followDesignLocation();
-    return this.#focusGlyphHandle(handle);
+    this.#glyph.open.glyph.set(glyph);
+    return glyph;
+  }
+
+  /**
+   * Opens a route-selected glyph in the scene and focuses it after geometry loads.
+   *
+   * @remarks
+   * The scene item is placed synchronously so guides and route state update
+   * immediately. Geometry hydration runs through the glyph snapshot loader; if a
+   * later route opens before it resolves, the stale completion is ignored.
+   *
+   * @param glyphId - document glyph identity from the editor route, or null to clear.
+   * @returns route session handle for cancellation and optional readiness awaits.
+   */
+  public openGlyphRoute(glyphId: GlyphId | null): GlyphRouteSession {
+    const generation = ++this.#glyphRouteGeneration;
+    const close = () => this.#closeGlyphRoute(generation);
+
+    if (!glyphId) {
+      this.close();
+      return { ready: Promise.resolve(null), close };
+    }
+
+    const record = this.font.recordForId(glyphId);
+    if (!record) {
+      this.close();
+      return { ready: Promise.resolve(null), close };
+    }
+
+    const location = this.font.defaultLocation();
+    const handle = this.font.glyphHandleForName(record.name);
+    batch(() => {
+      this.scene.clear();
+      this.scene.setLocation(location);
+      const itemId = this.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
+      this.scene.setGeometryItems([itemId]);
+      this.#glyph.open.rootHandle.set(handle);
+      this.#glyph.open.glyph.set(null);
+      this.#glyph.layerEditing.followDesignLocation();
+    });
+
+    const ready = this.#loadRouteGlyph(glyphId, location, generation).catch((error) => {
+      if (this.#glyphRouteGeneration === generation) {
+        console.error("failed to open glyph route", error);
+      }
+      return null;
+    });
+    return { ready, close };
   }
 
   /**
@@ -608,6 +683,22 @@ export class Editor {
     this.scene.clear();
     this.#glyph.open.glyph.set(null);
     this.#glyph.open.activeContourId.set(null);
+  }
+
+  async #loadRouteGlyph(
+    glyphId: GlyphId,
+    location: AxisLocation,
+    generation: number,
+  ): Promise<Glyph | null> {
+    await this.#glyphSnapshotLoader?.load([glyphId]);
+    if (this.#glyphRouteGeneration !== generation) return null;
+    return this.focusGlyph(glyphId, location);
+  }
+
+  #closeGlyphRoute(generation: number): void {
+    if (this.#glyphRouteGeneration !== generation) return;
+    this.#glyphRouteGeneration += 1;
+    this.close();
   }
 
   public get $designLocation(): Signal<AxisLocation> {
@@ -775,10 +866,7 @@ export class Editor {
     const item = this.scene.glyphItem(itemId);
     if (!item) return null;
 
-    const record = this.font.recordForId(item.glyphId);
-    if (!record) return null;
-
-    return this.font.glyph(this.font.glyphHandleForName(record.name));
+    return this.font.glyphForId(item.glyphId);
   }
 
   public instanceForItem(itemId: ItemId): GlyphInstance | null {
@@ -793,9 +881,7 @@ export class Editor {
     if (!item) return null;
     const source = this.font.sourceAt(this.scene.location);
     if (!source) return null;
-    const record = this.font.recordForId(item.glyphId);
-    if (!record) return null;
-    return this.font.glyphLayer(this.font.glyphHandleForName(record.name), source);
+    return this.font.glyphLayerForId(item.glyphId, source.id);
   }
 
   /** Stateless command executor; undo authority is the workspace ledger. */

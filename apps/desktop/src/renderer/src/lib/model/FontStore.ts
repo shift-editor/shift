@@ -2,6 +2,8 @@ import type {
   AppliedChange,
   FontIntent,
   GlyphId,
+  GlyphLayerRecord,
+  GlyphRecord,
   GlyphStructure,
   GlyphState,
   GlyphVariationData,
@@ -15,6 +17,7 @@ import type {
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 import { GlyphLayerState } from "./GlyphLayerState";
+import type { Glyph, GlyphLayer } from "./Glyph";
 
 export type GlyphSnapshotStatus = "missing" | "loading" | "loaded" | "stale";
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
@@ -38,6 +41,9 @@ export class FontStore {
   readonly #layerStates = new Map<LayerId, GlyphLayerState>();
   readonly #layerByGlyphSource = new Map<GlyphSourceKey, LayerId>();
   readonly #glyphByLayer = new Map<LayerId, GlyphId>();
+  readonly #glyphById = new Map<GlyphId, GlyphRecord>();
+  readonly #glyphModels = new Map<GlyphId, Glyph>();
+  readonly #glyphLayerModels = new Map<GlyphSourceKey, GlyphLayer>();
   readonly #variationDataByGlyph = new Map<GlyphId, GlyphVariationData>();
   readonly #snapshotGeneration = new Map<GlyphId, number>();
 
@@ -76,6 +82,8 @@ export class FontStore {
       this.#workspace.set(snapshot);
       this.#indexWorkspace(snapshot);
       this.#layerStates.clear();
+      this.#glyphModels.clear();
+      this.#glyphLayerModels.clear();
       this.#variationDataByGlyph.clear();
       this.#snapshotGeneration.clear();
       this.#snapshotStatus.set(EMPTY_STATUS);
@@ -222,6 +230,22 @@ export class FontStore {
     return this.#layerStates.get(layerId) ?? null;
   }
 
+  hasGlyph(glyphId: GlyphId): boolean {
+    return this.#glyphById.has(glyphId);
+  }
+
+  recordForId(glyphId: GlyphId): GlyphRecord | null {
+    return this.#glyphById.get(glyphId) ?? null;
+  }
+
+  layerRecordForId(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
+    return this.recordForId(glyphId)?.layers.find((layer) => layer.sourceId === sourceId) ?? null;
+  }
+
+  sourceIdsForGlyph(glyphId: GlyphId): readonly SourceId[] {
+    return this.recordForId(glyphId)?.layers.map((layer) => layer.sourceId) ?? [];
+  }
+
   layerStateForGlyphSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerState | null {
     const layerId = this.#layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId));
     return layerId ? (this.#layerStates.get(layerId) ?? null) : null;
@@ -241,6 +265,29 @@ export class FontStore {
 
   hasLayerRecord(glyphId: GlyphId, sourceId: SourceId): boolean {
     return this.#layerByGlyphSource.has(glyphSourceKey(glyphId, sourceId));
+  }
+
+  glyphModel(glyphId: GlyphId, create: () => Glyph | null): Glyph | null {
+    const cached = this.#glyphModels.get(glyphId);
+    if (cached) return cached;
+
+    const created = create();
+    if (created) this.#glyphModels.set(glyphId, created);
+    return created;
+  }
+
+  glyphLayerModel(
+    glyphId: GlyphId,
+    sourceId: SourceId,
+    create: () => GlyphLayer | null,
+  ): GlyphLayer | null {
+    const key = glyphSourceKey(glyphId, sourceId);
+    const cached = this.#glyphLayerModels.get(key);
+    if (cached) return cached;
+
+    const created = create();
+    if (created) this.#glyphLayerModels.set(key, created);
+    return created;
   }
 
   loadedComponentBaseGlyphIds(glyphId: GlyphId): readonly GlyphId[] {
@@ -287,9 +334,11 @@ export class FontStore {
   #indexWorkspace(snapshot: WorkspaceSnapshot | null): void {
     this.#layerByGlyphSource.clear();
     this.#glyphByLayer.clear();
+    this.#glyphById.clear();
     if (!snapshot) return;
 
     for (const glyph of snapshot.glyphs) {
+      this.#glyphById.set(glyph.id, glyph);
       for (const layer of glyph.layers) {
         this.#layerByGlyphSource.set(glyphSourceKey(glyph.id, layer.sourceId), layer.id);
         this.#glyphByLayer.set(layer.id, glyph.id);

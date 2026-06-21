@@ -259,8 +259,7 @@ export class GlyphLayerEditingState {
         const glyph = open.glyph.value;
         if (!glyph) return { sourceId: source.id, layerId: null };
 
-        const record = font.recordForName(glyph.handle.name);
-        const layerId = record ? (font.glyphLayerRecord(record.id, source.id)?.id ?? null) : null;
+        const layerId = font.layerRecordForId(glyph.id, source.id)?.id ?? null;
         return { sourceId: source.id, layerId };
       },
       { name: "editor.glyph.layerEditing.layer" },
@@ -275,7 +274,7 @@ export class GlyphLayerEditingState {
         if (!source) return null;
         if (this.layer.value?.layerId === null) return null;
 
-        return font.glyphLayer(glyph.handle, source);
+        return font.glyphLayerForId(glyph.id, source.id);
       },
       { name: "editor.glyph.layerEditing.glyphLayer" },
     );

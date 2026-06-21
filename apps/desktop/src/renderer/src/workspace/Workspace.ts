@@ -4,7 +4,7 @@ import type { SystemClipboard } from "@/lib/clipboard";
 import { Editor } from "@/lib/editor/Editor";
 import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
-import { GlyphSnapshotRequests } from "@/lib/model/GlyphSnapshotRequests";
+import { GlyphSnapshotLoader } from "@/lib/model/GlyphSnapshotLoader";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
 import {
@@ -28,7 +28,7 @@ export class Workspace {
 
   readonly font: Font;
   readonly editor: Editor;
-  readonly glyphSnapshots: GlyphSnapshotRequests;
+  readonly glyphSnapshotLoader: GlyphSnapshotLoader;
   readonly documentStateCell: Signal<WorkspaceDocumentState | null>;
   readonly commitStateCell: Signal<WorkspaceCommitState>;
 
@@ -42,8 +42,12 @@ export class Workspace {
     });
 
     this.font = new Font(this.#store, this.#edits);
-    this.editor = new Editor({ font: this.font, clipboard: options.clipboard });
-    this.glyphSnapshots = new GlyphSnapshotRequests(this.#store, this.#edits);
+    this.glyphSnapshotLoader = new GlyphSnapshotLoader(this.#store, this.#edits);
+    this.editor = new Editor({
+      font: this.font,
+      glyphSnapshotLoader: this.glyphSnapshotLoader,
+      clipboard: options.clipboard,
+    });
     this.documentStateCell = this.#client.documentStateCell;
     this.commitStateCell = this.#edits.commitStateCell;
 

@@ -8,7 +8,7 @@ import type { ContourData, GlyphId } from "@shift/types";
 import type { LayerContourCoordinates } from "./GlyphLayerState";
 
 interface GlyphResolver {
-  glyphById(glyphId: GlyphId): Glyph | null;
+  glyphForId(glyphId: GlyphId): Glyph | null;
 }
 
 type OutlineCommand =
@@ -390,7 +390,7 @@ class GlyphOutlineBuilder {
         const componentValues = coordinates.components[index];
         if (!componentValues) continue;
 
-        const componentGlyph = this.#resolver.glyphById(component.baseGlyphId);
+        const componentGlyph = this.#resolver.glyphForId(component.baseGlyphId);
         if (!componentGlyph) continue;
 
         track(componentValues.matrix);
@@ -407,7 +407,7 @@ class GlyphOutlineBuilder {
       }
 
       for (const component of geometry.components) {
-        const componentGlyph = this.#resolver.glyphById(component.baseGlyphId);
+        const componentGlyph = this.#resolver.glyphForId(component.baseGlyphId);
         if (!componentGlyph) continue;
 
         const child = this.#collect(componentGlyph, Mat.Compose(matrix, component.matrix));

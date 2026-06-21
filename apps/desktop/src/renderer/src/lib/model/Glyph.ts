@@ -1319,10 +1319,9 @@ class ContourCache {
  * location.
  */
 export class Glyph {
-  readonly handle: GlyphHandle;
-
   readonly #font: Font;
   readonly #source: Source;
+  readonly #fallbackHandle: GlyphHandle;
 
   readonly #layerState: GlyphLayerState;
   readonly #glyphId: GlyphId;
@@ -1341,7 +1340,7 @@ export class Glyph {
     source: Source,
     state: GlyphLayerState,
   ) {
-    this.handle = handle;
+    this.#fallbackHandle = handle;
     this.#font = font;
     this.#source = source;
     this.#glyphId = glyphId;
@@ -1359,6 +1358,14 @@ export class Glyph {
 
   get id(): GlyphId {
     return this.#glyphId;
+  }
+
+  get handle(): GlyphHandle {
+    const record = this.#font.recordForId(this.#glyphId);
+    if (!record) return this.#fallbackHandle;
+
+    const unicode = record.unicodes[0];
+    return unicode === undefined ? { name: record.name } : { name: record.name, unicode };
   }
 
   get name(): GlyphName {
@@ -1450,7 +1457,7 @@ export class Glyph {
     const exactSource = this.#font.sourceAt(location);
     if (exactSource) {
       return (
-        this.#font.glyphLayerById(this.#glyphId, exactSource)?.geometry ?? emptyGlyphGeometry()
+        this.#font.glyphLayerForId(this.#glyphId, exactSource.id)?.geometry ?? emptyGlyphGeometry()
       );
     }
 
@@ -1478,7 +1485,7 @@ export class Glyph {
     const exactSource = this.#font.sourceAt(location);
     if (!exactSource) return null;
 
-    return this.#font.glyphLayerById(this.#glyphId, exactSource);
+    return this.#font.glyphLayerForId(this.#glyphId, exactSource.id);
   }
 
   /**
