@@ -56,18 +56,17 @@ export function GlyphPreview({ handle, font, height = CELL_HEIGHT }: GlyphPrevie
   const fontLoaded = useSignalState(font.$loaded);
   const record = fontLoaded ? font.recordForName(handle.name) : null;
   const recordId = record?.id ?? null;
-  const defaultSourceId = record ? font.defaultSource.id : null;
 
   useEffect(() => {
-    if (!recordId || !defaultSourceId) return;
-    editor.requestGlyphSnapshots([recordId], { sourceIds: [defaultSourceId] });
-  }, [defaultSourceId, editor, recordId]);
+    if (!recordId) return;
+    editor.requestGlyphSnapshots([recordId]);
+  }, [editor, recordId]);
 
   if (!fontLoaded) {
     return <FallbackCell handle={handle} font={font} height={height} advance={null} />;
   }
 
-  const glyph = font.glyph(handle);
+  const glyph = recordId ? font.glyphForId(recordId) : null;
   if (!glyph) {
     return <FallbackCell handle={handle} font={font} height={height} advance={null} />;
   }

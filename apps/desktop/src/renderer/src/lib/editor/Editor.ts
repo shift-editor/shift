@@ -530,15 +530,16 @@ export class Editor {
   /**
    * Focus an existing glyph model in the editor.
    *
-   * This is a read/focus API. It chooses the current active source context for
-   * camera metrics, asks `Font` for existing glyph state, and updates
-   * `editingGlyph` when the glyph can be loaded. It does not create missing
-   * glyph data and does not select an authored glyph layer.
+   * This is a read/focus API. It accepts route/text handles at the edge,
+   * resolves committed glyph identity, and updates `editingGlyph` when the
+   * glyph can be loaded. It does not create missing glyph data and does not
+   * select an authored glyph layer.
    *
    * @returns The focused glyph model, or `null` when the glyph has no readable state.
    */
   #focusGlyphHandle(handle: GlyphHandle): Glyph | null {
-    const glyph = this.font.glyph(handle);
+    const record = this.font.recordForName(handle.name);
+    const glyph = record ? this.font.glyphForId(record.id) : null;
     if (!glyph) return null;
 
     this.#glyph.open.glyph.set(glyph);
@@ -846,9 +847,7 @@ export class Editor {
     const handle = this.font.glyphHandleForUnicode(codepoint);
     if (!handle) return;
     const record = this.font.recordForName(handle.name);
-    if (record) {
-      this.requestGlyphSnapshots([record.id], { sourceIds: [this.font.defaultSource.id] });
-    }
+    if (record) this.requestGlyphSnapshots([record.id]);
     this.textRun.insert(glyphTextItem(handle.name, codepoint));
   }
 

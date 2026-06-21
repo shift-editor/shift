@@ -68,7 +68,7 @@ export class Text {
             continue;
           }
 
-          const glyph = font.glyph({ name: g.glyphName });
+          const glyph = g.glyphId ? font.glyphForId(g.glyphId) : null;
           if (!glyph) continue;
 
           const outline = glyph.instance(designLocation).render.outline;

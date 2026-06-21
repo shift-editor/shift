@@ -603,22 +603,6 @@ export class Font {
   }
 
   /**
-   * Returns the local glyph model for a name-based handle.
-   *
-   * @remarks
-   * This is a pure local read. It does not request geometry; callers that need
-   * missing snapshots should use the glyph snapshot loader before expecting a
-   * model.
-   *
-   * @param handle - glyph identity from a text, catalog, or finder flow.
-   * @returns the glyph model, or null when the glyph is missing or not loaded.
-   */
-  glyph(handle: GlyphHandle): Glyph | null {
-    const record = this.#directory.peek().recordForName(handle.name);
-    return record ? this.glyphForId(record.id) : null;
-  }
-
-  /**
    * Returns the local glyph model for a stable glyph id.
    *
    * @param glyphId - document glyph identity to resolve.
@@ -641,26 +625,6 @@ export class Font {
 
       return new Glyph(this, glyphId, directory.glyphHandleForName(record.name), source, state);
     });
-  }
-
-  /**
-   * Get authored layer data for a glyph at an exact source.
-   *
-   * A source is a designspace location. This method returns the authored glyph
-   * layer model when both the source and glyph layer state exist.
-   * It does not choose a fallback source and does not create missing glyph data.
-   *
-   * @example
-   * ```ts
-   * const source = font.defaultSource
-   * const glyphLayer = font.glyphLayer(handle, source)
-   * ```
-   *
-   * @returns The authored glyph layer, or `null` when the source or layer state is unavailable.
-   */
-  glyphLayer(handle: GlyphHandle, source: Source): GlyphLayer | null {
-    const record = this.#directory.peek().recordForName(handle.name);
-    return record ? this.glyphLayerForId(record.id, source.id) : null;
   }
 
   /**

@@ -51,7 +51,8 @@ describe("Glyph", () => {
     editor = new TestEditor();
     await editor.startSession();
     layer = editor.editingGlyphLayer!;
-    glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
+    const record = editor.font.recordForName(editor.rootGlyphHandle!.name)!;
+    glyph = editor.font.glyphForId(record.id)!;
   });
 
   it("hydrates identity and state from the workspace", () => {
@@ -180,7 +181,8 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     editor = new TestEditor();
     await editor.startSession();
     layer = editor.editingGlyphLayer!;
-    glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
+    const record = editor.font.recordForName(editor.rootGlyphHandle!.name)!;
+    glyph = editor.font.glyphForId(record.id)!;
   });
 
   it("previews point patches through every public layer geometry view", async () => {

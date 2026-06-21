@@ -33,11 +33,7 @@ export class TextTool extends BaseTool<TextState> {
 
     const ownerName = owner.name;
     const record = this.editor.font.recordForName(ownerName);
-    if (record) {
-      this.editor.requestGlyphSnapshots([record.id], {
-        sourceIds: [this.editor.font.defaultSource.id],
-      });
-    }
+    if (record) this.editor.requestGlyphSnapshots([record.id]);
 
     const run = this.editor.textRuns.switchTo(ownerName);
     run.seed(glyphTextItem(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);

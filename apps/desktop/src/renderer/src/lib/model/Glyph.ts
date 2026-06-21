@@ -1520,7 +1520,7 @@ export class Glyph {
     return source.id === this.#source.id;
   }
 
-  /** @internal GlyphLayer caching is owned by Font.glyphLayer(). */
+  /** @internal GlyphLayer caching is owned by the id-keyed FontStore model cache. */
   createGlyphLayer(source: Source, state?: GlyphLayerState | null): GlyphLayer | null {
     if (!this.#font.source(source.id)) return null;
     if (this.isPrimarySource(source)) return new GlyphLayer(source, this.#edit);

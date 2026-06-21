@@ -6,7 +6,7 @@
  * outline bounds flow through positioning. No fakes; tests assert against
  * values read back from the workspace, not hardcoded advances.
  */
-import { mintGlyphId, mintLayerId, type GlyphName, type Unicode } from "@shift/types";
+import { mintGlyphId, mintLayerId, type GlyphName } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 import type { Font } from "@/lib/model/Font";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
@@ -47,11 +47,11 @@ export async function layoutTestFont(): Promise<Font> {
     await stack.editCoordinator.apply([
       { kind: "setXAdvance", setXAdvance: { layerId, width: advance } },
     ]);
-    await stack.glyphSnapshotLoader.load([record.id], { sourceIds: [stack.font.defaultSource.id] });
+    await stack.glyphSnapshotLoader.load([record.id]);
   }
 
-  const handle = stack.font.glyphHandleForUnicode(65 as Unicode);
-  const a = stack.font.glyphLayer(handle, stack.font.defaultSource);
+  const record = stack.font.recordForName("A" as GlyphName);
+  const a = record ? stack.font.glyphLayerForId(record.id, stack.font.defaultSource.id) : null;
   if (!a) throw new Error("Expected authored glyph layer for A");
 
   const contourId = a.addContour();

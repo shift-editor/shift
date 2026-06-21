@@ -1,5 +1,5 @@
 import type { Bounds, Point2D } from "@shift/geo";
-import type { FontMetrics } from "@shift/types";
+import type { FontMetrics, GlyphId } from "@shift/types";
 
 export type TextItemId = string;
 export type TextRunId = string;
@@ -52,6 +52,8 @@ export function lineBreakTextItem(id: TextItemId = createTextItemId()): LineBrea
 }
 
 export interface PositionedGlyph {
+  /** Stable document glyph identity resolved during layout; null when unresolved. */
+  glyphId: GlyphId | null;
   glyphName: string;
   sourceItemIds: readonly TextItemId[];
   origin: Point2D;

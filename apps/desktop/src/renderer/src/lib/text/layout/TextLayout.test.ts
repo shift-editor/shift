@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { glyphTextItem as glyph, lineBreakTextItem } from "./types";
 import { layoutTestFont, makeLayout } from "./testUtils";
 import type { Font } from "@/lib/model/Font";
-import type { Unicode } from "@shift/types";
 
 describe("TextLayout", () => {
   let font: Font;
@@ -55,11 +54,8 @@ describe("TextLayout", () => {
   // left half of B's advance box hits cluster=1, side="left".
   it("pointAt after hitTest recovers cluster's leading edge", () => {
     const layout = makeLayout([glyph("A", 65), glyph("B", 66)], font);
-    const source = font.defaultSource;
-    const aAdvance =
-      font.glyphLayer(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
-    const bAdvance =
-      font.glyphLayer(font.glyphHandleForUnicode(66 as Unicode), source)?.xAdvance ?? 0;
+    const aAdvance = xAdvance("A", font);
+    const bAdvance = xAdvance("B", font);
     const bLeftHalfX = aAdvance + bAdvance / 4;
 
     const hit = layout.hitTest({ x: bLeftHalfX, y: 0 });
@@ -77,12 +73,11 @@ describe("TextLayout", () => {
     const a = glyph("A", 65);
     const b = glyph("B", 66);
     const layout = makeLayout([a, b], font);
-    const source = font.defaultSource;
-    const aAdvance =
-      font.glyphLayer(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
+    const aAdvance = xAdvance("A", font);
 
     expect(layout.editOriginForItem(b.id)).toEqual({ x: aAdvance, y: 0 });
     expect(layout.primaryGlyphForItem(b.id)?.sourceItemIds).toEqual([b.id]);
+    expect(layout.primaryGlyphForItem(b.id)?.glyphId).toBe(font.recordForName("B")?.id);
   });
 
   it("resolves edit origin by item id after a linebreak", () => {
@@ -98,9 +93,7 @@ describe("TextLayout", () => {
   it("returns anchors with item ids rather than cluster-only hits", () => {
     const b = glyph("B", 66);
     const layout = makeLayout([glyph("A", 65), b], font);
-    const source = font.defaultSource;
-    const aAdvance =
-      font.glyphLayer(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
+    const aAdvance = xAdvance("A", font);
 
     expect(layout.anchorAtPoint("run-1", { x: aAdvance + 1, y: 0 })).toEqual({
       runId: "run-1",
@@ -108,3 +101,8 @@ describe("TextLayout", () => {
     });
   });
 });
+
+function xAdvance(name: string, font: Font): number {
+  const record = font.recordForName(name);
+  return record ? (font.glyphLayerForId(record.id, font.defaultSource.id)?.xAdvance ?? 0) : 0;
+}
