@@ -45,8 +45,8 @@ export function createWorkspaceStack(): WorkspaceStack {
     },
   });
   const store = new FontStore();
-  const editCoordinator = new WorkspaceEditCoordinator(client, store);
-  const glyphSnapshotLoader = new GlyphSnapshotLoader(store, editCoordinator);
+  const editCoordinator = new WorkspaceEditCoordinator(client, store.sync);
+  const glyphSnapshotLoader = new GlyphSnapshotLoader(store.glyphSnapshots, editCoordinator);
   const font = new Font(store, editCoordinator);
 
   return {
@@ -64,7 +64,7 @@ export function createWorkspaceStack(): WorkspaceStack {
         throw new Error("workspace stack connected without a snapshot");
       }
 
-      store.replaceWorkspace(snapshot);
+      store.sync.replaceWorkspace(snapshot);
     },
   };
 }

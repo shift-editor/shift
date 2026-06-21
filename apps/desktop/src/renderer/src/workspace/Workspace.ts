@@ -35,14 +35,14 @@ export class Workspace {
   constructor(options: WorkspaceOptions) {
     this.#client = new WorkspaceClient(options.host);
     this.#store = new FontStore();
-    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store);
+    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store.sync);
     this.#documentBridge = new WorkspaceDocumentBridge({
       host: options.host,
       edits: this.#edits,
     });
 
     this.font = new Font(this.#store, this.#edits);
-    this.glyphSnapshotLoader = new GlyphSnapshotLoader(this.#store, this.#edits);
+    this.glyphSnapshotLoader = new GlyphSnapshotLoader(this.#store.glyphSnapshots, this.#edits);
     this.editor = new Editor({
       font: this.font,
       glyphSnapshotLoader: this.glyphSnapshotLoader,
@@ -77,7 +77,7 @@ export class Workspace {
         throw new Error("workspace connected without a snapshot");
       }
 
-      this.#store.replaceWorkspace(snapshot);
+      this.#store.sync.replaceWorkspace(snapshot);
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

@@ -4,7 +4,7 @@ import type {
   WorkspaceGlyphSnapshotRequest,
 } from "@shared/workspace/protocol";
 import type { Signal } from "@/lib/signals/signal";
-import type { FontStore, WorkspaceCommitState } from "@/lib/model/FontStore";
+import type { FontStoreSyncPort, WorkspaceCommitState } from "@/lib/model/FontStore";
 import type { WorkspaceClient } from "./WorkspaceClient";
 
 export type { WorkspaceCommitState } from "@/lib/model/FontStore";
@@ -27,13 +27,13 @@ export type { WorkspaceCommitState } from "@/lib/model/FontStore";
  */
 export class WorkspaceEditCoordinator {
   readonly #workspace: WorkspaceClient;
-  readonly #store: FontStore;
+  readonly #store: FontStoreSyncPort;
 
   #flushQueued = false;
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
 
-  constructor(workspace: WorkspaceClient, store: FontStore) {
+  constructor(workspace: WorkspaceClient, store: FontStoreSyncPort) {
     this.#workspace = workspace;
     this.#store = store;
   }

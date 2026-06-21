@@ -1,5 +1,5 @@
 import type { GlyphId, SourceId } from "@shift/types";
-import type { FontStore } from "./FontStore";
+import type { GlyphSnapshotStorePort } from "./FontStore";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 type SnapshotRequest = {
@@ -21,11 +21,11 @@ type InFlightKey = string & { readonly __inFlightKey: unique symbol };
  * only dedupes requests, chooses source scopes, and follows component bases.
  */
 export class GlyphSnapshotLoader {
-  readonly #store: FontStore;
+  readonly #store: GlyphSnapshotStorePort;
   readonly #edits: WorkspaceEditCoordinator;
   readonly #inFlight = new Set<InFlightKey>();
 
-  constructor(store: FontStore, edits: WorkspaceEditCoordinator) {
+  constructor(store: GlyphSnapshotStorePort, edits: WorkspaceEditCoordinator) {
     this.#store = store;
     this.#edits = edits;
   }

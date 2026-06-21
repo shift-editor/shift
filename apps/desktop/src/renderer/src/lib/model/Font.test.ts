@@ -52,7 +52,7 @@ describe("Font projects the workspace snapshot", () => {
     const store = new FontStore();
     const font = new Font(store);
 
-    store.replaceWorkspace(SNAPSHOT);
+    store.sync.replaceWorkspace(SNAPSHOT);
 
     expect(font.loaded).toBe(true);
     expect(font.metrics.unitsPerEm).toBe(2048);
@@ -70,7 +70,7 @@ describe("Font projects the workspace snapshot", () => {
 
     expect(font.$loaded.value).toBe(false);
 
-    store.replaceWorkspace(SNAPSHOT);
+    store.sync.replaceWorkspace(SNAPSHOT);
 
     expect(font.$loaded.value).toBe(true);
   });
@@ -81,7 +81,7 @@ describe("Font projects the workspace snapshot", () => {
 
     expect(font.loaded).toBe(true);
 
-    store.replaceWorkspace(null);
+    store.sync.replaceWorkspace(null);
 
     expect(font.loaded).toBe(false);
     expect(font.metrics.unitsPerEm).toBe(1000);

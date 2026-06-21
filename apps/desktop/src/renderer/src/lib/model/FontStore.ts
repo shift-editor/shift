@@ -26,9 +26,42 @@ type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
 
 const EMPTY_STATUS: ReadonlyMap<GlyphId, GlyphSnapshotStatus> = new Map();
 
+/** Mutates renderer-local font state from the serialized workspace sync lane. */
+export interface FontStoreSyncPort {
+  readonly settledCell: Signal<boolean>;
+  readonly commitStateCell: Signal<WorkspaceCommitState>;
+
+  replaceWorkspace(snapshot: WorkspaceSnapshot | null): void;
+  enqueueIntent(intent: FontIntent): void;
+  hasPendingIntents(): boolean;
+  takePendingIntents(): FontIntent[];
+  beginApplying(): void;
+  markSettledIfIdle(busy: number): void;
+  markSnapshotsLoading(glyphIds: readonly GlyphId[]): number;
+  applyGlyphSnapshots(
+    requestedGlyphIds: readonly GlyphId[],
+    snapshots: readonly WorkspaceGlyphSnapshot[],
+    generation: number,
+  ): void;
+  foldAppliedChange(applied: AppliedChange): void;
+}
+
+/** Exposes glyph snapshot freshness and dependency reads to the snapshot loader. */
+export interface GlyphSnapshotStorePort {
+  sourceIdsForGlyph(glyphId: GlyphId): readonly SourceId[];
+  snapshotStatus(glyphId: GlyphId): GlyphSnapshotStatus;
+  hasLayerSnapshot(glyphId: GlyphId, sourceId: SourceId): boolean;
+  hasLayerRecord(glyphId: GlyphId, sourceId: SourceId): boolean;
+  loadedComponentBaseGlyphIds(glyphId: GlyphId): readonly GlyphId[];
+}
+
 /**
  * Renderer-local owner for font records, loaded glyph snapshots, and pending
  * local commits.
+ *
+ * Model reads stay on the store. Workspace mutation enters through
+ * {@link sync}; snapshot request coordination reads through
+ * {@link glyphSnapshots}.
  */
 export class FontStore {
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
@@ -50,6 +83,29 @@ export class FontStore {
   #generation = 0;
   #pendingIntents: FontIntent[] = [];
 
+  readonly sync: FontStoreSyncPort = {
+    settledCell: this.#settledCell,
+    commitStateCell: this.#commitState,
+    replaceWorkspace: (snapshot) => this.#replaceWorkspace(snapshot),
+    enqueueIntent: (intent) => this.#enqueueIntent(intent),
+    hasPendingIntents: () => this.#hasPendingIntents(),
+    takePendingIntents: () => this.#takePendingIntents(),
+    beginApplying: () => this.#beginApplying(),
+    markSettledIfIdle: (busy) => this.#markSettledIfIdle(busy),
+    markSnapshotsLoading: (glyphIds) => this.#markSnapshotsLoading(glyphIds),
+    applyGlyphSnapshots: (requestedGlyphIds, snapshots, generation) =>
+      this.#applyGlyphSnapshots(requestedGlyphIds, snapshots, generation),
+    foldAppliedChange: (applied) => this.#foldAppliedChange(applied),
+  };
+
+  readonly glyphSnapshots: GlyphSnapshotStorePort = {
+    sourceIdsForGlyph: (glyphId) => this.#sourceIdsForGlyph(glyphId),
+    snapshotStatus: (glyphId) => this.#snapshotStatusForGlyph(glyphId),
+    hasLayerSnapshot: (glyphId, sourceId) => this.#hasLayerSnapshot(glyphId, sourceId),
+    hasLayerRecord: (glyphId, sourceId) => this.#hasLayerRecord(glyphId, sourceId),
+    loadedComponentBaseGlyphIds: (glyphId) => this.#loadedComponentBaseGlyphIds(glyphId),
+  };
+
   constructor(workspace: WorkspaceSnapshot | null = null) {
     this.#workspace = signal(workspace, { name: "fontStore.workspace" });
     this.#snapshotStatus = signal(EMPTY_STATUS, { name: "fontStore.snapshotStatus" });
@@ -60,23 +116,7 @@ export class FontStore {
     return this.#workspace;
   }
 
-  get snapshotStatusCell(): Signal<ReadonlyMap<GlyphId, GlyphSnapshotStatus>> {
-    return this.#snapshotStatus;
-  }
-
-  get settledCell(): Signal<boolean> {
-    return this.#settledCell;
-  }
-
-  get commitStateCell(): Signal<WorkspaceCommitState> {
-    return this.#commitState;
-  }
-
-  get generation(): number {
-    return this.#generation;
-  }
-
-  replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
+  #replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
       this.#generation += 1;
       this.#workspace.set(snapshot);
@@ -93,7 +133,7 @@ export class FontStore {
     });
   }
 
-  enqueueIntent(intent: FontIntent): void {
+  #enqueueIntent(intent: FontIntent): void {
     this.#pendingIntents.push(intent);
     this.#settledCell.set(false);
     if (this.#commitState.peek() === "idle") {
@@ -101,28 +141,28 @@ export class FontStore {
     }
   }
 
-  hasPendingIntents(): boolean {
+  #hasPendingIntents(): boolean {
     return this.#pendingIntents.length > 0;
   }
 
-  takePendingIntents(): FontIntent[] {
+  #takePendingIntents(): FontIntent[] {
     const intents = this.#pendingIntents;
     this.#pendingIntents = [];
     return intents;
   }
 
-  beginApplying(): void {
+  #beginApplying(): void {
     this.#commitState.set("applying");
   }
 
-  markSettledIfIdle(busy: number): void {
+  #markSettledIfIdle(busy: number): void {
     if (busy === 0 && this.#pendingIntents.length === 0) {
       this.#settledCell.set(true);
       this.#commitState.set("idle");
     }
   }
 
-  markSnapshotsLoading(glyphIds: readonly GlyphId[]): number {
+  #markSnapshotsLoading(glyphIds: readonly GlyphId[]): number {
     const generation = this.#generation;
     const next = new Map(this.#snapshotStatus.peek());
     for (const glyphId of glyphIds) {
@@ -133,7 +173,7 @@ export class FontStore {
     return generation;
   }
 
-  applyGlyphSnapshots(
+  #applyGlyphSnapshots(
     requestedGlyphIds: readonly GlyphId[],
     snapshots: readonly WorkspaceGlyphSnapshot[],
     generation: number,
@@ -169,7 +209,7 @@ export class FontStore {
     });
   }
 
-  foldAppliedChange(applied: AppliedChange): void {
+  #foldAppliedChange(applied: AppliedChange): void {
     const current = this.#workspace.peek();
     if (!current) return;
 
@@ -242,10 +282,6 @@ export class FontStore {
     return this.recordForId(glyphId)?.layers.find((layer) => layer.sourceId === sourceId) ?? null;
   }
 
-  sourceIdsForGlyph(glyphId: GlyphId): readonly SourceId[] {
-    return this.recordForId(glyphId)?.layers.map((layer) => layer.sourceId) ?? [];
-  }
-
   layerStateForGlyphSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerState | null {
     const layerId = this.#layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId));
     return layerId ? (this.#layerStates.get(layerId) ?? null) : null;
@@ -253,18 +289,6 @@ export class FontStore {
 
   variationData(glyphId: GlyphId): GlyphVariationData | null {
     return this.#variationDataByGlyph.get(glyphId) ?? null;
-  }
-
-  snapshotStatus(glyphId: GlyphId): GlyphSnapshotStatus {
-    return this.#snapshotStatus.peek().get(glyphId) ?? "missing";
-  }
-
-  hasLayerSnapshot(glyphId: GlyphId, sourceId: SourceId): boolean {
-    return this.layerStateForGlyphSource(glyphId, sourceId) !== null;
-  }
-
-  hasLayerRecord(glyphId: GlyphId, sourceId: SourceId): boolean {
-    return this.#layerByGlyphSource.has(glyphSourceKey(glyphId, sourceId));
   }
 
   glyphModel(glyphId: GlyphId, create: () => Glyph | null): Glyph | null {
@@ -290,7 +314,23 @@ export class FontStore {
     return created;
   }
 
-  loadedComponentBaseGlyphIds(glyphId: GlyphId): readonly GlyphId[] {
+  #sourceIdsForGlyph(glyphId: GlyphId): readonly SourceId[] {
+    return this.recordForId(glyphId)?.layers.map((layer) => layer.sourceId) ?? [];
+  }
+
+  #snapshotStatusForGlyph(glyphId: GlyphId): GlyphSnapshotStatus {
+    return this.#snapshotStatus.peek().get(glyphId) ?? "missing";
+  }
+
+  #hasLayerSnapshot(glyphId: GlyphId, sourceId: SourceId): boolean {
+    return this.layerStateForGlyphSource(glyphId, sourceId) !== null;
+  }
+
+  #hasLayerRecord(glyphId: GlyphId, sourceId: SourceId): boolean {
+    return this.#layerByGlyphSource.has(glyphSourceKey(glyphId, sourceId));
+  }
+
+  #loadedComponentBaseGlyphIds(glyphId: GlyphId): readonly GlyphId[] {
     const baseGlyphIds = new Set<GlyphId>();
     for (const state of this.#loadedLayerStatesForGlyph(glyphId)) {
       for (const baseGlyphId of componentBaseGlyphIds(state.structure)) {
