@@ -1,6 +1,6 @@
 import type { GlyphId, SourceId } from "@shift/types";
+import type { WorkspaceGlyphSnapshotRequest } from "@shared/workspace/protocol";
 import type { GlyphSnapshotStorePort } from "./FontStore";
-import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 type SnapshotRequest = {
   glyphId: GlyphId;
@@ -10,6 +10,10 @@ type SnapshotRequest = {
 export type GlyphSnapshotLoadOptions = {
   readonly sourceIds?: readonly SourceId[];
 };
+
+export interface GlyphSnapshotLoadPort {
+  loadGlyphSnapshots(requests: readonly WorkspaceGlyphSnapshotRequest[]): Promise<void>;
+}
 
 type InFlightKey = string & { readonly __inFlightKey: unique symbol };
 
@@ -22,12 +26,12 @@ type InFlightKey = string & { readonly __inFlightKey: unique symbol };
  */
 export class GlyphSnapshotLoader {
   readonly #store: GlyphSnapshotStorePort;
-  readonly #edits: WorkspaceEditCoordinator;
+  readonly #sync: GlyphSnapshotLoadPort;
   readonly #inFlight = new Set<InFlightKey>();
 
-  constructor(store: GlyphSnapshotStorePort, edits: WorkspaceEditCoordinator) {
+  constructor(store: GlyphSnapshotStorePort, sync: GlyphSnapshotLoadPort) {
     this.#store = store;
-    this.#edits = edits;
+    this.#sync = sync;
   }
 
   /**
@@ -45,7 +49,7 @@ export class GlyphSnapshotLoader {
       for (const request of batch) this.#markInFlight(request);
 
       try {
-        await this.#edits.loadGlyphSnapshots(batch);
+        await this.#sync.loadGlyphSnapshots(batch);
       } finally {
         for (const request of batch) this.#unmarkInFlight(request);
       }
