@@ -188,6 +188,7 @@ export class Editor {
 
   #cursorEffect: Effect;
   #cameraMetricsEffect: Effect;
+  #textScenePlacementEffect: Effect;
 
   #clipboard: Clipboard;
 
@@ -289,6 +290,30 @@ export class Editor {
         this.setCursor({ type: "default" });
       },
       { name: "editor.cursor" },
+    );
+
+    this.#textScenePlacementEffect = effect(
+      () => {
+        const anchor = this.#text.glyphAnchor.value;
+        const focused = this.#text.focusedGlyph.value;
+        if (!anchor) return;
+
+        const sceneGlyphId = sceneGlyphIdForTextAnchor(anchor);
+        if (!focused) {
+          if (this.scene.selectedGlyphIdCell.value === sceneGlyphId) {
+            this.scene.selectGlyph(null);
+          }
+          return;
+        }
+
+        const item = this.scene.item(sceneGlyphId);
+        if (!item) return;
+
+        const origin = item.placement.origin;
+        if (origin.x === focused.editOrigin.x && origin.y === focused.editOrigin.y) return;
+        this.scene.setPlacement(sceneGlyphId, { origin: focused.editOrigin });
+      },
+      { name: "editor.text.scenePlacement" },
     );
   }
 
@@ -644,7 +669,7 @@ export class Editor {
         void this.scene.set({
           glyphs: [
             {
-              id: sceneGlyphId(`${anchor.runId}:${anchor.itemId}`),
+              id: sceneGlyphIdForTextAnchor(anchor),
               glyphId: record.id,
               location: this.designLocation,
               placement: { origin: focused.editOrigin },
@@ -1031,13 +1056,15 @@ export class Editor {
 
   public fromScreen(screen: Point2D): Coordinates {
     const scene = this.projectScreenToScene(screen);
-    const glyphLocal = this.sceneToGlyphLocal(scene);
+    const sceneGlyphId = this.scene.selectedGlyphId;
+    const glyphLocal = sceneGlyphId ? this.scene.toLocal(sceneGlyphId, scene) : scene;
     return { screen, scene, glyphLocal };
   }
 
   public fromScene(scene: Point2D): Coordinates {
     const screen = this.projectSceneToScreen(scene);
-    const glyphLocal = this.sceneToGlyphLocal(scene);
+    const sceneGlyphId = this.scene.selectedGlyphId;
+    const glyphLocal = sceneGlyphId ? this.scene.toLocal(sceneGlyphId, scene) : scene;
     return { screen, scene, glyphLocal };
   }
 
@@ -1115,7 +1142,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.#glyph.open.glyph.peek();
+    const glyph = this.scene.selectedModelCell.peek();
     if (!glyph) return false;
 
     return this.#clipboard.write(content, { sourceGlyph: glyph.name });
@@ -1125,7 +1152,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.#glyph.open.glyph.peek();
+    const glyph = this.scene.selectedModelCell.peek();
     if (!glyph) return false;
 
     const written = await this.#clipboard.write(content, {
@@ -1161,7 +1188,7 @@ export class Editor {
   }
 
   #selectedClipboardContent(): ClipboardContent | null {
-    const source = this.#glyph.edit.glyphSource.peek();
+    const source = this.scene.selectedEditLayerCell.peek();
     if (!source) return null;
 
     const selection = ClipboardSelection.fromSelection(this.selection);
@@ -1348,6 +1375,7 @@ export class Editor {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
     this.#cameraMetricsEffect.dispose();
+    this.#textScenePlacementEffect.dispose();
     this.#renderer.destroy();
     this.#events.dispose();
   }
@@ -1359,4 +1387,8 @@ export class Editor {
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
     return this.#toolState[scope];
   }
+}
+
+function sceneGlyphIdForTextAnchor(anchor: GlyphAnchor): SceneGlyphId {
+  return sceneGlyphId(`${anchor.runId}:${anchor.itemId}`);
 }
