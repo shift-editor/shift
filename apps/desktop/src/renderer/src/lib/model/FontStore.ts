@@ -282,11 +282,6 @@ export class FontStore {
     return this.recordForId(glyphId)?.layers.find((layer) => layer.sourceId === sourceId) ?? null;
   }
 
-  layerStateForGlyphSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerState | null {
-    const layerId = this.#layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId));
-    return layerId ? (this.#layerStates.get(layerId) ?? null) : null;
-  }
-
   variationData(glyphId: GlyphId): GlyphVariationData | null {
     return this.#variationDataByGlyph.get(glyphId) ?? null;
   }
@@ -323,7 +318,7 @@ export class FontStore {
   }
 
   #hasLayerSnapshot(glyphId: GlyphId, sourceId: SourceId): boolean {
-    return this.layerStateForGlyphSource(glyphId, sourceId) !== null;
+    return this.#layerStateForGlyphSource(glyphId, sourceId) !== null;
   }
 
   #hasLayerRecord(glyphId: GlyphId, sourceId: SourceId): boolean {
@@ -338,6 +333,11 @@ export class FontStore {
       }
     }
     return [...baseGlyphIds];
+  }
+
+  #layerStateForGlyphSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerState | null {
+    const layerId = this.#layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId));
+    return layerId ? (this.#layerStates.get(layerId) ?? null) : null;
   }
 
   #applyLayerSnapshot(snapshot: WorkspaceGlyphLayerSnapshot): void {
