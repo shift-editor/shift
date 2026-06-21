@@ -7,6 +7,7 @@ import type {
   GlyphName,
   GlyphRecord,
   GlyphId,
+  ItemId,
 } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
@@ -82,7 +83,7 @@ import { EventEmitter } from "./lifecycle";
 import type { LineSegmentPoints } from "@shift/glyph-state";
 import { Contour } from "@shift/glyph-state";
 import { SourceEditDraft, type SourceEditSubject } from "./SourceEditDraft";
-import { EditorScene, asItemId, type ItemId, type SceneGlyph } from "./EditorScene";
+import { Scene } from "./Scene";
 import {
   EditorGlyphState,
   EditorGesture,
@@ -142,7 +143,7 @@ export class Editor {
   readonly selection: Selection;
   readonly hover: Hover;
   readonly font: Font;
-  readonly scene: EditorScene;
+  readonly scene: Scene;
 
   /**
    * Rendering and camera infrastructure.
@@ -180,7 +181,7 @@ export class Editor {
   /**
    * Active glyph/source context.
    *
-   * `edit` is the authored source backing commands and mutation.
+   * `edit` resolves the authored glyph layer backing commands and mutation.
    * `preview` is the displayed/interpolated glyph used by rendering and hit
    * queries.
    */
@@ -188,12 +189,6 @@ export class Editor {
 
   #cursorEffect: Effect;
   #cameraMetricsEffect: Effect;
-  #textScenePlacementEffect: Effect;
-  #geometryItem: Signal<SceneGlyph | null>;
-  #geometryGlyph: Signal<Glyph | null>;
-  #geometryInstance: Signal<GlyphInstance | null>;
-  #geometryLayer: Signal<GlyphSource | null>;
-  #geometryOrigin: Signal<Point2D>;
 
   #clipboard: Clipboard;
 
@@ -230,61 +225,14 @@ export class Editor {
     this.#camera = new Camera();
 
     this.font = options.font;
-    this.scene = new EditorScene();
+    this.scene = new Scene();
     this.#glyph = new EditorGlyphState(this.font);
-    this.#geometryItem = computed(
-      () => {
-        const scene = this.scene.cell.value;
-        const itemId = scene.geometryItems[0] ?? null;
-        if (!itemId) return null;
-        const item = scene.items.find((candidate) => candidate.id === itemId) ?? null;
-        return item?.kind === "glyph" ? item : null;
-      },
-      { name: "editor.geometry.item" },
-    );
-    this.#geometryGlyph = computed(
-      () => {
-        const item = this.#geometryItem.value;
-        if (!item) return null;
-        const record = this.font.recordForId(item.glyphId);
-        if (!record) return null;
-        return this.font.glyph(this.font.glyphHandleForName(record.name));
-      },
-      { name: "editor.geometry.glyph" },
-    );
-    this.#geometryInstance = computed(
-      () => {
-        const item = this.#geometryItem.value;
-        const glyph = this.#geometryGlyph.value;
-        if (!item || !glyph) return null;
-        return glyph.instance(
-          signal(item.location, { name: `editor.geometry.${item.id}.location` }),
-        );
-      },
-      { name: "editor.geometry.instance" },
-    );
-    this.#geometryLayer = computed(
-      () => {
-        const item = this.#geometryItem.value;
-        if (!item) return null;
-        const source = this.font.sourceAt(item.location);
-        if (!source) return null;
-        const record = this.font.recordForId(item.glyphId);
-        if (!record) return null;
-        return this.font.glyphSource(this.font.glyphHandleForName(record.name), source);
-      },
-      { name: "editor.geometry.layer" },
-    );
-    this.#geometryOrigin = computed(
-      () => this.#geometryItem.value?.placement.origin ?? { x: 0, y: 0 },
-      { name: "editor.geometry.origin" },
-    );
 
     this.#view = new EditorViewState();
     this.input = new EditorInput();
     this.gesture = new EditorGesture();
 
-    this.#commands = new CommandRunner(this.#geometryLayer);
+    this.#commands = new CommandRunner(this.#glyph.edit.glyphSource);
 
     this.#toolState = {
       app: new Map<string, unknown>(),
@@ -293,7 +241,7 @@ export class Editor {
 
     this.#glyphFinderOpen = signal(false, { name: "editor.glyphFinder.open" });
 
-    this.selection = new Selection(this.#geometryLayer);
+    this.selection = new Selection(this.#glyph.edit.glyphSource);
     this.hover = new Hover();
 
     this.#edgePan = new EdgePanManager(this);
@@ -342,28 +290,6 @@ export class Editor {
         this.setCursor({ type: "default" });
       },
       { name: "editor.cursor" },
-    );
-
-    this.#textScenePlacementEffect = effect(
-      () => {
-        const anchor = this.#text.glyphAnchor.value;
-        const focused = this.#text.focusedGlyph.value;
-        if (!anchor) return;
-
-        const itemId = itemIdForTextAnchor(anchor);
-        if (!focused) {
-          this.scene.hideGeometry(itemId);
-          return;
-        }
-
-        const item = this.scene.item(itemId);
-        if (!item) return;
-
-        const origin = item.placement.origin;
-        if (origin.x === focused.editOrigin.x && origin.y === focused.editOrigin.y) return;
-        this.scene.setPlacement(itemId, { origin: focused.editOrigin });
-      },
-      { name: "editor.text.scenePlacement" },
     );
   }
 
@@ -470,7 +396,7 @@ export class Editor {
   }
 
   public beginSourceEditDraft(subject: SourceEditSubject): SourceEditDraft {
-    const glyphSource = this.#geometryLayer.peek();
+    const glyphSource = this.#glyph.edit.glyphSource.peek();
     if (!glyphSource) {
       throw new Error("Cannot begin a source edit draft without an active glyph source");
     }
@@ -526,7 +452,7 @@ export class Editor {
   }
 
   /**
-   * Sets whether point handles and edit affordances are visible.
+   * Sets whether point handles and structured geometry controls are visible.
    *
    * @param visible - `true` to draw handles for editable glyph instances.
    */
@@ -534,12 +460,12 @@ export class Editor {
     this.#glyphDisplay.setHandlesVisible(visible);
   }
 
-  /** Shows point handles and edit affordances. */
+  /** Shows point handles and structured geometry controls. */
   public showHandles(): void {
     this.setHandlesVisible(true);
   }
 
-  /** Hides point handles and edit affordances. */
+  /** Hides point handles and structured geometry controls. */
   public hideHandles(): void {
     this.setHandlesVisible(false);
   }
@@ -589,7 +515,11 @@ export class Editor {
    * @returns The focused glyph model, or `null` when the glyph has no readable state.
    */
   public getGlyph(handle: GlyphHandle): Glyph | null {
-    return this.font.glyph(handle);
+    const glyph = this.font.glyph(handle);
+    if (!glyph) return null;
+
+    this.#glyph.open.glyph.set(glyph);
+    return glyph;
   }
 
   public setRootGlyphHandle(handle: GlyphHandle | null): void {
@@ -601,19 +531,28 @@ export class Editor {
   }
 
   public getActiveGlyphName(): string | null {
-    return this.#geometryGlyph.peek()?.name ?? null;
+    return this.#glyph.open.glyph.peek()?.name ?? null;
   }
 
-  public async setEditorSceneGlyph(glyphId: GlyphId): Promise<void> {
+  /**
+   * Focuses an existing document glyph as the active glyph model.
+   *
+   * @param glyphId - Document glyph identity to focus.
+   * @returns The loaded glyph model, or `null` when the glyph cannot be read.
+   */
+  public focusGlyph(glyphId: GlyphId, location: AxisLocation): Glyph | null {
     const record = this.font.recordForId(glyphId);
-    const itemId = this.scene.replaceWithGlyph(glyphId, {
-      id: asItemId("main"),
-      location: this.font.defaultLocation(),
-      origin: { x: 0, y: 0 },
-    });
-    this.scene.setGeometryItems([itemId]);
-    this.#glyph.design.set(this.font.defaultLocation());
-    this.#glyph.open.rootHandle.set(record ? this.font.glyphHandleForName(record.name) : null);
+    if (!record) {
+      this.#glyph.open.glyph.set(null);
+      this.#glyph.open.rootHandle.set(null);
+      return null;
+    }
+
+    const handle = this.font.glyphHandleForName(record.name);
+    this.#glyph.open.rootHandle.set(handle);
+    this.#glyph.design.set(location);
+    this.#glyph.edit.selectDefaultSource();
+    return this.getGlyph(handle);
   }
 
   /**
@@ -637,19 +576,10 @@ export class Editor {
     if (!source) return null;
 
     this.#glyph.edit.selectSource(source.id);
+    this.#glyph.design.set(axisLocationFromLocation(source.location));
 
     const glyph = this.getGlyph(handle);
     if (!glyph) return null;
-
-    const record = this.font.recordForName(handle.name);
-    if (record) {
-      const itemId = this.scene.replaceWithGlyph(record.id, {
-        id: asItemId("main"),
-        location: axisLocationFromLocation(source.location),
-        origin: { x: 0, y: 0 },
-      });
-      this.scene.setGeometryItems([itemId]);
-    }
 
     return this.font.glyphSource(handle, source);
   }
@@ -702,22 +632,7 @@ export class Editor {
 
     batch(() => {
       this.#text.glyphAnchor.set(anchor);
-      const record = this.font.recordForName(focused.glyph.name);
-      if (record) {
-        const itemId = itemIdForTextAnchor(anchor);
-        this.scene.set({
-          items: [
-            {
-              id: itemId,
-              kind: "glyph",
-              glyphId: record.id,
-              location: this.designLocation,
-              placement: { origin: focused.editOrigin },
-            },
-          ],
-          geometryItems: [itemId],
-        });
-      }
+      this.getGlyph(focused.glyph);
       this.disableProofMode();
     });
   }
@@ -741,6 +656,7 @@ export class Editor {
   /** Clears the current glyph focus and active contour selection. */
   public close(): void {
     this.scene.clear();
+    this.#glyph.open.glyph.set(null);
     this.#glyph.open.activeContourId.set(null);
   }
 
@@ -750,61 +666,59 @@ export class Editor {
 
   /** Current designspace coordinate used for displayed glyph data. */
   public get designLocation(): AxisLocation {
-    return this.#geometryItem.peek()?.location ?? this.#glyph.design.location.peek();
+    return this.#glyph.design.location.peek();
   }
 
   /**
    * Reactive ID of the authored source selected for editing.
    *
-   * `null` means the edit target follows the exact source at
-   * `designLocation`, if one exists.
+   * `null` means layer editing follows the exact source at `designLocation`,
+   * if one exists.
    */
   public get $editSourceId(): Signal<SourceId | null> {
     return this.#glyph.edit.sourceId;
   }
 
-  /** ID of the authored source selected for editing, or `null` for location fallback. */
+  /** ID of the source selected for layer editing, or `null` for location fallback. */
   public get editSourceId(): SourceId | null {
     return this.#glyph.edit.sourceId.peek();
   }
 
-  /** Authored font source currently selected for editing, or `null` when unavailable. */
+  /** Font source currently selected for layer editing, or `null` when unavailable. */
   public get editSource(): Source | null {
-    const item = this.#geometryItem.peek();
-    return item ? this.font.sourceAt(item.location) : this.#glyph.edit.source.peek();
+    return this.#glyph.edit.source.peek();
   }
 
   /**
-   * Returns the authored glyph source currently targeted by edit commands.
+   * Returns the authored glyph layer currently mutated by edit commands.
    *
    * @remarks
-   * This is the source-backed edit target, not the interpolated preview
-   * geometry shown at the current design location. Clipboard, command, and test
-   * code should use this when reading or mutating authored point data.
+   * This is the layer model for an exact source, not interpolated preview
+   * geometry. Clipboard, command, and test code should use this when reading
+   * or mutating authored point data.
    *
-   * @returns null when no glyph source is open for editing.
+   * @returns null when no authored glyph layer is available.
    */
   public get activeGlyphSource(): GlyphSource | null {
-    return this.#geometryLayer.peek();
+    return this.#glyph.edit.glyphSource.peek();
   }
 
   /** Glyph instance resolved at the current design location. */
   public get glyphInstance(): GlyphInstance | null {
-    return this.#geometryInstance.peek();
+    return this.#glyph.preview.instance.peek();
   }
 
   /**
    * Set the displayed designspace coordinate and synchronize edit-source focus.
    *
    * If the location exactly matches an authored source, that source becomes the
-   * explicit edit target. Otherwise the edit target falls back to location
-   * resolution and may be `null`.
+   * explicit layer-editing source. Otherwise layer editing falls back to
+   * location resolution and may be `null`.
    */
   public setDesignLocation(location: AxisLocation): void {
     batch(() => {
       this.#glyph.design.set(location);
-      const itemId = this.#geometryItem.peek()?.id;
-      if (itemId) this.scene.updateGlyph(itemId, { location });
+      this.#updateShownGlyphItemLocations(location);
 
       const source = this.font.sourceAt(location);
       if (source) {
@@ -819,8 +733,8 @@ export class Editor {
    * Select every point in the active editable source.
    *
    * This intentionally uses the editable source rather than interpolated
-   * design-location geometry: selection is an edit target, so it must refer to
-   * authored source point IDs that commands can mutate.
+   * design-location geometry: selection mutates an authored layer, so it must
+   * refer to point IDs that commands can mutate.
    */
   public selectAll(): void {
     const instance = this.glyphInstance;
@@ -849,8 +763,7 @@ export class Editor {
       const location = axisLocationFromLocation(source.location);
       this.#glyph.design.set(location);
       this.#glyph.edit.selectSource(source.id);
-      const itemId = this.#geometryItem.peek()?.id;
-      if (itemId) this.scene.updateGlyph(itemId, { location });
+      this.#updateShownGlyphItemLocations(location);
     });
   }
 
@@ -903,15 +816,11 @@ export class Editor {
   }
 
   public get glyph(): Signal<Glyph | null> {
-    return this.#geometryGlyph;
+    return this.#glyph.open.glyph;
   }
 
   public get glyphInstanceCell(): Signal<GlyphInstance | null> {
-    return this.#geometryInstance;
-  }
-
-  public get geometryOriginCell(): Signal<Point2D> {
-    return this.#geometryOrigin;
+    return this.#glyph.preview.instance;
   }
 
   public glyphForItem(itemId: ItemId): Glyph | null {
@@ -1090,11 +999,13 @@ export class Editor {
   }
 
   public sceneToGlyphLocal(point: Point2D): Point2D {
-    return this.scene.toLocal(this.requireItemId(), point);
+    const offset = this.drawOffset;
+    return { x: point.x - offset.x, y: point.y - offset.y };
   }
 
   public glyphLocalToScene(point: Point2D): Point2D {
-    return this.scene.toScene(this.requireItemId(), point);
+    const offset = this.drawOffset;
+    return { x: point.x + offset.x, y: point.y + offset.y };
   }
 
   public get hitRadius(): number {
@@ -1128,15 +1039,13 @@ export class Editor {
 
   public fromScreen(screen: Point2D): Coordinates {
     const scene = this.projectScreenToScene(screen);
-    const itemId = this.#geometryItem.peek()?.id ?? null;
-    const glyphLocal = itemId ? this.scene.toLocal(itemId, scene) : scene;
+    const glyphLocal = this.sceneToGlyphLocal(scene);
     return { screen, scene, glyphLocal };
   }
 
   public fromScene(scene: Point2D): Coordinates {
     const screen = this.projectSceneToScreen(scene);
-    const itemId = this.#geometryItem.peek()?.id ?? null;
-    const glyphLocal = itemId ? this.scene.toLocal(itemId, scene) : scene;
+    const glyphLocal = this.sceneToGlyphLocal(scene);
     return { screen, scene, glyphLocal };
   }
 
@@ -1214,7 +1123,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.#geometryGlyph.peek();
+    const glyph = this.#glyph.open.glyph.peek();
     if (!glyph) return false;
 
     return this.#clipboard.write(content, { sourceGlyph: glyph.name });
@@ -1224,7 +1133,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.#geometryGlyph.peek();
+    const glyph = this.#glyph.open.glyph.peek();
     if (!glyph) return false;
 
     const written = await this.#clipboard.write(content, {
@@ -1260,7 +1169,7 @@ export class Editor {
   }
 
   #selectedClipboardContent(): ClipboardContent | null {
-    const source = this.#geometryLayer.peek();
+    const source = this.#glyph.edit.glyphSource.peek();
     if (!source) return null;
 
     const selection = ClipboardSelection.fromSelection(this.selection);
@@ -1429,27 +1338,26 @@ export class Editor {
   }
 
   public get drawOffset(): Point2D {
-    return this.#geometryOrigin.peek();
+    return this.#text.drawOffset.peek();
   }
 
   /** @knipclassignore */
   public get $drawOffset(): Signal<Point2D> {
-    return this.#geometryOrigin;
-  }
-
-  public requireItemId(): ItemId {
-    const id = this.#geometryItem.peek()?.id ?? null;
-    if (!id) throw new Error("No scene item is showing geometry");
-    return id;
+    return this.#text.drawOffset;
   }
 
   public destroy() {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
     this.#cameraMetricsEffect.dispose();
-    this.#textScenePlacementEffect.dispose();
     this.#renderer.destroy();
     this.#events.dispose();
+  }
+
+  #updateShownGlyphItemLocations(location: AxisLocation): void {
+    for (const itemId of this.scene.geometryItemIds()) {
+      if (this.scene.glyphItem(itemId)) this.scene.updateGlyphItem(itemId, { location });
+    }
   }
 
   #toolStateKey(toolId: string, key: string): string {
@@ -1459,8 +1367,4 @@ export class Editor {
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
     return this.#toolState[scope];
   }
-}
-
-function itemIdForTextAnchor(anchor: GlyphAnchor): ItemId {
-  return asItemId(`${anchor.runId}:${anchor.itemId}`);
 }

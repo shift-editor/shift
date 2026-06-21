@@ -6,6 +6,7 @@ import type { SelectionState } from "@/lib/editor/Selection";
 import type { HoverState } from "@/lib/editor/Hover";
 import type { Editor } from "@/lib/editor/Editor";
 import type { GlyphDisplayState } from "@/lib/editor/EditorState";
+import type { SceneGlyph } from "@/lib/editor/Scene";
 import type { AxisLocation } from "@/types/variation";
 import { track, type Signal } from "@/lib/signals";
 import { displayAdvance } from "@/lib/utils/unicode";
@@ -17,19 +18,22 @@ import { Text as TextRunDrawer } from "./Text";
 import { Anchors, ControlLines, DebugOverlays, Guides, Handles } from "./overlays";
 import type { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 
-export interface BackgroundLayerProps {
-  readonly glyph: {
-    readonly model: Glyph;
-    readonly display: GlyphDisplayState;
-    readonly advance: number;
-    readonly origin: Point2D;
-  };
+interface BackgroundGlyphFrame {
+  readonly item: SceneGlyph;
+  readonly model: Glyph;
+  readonly advance: number;
+  readonly geometryShown: boolean;
 }
 
-interface SceneGlyphProps {
+export interface BackgroundLayerProps {
+  readonly glyphs: readonly BackgroundGlyphFrame[];
+}
+
+interface SceneGlyphFrame {
+  readonly item: SceneGlyph;
   readonly model: Glyph | null;
   readonly instance: GlyphInstance | null;
-  readonly display: GlyphDisplayState;
+  readonly geometryShown: boolean;
 }
 
 interface SceneInteractionProps {
@@ -39,11 +43,11 @@ interface SceneInteractionProps {
 
 interface SceneViewProps {
   readonly debugOverlays: DebugOverlayState;
-  readonly origin: Point2D;
 }
 
 export interface SceneLayerProps {
-  readonly glyph: SceneGlyphProps;
+  readonly glyphs: readonly SceneGlyphFrame[];
+  readonly display: GlyphDisplayState;
   readonly interaction: SceneInteractionProps;
   readonly view: SceneViewProps;
 }
@@ -58,7 +62,6 @@ interface TextLayerProps {
 export interface OverlayLayerProps {
   readonly activeTool: string;
   readonly activeToolState: unknown;
-  readonly origin: Point2D;
 }
 
 /**
@@ -91,34 +94,43 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     this.#editor.camera.trackViewportTransform();
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
-    this.#editor.geometryOriginCell.value;
 
-    const glyph = this.#editor.glyph.value;
-    if (!glyph) return null;
+    const scene = this.#editor.scene.cell.value;
+    const glyphs: BackgroundGlyphFrame[] = [];
 
-    const instance = this.#editor.glyphInstanceCell.value;
-    if (!instance) return null;
+    for (const item of scene.items) {
+      if (item.kind !== "glyph") continue;
 
-    const xAdvance = instance.xAdvanceCell.value;
+      const glyph = this.#editor.glyphForItem(item.id);
+      if (!glyph) continue;
 
-    const display = this.#editor.glyphDisplayCell.value;
-    if (!display.editableGlyphVisible && display.proofMode) return null;
+      const instance = this.#editor.instanceForItem(item.id);
+      if (!instance) continue;
 
-    const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
-    const advance = displayAdvance(xAdvance, glyph.name, unicode);
-    const origin = this.#editor.geometryOriginCell.value;
+      const xAdvance = instance.xAdvanceCell.value;
+      const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
+      glyphs.push({
+        item,
+        model: glyph,
+        advance: displayAdvance(xAdvance, glyph.name, unicode),
+        geometryShown: scene.geometryItems.includes(item.id),
+      });
+    }
 
-    return { glyph: { model: glyph, display, advance, origin } };
+    return { glyphs };
   }
 
   draw(canvas: Canvas): void {
     const props = this.propsCell.value;
     if (!props) return;
 
-    canvas.withTranslation(props.glyph.origin, () => {
-      this.#guides.draw(canvas, this.#editor.font.metrics, props.glyph.advance);
-      this.#editor.toolManager.drawBackground(canvas);
-    });
+    for (const glyph of props.glyphs) {
+      if (!glyph.geometryShown) continue;
+      canvas.withTranslation(glyph.item.placement.origin, () => {
+        this.#guides.draw(canvas, this.#editor.font.metrics, glyph.advance);
+        this.#editor.toolManager.drawBackground(canvas);
+      });
+    }
   }
 }
 
@@ -182,7 +194,7 @@ export class TextLayer extends CanvasItem<TextLayerProps> {
  *
  * @remarks
  * Z-order slot 1. This layer is ordered from persistent glyph content to
- * direct edit affordances:
+ * direct geometry controls:
  *
  * 1. editable glyph outline
  * 2. debug overlays
@@ -215,7 +227,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
   constructor(editor: Editor) {
     super();
     this.#editor = editor;
-    this.#handles = new Handles(editor);
+    this.#handles = new Handles();
     this.#textLayer = new TextLayer(editor);
   }
 
@@ -229,22 +241,31 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
 
-    const instance = this.#editor.glyphInstanceCell.value;
-    if (instance) instance.render.trackShape();
+    const scene = this.#editor.scene.cell.value;
+    const glyphs: SceneGlyphFrame[] = [];
+    for (const item of scene.items) {
+      if (item.kind !== "glyph") continue;
+
+      const instance = this.#editor.instanceForItem(item.id);
+      if (instance) instance.render.trackShape();
+
+      glyphs.push({
+        item,
+        model: this.#editor.glyphForItem(item.id),
+        instance,
+        geometryShown: scene.geometryItems.includes(item.id),
+      });
+    }
 
     return {
-      glyph: {
-        model: this.#editor.glyph.value,
-        instance,
-        display: this.#editor.glyphDisplayCell.value,
-      },
+      glyphs,
+      display: this.#editor.glyphDisplayCell.value,
       interaction: {
         selection: this.#editor.selection.stateCell.value,
         hover: this.#editor.hover.targetCell.value,
       },
       view: {
         debugOverlays: this.#editor.debugOverlaysCell.value,
-        origin: this.#editor.geometryOriginCell.value,
       },
     };
   }
@@ -253,70 +274,92 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
-    // Scene z-order. Keep this sequence intentional; see the class remarks.
-    canvas.withTranslation(props.view.origin, () => {
-      this.#drawGlyphOutline(canvas, props);
-      this.#drawDebugOverlays(canvas, props);
-      this.#editor.toolManager.drawScene(canvas);
-    });
+    for (const glyph of props.glyphs) {
+      this.#drawGlyphOutline(canvas, props, glyph);
+      this.#drawDebugOverlays(canvas, props, glyph);
+      if (glyph.geometryShown) {
+        canvas.withTranslation(glyph.item.placement.origin, () => {
+          this.#editor.toolManager.drawScene(canvas);
+        });
+      }
+    }
     this.#drawTextRuns(canvas);
-    this.#drawGlyphEditHandles(canvas, props);
+    let drewHandles = false;
+    for (const glyph of props.glyphs) {
+      drewHandles = this.#drawGlyphEditHandles(canvas, props, glyph) || drewHandles;
+    }
+    if (!drewHandles) this.#handles.clear();
   }
 
-  #drawGlyphOutline(canvas: Canvas, props: SceneLayerProps): void {
-    const { model, instance, display } = props.glyph;
-    if (!model || !instance || !display.editableGlyphVisible) return;
+  #drawGlyphOutline(canvas: Canvas, props: SceneLayerProps, glyph: SceneGlyphFrame): void {
+    const { model, instance, geometryShown } = glyph;
+    const { display } = props;
+    if (!model || !instance) return;
+    if (geometryShown && !display.editableGlyphVisible) return;
 
-    this.#outline.draw(canvas, instance.render.outline, {
-      fill: display.proofMode ? canvas.theme.glyph.fill : null,
-      stroke: {
-        color: canvas.theme.glyph.stroke,
-        widthPx: canvas.theme.glyph.widthPx,
-      },
+    canvas.withTranslation(glyph.item.placement.origin, () => {
+      if (!geometryShown) {
+        this.#outline.draw(canvas, instance.render.outline, {
+          fill: canvas.theme.glyph.fill,
+        });
+        return;
+      }
+
+      this.#outline.draw(canvas, instance.render.outline, {
+        fill: display.proofMode ? canvas.theme.glyph.fill : null,
+        stroke: {
+          color: canvas.theme.glyph.stroke,
+          widthPx: canvas.theme.glyph.widthPx,
+        },
+      });
     });
   }
 
-  #drawDebugOverlays(canvas: Canvas, props: SceneLayerProps): void {
-    const { model, display } = props.glyph;
-    if (!model || display.proofMode || !display.editableGlyphVisible) return;
+  #drawDebugOverlays(canvas: Canvas, props: SceneLayerProps, glyph: SceneGlyphFrame): void {
+    const { model, geometryShown } = glyph;
+    const { display } = props;
+    if (!geometryShown || !model || display.proofMode || !display.editableGlyphVisible) return;
     const { hover } = props.interaction;
     const hoveredSegmentId = hover?.type === "segment" ? hover.segmentId : null;
 
-    this.#debugOverlays.draw(
-      canvas,
-      model,
-      props.view.debugOverlays,
-      hoveredSegmentId,
-      canvas.pxToUpm(SCREEN_HIT_RADIUS),
-    );
+    canvas.withTranslation(glyph.item.placement.origin, () => {
+      this.#debugOverlays.draw(
+        canvas,
+        model,
+        props.view.debugOverlays,
+        hoveredSegmentId,
+        canvas.pxToUpm(SCREEN_HIT_RADIUS),
+      );
+    });
   }
 
   #drawTextRuns(canvas: Canvas): void {
     this.#textLayer.draw(canvas);
   }
 
-  #drawGlyphEditHandles(canvas: Canvas, props: SceneLayerProps): void {
-    const { instance, display } = props.glyph;
+  #drawGlyphEditHandles(canvas: Canvas, props: SceneLayerProps, glyph: SceneGlyphFrame): boolean {
+    const { instance, geometryShown } = glyph;
+    const { display } = props;
     if (
+      !geometryShown ||
       display.proofMode ||
       !display.handlesVisible ||
       !display.editableGlyphVisible ||
       !instance
     ) {
-      this.#handles.clear();
-      return;
+      return false;
     }
 
     const renderModel = instance.render;
     const sceneBounds = this.#editor.camera.visibleSceneBounds(64);
-    const drawOffset = props.view.origin;
+    const origin = glyph.item.placement.origin;
 
-    canvas.withTranslation(drawOffset, () => {
+    canvas.withTranslation(origin, () => {
       this.#controlLines.draw(canvas, renderModel.contours, (from, to) => {
-        const minX = Math.min(from.x, to.x) + drawOffset.x;
-        const maxX = Math.max(from.x, to.x) + drawOffset.x;
-        const minY = Math.min(from.y, to.y) + drawOffset.y;
-        const maxY = Math.max(from.y, to.y) + drawOffset.y;
+        const minX = Math.min(from.x, to.x) + origin.x;
+        const maxX = Math.max(from.x, to.x) + origin.x;
+        const minY = Math.min(from.y, to.y) + origin.y;
+        const maxY = Math.max(from.y, to.y) + origin.y;
         return !(
           maxX < sceneBounds.minX ||
           minX > sceneBounds.maxX ||
@@ -326,14 +369,23 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
       });
     });
 
-    this.#handles.draw(canvas, canvas.camera, drawOffset);
+    this.#handles.draw(
+      canvas,
+      canvas.camera,
+      origin,
+      instance,
+      props.interaction.selection,
+      props.interaction.hover,
+    );
 
-    canvas.withTranslation(drawOffset, () => {
+    canvas.withTranslation(origin, () => {
       this.#anchors.draw(canvas, renderModel.anchors, {
         selection: props.interaction.selection,
         hover: props.interaction.hover,
       });
     });
+
+    return true;
   }
 }
 
@@ -364,12 +416,10 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
 
   protected props(): OverlayLayerProps {
     this.#editor.camera.trackViewportTransform();
-    const origin = this.#editor.geometryOriginCell.value;
 
     return {
       activeTool: this.#editor.activeToolCell.value,
       activeToolState: this.#editor.activeToolStateCell.value,
-      origin,
     };
   }
 
@@ -377,8 +427,6 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
-    canvas.withTranslation(props.origin, () => {
-      this.#editor.toolManager.drawOverlay(canvas);
-    });
+    this.#editor.toolManager.drawOverlay(canvas);
   }
 }

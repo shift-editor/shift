@@ -45,7 +45,16 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     const toolManager = editor.toolManager;
 
     void (async () => {
-      await editor.setEditorSceneGlyph(record.id);
+      const location = editor.font.defaultLocation();
+      const glyph = editor.focusGlyph(record.id, location);
+      if (!glyph || cancelled) return;
+
+      const itemId = editor.scene.placeGlyph({
+        glyphId: record.id,
+        location,
+        origin: { x: 0, y: 0 },
+      });
+      editor.scene.setGeometryItems([itemId]);
       if (cancelled) return;
 
       editor.updateMetricsFromFont();

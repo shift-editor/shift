@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { glyphTextItem, lineBreakTextItem } from "@/lib/text/layout";
-import { asItemId } from "./EditorScene";
+import { asItemId } from "@shift/types";
 
 describe("Editor", () => {
   let editor: TestEditor;
@@ -15,18 +15,17 @@ describe("Editor", () => {
   describe("scene bootstrap", () => {
     it("places the opened glyph as one scene item with geometry shown at the origin", () => {
       const record = editor.font.recordForName("A")!;
-      const itemId = asItemId("main");
+      const itemId = editor.scene.value.items[0]?.id ?? null;
       const item = editor.scene.item(itemId);
 
       expect(editor.scene.value.items).toHaveLength(1);
       expect(item).toMatchObject({
-        id: "main",
         kind: "glyph",
         glyphId: record.id,
         placement: { origin: { x: 0, y: 0 } },
       });
-      expect(editor.scene.isGeometryShown(itemId)).toBe(true);
-      expect(editor.layerForItem(itemId)).not.toBeNull();
+      expect(itemId && editor.scene.isGeometryShown(itemId)).toBe(true);
+      expect(itemId && editor.layerForItem(itemId)).not.toBeNull();
     });
 
     it("can place the same glyph id twice with distinct item ids", async () => {
@@ -56,8 +55,14 @@ describe("Editor", () => {
 
       expect(editor.scene.item(left)?.glyphId).toBe(record.id);
       expect(editor.scene.item(right)?.glyphId).toBe(record.id);
-      expect(editor.scene.toScene(right, { x: 10, y: 20 })).toEqual({ x: 710, y: 20 });
-      expect(editor.scene.toLocal(right, { x: 710, y: 20 })).toEqual({ x: 10, y: 20 });
+      expect(editor.scene.sceneFromItemLocal(right, { x: 10, y: 20 })).toEqual({
+        x: 710,
+        y: 20,
+      });
+      expect(editor.scene.itemLocalFromScene(right, { x: 710, y: 20 })).toEqual({
+        x: 10,
+        y: 20,
+      });
       expect(editor.scene.isGeometryShown(left)).toBe(true);
       expect(editor.scene.isGeometryShown(right)).toBe(false);
 

@@ -1,9 +1,11 @@
 import type { Point2D } from "@shift/geo";
 
 /**
- * A point in all three coordinate spaces: screen (canvas pixels), scene (UPM
- * viewport space), and glyph-local (scene minus drawOffset, origin at glyph
- * left baseline). Built only via Editor.fromScreen / fromScene / fromGlyphLocal.
+ * A point in the active tool coordinate spaces.
+ *
+ * `glyphLocal` is the current active glyph-local coordinate used by existing
+ * tools. It is not enough to identify a local coordinate for an arbitrary
+ * placed scene item; item-local conversion requires an `ItemId`.
  */
 export interface Coordinates {
   readonly screen: Point2D;

@@ -6,7 +6,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, edge-pan, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers.
 
-**Architecture Invariant:** Three coordinate spaces flow through every interaction: `screen` (canvas pixels, Y-down), `scene` (UPM with viewport transform applied), and `glyphLocal` (scene minus draw offset). All three are bundled in the `Coordinates` type; build one via `Editor.fromScreen()` / `fromScene()` / `fromGlyphLocal()` -- never compute one space from another manually.
+**Architecture Invariant:** Pointer events still carry `screen`, `scene`, and active glyph-local coordinates for the current tool path. Placed scene item-local conversion is not global; it requires an `ItemId` through `Scene.itemLocalFromScene()` / `Scene.sceneFromItemLocal()`.
 
 **Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
 
@@ -22,7 +22,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Selection` uses discriminated `Selectable` unions (`{ kind: "point" | "anchor" | "segment", id }`). Mutations go through `select()`, `add()`, `remove()`, `toggle()`. Derived contour and bounds queries are computed from the single `$state` signal and the current glyph geometry.
 
-**Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific affordances, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
+**Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
 
 **Architecture Invariant:** `Handles` tries the accelerated marker layer first and falls back to CPU canvas drawing if WebGL is unavailable. The marker-layer path packs all handle instances into a `Float32Array` for a single draw call.
 
@@ -62,12 +62,12 @@ editor/
 - **`Selectable`** -- Discriminated union: `{ kind: "point" | "anchor" | "segment", id }`.
 - **`Coordinates`** -- Triple of `{ screen, scene, glyphLocal }` for a single position. Built via `Editor.fromScreen()` etc.
 - **`SourceEditDraft`** -- Transactional interface for continuous source manipulation: `previewPositionPatch()` / `previewTranslate()` / `previewRotate()` / `previewScale()` during drag, `commit(label)` or `discard()` at end.
-- **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific affordances such as select bounding boxes stay with the owning tool.
+- **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. Only the latest callback fires.
 - **`EdgePanManager`** -- During drags, auto-pans when the cursor is within 50px of canvas edges, using velocity proportional to distance from edge.
 - **`EventEmitter`** -- Typed emitter for `LifecycleEventMap` (`fontLoaded`, `fontSaved`, `destroying`).
-- **`Theme`** -- Shared visual config for editor-rendered elements. Tool-owned affordances keep their own local style constants.
+- **`Theme`** -- Shared visual config for editor-rendered elements. Tool-owned controls keep their own local style constants.
 
 ## How it works
 
@@ -98,7 +98,7 @@ For direct glyph opens, `Editor.openGlyph()` creates a one-item implicit editor 
 | handles    | WebGL (regl) | GPU-rendered point handles                                  | `#staticEffect` (via scene render) |
 | overlay    | Canvas 2D    | Bounding box handles, tool overlays                         | `#overlayEffect`                   |
 
-Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()` applies the affine transform and draw offset). Tool-owned affordances convert pixel-sized handles and strokes at draw time.
+Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()` applies the affine transform). Tool-owned controls convert pixel-sized handles and strokes at draw time.
 
 ### Rendering pipeline
 
@@ -122,7 +122,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()
 
 ### Hit testing
 
-Glyph geometry exposes domain hit queries for points, anchors, and segments. Tool-specific surfaces compose those queries with their own affordances; for example, the select tool owns bounding-box hit testing and rendering through `SelectBoundingBox`.
+Glyph geometry exposes domain hit queries for points, anchors, and segments. Tool-specific surfaces compose those queries with their own controls; for example, the select tool owns bounding-box hit testing and rendering through `SelectBoundingBox`.
 
 ## Workflow recipes
 

@@ -240,26 +240,26 @@ export class DesignLocationState {
   }
 }
 
-export interface EditTarget {
+export interface GlyphLayerResolution {
   readonly sourceId: SourceId;
   readonly layerId: LayerId | null;
 }
 
 /**
- * Resolves the authored glyph source selected for editing.
+ * Resolves the authored glyph layer for the current designspace source.
  *
- * `sourceId === null` means the edit target follows the exact source at the
- * current design location when one exists.
+ * `sourceId === null` means the source follows the exact source at the current
+ * design location when one exists.
  */
-export class EditTargetState {
-  /** Explicit authored source selected for editing, or `null` for location fallback. */
+export class GlyphLayerEditState {
+  /** Explicit designspace source selected for layer editing, or `null` for location fallback. */
   readonly sourceId: WritableSignal<SourceId | null>;
 
-  /** Authored font source selected by `sourceId` or by exact design-location fallback. */
+  /** Font source selected by `sourceId` or by exact design-location fallback. */
   readonly source: Signal<Source | null>;
 
   /** Selected source with the current glyph's authored layer when one exists. */
-  readonly target: Signal<EditTarget | null>;
+  readonly layer: Signal<GlyphLayerResolution | null>;
 
   /** Editable glyph data for the selected authored source. */
   readonly glyphSource: Signal<GlyphSource | null>;
@@ -279,7 +279,7 @@ export class EditTargetState {
       { name: "editor.glyph.edit.source" },
     );
 
-    this.target = computed(
+    this.layer = computed(
       () => {
         const source = this.source.value;
         if (!source) return null;
@@ -291,7 +291,7 @@ export class EditTargetState {
         const layerId = record ? (font.glyphLayer(record.id, source.id)?.id ?? null) : null;
         return { sourceId: source.id, layerId };
       },
-      { name: "editor.glyph.edit.target" },
+      { name: "editor.glyph.edit.layer" },
     );
 
     this.glyphSource = computed(
@@ -301,7 +301,7 @@ export class EditTargetState {
 
         const source = this.source.value;
         if (!source) return null;
-        if (this.target.value?.layerId === null) return null;
+        if (this.layer.value?.layerId === null) return null;
 
         return font.glyphSource(glyph.handle, source);
       },
@@ -310,9 +310,9 @@ export class EditTargetState {
   }
 
   /**
-   * Select an explicit authored source as the edit target.
+   * Select an explicit designspace source for layer editing.
    *
-   * Resolution is reactive: `source` and `glyphSource` update after this ID is
+   * Resolution is reactive: `source` and `glyphSource` update after this id is
    * set, and either may be `null` if the source or open glyph is unavailable.
    */
   selectSource(sourceId: SourceId): void {
@@ -362,13 +362,13 @@ export class PreviewGlyphState {
 export class EditorGlyphState {
   readonly open: OpenGlyphState;
   readonly design: DesignLocationState;
-  readonly edit: EditTargetState;
+  readonly edit: GlyphLayerEditState;
   readonly preview: PreviewGlyphState;
 
   constructor(font: Font) {
     this.open = new OpenGlyphState();
     this.design = new DesignLocationState();
-    this.edit = new EditTargetState(font, this.open, this.design);
+    this.edit = new GlyphLayerEditState(font, this.open, this.design);
     this.preview = new PreviewGlyphState(this.open, this.design);
   }
 }

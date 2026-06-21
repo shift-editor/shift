@@ -1,16 +1,8 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId } from "@shift/types";
+import { mintItemId, type GlyphId, type ItemId } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
+import { cloneAxisLocation } from "@/lib/variation/location";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals";
-
-declare const crypto: { getRandomValues<T extends Uint8Array>(array: T): T };
-
-const SHORT_ID_ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
-const SHORT_ID_SUFFIX_LENGTH = 10;
-const SHORT_ID_ALPHABET_MASK = SHORT_ID_ALPHABET.length - 1;
-
-export type ItemId = string & { readonly __itemId: unique symbol };
-export type TextRunId = string & { readonly __textRunId: unique symbol };
 
 export interface ScenePlacement {
   readonly origin: Point2D;
@@ -24,80 +16,96 @@ export interface SceneGlyph {
   readonly placement: ScenePlacement;
 }
 
-export interface SceneTextRun {
-  readonly id: ItemId;
-  readonly kind: "textRun";
-  readonly textRunId: TextRunId;
-  readonly placement: ScenePlacement;
+export type SceneItem = SceneGlyph;
+
+export interface PlaceGlyphInput {
+  readonly id?: ItemId;
+  readonly glyphId: GlyphId;
+  readonly location: AxisLocation;
+  readonly origin: Point2D;
 }
 
-export type SceneItem = SceneGlyph | SceneTextRun;
-
-export interface EditorSceneValue {
+export interface SceneValue {
   readonly items: readonly SceneItem[];
   readonly geometryItems: readonly ItemId[];
 }
 
-export interface EditorSceneInput {
+export interface SceneInput {
   readonly items: readonly SceneItem[];
   readonly geometryItems?: readonly ItemId[];
 }
 
-const EMPTY_SCENE: EditorSceneValue = { items: [], geometryItems: [] };
+const EMPTY_SCENE: SceneValue = { items: [], geometryItems: [] };
 
 /**
- * Owns the scene items visible in the editor canvas.
+ * Owns the placed items visible in the editor scene.
  *
  * @remarks
- * Scene stores item identity, display location, placement, and which items
- * show structured geometry. It does not resolve glyph models, glyph layers, or
- * mutation capability; callers compose scene items with `Font`/`Glyph` when
- * they need those concepts.
+ * Scene stores placement identity, display location, and which item ids should
+ * show structured geometry. It does not resolve glyph models or glyph layers,
+ * and it does not decide what authored data a command mutates.
  */
-export class EditorScene {
-  readonly #cell: WritableSignal<EditorSceneValue>;
+export class Scene {
+  readonly #cell: WritableSignal<SceneValue>;
 
   constructor() {
-    this.#cell = signal<EditorSceneValue>(EMPTY_SCENE, { name: "editor.scene" });
+    this.#cell = signal<SceneValue>(EMPTY_SCENE, { name: "editor.scene" });
   }
 
-  get cell(): Signal<EditorSceneValue> {
+  /** Reactive scene value for renderers and panels. */
+  get cell(): Signal<SceneValue> {
     return this.#cell;
   }
 
-  get value(): EditorSceneValue {
+  /** Current scene snapshot. */
+  get value(): SceneValue {
     return this.#cell.peek();
   }
 
+  /** Returns all placed scene items as a read-only snapshot. */
   items(): readonly SceneItem[] {
     return this.#cell.peek().items;
   }
 
+  /** Returns all placed glyph items as a read-only snapshot. */
   glyphItems(): readonly SceneGlyph[] {
     return this.#cell.peek().items.filter(isSceneGlyph);
   }
 
+  /** Returns item ids currently rendered with structured geometry. */
   geometryItemIds(): readonly ItemId[] {
     return this.#cell.peek().geometryItems;
   }
 
+  /**
+   * Resolves a placed scene item by id.
+   *
+   * @param itemId - Placement identity to resolve; `null` resolves to `null`.
+   * @returns The placed item, or `null` when the item is no longer in the scene.
+   */
   item(itemId: ItemId | null): SceneItem | null {
     if (!itemId) return null;
     return this.#cell.peek().items.find((item) => item.id === itemId) ?? null;
   }
 
+  /**
+   * Resolves a placed glyph item by id.
+   *
+   * @param itemId - Placement identity to resolve; `null` resolves to `null`.
+   * @returns The placed glyph item, or `null` when the item is absent or not a glyph.
+   */
   glyphItem(itemId: ItemId | null): SceneGlyph | null {
     const item = this.item(itemId);
     return item?.kind === "glyph" ? item : null;
   }
 
   /**
-   * Replaces every scene item and the set of items showing structured geometry.
+   * Replaces every scene item and geometry visibility state.
    *
    * @param scene - Complete scene description. Items are copied by value; glyph
    *   models and layers are not loaded or created.
    */
-  set(scene: EditorSceneInput): void {
+  set(scene: SceneInput): void {
     const items = scene.items.map(copyItem);
     const itemIds = new Set(items.map((item) => item.id));
     const geometryItems = (scene.geometryItems ?? []).filter((itemId) => itemIds.has(itemId));
@@ -113,20 +121,17 @@ export class EditorScene {
    * Places one glyph item in the scene.
    *
    * @param glyphId - Document glyph identity to display.
-   * @param options - Scene identity, display location, and origin.
-   * @returns The scene item id for the placed glyph.
+   * @param options - Optional placement identity, display location, and origin.
+   * @returns The item id for the placed glyph.
    */
-  placeGlyph(
-    glyphId: GlyphId,
-    options: { id?: ItemId; location: AxisLocation; origin: Point2D },
-  ): ItemId {
-    const id = options.id ?? mintItemId();
+  placeGlyph(input: PlaceGlyphInput): ItemId {
+    const id = input.id ?? mintItemId();
     const item: SceneGlyph = {
       id,
       kind: "glyph",
-      glyphId,
-      location: copyAxisLocation(options.location),
-      placement: { origin: { ...options.origin } },
+      glyphId: input.glyphId,
+      location: cloneAxisLocation(input.location),
+      placement: { origin: { ...input.origin } },
     };
     const scene = this.#cell.peek();
     const items = [...scene.items.filter((existing) => existing.id !== id), item];
@@ -138,36 +143,9 @@ export class EditorScene {
   }
 
   /**
-   * Replaces the scene with one glyph item.
+   * Shows structured geometry for a placed scene item.
    *
-   * @param glyphId - Document glyph identity to display.
-   * @param options - Scene identity, display location, and origin.
-   * @returns The scene item id for the placed glyph.
-   */
-  replaceWithGlyph(
-    glyphId: GlyphId,
-    options: { id?: ItemId; location: AxisLocation; origin: Point2D },
-  ): ItemId {
-    const id = options.id ?? mintItemId();
-    this.set({
-      items: [
-        {
-          id,
-          kind: "glyph",
-          glyphId,
-          location: copyAxisLocation(options.location),
-          placement: { origin: { ...options.origin } },
-        },
-      ],
-      geometryItems: [],
-    });
-    return id;
-  }
-
-  /**
-   * Shows structured geometry for a scene item.
-   *
-   * @param itemId - Scene item whose geometry should be shown.
+   * @param itemId - Placement identity whose geometry should be shown.
    */
   showGeometry(itemId: ItemId): void {
     if (!this.item(itemId) || this.isGeometryShown(itemId)) return;
@@ -176,9 +154,9 @@ export class EditorScene {
   }
 
   /**
-   * Hides structured geometry for a scene item.
+   * Hides structured geometry for a placed scene item.
    *
-   * @param itemId - Scene item whose geometry should be hidden.
+   * @param itemId - Placement identity whose geometry should be hidden.
    */
   hideGeometry(itemId: ItemId): void {
     const scene = this.#cell.peek();
@@ -189,9 +167,9 @@ export class EditorScene {
   }
 
   /**
-   * Replaces the complete set of scene items whose structured geometry is shown.
+   * Replaces the complete set of items whose structured geometry is shown.
    *
-   * @param itemIds - Scene item ids to show as structured geometry.
+   * @param itemIds - Placement identities to show with structured geometry.
    */
   setGeometryItems(itemIds: readonly ItemId[]): void {
     const scene = this.#cell.peek();
@@ -205,14 +183,20 @@ export class EditorScene {
   }
 
   /**
-   * Returns whether a scene item is currently shown as structured geometry.
+   * Returns whether structured geometry is shown for a scene item.
    *
-   * @param itemId - Scene item to inspect.
+   * @param itemId - Placement identity to inspect.
    */
   isGeometryShown(itemId: ItemId): boolean {
     return this.#cell.peek().geometryItems.includes(itemId);
   }
 
+  /**
+   * Replaces a scene item's placement.
+   *
+   * @param itemId - Placement identity whose placement is updated.
+   * @param placement - New placement in scene coordinates.
+   */
   setPlacement(itemId: ItemId, placement: ScenePlacement): void {
     const scene = this.#cell.peek();
     this.#cell.set({
@@ -226,7 +210,7 @@ export class EditorScene {
   /**
    * Sets a scene item's origin to an absolute scene-space position.
    *
-   * @param itemId - Scene item whose placement is updated.
+   * @param itemId - Placement identity whose origin is updated.
    * @param origin - Destination origin in scene coordinates.
    */
   moveItemTo(itemId: ItemId, origin: Point2D): void {
@@ -238,7 +222,7 @@ export class EditorScene {
   /**
    * Offsets a scene item's origin by a scene-space delta.
    *
-   * @param itemId - Scene item whose placement is updated.
+   * @param itemId - Placement identity whose origin is updated.
    * @param delta - Relative movement in scene coordinates.
    */
   moveItemBy(itemId: ItemId, delta: Point2D): void {
@@ -250,7 +234,13 @@ export class EditorScene {
     });
   }
 
-  updateGlyph(itemId: ItemId, patch: Partial<Omit<SceneGlyph, "id" | "kind">>): void {
+  /**
+   * Updates display-only fields for a placed glyph item.
+   *
+   * @param itemId - Placement identity for the glyph item to update.
+   * @param patch - Replacement display data; does not mutate authored glyph geometry.
+   */
+  updateGlyphItem(itemId: ItemId, patch: Partial<Omit<SceneGlyph, "id" | "kind">>): void {
     const scene = this.#cell.peek();
     this.#cell.set({
       ...scene,
@@ -262,31 +252,31 @@ export class EditorScene {
     });
   }
 
-  toLocal(itemId: ItemId, scenePoint: Point2D): Point2D {
-    const origin = this.item(itemId)?.placement.origin ?? { x: 0, y: 0 };
+  /**
+   * Converts a scene-space point into a placed item's local coordinate space.
+   *
+   * @param itemId - Placement identity that supplies the local origin.
+   * @param scenePoint - Point in scene coordinates.
+   * @returns Local point, or `null` when the item is not in the scene.
+   */
+  itemLocalFromScene(itemId: ItemId, scenePoint: Point2D): Point2D | null {
+    const origin = this.item(itemId)?.placement.origin;
+    if (!origin) return null;
     return { x: scenePoint.x - origin.x, y: scenePoint.y - origin.y };
   }
 
-  toScene(itemId: ItemId, localPoint: Point2D): Point2D {
-    const origin = this.item(itemId)?.placement.origin ?? { x: 0, y: 0 };
+  /**
+   * Converts a placed item's local point into scene-space coordinates.
+   *
+   * @param itemId - Placement identity that supplies the local origin.
+   * @param localPoint - Point in the placed item's local coordinates.
+   * @returns Scene-space point, or `null` when the item is not in the scene.
+   */
+  sceneFromItemLocal(itemId: ItemId, localPoint: Point2D): Point2D | null {
+    const origin = this.item(itemId)?.placement.origin;
+    if (!origin) return null;
     return { x: localPoint.x + origin.x, y: localPoint.y + origin.y };
   }
-}
-
-export function asItemId(id: string): ItemId {
-  return id as ItemId;
-}
-
-export function mintItemId(): ItemId {
-  const bytes = new Uint8Array(SHORT_ID_SUFFIX_LENGTH);
-  crypto.getRandomValues(bytes);
-
-  let suffix = "";
-  for (let i = 0; i < bytes.length; i++) {
-    const byte = bytes[i];
-    suffix += SHORT_ID_ALPHABET[byte & SHORT_ID_ALPHABET_MASK];
-  }
-  return `item_${suffix}` as ItemId;
 }
 
 function isSceneGlyph(item: SceneItem): item is SceneGlyph {
@@ -297,16 +287,12 @@ function copyItem<T extends SceneItem>(item: T): T {
   return {
     ...item,
     placement: copyPlacement(item.placement),
-    ...("location" in item ? { location: copyAxisLocation(item.location) } : {}),
-  } as T;
+    location: cloneAxisLocation(item.location),
+  };
 }
 
 function copyPlacement(placement: ScenePlacement): ScenePlacement {
   return {
     origin: { ...placement.origin },
   };
-}
-
-function copyAxisLocation(location: AxisLocation): AxisLocation {
-  return new Map(location);
 }
