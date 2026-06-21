@@ -22,7 +22,7 @@ export class AlignPointsCommand implements Command<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    ctx.source.align(this.#pointIds, this.#alignment);
+    ctx.layer.align(this.#pointIds, this.#alignment);
   }
 }
 
@@ -46,6 +46,6 @@ export class DistributePointsCommand implements Command<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length < 3) return;
 
-    ctx.source.distribute(this.#pointIds, this.#type);
+    ctx.layer.distribute(this.#pointIds, this.#type);
   }
 }

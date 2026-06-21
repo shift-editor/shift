@@ -50,20 +50,27 @@ export class TestEditor extends Editor {
   }
 
   /**
-   * Creates a real workspace, a glyph, and opens an editable session on it —
+   * Creates a real workspace, a glyph, and places it in the editor scene —
    * the production pipe end to end (intents → NAPI → SQLite → echo → fold).
    */
   async startSession(name = "A", unicode: number | null = 65): Promise<this> {
     await this.#stack.client.create();
 
     const glyph = await this.#createAndOpenGlyph(name, unicode);
-    this.openGlyphSource(glyph.handle, this.font.defaultSource.id);
+    const record = this.font.recordForName(glyph.handle.name);
+    if (!record) throw new Error("created glyph did not appear in the font directory");
+    const location = this.font.defaultLocation();
+    this.focusGlyph(record.id, location);
+    const itemId = this.scene.addGlyph({
+      glyphId: record.id,
+      origin: { x: 0, y: 0 },
+    });
+    this.scene.setGeometryItems([itemId]);
     return this;
   }
 
   /**
-   * Adds another glyph to the workspace font and pulls its model into the
-   * Font cache — the same create-then-open flow EditorView runs in the app.
+   * Adds another glyph to the workspace font and pulls its model into the Font cache.
    */
   async addGlyph(name: string, unicode: number | null): Promise<void> {
     await this.#createAndOpenGlyph(name, unicode);
@@ -121,7 +128,7 @@ export class TestEditor extends Editor {
   }
 
   get pointCount(): number {
-    return this.activeGlyphSource?.allPoints.length ?? 0;
+    return this.editingGlyphLayer?.allPoints.length ?? 0;
   }
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {

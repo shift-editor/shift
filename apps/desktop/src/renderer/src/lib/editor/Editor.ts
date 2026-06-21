@@ -1,8 +1,17 @@
 import type { CursorType, ToolRegistryItem } from "@/types/editor";
-import type { PointId, ContourId, Source, SourceId, GlyphName, GlyphRecord } from "@shift/types";
+import type {
+  PointId,
+  ContourId,
+  Source,
+  SourceId,
+  GlyphName,
+  GlyphRecord,
+  GlyphId,
+  ItemId,
+} from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
-import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
+import type { Glyph, GlyphInstance, GlyphLayer } from "@/lib/model/Glyph";
 import { axisLocationFromLocation } from "@/lib/variation/location";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
@@ -73,7 +82,8 @@ import { EventEmitter } from "./lifecycle";
 
 import type { LineSegmentPoints } from "@shift/glyph-state";
 import { Contour } from "@shift/glyph-state";
-import { SourceEditDraft, type SourceEditSubject } from "./SourceEditDraft";
+import { GlyphLayerEditDraft, type GlyphLayerEditSubject } from "./GlyphLayerEditDraft";
+import { Scene } from "./Scene";
 import {
   EditorGlyphState,
   EditorGesture,
@@ -133,6 +143,7 @@ export class Editor {
   readonly selection: Selection;
   readonly hover: Hover;
   readonly font: Font;
+  readonly scene: Scene;
 
   /**
    * Rendering and camera infrastructure.
@@ -170,7 +181,7 @@ export class Editor {
   /**
    * Active glyph/source context.
    *
-   * `edit` is the authored source backing commands and mutation.
+   * `edit` resolves the authored glyph layer backing commands and mutation.
    * `preview` is the displayed/interpolated glyph used by rendering and hit
    * queries.
    */
@@ -214,13 +225,14 @@ export class Editor {
     this.#camera = new Camera();
 
     this.font = options.font;
-    this.#glyph = new EditorGlyphState(this.font);
+    this.scene = new Scene();
+    this.#glyph = new EditorGlyphState(this.font, this.scene.locationCell);
 
     this.#view = new EditorViewState();
     this.input = new EditorInput();
     this.gesture = new EditorGesture();
 
-    this.#commands = new CommandRunner(this.#glyph.edit.glyphSource);
+    this.#commands = new CommandRunner(this.#glyph.layerEditing.glyphLayer);
 
     this.#toolState = {
       app: new Map<string, unknown>(),
@@ -229,7 +241,7 @@ export class Editor {
 
     this.#glyphFinderOpen = signal(false, { name: "editor.glyphFinder.open" });
 
-    this.selection = new Selection(this.#glyph.edit.glyphSource);
+    this.selection = new Selection(this.#glyph.layerEditing.glyphLayer);
     this.hover = new Hover();
 
     this.#edgePan = new EdgePanManager(this);
@@ -253,7 +265,7 @@ export class Editor {
 
     this.#clipboard = new Clipboard(options.clipboard);
 
-    this.#textRuns = new TextRuns(this.font, new Positioner(), this.#glyph.design.location);
+    this.#textRuns = new TextRuns(this.font, new Positioner(), this.scene.locationCell);
     this.#text = new TextEditingState(this.#textRuns);
     this.#glyphDisplay = new GlyphDisplay(this.#text, this.#textRuns);
 
@@ -383,13 +395,13 @@ export class Editor {
     this.input.setModifiers(modifiers);
   }
 
-  public beginSourceEditDraft(subject: SourceEditSubject): SourceEditDraft {
-    const glyphSource = this.#glyph.edit.glyphSource.peek();
-    if (!glyphSource) {
-      throw new Error("Cannot begin a source edit draft without an active glyph source");
+  public beginGlyphLayerEditDraft(subject: GlyphLayerEditSubject): GlyphLayerEditDraft {
+    const glyphLayer = this.#glyph.layerEditing.glyphLayer.peek();
+    if (!glyphLayer) {
+      throw new Error("Cannot begin a glyph layer edit draft without an authored glyph layer");
     }
 
-    return new SourceEditDraft(glyphSource, subject);
+    return new GlyphLayerEditDraft(glyphLayer, subject);
   }
 
   public get debugOverlays(): DebugOverlays {
@@ -413,7 +425,7 @@ export class Editor {
   }
 
   /**
-   * Sets whether the editable glyph is drawn as filled proof artwork.
+   * Sets whether the focused glyph is drawn as filled proof artwork.
    *
    * @param enabled - `true` to show proof artwork and suppress edit handles.
    */
@@ -440,20 +452,20 @@ export class Editor {
   }
 
   /**
-   * Sets whether point handles and edit affordances are visible.
+   * Sets whether point handles and structured geometry controls are visible.
    *
-   * @param visible - `true` to draw handles for editable glyph instances.
+   * @param visible - `true` to draw handles for focused glyph instances.
    */
   public setHandlesVisible(visible: boolean): void {
     this.#glyphDisplay.setHandlesVisible(visible);
   }
 
-  /** Shows point handles and edit affordances. */
+  /** Shows point handles and structured geometry controls. */
   public showHandles(): void {
     this.setHandlesVisible(true);
   }
 
-  /** Hides point handles and edit affordances. */
+  /** Hides point handles and structured geometry controls. */
   public hideHandles(): void {
     this.setHandlesVisible(false);
   }
@@ -498,16 +510,15 @@ export class Editor {
    * This is a read/focus API. It chooses the current active source context for
    * camera metrics, asks `Font` for existing glyph state, and updates
    * `editingGlyph` when the glyph can be loaded. It does not create missing
-   * glyph data and does not select an editable source.
+   * glyph data and does not select an authored glyph layer.
    *
    * @returns The focused glyph model, or `null` when the glyph has no readable state.
    */
-  public getGlyph(handle: GlyphHandle): Glyph | null {
+  #focusGlyphHandle(handle: GlyphHandle): Glyph | null {
     const glyph = this.font.glyph(handle);
     if (!glyph) return null;
 
     this.#glyph.open.glyph.set(glyph);
-
     return glyph;
   }
 
@@ -519,53 +530,25 @@ export class Editor {
     return this.#glyph.open.rootHandle.peek();
   }
 
-  public getActiveGlyphName(): string | null {
-    return this.#glyph.open.glyph.peek()?.name ?? null;
-  }
-
   /**
-   * Start editing a glyph at an explicit source.
+   * Focuses an existing document glyph as the active glyph model.
    *
-   * This is the source-aware edit entry point. The `sourceId` must be explicit
-   * so callers do not accidentally edit whatever source happens to be active in
-   * the UI.
-   *
-   * @example
-   * ```ts
-   * const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation())
-   * editor.openGlyphSource(handle, source.id)
-   * ```
-   *
-   * @returns The editable glyph source, or `null` when the source/glyph cannot be opened.
+   * @param glyphId - Document glyph identity to focus.
+   * @returns The loaded glyph model, or `null` when the glyph cannot be read.
    */
-  public openGlyphSource(handle: GlyphHandle, sourceId: SourceId): GlyphSource | null {
-    this.setRootGlyphHandle(handle);
-    const source = this.font.source(sourceId);
-    if (!source) return null;
+  public focusGlyph(glyphId: GlyphId, location: AxisLocation): Glyph | null {
+    const record = this.font.recordForId(glyphId);
+    if (!record) {
+      this.#glyph.open.glyph.set(null);
+      this.#glyph.open.rootHandle.set(null);
+      return null;
+    }
 
-    this.#glyph.edit.selectSource(source.id);
-
-    const glyph = this.getGlyph(handle);
-    if (!glyph) return null;
-
-    return this.font.glyphSource(handle, source);
-  }
-
-  /**
-   * Open a glyph as the editor's root text run glyph.
-   *
-   * This updates text-run focus and returns the glyph model selected by the
-   * resulting focus change. It is not the source-editing entry point; use
-   * {@link openGlyphSource} when the caller wants editable source data.
-   *
-   * @returns The focused glyph model, or `null` when the glyph cannot be read.
-   */
-  public openGlyph(handle: GlyphHandle): Glyph | null {
-    this.setRootGlyphHandle(handle);
-    const runs = this.#textRuns.editorRun();
-    const anchor = runs.setSingleGlyph(handle);
-    this.setGlyphFocus(anchor);
-    return this.#glyph.open.glyph.peek();
+    const handle = this.font.glyphHandleForName(record.name);
+    this.#glyph.open.rootHandle.set(handle);
+    this.scene.setLocation(location);
+    this.#glyph.layerEditing.followDesignLocation();
+    return this.#focusGlyphHandle(handle);
   }
 
   /**
@@ -599,7 +582,7 @@ export class Editor {
 
     batch(() => {
       this.#text.glyphAnchor.set(anchor);
-      this.getGlyph(focused.glyph);
+      this.#focusGlyphHandle(focused.glyph);
       this.disableProofMode();
     });
   }
@@ -622,51 +605,52 @@ export class Editor {
 
   /** Clears the current glyph focus and active contour selection. */
   public close(): void {
+    this.scene.clear();
     this.#glyph.open.glyph.set(null);
     this.#glyph.open.activeContourId.set(null);
   }
 
   public get $designLocation(): Signal<AxisLocation> {
-    return this.#glyph.design.location;
+    return this.scene.locationCell;
   }
 
   /** Current designspace coordinate used for displayed glyph data. */
   public get designLocation(): AxisLocation {
-    return this.#glyph.design.location.peek();
+    return this.scene.location;
   }
 
   /**
-   * Reactive ID of the authored source selected for editing.
+   * Reactive ID of the designspace source selected for layer editing.
    *
-   * `null` means the edit target follows the exact source at
-   * `designLocation`, if one exists.
+   * `null` means layer editing follows the exact source at `designLocation`,
+   * if one exists.
    */
-  public get $editSourceId(): Signal<SourceId | null> {
-    return this.#glyph.edit.sourceId;
+  public get $layerSourceId(): Signal<SourceId | null> {
+    return this.#glyph.layerEditing.selectedSourceId;
   }
 
-  /** ID of the authored source selected for editing, or `null` for location fallback. */
-  public get editSourceId(): SourceId | null {
-    return this.#glyph.edit.sourceId.peek();
+  /** ID of the designspace source selected for layer editing, or `null` for location fallback. */
+  public get layerSourceId(): SourceId | null {
+    return this.#glyph.layerEditing.selectedSourceId.peek();
   }
 
-  /** Authored font source currently selected for editing, or `null` when unavailable. */
-  public get editSource(): Source | null {
-    return this.#glyph.edit.source.peek();
+  /** Font source currently selected for layer editing, or `null` when unavailable. */
+  public get layerSource(): Source | null {
+    return this.#glyph.layerEditing.selectedSource.peek();
   }
 
   /**
-   * Returns the authored glyph source currently targeted by edit commands.
+   * Returns the authored glyph layer currently mutated by edit commands.
    *
    * @remarks
-   * This is the source-backed edit target, not the interpolated preview
-   * geometry shown at the current design location. Clipboard, command, and test
-   * code should use this when reading or mutating authored point data.
+   * This is the layer model for an exact source, not interpolated preview
+   * geometry. Clipboard, command, and test code should use this when reading
+   * or mutating authored point data.
    *
-   * @returns null when no glyph source is open for editing.
+   * @returns null when no authored glyph layer is available.
    */
-  public get activeGlyphSource(): GlyphSource | null {
-    return this.#glyph.edit.glyphSource.peek();
+  public get editingGlyphLayer(): GlyphLayer | null {
+    return this.#glyph.layerEditing.glyphLayer.peek();
   }
 
   /** Glyph instance resolved at the current design location. */
@@ -674,40 +658,36 @@ export class Editor {
     return this.#glyph.preview.instance.peek();
   }
 
-  public get glyphInstanceCell(): Signal<GlyphInstance | null> {
-    return this.#glyph.preview.instance;
-  }
-
   /**
-   * Set the displayed designspace coordinate and synchronize edit-source focus.
+   * Set the displayed designspace coordinate and synchronize layer-source focus.
    *
-   * If the location exactly matches an authored source, that source becomes the
-   * explicit edit target. Otherwise the edit target falls back to location
-   * resolution and may be `null`.
+   * If the location exactly matches an authored glyph layer, that source becomes the
+   * explicit layer-editing source. Otherwise layer editing falls back to
+   * location resolution and may be `null`.
    */
   public setDesignLocation(location: AxisLocation): void {
     batch(() => {
-      this.#glyph.design.set(location);
+      this.scene.setLocation(location);
 
       const source = this.font.sourceAt(location);
       if (source) {
-        this.#glyph.edit.selectSource(source.id);
+        this.#glyph.layerEditing.selectLayerSource(source.id);
       } else {
-        this.#glyph.edit.selectDefaultSource();
+        this.#glyph.layerEditing.followDesignLocation();
       }
     });
   }
 
   /**
-   * Select every point in the active editable source.
+   * Select every point in the active authored glyph layer.
    *
-   * This intentionally uses the editable source rather than interpolated
-   * design-location geometry: selection is an edit target, so it must refer to
-   * authored source point IDs that commands can mutate.
+   * This intentionally uses the authored glyph layer rather than interpolated
+   * design-location geometry: selection mutates an authored layer, so it must
+   * refer to point IDs that commands can mutate.
    */
   public selectAll(): void {
     const instance = this.glyphInstance;
-    if (!instance?.edit) return;
+    if (!instance?.layer) return;
 
     this.selection.select(
       instance.geometry.allPoints.map((point) => ({
@@ -719,30 +699,30 @@ export class Editor {
   }
 
   /**
-   * Select an authored source for editing and move the display location to it.
+   * Select an authored glyph layer for editing and move the display location to it.
    *
    * Missing source IDs are ignored. This does not open a glyph; it retargets
-   * the current open glyph's edit source when one is available.
+   * the current open glyph's layer source when one is available.
    */
-  public selectSource(sourceId: SourceId): void {
+  public selectLayerSource(sourceId: SourceId): void {
     const source = this.font.source(sourceId);
     if (!source) return;
 
     batch(() => {
       const location = axisLocationFromLocation(source.location);
-      this.#glyph.design.set(location);
-      this.#glyph.edit.selectSource(source.id);
+      this.scene.setLocation(location);
+      this.#glyph.layerEditing.selectLayerSource(source.id);
     });
   }
 
   /**
-   * Clear explicit edit-source selection.
+   * Clear explicit layer-source selection.
    *
-   * The editor will resolve the edit source from the current design location
-   * until another source is selected.
+   * The editor will resolve the layer source from the current design location
+   * until another layer source is selected.
    */
-  public clearActiveSource(): void {
-    this.#glyph.edit.selectDefaultSource();
+  public clearLayerSourceSelection(): void {
+    this.#glyph.layerEditing.followDesignLocation();
   }
 
   public get textRuns(): TextRuns {
@@ -762,8 +742,8 @@ export class Editor {
   }
 
   /** @knipclassignore Indirectly consumed through Renderer. */
-  public editableGlyphVisible(): boolean {
-    return this.#glyphDisplay.cell.peek().editableGlyphVisible;
+  public focusedGlyphVisible(): boolean {
+    return this.#glyphDisplay.cell.peek().focusedGlyphVisible;
   }
 
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
@@ -785,6 +765,37 @@ export class Editor {
 
   public get glyph(): Signal<Glyph | null> {
     return this.#glyph.open.glyph;
+  }
+
+  public get glyphInstanceCell(): Signal<GlyphInstance | null> {
+    return this.#glyph.preview.instance;
+  }
+
+  public glyphForItem(itemId: ItemId): Glyph | null {
+    const item = this.scene.glyphItem(itemId);
+    if (!item) return null;
+
+    const record = this.font.recordForId(item.glyphId);
+    if (!record) return null;
+
+    return this.font.glyph(this.font.glyphHandleForName(record.name));
+  }
+
+  public instanceForItem(itemId: ItemId): GlyphInstance | null {
+    const item = this.scene.glyphItem(itemId);
+    const glyph = item ? this.glyphForItem(itemId) : null;
+    if (!item || !glyph) return null;
+    return glyph.instance(this.scene.locationCell);
+  }
+
+  public layerForItem(itemId: ItemId): GlyphLayer | null {
+    const item = this.scene.glyphItem(itemId);
+    if (!item) return null;
+    const source = this.font.sourceAt(this.scene.location);
+    if (!source) return null;
+    const record = this.font.recordForId(item.glyphId);
+    if (!record) return null;
+    return this.font.glyphLayer(this.font.glyphHandleForName(record.name), source);
   }
 
   /** Stateless command executor; undo authority is the workspace ledger. */
@@ -853,13 +864,13 @@ export class Editor {
   }
 
   /**
-   * Sets the active editable glyph's horizontal advance through command history.
+   * Sets the active glyph layer's horizontal advance through command history.
    *
    * @param width - New advance width in UPM units.
    */
   public setXAdvance(width: number): void {
     const instance = this.glyphInstance;
-    if (!instance?.edit) return;
+    if (!instance?.layer) return;
 
     if (instance.xAdvance === width) return;
 
@@ -867,13 +878,13 @@ export class Editor {
   }
 
   /**
-   * Sets the active editable glyph's left sidebearing by translating its outline.
+   * Sets the active glyph layer's left sidebearing by translating its outline.
    *
    * @param value - Desired left sidebearing in UPM units.
    */
   public setLeftSidebearing(value: number): void {
     const instance = this.glyphInstance;
-    if (!instance?.edit) return;
+    if (!instance?.layer) return;
 
     const bbox = instance.render.outline.bounds;
     if (!bbox) return;
@@ -885,13 +896,13 @@ export class Editor {
   }
 
   /**
-   * Sets the active editable glyph's right sidebearing by changing its advance.
+   * Sets the active glyph layer's right sidebearing by changing its advance.
    *
    * @param value - Desired right sidebearing in UPM units.
    */
   public setRightSidebearing(value: number): void {
     const instance = this.glyphInstance;
-    if (!instance?.edit) return;
+    if (!instance?.layer) return;
 
     const bbox = instance.render.outline.bounds;
     if (!bbox) return;
@@ -1046,9 +1057,9 @@ export class Editor {
     this.#renderer.fpsMonitor.stop();
   }
 
-  /** Deletes currently selected points from the active editable glyph. */
+  /** Deletes currently selected points from the active authored glyph layer. */
   public deleteSelectedPoints(): void {
-    const edit = this.glyphInstance?.edit;
+    const edit = this.glyphInstance?.layer;
     if (!edit) return;
 
     const selectedIds = [...this.selection.pointIds];
@@ -1108,7 +1119,7 @@ export class Editor {
   }
 
   #selectedClipboardContent(): ClipboardContent | null {
-    const source = this.#glyph.edit.glyphSource.peek();
+    const source = this.#glyph.layerEditing.glyphLayer.peek();
     if (!source) return null;
 
     const selection = ClipboardSelection.fromSelection(this.selection);

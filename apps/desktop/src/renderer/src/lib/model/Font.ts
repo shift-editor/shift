@@ -18,7 +18,7 @@ import { mintAxisId, mintGlyphId, mintLayerId, mintSourceId } from "@shift/types
 import { computed, type Signal } from "@/lib/signals/signal";
 import type { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
-import { Glyph, type GlyphSource } from "./Glyph";
+import { Glyph, type GlyphLayer } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
 import type { GlyphHandle } from "@shift/bridge";
 import {
@@ -62,7 +62,7 @@ class GlyphDirectory {
   readonly recordsById: ReadonlyMap<GlyphId, GlyphRecord> = new Map();
   readonly nameById: ReadonlyMap<GlyphId, GlyphName> = new Map();
   readonly nameByUnicode: ReadonlyMap<Unicode, GlyphName> = new Map();
-  readonly layerByGlyphSource: ReadonlyMap<string, GlyphLayerRecord> = new Map();
+  readonly layerByGlyphAndSource: ReadonlyMap<string, GlyphLayerRecord> = new Map();
   readonly componentBasesById: ReadonlyMap<GlyphId, readonly GlyphId[]> = new Map();
   readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>> = new Map();
 
@@ -71,7 +71,7 @@ class GlyphDirectory {
     const recordsById = new Map<GlyphId, GlyphRecord>();
     const nameById = new Map<GlyphId, GlyphName>();
     const nameByUnicode = new Map<Unicode, GlyphName>();
-    const layerByGlyphSource = new Map<string, GlyphLayerRecord>();
+    const layerByGlyphAndSource = new Map<string, GlyphLayerRecord>();
     const componentBasesById = new Map<GlyphId, readonly GlyphId[]>();
     const dependentsById = new Map<GlyphId, Set<GlyphId>>();
 
@@ -81,7 +81,7 @@ class GlyphDirectory {
       nameById.set(record.id, record.name);
 
       for (const layer of record.layers) {
-        layerByGlyphSource.set(glyphLayerKey(record.id, layer.sourceId), layer);
+        layerByGlyphAndSource.set(glyphLayerKey(record.id, layer.sourceId), layer);
       }
 
       for (const unicode of record.unicodes) {
@@ -106,7 +106,7 @@ class GlyphDirectory {
     this.recordsById = recordsById;
     this.nameById = nameById;
     this.nameByUnicode = nameByUnicode;
-    this.layerByGlyphSource = layerByGlyphSource;
+    this.layerByGlyphAndSource = layerByGlyphAndSource;
     this.componentBasesById = componentBasesById;
     this.dependentsById = dependentsById;
   }
@@ -143,14 +143,14 @@ class GlyphDirectory {
   }
 
   /**
-   * Reports whether the current font has a committed glyph with this name.
+   * Reports whether the current font has a committed glyph with this id.
    *
-   * @param name - Glyph name to test against committed font records.
-   * @returns `true` only for glyphs present in the loaded font, not database fallbacks.
+   * @param glyphId - Stable glyph identity to test against committed font records.
+   * @returns `true` only for glyphs present in the loaded font.
    * @knipclassignore
    */
-  hasGlyph(name: GlyphName): boolean {
-    return this.recordsByName.has(name);
+  hasGlyph(glyphId: GlyphId): boolean {
+    return this.recordsById.has(glyphId);
   }
 
   /**
@@ -170,15 +170,15 @@ class GlyphDirectory {
   }
 
   /** Returns the sparse authored layer for a glyph/source pair. */
-  layerForGlyphSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.layerByGlyphSource.get(glyphLayerKey(glyphId, sourceId)) ?? null;
+  layerForGlyphAtSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
+    return this.layerByGlyphAndSource.get(glyphLayerKey(glyphId, sourceId)) ?? null;
   }
 
   /** Returns the sparse authored layer for a glyph name and source. */
-  layerForGlyphNameSource(name: GlyphName, sourceId: SourceId): GlyphLayerRecord | null {
+  layerForGlyphNameAtSource(name: GlyphName, sourceId: SourceId): GlyphLayerRecord | null {
     const record = this.recordForName(name);
     if (!record) return null;
-    return this.layerForGlyphSource(record.id, sourceId);
+    return this.layerForGlyphAtSource(record.id, sourceId);
   }
 
   /**
@@ -263,7 +263,7 @@ class GlyphDirectory {
   }
 }
 
-type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
+type GlyphLayerKey = string & { readonly __glyphLayerKey: unique symbol };
 
 const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
@@ -283,9 +283,10 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
  *
  * A glyph handle is only an identity. It may name a glyph that is not committed
  * in the font yet. Use {@link glyph} for existing glyph data, and use the
- * editor edit/open API when the caller intends to create or edit source data.
+ * editor layer API when the caller intends to create or edit authored glyph data.
  */
 export class Font {
+  // TODO: these all need to renamed to have the <name>Cell naming convention
   readonly #$loaded: Signal<boolean>;
   readonly #$metrics: Signal<FontMetrics>;
   readonly #$metadata: Signal<FontMetadata>;
@@ -298,7 +299,7 @@ export class Font {
   readonly #glyphs = new Map<GlyphName, Glyph>();
   /** Open glyph models keyed by stable id; survives directory re-keys. */
   readonly #glyphsById = new Map<GlyphId, Glyph>();
-  readonly #glyphSources = new Map<GlyphSourceKey, GlyphSource>();
+  readonly #glyphLayers = new Map<GlyphLayerKey, GlyphLayer>();
   readonly #editQueue: WorkspaceEditQueue | null;
   #cachesKeyedTo: GlyphDirectory | null = null;
 
@@ -308,7 +309,7 @@ export class Font {
    * @param $workspace - Single source of workspace truth owned by
    *   `WorkspaceSession`. There is no load: every derived value follows this
    *   signal, and `null` means no font is open.
-   * @param editQueue - Optional queue used by editable projections to submit
+   * @param editQueue - Optional queue used by authored layer projections to submit
    *   committed edits to the utility workspace.
    */
   constructor($workspace: Signal<WorkspaceSnapshot | null>, editQueue?: WorkspaceEditQueue) {
@@ -326,6 +327,10 @@ export class Font {
   /** @knipclassignore */
   get loaded(): boolean {
     return this.#$loaded.peek();
+  }
+
+  get defaultXAdvance(): number {
+    return this.#$metrics.peek().unitsPerEm / 2;
   }
 
   /** @knipclassignore */
@@ -398,14 +403,14 @@ export class Font {
   }
 
   /**
-   * Reports whether the current font has a committed glyph with this name.
+   * Reports whether the current font has a committed glyph with this id.
    *
-   * @param name - Glyph name to test against committed font records.
+   * @param glyphId - Stable glyph identity to test against committed font records.
    * @returns `true` only for glyphs present in the loaded font.
    * @knipclassignore
    */
-  hasGlyph(name: GlyphName): boolean {
-    return this.#directory.peek().hasGlyph(name);
+  hasGlyph(glyphId: GlyphId): boolean {
+    return this.#directory.peek().hasGlyph(glyphId);
   }
 
   /**
@@ -417,6 +422,16 @@ export class Font {
    */
   recordForName(name: GlyphName): GlyphRecord | null {
     return this.#directory.peek().recordForName(name);
+  }
+
+  /** Returns the committed glyph record for a stable glyph id. */
+  recordForId(glyphId: GlyphId): GlyphRecord | null {
+    return this.#directory.peek().recordForId(glyphId);
+  }
+
+  /** Returns the committed layer record for an exact glyph/source pair. */
+  layerForGlyphAtSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
+    return this.#directory.peek().layerForGlyphAtSource(glyphId, sourceId);
   }
 
   /**
@@ -466,7 +481,7 @@ export class Font {
    * committed in the font.
    *
    * @remarks
-   * Name-first flows such as New Glyph need a stable handle before source data
+   * Name-first flows such as New Glyph need a stable handle before layer data
    * exists. Existing font records provide their committed Unicode assignment;
    * otherwise the glyph database is used as a best-effort Unicode hint.
    *
@@ -490,31 +505,43 @@ export class Font {
   }
 
   /**
-   * Creates a glyph identity and returns its record immediately.
+   * Creates a glyph and its default authored layer.
    *
    * @remarks
-   * The durable commit happens asynchronously; the committed record folds
-   * into the font's directory when the workspace echo lands. This does not
-   * create editable layer data. Use {@link createGlyphLayer} for authored
-   * glyph data at a source.
+   * The durable commit happens asynchronously; the committed glyph and sparse
+   * layer membership fold into the font's directory when the workspace echo
+   * lands. The layer is authored at the font's default source, and its initial
+   * advance comes from the workspace layer-creation policy.
    *
    * @param name - Preferred glyph name. Existing names are auto-incremented
    *   (`base`, `base.1`, …); Unicode assignment is inferred from the
    *   resolved name.
-   * @returns The created glyph's identity record with no authored layers.
+   * @returns The created glyph record with its optimistic default layer.
    */
   createGlyph(name: GlyphName): GlyphRecord {
     const finalName = this.nextAvailableGlyphName(name);
     const handle = this.glyphHandleForName(finalName);
     const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
     const glyphId = mintGlyphId();
+    const layerId = mintLayerId();
+    const sourceId = this.defaultSource.id;
 
     this.editQueue.push({
       kind: "createGlyph",
       createGlyph: { glyphId, name: finalName, unicodes },
     });
+    this.editQueue.push({
+      kind: "createGlyphLayer",
+      createGlyphLayer: { layerId, glyphId, sourceId },
+    });
 
-    return { id: glyphId, name: finalName, unicodes, componentBaseGlyphIds: [], layers: [] };
+    return {
+      id: glyphId,
+      name: finalName,
+      unicodes,
+      componentBaseGlyphIds: [],
+      layers: [{ id: layerId, sourceId }],
+    };
   }
 
   /**
@@ -522,8 +549,8 @@ export class Font {
    *
    * @remarks
    * The layer id is caller-minted and becomes the stable edit identity for
-   * subsequent geometry intents. This method does not clone, seed, or copy
-   * geometry from another layer.
+   * subsequent geometry intents. The workspace initializes default metrics;
+   * this method does not clone, seed, or copy geometry from another layer.
    *
    * @param glyphId - Committed glyph identity that will own the new layer.
    * @param sourceId - Committed source where the layer is authored.
@@ -545,8 +572,8 @@ export class Font {
    * @param sourceId - Source whose authored glyph data is requested.
    * @returns The sparse layer record, or `null` when that source has no layer for the glyph.
    */
-  glyphLayer(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.#directory.peek().layerForGlyphSource(glyphId, sourceId);
+  glyphLayerRecord(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
+    return this.#directory.peek().layerForGlyphAtSource(glyphId, sourceId);
   }
 
   /**
@@ -557,11 +584,11 @@ export class Font {
    */
   nextAvailableGlyphName(name: GlyphName): GlyphName {
     const baseName = (name.trim() || "newGlyph") as GlyphName;
-    if (!this.hasGlyph(baseName)) return baseName;
+    if (!this.recordForName(baseName)) return baseName;
 
     for (let index = 1; ; index += 1) {
       const candidate = `${baseName}.${index}` as GlyphName;
-      if (!this.hasGlyph(candidate)) return candidate;
+      if (!this.recordForName(candidate)) return candidate;
     }
   }
 
@@ -575,7 +602,7 @@ export class Font {
    * @example
    * ```ts
    * const handle = font.glyphHandleForUnicode(0x41)
-   * // `handle` is suitable for opening or creating the glyph source.
+   * // `handle` is suitable for resolving or creating glyph-layer data.
    * ```
    *
    * @returns A glyph identity for the codepoint. This does not load or create glyph geometry.
@@ -590,7 +617,7 @@ export class Font {
    *
    * This is a read/data access API. It asks the bridge for glyph state at the
    * font's default source and returns `null` when no state exists. It does not
-   * create missing glyphs or select an editable source.
+   * create missing glyphs or select a layer source.
    *
    * @example
    * ```ts
@@ -619,7 +646,7 @@ export class Font {
     }
 
     const source = this.defaultSource;
-    const layer = record ? directory.layerForGlyphSource(record.id, source.id) : null;
+    const layer = record ? directory.layerForGlyphAtSource(record.id, source.id) : null;
     if (!layer) return null;
 
     const state = this.layerState(layer.id);
@@ -631,40 +658,40 @@ export class Font {
   }
 
   /**
-   * Get editable data for a glyph at an exact source.
+   * Get authored layer data for a glyph at an exact source.
    *
-   * A source is a glyph at a designspace location. This method returns the
-   * source-specific editable model when both the source and glyph state exist.
+   * A source is a designspace location. This method returns the authored glyph
+   * layer model when both the source and glyph layer state exist.
    * It does not choose a fallback source and does not create missing glyph data.
    *
    * @example
    * ```ts
    * const source = font.defaultSource
-   * const glyphSource = font.glyphSource(handle, source)
+   * const glyphLayer = font.glyphLayer(handle, source)
    * ```
    *
-   * @returns The editable glyph source, or `null` when the source/glyph state is unavailable.
+   * @returns The authored glyph layer, or `null` when the source or layer state is unavailable.
    */
-  glyphSource(handle: GlyphHandle, source: Source): GlyphSource | null {
+  glyphLayer(handle: GlyphHandle, source: Source): GlyphLayer | null {
     if (!this.source(source.id)) return null;
 
     this.#syncCaches();
-    const layer = this.#directory.peek().layerForGlyphNameSource(handle.name, source.id);
+    const layer = this.#directory.peek().layerForGlyphNameAtSource(handle.name, source.id);
     if (!layer) return null;
 
-    const key = glyphSourceKey(handle.name, source.id);
-    const cached = this.#glyphSources.get(key);
+    const key = glyphLayerModelKey(handle.name, source.id);
+    const cached = this.#glyphLayers.get(key);
     if (cached) return cached;
 
     const glyph = this.glyph(handle);
     if (!glyph) return null;
 
     const state = glyph.isPrimarySource(source) ? undefined : this.layerState(layer.id);
-    const glyphSource = glyph.createGlyphSource(source, state);
-    if (!glyphSource) return null;
+    const glyphLayer = glyph.createGlyphLayer(source, state);
+    if (!glyphLayer) return null;
 
-    this.#glyphSources.set(key, glyphSource);
-    return glyphSource;
+    this.#glyphLayers.set(key, glyphLayer);
+    return glyphLayer;
   }
 
   /**
@@ -752,7 +779,7 @@ export class Font {
    * Find an exact source for a location, or fall back to the default source.
    *
    * This is useful for UI bootstrapping where a fresh/static font should still
-   * resolve to its editable default source even when the current location does
+   * resolve to its default authoring source even when the current location does
    * not exactly identify one.
    *
    * @returns The matching source or the font's default source.
@@ -803,7 +830,7 @@ export class Font {
   }
 
   /**
-   * Opens (or returns the cached) editable glyph model, pulling
+   * Opens (or returns the cached) glyph model, pulling
    * replace-grade state from the workspace.
    *
    * @remarks
@@ -815,7 +842,7 @@ export class Font {
     const record = directory.recordForId(glyphId);
     if (!record) return null;
 
-    const layer = directory.layerForGlyphSource(glyphId, source.id);
+    const layer = directory.layerForGlyphAtSource(glyphId, source.id);
     if (!layer) return null;
 
     const cached = this.#glyphsById.get(glyphId);
@@ -833,34 +860,34 @@ export class Font {
   }
 
   /**
-   * Opens (or returns the cached) editable glyph source at any source,
+   * Opens (or returns the cached) authored glyph layer at any source,
    * pulling replace-grade state from the workspace.
    *
    * @remarks
    * This is the async entry point for non-primary sources; once opened, the
-   * sync {@link glyphSource} resolves from cache (instance resolution,
+   * sync {@link glyphLayer} resolves from cache (instance resolution,
    * tools). Echoes for the source's layer fold into the opened state.
    */
-  async openGlyphSource(glyphId: GlyphId, source: Source): Promise<GlyphSource | null> {
+  async openGlyphLayer(glyphId: GlyphId, source: Source): Promise<GlyphLayer | null> {
     this.#syncCaches();
-    const layer = this.#directory.peek().layerForGlyphSource(glyphId, source.id);
+    const layer = this.#directory.peek().layerForGlyphAtSource(glyphId, source.id);
     if (!layer) return null;
 
     const glyph =
       this.#glyphsById.get(glyphId) ?? (await this.openGlyph(glyphId, this.defaultSource));
     if (!glyph) return null;
 
-    const cached = this.glyphSource(glyph.handle, source);
+    const cached = this.glyphLayer(glyph.handle, source);
     if (cached) return cached;
 
     const state = await this.editQueue.layer(layer.id);
     if (!state) return null;
 
-    const glyphSource = glyph.createGlyphSource(source, state);
-    if (!glyphSource) return null;
+    const glyphLayer = glyph.createGlyphLayer(source, state);
+    if (!glyphLayer) return null;
 
-    this.#glyphSources.set(glyphSourceKey(glyph.handle.name, source.id), glyphSource);
-    return glyphSource;
+    this.#glyphLayers.set(glyphLayerModelKey(glyph.handle.name, source.id), glyphLayer);
+    return glyphLayer;
   }
 
   createSource(name: string, location: Location): SourceId {
@@ -922,7 +949,7 @@ export class Font {
     if (this.#cachesKeyedTo === directory) return;
 
     this.#glyphs.clear();
-    this.#glyphSources.clear();
+    this.#glyphLayers.clear();
     this.#cachesKeyedTo = directory;
   }
 
@@ -931,8 +958,8 @@ export class Font {
   }
 }
 
-function glyphSourceKey(name: GlyphName, sourceId: SourceId): GlyphSourceKey {
-  return `${sourceId}:${name}` as GlyphSourceKey;
+function glyphLayerModelKey(name: GlyphName, sourceId: SourceId): GlyphLayerKey {
+  return `${sourceId}:${name}` as GlyphLayerKey;
 }
 
 function glyphLayerKey(glyphId: GlyphId, sourceId: SourceId): string {

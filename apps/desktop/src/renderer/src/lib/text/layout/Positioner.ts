@@ -55,7 +55,7 @@ export class Positioner {
 
 /** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
 export function resolveAdvance(item: GlyphTextItem, font: Font, source: Source | null): number {
-  const raw = source ? (font.glyphSource({ name: item.glyphName }, source)?.xAdvance ?? 0) : 0;
+  const raw = source ? (font.glyphLayer({ name: item.glyphName }, source)?.xAdvance ?? 0) : 0;
   return displayAdvance(raw, item.glyphName, item.codepoint);
 }
 
@@ -67,7 +67,7 @@ export function resolveGlyphOffset(
   if (!isNonSpacingGlyph(item.glyphName, item.codepoint)) return { x: 0, y: 0 };
   if (!source) return { x: 0, y: 0 };
 
-  const glyph = font.glyphSource({ name: item.glyphName }, source);
+  const glyph = font.glyphLayer({ name: item.glyphName }, source);
   if (!glyph) return { x: 0, y: 0 };
 
   const metrics = font.metrics;

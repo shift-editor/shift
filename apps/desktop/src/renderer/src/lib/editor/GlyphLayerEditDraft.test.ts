@@ -1,20 +1,20 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import type { PointId } from "@shift/types";
-import type { GlyphSource } from "@/lib/model/Glyph";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 import { TestEditor } from "@/testing/TestEditor";
-import { SourceEditDraft } from "./SourceEditDraft";
+import { GlyphLayerEditDraft } from "./GlyphLayerEditDraft";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^); drafts no
 // longer record commands — the movePoints intent from commit IS the ledger
 // entry, so undo goes through the workspace.
-function pointPosition(source: GlyphSource, pointId: PointId): { x: number; y: number } {
+function pointPosition(source: GlyphLayer, pointId: PointId): { x: number; y: number } {
   const point = source.point(pointId);
   if (!point) throw new Error("Expected point");
 
   return { x: point.x, y: point.y };
 }
 
-function pointBase(draft: SourceEditDraft, pointId: PointId): { x: number; y: number } {
+function pointBase(draft: GlyphLayerEditDraft, pointId: PointId): { x: number; y: number } {
   const position = draft.basePositions.find(
     (position) => position.kind === "point" && position.id === pointId,
   );
@@ -23,7 +23,7 @@ function pointBase(draft: SourceEditDraft, pointId: PointId): { x: number; y: nu
   return { x: position.x, y: position.y };
 }
 
-describe("source edit drafts preserve committed preview bases", () => {
+describe("glyph layer edit drafts preserve committed preview bases", () => {
   let editor: TestEditor;
 
   beforeEach(async () => {
@@ -36,12 +36,12 @@ describe("source edit drafts preserve committed preview bases", () => {
     await editor.settle();
   });
 
-  const source = () => editor.activeGlyphSource!;
+  const source = () => editor.editingGlyphLayer!;
 
-  it("previews, commits, and undoes a source edit through the real glyph source", async () => {
+  it("previews, commits, and undoes a layer edit through the real glyph layer", async () => {
     const point = source().allPoints[0]!;
     const start = pointPosition(source(), point.id);
-    const draft = new SourceEditDraft(source(), { points: [point.id] });
+    const draft = new GlyphLayerEditDraft(source(), { points: [point.id] });
 
     draft.previewTranslate({ x: 25, y: -10 });
     expect(pointPosition(source(), point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
@@ -58,7 +58,7 @@ describe("source edit drafts preserve committed preview bases", () => {
     const [first, second] = source().allPoints;
     const firstStart = pointPosition(source(), first!.id);
     const secondStart = pointPosition(source(), second!.id);
-    const draft = new SourceEditDraft(source(), { points: [first!.id] });
+    const draft = new GlyphLayerEditDraft(source(), { points: [first!.id] });
 
     draft.previewPositionPatch([
       { kind: "point", id: first!.id, x: firstStart.x + 10, y: firstStart.y },
@@ -77,13 +77,13 @@ describe("source edit drafts preserve committed preview bases", () => {
   it("starts the next draft from a committed preview position", async () => {
     const point = source().allPoints[0]!;
     const start = pointPosition(source(), point.id);
-    const firstDraft = new SourceEditDraft(source(), { points: [point.id] });
+    const firstDraft = new GlyphLayerEditDraft(source(), { points: [point.id] });
 
     firstDraft.previewTranslate({ x: 25, y: -10 });
     firstDraft.commit();
     await editor.settle();
 
-    const secondDraft = new SourceEditDraft(source(), { points: [point.id] });
+    const secondDraft = new GlyphLayerEditDraft(source(), { points: [point.id] });
 
     expect(pointBase(secondDraft, point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
   });
@@ -92,7 +92,7 @@ describe("source edit drafts preserve committed preview bases", () => {
     const [first, second] = source().allPoints;
     const firstStart = pointPosition(source(), first!.id);
     const secondStart = pointPosition(source(), second!.id);
-    const draft = new SourceEditDraft(source(), { points: [first!.id] });
+    const draft = new GlyphLayerEditDraft(source(), { points: [first!.id] });
 
     draft.previewPositionPatch([
       { kind: "point", id: first!.id, x: firstStart.x + 10, y: firstStart.y },
@@ -101,7 +101,7 @@ describe("source edit drafts preserve committed preview bases", () => {
     draft.commit();
     await editor.settle();
 
-    const nextDraft = new SourceEditDraft(source(), { points: [second!.id] });
+    const nextDraft = new GlyphLayerEditDraft(source(), { points: [second!.id] });
 
     expect(pointBase(nextDraft, second!.id)).toEqual({ x: secondStart.x + 20, y: secondStart.y });
   });

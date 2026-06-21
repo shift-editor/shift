@@ -1,7 +1,7 @@
 import type { Command, CommandContext } from "../core/Command";
 import type { PointId, ContourId } from "@shift/types";
 import { Point } from "@shift/glyph-state";
-import type { GlyphSource } from "@/lib/model/Glyph";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { ClipboardContent, PasteOptions } from "../../clipboard/types";
 import { Vec2 } from "@shift/geo";
 
@@ -20,7 +20,7 @@ export class CutCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.removePoints(this.#pointIds);
+    ctx.layer.removePoints(this.#pointIds);
   }
 }
 
@@ -43,7 +43,7 @@ export class PasteCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    const result = pasteContours(ctx.source, this.#content, this.#options);
+    const result = pasteContours(ctx.layer, this.#content, this.#options);
     this.#createdPointIds = result.createdPointIds;
     this.#createdContourIds = result.createdContourIds;
   }
@@ -58,7 +58,7 @@ export class PasteCommand implements Command<void> {
 }
 
 function pasteContours(
-  source: GlyphSource,
+  layer: GlyphLayer,
   content: ClipboardContent,
   options: PasteOptions,
 ): { createdPointIds: PointId[]; createdContourIds: ContourId[] } {
@@ -66,12 +66,12 @@ function pasteContours(
   const createdContourIds: ContourId[] = [];
 
   for (const contour of content.contours) {
-    const contourId = source.addContour();
+    const contourId = layer.addContour();
     createdContourIds.push(contourId);
 
     for (const point of contour.points) {
       const newPos = Vec2.add(point, options.offset);
-      const pointId = source.addPoint(
+      const pointId = layer.addPoint(
         contourId,
         Point.create(newPos, point.pointType, point.smooth),
       );
@@ -79,7 +79,7 @@ function pasteContours(
     }
 
     if (contour.closed) {
-      source.closeContour(contourId);
+      layer.closeContour(contourId);
     }
   }
 

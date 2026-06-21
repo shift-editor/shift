@@ -5,6 +5,10 @@ export function emptyAxisLocation(): AxisLocation {
   return new Map();
 }
 
+export function cloneAxisLocation(location: AxisLocation): AxisLocation {
+  return new Map(location);
+}
+
 export function axisLocationFromRecord(values: Readonly<Record<string, number>>): AxisLocation {
   return new Map(Object.entries(values).map(([axisId, value]) => [asAxisId(axisId), value]));
 }

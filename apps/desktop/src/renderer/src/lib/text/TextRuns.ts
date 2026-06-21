@@ -65,9 +65,9 @@ export class TextRuns {
   }
 
   /**
-   * Return the implicit one-glyph run used by direct glyph editing.
+   * Return the implicit one-glyph run used by legacy text-glyph focus.
    *
-   *   openGlyph(S)
+   *   editorRun.setSingleGlyph(S)
    *      │
    *      ▼
    *   editorRun = [S(id=s1)]

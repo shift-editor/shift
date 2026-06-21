@@ -16,7 +16,7 @@ describe("ToggleSmoothCommand", () => {
     await editor.settle();
   });
 
-  const source = () => editor.activeGlyphSource!;
+  const source = () => editor.editingGlyphLayer!;
 
   it("toggles a corner point smooth", async () => {
     const pointId = source().allPoints[0]!.id;

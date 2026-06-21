@@ -14,10 +14,10 @@ import {
 } from "@shift/rules";
 import type {
   GlyphInstanceGeometry,
-  SourcePositionTarget,
-  SourcePositions,
+  GlyphLayerPositionTarget,
+  GlyphLayerPositions,
 } from "@/lib/model/Glyph";
-import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
+import type { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
@@ -89,13 +89,13 @@ class TranslateTarget {
   readonly pointIds: readonly PointId[];
   readonly anchorIds: readonly AnchorId[];
   readonly selection: readonly Selectable[] | null;
-  readonly dragAnchor: SourcePositionTarget | null;
+  readonly dragAnchor: GlyphLayerPositionTarget | null;
 
   private constructor(
     pointIds: readonly PointId[],
     anchorIds: readonly AnchorId[],
     selection: readonly Selectable[] | null,
-    dragAnchor: SourcePositionTarget | null,
+    dragAnchor: GlyphLayerPositionTarget | null,
   ) {
     this.pointIds = [...pointIds];
     this.anchorIds = [...anchorIds];
@@ -105,7 +105,7 @@ class TranslateTarget {
 
   static fromDragStart(editor: Editor, event: ToolEventOf<"dragStart">): TranslateTarget | null {
     const instance = editor.glyphInstance;
-    if (!instance?.edit) return null;
+    if (!instance?.layer) return null;
 
     const geometry = instance.geometry;
     const pos = event.coords.glyphLocal;
@@ -241,7 +241,7 @@ class TranslateTarget {
 
   static fromSelection(
     editor: Editor,
-    dragAnchor: SourcePositionTarget | null = null,
+    dragAnchor: GlyphLayerPositionTarget | null = null,
   ): TranslateTarget {
     return new TranslateTarget(
       [...editor.selection.pointIds],
@@ -265,7 +265,7 @@ function translatingState(startPos: Point2D): TranslatingState {
 
 class TranslateDrag {
   readonly #target: TranslateTarget;
-  readonly #draft: SourceEditDraft;
+  readonly #draft: GlyphLayerEditDraft;
   readonly #constraint: ConstrainedTranslate | null;
   readonly #pointerOffset: Point2D;
   readonly startPos: Point2D;
@@ -274,7 +274,7 @@ class TranslateDrag {
     this.#target = target;
     const instance = editor.glyphInstance;
 
-    this.#draft = editor.beginSourceEditDraft({
+    this.#draft = editor.beginGlyphLayerEditDraft({
       points: target.pointIds,
       anchors: target.anchorIds,
     });
@@ -328,8 +328,12 @@ class ConstrainedTranslate {
     return new ConstrainedTranslate(rules);
   }
 
-  positionsFor(base: SourcePositions, target: TranslateTarget, delta: Point2D): SourcePositions {
-    const updates: SourcePositions[number][] = [];
+  positionsFor(
+    base: GlyphLayerPositions,
+    target: TranslateTarget,
+    delta: Point2D,
+  ): GlyphLayerPositions {
+    const updates: GlyphLayerPositions[number][] = [];
     const patch = constrainPreparedDrag(this.#rules, delta, {
       includeMatchedRules: false,
     });

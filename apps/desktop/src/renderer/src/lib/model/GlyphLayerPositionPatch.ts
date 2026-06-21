@@ -9,22 +9,22 @@ export type BridgePositionPatchPayload = readonly [
 ];
 
 /**
- * Sparse authored-source position patch.
+ * Sparse authored-layer position patch.
  *
- * `GlyphPositions` is the domain shape used by tools, commands, and source
- * editing. `SourcePositionPatch` is the model/bridge boundary: it keeps bridge
+ * `GlyphPositions` is the domain shape used by tools, commands, and layer
+ * editing. `GlyphLayerPositionPatch` is the model/bridge boundary: it keeps bridge
  * transport encoding out of geometry and tools, so the N-API payload can change
  * without changing editor behavior code.
  */
-export class SourcePositionPatch {
+export class GlyphLayerPositionPatch {
   readonly positions: GlyphPositions;
 
   private constructor(positions: GlyphPositions) {
     this.positions = [...positions];
   }
 
-  static from(positions: GlyphPositions): SourcePositionPatch {
-    return new SourcePositionPatch(positions);
+  static from(positions: GlyphPositions): GlyphLayerPositionPatch {
+    return new GlyphLayerPositionPatch(positions);
   }
 
   get isEmpty(): boolean {

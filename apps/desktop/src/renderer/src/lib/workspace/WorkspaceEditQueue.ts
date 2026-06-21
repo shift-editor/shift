@@ -1,14 +1,14 @@
 import type { AppliedChange, FontIntent, GlyphState, LayerId } from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import { signal, type Signal } from "@/lib/signals/signal";
-import type { GlyphSourceState } from "@/lib/model/GlyphSourceState";
+import type { GlyphLayerState } from "@/lib/model/GlyphLayerState";
 import type { WorkspaceSession } from "./WorkspaceSession";
 
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
 /** Where one layer's replace-grade echoes fold; registered per open session. */
 type FoldTarget = {
-  state: GlyphSourceState;
+  state: GlyphLayerState;
 };
 
 /**
@@ -21,7 +21,7 @@ type FoldTarget = {
  * values); the queue contains zero change-application or save semantics.
  * Undo, redo, and save are serialized through the same queue so none can
  * overtake a pending flush. Tools never hold the queue — they speak domain
- * verbs on `GlyphSource`.
+ * verbs on `GlyphLayer`.
  *
  * Save ownership lives in the utility. The renderer issues save as one more op
  * on this queue (see {@link save}); because it shares the FIFO edit lane, the

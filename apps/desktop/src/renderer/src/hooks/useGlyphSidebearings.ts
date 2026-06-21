@@ -6,15 +6,15 @@ const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
 
 export interface GlyphSidebearingsState {
   readonly sidebearings: GlyphSidebearings;
-  readonly editable: boolean;
+  readonly hasLayer: boolean;
 }
 
 /**
  * Current glyph sidebearings (LSB/RSB), live-updating.
  *
  * Subscribes to the displayed glyph instance. Interpolated instances still
- * expose resolved values, but report `editable: false` so inputs can display
- * them without mutating a missing authored source.
+ * expose resolved values, but report `hasLayer: false` so inputs can display
+ * them without mutating a missing authored glyph layer.
  *
  * @returns Current values and whether the displayed instance can be edited.
  */
@@ -25,6 +25,6 @@ export function useGlyphSidebearings(): GlyphSidebearingsState {
   useSignalTrigger(instance?.sidebearingsCell, { schedule: "frame" });
   return {
     sidebearings: instance?.sidebearings ?? EMPTY_SIDEBEARINGS,
-    editable: instance?.editable ?? false,
+    hasLayer: instance?.hasLayer ?? false,
   };
 }

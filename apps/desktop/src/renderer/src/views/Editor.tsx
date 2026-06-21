@@ -7,16 +7,16 @@ import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { GlyphFinder } from "@/components/editor/GlyphFinder";
-import { EditorView } from "@/components/editor/EditorView";
+import { Canvas } from "@/components/editor/Canvas";
 import { getEditor } from "@/store/appStore";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
 
-import type { GlyphName, Unicode } from "@shift/types";
+import type { Unicode } from "@shift/types";
 
 export const Editor = () => {
-  const { glyphName } = useParams();
+  const { glyphId } = useParams();
   const editor = getEditor();
 
   const { activeZone } = useFocusZone();
@@ -40,7 +40,9 @@ export const Editor = () => {
       if (editor.toolManager.activeToolId === "text") {
         editor.insertTextCodepoint(codepoint);
       } else {
-        navigate(`/editor/${encodeURIComponent(editor.font.nameForUnicode(codepoint as Unicode))}`);
+        const name = editor.font.nameForUnicode(codepoint as Unicode);
+        const record = name ? editor.font.recordForName(name) : null;
+        if (record) navigate(`/editor/${encodeURIComponent(record.id)}`);
       }
       editor.closeGlyphFinder();
     },
@@ -72,14 +74,14 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [glyphName, activeZone]);
+  }, [glyphId, activeZone]);
 
   useEffect(() => {
     const editor = getEditor();
     editor.setZone(activeZone);
   }, [activeZone]);
 
-  if (!glyphName) return null;
+  if (!glyphId) return null;
 
   return (
     <div className="flex h-screen w-screen min-w-[600px] flex-col bg-white">
@@ -105,7 +107,7 @@ export const Editor = () => {
         <ResizableHandle inset="start" />
         <ResizablePanel id="canvas" order={2} minSize={30}>
           <ZoneContainer zone="canvas" className="h-full">
-            <EditorView glyphName={glyphName as GlyphName} />
+            <Canvas />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle inset="end" />

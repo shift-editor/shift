@@ -1,23 +1,23 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import { Transform } from "@/lib/transform/Transform";
-import type { SourcePosition, SourcePositions, SourcePositionTarget } from "./Glyph";
+import type { GlyphLayerPosition, GlyphLayerPositions, GlyphLayerPositionTarget } from "./Glyph";
 
-export interface SourcePositionSubject {
+export interface GlyphLayerPositionSubject {
   readonly points?: readonly PointId[];
   readonly anchors?: readonly AnchorId[];
 }
 
-export interface SourcePositionLookup {
-  positionsFor(targets: readonly SourcePositionTarget[]): SourcePosition[];
+export interface GlyphLayerPositionLookup {
+  positionsFor(targets: readonly GlyphLayerPositionTarget[]): GlyphLayerPosition[];
 }
 
-export class SourcePositionList {
-  readonly positions: SourcePositions;
+export class GlyphLayerPositionList {
+  readonly positions: GlyphLayerPositions;
   readonly #pointIds: ReadonlySet<PointId>;
   readonly #anchorIds: ReadonlySet<AnchorId>;
 
-  private constructor(positions: SourcePositions) {
+  private constructor(positions: GlyphLayerPositions) {
     this.positions = [...positions];
     const pointIds = new Set<PointId>();
     const anchorIds = new Set<AnchorId>();
@@ -38,30 +38,33 @@ export class SourcePositionList {
   }
 
   /** @knipclassignore — convenience constructor for draft callers. */
-  static empty(): SourcePositionList {
-    return new SourcePositionList([]);
+  static empty(): GlyphLayerPositionList {
+    return new GlyphLayerPositionList([]);
   }
 
-  static fromPositions(positions: SourcePositions): SourcePositionList {
-    return new SourcePositionList(positions);
+  static fromPositions(positions: GlyphLayerPositions): GlyphLayerPositionList {
+    return new GlyphLayerPositionList(positions);
   }
 
   static fromSubject(
-    source: SourcePositionLookup,
-    subject: SourcePositionSubject,
-  ): SourcePositionList {
-    return SourcePositionList.fromTargets(source, SourcePositionList.targetsFromSubject(subject));
+    source: GlyphLayerPositionLookup,
+    subject: GlyphLayerPositionSubject,
+  ): GlyphLayerPositionList {
+    return GlyphLayerPositionList.fromTargets(
+      source,
+      GlyphLayerPositionList.targetsFromSubject(subject),
+    );
   }
 
   static fromTargets(
-    source: SourcePositionLookup,
-    targets: readonly SourcePositionTarget[],
-  ): SourcePositionList {
-    return new SourcePositionList(source.positionsFor(targets));
+    source: GlyphLayerPositionLookup,
+    targets: readonly GlyphLayerPositionTarget[],
+  ): GlyphLayerPositionList {
+    return new GlyphLayerPositionList(source.positionsFor(targets));
   }
 
-  static targetsFromSubject(subject: SourcePositionSubject): SourcePositionTarget[] {
-    const targets: SourcePositionTarget[] = [];
+  static targetsFromSubject(subject: GlyphLayerPositionSubject): GlyphLayerPositionTarget[] {
+    const targets: GlyphLayerPositionTarget[] = [];
     if (subject.points) {
       targets.push(...subject.points.map((id) => ({ kind: "point" as const, id })));
     }
@@ -73,7 +76,7 @@ export class SourcePositionList {
   }
 
   /** @knipclassignore — inverse projection for command/draft callers. */
-  get targets(): readonly SourcePositionTarget[] {
+  get targets(): readonly GlyphLayerPositionTarget[] {
     return this.positions.map((position) => {
       switch (position.kind) {
         case "point":
@@ -84,8 +87,11 @@ export class SourcePositionList {
     });
   }
 
-  includeFrom(source: SourcePositionLookup, positions: SourcePositions): SourcePositionList {
-    let missing: SourcePositionTarget[] | null = null;
+  includeFrom(
+    source: GlyphLayerPositionLookup,
+    positions: GlyphLayerPositions,
+  ): GlyphLayerPositionList {
+    let missing: GlyphLayerPositionTarget[] | null = null;
 
     for (const position of positions) {
       const known =
@@ -100,14 +106,14 @@ export class SourcePositionList {
 
     if (!missing) return this;
 
-    return new SourcePositionList([
+    return new GlyphLayerPositionList([
       ...this.positions,
-      ...SourcePositionList.fromTargets(source, missing).positions,
+      ...GlyphLayerPositionList.fromTargets(source, missing).positions,
     ]);
   }
 
-  translate(delta: Point2D): SourcePositionList {
-    return new SourcePositionList(
+  translate(delta: Point2D): GlyphLayerPositionList {
+    return new GlyphLayerPositionList(
       this.positions.map((position) => {
         const next = Vec2.add(position, delta);
         return { ...position, x: next.x, y: next.y };
@@ -115,11 +121,11 @@ export class SourcePositionList {
     );
   }
 
-  rotate(angle: number, origin: Point2D): SourcePositionList {
-    return new SourcePositionList(Transform.rotatePoints(this.positions, angle, origin));
+  rotate(angle: number, origin: Point2D): GlyphLayerPositionList {
+    return new GlyphLayerPositionList(Transform.rotatePoints(this.positions, angle, origin));
   }
 
-  scale(sx: number, sy: number, origin: Point2D): SourcePositionList {
-    return new SourcePositionList(Transform.scalePoints(this.positions, sx, sy, origin));
+  scale(sx: number, sy: number, origin: Point2D): GlyphLayerPositionList {
+    return new GlyphLayerPositionList(Transform.scalePoints(this.positions, sx, sy, origin));
   }
 }

@@ -6,11 +6,10 @@ import type { AxisLocation } from "@/types/variation";
 import type { DebugOverlays } from "@/types/uiState";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type { Font } from "../model/Font";
-import type { Glyph, GlyphInstance, GlyphSource } from "../model/Glyph";
+import type { Glyph, GlyphInstance, GlyphLayer } from "../model/Glyph";
 import type { FocusedGlyph } from "../text/TextRun";
 import type { GlyphAnchor } from "../text/layout";
 import type { TextRuns } from "../text/TextRuns";
-import { emptyAxisLocation } from "../variation/location";
 import {
   computed,
   signal,
@@ -35,7 +34,7 @@ const DEFAULT_DEBUG_OVERLAYS: DebugOverlays = {
 export interface GlyphDisplayState {
   readonly proofMode: boolean;
   readonly handlesVisible: boolean;
-  readonly editableGlyphVisible: boolean;
+  readonly focusedGlyphVisible: boolean;
 }
 
 export type EditorGesturePhase = "idle" | "pressed" | "dragging";
@@ -105,7 +104,7 @@ export class GlyphDisplay {
         return {
           proofMode: this.proofModeCell.value,
           handlesVisible: this.handlesVisibleCell.value,
-          editableGlyphVisible: !hasTextActivity || focusedGlyph?.anchor.runId === run.id,
+          focusedGlyphVisible: !hasTextActivity || focusedGlyph?.anchor.runId === run.id,
         };
       },
       { name: "editor.glyph.display" },
@@ -213,120 +212,93 @@ export class OpenGlyphState {
   }
 }
 
-/**
- * Stores the current designspace coordinate.
- *
- * The location drives preview geometry and display outlines. Source selection
- * policy is applied by `Editor.setDesignLocation`.
- */
-export class DesignLocationState {
-  /** Reactive designspace location used by preview geometry and outlines. */
-  readonly location: WritableSignal<AxisLocation>;
-
-  constructor() {
-    this.location = signal<AxisLocation>(emptyAxisLocation(), {
-      name: "editor.glyph.design.location",
-    });
-  }
-
-  /**
-   * Set the raw designspace coordinate.
-   *
-   * This updates `location` only. Use `Editor.setDesignLocation` when the edit
-   * source should be synchronized with the new coordinate.
-   */
-  set(location: AxisLocation): void {
-    this.location.set(location);
-  }
-}
-
-export interface EditTarget {
+export interface GlyphLayerResolution {
   readonly sourceId: SourceId;
   readonly layerId: LayerId | null;
 }
 
 /**
- * Resolves the authored glyph source selected for editing.
+ * Resolves the authored glyph layer for the current designspace source.
  *
- * `sourceId === null` means the edit target follows the exact source at the
+ * `selectedSourceId === null` means the source follows the exact source at the
  * current design location when one exists.
  */
-export class EditTargetState {
-  /** Explicit authored source selected for editing, or `null` for location fallback. */
-  readonly sourceId: WritableSignal<SourceId | null>;
+export class GlyphLayerEditingState {
+  /** Explicit designspace source selected for layer editing, or `null` for location fallback. */
+  readonly selectedSourceId: WritableSignal<SourceId | null>;
 
-  /** Authored font source selected by `sourceId` or by exact design-location fallback. */
-  readonly source: Signal<Source | null>;
+  /** Font source selected for layer editing, or by exact design-location fallback. */
+  readonly selectedSource: Signal<Source | null>;
 
   /** Selected source with the current glyph's authored layer when one exists. */
-  readonly target: Signal<EditTarget | null>;
+  readonly layer: Signal<GlyphLayerResolution | null>;
 
-  /** Editable glyph data for the selected authored source. */
-  readonly glyphSource: Signal<GlyphSource | null>;
+  /** Authored glyph layer data for the selected source. */
+  readonly glyphLayer: Signal<GlyphLayer | null>;
 
-  constructor(font: Font, open: OpenGlyphState, design: DesignLocationState) {
-    this.sourceId = signal<SourceId | null>(null, {
-      name: "editor.glyph.edit.sourceId",
+  constructor(font: Font, open: OpenGlyphState, location: Signal<AxisLocation>) {
+    this.selectedSourceId = signal<SourceId | null>(null, {
+      name: "editor.glyph.layerEditing.sourceId",
     });
 
-    this.source = computed(
+    this.selectedSource = computed(
       () => {
-        const sourceId = this.sourceId.value;
+        const sourceId = this.selectedSourceId.value;
         if (sourceId) return font.source(sourceId);
 
-        return font.sourceAt(design.location.value);
+        return font.sourceAt(location.value);
       },
-      { name: "editor.glyph.edit.source" },
+      { name: "editor.glyph.layerEditing.source" },
     );
 
-    this.target = computed(
+    this.layer = computed(
       () => {
-        const source = this.source.value;
+        const source = this.selectedSource.value;
         if (!source) return null;
 
         const glyph = open.glyph.value;
         if (!glyph) return { sourceId: source.id, layerId: null };
 
         const record = font.recordForName(glyph.handle.name);
-        const layerId = record ? (font.glyphLayer(record.id, source.id)?.id ?? null) : null;
+        const layerId = record ? (font.glyphLayerRecord(record.id, source.id)?.id ?? null) : null;
         return { sourceId: source.id, layerId };
       },
-      { name: "editor.glyph.edit.target" },
+      { name: "editor.glyph.layerEditing.layer" },
     );
 
-    this.glyphSource = computed(
+    this.glyphLayer = computed(
       () => {
         const glyph = open.glyph.value;
         if (!glyph) return null;
 
-        const source = this.source.value;
+        const source = this.selectedSource.value;
         if (!source) return null;
-        if (this.target.value?.layerId === null) return null;
+        if (this.layer.value?.layerId === null) return null;
 
-        return font.glyphSource(glyph.handle, source);
+        return font.glyphLayer(glyph.handle, source);
       },
-      { name: "editor.glyph.edit.glyphSource" },
+      { name: "editor.glyph.layerEditing.glyphLayer" },
     );
   }
 
   /**
-   * Select an explicit authored source as the edit target.
+   * Select an explicit designspace source for layer editing.
    *
-   * Resolution is reactive: `source` and `glyphSource` update after this ID is
+   * Resolution is reactive: `source` and `glyphLayer` update after this id is
    * set, and either may be `null` if the source or open glyph is unavailable.
    */
-  selectSource(sourceId: SourceId): void {
-    this.sourceId.set(sourceId);
+  selectLayerSource(sourceId: SourceId): void {
+    this.selectedSourceId.set(sourceId);
   }
 
   /**
    * Clear explicit source selection.
    *
    * After this call, `source` resolves from the exact source at the current
-   * design location, and `glyphSource` follows that source when a glyph is open.
+   * design location, and `glyphLayer` follows that source when a glyph is open.
    */
-  selectDefaultSource(): void {
-    this.sourceId.set(null);
+  followDesignLocation(): void {
+    this.selectedSourceId.set(null);
   }
 }
 
@@ -335,19 +307,19 @@ export class EditTargetState {
  *
  * The instance is the glyph resolved at the current design location. Query,
  * render, and edit callers choose a surface from that one instance instead of
- * choosing between source geometry, interpolated geometry, and outline models.
+ * choosing between layer geometry, interpolated geometry, and outline models.
  */
 export class PreviewGlyphState {
   /** Glyph resolved at the current design location. */
   readonly instance: Signal<GlyphInstance | null>;
 
-  constructor(open: OpenGlyphState, design: DesignLocationState) {
+  constructor(open: OpenGlyphState, location: Signal<AxisLocation>) {
     this.instance = computed(
       () => {
         const glyph = open.glyph.value;
         if (!glyph) return null;
 
-        return glyph.instance(design.location);
+        return glyph.instance(location);
       },
       { name: "editor.glyph.preview.instance" },
     );
@@ -356,20 +328,18 @@ export class PreviewGlyphState {
 /**
  * Groups glyph-session state by ownership.
  *
- * `edit` owns authored source selection. `preview` owns the displayed glyph
- * model at the current design location.
+ * `layerEditing` owns authored glyph layer selection. `preview` owns the
+ * displayed glyph model at the current design location.
  */
 export class EditorGlyphState {
   readonly open: OpenGlyphState;
-  readonly design: DesignLocationState;
-  readonly edit: EditTargetState;
+  readonly layerEditing: GlyphLayerEditingState;
   readonly preview: PreviewGlyphState;
 
-  constructor(font: Font) {
+  constructor(font: Font, location: Signal<AxisLocation>) {
     this.open = new OpenGlyphState();
-    this.design = new DesignLocationState();
-    this.edit = new EditTargetState(font, this.open, this.design);
-    this.preview = new PreviewGlyphState(this.open, this.design);
+    this.layerEditing = new GlyphLayerEditingState(font, this.open, location);
+    this.preview = new PreviewGlyphState(this.open, location);
   }
 }
 

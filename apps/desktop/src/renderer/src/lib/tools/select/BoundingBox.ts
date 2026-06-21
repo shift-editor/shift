@@ -113,7 +113,7 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (state.type === "brushing") return null;
 
     const display = this.#editor.glyphDisplayCell.value;
-    if (!display.handlesVisible || display.proofMode || !display.editableGlyphVisible) return null;
+    if (!display.handlesVisible || display.proofMode || !display.focusedGlyphVisible) return null;
 
     const selection = this.#editor.selection.stateCell.value;
     const selectedCount =

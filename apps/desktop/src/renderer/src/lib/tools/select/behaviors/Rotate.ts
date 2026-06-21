@@ -3,11 +3,11 @@ import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
+import type { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
 import type { Select } from "../Select";
 
 export class Rotate implements SelectBehavior {
-  #draft: SourceEditDraft | null = null;
+  #draft: GlyphLayerEditDraft | null = null;
   #origin: Point2D | null = null;
 
   onDragStart(
@@ -104,7 +104,7 @@ export class Rotate implements SelectBehavior {
     tool: Select,
   ): SelectState | null {
     const instance = editor.glyphInstance;
-    if (!instance?.edit) return null;
+    if (!instance?.layer) return null;
 
     const bbHit = tool.boundingBox.hit(event.coords);
     if (!bbHit) return null;
@@ -119,7 +119,7 @@ export class Rotate implements SelectBehavior {
 
     const startAngle = Vec2.angleTo(center, localPoint);
 
-    this.#draft = editor.beginSourceEditDraft({
+    this.#draft = editor.beginGlyphLayerEditDraft({
       points: [...editor.selection.pointIds],
       anchors: [...editor.selection.anchorIds],
     });

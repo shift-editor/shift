@@ -13,7 +13,7 @@ export class DrawRectangleCommand implements Command<ContourId> {
   }
 
   execute(ctx: CommandContext): ContourId {
-    const contourId = ctx.source.addContour();
+    const contourId = ctx.layer.addContour();
 
     const origin = Vec2.create(this.#rect.x, this.#rect.y);
     const topLeft = origin;
@@ -21,12 +21,12 @@ export class DrawRectangleCommand implements Command<ContourId> {
     const bottomRight = Vec2.add(origin, Vec2.create(this.#rect.width, this.#rect.height));
     const bottomLeft = Vec2.add(origin, Vec2.create(0, this.#rect.height));
 
-    ctx.source.addPoint(contourId, Point.onCurve(topLeft));
-    ctx.source.addPoint(contourId, Point.onCurve(topRight));
-    ctx.source.addPoint(contourId, Point.onCurve(bottomRight));
-    ctx.source.addPoint(contourId, Point.onCurve(bottomLeft));
+    ctx.layer.addPoint(contourId, Point.onCurve(topLeft));
+    ctx.layer.addPoint(contourId, Point.onCurve(topRight));
+    ctx.layer.addPoint(contourId, Point.onCurve(bottomRight));
+    ctx.layer.addPoint(contourId, Point.onCurve(bottomLeft));
 
-    ctx.source.closeContour(contourId);
+    ctx.layer.closeContour(contourId);
 
     return contourId;
   }

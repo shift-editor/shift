@@ -39,7 +39,7 @@ function createBoundingBox(rect: Rect2D) {
     glyphDisplayCell: signal({
       proofMode: false,
       handlesVisible: true,
-      editableGlyphVisible: true,
+      focusedGlyphVisible: true,
     }),
     fromGlyphLocal: project,
     screenToUpmDistance: (pixels: number) => pixels,

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AnchorId, ContourId, GlyphState, LayerId, PointId } from "@shift/types";
-import { GlyphSourceState } from "./GlyphSourceState";
+import { GlyphLayerState } from "./GlyphLayerState";
 
 const contourId = (index: number): ContourId => `contour-${index}` as ContourId;
 const pointId = (index: number): PointId => `point-${index}` as PointId;
 const anchorId = (index: number): AnchorId => `anchor-${index}` as AnchorId;
 const layerId = (index: number): LayerId => `layer-${index}` as LayerId;
 
-function sourceState(): GlyphState {
+function layerState(): GlyphState {
   return {
     layerId: layerId(1),
     structure: {
@@ -28,7 +28,7 @@ function sourceState(): GlyphState {
   };
 }
 
-function pointPosition(state: GlyphSourceState, pointId: PointId) {
+function pointPosition(state: GlyphLayerState, pointId: PointId) {
   const position = state.positionsFor([{ kind: "point", id: pointId }])[0];
   const point = state.geometry.point(pointId);
 
@@ -38,9 +38,9 @@ function pointPosition(state: GlyphSourceState, pointId: PointId) {
   };
 }
 
-describe("glyph source geometry follows coordinate patches", () => {
-  it("keeps source positions and geometry lookup in sync after a position patch", () => {
-    const state = new GlyphSourceState(sourceState());
+describe("glyph layer geometry follows coordinate patches", () => {
+  it("keeps layer positions and geometry lookup in sync after a position patch", () => {
+    const state = new GlyphLayerState(layerState());
 
     state.patchPositions([{ kind: "point", id: pointId(2), x: 75, y: 125 }]);
 
@@ -51,7 +51,7 @@ describe("glyph source geometry follows coordinate patches", () => {
   });
 
   it("invalidates geometry that was read before a position patch", () => {
-    const state = new GlyphSourceState(sourceState());
+    const state = new GlyphLayerState(layerState());
 
     expect(state.geometry.point(pointId(2))).toMatchObject({ x: 30, y: 40 });
 
@@ -64,7 +64,7 @@ describe("glyph source geometry follows coordinate patches", () => {
   });
 
   it("keeps contour points and all-points geometry fresh after a position patch", () => {
-    const state = new GlyphSourceState(sourceState());
+    const state = new GlyphLayerState(layerState());
 
     expect(state.geometry.contours[0]?.points[1]).toMatchObject({
       id: pointId(2),
@@ -86,7 +86,7 @@ describe("glyph source geometry follows coordinate patches", () => {
   });
 
   it("keeps anchor positions and geometry lookup in sync after an anchor patch", () => {
-    const state = new GlyphSourceState(sourceState());
+    const state = new GlyphLayerState(layerState());
 
     state.patchPositions([{ kind: "anchor", id: anchorId(1), x: 330, y: 440 }]);
 
@@ -101,7 +101,7 @@ describe("glyph source geometry follows coordinate patches", () => {
   });
 
   it("updates source metrics derived from point coordinates", () => {
-    const state = new GlyphSourceState(sourceState());
+    const state = new GlyphLayerState(layerState());
 
     state.patchPositions([
       { kind: "point", id: pointId(1), x: -25, y: 20 },
@@ -116,7 +116,7 @@ describe("glyph source geometry follows coordinate patches", () => {
   });
 
   it("serializes patched coordinates into state values", () => {
-    const state = new GlyphSourceState(sourceState());
+    const state = new GlyphLayerState(layerState());
 
     state.patchPositions([
       { kind: "point", id: pointId(2), x: 75, y: 125 },
@@ -127,7 +127,7 @@ describe("glyph source geometry follows coordinate patches", () => {
   });
 
   it("keeps the xAdvance signal fresh after replacing packed values", () => {
-    const state = new GlyphSourceState(sourceState());
+    const state = new GlyphLayerState(layerState());
     const xAdvance = state.xAdvanceCell;
     const sidebearings = state.sidebearingsCell;
 

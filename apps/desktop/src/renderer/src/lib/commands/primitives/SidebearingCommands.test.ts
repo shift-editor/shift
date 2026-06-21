@@ -17,10 +17,10 @@ describe("sidebearing commands through the workspace", () => {
     editor.selectTool("pen");
     editor.clickGlyphLocal(100, 200);
     await editor.settle();
-    initialAdvance = editor.activeGlyphSource!.xAdvance;
+    initialAdvance = editor.editingGlyphLayer!.xAdvance;
   });
 
-  const source = () => editor.activeGlyphSource!;
+  const source = () => editor.editingGlyphLayer!;
 
   describe("SetXAdvanceCommand", () => {
     it("sets the advance width", async () => {

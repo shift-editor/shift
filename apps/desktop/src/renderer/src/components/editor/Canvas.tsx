@@ -1,8 +1,8 @@
-import { FC, useEffect, useRef, useState } from "react";
+import { FC, useEffect, useRef } from "react";
+import { useParams } from "react-router-dom";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
-import { effect } from "@/lib/signals/signal";
 import { useSignalState } from "@/lib/signals";
 import { getEditor } from "@/store/appStore";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
@@ -11,61 +11,35 @@ import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
-import type { GlyphName } from "@shift/types";
+import { asGlyphId } from "@shift/types";
 
-interface EditorViewProps {
-  glyphName: GlyphName;
-}
-
-export const EditorView: FC<EditorViewProps> = ({ glyphName }) => {
+export const Canvas: FC = () => {
   const editor = getEditor();
   const debug = useDebugSafe();
+  const { glyphId: glyphIdParam } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
-  const fontLoaded = useSignalState(editor.font.$loaded);
 
-  const [cursorStyle, setCursorStyle] = useState(() => editor.cursor);
-
-  useEffect(() => {
-    const fx = effect(() => {
-      setCursorStyle(editor.cursorCell.value);
-    });
-    return () => fx.dispose();
-  }, [editor]);
+  const cursorStyle = useSignalState(editor.cursorCell);
 
   useEffect(() => {
-    if (!fontLoaded) return undefined;
+    if (!glyphIdParam) {
+      editor.scene.clear();
+      return;
+    }
 
-    const handle = editor.font.glyphHandleForName(glyphName);
-    if (!handle) return undefined;
+    const glyphId = asGlyphId(glyphIdParam);
+    if (!editor.font.hasGlyph(glyphId)) {
+      editor.scene.clear();
+      return;
+    }
 
-    let cancelled = false;
-    const toolManager = editor.toolManager;
-
-    void (async () => {
-      const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation());
-
-      // Glyph-name-first: opening a cell that has no committed record yet
-      // creates the glyph in the workspace, then opens it.
-      const record = editor.font.recordForName(handle.name) ?? editor.createGlyph(handle.name);
-
-      // Pull replace-grade state and materialize the editable model before
-      // the session opens; folds keep it current afterwards.
-      const glyph = await editor.font.openGlyph(record.id, source);
-      if (!glyph || cancelled) return;
-
-      editor.openGlyph(handle);
-      editor.openGlyphSource(handle, source.id);
-
-      editor.updateMetricsFromFont();
-      toolManager.activate(editor.getActiveTool());
-    })();
+    const itemId = editor.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
+    editor.scene.setGeometryItems([itemId]);
 
     return () => {
-      cancelled = true;
-      toolManager.reset();
-      editor.close();
+      editor.scene.clear();
     };
-  }, [editor, fontLoaded, glyphName]);
+  }, [glyphIdParam]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -76,6 +50,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphName }) => {
     const handleWheel = (e: WheelEvent) => {
       editor.updateMousePosition(e.clientX, e.clientY);
       const screenPos = editor.getScreenMousePosition();
+
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
         const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);

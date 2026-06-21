@@ -29,34 +29,34 @@ interface PointBufferLocation {
 }
 
 /**
- * Reactive state for one authored glyph source.
+ * Reactive state for one authored glyph layer.
  *
  * The domain shape remains `GlyphStructure + Float64Array`. This class only
  * splits the packed value buffer into reactive buffers so pointer previews can
  * update a touched contour without invalidating every contour path.
  */
-export class GlyphSourceState {
+export class GlyphLayerState {
   readonly #layerId: LayerId;
   readonly #structure: WritableSignal<GlyphStructure>;
-  readonly #coordinates: WritableSignal<SourceCoordinateBuffers>;
+  readonly #coordinates: WritableSignal<LayerCoordinateBuffers>;
   readonly #xAdvance: ComputedSignal<number>;
   readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
-  readonly #coordinateBuffersChanged: ComputedSignal<SourceCoordinateBuffers>;
+  readonly #coordinateBuffersChanged: ComputedSignal<LayerCoordinateBuffers>;
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
   constructor(state: GlyphState) {
     this.#layerId = state.layerId;
     this.#structure = signal(state.structure, {
-      name: "glyphSource.structure",
+      name: "glyphLayer.structure",
     });
-    this.#coordinates = signal(SourceCoordinateBuffers.fromState(state), {
-      name: "glyphSource.coordinateBuffers",
+    this.#coordinates = signal(LayerCoordinateBuffers.fromState(state), {
+      name: "glyphLayer.coordinateBuffers",
     });
     this.#xAdvance = computed(() => this.#coordinates.value.xAdvance.value, {
-      name: "glyphSource.xAdvance",
+      name: "glyphLayer.xAdvance",
     });
     this.#sidebearings = computed(() => this.#coordinates.value.sidebearings.value, {
-      name: "glyphSource.sidebearings",
+      name: "glyphLayer.sidebearings",
     });
     this.#coordinateBuffersChanged = computed(
       () => {
@@ -64,11 +64,11 @@ export class GlyphSourceState {
         buffers.changedCell.value;
         return buffers;
       },
-      { name: "glyphSource.coordinateBuffers.changed" },
+      { name: "glyphLayer.coordinateBuffers.changed" },
     );
     this.#geometry = computed(
       () => new GlyphGeometry(this.#structure.value, this.#coordinates.value.snapshot.value),
-      { name: "glyphSource.geometry" },
+      { name: "glyphLayer.geometry" },
     );
   }
 
@@ -80,7 +80,7 @@ export class GlyphSourceState {
     return this.#structure;
   }
 
-  get coordinateBuffers(): SourceCoordinateBuffers {
+  get coordinateBuffers(): LayerCoordinateBuffers {
     return this.#coordinates.peek();
   }
 
@@ -90,7 +90,7 @@ export class GlyphSourceState {
    * @returns A signal that changes when the buffer container is replaced, not
    * when individual coordinates inside that container change.
    */
-  get coordinateBuffersCell(): Signal<SourceCoordinateBuffers> {
+  get coordinateBuffersCell(): Signal<LayerCoordinateBuffers> {
     return this.#coordinates;
   }
 
@@ -112,7 +112,7 @@ export class GlyphSourceState {
    * @returns A signal that invalidates when any contour, anchor, or component
    * coordinate changes, without packing a full glyph snapshot.
    */
-  get coordinateBuffersChangedCell(): Signal<SourceCoordinateBuffers> {
+  get coordinateBuffersChangedCell(): Signal<LayerCoordinateBuffers> {
     return this.#coordinateBuffersChanged;
   }
 
@@ -159,13 +159,13 @@ export class GlyphSourceState {
   replace(state: GlyphState): void {
     batch(() => {
       this.#structure.set(state.structure);
-      this.#coordinates.set(SourceCoordinateBuffers.fromState(state));
+      this.#coordinates.set(LayerCoordinateBuffers.fromState(state));
     });
   }
 
   replaceValues(values: Float64Array): void {
     this.#coordinates.set(
-      SourceCoordinateBuffers.fromState({
+      LayerCoordinateBuffers.fromState({
         layerId: this.#layerId,
         structure: this.#structure.peek(),
         values,
@@ -184,15 +184,15 @@ export class GlyphSourceState {
  * `snapshot` repacks the buffers into the bridge/geometry `Float64Array`
  * format, but only after one of the underlying buffers changes.
  */
-export class SourceCoordinateBuffers {
+export class LayerCoordinateBuffers {
   readonly xAdvance: WritableSignal<number>;
 
-  readonly contours: readonly SourceContourCoordinates[];
+  readonly contours: readonly LayerContourCoordinates[];
   readonly anchors: WritableSignal<Float64Array>;
   readonly components: readonly SourceComponentTransform[];
 
   readonly snapshot: ComputedSignal<Float64Array>;
-  readonly changedCell: ComputedSignal<SourceCoordinateBuffers>;
+  readonly changedCell: ComputedSignal<LayerCoordinateBuffers>;
 
   readonly bounds: ComputedSignal<BoundsType | null>;
   readonly sidebearings: ComputedSignal<GlyphSidebearings>;
@@ -201,30 +201,30 @@ export class SourceCoordinateBuffers {
 
   private constructor(
     xAdvance: number,
-    contours: readonly SourceContourCoordinates[],
+    contours: readonly LayerContourCoordinates[],
     anchors: Float64Array,
     components: readonly SourceComponentTransform[],
     lookup: SourceLookupIndex,
   ) {
     this.xAdvance = signal(xAdvance, {
-      name: "glyphSource.coordinates.xAdvance",
+      name: "glyphLayer.coordinates.xAdvance",
     });
     this.contours = contours;
     this.anchors = signal(anchors, {
       equals: () => false,
-      name: "glyphSource.coordinates.anchors",
+      name: "glyphLayer.coordinates.anchors",
     });
     this.components = components;
     this.#lookup = lookup;
     this.snapshot = computed(
       () =>
-        SourceCoordinateBuffers.#snapshot(
+        LayerCoordinateBuffers.#snapshot(
           this.xAdvance.value,
           this.contours.map((contour) => contour.values.value),
           this.anchors.value,
           this.components.map((component) => component.values.value),
         ),
-      { name: "glyphSource.coordinates.snapshot" },
+      { name: "glyphLayer.coordinates.snapshot" },
     );
     this.changedCell = computed(
       () => {
@@ -232,11 +232,11 @@ export class SourceCoordinateBuffers {
         this.anchors.value;
         return this;
       },
-      { name: "glyphSource.coordinates.changed" },
+      { name: "glyphLayer.coordinates.changed" },
     );
     this.bounds = computed(
-      () => SourceCoordinateBuffers.#bounds(this.contours.map((contour) => contour.bounds.value)),
-      { name: "glyphSource.coordinates.bounds" },
+      () => LayerCoordinateBuffers.#bounds(this.contours.map((contour) => contour.bounds.value)),
+      { name: "glyphLayer.coordinates.bounds" },
     );
     this.sidebearings = computed(
       () => {
@@ -244,21 +244,21 @@ export class SourceCoordinateBuffers {
         if (!bounds) return { lsb: null, rsb: null };
         return { lsb: bounds.min.x, rsb: this.xAdvance.value - bounds.max.x };
       },
-      { name: "glyphSource.coordinates.sidebearings" },
+      { name: "glyphLayer.coordinates.sidebearings" },
     );
   }
 
-  static fromState(state: GlyphState): SourceCoordinateBuffers {
+  static fromState(state: GlyphState): LayerCoordinateBuffers {
     let cursor = 0;
     const xAdvance = state.values[cursor++] ?? 0;
-    const contours: SourceContourCoordinates[] = [];
+    const contours: LayerContourCoordinates[] = [];
     const lookup = SourceLookupIndex.fromStructure(state.structure);
 
     for (let contourIndex = 0; contourIndex < state.structure.contours.length; contourIndex++) {
       const contour = state.structure.contours[contourIndex];
       const length = contour.points.length * 2;
       const values = state.values.slice(cursor, cursor + length);
-      contours.push(new SourceContourCoordinates(values, contourIndex));
+      contours.push(new LayerContourCoordinates(values, contourIndex));
       cursor += length;
     }
 
@@ -273,7 +273,7 @@ export class SourceCoordinateBuffers {
       return new SourceComponentTransform(values, componentIndex);
     });
 
-    return new SourceCoordinateBuffers(xAdvance, contours, anchors, components, lookup);
+    return new LayerCoordinateBuffers(xAdvance, contours, anchors, components, lookup);
   }
 
   positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
@@ -445,17 +445,17 @@ class SourceLookupIndex {
   }
 }
 
-export class SourceContourCoordinates {
+export class LayerContourCoordinates {
   readonly values: WritableSignal<Float64Array>;
   readonly bounds: ComputedSignal<BoundsType | null>;
 
   constructor(values: Float64Array, contourIndex: number) {
     this.values = signal(values, {
       equals: () => false,
-      name: `glyphSource.contour[${contourIndex}].coordinates`,
+      name: `glyphLayer.contour[${contourIndex}].coordinates`,
     });
-    this.bounds = computed(() => SourceContourCoordinates.#bounds(this.values.value), {
-      name: `glyphSource.contour[${contourIndex}].bounds`,
+    this.bounds = computed(() => LayerContourCoordinates.#bounds(this.values.value), {
+      name: `glyphLayer.contour[${contourIndex}].bounds`,
     });
   }
 
@@ -504,7 +504,7 @@ export class SourceComponentTransform {
 
   constructor(values: Float64Array, componentIndex: number) {
     this.values = signal(values, {
-      name: `glyphSource.component[${componentIndex}].transformValues`,
+      name: `glyphLayer.component[${componentIndex}].transformValues`,
     });
     this.matrix = computed(
       () =>
@@ -519,7 +519,7 @@ export class SourceComponentTransform {
           tCenterX: this.values.value[7] ?? 0,
           tCenterY: this.values.value[8] ?? 0,
         }),
-      { name: `glyphSource.component[${componentIndex}].matrix` },
+      { name: `glyphLayer.component[${componentIndex}].matrix` },
     );
   }
 }

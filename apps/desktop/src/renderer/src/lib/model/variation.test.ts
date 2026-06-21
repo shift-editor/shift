@@ -143,8 +143,8 @@ describe("variable editing across sources", () => {
     ({ stack, glyphId, bold } = await variableFont());
   });
 
-  it("opens an editable glyph source at a non-default master", async () => {
-    const boldSource = await stack.font.openGlyphSource(glyphId, bold);
+  it("opens an authored glyph layer at a non-default master", async () => {
+    const boldSource = await stack.font.openGlyphLayer(glyphId, bold);
 
     expect(boldSource).not.toBeNull();
     expect(boldSource!.contours.length).toBe(1);
@@ -152,7 +152,7 @@ describe("variable editing across sources", () => {
   });
 
   it("folds echoes for edits made on a non-default master", async () => {
-    const boldSource = (await stack.font.openGlyphSource(glyphId, bold))!;
+    const boldSource = (await stack.font.openGlyphLayer(glyphId, bold))!;
     const point = boldSource.allPoints[1]!;
 
     boldSource.commitPositionPatch([{ kind: "point", id: point.id, x: 250, y: 0 }]);
@@ -173,23 +173,23 @@ describe("variable editing across sources", () => {
     const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
     const instance = glyph.instanceAt(mid);
 
-    expect(instance.hasSource).toBe(false);
+    expect(instance.hasLayer).toBe(false);
     expect(instance.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
 
     const xs = instance.geometry.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);
   });
 
-  it("resolves live editable geometry at exact master locations", async () => {
+  it("resolves live layer geometry at exact master locations", async () => {
     const glyph = (await stack.font.openGlyph(glyphId, stack.font.defaultSource))!;
-    await stack.font.openGlyphSource(glyphId, bold);
+    await stack.font.openGlyphLayer(glyphId, bold);
 
     const axis = stack.font.getAxes()[0]!;
     const atBold = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 700);
     const instance = glyph.instanceAt(atBold);
 
-    expect(instance.hasSource).toBe(true);
-    expect(instance.editable).toBe(true);
+    expect(instance.hasLayer).toBe(true);
+    expect(instance.hasLayer).toBe(true);
     expect(instance.xAdvance).toBe(500);
   });
 });

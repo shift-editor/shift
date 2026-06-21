@@ -124,6 +124,16 @@ export class Canvas {
     }
   }
 
+  withTranslation(offset: Point2D, draw: (canvas: Canvas) => void): void {
+    this.ctx.save();
+    this.ctx.translate(offset.x, offset.y);
+    try {
+      draw(this);
+    } finally {
+      this.ctx.restore();
+    }
+  }
+
   /** @knipclassignore */
   circle(center: Point2D, radiusPx: number, fill: string): void {
     const r = this.pxToUpm(radiusPx);

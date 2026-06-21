@@ -3,7 +3,7 @@ import { useSignalState, useSignalTrigger } from "@/lib/signals";
 
 export interface GlyphXAdvanceState {
   readonly xAdvance: number;
-  readonly editable: boolean;
+  readonly hasLayer: boolean;
 }
 
 /**
@@ -17,6 +17,6 @@ export function useGlyphXAdvance(): GlyphXAdvanceState {
 
   return {
     xAdvance: instance?.xAdvance ?? 0,
-    editable: instance?.editable ?? false,
+    hasLayer: instance?.hasLayer ?? false,
   };
 }

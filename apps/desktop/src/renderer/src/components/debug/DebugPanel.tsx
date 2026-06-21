@@ -23,7 +23,7 @@ export function DebugPanel() {
   const glyphStats = useMemo(() => {
     if (!instance) return { pointCount: "0", snapshotSize: "—" };
 
-    const snapshot = instance.edit?.state ?? null;
+    const snapshot = instance.layer?.state ?? null;
     const bytes = snapshot ? new Blob([JSON.stringify(snapshot)]).size : null;
 
     return {

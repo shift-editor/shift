@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { glyphTextItem, lineBreakTextItem } from "@/lib/text/layout";
+import { mintItemId } from "@shift/types";
 
 describe("Editor", () => {
   let editor: TestEditor;
@@ -11,21 +12,78 @@ describe("Editor", () => {
     await editor.addGlyph("S", 83);
   });
 
-  // editableGlyphVisible rule:
+  describe("scene bootstrap", () => {
+    it("places the focused glyph as one scene item with geometry shown at the origin", () => {
+      const record = editor.font.recordForName("A")!;
+      const itemId = editor.scene.value.items[0]?.id ?? null;
+      const item = editor.scene.item(itemId);
+
+      expect(editor.scene.value.items).toHaveLength(1);
+      expect(item).toMatchObject({
+        kind: "glyph",
+        glyphId: record.id,
+        placement: { origin: { x: 0, y: 0 } },
+      });
+      expect(itemId && editor.scene.isGeometryShown(itemId)).toBe(true);
+      expect(itemId && editor.layerForItem(itemId)).not.toBeNull();
+    });
+
+    it("can place the same glyph id twice with distinct item ids", async () => {
+      const record = editor.font.recordForName("A")!;
+      const left = mintItemId();
+      const right = mintItemId();
+
+      editor.scene.set({
+        items: [
+          {
+            id: left,
+            kind: "glyph",
+            glyphId: record.id,
+            placement: { origin: { x: 0, y: 0 } },
+          },
+          {
+            id: right,
+            kind: "glyph",
+            glyphId: record.id,
+            placement: { origin: { x: 700, y: 0 } },
+          },
+        ],
+        geometryItems: [left],
+      });
+
+      expect(editor.scene.item(left)?.glyphId).toBe(record.id);
+      expect(editor.scene.item(right)?.glyphId).toBe(record.id);
+      expect(editor.scene.toScene(right, { x: 10, y: 20 })).toEqual({
+        x: 710,
+        y: 20,
+      });
+      expect(editor.scene.toLocal(right, { x: 710, y: 20 })).toEqual({
+        x: 10,
+        y: 20,
+      });
+      expect(editor.scene.isGeometryShown(left)).toBe(true);
+      expect(editor.scene.isGeometryShown(right)).toBe(false);
+
+      editor.scene.moveItemBy(right, { x: 30, y: 5 });
+      expect(editor.scene.item(right)?.placement.origin).toEqual({ x: 730, y: 5 });
+    });
+  });
+
+  // focusedGlyphVisible rule:
   //   No active text-run activity (buffer empty AND cursor not visible)
   //     → render the glyph normally. (grid → canvas open path)
   //   Active text run (typed something or Text tool active)
   //     → render the glyph only when in-place editing a slot.
-  describe("editable glyph visibility follows text focus", () => {
+  describe("focused glyph visibility follows text focus", () => {
     it("renders the glyph in initial state (no run, no cursor visible)", () => {
       expect(editor.textRun.buffer.items).toHaveLength(0);
       expect(editor.textRun.cursorVisible).toBe(false);
-      expect(editor.editableGlyphVisible()).toBe(true);
+      expect(editor.focusedGlyphVisible()).toBe(true);
     });
 
     it("does not render the glyph once the run has items and no slot edit", () => {
       editor.selectTool("text");
-      expect(editor.editableGlyphVisible()).toBe(false);
+      expect(editor.focusedGlyphVisible()).toBe(false);
     });
 
     it("renders the glyph again when in-place editing a slot", () => {
@@ -33,12 +91,12 @@ describe("Editor", () => {
       const item = glyphTextItem("S", 83);
       editor.textRun.insert(item);
       editor.setGlyphFocus({ runId: editor.textRun.id, itemId: item.id });
-      expect(editor.editableGlyphVisible()).toBe(true);
+      expect(editor.focusedGlyphVisible()).toBe(true);
     });
 
     it("does not render the glyph with empty buffer but cursor visible (Text tool active)", () => {
       editor.textRun.setCursorVisible(true);
-      expect(editor.editableGlyphVisible()).toBe(false);
+      expect(editor.focusedGlyphVisible()).toBe(false);
     });
   });
 
@@ -63,7 +121,7 @@ describe("Editor", () => {
       const sItem = editor.textRun.buffer.items[1];
       expect(sItem.kind).toBe("glyph");
       editor.setGlyphFocus({ runId: editor.textRun.id, itemId: sItem.id });
-      expect(editor.getActiveGlyphName()).toBe("S");
+      expect(editor.focusedGlyph?.glyph.name).toBe("S");
       // Main glyph (run owner) hasn't moved.
       expect(editor.rootGlyphHandle!.name).toBe(ownerKey);
 
@@ -116,16 +174,6 @@ describe("Editor", () => {
       expect(editor.focusedGlyph).toBeNull();
       expect(editor.glyphPlacement).toBeNull();
       expect(editor.drawOffset).toEqual({ x: 0, y: 0 });
-    });
-
-    it("opens direct glyphs through the implicit editor run", () => {
-      editor.openGlyph({ name: "S", unicode: 83 });
-
-      expect(editor.focusedGlyph?.glyph.name).toBe("S");
-      expect(editor.textRuns.resolveAnchor(editor.focusedGlyph!.anchor)).toEqual(
-        editor.focusedGlyph,
-      );
-      expect(editor.drawOffset).toEqual(editor.glyphPlacement?.focused.editOrigin);
     });
   });
 });

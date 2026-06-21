@@ -106,7 +106,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
 
   const handleCellClick = useCallback(
     (glyph: GlyphCatalogItem) => {
-      navigate(`/editor/${encodeURIComponent(glyph.name)}`);
+      if (!glyph.id) return;
+      navigate(`/editor/${encodeURIComponent(glyph.id)}`);
     },
     [navigate],
   );
@@ -190,7 +191,7 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
       return;
     }
 
-    if (!next || editor.font.hasGlyph(next)) {
+    if (!next || editor.font.recordForName(next)) {
       setDraft(glyphName);
       return;
     }

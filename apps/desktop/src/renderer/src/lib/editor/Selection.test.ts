@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Selection } from "./Selection";
 import { signal } from "@/lib/signals/signal";
 import type { PointId } from "@shift/types";
-import type { GlyphSource } from "@/lib/model/Glyph";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { SegmentId } from "@shift/glyph-state";
 
 const asPointId = (id: string): PointId => id as PointId;
@@ -12,7 +12,7 @@ describe("Selection", () => {
   let selection: Selection;
 
   beforeEach(() => {
-    selection = new Selection(signal<GlyphSource | null>(null));
+    selection = new Selection(signal<GlyphLayer | null>(null));
   });
 
   describe("initialization", () => {

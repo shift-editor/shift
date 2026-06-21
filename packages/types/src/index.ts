@@ -11,6 +11,7 @@ export type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  ItemId,
   LayerId,
   SourceId,
 } from "./ids";
@@ -22,6 +23,7 @@ export {
   asComponentId,
   asGuidelineId,
   asGlyphId,
+  asItemId,
   asLayerId,
   asSourceId,
   isValidPointId,
@@ -31,6 +33,7 @@ export {
   isValidComponentId,
   isValidGuidelineId,
   isValidGlyphId,
+  isValidItemId,
   isValidLayerId,
   isValidSourceId,
   mintContourId,
@@ -38,6 +41,7 @@ export {
   mintAxisId,
   mintPointId,
   mintGlyphId,
+  mintItemId,
   mintLayerId,
   mintSourceId,
 } from "./ids";

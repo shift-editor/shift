@@ -4,7 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Landing } from "@/views/Landing";
 import { Home } from "@/views/Home";
 import { Editor } from "@/views/Editor";
-import { getFont } from "@/store/appStore";
+import { getEditor, getFont } from "@/store/appStore";
 import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@/lib/signals/useSignal";
 
@@ -19,23 +19,27 @@ import { useSignalState } from "@/lib/signals/useSignal";
  * navigate to make it happen.
  */
 export const Screens = () => {
-  const documentLoaded = useSignalState(getFont().$loaded);
+  const font = getFont();
+  const editor = getEditor();
+  const documentLoaded = useSignalState(font.$loaded);
 
   // Side effect of a document loading: give the editor room.
   useEffect(() => {
     if (!documentLoaded) return;
 
+    editor.scene.setLocation(font.defaultLocation());
+
     void getShiftHost()
       .commands.run("window.maximise")
       .catch((error) => console.error("maximise on document load failed", error));
-  }, [documentLoaded]);
+  }, [documentLoaded, editor, font]);
 
   if (!documentLoaded) return <Landing />;
 
   return (
     <Routes>
       <Route path="/home" element={<Home />} />
-      <Route path="/editor/:glyphName" element={<Editor />} />
+      <Route path="/editor/:glyphId" element={<Editor />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   );
