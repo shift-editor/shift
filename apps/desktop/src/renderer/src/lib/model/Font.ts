@@ -419,6 +419,16 @@ export class Font {
     return this.#directory.peek().recordForName(name);
   }
 
+  /** Returns the committed glyph record for a stable glyph id. */
+  recordForId(glyphId: GlyphId): GlyphRecord | null {
+    return this.#directory.peek().recordForId(glyphId);
+  }
+
+  /** Returns the committed layer record for an exact glyph/source pair. */
+  layerForGlyphSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
+    return this.#directory.peek().layerForGlyphSource(glyphId, sourceId);
+  }
+
   /**
    * Returns the committed Unicode assignments for a glyph name.
    *

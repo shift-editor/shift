@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { glyphTextItem, lineBreakTextItem } from "@/lib/text/layout";
+import { sceneGlyphId } from "./EditorScene";
 
 describe("Editor", () => {
   let editor: TestEditor;
@@ -9,6 +10,56 @@ describe("Editor", () => {
     editor = new TestEditor();
     await editor.startSession();
     await editor.addGlyph("S", 83);
+  });
+
+  describe("scene bootstrap", () => {
+    it("places the opened glyph as one editable scene glyph at the origin", () => {
+      const record = editor.font.recordForName("A")!;
+      const item = editor.scene.item(sceneGlyphId("main"));
+
+      expect(editor.scene.value.glyphs).toHaveLength(1);
+      expect(item).toMatchObject({
+        id: "main",
+        glyphId: record.id,
+        placement: { origin: { x: 0, y: 0 } },
+        editable: true,
+      });
+      expect(editor.scene.editLayer(sceneGlyphId("main"))).not.toBeNull();
+    });
+
+    it("can place the same glyph id twice with distinct scene glyph ids", async () => {
+      const record = editor.font.recordForName("A")!;
+      const left = sceneGlyphId("left");
+      const right = sceneGlyphId("right");
+
+      await editor.scene.set({
+        glyphs: [
+          {
+            id: left,
+            glyphId: record.id,
+            location: editor.font.defaultLocation(),
+            placement: { origin: { x: 0, y: 0 } },
+            editable: true,
+          },
+          {
+            id: right,
+            glyphId: record.id,
+            location: editor.font.defaultLocation(),
+            placement: { origin: { x: 700, y: 0 } },
+            editable: true,
+          },
+        ],
+        textRuns: [],
+      });
+
+      expect(editor.scene.item(left)?.glyphId).toBe(record.id);
+      expect(editor.scene.item(right)?.glyphId).toBe(record.id);
+      expect(editor.scene.toScene(right, { x: 10, y: 20 })).toEqual({ x: 710, y: 20 });
+      expect(editor.scene.toLocal(right, { x: 710, y: 20 })).toEqual({ x: 10, y: 20 });
+
+      editor.scene.translatePlacement(right, { x: 30, y: 5 });
+      expect(editor.scene.item(right)?.placement.origin).toEqual({ x: 730, y: 5 });
+    });
   });
 
   // editableGlyphVisible rule:

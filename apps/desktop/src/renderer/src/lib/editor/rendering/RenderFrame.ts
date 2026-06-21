@@ -22,6 +22,7 @@ export interface BackgroundLayerProps {
     readonly model: Glyph;
     readonly display: GlyphDisplayState;
     readonly advance: number;
+    readonly origin: Point2D;
   };
 }
 
@@ -38,7 +39,7 @@ interface SceneInteractionProps {
 
 interface SceneViewProps {
   readonly debugOverlays: DebugOverlayState;
-  readonly drawOffset: Point2D;
+  readonly origin: Point2D;
 }
 
 export interface SceneLayerProps {
@@ -57,6 +58,7 @@ interface TextLayerProps {
 export interface OverlayLayerProps {
   readonly activeTool: string;
   readonly activeToolState: unknown;
+  readonly origin: Point2D;
 }
 
 /**
@@ -89,12 +91,12 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     this.#editor.camera.trackViewportTransform();
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
-    this.#editor.$drawOffset.value;
+    this.#editor.scene.selectedOriginCell.value;
 
     const glyph = this.#editor.glyph.value;
     if (!glyph) return null;
 
-    const instance = this.#editor.glyphInstanceCell.value;
+    const instance = this.#editor.scene.selectedInstanceCell.value;
     if (!instance) return null;
 
     const xAdvance = instance.xAdvanceCell.value;
@@ -104,16 +106,19 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
 
     const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
     const advance = displayAdvance(xAdvance, glyph.name, unicode);
+    const origin = this.#editor.scene.selectedOriginCell.value;
 
-    return { glyph: { model: glyph, display, advance } };
+    return { glyph: { model: glyph, display, advance, origin } };
   }
 
   draw(canvas: Canvas): void {
     const props = this.propsCell.value;
     if (!props) return;
 
-    this.#guides.draw(canvas, this.#editor.font.metrics, props.glyph.advance);
-    this.#editor.toolManager.drawBackground(canvas);
+    canvas.withTranslation(props.glyph.origin, () => {
+      this.#guides.draw(canvas, this.#editor.font.metrics, props.glyph.advance);
+      this.#editor.toolManager.drawBackground(canvas);
+    });
   }
 }
 
@@ -152,7 +157,7 @@ export class TextLayer extends CanvasItem<TextLayerProps> {
     return {
       run,
       designLocation: this.#editor.$designLocation,
-      drawOffset: this.#editor.$drawOffset.value,
+      drawOffset: { x: 0, y: 0 },
       focusedGlyph: this.#editor.focusedGlyphCell.value,
     };
   }
@@ -224,7 +229,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
 
-    const instance = this.#editor.glyphInstanceCell.value;
+    const instance = this.#editor.scene.selectedInstanceCell.value;
     if (instance) instance.render.trackShape();
 
     return {
@@ -239,7 +244,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
       },
       view: {
         debugOverlays: this.#editor.debugOverlaysCell.value,
-        drawOffset: this.#editor.$drawOffset.value,
+        origin: this.#editor.scene.selectedOriginCell.value,
       },
     };
   }
@@ -249,9 +254,11 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     if (!props) return;
 
     // Scene z-order. Keep this sequence intentional; see the class remarks.
-    this.#drawGlyphOutline(canvas, props);
-    this.#drawDebugOverlays(canvas, props);
-    this.#editor.toolManager.drawScene(canvas);
+    canvas.withTranslation(props.view.origin, () => {
+      this.#drawGlyphOutline(canvas, props);
+      this.#drawDebugOverlays(canvas, props);
+      this.#editor.toolManager.drawScene(canvas);
+    });
     this.#drawTextRuns(canvas);
     this.#drawGlyphEditHandles(canvas, props);
   }
@@ -302,26 +309,30 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
 
     const renderModel = instance.render;
     const sceneBounds = this.#editor.camera.visibleSceneBounds(64);
-    const drawOffset = props.view.drawOffset;
+    const drawOffset = props.view.origin;
 
-    this.#controlLines.draw(canvas, renderModel.contours, (from, to) => {
-      const minX = Math.min(from.x, to.x) + drawOffset.x;
-      const maxX = Math.max(from.x, to.x) + drawOffset.x;
-      const minY = Math.min(from.y, to.y) + drawOffset.y;
-      const maxY = Math.max(from.y, to.y) + drawOffset.y;
-      return !(
-        maxX < sceneBounds.minX ||
-        minX > sceneBounds.maxX ||
-        maxY < sceneBounds.minY ||
-        minY > sceneBounds.maxY
-      );
+    canvas.withTranslation(drawOffset, () => {
+      this.#controlLines.draw(canvas, renderModel.contours, (from, to) => {
+        const minX = Math.min(from.x, to.x) + drawOffset.x;
+        const maxX = Math.max(from.x, to.x) + drawOffset.x;
+        const minY = Math.min(from.y, to.y) + drawOffset.y;
+        const maxY = Math.max(from.y, to.y) + drawOffset.y;
+        return !(
+          maxX < sceneBounds.minX ||
+          minX > sceneBounds.maxX ||
+          maxY < sceneBounds.minY ||
+          minY > sceneBounds.maxY
+        );
+      });
     });
 
     this.#handles.draw(canvas, canvas.camera, drawOffset);
 
-    this.#anchors.draw(canvas, renderModel.anchors, {
-      selection: props.interaction.selection,
-      hover: props.interaction.hover,
+    canvas.withTranslation(drawOffset, () => {
+      this.#anchors.draw(canvas, renderModel.anchors, {
+        selection: props.interaction.selection,
+        hover: props.interaction.hover,
+      });
     });
   }
 }
@@ -353,11 +364,12 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
 
   protected props(): OverlayLayerProps {
     this.#editor.camera.trackViewportTransform();
-    this.#editor.$drawOffset.value;
+    const origin = this.#editor.scene.selectedOriginCell.value;
 
     return {
       activeTool: this.#editor.activeToolCell.value,
       activeToolState: this.#editor.activeToolStateCell.value,
+      origin,
     };
   }
 
@@ -365,6 +377,8 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
-    this.#editor.toolManager.drawOverlay(canvas);
+    canvas.withTranslation(props.origin, () => {
+      this.#editor.toolManager.drawOverlay(canvas);
+    });
   }
 }

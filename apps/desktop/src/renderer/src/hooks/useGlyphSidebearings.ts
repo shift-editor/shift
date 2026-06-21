@@ -20,7 +20,7 @@ export interface GlyphSidebearingsState {
  */
 export function useGlyphSidebearings(): GlyphSidebearingsState {
   const editor = getEditor();
-  const instance = useSignalState(editor.glyphInstanceCell);
+  const instance = useSignalState(editor.scene.selectedInstanceCell);
 
   useSignalTrigger(instance?.sidebearingsCell, { schedule: "frame" });
   return {

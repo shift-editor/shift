@@ -1,5 +1,13 @@
 import type { CursorType, ToolRegistryItem } from "@/types/editor";
-import type { PointId, ContourId, Source, SourceId, GlyphName, GlyphRecord } from "@shift/types";
+import type {
+  PointId,
+  ContourId,
+  Source,
+  SourceId,
+  GlyphName,
+  GlyphRecord,
+  GlyphId,
+} from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
 import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
@@ -74,6 +82,7 @@ import { EventEmitter } from "./lifecycle";
 import type { LineSegmentPoints } from "@shift/glyph-state";
 import { Contour } from "@shift/glyph-state";
 import { SourceEditDraft, type SourceEditSubject } from "./SourceEditDraft";
+import { EditorScene, sceneGlyphId, type SceneGlyphId } from "./EditorScene";
 import {
   EditorGlyphState,
   EditorGesture,
@@ -133,6 +142,7 @@ export class Editor {
   readonly selection: Selection;
   readonly hover: Hover;
   readonly font: Font;
+  readonly scene: EditorScene;
 
   /**
    * Rendering and camera infrastructure.
@@ -214,13 +224,14 @@ export class Editor {
     this.#camera = new Camera();
 
     this.font = options.font;
+    this.scene = new EditorScene(this.font);
     this.#glyph = new EditorGlyphState(this.font);
 
     this.#view = new EditorViewState();
     this.input = new EditorInput();
     this.gesture = new EditorGesture();
 
-    this.#commands = new CommandRunner(this.#glyph.edit.glyphSource);
+    this.#commands = new CommandRunner(this.scene.selectedEditLayerCell);
 
     this.#toolState = {
       app: new Map<string, unknown>(),
@@ -229,7 +240,7 @@ export class Editor {
 
     this.#glyphFinderOpen = signal(false, { name: "editor.glyphFinder.open" });
 
-    this.selection = new Selection(this.#glyph.edit.glyphSource);
+    this.selection = new Selection(this.scene.selectedEditLayerCell);
     this.hover = new Hover();
 
     this.#edgePan = new EdgePanManager(this);
@@ -384,7 +395,7 @@ export class Editor {
   }
 
   public beginSourceEditDraft(subject: SourceEditSubject): SourceEditDraft {
-    const glyphSource = this.#glyph.edit.glyphSource.peek();
+    const glyphSource = this.scene.selectedEditLayerCell.peek();
     if (!glyphSource) {
       throw new Error("Cannot begin a source edit draft without an active glyph source");
     }
@@ -503,12 +514,7 @@ export class Editor {
    * @returns The focused glyph model, or `null` when the glyph has no readable state.
    */
   public getGlyph(handle: GlyphHandle): Glyph | null {
-    const glyph = this.font.glyph(handle);
-    if (!glyph) return null;
-
-    this.#glyph.open.glyph.set(glyph);
-
-    return glyph;
+    return this.font.glyph(handle);
   }
 
   public setRootGlyphHandle(handle: GlyphHandle | null): void {
@@ -520,7 +526,25 @@ export class Editor {
   }
 
   public getActiveGlyphName(): string | null {
-    return this.#glyph.open.glyph.peek()?.name ?? null;
+    return this.scene.selectedModelCell.peek()?.name ?? null;
+  }
+
+  public async setEditorSceneGlyph(glyphId: GlyphId): Promise<void> {
+    const record = this.font.recordForId(glyphId);
+    await this.scene.set({
+      glyphs: [
+        {
+          id: sceneGlyphId("main"),
+          glyphId,
+          location: this.font.defaultLocation(),
+          placement: { origin: { x: 0, y: 0 } },
+          editable: true,
+        },
+      ],
+      textRuns: [],
+    });
+    this.#glyph.design.set(this.font.defaultLocation());
+    this.#glyph.open.rootHandle.set(record ? this.font.glyphHandleForName(record.name) : null);
   }
 
   /**
@@ -547,6 +571,22 @@ export class Editor {
 
     const glyph = this.getGlyph(handle);
     if (!glyph) return null;
+
+    const record = this.font.recordForName(handle.name);
+    if (record) {
+      void this.scene.set({
+        glyphs: [
+          {
+            id: sceneGlyphId("main"),
+            glyphId: record.id,
+            location: axisLocationFromLocation(source.location),
+            placement: { origin: { x: 0, y: 0 } },
+            editable: true,
+          },
+        ],
+        textRuns: [],
+      });
+    }
 
     return this.font.glyphSource(handle, source);
   }
@@ -599,7 +639,21 @@ export class Editor {
 
     batch(() => {
       this.#text.glyphAnchor.set(anchor);
-      this.getGlyph(focused.glyph);
+      const record = this.font.recordForName(focused.glyph.name);
+      if (record) {
+        void this.scene.set({
+          glyphs: [
+            {
+              id: sceneGlyphId(`${anchor.runId}:${anchor.itemId}`),
+              glyphId: record.id,
+              location: this.designLocation,
+              placement: { origin: focused.editOrigin },
+              editable: true,
+            },
+          ],
+          textRuns: [],
+        });
+      }
       this.disableProofMode();
     });
   }
@@ -622,7 +676,7 @@ export class Editor {
 
   /** Clears the current glyph focus and active contour selection. */
   public close(): void {
-    this.#glyph.open.glyph.set(null);
+    this.scene.clear();
     this.#glyph.open.activeContourId.set(null);
   }
 
@@ -632,7 +686,7 @@ export class Editor {
 
   /** Current designspace coordinate used for displayed glyph data. */
   public get designLocation(): AxisLocation {
-    return this.#glyph.design.location.peek();
+    return this.scene.selectedGlyphCell.peek()?.location ?? this.#glyph.design.location.peek();
   }
 
   /**
@@ -652,7 +706,8 @@ export class Editor {
 
   /** Authored font source currently selected for editing, or `null` when unavailable. */
   public get editSource(): Source | null {
-    return this.#glyph.edit.source.peek();
+    const item = this.scene.selectedGlyphCell.peek();
+    return item ? this.font.sourceAt(item.location) : this.#glyph.edit.source.peek();
   }
 
   /**
@@ -666,16 +721,12 @@ export class Editor {
    * @returns null when no glyph source is open for editing.
    */
   public get activeGlyphSource(): GlyphSource | null {
-    return this.#glyph.edit.glyphSource.peek();
+    return this.scene.selectedEditLayerCell.peek();
   }
 
   /** Glyph instance resolved at the current design location. */
   public get glyphInstance(): GlyphInstance | null {
-    return this.#glyph.preview.instance.peek();
-  }
-
-  public get glyphInstanceCell(): Signal<GlyphInstance | null> {
-    return this.#glyph.preview.instance;
+    return this.scene.selectedInstanceCell.peek();
   }
 
   /**
@@ -688,6 +739,8 @@ export class Editor {
   public setDesignLocation(location: AxisLocation): void {
     batch(() => {
       this.#glyph.design.set(location);
+      const selected = this.scene.selectedGlyphId;
+      if (selected) this.scene.updateGlyph(selected, { location });
 
       const source = this.font.sourceAt(location);
       if (source) {
@@ -732,6 +785,8 @@ export class Editor {
       const location = axisLocationFromLocation(source.location);
       this.#glyph.design.set(location);
       this.#glyph.edit.selectSource(source.id);
+      const selected = this.scene.selectedGlyphId;
+      if (selected) this.scene.updateGlyph(selected, { location });
     });
   }
 
@@ -784,7 +839,7 @@ export class Editor {
   }
 
   public get glyph(): Signal<Glyph | null> {
-    return this.#glyph.open.glyph;
+    return this.scene.selectedModelCell;
   }
 
   /** Stateless command executor; undo authority is the workspace ledger. */
@@ -938,13 +993,11 @@ export class Editor {
   }
 
   public sceneToGlyphLocal(point: Point2D): Point2D {
-    const offset = this.drawOffset;
-    return { x: point.x - offset.x, y: point.y - offset.y };
+    return this.scene.toLocal(this.requireSceneGlyphId(), point);
   }
 
   public glyphLocalToScene(point: Point2D): Point2D {
-    const offset = this.drawOffset;
-    return { x: point.x + offset.x, y: point.y + offset.y };
+    return this.scene.toScene(this.requireSceneGlyphId(), point);
   }
 
   public get hitRadius(): number {
@@ -1277,12 +1330,18 @@ export class Editor {
   }
 
   public get drawOffset(): Point2D {
-    return this.#text.drawOffset.peek();
+    return this.scene.selectedGlyphCell.peek()?.placement.origin ?? { x: 0, y: 0 };
   }
 
   /** @knipclassignore */
   public get $drawOffset(): Signal<Point2D> {
-    return this.#text.drawOffset;
+    return this.scene.selectedOriginCell;
+  }
+
+  public requireSceneGlyphId(): SceneGlyphId {
+    const id = this.scene.selectedGlyphId;
+    if (!id) throw new Error("No scene glyph is selected");
+    return id;
   }
 
   public destroy() {

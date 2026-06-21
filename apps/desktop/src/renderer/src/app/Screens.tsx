@@ -35,7 +35,7 @@ export const Screens = () => {
   return (
     <Routes>
       <Route path="/home" element={<Home />} />
-      <Route path="/editor/:glyphName" element={<Editor />} />
+      <Route path="/editor/:glyphId" element={<Editor />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   );

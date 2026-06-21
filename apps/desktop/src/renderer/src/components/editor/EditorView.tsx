@@ -11,13 +11,13 @@ import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
-import type { GlyphName } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 
 interface EditorViewProps {
-  glyphName: GlyphName;
+  glyphId: GlyphId;
 }
 
-export const EditorView: FC<EditorViewProps> = ({ glyphName }) => {
+export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
   const debug = useDebugSafe();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,26 +35,18 @@ export const EditorView: FC<EditorViewProps> = ({ glyphName }) => {
   useEffect(() => {
     if (!fontLoaded) return undefined;
 
-    const handle = editor.font.glyphHandleForName(glyphName);
-    if (!handle) return undefined;
+    const record = editor.font.recordForId(glyphId);
+    if (!record) {
+      editor.scene.clear();
+      return undefined;
+    }
 
     let cancelled = false;
     const toolManager = editor.toolManager;
 
     void (async () => {
-      const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation());
-
-      // Glyph-name-first: opening a cell that has no committed record yet
-      // creates the glyph in the workspace, then opens it.
-      const record = editor.font.recordForName(handle.name) ?? editor.createGlyph(handle.name);
-
-      // Pull replace-grade state and materialize the editable model before
-      // the session opens; folds keep it current afterwards.
-      const glyph = await editor.font.openGlyph(record.id, source);
-      if (!glyph || cancelled) return;
-
-      editor.openGlyph(handle);
-      editor.openGlyphSource(handle, source.id);
+      await editor.setEditorSceneGlyph(record.id);
+      if (cancelled) return;
 
       editor.updateMetricsFromFont();
       toolManager.activate(editor.getActiveTool());
@@ -65,7 +57,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphName }) => {
       toolManager.reset();
       editor.close();
     };
-  }, [editor, fontLoaded, glyphName]);
+  }, [editor, fontLoaded, glyphId]);
 
   useEffect(() => {
     const element = containerRef.current;

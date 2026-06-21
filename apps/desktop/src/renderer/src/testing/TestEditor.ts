@@ -57,7 +57,9 @@ export class TestEditor extends Editor {
     await this.#stack.client.create();
 
     const glyph = await this.#createAndOpenGlyph(name, unicode);
-    this.openGlyphSource(glyph.handle, this.font.defaultSource.id);
+    const record = this.font.recordForName(glyph.handle.name);
+    if (!record) throw new Error("created glyph did not appear in the font directory");
+    await this.setEditorSceneGlyph(record.id);
     return this;
   }
 
@@ -121,7 +123,7 @@ export class TestEditor extends Editor {
   }
 
   get pointCount(): number {
-    return this.activeGlyphSource?.allPoints.length ?? 0;
+    return this.scene.selectedEditLayerCell.peek()?.allPoints.length ?? 0;
   }
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {

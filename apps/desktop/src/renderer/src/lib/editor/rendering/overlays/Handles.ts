@@ -27,7 +27,7 @@ export class Handles {
     this.#editor = editor;
     this.#displayList = computed(
       () => {
-        const instance = this.#editor.glyphInstanceCell.value;
+        const instance = this.#editor.scene.selectedInstanceCell.value;
         const display = this.#editor.glyphDisplayCell.value;
 
         if (
