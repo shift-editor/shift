@@ -1,82 +1,64 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, GlyphLayerRecord } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
-import { computed, signal, type Signal, type WritableSignal } from "@/lib/signals";
-import type { Font } from "@/lib/model/Font";
-import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
+import { signal, type Signal, type WritableSignal } from "@/lib/signals";
 
-export type SceneGlyphId = string & { readonly __sceneGlyphId: unique symbol };
-export type SceneTextRunId = string & { readonly __sceneTextRunId: unique symbol };
+declare const crypto: { getRandomValues<T extends Uint8Array>(array: T): T };
 
-export interface SceneGlyphPlacement {
+const SHORT_ID_ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+const SHORT_ID_SUFFIX_LENGTH = 10;
+const SHORT_ID_ALPHABET_MASK = SHORT_ID_ALPHABET.length - 1;
+
+export type ItemId = string & { readonly __itemId: unique symbol };
+export type TextRunId = string & { readonly __textRunId: unique symbol };
+
+export interface ScenePlacement {
   readonly origin: Point2D;
 }
 
 export interface SceneGlyph {
-  readonly id: SceneGlyphId;
+  readonly id: ItemId;
+  readonly kind: "glyph";
   readonly glyphId: GlyphId;
   readonly location: AxisLocation;
-  readonly placement: SceneGlyphPlacement;
-  readonly editable: boolean;
+  readonly placement: ScenePlacement;
 }
 
 export interface SceneTextRun {
-  readonly id: SceneTextRunId;
-  readonly placement: SceneGlyphPlacement;
+  readonly id: ItemId;
+  readonly kind: "textRun";
+  readonly textRunId: TextRunId;
+  readonly placement: ScenePlacement;
 }
 
+export type SceneItem = SceneGlyph | SceneTextRun;
+
 export interface EditorSceneValue {
-  readonly glyphs: readonly SceneGlyph[];
-  readonly textRuns: readonly SceneTextRun[];
+  readonly items: readonly SceneItem[];
+  readonly geometryItems: readonly ItemId[];
 }
 
 export interface EditorSceneInput {
-  readonly glyphs: readonly SceneGlyph[];
-  readonly textRuns: readonly SceneTextRun[];
+  readonly items: readonly SceneItem[];
+  readonly geometryItems?: readonly ItemId[];
 }
 
-const EMPTY_SCENE: EditorSceneValue = { glyphs: [], textRuns: [] };
+const EMPTY_SCENE: EditorSceneValue = { items: [], geometryItems: [] };
 
 /**
- * Owns the placed items visible in the editor scene.
+ * Owns the scene items visible in the editor canvas.
  *
  * @remarks
- * Geometry remains owned by {@link Font}. Scene glyphs only point at document
- * glyph identities, choose a designspace location, and place that display
- * result in scene coordinates.
+ * Scene stores item identity, display location, placement, and which items
+ * show structured geometry. It does not resolve glyph models, glyph layers, or
+ * mutation capability; callers compose scene items with `Font`/`Glyph` when
+ * they need those concepts.
  */
 export class EditorScene {
-  readonly #font: Font;
   readonly #cell: WritableSignal<EditorSceneValue>;
-  readonly #selectedGlyphId: WritableSignal<SceneGlyphId | null>;
-  readonly #selectedGlyph: Signal<SceneGlyph | null>;
-  readonly #selectedModel: Signal<Glyph | null>;
-  readonly #selectedInstance: Signal<GlyphInstance | null>;
-  readonly #selectedEditLayer: Signal<GlyphSource | null>;
-  readonly #selectedOrigin: Signal<Point2D>;
 
-  constructor(font: Font) {
-    this.#font = font;
+  constructor() {
     this.#cell = signal<EditorSceneValue>(EMPTY_SCENE, { name: "editor.scene" });
-    this.#selectedGlyphId = signal<SceneGlyphId | null>(null, {
-      name: "editor.scene.selectedGlyphId",
-    });
-    this.#selectedGlyph = computed(() => this.item(this.#selectedGlyphId.value), {
-      name: "editor.scene.selectedGlyph",
-    });
-    this.#selectedModel = computed(() => this.#model(this.#selectedGlyph.value), {
-      name: "editor.scene.selectedModel",
-    });
-    this.#selectedInstance = computed(() => this.#instance(this.#selectedGlyph.value), {
-      name: "editor.scene.selectedInstance",
-    });
-    this.#selectedEditLayer = computed(() => this.#editLayer(this.#selectedGlyph.value), {
-      name: "editor.scene.selectedEditLayer",
-    });
-    this.#selectedOrigin = computed(
-      () => this.#selectedGlyph.value?.placement.origin ?? { x: 0, y: 0 },
-      { name: "editor.scene.selectedOrigin" },
-    );
   }
 
   get cell(): Signal<EditorSceneValue> {
@@ -87,204 +69,244 @@ export class EditorScene {
     return this.#cell.peek();
   }
 
-  get selectedGlyphIdCell(): Signal<SceneGlyphId | null> {
-    return this.#selectedGlyphId;
+  items(): readonly SceneItem[] {
+    return this.#cell.peek().items;
   }
 
-  get selectedGlyphId(): SceneGlyphId | null {
-    return this.#selectedGlyphId.peek();
+  glyphItems(): readonly SceneGlyph[] {
+    return this.#cell.peek().items.filter(isSceneGlyph);
   }
 
-  get selectedGlyphCell(): Signal<SceneGlyph | null> {
-    return this.#selectedGlyph;
+  geometryItemIds(): readonly ItemId[] {
+    return this.#cell.peek().geometryItems;
   }
 
-  get selectedModelCell(): Signal<Glyph | null> {
-    return this.#selectedModel;
+  item(itemId: ItemId | null): SceneItem | null {
+    if (!itemId) return null;
+    return this.#cell.peek().items.find((item) => item.id === itemId) ?? null;
   }
 
-  get selectedInstanceCell(): Signal<GlyphInstance | null> {
-    return this.#selectedInstance;
-  }
-
-  get selectedEditLayerCell(): Signal<GlyphSource | null> {
-    return this.#selectedEditLayer;
-  }
-
-  get selectedOriginCell(): Signal<Point2D> {
-    return this.#selectedOrigin;
+  glyphItem(itemId: ItemId | null): SceneGlyph | null {
+    const item = this.item(itemId);
+    return item?.kind === "glyph" ? item : null;
   }
 
   /**
-   * Replaces the full scene and selects the first editable glyph.
+   * Replaces every scene item and the set of items showing structured geometry.
    *
-   * @param scene - Complete scene description. Missing glyphs/layers are left
-   *   unresolved; this method does not create document data.
+   * @param scene - Complete scene description. Items are copied by value; glyph
+   *   models and layers are not loaded or created.
    */
-  async set(scene: EditorSceneInput): Promise<void> {
-    this.#cell.set({
-      glyphs: scene.glyphs.map(copyGlyph),
-      textRuns: scene.textRuns.map(copyTextRun),
-    });
-    this.#selectedGlyphId.set(scene.glyphs.find((item) => item.editable)?.id ?? null);
-    await this.#hydrate(scene.glyphs);
-    this.#cell.set({
-      glyphs: scene.glyphs.map(copyGlyph),
-      textRuns: scene.textRuns.map(copyTextRun),
-    });
+  set(scene: EditorSceneInput): void {
+    const items = scene.items.map(copyItem);
+    const itemIds = new Set(items.map((item) => item.id));
+    const geometryItems = (scene.geometryItems ?? []).filter((itemId) => itemIds.has(itemId));
+    this.#cell.set({ items, geometryItems });
   }
 
+  /** Clears all scene items and geometry visibility state. */
   clear(): void {
     this.#cell.set(EMPTY_SCENE);
-    this.#selectedGlyphId.set(null);
   }
 
   /**
-   * Adds one placed glyph to the scene.
+   * Places one glyph item in the scene.
    *
-   * @param item - Placed glyph occurrence to append.
+   * @param glyphId - Document glyph identity to display.
+   * @param options - Scene identity, display location, and origin.
+   * @returns The scene item id for the placed glyph.
    */
-  async addGlyph(item: SceneGlyph): Promise<void> {
+  placeGlyph(
+    glyphId: GlyphId,
+    options: { id?: ItemId; location: AxisLocation; origin: Point2D },
+  ): ItemId {
+    const id = options.id ?? mintItemId();
+    const item: SceneGlyph = {
+      id,
+      kind: "glyph",
+      glyphId,
+      location: copyAxisLocation(options.location),
+      placement: { origin: { ...options.origin } },
+    };
+    const scene = this.#cell.peek();
+    const items = [...scene.items.filter((existing) => existing.id !== id), item];
+    this.#cell.set({
+      items,
+      geometryItems: scene.geometryItems.filter((itemId) => itemId !== id),
+    });
+    return id;
+  }
+
+  /**
+   * Replaces the scene with one glyph item.
+   *
+   * @param glyphId - Document glyph identity to display.
+   * @param options - Scene identity, display location, and origin.
+   * @returns The scene item id for the placed glyph.
+   */
+  replaceWithGlyph(
+    glyphId: GlyphId,
+    options: { id?: ItemId; location: AxisLocation; origin: Point2D },
+  ): ItemId {
+    const id = options.id ?? mintItemId();
+    this.set({
+      items: [
+        {
+          id,
+          kind: "glyph",
+          glyphId,
+          location: copyAxisLocation(options.location),
+          placement: { origin: { ...options.origin } },
+        },
+      ],
+      geometryItems: [],
+    });
+    return id;
+  }
+
+  /**
+   * Shows structured geometry for a scene item.
+   *
+   * @param itemId - Scene item whose geometry should be shown.
+   */
+  showGeometry(itemId: ItemId): void {
+    if (!this.item(itemId) || this.isGeometryShown(itemId)) return;
+    const scene = this.#cell.peek();
+    this.#cell.set({ ...scene, geometryItems: [...scene.geometryItems, itemId] });
+  }
+
+  /**
+   * Hides structured geometry for a scene item.
+   *
+   * @param itemId - Scene item whose geometry should be hidden.
+   */
+  hideGeometry(itemId: ItemId): void {
     const scene = this.#cell.peek();
     this.#cell.set({
-      glyphs: [...scene.glyphs, copyGlyph(item)],
-      textRuns: scene.textRuns,
-    });
-    if (!this.selectedGlyphId && item.editable) this.#selectedGlyphId.set(item.id);
-    await this.#hydrate([item]);
-    const hydrated = this.#cell.peek();
-    this.#cell.set({
-      glyphs: hydrated.glyphs.map(copyGlyph),
-      textRuns: hydrated.textRuns,
+      ...scene,
+      geometryItems: scene.geometryItems.filter((existing) => existing !== itemId),
     });
   }
 
-  items(): readonly SceneGlyph[] {
-    return this.#cell.peek().glyphs;
+  /**
+   * Replaces the complete set of scene items whose structured geometry is shown.
+   *
+   * @param itemIds - Scene item ids to show as structured geometry.
+   */
+  setGeometryItems(itemIds: readonly ItemId[]): void {
+    const scene = this.#cell.peek();
+    const validIds = new Set(scene.items.map((item) => item.id));
+    const geometryItems: ItemId[] = [];
+    for (const itemId of itemIds) {
+      if (!validIds.has(itemId) || geometryItems.includes(itemId)) continue;
+      geometryItems.push(itemId);
+    }
+    this.#cell.set({ ...scene, geometryItems });
   }
 
-  item(sceneGlyphId: SceneGlyphId | null): SceneGlyph | null {
-    if (!sceneGlyphId) return null;
-    return this.#cell.peek().glyphs.find((item) => item.id === sceneGlyphId) ?? null;
+  /**
+   * Returns whether a scene item is currently shown as structured geometry.
+   *
+   * @param itemId - Scene item to inspect.
+   */
+  isGeometryShown(itemId: ItemId): boolean {
+    return this.#cell.peek().geometryItems.includes(itemId);
   }
 
-  model(sceneGlyphId: SceneGlyphId): Glyph | null {
-    return this.#model(this.item(sceneGlyphId));
-  }
-
-  instance(sceneGlyphId: SceneGlyphId): GlyphInstance | null {
-    return this.#instance(this.item(sceneGlyphId));
-  }
-
-  layer(sceneGlyphId: SceneGlyphId): GlyphLayerRecord | null {
-    const item = this.item(sceneGlyphId);
-    if (!item) return null;
-    const source = this.#font.sourceAt(item.location);
-    if (!source) return null;
-    return this.#font.layerForGlyphSource(item.glyphId, source.id);
-  }
-
-  editLayer(sceneGlyphId: SceneGlyphId): GlyphSource | null {
-    return this.#editLayer(this.item(sceneGlyphId));
-  }
-
-  selectGlyph(sceneGlyphId: SceneGlyphId | null): void {
-    this.#selectedGlyphId.set(this.item(sceneGlyphId)?.id ?? null);
-  }
-
-  setPlacement(sceneGlyphId: SceneGlyphId, placement: SceneGlyphPlacement): void {
+  setPlacement(itemId: ItemId, placement: ScenePlacement): void {
     const scene = this.#cell.peek();
     this.#cell.set({
-      glyphs: scene.glyphs.map((item) =>
-        item.id === sceneGlyphId ? { ...item, placement: copyPlacement(placement) } : item,
+      ...scene,
+      items: scene.items.map((item) =>
+        item.id === itemId ? copyItem({ ...item, placement: copyPlacement(placement) }) : item,
       ),
-      textRuns: scene.textRuns,
     });
   }
 
-  translatePlacement(sceneGlyphId: SceneGlyphId, delta: Point2D): void {
-    const item = this.item(sceneGlyphId);
+  /**
+   * Sets a scene item's origin to an absolute scene-space position.
+   *
+   * @param itemId - Scene item whose placement is updated.
+   * @param origin - Destination origin in scene coordinates.
+   */
+  moveItemTo(itemId: ItemId, origin: Point2D): void {
+    const item = this.item(itemId);
     if (!item) return;
-    this.setPlacement(sceneGlyphId, {
-      origin: {
-        x: item.placement.origin.x + delta.x,
-        y: item.placement.origin.y + delta.y,
-      },
+    this.setPlacement(itemId, { ...item.placement, origin: { ...origin } });
+  }
+
+  /**
+   * Offsets a scene item's origin by a scene-space delta.
+   *
+   * @param itemId - Scene item whose placement is updated.
+   * @param delta - Relative movement in scene coordinates.
+   */
+  moveItemBy(itemId: ItemId, delta: Point2D): void {
+    const item = this.item(itemId);
+    if (!item) return;
+    this.moveItemTo(itemId, {
+      x: item.placement.origin.x + delta.x,
+      y: item.placement.origin.y + delta.y,
     });
   }
 
-  updateGlyph(sceneGlyphId: SceneGlyphId, patch: Partial<Omit<SceneGlyph, "id">>): void {
+  updateGlyph(itemId: ItemId, patch: Partial<Omit<SceneGlyph, "id" | "kind">>): void {
     const scene = this.#cell.peek();
     this.#cell.set({
-      glyphs: scene.glyphs.map((item) =>
-        item.id === sceneGlyphId ? copyGlyph({ ...item, ...patch }) : item,
+      ...scene,
+      items: scene.items.map((item) =>
+        item.id === itemId && item.kind === "glyph"
+          ? copyItem({ ...item, ...patch, kind: "glyph" })
+          : item,
       ),
-      textRuns: scene.textRuns,
     });
   }
 
-  toLocal(sceneGlyphId: SceneGlyphId, scenePoint: Point2D): Point2D {
-    const origin = this.item(sceneGlyphId)?.placement.origin ?? { x: 0, y: 0 };
+  toLocal(itemId: ItemId, scenePoint: Point2D): Point2D {
+    const origin = this.item(itemId)?.placement.origin ?? { x: 0, y: 0 };
     return { x: scenePoint.x - origin.x, y: scenePoint.y - origin.y };
   }
 
-  toScene(sceneGlyphId: SceneGlyphId, localPoint: Point2D): Point2D {
-    const origin = this.item(sceneGlyphId)?.placement.origin ?? { x: 0, y: 0 };
+  toScene(itemId: ItemId, localPoint: Point2D): Point2D {
+    const origin = this.item(itemId)?.placement.origin ?? { x: 0, y: 0 };
     return { x: localPoint.x + origin.x, y: localPoint.y + origin.y };
   }
-
-  async #hydrate(glyphs: readonly SceneGlyph[]): Promise<void> {
-    for (const item of glyphs) {
-      const source = this.#font.sourceAt(item.location);
-      if (!source) continue;
-      await this.#font.openGlyph(item.glyphId, source);
-      await this.#font.openGlyphSource(item.glyphId, source);
-    }
-  }
-
-  #model(item: SceneGlyph | null): Glyph | null {
-    if (!item) return null;
-    const record = this.#font.recordForId(item.glyphId);
-    if (!record) return null;
-    return this.#font.glyph(this.#font.glyphHandleForName(record.name));
-  }
-
-  #instance(item: SceneGlyph | null): GlyphInstance | null {
-    const model = this.#model(item);
-    if (!model || !item) return null;
-    return model.instance(signal(item.location, { name: `editor.scene.${item.id}.location` }));
-  }
-
-  #editLayer(item: SceneGlyph | null): GlyphSource | null {
-    if (!item?.editable) return null;
-    const source = this.#font.sourceAt(item.location);
-    if (!source) return null;
-    const record = this.#font.recordForId(item.glyphId);
-    if (!record) return null;
-    return this.#font.glyphSource(this.#font.glyphHandleForName(record.name), source);
-  }
 }
 
-export function sceneGlyphId(id: string): SceneGlyphId {
-  return id as SceneGlyphId;
+export function asItemId(id: string): ItemId {
+  return id as ItemId;
 }
 
-function copyGlyph(item: SceneGlyph): SceneGlyph {
+export function mintItemId(): ItemId {
+  const bytes = new Uint8Array(SHORT_ID_SUFFIX_LENGTH);
+  crypto.getRandomValues(bytes);
+
+  let suffix = "";
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = bytes[i];
+    suffix += SHORT_ID_ALPHABET[byte & SHORT_ID_ALPHABET_MASK];
+  }
+  return `item_${suffix}` as ItemId;
+}
+
+function isSceneGlyph(item: SceneItem): item is SceneGlyph {
+  return item.kind === "glyph";
+}
+
+function copyItem<T extends SceneItem>(item: T): T {
   return {
     ...item,
     placement: copyPlacement(item.placement),
-  };
+    ...("location" in item ? { location: copyAxisLocation(item.location) } : {}),
+  } as T;
 }
 
-function copyTextRun(run: SceneTextRun): SceneTextRun {
-  return {
-    ...run,
-    placement: copyPlacement(run.placement),
-  };
-}
-
-function copyPlacement(placement: SceneGlyphPlacement): SceneGlyphPlacement {
+function copyPlacement(placement: ScenePlacement): ScenePlacement {
   return {
     origin: { ...placement.origin },
   };
+}
+
+function copyAxisLocation(location: AxisLocation): AxisLocation {
+  return new Map(location);
 }

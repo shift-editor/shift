@@ -91,12 +91,12 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     this.#editor.camera.trackViewportTransform();
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
-    this.#editor.scene.selectedOriginCell.value;
+    this.#editor.geometryOriginCell.value;
 
     const glyph = this.#editor.glyph.value;
     if (!glyph) return null;
 
-    const instance = this.#editor.scene.selectedInstanceCell.value;
+    const instance = this.#editor.glyphInstanceCell.value;
     if (!instance) return null;
 
     const xAdvance = instance.xAdvanceCell.value;
@@ -106,7 +106,7 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
 
     const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
     const advance = displayAdvance(xAdvance, glyph.name, unicode);
-    const origin = this.#editor.scene.selectedOriginCell.value;
+    const origin = this.#editor.geometryOriginCell.value;
 
     return { glyph: { model: glyph, display, advance, origin } };
   }
@@ -229,7 +229,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
 
-    const instance = this.#editor.scene.selectedInstanceCell.value;
+    const instance = this.#editor.glyphInstanceCell.value;
     if (instance) instance.render.trackShape();
 
     return {
@@ -244,7 +244,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
       },
       view: {
         debugOverlays: this.#editor.debugOverlaysCell.value,
-        origin: this.#editor.scene.selectedOriginCell.value,
+        origin: this.#editor.geometryOriginCell.value,
       },
     };
   }
@@ -364,7 +364,7 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
 
   protected props(): OverlayLayerProps {
     this.#editor.camera.trackViewportTransform();
-    const origin = this.#editor.scene.selectedOriginCell.value;
+    const origin = this.#editor.geometryOriginCell.value;
 
     return {
       activeTool: this.#editor.activeToolCell.value,

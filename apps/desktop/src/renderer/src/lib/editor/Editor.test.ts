@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { glyphTextItem, lineBreakTextItem } from "@/lib/text/layout";
-import { sceneGlyphId } from "./EditorScene";
+import { asItemId } from "./EditorScene";
 
 describe("Editor", () => {
   let editor: TestEditor;
@@ -13,51 +13,55 @@ describe("Editor", () => {
   });
 
   describe("scene bootstrap", () => {
-    it("places the opened glyph as one editable scene glyph at the origin", () => {
+    it("places the opened glyph as one scene item with geometry shown at the origin", () => {
       const record = editor.font.recordForName("A")!;
-      const item = editor.scene.item(sceneGlyphId("main"));
+      const itemId = asItemId("main");
+      const item = editor.scene.item(itemId);
 
-      expect(editor.scene.value.glyphs).toHaveLength(1);
+      expect(editor.scene.value.items).toHaveLength(1);
       expect(item).toMatchObject({
         id: "main",
+        kind: "glyph",
         glyphId: record.id,
         placement: { origin: { x: 0, y: 0 } },
-        editable: true,
       });
-      expect(editor.scene.editLayer(sceneGlyphId("main"))).not.toBeNull();
+      expect(editor.scene.isGeometryShown(itemId)).toBe(true);
+      expect(editor.layerForItem(itemId)).not.toBeNull();
     });
 
-    it("can place the same glyph id twice with distinct scene glyph ids", async () => {
+    it("can place the same glyph id twice with distinct item ids", async () => {
       const record = editor.font.recordForName("A")!;
-      const left = sceneGlyphId("left");
-      const right = sceneGlyphId("right");
+      const left = asItemId("left");
+      const right = asItemId("right");
 
-      await editor.scene.set({
-        glyphs: [
+      editor.scene.set({
+        items: [
           {
             id: left,
+            kind: "glyph",
             glyphId: record.id,
             location: editor.font.defaultLocation(),
             placement: { origin: { x: 0, y: 0 } },
-            editable: true,
           },
           {
             id: right,
+            kind: "glyph",
             glyphId: record.id,
             location: editor.font.defaultLocation(),
             placement: { origin: { x: 700, y: 0 } },
-            editable: true,
           },
         ],
-        textRuns: [],
+        geometryItems: [left],
       });
 
       expect(editor.scene.item(left)?.glyphId).toBe(record.id);
       expect(editor.scene.item(right)?.glyphId).toBe(record.id);
       expect(editor.scene.toScene(right, { x: 10, y: 20 })).toEqual({ x: 710, y: 20 });
       expect(editor.scene.toLocal(right, { x: 710, y: 20 })).toEqual({ x: 10, y: 20 });
+      expect(editor.scene.isGeometryShown(left)).toBe(true);
+      expect(editor.scene.isGeometryShown(right)).toBe(false);
 
-      editor.scene.translatePlacement(right, { x: 30, y: 5 });
+      editor.scene.moveItemBy(right, { x: 30, y: 5 });
       expect(editor.scene.item(right)?.placement.origin).toEqual({ x: 730, y: 5 });
     });
   });

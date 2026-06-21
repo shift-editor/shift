@@ -123,7 +123,7 @@ export class TestEditor extends Editor {
   }
 
   get pointCount(): number {
-    return this.scene.selectedEditLayerCell.peek()?.allPoints.length ?? 0;
+    return this.activeGlyphSource?.allPoints.length ?? 0;
   }
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {

@@ -17,7 +17,7 @@ function formatBytes(bytes: number): string {
 
 export function DebugPanel() {
   const editor = getEditor();
-  const instance = useSignalState(editor.scene.selectedInstanceCell);
+  const instance = useSignalState(editor.glyphInstanceCell);
   useSignalTrigger(instance?.xAdvanceCell);
 
   const glyphStats = useMemo(() => {
@@ -57,12 +57,10 @@ export function DebugPanel() {
     const fx = effect(() => {
       const screen = editor.screenMousePositionCell.value;
       const coords = editor.fromScreen(screen);
-      const sceneGlyphId = editor.scene.selectedGlyphIdCell.value;
-      const local = sceneGlyphId ? editor.scene.toLocal(sceneGlyphId, coords.scene) : null;
       if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
       if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
       if (worldRef.current)
-        worldRef.current.textContent = local ? formatCoords(local.x, local.y) : "—";
+        worldRef.current.textContent = formatCoords(coords.glyphLocal.x, coords.glyphLocal.y);
     });
     return () => fx.dispose();
   }, [editor]);

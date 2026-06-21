@@ -21,7 +21,7 @@ export const AnchorSection = () => {
   const yRef = useRef<EditableSidebarInputHandle>(null);
 
   useSignalEffect(() => {
-    const instance = editor.scene.selectedInstanceCell.value;
+    const instance = editor.glyphInstanceCell.value;
     const ids = [...editor.selection.stateCell.value.anchorIds];
 
     setEditable(instance?.editable ?? false);
@@ -54,7 +54,7 @@ export const AnchorSection = () => {
   const handlePositionChange = (axis: "x" | "y", value: number) => {
     if (!singleAnchorId) return;
 
-    const edit = editor.scene.selectedInstanceCell.peek()?.edit;
+    const edit = editor.glyphInstanceCell.peek()?.edit;
     if (!edit) return;
 
     const nextX = axis === "x" ? value : anchorX;

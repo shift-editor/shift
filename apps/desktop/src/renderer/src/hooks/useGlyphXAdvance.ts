@@ -11,7 +11,7 @@ export interface GlyphXAdvanceState {
  */
 export function useGlyphXAdvance(): GlyphXAdvanceState {
   const editor = getEditor();
-  const instance = useSignalState(editor.scene.selectedInstanceCell);
+  const instance = useSignalState(editor.glyphInstanceCell);
 
   useSignalTrigger(instance?.xAdvanceCell, { schedule: "frame" });
 
