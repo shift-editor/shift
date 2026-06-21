@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/model/Font";
 import type { Glyph } from "@/lib/model/Glyph";
@@ -51,7 +52,18 @@ interface GlyphPreviewProps {
 }
 
 export function GlyphPreview({ handle, font, height = CELL_HEIGHT }: GlyphPreviewProps) {
-  if (!font.loaded) {
+  const editor = getEditor();
+  const fontLoaded = useSignalState(font.$loaded);
+  const record = fontLoaded ? font.recordForName(handle.name) : null;
+  const recordId = record?.id ?? null;
+  const defaultSourceId = record ? font.defaultSource.id : null;
+
+  useEffect(() => {
+    if (!recordId || !defaultSourceId) return;
+    editor.requestGlyphSnapshots([recordId], { sourceIds: [defaultSourceId] });
+  }, [defaultSourceId, editor, recordId]);
+
+  if (!fontLoaded) {
     return <FallbackCell handle={handle} font={font} height={height} advance={null} />;
   }
 

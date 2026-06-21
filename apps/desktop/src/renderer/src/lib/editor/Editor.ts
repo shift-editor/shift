@@ -75,7 +75,10 @@ import { TextRuns } from "@/lib/text/TextRuns";
 import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
 import { glyphTextItem, Positioner } from "@/lib/text/layout";
 import type { GlyphAnchor } from "@/lib/text/layout";
-import type { GlyphSnapshotLoader } from "@/lib/model/GlyphSnapshotLoader";
+import type {
+  GlyphSnapshotLoader,
+  GlyphSnapshotLoadOptions,
+} from "@/lib/model/GlyphSnapshotLoader";
 
 import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
@@ -627,6 +630,19 @@ export class Editor {
   }
 
   /**
+   * Requests local glyph geometry without making model getters asynchronous.
+   *
+   * @param glyphIds - stable glyph identities whose snapshots should be hydrated.
+   * @param options - optional exact source scope for the snapshot request.
+   */
+  public requestGlyphSnapshots(
+    glyphIds: readonly GlyphId[],
+    options: GlyphSnapshotLoadOptions = {},
+  ): void {
+    this.#glyphSnapshotLoader?.request(glyphIds, options);
+  }
+
+  /**
    * Creates an empty glyph in the loaded font.
    *
    * @param name - Preferred glyph name. Existing names are auto-incremented.
@@ -829,6 +845,10 @@ export class Editor {
   public insertTextCodepoint(codepoint: number): void {
     const handle = this.font.glyphHandleForUnicode(codepoint);
     if (!handle) return;
+    const record = this.font.recordForName(handle.name);
+    if (record) {
+      this.requestGlyphSnapshots([record.id], { sourceIds: [this.font.defaultSource.id] });
+    }
     this.textRun.insert(glyphTextItem(handle.name, codepoint));
   }
 
