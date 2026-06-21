@@ -81,7 +81,7 @@ describe("Clipboard (via Editor)", () => {
     await editor.paste();
     await editor.settle();
 
-    const contours = (editor.activeGlyphSource?.contours ?? []).filter(
+    const contours = (editor.editingGlyphLayer?.contours ?? []).filter(
       (contour) => !contour.isEmpty,
     );
     expect(contours).toHaveLength(3);

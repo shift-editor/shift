@@ -22,7 +22,7 @@ export class NudgePointsCommand implements Command<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    ctx.source.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    ctx.layer.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
   }
 }
 
@@ -40,7 +40,7 @@ export class ReverseContourCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.reverseContour(this.#contourId);
+    ctx.layer.reverseContour(this.#contourId);
   }
 }
 
@@ -79,7 +79,7 @@ export class SplitSegmentCommand implements Command<PointId> {
 
     const anchor2Id = this.#segment.endId;
 
-    this.#splitPointId = ctx.source.insertPointBefore(anchor2Id, Point.onCurve(splitPoint));
+    this.#splitPointId = ctx.layer.insertPointBefore(anchor2Id, Point.onCurve(splitPoint));
 
     return this.#splitPointId;
   }
@@ -95,10 +95,10 @@ export class SplitSegmentCommand implements Command<PointId> {
     const controlId = points.control.id;
     const anchor2Id = points.end.id;
 
-    this.#splitPointId = ctx.source.insertPointBefore(anchor2Id, Point.smooth(mid));
-    ctx.source.insertPointBefore(anchor2Id, Point.offCurve(cB));
+    this.#splitPointId = ctx.layer.insertPointBefore(anchor2Id, Point.smooth(mid));
+    ctx.layer.insertPointBefore(anchor2Id, Point.offCurve(cB));
 
-    ctx.source.movePointTo(controlId, cA);
+    ctx.layer.movePointTo(controlId, cA);
 
     return this.#splitPointId;
   }
@@ -116,12 +116,12 @@ export class SplitSegmentCommand implements Command<PointId> {
     const control1Id = points.controlStart.id;
     const control2Id = points.controlEnd.id;
 
-    ctx.source.insertPointBefore(control2Id, Point.offCurve(c1A));
-    this.#splitPointId = ctx.source.insertPointBefore(control2Id, Point.smooth(mid));
-    ctx.source.insertPointBefore(control2Id, Point.offCurve(c0B));
+    ctx.layer.insertPointBefore(control2Id, Point.offCurve(c1A));
+    this.#splitPointId = ctx.layer.insertPointBefore(control2Id, Point.smooth(mid));
+    ctx.layer.insertPointBefore(control2Id, Point.offCurve(c0B));
 
-    ctx.source.movePointTo(control1Id, c0A);
-    ctx.source.movePointTo(control2Id, c1B);
+    ctx.layer.movePointTo(control1Id, c0A);
+    ctx.layer.movePointTo(control2Id, c1B);
 
     return this.#splitPointId;
   }
@@ -160,10 +160,10 @@ export class UpgradeLineToCubicCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    const control2Id = ctx.source.insertPointBefore(
+    const control2Id = ctx.layer.insertPointBefore(
       this.#anchor2Id,
       Point.offCurve(this.#control2Pos),
     );
-    ctx.source.insertPointBefore(control2Id, Point.offCurve(this.#control1Pos));
+    ctx.layer.insertPointBefore(control2Id, Point.offCurve(this.#control1Pos));
   }
 }

@@ -57,9 +57,9 @@ describe("TextLayout", () => {
     const layout = makeLayout([glyph("A", 65), glyph("B", 66)], font);
     const source = font.defaultSource;
     const aAdvance =
-      font.glyphSource(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
+      font.glyphLayer(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
     const bAdvance =
-      font.glyphSource(font.glyphHandleForUnicode(66 as Unicode), source)?.xAdvance ?? 0;
+      font.glyphLayer(font.glyphHandleForUnicode(66 as Unicode), source)?.xAdvance ?? 0;
     const bLeftHalfX = aAdvance + bAdvance / 4;
 
     const hit = layout.hitTest({ x: bLeftHalfX, y: 0 });
@@ -79,7 +79,7 @@ describe("TextLayout", () => {
     const layout = makeLayout([a, b], font);
     const source = font.defaultSource;
     const aAdvance =
-      font.glyphSource(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
+      font.glyphLayer(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
 
     expect(layout.editOriginForItem(b.id)).toEqual({ x: aAdvance, y: 0 });
     expect(layout.primaryGlyphForItem(b.id)?.sourceItemIds).toEqual([b.id]);
@@ -100,7 +100,7 @@ describe("TextLayout", () => {
     const layout = makeLayout([glyph("A", 65), b], font);
     const source = font.defaultSource;
     const aAdvance =
-      font.glyphSource(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
+      font.glyphLayer(font.glyphHandleForUnicode(65 as Unicode), source)?.xAdvance ?? 0;
 
     expect(layout.anchorAtPoint("run-1", { x: aAdvance + 1, y: 0 })).toEqual({
       runId: "run-1",

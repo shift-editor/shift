@@ -18,6 +18,6 @@ export class BooleanOperationCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.applyBooleanOp(this.#contourIdA, this.#contourIdB, this.#operation);
+    ctx.layer.applyBooleanOp(this.#contourIdA, this.#contourIdB, this.#operation);
   }
 }

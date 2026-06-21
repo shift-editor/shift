@@ -2,10 +2,10 @@ import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
+import type { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
 
 export class BendCurve implements SelectBehavior {
-  #draft: SourceEditDraft | null = null;
+  #draft: GlyphLayerEditDraft | null = null;
   #hasChanges = false;
 
   onDragStart(
@@ -16,7 +16,7 @@ export class BendCurve implements SelectBehavior {
     if (state.type !== "ready" || !event.metaKey) return false;
 
     const instance = ctx.editor.glyphInstance;
-    if (!instance?.edit) return false;
+    if (!instance?.layer) return false;
 
     const geometry = instance.geometry;
     const hit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);
@@ -31,7 +31,7 @@ export class BendCurve implements SelectBehavior {
 
     const { controlStart, controlEnd } = cubic;
 
-    this.#draft = ctx.editor.beginSourceEditDraft({
+    this.#draft = ctx.editor.beginGlyphLayerEditDraft({
       points: [controlStart.id, controlEnd.id],
     });
     this.#hasChanges = false;

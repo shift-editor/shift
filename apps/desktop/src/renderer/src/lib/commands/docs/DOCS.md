@@ -4,7 +4,7 @@ Command pattern implementation providing undo/redo for all glyph editing operati
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Commands mutate the active editable source exclusively through `CommandContext.source`. They never touch the native bridge directly.
+- **Architecture Invariant:** Commands mutate the active authored glyph layer exclusively through `CommandContext.layer`. They never touch the native bridge directly.
 - **Architecture Invariant:** Every command must be self-contained for undo. `execute` must capture enough state (original positions, snapshot, etc.) so that `undo` can fully reverse the operation without external help.
 - **Architecture Invariant:** `CompositeCommand` undoes children in reverse order. Commands grouped via `beginBatch`/`endBatch` are auto-wrapped in a `CompositeCommand` at `endBatch` time.
 - **Architecture Invariant:** `record` adds a command to the undo stack without calling `execute`. This is the correct path for incremental operations (e.g. drag) where mutations have already been applied live. **CRITICAL:** Using `execute` instead of `record` for already-applied mutations will double-apply them.
@@ -34,12 +34,12 @@ commands/
 ## Key Types
 
 - **`Command<TResult>`** -- Interface: `name`, `execute(ctx)`, `undo(ctx)`, `redo(ctx)`. All commands implement this.
-- **`CommandContext`** -- `{ readonly source: GlyphSource }`. Injected into every command method. Provides access to the active editable source.
+- **`CommandContext`** -- `{ readonly layer: GlyphLayer }`. Injected into every command method. Provides access to the active authored glyph layer.
 - **`BaseCommand<TResult>`** -- Abstract class implementing `Command`. Default `redo` calls `execute`; subclasses override when redo needs different logic (e.g. snapshot-based replay).
 - **`CompositeCommand`** -- Groups multiple commands into one undo step. Executes children in order, undoes in reverse.
 - **`CommandHistory`** -- Manages undo/redo stacks. Exposes `execute`, `record`, `undo`, `redo`, `clear`, batching (`beginBatch`/`endBatch`/`withBatch`), and reactive signals (`canUndo`, `canRedo`).
 - **`CommandHistoryOptions`** -- `{ maxHistory?: number; onDirty?: () => void }`. `maxHistory` defaults to 100.
-- **`ApplyPositionPatchCommand`** -- Stores before/after `SourcePositions`. Efficient path for point/anchor position-only operations.
+- **`ApplyPositionPatchCommand`** -- Stores before/after `GlyphLayerPositions`. Efficient path for point/anchor position-only operations.
 - **`BaseTransformCommand`** -- Abstract template in `TransformCommands.ts`. Captures original positions on first execute; subclasses implement `transformPoints`. Used by `RotatePointsCommand`, `ScalePointsCommand`, `ReflectPointsCommand`, `MoveSelectionToCommand`.
 
 ## How it works
@@ -51,7 +51,7 @@ commands/
 ### execute vs record
 
 - **`execute(cmd)`** -- Calls `cmd.execute(ctx)`, then pushes to undo stack. Use for discrete one-shot operations (add point, nudge, transform).
-- **`record(cmd)`** -- Pushes to undo stack without calling execute. Use when mutations have already been applied incrementally (e.g. dragging points). `SourceEditDraft.commit()` commits the final sparse patch to Rust, then records an `ApplyPositionPatchCommand`.
+- **`record(cmd)`** -- Pushes to undo stack without calling execute. Use when mutations have already been applied incrementally (e.g. dragging points). `GlyphLayerEditDraft.commit()` commits the final sparse patch to Rust, then records an `ApplyPositionPatchCommand`.
 
 ### Batching
 
@@ -63,7 +63,7 @@ Commands use one of three strategies depending on cost:
 
 1. **Delta-based** -- Store the delta, apply inverse on undo. Used by `NudgePointsCommand`.
 2. **Position-capture** -- Store original positions, restore on undo. Used by `BaseTransformCommand` subclasses, `AlignPointsCommand`, `DistributePointsCommand`, `SplitSegmentCommand`.
-3. **Source-state-based** -- Store full `GlyphState` before/after. Used by `CutCommand` and `PasteCommand` for topology changes (adding/removing contours).
+3. **Layer-state-based** -- Store full `GlyphState` before/after. Used by `CutCommand` and `PasteCommand` for topology changes (adding/removing contours).
 
 `ApplyPositionPatchCommand` stores before/after position lists (cheaper than full snapshots) and replays them on undo/redo.
 
@@ -81,7 +81,7 @@ Commands use one of three strategies depending on cost:
 
 1. Create a class extending `BaseCommand<TResult>` (or implementing `Command<TResult>` directly).
 2. Set `readonly name` to a human-readable label (shown in undo/redo menus).
-3. Implement `execute(ctx)` -- perform the mutation via `ctx.source.*` methods and capture any state needed for undo.
+3. Implement `execute(ctx)` -- perform the mutation via `ctx.layer.*` methods and capture any state needed for undo.
 4. Implement `undo(ctx)` -- fully reverse the mutation.
 5. Override `redo(ctx)` only if re-executing from scratch would fail (e.g. id drift after point removal). Default `redo` calls `execute`.
 6. Export from the appropriate subdirectory's `index.ts` and from the top-level `commands/index.ts`.
@@ -98,7 +98,7 @@ Commands use one of three strategies depending on cost:
 
 - `SetLeftSidebearingCommand` moves all geometry (`translateLayer`) in addition to changing `xAdvance`. Undo must reverse both, and the order matters (restore advance first, then translate back).
 - `SplitSegmentCommand.redo` resets internal state (`#insertedPointIds`, `#originalPositions`) before re-executing because point ids are engine-assigned and differ across executions.
-- `PasteCommand` captures full source state after first execute and restores it for redo, avoiding id-drift issues from creating new contours/points twice.
+- `PasteCommand` captures full layer state after first execute and restores it for redo, avoiding id-drift issues from creating new contours/points twice.
 - `cancelBatch` does not undo already-executed commands -- it only discards the batch bookkeeping. Callers must handle rollback separately if needed.
 
 ## Verification
@@ -113,9 +113,9 @@ npx vitest run --project renderer src/lib/editor/
 
 ## Related
 
-- `GlyphSource` -- Active editable glyph source; commands mutate through `ctx.source`
+- `GlyphLayer` -- Active authored glyph layer; commands mutate through `ctx.layer`
 - `Editor` -- Orchestrates command execution; owns the `CommandHistory` instance
 - `Signal`, `ComputedSignal` -- Reactive primitives powering `canUndo`/`canRedo`
-- `SourcePositions` -- Typed point/anchor position lists used by `ApplyPositionPatchCommand`
+- `GlyphLayerPositions` -- Typed point/anchor position lists used by `ApplyPositionPatchCommand`
 - `Transform` -- Pure math functions for rotate/scale/reflect, consumed by transform commands
 - `Alignment` -- Pure math for align/distribute, consumed by `AlignPointsCommand`/`DistributePointsCommand`

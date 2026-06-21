@@ -11,6 +11,6 @@ export class ToggleSmoothCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.toggleSmooth(this.#pointId);
+    ctx.layer.toggleSmooth(this.#pointId);
   }
 }

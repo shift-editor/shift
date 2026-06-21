@@ -16,7 +16,7 @@ describe("DrawRectangleCommand", () => {
     await editor.startSession();
   });
 
-  const source = () => editor.activeGlyphSource!;
+  const source = () => editor.editingGlyphLayer!;
 
   it("adds a closed four-point contour", async () => {
     const contourId = editor.commands.run(new DrawRectangleCommand(rect(10, 20, 100, 50)));

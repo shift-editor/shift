@@ -13,7 +13,7 @@ import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
 
-import { asGlyphId, type Unicode } from "@shift/types";
+import type { Unicode } from "@shift/types";
 
 export const Editor = () => {
   const { glyphId } = useParams();
@@ -107,7 +107,7 @@ export const Editor = () => {
         <ResizableHandle inset="start" />
         <ResizablePanel id="canvas" order={2} minSize={30}>
           <ZoneContainer zone="canvas" className="h-full">
-            <EditorView glyphId={asGlyphId(glyphId)} />
+            <EditorView />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle inset="end" />

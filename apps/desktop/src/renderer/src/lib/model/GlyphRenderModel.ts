@@ -2,7 +2,7 @@ import type { AnchorData, AnchorId, ContourData, ContourId } from "@shift/types"
 import { Point, type Anchor, type Contour } from "@shift/glyph-state";
 import type { GlyphOutline } from "./GlyphOutline";
 import type { GlyphGeometry } from "./Glyph";
-import type { SourceContourCoordinates } from "./GlyphSourceState";
+import type { LayerContourCoordinates } from "./GlyphLayerState";
 import { computed, track, type ComputedSignal, type Signal } from "@/lib/signals/signal";
 
 /**
@@ -10,7 +10,7 @@ import { computed, track, type ComputedSignal, type Signal } from "@/lib/signals
  *
  * @remarks
  * The `points` collection is a render-time view of authored contour structure
- * plus current coordinates. Source-backed contours can change coordinates
+ * plus current coordinates. Layer-backed contours can change coordinates
  * without changing contour identity.
  */
 export interface GlyphRenderContour {
@@ -23,7 +23,7 @@ export interface GlyphRenderContour {
  * Anchor position as consumed by render code.
  *
  * @remarks
- * Source-backed anchors can change position without replacing the anchor item.
+ * Layer-backed anchors can change position without replacing the anchor item.
  */
 export interface GlyphRenderAnchor {
   readonly id: AnchorId;
@@ -34,7 +34,7 @@ export interface GlyphRenderAnchor {
 
 export interface GlyphRenderContourInput {
   readonly data: ContourData;
-  readonly coordinates: SourceContourCoordinates;
+  readonly coordinates: LayerContourCoordinates;
 }
 
 export interface GlyphRenderAnchorInput {
@@ -46,7 +46,7 @@ export interface GlyphRenderAnchorInput {
 /**
  * Render-facing projection for one displayed glyph.
  *
- * This keeps renderers off `GlyphGeometry` during exact-source editing. Source
+ * This keeps renderers off `GlyphGeometry` during exact-layer editing. Source
  * backed contours read per-contour value buffers, while geometry-backed
  * contours are immutable fallback data for interpolated locations.
  */
@@ -76,7 +76,7 @@ export class GlyphRenderModel {
   /**
    * Builds geometry-backed contour items from an immutable glyph snapshot.
    *
-   * @param geometry - Snapshot geometry for a non-editable or interpolated display location.
+   * @param geometry - Snapshot geometry for a display location without a live layer.
    * @returns Render contour items backed directly by the geometry snapshot.
    */
   static geometryContours(geometry: GlyphGeometry): readonly RenderContour[] {
@@ -86,7 +86,7 @@ export class GlyphRenderModel {
   /**
    * Builds geometry-backed anchor items from an immutable glyph snapshot.
    *
-   * @param geometry - Snapshot geometry for a non-editable or interpolated display location.
+   * @param geometry - Snapshot geometry for a display location without a live layer.
    * @returns Render anchor items backed directly by the geometry snapshot.
    */
   static geometryAnchors(geometry: GlyphGeometry): readonly RenderAnchor[] {
@@ -117,7 +117,7 @@ export class GlyphRenderModel {
    * @remarks
    * Call this inside a render dependency boundary. The method tracks structural
    * replacement of contour and anchor lists, then delegates to each item so
-   * source-backed coordinates can invalidate rendering without forcing callers
+   * layer-backed coordinates can invalidate rendering without forcing callers
    * to know which backing model they are reading.
    */
   trackShape(): void {
@@ -151,7 +151,7 @@ export abstract class RenderAnchor implements GlyphRenderAnchor {
 /**
  * Render contour backed by source structure plus a mutable coordinate buffer.
  */
-export class SourceRenderContour extends RenderContour {
+export class LayerRenderContour extends RenderContour {
   readonly #input: Signal<GlyphRenderContourInput>;
   readonly #points: ComputedSignal<readonly Point[]>;
 
@@ -219,7 +219,7 @@ class GeometryRenderContour extends RenderContour {
 /**
  * Render anchor backed by source structure plus a mutable coordinate buffer.
  */
-export class SourceRenderAnchor extends RenderAnchor {
+export class LayerRenderAnchor extends RenderAnchor {
   readonly #input: Signal<GlyphRenderAnchorInput>;
 
   constructor(input: Signal<GlyphRenderAnchorInput>) {

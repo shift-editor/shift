@@ -16,7 +16,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** `ToolContext.setState` inside a behavior's event handler updates a local `nextState` variable, not `this.state` on the tool. `BaseTool` commits the new state and fires lifecycle hooks (`onStateExit`, `onStateEnter`, `onStateChange`) only after the behavior loop returns. Calling `setState` multiple times within one handler is legal; only the final value is committed.
 
-- **Architecture Invariant:** For drag operations that mutate the glyph (translate, resize, rotate, bend), use the source edit draft pattern: `editor.beginSourceEditDraft(subject)` on drag start, `draft.previewPositionPatch()` or another `draft.preview*()` method on each drag event, `draft.commit(label)` on drag end, `draft.discard()` on cancel. **CRITICAL**: forgetting `commit` or `discard` leaks the draft and leaves the glyph in preview state.
+- **Architecture Invariant:** For drag operations that mutate the glyph (translate, resize, rotate, bend), use the glyph layer edit draft pattern: `editor.beginGlyphLayerEditDraft(subject)` on drag start, `draft.previewPositionPatch()` or another `draft.preview*()` method on each drag event, `draft.commit(label)` on drag end, `draft.discard()` on cancel. **CRITICAL**: forgetting `commit` or `discard` leaks the draft and leaves the glyph in preview state.
 
 - **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`, `glyphLocal`). Use `event.coords` for hit-testing and layout; `event.point` is an alias for `coords.scene`. **CRITICAL**: using raw `event.point` when glyph-local coordinates are needed (e.g. pen cursor position) produces wrong results when draw offset is non-zero.
 
@@ -101,12 +101,12 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 ### Draft pattern for drag mutations
 
-Behaviors that move source geometry use `SourceEditDraft`:
+Behaviors that move layer geometry use `GlyphLayerEditDraft`:
 
-1. `editor.beginSourceEditDraft(subject)` on drag start -- captures source positions for selected points/anchors.
-2. `draft.preview(...)` on each drag event -- applies preview positions to the reactive source.
+1. `editor.beginGlyphLayerEditDraft(subject)` on drag start -- captures layer positions for selected points/anchors.
+2. `draft.preview(...)` on each drag event -- applies preview positions to the reactive glyph layer.
 3. `draft.commit(label)` on drag end -- commits the final positions as an undoable command.
-4. `draft.discard()` on drag cancel -- restores the captured source positions.
+4. `draft.discard()` on drag cancel -- restores the captured layer positions.
 
 ### Rendering layers
 
@@ -179,7 +179,7 @@ export class MyBehavior implements Behavior<MyState> {
 ```typescript
 onDragStart(state, ctx, event) {
   if (state.type !== "selected") return false;
-  this.#draft = ctx.editor.beginSourceEditDraft({ points: [...ctx.editor.selection.pointIds] });
+  this.#draft = ctx.editor.beginGlyphLayerEditDraft({ points: [...ctx.editor.selection.pointIds] });
   ctx.setState({ type: "translating", startPos: event.point, totalDelta: { x: 0, y: 0 } });
   return true;
 }
@@ -232,7 +232,7 @@ onDragCancel(state, ctx) {
 
 - `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph).
 - `Canvas` — rendering target passed to `drawOverlay` / `drawScene` / `drawBackground`.
-- `SourceEditDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
+- `GlyphLayerEditDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
 - `Coordinates` — `{ screen, scene, glyphLocal }` coordinate bundle on pointer events.
 - `TextRunController` — text input controller used by Text tool.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

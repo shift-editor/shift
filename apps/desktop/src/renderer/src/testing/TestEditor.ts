@@ -50,7 +50,7 @@ export class TestEditor extends Editor {
   }
 
   /**
-   * Creates a real workspace, a glyph, and opens an editable session on it —
+   * Creates a real workspace, a glyph, and places it in the editor scene —
    * the production pipe end to end (intents → NAPI → SQLite → echo → fold).
    */
   async startSession(name = "A", unicode: number | null = 65): Promise<this> {
@@ -71,8 +71,7 @@ export class TestEditor extends Editor {
   }
 
   /**
-   * Adds another glyph to the workspace font and pulls its model into the
-   * Font cache — the same create-then-open flow EditorView runs in the app.
+   * Adds another glyph to the workspace font and pulls its model into the Font cache.
    */
   async addGlyph(name: string, unicode: number | null): Promise<void> {
     await this.#createAndOpenGlyph(name, unicode);
@@ -130,7 +129,7 @@ export class TestEditor extends Editor {
   }
 
   get pointCount(): number {
-    return this.activeGlyphSource?.allPoints.length ?? 0;
+    return this.editingGlyphLayer?.allPoints.length ?? 0;
   }
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {

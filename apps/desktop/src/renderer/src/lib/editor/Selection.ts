@@ -1,7 +1,7 @@
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import type { AnchorId, ContourId, PointId } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
-import type { GlyphSource } from "@/lib/model/Glyph";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 import {
   computed,
   signal,
@@ -46,15 +46,15 @@ function emptySelectionState(): SelectionState {
  * Selection owns selected IDs. Geometry owns object and parent lookups.
  */
 export class Selection {
-  readonly #glyphSource: Signal<GlyphSource | null>;
+  readonly #glyphLayer: Signal<GlyphLayer | null>;
   readonly #state: WritableSignal<SelectionState>;
   readonly #derived: ComputedSignal<DerivedSelection>;
   readonly #bounds: ComputedSignal<BoundsType | null>;
   readonly stateCell: Signal<SelectionState>;
   readonly boundsCell: Signal<BoundsType | null>;
 
-  constructor(glyphSource: Signal<GlyphSource | null>) {
-    this.#glyphSource = glyphSource;
+  constructor(glyphLayer: Signal<GlyphLayer | null>) {
+    this.#glyphLayer = glyphLayer;
     this.#state = signal<SelectionState>(emptySelectionState(), {
       name: "editor.selection.state",
     });
@@ -63,24 +63,24 @@ export class Selection {
       () => {
         const state = this.#state.value;
         const pointIds = state.pointIds;
-        const glyphSource = this.#glyphSource.value;
+        const glyphLayer = this.#glyphLayer.value;
 
-        if (!glyphSource) return EMPTY_DERIVED;
+        if (!glyphLayer) return EMPTY_DERIVED;
         if (pointIds.size === 0) return EMPTY_DERIVED;
 
-        glyphSource.coordinateBuffersChangedCell.value;
+        glyphLayer.coordinateBuffersChangedCell.value;
 
         const contourIds = new Set<ContourId>();
 
         for (const pointId of pointIds) {
-          const contourId = glyphSource.contourIdOfPoint(pointId);
+          const contourId = glyphLayer.contourIdOfPoint(pointId);
           if (contourId) contourIds.add(contourId);
         }
 
         let bounds: BoundsType | null = null;
         if (this.segmentIds.size !== 0) {
           for (const segment of this.segmentIds) {
-            const s = glyphSource.geometry.segment(segment);
+            const s = glyphLayer.geometry.segment(segment);
             if (!s) continue;
             bounds = Bounds.unionAll([bounds, s.bounds]);
           }
@@ -88,7 +88,7 @@ export class Selection {
           return { contourIds, bounds };
         }
 
-        const points = glyphSource.positionsFor(
+        const points = glyphLayer.positionsFor(
           [...pointIds].map((id) => ({ kind: "point" as const, id })),
         );
         bounds = Bounds.fromPoints(points);

@@ -10,7 +10,7 @@ export class SetXAdvanceCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.setXAdvance(this.#xAdvance);
+    ctx.layer.setXAdvance(this.#xAdvance);
   }
 }
 
@@ -24,7 +24,7 @@ export class SetRightSidebearingCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.setXAdvance(this.#xAdvance);
+    ctx.layer.setXAdvance(this.#xAdvance);
   }
 }
 
@@ -40,7 +40,7 @@ export class SetLeftSidebearingCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.translateLayer(this.#deltaX, 0);
-    ctx.source.setXAdvance(this.#xAdvance);
+    ctx.layer.translateLayer(this.#deltaX, 0);
+    ctx.layer.setXAdvance(this.#xAdvance);
   }
 }

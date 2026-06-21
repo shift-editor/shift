@@ -36,10 +36,10 @@ describe("CutCommand", () => {
     await editor.settle();
     editor.clickGlyphLocal(200, 200);
     await editor.settle();
-    [p1, p2] = editor.activeGlyphSource!.allPoints.map((point) => point.id) as [PointId, PointId];
+    [p1, p2] = editor.editingGlyphLayer!.allPoints.map((point) => point.id) as [PointId, PointId];
   });
 
-  const source = () => editor.activeGlyphSource!;
+  const source = () => editor.editingGlyphLayer!;
 
   it("removes the cut points and keeps the rest", async () => {
     editor.commands.run(new CutCommand([p1]));
@@ -68,7 +68,7 @@ describe("PasteCommand", () => {
     await editor.startSession();
   });
 
-  const source = () => editor.activeGlyphSource!;
+  const source = () => editor.editingGlyphLayer!;
 
   it("creates points offset from the clipboard content", async () => {
     const command = new PasteCommand(createTestContent([{ x: 100, y: 100 }]), {

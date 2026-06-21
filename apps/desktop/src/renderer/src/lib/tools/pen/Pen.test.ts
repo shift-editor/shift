@@ -64,7 +64,7 @@ describe("Pen tool", () => {
       editor.click(100, 200); // back on the first point
       await editor.settle();
 
-      const contour = editor.activeGlyphSource?.geometry.contours[0];
+      const contour = editor.editingGlyphLayer?.geometry.contours[0];
       expect(contour?.closed).toBe(true);
       expect(contour?.points.length).toBe(3);
       expect(editor.getActiveContour()).toBeNull();
@@ -134,7 +134,7 @@ describe("Pen tool", () => {
       await editor.undoAndSettle();
 
       expect(editor.pointCount).toBe(0);
-      expect(editor.activeGlyphSource?.geometry.contours.length).toBe(0);
+      expect(editor.editingGlyphLayer?.geometry.contours.length).toBe(0);
     });
   });
 });

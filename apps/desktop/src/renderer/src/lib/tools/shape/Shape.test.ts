@@ -12,7 +12,7 @@ describe("Shape tool", () => {
     editor.selectTool("shape");
   });
 
-  const contours = () => editor.activeGlyphSource?.geometry.contours ?? [];
+  const contours = () => editor.editingGlyphLayer?.geometry.contours ?? [];
 
   it("drag then release commits a closed 4-point rectangle contour", async () => {
     const contoursBefore = contours().length;

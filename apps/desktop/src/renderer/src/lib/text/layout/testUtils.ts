@@ -49,8 +49,8 @@ export async function layoutTestFont(): Promise<Font> {
   }
 
   const handle = stack.font.glyphHandleForUnicode(65 as Unicode);
-  const a = stack.font.glyphSource(handle, stack.font.defaultSource);
-  if (!a) throw new Error("Expected editable glyph source for A");
+  const a = stack.font.glyphLayer(handle, stack.font.defaultSource);
+  if (!a) throw new Error("Expected authored glyph layer for A");
 
   const contourId = a.addContour();
   a.addOnCurvePoint(contourId, { x: 0, y: 0 });

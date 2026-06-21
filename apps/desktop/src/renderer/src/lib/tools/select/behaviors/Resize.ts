@@ -3,11 +3,11 @@ import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
-import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
+import type { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
 import type { Select } from "../Select";
 
 export class Resize implements SelectBehavior {
-  #draft: SourceEditDraft | null = null;
+  #draft: GlyphLayerEditDraft | null = null;
   #origin: Point2D | null = null;
 
   onDragStart(
@@ -18,7 +18,7 @@ export class Resize implements SelectBehavior {
     if (!ctx.editor.selection.hasSelection()) return false;
 
     const editor = ctx.editor;
-    if (!editor.glyphInstance?.edit) return false;
+    if (!editor.glyphInstance?.layer) return false;
 
     const bbHit = ctx.tool.boundingBox.hit(event.coords);
     if (!bbHit) return false;
@@ -30,7 +30,7 @@ export class Resize implements SelectBehavior {
     const localPoint = event.coords.glyphLocal;
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
 
-    this.#draft = editor.beginSourceEditDraft({
+    this.#draft = editor.beginGlyphLayerEditDraft({
       points: [...editor.selection.pointIds],
       anchors: [...editor.selection.anchorIds],
     });

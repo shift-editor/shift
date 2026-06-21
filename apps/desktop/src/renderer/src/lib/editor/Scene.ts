@@ -259,7 +259,7 @@ export class Scene {
    * @param scenePoint - Point in scene coordinates.
    * @returns Local point, or `null` when the item is not in the scene.
    */
-  itemLocalFromScene(itemId: ItemId, scenePoint: Point2D): Point2D | null {
+  toLocal(itemId: ItemId, scenePoint: Point2D): Point2D | null {
     const origin = this.item(itemId)?.placement.origin;
     if (!origin) return null;
     return { x: scenePoint.x - origin.x, y: scenePoint.y - origin.y };
@@ -272,7 +272,7 @@ export class Scene {
    * @param localPoint - Point in the placed item's local coordinates.
    * @returns Scene-space point, or `null` when the item is not in the scene.
    */
-  sceneFromItemLocal(itemId: ItemId, localPoint: Point2D): Point2D | null {
+  toScene(itemId: ItemId, localPoint: Point2D): Point2D | null {
     const origin = this.item(itemId)?.placement.origin;
     if (!origin) return null;
     return { x: localPoint.x + origin.x, y: localPoint.y + origin.y };

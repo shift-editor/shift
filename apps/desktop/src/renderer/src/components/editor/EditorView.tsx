@@ -1,4 +1,5 @@
 import { FC, useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
@@ -11,15 +12,12 @@ import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
-import type { GlyphId } from "@shift/types";
+import { asGlyphId } from "@shift/types";
 
-interface EditorViewProps {
-  glyphId: GlyphId;
-}
-
-export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
+export const EditorView: FC = () => {
   const editor = getEditor();
   const debug = useDebugSafe();
+  const { glyphId } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
   const fontLoaded = useSignalState(editor.font.$loaded);
 
@@ -33,9 +31,9 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   }, [editor]);
 
   useEffect(() => {
-    if (!fontLoaded) return undefined;
+    if (!fontLoaded || !glyphId) return undefined;
 
-    const record = editor.font.recordForId(glyphId);
+    const record = editor.font.recordForId(asGlyphId(glyphId));
     if (!record) {
       editor.scene.clear();
       return undefined;

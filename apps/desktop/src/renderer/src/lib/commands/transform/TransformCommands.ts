@@ -21,7 +21,7 @@ export class RotatePointsCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.rotate(this.#pointIds, this.#angle, this.#origin);
+    ctx.layer.rotate(this.#pointIds, this.#angle, this.#origin);
   }
 }
 
@@ -45,7 +45,7 @@ export class ScalePointsCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.scale(this.#pointIds, this.#sx, this.#sy, this.#origin);
+    ctx.layer.scale(this.#pointIds, this.#sx, this.#sy, this.#origin);
   }
 }
 
@@ -67,7 +67,7 @@ export class ReflectPointsCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.reflect(this.#pointIds, this.#axis, this.#origin);
+    ctx.layer.reflect(this.#pointIds, this.#axis, this.#origin);
   }
 }
 
@@ -90,6 +90,6 @@ export class MoveSelectionToCommand implements Command<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.source.moveSelectionTo(this.#pointIds, this.#target, this.#anchor);
+    ctx.layer.moveSelectionTo(this.#pointIds, this.#target, this.#anchor);
   }
 }

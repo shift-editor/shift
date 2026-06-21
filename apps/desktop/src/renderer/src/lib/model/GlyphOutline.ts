@@ -6,7 +6,7 @@ import type { AxisLocation } from "@/types/variation";
 import { Contour, Segment } from "@shift/glyph-state";
 import type { Glyph } from "./Glyph";
 import type { ContourData } from "@shift/types";
-import type { SourceContourCoordinates } from "./GlyphSourceState";
+import type { LayerContourCoordinates } from "./GlyphLayerState";
 
 interface GlyphResolver {
   glyph(handle: GlyphHandle): Glyph | null;
@@ -32,7 +32,7 @@ interface OutlineData {
  * Drawable outline part for one contour after component transforms are applied.
  *
  * @remarks
- * Parts are the cache boundary for outline rendering. A source-backed part can
+ * Parts are the cache boundary for outline rendering. A layer-backed part can
  * update its `path`, `svgPath`, and `bounds` when coordinates move; a
  * geometry-backed part is immutable after construction.
  */
@@ -60,9 +60,9 @@ export interface OutlinePart {
  * read from the source buffer. This lets sparse point edits invalidate one
  * contour part instead of rebuilding a full glyph snapshot.
  */
-class SourceOutlinePart implements OutlinePart {
+class LayerOutlinePart implements OutlinePart {
   readonly #contour: ContourData;
-  readonly #values: SourceContourCoordinates;
+  readonly #values: LayerContourCoordinates;
 
   readonly #matrix: Signal<MatModel>;
 
@@ -73,13 +73,13 @@ class SourceOutlinePart implements OutlinePart {
   readonly #bounds: ComputedSignal<BoundsType | null>;
 
   /**
-   * Creates a source-backed outline part.
+   * Creates a layer-backed outline part.
    *
    * @param contour - Contour structure whose points define the segment order.
    * @param values - Coordinate buffer for the contour's current source values.
    * @param matrix - Component transform applied to the contour.
    */
-  constructor(contour: ContourData, values: SourceContourCoordinates, matrix: Signal<MatModel>) {
+  constructor(contour: ContourData, values: LayerContourCoordinates, matrix: Signal<MatModel>) {
     this.#contour = contour;
     this.#values = values;
     this.#matrix = matrix;
@@ -90,7 +90,7 @@ class SourceOutlinePart implements OutlinePart {
         this.#matrix.value,
       ),
     );
-    this.#path = computed(() => SourceOutlinePart.#commandsToPath(this.#commands.value));
+    this.#path = computed(() => LayerOutlinePart.#commandsToPath(this.#commands.value));
     this.#svgPath = computed(() =>
       this.#commands.value.map((command) => OutlineCommands.toSvg(command)).join(" "),
     );
@@ -151,7 +151,7 @@ class SourceOutlinePart implements OutlinePart {
  * Outline part backed by an immutable geometry contour.
  *
  * @remarks
- * Geometry-backed parts are used when the outline is not at an editable source
+ * Geometry-backed parts are used when the outline is not backed by a live glyph layer
  * location. Their path surfaces are built lazily and remain valid for the
  * lifetime of the part.
  */
@@ -240,7 +240,7 @@ export class GlyphOutline {
    * Creates an outline model for one glyph at a reactive design location.
    *
    * @param glyph - Glyph whose contours and components are expanded.
-   * @param variationLocation - Design location that selects source-backed or geometry-backed outline parts.
+   * @param variationLocation - Design location that selects layer-backed or geometry-backed outline parts.
    * @param resolver - Glyph lookup used to expand component references.
    */
   constructor(glyph: Glyph, variationLocation: Signal<AxisLocation>, resolver: GlyphResolver) {
@@ -336,7 +336,7 @@ export class GlyphOutline {
    *
    * @remarks
    * Call this inside a render dependency boundary. It tracks outline part
-   * replacement plus source-backed coordinate changes, without forcing a
+   * replacement plus layer-backed coordinate changes, without forcing a
    * composed `Path2D` build during dependency collection.
    */
   trackShape(): void {
@@ -349,7 +349,7 @@ export class GlyphOutline {
  * Builds composed outline command data for one design location.
  *
  * The builder is intentionally short-lived. It owns recursion state while
- * expanding components, then returns either source-backed reactive parts or
+ * expanding components, then returns either layer-backed reactive parts or
  * immutable geometry-backed parts.
  */
 class GlyphOutlineBuilder {
@@ -371,7 +371,7 @@ class GlyphOutlineBuilder {
     this.#stack.add(glyph.name);
 
     const parts: OutlinePart[] = [];
-    const source = glyph.sourceAt(this.#location);
+    const source = glyph.layerAt(this.#location);
 
     if (source) {
       track(source.structureCell);
@@ -382,7 +382,7 @@ class GlyphOutlineBuilder {
       for (let index = 0; index < structure.contours.length; index++) {
         const contourValues = coordinates.contours[index];
         if (contourValues) {
-          parts.push(new SourceOutlinePart(structure.contours[index], contourValues, matrixSignal));
+          parts.push(new LayerOutlinePart(structure.contours[index], contourValues, matrixSignal));
         }
       }
 

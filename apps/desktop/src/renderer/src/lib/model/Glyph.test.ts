@@ -4,7 +4,7 @@ import type { Point } from "@shift/glyph-state";
 import { effect } from "@/lib/signals/signal";
 import { axisLocationFromLocation } from "@/lib/variation/location";
 import { TestEditor } from "@/testing/TestEditor";
-import type { Glyph, GlyphSource } from "./Glyph";
+import type { Glyph, GlyphLayer } from "./Glyph";
 
 /**
  * Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
@@ -14,7 +14,7 @@ import type { Glyph, GlyphSource } from "./Glyph";
  * Not restored yet (blocked on workspace vocabulary):
  * - "Glyph variation interpolation" — needs multi-source/axes vocabulary.
  */
-async function addTriangle(editor: TestEditor, layer: GlyphSource): Promise<readonly Point[]> {
+async function addTriangle(editor: TestEditor, layer: GlyphLayer): Promise<readonly Point[]> {
   const contourId = layer.addContour();
 
   layer.addPoint(contourId, { x: 0, y: 0, pointType: "onCurve", smooth: false });
@@ -28,14 +28,14 @@ async function addTriangle(editor: TestEditor, layer: GlyphSource): Promise<read
   return contour.points;
 }
 
-function pointPosition(layer: GlyphSource, pointId: PointId): { x: number; y: number } {
+function pointPosition(layer: GlyphLayer, pointId: PointId): { x: number; y: number } {
   const point = layer.point(pointId);
   if (!point) throw new Error("Expected point");
 
   return { x: point.x, y: point.y };
 }
 
-function sourcePosition(layer: GlyphSource, pointId: PointId): { x: number; y: number } {
+function sourcePosition(layer: GlyphLayer, pointId: PointId): { x: number; y: number } {
   const position = layer.positionsFor([{ kind: "point", id: pointId }])[0];
   if (!position) throw new Error("Expected source position");
 
@@ -45,12 +45,12 @@ function sourcePosition(layer: GlyphSource, pointId: PointId): { x: number; y: n
 describe("Glyph", () => {
   let editor: TestEditor;
   let glyph: Glyph;
-  let layer: GlyphSource;
+  let layer: GlyphLayer;
 
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    layer = editor.activeGlyphSource!;
+    layer = editor.editingGlyphLayer!;
     glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
   });
 
@@ -99,12 +99,12 @@ describe("Glyph", () => {
 
 describe("anchors edit through the workspace", () => {
   let editor: TestEditor;
-  let layer: GlyphSource;
+  let layer: GlyphLayer;
 
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    layer = editor.activeGlyphSource!;
+    layer = editor.editingGlyphLayer!;
   });
 
   it("addAnchor echoes a named anchor into confirmed geometry", async () => {
@@ -171,19 +171,19 @@ describe("anchors edit through the workspace", () => {
   });
 });
 
-describe("glyph sources keep public geometry coherent across position edits", () => {
+describe("glyph layers keep public geometry coherent across position edits", () => {
   let editor: TestEditor;
   let glyph: Glyph;
-  let layer: GlyphSource;
+  let layer: GlyphLayer;
 
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    layer = editor.activeGlyphSource!;
+    layer = editor.editingGlyphLayer!;
     glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
   });
 
-  it("previews point patches through every public source geometry view", async () => {
+  it("previews point patches through every public layer geometry view", async () => {
     const [, second] = await addTriangle(editor, layer);
 
     layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);

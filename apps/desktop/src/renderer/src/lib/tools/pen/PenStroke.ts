@@ -2,17 +2,17 @@ import { Vec2, type Point2D } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import type { ContourId, PointId } from "@shift/types";
 import type { Editor } from "@/lib/editor/Editor";
-import type { GlyphSource, GlyphInstanceGeometry, SourcePositions } from "@/lib/model/Glyph";
+import type { GlyphLayer, GlyphInstanceGeometry, GlyphLayerPositions } from "@/lib/model/Glyph";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import { Anchor, Handles } from "./types";
 
 export class PenStroke {
-  #pendingHandles: SourcePositions | null = null;
+  #pendingHandles: GlyphLayerPositions | null = null;
   readonly #editor: Editor;
   readonly #geometry: GlyphInstanceGeometry;
-  readonly #edit: GlyphSource;
+  readonly #edit: GlyphLayer;
 
-  private constructor(editor: Editor, geometry: GlyphInstanceGeometry, edit: GlyphSource) {
+  private constructor(editor: Editor, geometry: GlyphInstanceGeometry, edit: GlyphLayer) {
     this.#editor = editor;
     this.#geometry = geometry;
     this.#edit = edit;
@@ -20,9 +20,9 @@ export class PenStroke {
 
   static active(editor: Editor): PenStroke | null {
     const instance = editor.glyphInstance;
-    if (!instance?.edit) return null;
+    if (!instance?.layer) return null;
 
-    return new PenStroke(editor, instance.geometry, instance.edit);
+    return new PenStroke(editor, instance.geometry, instance.layer);
   }
 
   get activeContour(): Contour | null {
@@ -120,7 +120,7 @@ export class PenStroke {
   }
 
   moveHandles(anchor: Anchor, handles: Handles, handlePos: Point2D): void {
-    const positions: SourcePositions[number][] = [];
+    const positions: GlyphLayerPositions[number][] = [];
 
     if (handles.cpOut) {
       positions.push({

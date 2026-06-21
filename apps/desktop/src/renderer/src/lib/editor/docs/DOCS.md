@@ -6,7 +6,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, edge-pan, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers.
 
-**Architecture Invariant:** Pointer events still carry `screen`, `scene`, and active glyph-local coordinates for the current tool path. Placed scene item-local conversion is not global; it requires an `ItemId` through `Scene.itemLocalFromScene()` / `Scene.sceneFromItemLocal()`.
+**Architecture Invariant:** Pointer events still carry `screen`, `scene`, and active glyph-local coordinates for the current tool path. Placed scene item-local conversion is not global; it requires an `ItemId` through `Scene.toLocal()` / `Scene.toScene()`.
 
 **Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
 
@@ -16,7 +16,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `FrameHandler` deduplicates `requestAnimationFrame` calls per canvas layer. Multiple signal changes within a single frame coalesce into one render. Canvas lifecycle changes, such as replacing a layer context after resize, are represented as renderer surface signals so redraw causes remain inspectable.
 
-**Architecture Invariant:** `SourceEditDraft` is the only way to perform continuous source previews (drags). Call `beginSourceEditDraft()` at drag start, `preview*()` on each move, and either `commit(label)` or `discard()` at drag end. Draft internally records a single undo command from frozen base positions. Calling `commit` twice is a no-op; forgetting to call `commit`/`discard` leaks the preview state.
+**Architecture Invariant:** `GlyphLayerEditDraft` is the only way to perform continuous layer previews (drags). Call `beginGlyphLayerEditDraft()` at drag start, `preview*()` on each move, and either `commit(label)` or `discard()` at drag end. Draft internally records a single undo command from frozen base positions. Calling `commit` twice is a no-op; forgetting to call `commit`/`discard` leaks the preview state.
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
 
@@ -61,7 +61,7 @@ editor/
 - **`Selection`** -- Unified selection state for points, anchors, and segments. Computed `DerivedSelection` tracks selected contours and bounds. Exposes one raw `$state` signal plus unwrapped ID getters.
 - **`Selectable`** -- Discriminated union: `{ kind: "point" | "anchor" | "segment", id }`.
 - **`Coordinates`** -- Triple of `{ screen, scene, glyphLocal }` for a single position. Built via `Editor.fromScreen()` etc.
-- **`SourceEditDraft`** -- Transactional interface for continuous source manipulation: `previewPositionPatch()` / `previewTranslate()` / `previewRotate()` / `previewScale()` during drag, `commit(label)` or `discard()` at end.
+- **`GlyphLayerEditDraft`** -- Transactional interface for continuous layer manipulation: `previewPositionPatch()` / `previewTranslate()` / `previewRotate()` / `previewScale()` during drag, `commit(label)` or `discard()` at end.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. Only the latest callback fires.
@@ -81,11 +81,11 @@ editor/
 Screen (canvas pixels, Y-down)
   -> Camera.projectScreenToScene() [affine matrix inverse]
 Scene (UPM space, Y-up, viewport-relative)
-  -> Editor.sceneToGlyphLocal() [subtract layout-derived drawOffset]
-GlyphLocal (origin at glyph baseline-left)
+  -> Scene.toLocal(itemId, scenePoint) [subtract that item's placement origin]
+Item-local (origin defined by the placed scene item)
 ```
 
-For direct glyph opens, `Editor.openGlyph()` creates a one-item implicit editor run and focuses that item. For text-run editing, `Editor.setGlyphFocus(anchor)` focuses the clicked item. Both paths produce `drawOffset` through the same anchor-resolution pipeline.
+Existing tools still receive `coords.glyphLocal` for the active glyph path. New scene-aware code should not treat that coordinate as global; use `Scene.toLocal(itemId, scenePoint)` after hit testing identifies the item.
 
 `Camera` computes the UPM-to-screen matrix as: baseline positioning + Y-flip + scale, composed with pan + zoom. The inverse is lazily computed. Both are `ComputedSignal<Mat>` so any dependent computed/effect auto-invalidates.
 
@@ -118,7 +118,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()
 
 ### Draft pattern (continuous manipulation)
 
-`Editor.beginSourceEditDraft(subject)` captures base point/anchor positions from the active `GlyphSource`. During drag, `draft.preview*()` applies positions to the reactive glyph source only. On commit, it syncs the final sparse patch through `GlyphSource.commitPositionPatch()` and records a single `ApplyPositionPatchCommand`. On discard, it restores the frozen base positions as a preview.
+`Editor.beginGlyphLayerEditDraft(subject)` captures base point/anchor positions from the active `GlyphLayer`. During drag, `draft.preview*()` applies positions to the reactive glyph layer only. On commit, it syncs the final sparse patch through `GlyphLayer.commitPositionPatch()` and records a single `ApplyPositionPatchCommand`. On discard, it restores the frozen base positions as a preview.
 
 ### Hit testing
 
@@ -151,10 +151,10 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 - **Forgetting to read a signal in an effect** -- The canvas will not redraw when that state changes. Each effect must explicitly read `.value` of every signal it depends on.
 - **Caching `CameraTransform` across frames** -- `getCameraTransform()` returns a snapshot object. It is correct for one frame but stale after zoom/pan changes. Rendering code gets a fresh one via `Renderer.#getCanvas()`.
-- **Draft lifecycle** -- A `SourceEditDraft` must be committed or discarded. Calling `commit()` twice is safe (no-op), but forgetting both leaks the preview state.
+- **Draft lifecycle** -- A `GlyphLayerEditDraft` must be committed or discarded. Calling `commit()` twice is safe (no-op), but forgetting both leaks the preview state.
 - **Hover mutual exclusion** -- `Hover` stores one glyph-domain target at a time. Tool-specific hover state should stay with the owning tool.
 - **Marker fallback** -- `Handles.draw()` tries the accelerated marker layer first. If WebGL is unavailable, it falls back to CPU canvas drawing internally.
-- **Three-space coordinates** -- Never convert between screen/scene/glyphLocal manually. Always use `Editor.fromScreen()` / `fromScene()` / `fromGlyphLocal()` which guarantee all three are consistent.
+- **Item-local coordinates** -- `glyphLocal` is transitional active-glyph state. Scene item-local conversion requires an `ItemId` through `Scene.toLocal()` / `Scene.toScene()`.
 
 ## Verification
 
@@ -165,7 +165,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ## Related
 
-- `NativeBridge` -- State source; `Editor.#bridge` provides source-aware glyph state and edit-session mutations.
+- `Font` -- State projection and glyph/layer lookup; `Editor` reads authored glyph layers through this boundary.
 - `CommandHistory` -- Undo/redo stack; `Editor.#commandHistory` records all mutations.
 - `ToolManager` -- Tool lifecycle and dispatch; `Editor.#toolManager`. Tools receive `Editor` to access all subsystems.
 - `Clipboard` -- Copy/cut/paste via `Editor.#clipboard`.

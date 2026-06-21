@@ -19,7 +19,7 @@ export const GlyphSection = () => {
     sidebearings.sidebearings.lsb === null ? null : Math.round(sidebearings.sidebearings.lsb);
   const rsb =
     sidebearings.sidebearings.rsb === null ? null : Math.round(sidebearings.sidebearings.rsb);
-  const sidebearingsEnabled = sidebearings.editable && lsb !== null && rsb !== null;
+  const sidebearingsEnabled = sidebearings.hasLayer && lsb !== null && rsb !== null;
 
   return (
     <SidebarSection title="Glyph">
@@ -51,7 +51,7 @@ export const GlyphSection = () => {
           <EditableSidebarInput
             className="text-center"
             value={Math.round(xAdvance.xAdvance)}
-            disabled={!xAdvance.editable}
+            disabled={!xAdvance.hasLayer}
             onValueChange={(width) => editor.setXAdvance(width)}
           />
         </div>

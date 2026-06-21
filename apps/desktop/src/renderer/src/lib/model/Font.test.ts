@@ -146,7 +146,7 @@ describe("font-level intents make the font variable", () => {
     expect(bold?.id).toBe(boldSourceId);
     expect(applied.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
     expect(applied.layers).toEqual([]);
-    expect(stack.font.glyphLayer(glyphId, boldSourceId)).toBeNull();
+    expect(stack.font.glyphLayerRecord(glyphId, boldSourceId)).toBeNull();
   });
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
@@ -170,10 +170,10 @@ describe("font-level intents make the font variable", () => {
     ]);
 
     expect(applied.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
-    expect(stack.font.glyphLayer(glyphId, sourceId)).toEqual({ id: layerId, sourceId });
+    expect(stack.font.glyphLayerRecord(glyphId, sourceId)).toEqual({ id: layerId, sourceId });
   });
 
-  it("exact sources without glyph layers are non-editable and do not render default geometry", async () => {
+  it("exact sources without glyph layers have no live layer and do not render default geometry", async () => {
     const stack = createWorkspaceStack();
     await stack.client.create();
     const glyphId = mintGlyphId();
@@ -229,8 +229,8 @@ describe("font-level intents make the font variable", () => {
     if (!bold) throw new Error("Expected created source");
     const instance = glyph.instanceAt(axisLocationFromLocation(bold.location));
 
-    expect(instance.edit).toBeNull();
-    expect(instance.hasSource).toBe(false);
+    expect(instance.layer).toBeNull();
+    expect(instance.hasLayer).toBe(false);
     expect(instance.xAdvance).toBe(0);
     expect(instance.geometry.allPoints).toEqual([]);
   });

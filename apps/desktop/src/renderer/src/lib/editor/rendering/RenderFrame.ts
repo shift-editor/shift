@@ -65,10 +65,10 @@ export interface OverlayLayerProps {
 }
 
 /**
- * Draws stable glyph-context content behind the editable scene.
+ * Draws stable glyph-context content behind the scene.
  *
  * @remarks
- * Z-order slot 0. This layer sits below the editable glyph scene and should
+ * Z-order slot 0. This layer sits below the scene and should
  * contain stable context such as metrics guides and tool-specific background
  * aids.
  *
@@ -190,13 +190,13 @@ export class TextLayer extends CanvasItem<TextLayerProps> {
 }
 
 /**
- * Draws the main editable glyph scene.
+ * Draws the main scene.
  *
  * @remarks
  * Z-order slot 1. This layer is ordered from persistent glyph content to
  * direct geometry controls:
  *
- * 1. editable glyph outline
+ * 1. glyph outlines
  * 2. debug overlays
  * 3. active tool scene drawing
  * 4. text runs
@@ -208,7 +208,7 @@ export class TextLayer extends CanvasItem<TextLayerProps> {
  *
  * Scene props group glyph display state, interaction state, and view state so
  * render dependencies stay inspectable. Control lines are drawn as part of the
- * handle pass because handles and their control tethers are one visual affordance.
+ * handle pass because handles and their control tethers are one visual unit.
  */
 export class SceneLayer extends CanvasItem<SceneLayerProps> {
   readonly #editor: Editor;
@@ -295,7 +295,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     const { model, instance, geometryShown } = glyph;
     const { display } = props;
     if (!model || !instance) return;
-    if (geometryShown && !display.editableGlyphVisible) return;
+    if (geometryShown && !display.focusedGlyphVisible) return;
 
     canvas.withTranslation(glyph.item.placement.origin, () => {
       if (!geometryShown) {
@@ -318,7 +318,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
   #drawDebugOverlays(canvas: Canvas, props: SceneLayerProps, glyph: SceneGlyphFrame): void {
     const { model, geometryShown } = glyph;
     const { display } = props;
-    if (!geometryShown || !model || display.proofMode || !display.editableGlyphVisible) return;
+    if (!geometryShown || !model || display.proofMode || !display.focusedGlyphVisible) return;
     const { hover } = props.interaction;
     const hoveredSegmentId = hover?.type === "segment" ? hover.segmentId : null;
 
@@ -344,7 +344,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
       !geometryShown ||
       display.proofMode ||
       !display.handlesVisible ||
-      !display.editableGlyphVisible ||
+      !display.focusedGlyphVisible ||
       !instance
     ) {
       return false;

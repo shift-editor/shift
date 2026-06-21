@@ -31,10 +31,10 @@ TextBuffer items
 - **`PositionedGlyph.sourceItemIds`** -- source item identities covered by a positioned glyph. Simple layout is one-to-one; shaped layout may be many-to-one or one-to-many.
 - **`Positioner`** -- current simple source-order layout implementation. It owns display advance and mark offset logic so editor placement is layout-derived.
 
-## Direct Glyph Open
+## Legacy Editor Text Run
 
 ```
-openGlyph(S)
+editorRun.setSingleGlyph(S)
    |
    v
 editorRun = [S(id=s1)]
