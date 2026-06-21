@@ -11,7 +11,8 @@ export type GlyphSnapshotLoadOptions = {
   readonly sourceIds?: readonly SourceId[];
 };
 
-export interface GlyphSnapshotLoadPort {
+export interface GlyphSnapshotSyncPort {
+  settled(): Promise<void>;
   loadGlyphSnapshots(requests: readonly WorkspaceGlyphSnapshotRequest[]): Promise<void>;
 }
 
@@ -26,10 +27,10 @@ type InFlightKey = string & { readonly __inFlightKey: unique symbol };
  */
 export class GlyphSnapshotLoader {
   readonly #store: GlyphSnapshotStorePort;
-  readonly #sync: GlyphSnapshotLoadPort;
+  readonly #sync: GlyphSnapshotSyncPort;
   readonly #inFlight = new Set<InFlightKey>();
 
-  constructor(store: GlyphSnapshotStorePort, sync: GlyphSnapshotLoadPort) {
+  constructor(store: GlyphSnapshotStorePort, sync: GlyphSnapshotSyncPort) {
     this.#store = store;
     this.#sync = sync;
   }
@@ -41,6 +42,9 @@ export class GlyphSnapshotLoader {
    * @param options - optional source scope; omitted means every authored layer for each glyph.
    */
   async load(glyphIds: readonly GlyphId[], options: GlyphSnapshotLoadOptions = {}): Promise<void> {
+    if (glyphIds.length === 0) return;
+    await this.#sync.settled();
+
     const queue = this.#requestable(glyphIds, options);
     const seen = new Set<GlyphId>(queue.map((request) => request.glyphId));
 

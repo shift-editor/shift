@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
+  Axis,
+  AxisId,
   ComponentId,
   GlyphId,
   GlyphName,
@@ -14,9 +16,10 @@ import type {
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import { FontStore, type FontStoreSyncPort } from "./FontStore";
-import { GlyphSnapshotLoader, type GlyphSnapshotLoadPort } from "./GlyphSnapshotLoader";
+import { GlyphSnapshotLoader, type GlyphSnapshotSyncPort } from "./GlyphSnapshotLoader";
 
 const SOURCE_ID = "source_regular" as SourceId;
+const AXIS_ID = "axis_weight" as AxisId;
 const GLYPH_A_ID = "glyph_a" as GlyphId;
 const GLYPH_B_ID = "glyph_b" as GlyphId;
 const LAYER_A_ID = "layer_a" as LayerId;
@@ -35,15 +38,44 @@ describe("glyph snapshot loading follows component dependencies", () => {
     expect(store.layerState(LAYER_A_ID)?.geometry.components[0]?.baseGlyphId).toBe(GLYPH_B_ID);
     expect(store.layerState(LAYER_B_ID)?.xAdvance).toBe(500);
   });
+
+  it("settles queued workspace edits before checking snapshot freshness", async () => {
+    const store = new FontStore(workspaceSnapshot());
+    const generation = store.sync.markSnapshotsLoading([GLYPH_A_ID]);
+    store.sync.applyGlyphSnapshots([GLYPH_A_ID], [glyphSnapshotA(600)], generation);
+    const sync = new SnapshotFixtureSync(
+      store.sync,
+      [glyphSnapshotA(700), glyphSnapshotB()],
+      () => {
+        store.sync.foldAppliedChange({ layers: [], axes: [weightAxis()], dependents: [] });
+      },
+    );
+    const loader = new GlyphSnapshotLoader(store.glyphSnapshots, sync);
+
+    await loader.load([GLYPH_A_ID]);
+
+    expect(store.glyphSnapshots.snapshotStatus(GLYPH_A_ID)).toBe("loaded");
+    expect(store.layerState(LAYER_A_ID)?.xAdvance).toBe(700);
+  });
 });
 
-class SnapshotFixtureSync implements GlyphSnapshotLoadPort {
+class SnapshotFixtureSync implements GlyphSnapshotSyncPort {
   readonly #store: FontStoreSyncPort;
   readonly #snapshots: ReadonlyMap<GlyphId, WorkspaceGlyphSnapshot>;
+  readonly #settle: () => void;
 
-  constructor(store: FontStoreSyncPort, snapshots: readonly WorkspaceGlyphSnapshot[]) {
+  constructor(
+    store: FontStoreSyncPort,
+    snapshots: readonly WorkspaceGlyphSnapshot[],
+    settle: () => void = () => {},
+  ) {
     this.#store = store;
     this.#snapshots = new Map(snapshots.map((snapshot) => [snapshot.glyphId, snapshot]));
+    this.#settle = settle;
+  }
+
+  async settled(): Promise<void> {
+    this.#settle();
   }
 
   async loadGlyphSnapshots(requests: readonly WorkspaceGlyphSnapshotRequest[]): Promise<void> {
@@ -89,14 +121,14 @@ function workspaceSnapshot(): WorkspaceSnapshot {
   };
 }
 
-function glyphSnapshotA(): WorkspaceGlyphSnapshot {
+function glyphSnapshotA(xAdvance = 600): WorkspaceGlyphSnapshot {
   return {
     glyphId: GLYPH_A_ID,
     layers: [
       {
         glyphId: GLYPH_A_ID,
         sourceId: SOURCE_ID,
-        state: componentGlyphState(),
+        state: componentGlyphState(xAdvance),
       },
     ],
   };
@@ -115,7 +147,7 @@ function glyphSnapshotB(): WorkspaceGlyphSnapshot {
   };
 }
 
-function componentGlyphState(): GlyphState {
+function componentGlyphState(xAdvance: number): GlyphState {
   return {
     layerId: LAYER_A_ID,
     structure: {
@@ -129,7 +161,7 @@ function componentGlyphState(): GlyphState {
         },
       ],
     },
-    values: new Float64Array([600, 0, 0, 0, 1, 1, 0, 0, 0, 0]),
+    values: new Float64Array([xAdvance, 0, 0, 0, 1, 1, 0, 0, 0, 0]),
   };
 }
 
@@ -138,5 +170,17 @@ function simpleGlyphState(layerId: LayerId): GlyphState {
     layerId,
     structure: { contours: [], anchors: [], components: [] },
     values: new Float64Array([500]),
+  };
+}
+
+function weightAxis(): Axis {
+  return {
+    id: AXIS_ID,
+    tag: "wght",
+    name: "Weight",
+    min: 100,
+    default: 400,
+    max: 900,
+    hidden: false,
   };
 }

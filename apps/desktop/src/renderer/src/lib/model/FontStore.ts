@@ -269,14 +269,7 @@ export class FontStore {
         }
       }
 
-      if (staleGlyphIds.size > 0) {
-        const nextStatus = new Map(this.#snapshotStatus.peek());
-        for (const glyphId of staleGlyphIds) {
-          const status = nextStatus.get(glyphId);
-          if (status === "loaded") nextStatus.set(glyphId, "stale");
-        }
-        this.#snapshotStatus.set(nextStatus);
-      }
+      this.#markLoadedSnapshotsStale(staleGlyphIds);
     });
   }
 
@@ -383,6 +376,19 @@ export class FontStore {
     return record.layers
       .map((layer) => this.#layerStates.get(layer.id))
       .filter((state): state is GlyphLayerState => state !== undefined);
+  }
+
+  #markLoadedSnapshotsStale(glyphIds: Iterable<GlyphId>): void {
+    const nextStatus = new Map(this.#snapshotStatus.peek());
+    let changed = false;
+
+    for (const glyphId of glyphIds) {
+      if (nextStatus.get(glyphId) !== "loaded") continue;
+      nextStatus.set(glyphId, "stale");
+      changed = true;
+    }
+
+    if (changed) this.#snapshotStatus.set(nextStatus);
   }
 
   #indexWorkspace(snapshot: WorkspaceSnapshot | null): void {
