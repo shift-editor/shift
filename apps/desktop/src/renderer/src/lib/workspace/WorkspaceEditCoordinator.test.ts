@@ -2,7 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { type FontIntent, type GlyphName, type Unicode, mintGlyphId } from "@shift/types";
+import {
+  mintAxisId,
+  mintGlyphId,
+  mintLayerId,
+  type FontIntent,
+  type GlyphName,
+  type Unicode,
+} from "@shift/types";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
 const createGlyph = (name: string, unicode: number): FontIntent => ({
@@ -51,5 +58,41 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     await editCoordinator.settled();
     expect(editCoordinator.commitStateCell.peek()).toBe("idle");
     expect(client.documentStateCell.peek()).toMatchObject({ dirty: true });
+  });
+
+  it("marks snapshot loads after queued workspace summary edits flush", async () => {
+    const { font, glyphSnapshotLoader, store, workspaceSync } = stack;
+    const glyphId = mintGlyphId();
+    const layerId = mintLayerId();
+    await workspaceSync.apply([
+      {
+        kind: "createGlyph",
+        createGlyph: { glyphId, name: "D" as GlyphName, unicodes: [68 as Unicode] },
+      },
+      {
+        kind: "createGlyphLayer",
+        createGlyphLayer: { layerId, glyphId, sourceId: font.defaultSource.id },
+      },
+    ]);
+    await glyphSnapshotLoader.load([glyphId]);
+
+    const axisId = mintAxisId();
+    workspaceSync.push({
+      kind: "createAxis",
+      createAxis: {
+        axisId,
+        tag: "wght",
+        name: "Weight",
+        min: 100,
+        default: 400,
+        max: 900,
+        hidden: false,
+      },
+    });
+
+    await glyphSnapshotLoader.load([glyphId]);
+
+    expect(font.getAxes().map((axis) => axis.id)).toEqual([axisId]);
+    expect(store.glyphSnapshots.snapshotStatus(glyphId)).toBe("loaded");
   });
 });

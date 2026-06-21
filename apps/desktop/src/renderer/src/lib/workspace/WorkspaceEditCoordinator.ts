@@ -98,9 +98,16 @@ export class WorkspaceEditCoordinator {
     if (requests.length === 0) return;
 
     const glyphIds = requests.map((request) => request.glyphId);
-    const generation = this.#store.markSnapshotsLoading(glyphIds);
-    const snapshots = await this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
-    this.#store.applyGlyphSnapshots(glyphIds, snapshots, generation);
+    await this.#withFlush(async () => {
+      const generation = this.#store.markSnapshotsLoading(glyphIds);
+      try {
+        const snapshots = await this.#workspace.glyphSnapshots(requests);
+        this.#store.applyGlyphSnapshots(glyphIds, snapshots, generation);
+      } catch (error) {
+        this.#store.markSnapshotsFailed(glyphIds, generation);
+        throw error;
+      }
+    });
   }
 
   /** Replays the latest redo entry after pending pushes flush. */

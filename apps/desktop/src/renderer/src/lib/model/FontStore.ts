@@ -19,7 +19,7 @@ import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/s
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { Glyph, GlyphLayer } from "./Glyph";
 
-export type GlyphSnapshotStatus = "missing" | "loading" | "loaded" | "stale";
+export type GlyphSnapshotStatus = "missing" | "loading" | "loaded" | "stale" | "failed";
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
 type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
@@ -38,6 +38,7 @@ export interface FontStoreSyncPort {
   beginApplying(): void;
   markSettledIfIdle(busy: number): void;
   markSnapshotsLoading(glyphIds: readonly GlyphId[]): number;
+  markSnapshotsFailed(glyphIds: readonly GlyphId[], generation: number): void;
   applyGlyphSnapshots(
     requestedGlyphIds: readonly GlyphId[],
     snapshots: readonly WorkspaceGlyphSnapshot[],
@@ -93,6 +94,7 @@ export class FontStore {
     beginApplying: () => this.#beginApplying(),
     markSettledIfIdle: (busy) => this.#markSettledIfIdle(busy),
     markSnapshotsLoading: (glyphIds) => this.#markSnapshotsLoading(glyphIds),
+    markSnapshotsFailed: (glyphIds, generation) => this.#markSnapshotsFailed(glyphIds, generation),
     applyGlyphSnapshots: (requestedGlyphIds, snapshots, generation) =>
       this.#applyGlyphSnapshots(requestedGlyphIds, snapshots, generation),
     foldAppliedChange: (applied) => this.#foldAppliedChange(applied),
@@ -171,6 +173,18 @@ export class FontStore {
     }
     this.#snapshotStatus.set(next);
     return generation;
+  }
+
+  #markSnapshotsFailed(glyphIds: readonly GlyphId[], generation: number): void {
+    if (generation !== this.#generation) return;
+
+    const next = new Map(this.#snapshotStatus.peek());
+    for (const glyphId of glyphIds) {
+      if (this.#snapshotGeneration.get(glyphId) === generation) {
+        next.set(glyphId, "failed");
+      }
+    }
+    this.#snapshotStatus.set(next);
   }
 
   #applyGlyphSnapshots(

@@ -89,7 +89,7 @@ export class GlyphSnapshotLoader {
 
   #neededSourceIds(glyphId: GlyphId, options: GlyphSnapshotLoadOptions): SourceId[] {
     const status = this.#store.snapshotStatus(glyphId);
-    const stale = status === "stale";
+    const shouldReload = status === "stale" || status === "failed";
     const needed: SourceId[] = [];
     const seen = new Set<SourceId>();
     const sourceIds = options.sourceIds ?? this.#store.sourceIdsForGlyph(glyphId);
@@ -99,7 +99,7 @@ export class GlyphSnapshotLoader {
       seen.add(sourceId);
       if (!this.#store.hasLayerRecord(glyphId, sourceId)) continue;
       if (this.#inFlight.has(inFlightKey(glyphId, sourceId))) continue;
-      if (stale || !this.#store.hasLayerSnapshot(glyphId, sourceId)) {
+      if (shouldReload || !this.#store.hasLayerSnapshot(glyphId, sourceId)) {
         needed.push(sourceId);
       }
     }
