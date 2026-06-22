@@ -192,8 +192,7 @@ describe("font-level intents make the font variable", () => {
     expect(committed?.layers).toEqual(record.layers);
     expect(stack.font.layerRecordForId(record.id, source.id)).toEqual(record.layers[0]);
 
-    await stack.font.ensureGlyphs([record.id], { sourceIds: [source.id] });
-    const glyph = stack.font.glyphForId(record.id);
+    const glyph = await stack.font.loadGlyph(record.id, { sourceIds: [source.id] });
     expect(glyph?.xAdvance).toBe(stack.font.defaultXAdvance);
   });
 
@@ -203,9 +202,7 @@ describe("font-level intents make the font variable", () => {
 
     const record = stack.font.createGlyph("A" as GlyphName);
     await stack.editCoordinator.settled();
-    await stack.font.ensureGlyphs([record.id]);
-
-    const glyph = stack.font.glyphForId(record.id);
+    const glyph = await stack.font.loadGlyph(record.id);
     if (!glyph) throw new Error("Expected loaded glyph");
 
     await stack.editCoordinator.apply([
@@ -272,8 +269,9 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    await stack.font.ensureGlyphs([glyphId], { sourceIds: [stack.font.defaultSource.id] });
-    const glyph = stack.font.glyphForId(glyphId);
+    const glyph = await stack.font.loadGlyph(glyphId, {
+      sourceIds: [stack.font.defaultSource.id],
+    });
     if (!glyph) throw new Error("Expected default glyph layer to open");
     expect(glyph.xAdvance).toBe(640);
 
@@ -340,8 +338,8 @@ describe("font-level intents make the font variable", () => {
     const boldSource = stack.font.source(boldSourceId);
     if (!regularSource || !boldSource) throw new Error("Expected both sources");
 
-    const regularLoad = stack.font.ensureGlyphs([glyphId], { sourceIds: [defaultSourceId] });
-    const boldLoad = stack.font.ensureGlyphs([glyphId], { sourceIds: [boldSourceId] });
+    const regularLoad = stack.font.loadGlyph(glyphId, { sourceIds: [defaultSourceId] });
+    const boldLoad = stack.font.loadGlyph(glyphId, { sourceIds: [boldSourceId] });
     await Promise.all([regularLoad, boldLoad]);
 
     expect(stack.font.glyphLayerForId(glyphId, regularSource.id)?.id).toBe(defaultLayerId);

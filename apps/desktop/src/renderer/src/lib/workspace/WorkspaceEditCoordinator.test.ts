@@ -74,7 +74,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
         createGlyphLayer: { layerId, glyphId, sourceId: font.defaultSource.id },
       },
     ]);
-    await font.ensureGlyphs([glyphId]);
+    await font.loadGlyph(glyphId);
 
     const axisId = mintAxisId();
     editCoordinator.push({
@@ -90,7 +90,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
       },
     });
 
-    await font.ensureGlyphs([glyphId]);
+    await font.loadGlyph(glyphId);
 
     expect(font.getAxes().map((axis) => axis.id)).toEqual([axisId]);
     expect(store.snapshotStatus(glyphId)).toBe("loaded");

@@ -93,8 +93,7 @@ export class TestEditor extends Editor {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    await this.font.ensureGlyphs([record.id], { sourceIds: [sourceId] });
-    const glyph = this.font.glyphForId(record.id);
+    const glyph = await this.font.loadGlyph(record.id, { sourceIds: [sourceId] });
     if (!glyph) throw new Error("glyphForId returned null for a loaded glyph");
     return glyph;
   }

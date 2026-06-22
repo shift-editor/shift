@@ -47,7 +47,7 @@ export async function layoutTestFont(): Promise<Font> {
     await stack.editCoordinator.apply([
       { kind: "setXAdvance", setXAdvance: { layerId, width: advance } },
     ]);
-    await stack.font.ensureGlyphs([record.id]);
+    await stack.font.loadGlyph(record.id);
   }
 
   const record = stack.font.recordForName("A" as GlyphName);

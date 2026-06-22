@@ -1,10 +1,7 @@
-import { useEffect } from "react";
 import type { FontMetrics } from "@shift/types";
-import type { Font } from "@/lib/model/Font";
 import type { Glyph } from "@/lib/model/Glyph";
-import { useSignalState } from "@/lib/signals";
-import { useEditor } from "@/workspace/WorkspaceContext";
-import type { GlyphHandle } from "@shift/bridge";
+import { type Signal, useSignalState } from "@/lib/signals";
+import type { AxisLocation } from "@/types/variation";
 
 export const CELL_HEIGHT = 75;
 
@@ -46,50 +43,68 @@ export function computeCellWidth(
 }
 
 interface GlyphPreviewProps {
-  handle: GlyphHandle;
-  font: Font;
+  glyph: Glyph | null;
+  unicode: number | null;
+  metrics: FontMetrics;
+  designLocation: Signal<AxisLocation>;
   height?: number;
 }
 
-export function GlyphPreview({ handle, font, height = CELL_HEIGHT }: GlyphPreviewProps) {
-  const fontLoaded = useSignalState(font.$loaded);
-  const record = fontLoaded ? font.recordForName(handle.name) : null;
-  const recordId = record?.id ?? null;
-
-  useEffect(() => {
-    if (!recordId) return;
-    font.requestGlyphs([recordId]);
-  }, [font, recordId]);
-
-  if (!fontLoaded) {
-    return <FallbackCell handle={handle} font={font} height={height} advance={null} />;
-  }
-
-  const glyph = recordId ? font.glyphForId(recordId) : null;
+export function GlyphPreview({
+  glyph,
+  unicode,
+  metrics,
+  designLocation,
+  height = CELL_HEIGHT,
+}: GlyphPreviewProps) {
   if (!glyph) {
-    return <FallbackCell handle={handle} font={font} height={height} advance={null} />;
+    return <FallbackCell metrics={metrics} height={height} unicode={unicode} advance={null} />;
   }
 
-  return <GlyphCell font={font} height={height} glyph={glyph} />;
+  return (
+    <GlyphCell
+      metrics={metrics}
+      height={height}
+      glyph={glyph}
+      unicode={unicode}
+      designLocation={designLocation}
+    />
+  );
 }
 
-function GlyphCell({ font, height, glyph }: { font: Font; height: number; glyph: Glyph }) {
-  const editor = useEditor();
-  const outline = glyph.instance(editor.$designLocation).render.outline;
+function GlyphCell({
+  metrics,
+  height,
+  glyph,
+  unicode,
+  designLocation,
+}: {
+  metrics: FontMetrics;
+  height: number;
+  glyph: Glyph;
+  unicode: number | null;
+  designLocation: Signal<AxisLocation>;
+}) {
+  const outline = glyph.instance(designLocation).render.outline;
 
   const svgPath = useSignalState(outline.$svgPath);
   const advance = useSignalState(glyph.$xAdvance);
 
-  const fontMetrics = font.metrics;
-
-  const cellWidth = computeCellWidth(fontMetrics, advance, height);
+  const cellWidth = computeCellWidth(metrics, advance, height);
   const containerStyle = { width: cellWidth, height };
 
   if (!svgPath) {
-    return <FallbackCell handle={glyph.handle} font={font} height={height} advance={advance} />;
+    return (
+      <FallbackCell
+        metrics={metrics}
+        height={height}
+        unicode={glyph.handle.unicode ?? unicode}
+        advance={advance}
+      />
+    );
   }
 
-  const viewBox = glyphPreviewViewBox(fontMetrics, advance);
+  const viewBox = glyphPreviewViewBox(metrics, advance);
 
   return (
     <div style={containerStyle} className="flex items-center justify-center">
@@ -109,23 +124,18 @@ function GlyphCell({ font, height, glyph }: { font: Font; height: number; glyph:
 }
 
 function FallbackCell({
-  handle,
-  font,
+  metrics,
   height,
+  unicode,
   advance,
 }: {
-  handle: GlyphHandle;
-  font: Font;
+  metrics: FontMetrics;
   height: number;
+  unicode: number | null;
   advance: number | null;
 }) {
-  const cellWidth = computeCellWidth(font.metrics, advance, height);
-  let label: string = "";
-
-  const record = font.recordForName(handle.name);
-  if (record && record.unicodes.length > 0) {
-    label = String.fromCodePoint(record.unicodes[0]);
-  }
+  const cellWidth = computeCellWidth(metrics, advance, height);
+  const label = unicode === null ? "" : String.fromCodePoint(unicode);
 
   return (
     <div

@@ -41,15 +41,16 @@
  *   Row DOM: flex gap-2 px-4; each cell width/maxWidth = cellWidth, min-w-0.
  */
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { type VirtualItem, useVirtualizer } from "@tanstack/react-virtual";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button, Input } from "@shift/ui";
-import type { GlyphName } from "@shift/types";
+import type { GlyphId, GlyphName } from "@shift/types";
+import type { Glyph } from "@/lib/model/Glyph";
 
 const ROW_HEIGHT = CELL_HEIGHT + 40 + 8;
 const NOMINAL_CELL_WIDTH = 100;
@@ -65,9 +66,41 @@ function computeLayout(width: number) {
   return { columns, cellWidth };
 }
 
+function visibleGlyphIdsForRows(
+  glyphs: readonly GlyphCatalogItem[],
+  columns: number,
+  rows: readonly VirtualItem[],
+): readonly GlyphId[] {
+  const glyphIds: GlyphId[] = [];
+  for (const row of rows) {
+    const startIndex = row.index * columns;
+    const rowGlyphs = glyphs.slice(startIndex, startIndex + columns);
+    for (const glyph of rowGlyphs) {
+      if (glyph.exists) glyphIds.push(glyph.id);
+    }
+  }
+  return glyphIds;
+}
+
+function mergeLoadedGlyphs(
+  current: ReadonlyMap<GlyphId, Glyph>,
+  loaded: ReadonlyMap<GlyphId, Glyph>,
+): ReadonlyMap<GlyphId, Glyph> {
+  let next: Map<GlyphId, Glyph> | null = null;
+  for (const [glyphId, glyph] of loaded) {
+    if (current.get(glyphId) === glyph) continue;
+    next ??= new Map(current);
+    next.set(glyphId, glyph);
+  }
+  return next ?? current;
+}
+
 export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
   const editor = useEditor();
+  const font = editor.font;
+  const metrics = font.metrics;
+  const designLocation = editor.$designLocation;
   const { filteredGlyphs: glyphs } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -104,14 +137,35 @@ export const GlyphGrid = memo(function GlyphGrid() {
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
   });
+  const virtualRows = virtualizer.getVirtualItems();
+  const visibleRowsKey = virtualRows.map((row) => row.index).join(",");
+  const visibleGlyphIds = useMemo(
+    () => visibleGlyphIdsForRows(glyphs, columns, virtualRows),
+    [glyphs, columns, visibleRowsKey],
+  );
+  const [loadedGlyphs, setLoadedGlyphs] = useState<ReadonlyMap<GlyphId, Glyph>>(() => new Map());
+
+  useEffect(() => {
+    if (visibleGlyphIds.length === 0) return;
+
+    async function loadVisibleGlyphs() {
+      const nextGlyphs = await font.loadGlyphs(visibleGlyphIds);
+      setLoadedGlyphs((current) => mergeLoadedGlyphs(current, nextGlyphs));
+    }
+
+    loadVisibleGlyphs().catch((error) => {
+      console.error("failed to load visible glyphs", error);
+    });
+  }, [font, visibleGlyphIds]);
 
   const handleCellClick = useCallback(
     async (glyph: GlyphCatalogItem) => {
-      if (!glyph.id) return;
-      await editor.font.ensureGlyphs([glyph.id]);
+      if (!glyph.exists) return;
+      const loadedGlyph = await font.loadGlyph(glyph.id);
+      if (!loadedGlyph) return;
       navigate(`/editor/${encodeURIComponent(glyph.id)}`);
     },
-    [editor, navigate],
+    [font, navigate],
   );
 
   return (
@@ -131,7 +185,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
             position: "relative",
           }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
+          {virtualRows.map((virtualRow) => {
             const startIndex = virtualRow.index * columns;
             const rowGlyphs = glyphs.slice(startIndex, startIndex + columns);
             return (
@@ -146,27 +200,36 @@ export const GlyphGrid = memo(function GlyphGrid() {
                 }}
                 className="flex gap-2 px-4"
               >
-                {rowGlyphs.map((glyph) => (
-                  <div
-                    key={glyph.name}
-                    className="flex min-w-0 flex-col items-center gap-2"
-                    style={{ minHeight: CELL_HEIGHT + 20, width: cellWidth, maxWidth: cellWidth }}
-                  >
-                    <Button
-                      variant="ghost"
-                      className="w-full min-w-0 overflow-hidden"
-                      style={{ height: CELL_HEIGHT }}
-                      onClick={() => handleCellClick(glyph)}
+                {rowGlyphs.map((glyph) => {
+                  const previewGlyph = glyph.exists ? (loadedGlyphs.get(glyph.id) ?? null) : null;
+                  return (
+                    <div
+                      key={glyph.name}
+                      className="flex min-w-0 flex-col items-center gap-2"
+                      style={{
+                        minHeight: CELL_HEIGHT + 20,
+                        width: cellWidth,
+                        maxWidth: cellWidth,
+                      }}
                     >
-                      <GlyphPreview
-                        handle={editor.font.glyphHandleForName(glyph.name)}
-                        font={editor.font}
-                        height={CELL_HEIGHT}
-                      />
-                    </Button>
-                    <GlyphNameInput glyph={glyph} />
-                  </div>
-                ))}
+                      <Button
+                        variant="ghost"
+                        className="w-full min-w-0 overflow-hidden"
+                        style={{ height: CELL_HEIGHT }}
+                        onClick={() => handleCellClick(glyph)}
+                      >
+                        <GlyphPreview
+                          glyph={previewGlyph}
+                          unicode={glyph.unicode}
+                          metrics={metrics}
+                          designLocation={designLocation}
+                          height={CELL_HEIGHT}
+                        />
+                      </Button>
+                      <GlyphNameInput glyph={glyph} />
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

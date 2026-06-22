@@ -25,7 +25,7 @@ export const Sources = () => {
   const deleteSource = (sourceId: SourceId) => {
     const fallbackSource = sources.find((source) => source.id !== sourceId);
     if (layerSourceId === sourceId && fallbackSource) {
-      editor.selectLayerSource(fallbackSource.id);
+      editor.selectSource(fallbackSource.id);
     }
     editor.font.deleteSource(sourceId);
   };
@@ -36,7 +36,7 @@ export const Sources = () => {
         <SidebarActionRow
           key={s.id}
           isActive={s.id === layerSourceId}
-          onClick={() => editor.selectLayerSource(s.id)}
+          onClick={() => editor.selectSource(s.id)}
           contentClassName="h-6 text-ui"
           actions={
             <SourceActionsMenu

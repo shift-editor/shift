@@ -540,7 +540,11 @@ export class Editor {
     batch(() => {
       this.#text.glyphAnchor.set(anchor);
       const record = this.font.recordForName(focused.glyph.name);
-      if (record) this.font.requestGlyphs([record.id]);
+      if (record) {
+        this.font.loadGlyph(record.id).catch((error) => {
+          console.error("failed to load focused text glyph", error);
+        });
+      }
       this.disableProofMode();
     });
   }
@@ -647,7 +651,7 @@ export class Editor {
    * Missing source IDs are ignored. This does not open a glyph; it moves the
    * shared design location to the source.
    */
-  public selectLayerSource(sourceId: SourceId): void {
+  public selectSource(sourceId: SourceId): void {
     const source = this.font.source(sourceId);
     if (!source) return;
 
@@ -657,7 +661,7 @@ export class Editor {
   /**
    * Return the shared design location to the font default.
    */
-  public clearLayerSourceSelection(): void {
+  public setSourceToDefault(): void {
     this.setDesignLocation(this.font.defaultLocation());
   }
 
@@ -675,7 +679,11 @@ export class Editor {
     const handle = this.font.glyphHandleForUnicode(codepoint);
     if (!handle) return;
     const record = this.font.recordForName(handle.name);
-    if (record) this.font.requestGlyphs([record.id]);
+    if (record) {
+      this.font.loadGlyph(record.id).catch((error) => {
+        console.error("failed to load inserted text glyph", error);
+      });
+    }
     this.textRun.insert(glyphTextItem(handle.name, codepoint));
   }
 

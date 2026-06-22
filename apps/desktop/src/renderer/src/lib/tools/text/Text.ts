@@ -27,7 +27,11 @@ export class TextTool extends BaseTool<TextState> {
 
     const ownerName = owner.name;
     const record = this.editor.font.recordForName(ownerName);
-    if (record) this.editor.font.requestGlyphs([record.id]);
+    if (record) {
+      this.editor.font.loadGlyph(record.id).catch((error) => {
+        console.error("failed to load text owner glyph", error);
+      });
+    }
 
     const run = this.editor.textRuns.switchTo(ownerName);
     run.seed(glyphTextItem(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);

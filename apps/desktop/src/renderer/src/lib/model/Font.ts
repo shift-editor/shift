@@ -684,12 +684,46 @@ export class Font {
   }
 
   /**
-   * Loads missing or stale glyph geometry and discovered component bases.
+   * Loads one glyph's geometry and returns its live model.
+   *
+   * @param glyphId - Stable glyph identity whose local geometry should be available.
+   * @param options - Optional source scope; omitted means every authored layer for the glyph.
+   * @returns null when the glyph is not present in the current font.
+   * @see {@link loadGlyphs}
+   */
+  async loadGlyph(glyphId: GlyphId, options: GlyphLoadOptions = {}): Promise<Glyph | null> {
+    return (await this.loadGlyphs([glyphId], options)).get(glyphId) ?? null;
+  }
+
+  /**
+   * Loads missing or stale glyph geometry and returns the requested live models.
+   *
+   * @remarks
+   * Component bases discovered while loading are hydrated as a side effect, but
+   * the returned map is keyed only by the glyph IDs requested by the caller.
    *
    * @param glyphIds - Stable glyph identities whose local geometry should be available.
    * @param options - Optional source scope; omitted means every authored layer for each glyph.
+   * @returns A fresh map containing the requested glyphs that exist in the current font.
    */
-  async ensureGlyphs(glyphIds: readonly GlyphId[], options: GlyphLoadOptions = {}): Promise<void> {
+  async loadGlyphs(
+    glyphIds: readonly GlyphId[],
+    options: GlyphLoadOptions = {},
+  ): Promise<ReadonlyMap<GlyphId, Glyph>> {
+    await this.#loadGlyphSnapshots(glyphIds, options);
+
+    const glyphs = new Map<GlyphId, Glyph>();
+    for (const glyphId of uniqueGlyphIds(glyphIds)) {
+      const glyph = this.glyphForId(glyphId);
+      if (glyph) glyphs.set(glyphId, glyph);
+    }
+    return glyphs;
+  }
+
+  async #loadGlyphSnapshots(
+    glyphIds: readonly GlyphId[],
+    options: GlyphLoadOptions = {},
+  ): Promise<void> {
     if (!this.#editCoordinator || glyphIds.length === 0) return;
 
     await this.#editCoordinator.settled();
@@ -717,18 +751,6 @@ export class Font {
         }
       }
     }
-  }
-
-  /**
-   * Starts a background glyph-geometry request and logs failures.
-   *
-   * @param glyphIds - Stable glyph identities whose local geometry should be requested.
-   * @param options - Optional source scope; omitted means every authored layer for each glyph.
-   */
-  requestGlyphs(glyphIds: readonly GlyphId[], options: GlyphLoadOptions = {}): void {
-    void this.ensureGlyphs(glyphIds, options).catch((error) => {
-      console.error("failed to load glyph snapshots", error);
-    });
   }
 
   #requestableGlyphs(

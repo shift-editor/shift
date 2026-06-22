@@ -20,10 +20,9 @@ export const Canvas: FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const cursorStyle = useSignalState(editor.cursorCell);
-  const fontLoaded = useSignalState(editor.font.$loaded);
 
   useEffect(() => {
-    if (!fontLoaded || !glyphIdParam) {
+    if (!glyphIdParam) {
       editor.scene.clear();
       return undefined;
     }
@@ -37,8 +36,9 @@ export const Canvas: FC = () => {
     editor.scene.clear();
     const itemId = editor.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
     editor.scene.setGeometryItems([itemId]);
+
     return () => editor.scene.clear();
-  }, [editor, fontLoaded, glyphIdParam]);
+  }, [editor, glyphIdParam]);
 
   useEffect(() => {
     const element = containerRef.current;
