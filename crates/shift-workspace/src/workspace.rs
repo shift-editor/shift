@@ -503,7 +503,6 @@ impl FontWorkspace {
         let font = FontLoader::new().read_font(import_path_str)?;
         let mut store = ShiftStore::open(store_path)?;
         store.set_font_info(font_info_from_font(&font))?;
-        store.replace_font_state(&font)?;
         store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
 
         Ok(Self {
