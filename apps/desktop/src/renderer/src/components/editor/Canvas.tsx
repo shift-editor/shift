@@ -23,8 +23,21 @@ export const Canvas: FC = () => {
   const fontLoaded = useSignalState(editor.font.$loaded);
 
   useEffect(() => {
-    const route = editor.openGlyphRoute(glyphIdParam ? asGlyphId(glyphIdParam) : null);
-    return () => route.close();
+    if (!fontLoaded || !glyphIdParam) {
+      editor.scene.clear();
+      return undefined;
+    }
+
+    const glyphId = asGlyphId(glyphIdParam);
+    if (!editor.font.recordForId(glyphId)) {
+      editor.scene.clear();
+      return undefined;
+    }
+
+    editor.scene.clear();
+    const itemId = editor.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
+    editor.scene.setGeometryItems([itemId]);
+    return () => editor.scene.clear();
   }, [editor, fontLoaded, glyphIdParam]);
 
   useEffect(() => {

@@ -106,11 +106,12 @@ export const GlyphGrid = memo(function GlyphGrid() {
   });
 
   const handleCellClick = useCallback(
-    (glyph: GlyphCatalogItem) => {
+    async (glyph: GlyphCatalogItem) => {
       if (!glyph.id) return;
+      await editor.font.ensureGlyphs([glyph.id]);
       navigate(`/editor/${encodeURIComponent(glyph.id)}`);
     },
-    [navigate],
+    [editor, navigate],
   );
 
   return (

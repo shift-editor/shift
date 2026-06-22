@@ -11,23 +11,23 @@ const LAYER_B_ID = "layer_b" as LayerId;
 describe("FontStore snapshot freshness", () => {
   it("ignores stale snapshot responses after a workspace replacement", () => {
     const store = new FontStore(snapshot("document-a", LAYER_A_ID));
-    const generation = store.sync.markSnapshotsLoading([GLYPH_ID]);
+    const load = store.beginGlyphLoad([{ glyphId: GLYPH_ID, sourceIds: [SOURCE_ID] }]);
 
-    store.sync.replaceWorkspace(snapshot("document-b", LAYER_B_ID));
-    store.sync.applyGlyphSnapshots([GLYPH_ID], [glyphSnapshot(LAYER_A_ID)], generation);
+    store.replaceWorkspace(snapshot("document-b", LAYER_B_ID));
+    store.finishGlyphLoad(load, [glyphSnapshot(LAYER_A_ID)]);
 
-    expect(store.glyphSnapshots.snapshotStatus(GLYPH_ID)).toBe("missing");
+    expect(store.snapshotStatus(GLYPH_ID)).toBe("missing");
     expect(store.layerState(LAYER_A_ID)).toBeNull();
     expect(store.layerState(LAYER_B_ID)).toBeNull();
   });
 
   it("marks snapshot request failures against the matching workspace generation", () => {
     const store = new FontStore(snapshot("document-a", LAYER_A_ID));
-    const generation = store.sync.markSnapshotsLoading([GLYPH_ID]);
+    const load = store.beginGlyphLoad([{ glyphId: GLYPH_ID, sourceIds: [SOURCE_ID] }]);
 
-    store.sync.markSnapshotsFailed([GLYPH_ID], generation);
+    store.failGlyphLoad(load);
 
-    expect(store.glyphSnapshots.snapshotStatus(GLYPH_ID)).toBe("failed");
+    expect(store.snapshotStatus(GLYPH_ID)).toBe("failed");
   });
 });
 

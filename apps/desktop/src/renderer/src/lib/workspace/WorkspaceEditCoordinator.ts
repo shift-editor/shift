@@ -1,10 +1,11 @@
 import type { AppliedChange, FontIntent } from "@shift/types";
 import type {
   WorkspaceDocumentState,
+  WorkspaceGlyphSnapshot,
   WorkspaceGlyphSnapshotRequest,
 } from "@shared/workspace/protocol";
-import type { Signal } from "@/lib/signals/signal";
-import type { FontStoreSyncPort, WorkspaceCommitState } from "@/lib/model/FontStore";
+import { signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
+import type { FontStore, WorkspaceCommitState } from "@/lib/model/FontStore";
 import type { WorkspaceClient } from "./WorkspaceClient";
 
 export type { WorkspaceCommitState } from "@/lib/model/FontStore";
@@ -27,15 +28,22 @@ export type { WorkspaceCommitState } from "@/lib/model/FontStore";
  */
 export class WorkspaceEditCoordinator {
   readonly #workspace: WorkspaceClient;
-  readonly #store: FontStoreSyncPort;
+  readonly #store: FontStore;
+  readonly #settledCell: WritableSignal<boolean>;
+  readonly #commitState: WritableSignal<WorkspaceCommitState>;
 
   #flushQueued = false;
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
+  #pendingIntents: FontIntent[] = [];
 
-  constructor(workspace: WorkspaceClient, store: FontStoreSyncPort) {
+  constructor(workspace: WorkspaceClient, store: FontStore) {
     this.#workspace = workspace;
     this.#store = store;
+    this.#settledCell = signal(true);
+    this.#commitState = signal<WorkspaceCommitState>("idle", {
+      name: "workspace.commitState",
+    });
   }
 
   /**
@@ -43,7 +51,7 @@ export class WorkspaceEditCoordinator {
    * indicator: un-echoed state must never read as durable.
    */
   get settledCell(): Signal<boolean> {
-    return this.#store.settledCell;
+    return this.#settledCell;
   }
 
   /**
@@ -55,12 +63,16 @@ export class WorkspaceEditCoordinator {
    * the utility process has echoed the new dirty state.
    */
   get commitStateCell(): Signal<WorkspaceCommitState> {
-    return this.#store.commitStateCell;
+    return this.#commitState;
   }
 
   /** Queues one intent; everything in the same microtask becomes one apply. */
   push(intent: FontIntent): void {
-    this.#store.enqueueIntent(intent);
+    this.#pendingIntents.push(intent);
+    this.#settledCell.set(false);
+    if (this.#commitState.peek() === "idle") {
+      this.#commitState.set("queued");
+    }
 
     if (!this.#flushQueued) {
       this.#flushQueued = true;
@@ -70,7 +82,7 @@ export class WorkspaceEditCoordinator {
 
   /** Resolves when every queued and in-flight operation has settled. */
   async settled(): Promise<void> {
-    while (this.#store.hasPendingIntents() || this.#busy > 0) {
+    while (this.#pendingIntents.length > 0 || this.#busy > 0) {
       this.#enqueueFlush();
       await this.#chain;
     }
@@ -79,7 +91,7 @@ export class WorkspaceEditCoordinator {
   apply(intents: FontIntent[]): Promise<AppliedChange> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.apply(intents);
-      this.#store.foldAppliedChange(applied);
+      this.#store.applyWorkspaceChange(applied);
       return applied;
     });
   }
@@ -88,33 +100,24 @@ export class WorkspaceEditCoordinator {
   undo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.undo();
-      if (applied) this.#store.foldAppliedChange(applied);
+      if (applied) this.#store.applyWorkspaceChange(applied);
       return applied;
     });
   }
 
   /** Pulls replace-grade glyph snapshots by glyph id, serialized behind pending writes. */
-  async loadGlyphSnapshots(requests: readonly WorkspaceGlyphSnapshotRequest[]): Promise<void> {
-    if (requests.length === 0) return;
-
-    const glyphIds = requests.map((request) => request.glyphId);
-    await this.#withFlush(async () => {
-      const generation = this.#store.markSnapshotsLoading(glyphIds);
-      try {
-        const snapshots = await this.#workspace.glyphSnapshots(requests);
-        this.#store.applyGlyphSnapshots(glyphIds, snapshots, generation);
-      } catch (error) {
-        this.#store.markSnapshotsFailed(glyphIds, generation);
-        throw error;
-      }
-    });
+  async readGlyphSnapshots(
+    requests: readonly WorkspaceGlyphSnapshotRequest[],
+  ): Promise<WorkspaceGlyphSnapshot[]> {
+    if (requests.length === 0) return [];
+    return this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
   }
 
   /** Replays the latest redo entry after pending pushes flush. */
   redo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.redo();
-      if (applied) this.#store.foldAppliedChange(applied);
+      if (applied) this.#store.applyWorkspaceChange(applied);
       return applied;
     });
   }
@@ -142,15 +145,16 @@ export class WorkspaceEditCoordinator {
 
   #enqueueFlush(): void {
     this.#flushQueued = false;
-    if (!this.#store.hasPendingIntents()) return;
+    if (this.#pendingIntents.length === 0) return;
 
-    const intents = this.#store.takePendingIntents();
+    const intents = this.#pendingIntents;
+    this.#pendingIntents = [];
 
     void this.#serialize(async () => {
       try {
-        this.#store.beginApplying();
+        this.#commitState.set("applying");
         const applied = await this.#workspace.apply(intents);
-        this.#store.foldAppliedChange(applied);
+        this.#store.applyWorkspaceChange(applied);
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
         await this.#resync();
@@ -172,7 +176,10 @@ export class WorkspaceEditCoordinator {
 
   #afterJob(): void {
     this.#busy -= 1;
-    this.#store.markSettledIfIdle(this.#busy);
+    if (this.#busy === 0 && this.#pendingIntents.length === 0) {
+      this.#settledCell.set(true);
+      this.#commitState.set("idle");
+    }
   }
 
   /** Recovery: discard loaded projections and reload the workspace summary from utility. */

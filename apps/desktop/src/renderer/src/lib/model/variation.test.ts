@@ -135,14 +135,14 @@ async function variableFont(): Promise<{
 }
 
 async function loadGlyph(stack: WorkspaceStack, glyphId: GlyphId) {
-  await stack.glyphSnapshotLoader.load([glyphId], { sourceIds: [stack.font.defaultSource.id] });
+  await stack.font.ensureGlyphs([glyphId], { sourceIds: [stack.font.defaultSource.id] });
   const glyph = stack.font.glyphForId(glyphId);
   if (!glyph) throw new Error("Expected default glyph layer to load");
   return glyph;
 }
 
 async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: Source) {
-  await stack.glyphSnapshotLoader.load([glyphId], {
+  await stack.font.ensureGlyphs([glyphId], {
     sourceIds: [stack.font.defaultSource.id, source.id],
   });
   const layer = stack.font.glyphLayerForId(glyphId, source.id);

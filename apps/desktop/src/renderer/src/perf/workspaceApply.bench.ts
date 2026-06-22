@@ -81,7 +81,7 @@ describe("workspace apply round trip (channel + NAPI + SQLite)", () => {
   });
 
   bench("replace-grade glyph state pull", async () => {
-    await stack.editCoordinator.loadGlyphSnapshots([
+    await stack.editCoordinator.readGlyphSnapshots([
       { glyphId, sourceIds: [stack.font.defaultSource.id] },
     ]);
   });

@@ -52,15 +52,14 @@ interface GlyphPreviewProps {
 }
 
 export function GlyphPreview({ handle, font, height = CELL_HEIGHT }: GlyphPreviewProps) {
-  const editor = getEditor();
   const fontLoaded = useSignalState(font.$loaded);
   const record = fontLoaded ? font.recordForName(handle.name) : null;
   const recordId = record?.id ?? null;
 
   useEffect(() => {
     if (!recordId) return;
-    editor.requestGlyphSnapshots([recordId]);
-  }, [editor, recordId]);
+    font.requestGlyphs([recordId]);
+  }, [font, recordId]);
 
   if (!fontLoaded) {
     return <FallbackCell handle={handle} font={font} height={height} advance={null} />;

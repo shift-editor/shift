@@ -15,7 +15,7 @@ import { Editor } from "@/lib/editor/Editor";
 import type { Glyph } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { mintGlyphId, mintLayerId, type GlyphName, type Unicode } from "@shift/types";
+import { mintGlyphId, mintLayerId, type GlyphId, type GlyphName, type Unicode } from "@shift/types";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 
@@ -43,7 +43,7 @@ export class TestEditor extends Editor {
   constructor() {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ font: stack.font, glyphSnapshotLoader: stack.glyphSnapshotLoader, clipboard });
+    super({ font: stack.font, clipboard });
     this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
@@ -59,7 +59,7 @@ export class TestEditor extends Editor {
     const glyph = await this.#createAndOpenGlyph(name, unicode);
     const record = this.font.recordForName(glyph.handle.name);
     if (!record) throw new Error("created glyph did not appear in the font directory");
-    await this.openGlyphRoute(record.id).ready;
+    this.#placeGlyph(record.id);
     return this;
   }
 
@@ -93,10 +93,16 @@ export class TestEditor extends Editor {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    await this.#stack.glyphSnapshotLoader.load([record.id], { sourceIds: [sourceId] });
+    await this.font.ensureGlyphs([record.id], { sourceIds: [sourceId] });
     const glyph = this.font.glyphForId(record.id);
     if (!glyph) throw new Error("glyphForId returned null for a loaded glyph");
     return glyph;
+  }
+
+  #placeGlyph(glyphId: GlyphId): void {
+    this.scene.clear();
+    const itemId = this.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
+    this.scene.setGeometryItems([itemId]);
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */

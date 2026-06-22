@@ -4,7 +4,6 @@ import type { SystemClipboard } from "@/lib/clipboard";
 import { Editor } from "@/lib/editor/Editor";
 import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
-import { GlyphSnapshotLoader } from "@/lib/model/GlyphSnapshotLoader";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
 import {
@@ -28,26 +27,20 @@ export class Workspace {
 
   readonly font: Font;
   readonly editor: Editor;
-  readonly glyphSnapshotLoader: GlyphSnapshotLoader;
   readonly documentStateCell: Signal<WorkspaceDocumentState | null>;
   readonly commitStateCell: Signal<WorkspaceCommitState>;
 
   constructor(options: WorkspaceOptions) {
     this.#client = new WorkspaceClient(options.host);
     this.#store = new FontStore();
-    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store.sync);
+    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store);
     this.#documentBridge = new WorkspaceDocumentBridge({
       host: options.host,
       edits: this.#edits,
     });
 
     this.font = new Font(this.#store, this.#edits);
-    this.glyphSnapshotLoader = new GlyphSnapshotLoader(this.#store.glyphSnapshots, this.#edits);
-    this.editor = new Editor({
-      font: this.font,
-      glyphSnapshotLoader: this.glyphSnapshotLoader,
-      clipboard: options.clipboard,
-    });
+    this.editor = new Editor({ font: this.font, clipboard: options.clipboard });
     this.documentStateCell = this.#client.documentStateCell;
     this.commitStateCell = this.#edits.commitStateCell;
 
@@ -77,7 +70,7 @@ export class Workspace {
         throw new Error("workspace connected without a snapshot");
       }
 
-      this.#store.sync.replaceWorkspace(snapshot);
+      this.#store.replaceWorkspace(snapshot);
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

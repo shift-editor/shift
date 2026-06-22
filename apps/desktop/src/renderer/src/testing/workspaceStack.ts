@@ -7,7 +7,6 @@ import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
 import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
-import { GlyphSnapshotLoader } from "@/lib/model/GlyphSnapshotLoader";
 import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
 import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
@@ -15,7 +14,6 @@ export type WorkspaceStack = {
   client: WorkspaceClient;
   store: FontStore;
   editCoordinator: WorkspaceEditCoordinator;
-  glyphSnapshotLoader: GlyphSnapshotLoader;
   font: Font;
   createWorkspace(): Promise<void>;
 };
@@ -45,15 +43,13 @@ export function createWorkspaceStack(): WorkspaceStack {
     },
   });
   const store = new FontStore();
-  const editCoordinator = new WorkspaceEditCoordinator(client, store.sync);
-  const glyphSnapshotLoader = new GlyphSnapshotLoader(store.glyphSnapshots, editCoordinator);
+  const editCoordinator = new WorkspaceEditCoordinator(client, store);
   const font = new Font(store, editCoordinator);
 
   return {
     client,
     store,
     editCoordinator,
-    glyphSnapshotLoader,
     font,
     async createWorkspace(): Promise<void> {
       await shell.call("workspace.create", undefined);
@@ -64,7 +60,7 @@ export function createWorkspaceStack(): WorkspaceStack {
         throw new Error("workspace stack connected without a snapshot");
       }
 
-      store.sync.replaceWorkspace(snapshot);
+      store.replaceWorkspace(snapshot);
     },
   };
 }

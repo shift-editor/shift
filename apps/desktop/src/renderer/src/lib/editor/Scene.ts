@@ -1,8 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import { mintItemId, type GlyphId, type ItemId } from "@shift/types";
-import type { AxisLocation } from "@/types/variation";
-import { cloneAxisLocation, emptyAxisLocation } from "@/lib/variation/location";
-import { computed, signal, type Signal, type WritableSignal } from "@/lib/signals";
+import { signal, type Signal, type WritableSignal } from "@/lib/signals";
 
 export interface ScenePlacement {
   readonly origin: Point2D;
@@ -23,13 +21,11 @@ export interface AddGlyphInput {
 }
 
 export interface SceneValue {
-  readonly location: AxisLocation;
   readonly items: readonly SceneItem[];
   readonly geometryItems: readonly ItemId[];
 }
 
 export interface SceneInput {
-  readonly location?: AxisLocation;
   readonly items: readonly SceneItem[];
   readonly geometryItems?: readonly ItemId[];
 }
@@ -38,20 +34,15 @@ export interface SceneInput {
  * Owns the placed items visible in the editor scene.
  *
  * @remarks
- * Scene stores the scene-wide designspace location, placement identity, and
- * which item ids should show structured geometry. It does not resolve glyph
- * models or glyph layers, and it does not decide what authored data a command
- * mutates.
+ * Scene stores placement identity and which item ids should show structured
+ * geometry. It does not store designspace location, resolve glyph models or
+ * glyph layers, or decide what authored data a command mutates.
  */
 export class Scene {
   readonly #cell: WritableSignal<SceneValue>;
-  readonly #locationCell: Signal<AxisLocation>;
 
   constructor() {
     this.#cell = signal<SceneValue>(emptyScene(), { name: "editor.scene" });
-    this.#locationCell = computed(() => this.#cell.value.location, {
-      name: "editor.scene.location",
-    });
   }
 
   /** Reactive scene value for renderers and panels. */
@@ -62,26 +53,6 @@ export class Scene {
   /** Current scene snapshot. */
   get value(): SceneValue {
     return this.#cell.peek();
-  }
-
-  /** Reactive designspace location shown by this scene. */
-  get locationCell(): Signal<AxisLocation> {
-    return this.#locationCell;
-  }
-
-  /** Current designspace location shown by this scene. */
-  get location(): AxisLocation {
-    return this.#cell.peek().location;
-  }
-
-  /**
-   * Sets the designspace location used to render scene glyphs.
-   *
-   * @param location - Designspace coordinate shared by every glyph item in the scene.
-   */
-  setLocation(location: AxisLocation): void {
-    const scene = this.#cell.peek();
-    this.#cell.set({ ...scene, location: cloneAxisLocation(location) });
   }
 
   /** Returns all placed scene items as a read-only snapshot. */
@@ -131,9 +102,7 @@ export class Scene {
     const items = scene.items.map(copyItem);
     const itemIds = new Set(items.map((item) => item.id));
     const geometryItems = (scene.geometryItems ?? []).filter((itemId) => itemIds.has(itemId));
-    const current = this.#cell.peek();
     this.#cell.set({
-      location: cloneAxisLocation(scene.location ?? current.location),
       items,
       geometryItems,
     });
@@ -322,5 +291,5 @@ function copyPlacement(placement: ScenePlacement): ScenePlacement {
 }
 
 function emptyScene(): SceneValue {
-  return { location: emptyAxisLocation(), items: [], geometryItems: [] };
+  return { items: [], geometryItems: [] };
 }
