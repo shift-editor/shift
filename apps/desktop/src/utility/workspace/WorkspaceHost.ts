@@ -1,4 +1,5 @@
 import { createBridge, type ShiftBridge } from "@shift/bridge";
+import path from "node:path";
 import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
 import type {
   ShellCallMap,
@@ -128,7 +129,9 @@ export class WorkspaceHost {
   }
 
   #open(path: string): WorkspaceDocumentState {
-    const recovery = this.#bridge.findRecoverableWorkspace(path, this.#documents.listDrafts());
+    const recovery = isShiftPackagePath(path)
+      ? this.#bridge.findRecoverableWorkspace(path, this.#documents.listDrafts())
+      : null;
     const document = recovery ?? this.#documents.createDraft();
 
     if (recovery) {
@@ -193,4 +196,8 @@ function parseDocumentSourceKind(sourceKind: string): WorkspaceDocumentSourceKin
   }
 
   throw new Error(`unknown document source kind: ${sourceKind}`);
+}
+
+function isShiftPackagePath(sourcePath: string): boolean {
+  return path.extname(sourcePath).toLowerCase() === ".shift";
 }
