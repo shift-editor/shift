@@ -104,27 +104,27 @@ pub enum SourcePackageError {
     #[error("invalid source package module {path}: {message}")]
     InvalidModule { path: String, message: String },
 
-    #[error("source package JSON error in {path}")]
+    #[error("source package JSON error in {path}: {source}")]
     Json {
         path: String,
         #[source]
         source: serde_json::Error,
     },
 
-    #[error("source package text error in {path}")]
+    #[error("source package text error in {path}: {source}")]
     Text {
         path: String,
         #[source]
         source: FromUtf8Error,
     },
 
-    #[error("source package zip error")]
+    #[error("source package zip error: {0}")]
     Zip(#[from] ZipError),
 
-    #[error("source package file-system error")]
+    #[error("source package file-system error: {0}")]
     Io(#[from] io::Error),
 
-    #[error("font model error")]
+    #[error(transparent)]
     Font(#[from] shift_font::CoreError),
 }
 

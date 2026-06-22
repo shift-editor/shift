@@ -23,16 +23,16 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Font(#[from] CoreError),
 
-    #[error("source package error")]
+    #[error(transparent)]
     Source(#[from] shift_source::SourcePackageError),
 
-    #[error("store error")]
+    #[error(transparent)]
     Store(#[from] shift_store::StoreError),
 
-    #[error("font backend error")]
+    #[error(transparent)]
     Backend(#[from] shift_backends::BackendError),
 
-    #[error("font export error")]
+    #[error(transparent)]
     Export(#[from] shift_backends::ExportError),
 
     #[error("workspace needs a save path")]
@@ -56,7 +56,7 @@ pub enum WorkspaceError {
     #[error("invalid UTF-8 in workspace path: {0}")]
     InvalidPathUtf8(PathBuf),
 
-    #[error("workspace file-system error")]
+    #[error("workspace file-system error: {0}")]
     Io(#[from] io::Error),
 }
 
