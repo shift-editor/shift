@@ -5,19 +5,11 @@ import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 
-export type GlyphCatalogItem =
-  | {
-      readonly id: GlyphId;
-      readonly name: GlyphName;
-      readonly unicode: number | null;
-      readonly exists: true;
-    }
-  | {
-      readonly id: null;
-      readonly name: GlyphName;
-      readonly unicode: number | null;
-      readonly exists: false;
-    };
+export type GlyphCatalogItem = {
+  readonly id: GlyphId;
+  readonly name: GlyphName;
+  readonly unicode: number | null;
+};
 
 export interface GlyphCatalogState {
   availableGlyphs: GlyphCatalogItem[];
@@ -51,28 +43,15 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   const glyphInfo = getGlyphInfo();
   const font = editor.font;
 
-  const fontLoaded = useSignalState(font.$loaded);
   const glyphRecords = useSignalState(font.glyphRecordsCell);
 
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);
 
-  const starterUnicodes = useMemo(() => [], []);
-
   const availableGlyphs = useMemo(
-    () =>
-      fontLoaded && glyphRecords.length > 0
-        ? glyphRecords.map(glyphCatalogItemFromRecord)
-        : starterUnicodes.map(
-            (unicode): GlyphCatalogItem => ({
-              id: null,
-              name: font.nameForUnicode(unicode),
-              unicode,
-              exists: false,
-            }),
-          ),
-    [font, fontLoaded, glyphRecords, starterUnicodes],
+    () => glyphRecords.map(glyphCatalogItemFromRecord),
+    [glyphRecords],
   );
 
   const availableUnicodes = useMemo(
@@ -152,6 +131,5 @@ function glyphCatalogItemFromRecord(record: GlyphRecord): GlyphCatalogItem {
     id: record.id,
     name: record.name,
     unicode: record.unicodes[0] ?? null,
-    exists: true,
   };
 }

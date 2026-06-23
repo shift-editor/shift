@@ -76,23 +76,10 @@ function visibleGlyphIdsForRows(
     const startIndex = row.index * columns;
     const rowGlyphs = glyphs.slice(startIndex, startIndex + columns);
     for (const glyph of rowGlyphs) {
-      if (glyph.exists) glyphIds.push(glyph.id);
+      glyphIds.push(glyph.id);
     }
   }
   return glyphIds;
-}
-
-function mergeLoadedGlyphs(
-  current: ReadonlyMap<GlyphId, Glyph>,
-  loaded: ReadonlyMap<GlyphId, Glyph>,
-): ReadonlyMap<GlyphId, Glyph> {
-  let next: Map<GlyphId, Glyph> | null = null;
-  for (const [glyphId, glyph] of loaded) {
-    if (current.get(glyphId) === glyph) continue;
-    next ??= new Map(current);
-    next.set(glyphId, glyph);
-  }
-  return next ?? current;
 }
 
 export const GlyphGrid = memo(function GlyphGrid() {
@@ -146,24 +133,35 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const [loadedGlyphs, setLoadedGlyphs] = useState<ReadonlyMap<GlyphId, Glyph>>(() => new Map());
 
   useEffect(() => {
-    if (visibleGlyphIds.length === 0) return;
+    let cancelled = false;
 
-    async function loadVisibleGlyphs() {
-      const nextGlyphs = await font.loadGlyphs(visibleGlyphIds);
-      setLoadedGlyphs((current) => mergeLoadedGlyphs(current, nextGlyphs));
+    async function load(): Promise<void> {
+      try {
+        const loaded = await font.loadGlyphs(visibleGlyphIds);
+        if (!cancelled) setLoadedGlyphs(loaded);
+      } catch (error) {
+        console.error("failed to load visible glyphs", error);
+        if (!cancelled) setLoadedGlyphs(new Map());
+      }
     }
 
-    loadVisibleGlyphs().catch((error) => {
-      console.error("failed to load visible glyphs", error);
-    });
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, [font, visibleGlyphIds]);
 
   const handleCellClick = useCallback(
     async (glyph: GlyphCatalogItem) => {
-      if (!glyph.exists) return;
-      const loadedGlyph = await font.loadGlyph(glyph.id);
-      if (!loadedGlyph) return;
-      navigate(`/editor/${encodeURIComponent(glyph.id)}`);
+      try {
+        const loadedGlyph = await font.loadGlyph(glyph.id);
+        if (!loadedGlyph) return;
+
+        navigate(`/editor/${encodeURIComponent(glyph.id)}`);
+      } catch (error) {
+        console.error("failed to load glyph", error);
+      }
     },
     [font, navigate],
   );
@@ -201,10 +199,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
                 className="flex gap-2 px-4"
               >
                 {rowGlyphs.map((glyph) => {
-                  const previewGlyph = glyph.exists ? (loadedGlyphs.get(glyph.id) ?? null) : null;
+                  const previewGlyph = loadedGlyphs.get(glyph.id) ?? null;
                   return (
                     <div
-                      key={glyph.name}
+                      key={glyph.id}
                       className="flex min-w-0 flex-col items-center gap-2"
                       style={{
                         minHeight: CELL_HEIGHT + 20,
@@ -251,7 +249,7 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
 
   const commit = () => {
     const next = draft.trim() as GlyphName;
-    if (!glyph.exists || next === glyphName) {
+    if (next === glyphName) {
       setDraft(glyphName);
       return;
     }
@@ -268,7 +266,6 @@ function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
   return (
     <Input
       value={draft}
-      readOnly={!glyph.exists}
       onChange={(event) => setDraft(event.currentTarget.value as GlyphName)}
       onBlur={commit}
       onKeyDown={(event) => {
