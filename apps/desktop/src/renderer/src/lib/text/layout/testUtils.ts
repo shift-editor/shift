@@ -22,7 +22,7 @@ const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
 
 export async function layoutTestFont(): Promise<Font> {
   const stack = createWorkspaceStack();
-  await stack.client.create();
+  await stack.createWorkspace();
 
   for (const [name, unicode, advance] of GLYPHS) {
     const glyphId = mintGlyphId();

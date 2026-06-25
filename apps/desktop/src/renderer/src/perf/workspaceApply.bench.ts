@@ -10,7 +10,7 @@ import { createWorkspaceStack } from "@/testing/workspaceStack";
  * is one frame; WorkspaceHost.test.ts pins p99 < 50ms as the hard guard.
  */
 const stack = createWorkspaceStack();
-await stack.client.create();
+await stack.createWorkspace();
 
 const glyphId = mintGlyphId();
 const layerId = mintLayerId();

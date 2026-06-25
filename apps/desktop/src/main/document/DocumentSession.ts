@@ -1,9 +1,4 @@
-import {
-  dialog,
-  type MessageBoxOptions,
-  type OpenDialogOptions,
-  type SaveDialogOptions,
-} from "electron";
+import { dialog, type MessageBoxOptions, type SaveDialogOptions } from "electron";
 import path from "node:path";
 import { errorToMessage } from "../../shared/errors";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
@@ -11,24 +6,15 @@ import type { Window } from "../windows/Window";
 import type { Document } from "./DocumentClient";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
-const OPEN_FONT_EXTENSIONS = [
-  "shift",
-  "ttf",
-  "otf",
-  "glyphs",
-  "glyphspackage",
-  "ufo",
-  "designspace",
-];
-
 export type DocumentSessionOptions = {
   document: Document;
-  activeWindow: () => Window | null;
+  dialogWindow: () => Window | null;
+  windows: () => readonly Window[];
   applicationName: () => string;
   log?: ShiftLogger;
 };
 
-export type CloseReason = "window" | "quit" | "replace-document";
+export type CloseReason = "window" | "quit";
 type DirtyDocumentChoice = "save" | "discard" | "cancel";
 
 /**
@@ -36,13 +22,13 @@ type DirtyDocumentChoice = "save" | "discard" | "cancel";
  *
  * @remarks
  * Main owns the shell chrome and native dialogs. Document state reads and
- * writes that affect replacement or save decisions go through the renderer's
- * committed-op lane so pending edits cannot be bypassed by main-process state
- * reads.
+ * writes that affect save and close decisions go through the renderer's
+ * committed-op lane so pending edits cannot be bypassed by main-process reads.
  */
 export class DocumentSession {
   readonly #document: Document;
-  readonly #activeWindow: () => Window | null;
+  readonly #dialogWindow: () => Window | null;
+  readonly #windows: () => readonly Window[];
   readonly #applicationName: () => string;
   readonly #log: ShiftLogger;
 
@@ -50,39 +36,10 @@ export class DocumentSession {
 
   constructor(options: DocumentSessionOptions) {
     this.#document = options.document;
-    this.#activeWindow = options.activeWindow;
+    this.#dialogWindow = options.dialogWindow;
+    this.#windows = options.windows;
     this.#applicationName = options.applicationName;
     this.#log = options.log ?? createShiftLogger("document.session");
-  }
-
-  /** Creates an untitled workspace through the renderer edit lane. */
-  async create(): Promise<void> {
-    this.#log.info("new document requested");
-    if (!(await this.confirmClose("replace-document"))) {
-      this.#log.info("new document canceled by close guard");
-      return;
-    }
-
-    await this.#document.create();
-    this.#log.info("new document created");
-  }
-
-  /** Runs Open from main with a native open dialog. */
-  async open(): Promise<void> {
-    this.#log.info("open document requested");
-    const openPath = await this.#showOpenDialog();
-    if (!openPath) {
-      this.#log.info("open document canceled before file selection");
-      return;
-    }
-
-    if (!(await this.confirmClose("replace-document"))) {
-      this.#log.info("open document canceled by close guard", { path: openPath });
-      return;
-    }
-
-    await this.#requestOpen(openPath);
-    this.#log.info("open document completed", { path: openPath });
   }
 
   /** Returns whether a close transition needs document confirmation. */
@@ -97,9 +54,9 @@ export class DocumentSession {
   }
 
   /**
-   * Confirms whether the current document may be closed or replaced.
+   * Confirms whether the current document may be closed.
    *
-   * @param reason - Native transition that would discard or replace the document.
+   * @param reason - Native transition that would discard the document.
    * @returns `true` when the transition may continue.
    * @throws {Error} when the renderer cannot provide a settled document state.
    */
@@ -121,7 +78,7 @@ export class DocumentSession {
       return true;
     }
 
-    const choice = await this.#showDirtyDocumentDialog(state, reason);
+    const choice = await this.#showDirtyDocumentDialog(state);
     this.#log.info("dirty document dialog completed", {
       reason,
       choice,
@@ -254,11 +211,6 @@ export class DocumentSession {
     return state;
   }
 
-  async #requestOpen(openPath: string): Promise<void> {
-    this.#log.info("document open sent to renderer", { path: openPath });
-    await this.#document.open(openPath);
-  }
-
   async #showSaveDialog(state: WorkspaceDocumentState): Promise<string | null> {
     const options: SaveDialogOptions = {
       title: "Save Shift Document",
@@ -267,7 +219,7 @@ export class DocumentSession {
       properties: ["createDirectory", "showOverwriteConfirmation"],
     };
 
-    const window = this.#activeWindow();
+    const window = this.#dialogWindow();
     const result = window
       ? await dialog.showSaveDialog(window.window, options)
       : await dialog.showSaveDialog(options);
@@ -275,10 +227,7 @@ export class DocumentSession {
     return result.canceled ? null : (result.filePath ?? null);
   }
 
-  async #showDirtyDocumentDialog(
-    state: WorkspaceDocumentState,
-    reason: CloseReason,
-  ): Promise<DirtyDocumentChoice> {
+  async #showDirtyDocumentDialog(state: WorkspaceDocumentState): Promise<DirtyDocumentChoice> {
     const name = state.saveTarget ? path.basename(state.saveTarget) : "Untitled";
     const options: MessageBoxOptions = {
       type: "warning",
@@ -287,11 +236,11 @@ export class DocumentSession {
       cancelId: 2,
       noLink: true,
       title: this.#applicationName(),
-      message: this.#dirtyDocumentMessage(reason, name),
+      message: this.#dirtyDocumentMessage(name),
       detail: "Your changes will be lost if you don't save them.",
     };
 
-    const window = this.#activeWindow();
+    const window = this.#dialogWindow();
     const result = window
       ? await dialog.showMessageBox(window.window, options)
       : await dialog.showMessageBox(options);
@@ -311,7 +260,7 @@ export class DocumentSession {
       detail: errorToMessage(error),
     };
 
-    const window = this.#activeWindow();
+    const window = this.#dialogWindow();
     if (window) {
       await dialog.showMessageBox(window.window, options);
       return;
@@ -320,50 +269,24 @@ export class DocumentSession {
     await dialog.showMessageBox(options);
   }
 
-  #dirtyDocumentMessage(reason: CloseReason, name: string): string {
-    if (reason === "replace-document") {
-      return `Save changes to ${name} before replacing it?`;
-    }
-
+  #dirtyDocumentMessage(name: string): string {
     return `Save changes to ${name} before closing?`;
   }
 
-  async #showOpenDialog(): Promise<string | null> {
-    const options: OpenDialogOptions = {
-      title: "Open Font",
-      filters: [
-        { name: "Supported Fonts", extensions: OPEN_FONT_EXTENSIONS },
-        { name: "Shift Source Package", extensions: ["shift"] },
-        { name: "TrueType/OpenType", extensions: ["ttf", "otf"] },
-        { name: "Glyphs", extensions: ["glyphs", "glyphspackage"] },
-        { name: "UFO/Designspace", extensions: ["ufo", "designspace"] },
-      ],
-      properties: process.platform === "darwin" ? ["openFile", "openDirectory"] : ["openFile"],
-    };
-
-    const window = this.#activeWindow();
-    const result = window
-      ? await dialog.showOpenDialog(window.window, options)
-      : await dialog.showOpenDialog(options);
-
-    if (result.canceled) return null;
-    if (result.filePaths.length !== 1) return null;
-
-    return result.filePaths[0];
-  }
-
   #updateWindowTitle(): void {
-    const window = this.#activeWindow();
-    if (!window) return;
-
     const state = this.#state;
+    const windows = this.#windows();
+    if (windows.length === 0) return;
+
     if (!state) {
-      window.setTitle(this.#applicationName());
+      for (const window of windows) window.setTitle(this.#applicationName());
       return;
     }
 
     const name = state.saveTarget ? path.basename(state.saveTarget) : "Untitled";
     const dirty = state.dirty ? " *" : "";
-    window.setTitle(`${name}${dirty} - ${this.#applicationName()}`);
+    for (const window of windows) {
+      window.setTitle(`${name}${dirty} - ${this.#applicationName()}`);
+    }
   }
 }

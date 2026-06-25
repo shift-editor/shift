@@ -17,7 +17,7 @@ describe("WorkspaceEditQueue issues save on the committed-op lane", () => {
 
   beforeEach(async () => {
     stack = createWorkspaceStack();
-    await stack.client.create();
+    await stack.createWorkspace();
   });
 
   it("flushes queued edits before the save so the write includes them", async () => {

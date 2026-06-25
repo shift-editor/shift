@@ -54,7 +54,7 @@ export class TestEditor extends Editor {
    * the production pipe end to end (intents → NAPI → SQLite → echo → fold).
    */
   async startSession(name = "A", unicode: number | null = 65): Promise<this> {
-    await this.#stack.client.create();
+    await this.#stack.createWorkspace();
 
     const glyph = await this.#createAndOpenGlyph(name, unicode);
     const record = this.font.recordForName(glyph.handle.name);

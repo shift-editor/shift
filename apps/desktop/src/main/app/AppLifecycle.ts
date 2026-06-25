@@ -9,7 +9,8 @@ export type CloseConfirmation = {
 };
 
 export type AppLifecycleOptions = {
-  document: CloseConfirmation;
+  documentForWindow: (window: Window) => CloseConfirmation | null;
+  documents: () => readonly CloseConfirmation[];
   log: ShiftLogger;
 };
 
@@ -25,10 +26,11 @@ type QuitState = "idle" | "confirming" | "confirmed";
  * @remarks
  * Electron exposes window close and app quit as separate event paths. This
  * coordinator keeps their re-entrant state in one place and exposes a narrow
- * `registerWindow` surface to the app bootstrap.
+ * `registerWindow` surface to app startup.
  */
 export class AppLifecycle {
-  readonly #document: CloseConfirmation;
+  readonly #documentForWindow: (window: Window) => CloseConfirmation | null;
+  readonly #documents: () => readonly CloseConfirmation[];
   readonly #log: ShiftLogger;
 
   #quitState: QuitState = "idle";
@@ -36,7 +38,8 @@ export class AppLifecycle {
   #pendingWindowCloses = new Set<number>();
 
   constructor(options: AppLifecycleOptions) {
-    this.#document = options.document;
+    this.#documentForWindow = options.documentForWindow;
+    this.#documents = options.documents;
     this.#log = options.log;
   }
 
@@ -71,7 +74,8 @@ export class AppLifecycle {
       return;
     }
 
-    if (!this.#document.shouldConfirmClose()) {
+    const document = this.#documentForWindow(window);
+    if (!document?.shouldConfirmClose()) {
       this.#log.debug("window close guard skipped", { windowId });
       return;
     }
@@ -84,7 +88,7 @@ export class AppLifecycle {
 
     this.#pendingWindowCloses.add(windowId);
     this.#log.info("window close guard started", { windowId });
-    void this.#document
+    void document
       .confirmClose("window")
       .then((confirmed) => {
         if (!confirmed) {
@@ -111,7 +115,8 @@ export class AppLifecycle {
       return;
     }
 
-    if (!this.#document.shouldConfirmClose()) {
+    const documents = this.#documents().filter((document) => document.shouldConfirmClose());
+    if (documents.length === 0) {
       this.#log.info("quit guard skipped");
       return;
     }
@@ -124,8 +129,7 @@ export class AppLifecycle {
 
     this.#quitState = "confirming";
     this.#log.info("quit guard started");
-    void this.#document
-      .confirmClose("quit")
+    void this.#confirmQuit(documents)
       .then((confirmed) => {
         if (!confirmed) {
           this.#quitState = "idle";
@@ -141,5 +145,13 @@ export class AppLifecycle {
         this.#quitState = "idle";
         this.#log.error("quit guard failed", error);
       });
+  }
+
+  async #confirmQuit(documents: readonly CloseConfirmation[]): Promise<boolean> {
+    for (const document of documents) {
+      if (!(await document.confirmClose("quit"))) return false;
+    }
+
+    return true;
   }
 }

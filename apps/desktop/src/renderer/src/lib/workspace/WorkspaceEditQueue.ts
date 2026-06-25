@@ -115,18 +115,6 @@ export class WorkspaceEditQueue {
     });
   }
 
-  /** Creates an untitled workspace behind every queued and in-flight edit. */
-  create(): Promise<void> {
-    return this.#withFlush(() => this.#workspace.create());
-  }
-
-  /** Opens a workspace behind every queued and in-flight edit. */
-  open(path: string): Promise<void> {
-    return this.#withFlush(async () => {
-      await this.#workspace.open(path);
-    });
-  }
-
   /** Reads document state behind every queued and in-flight edit. */
   state(): Promise<WorkspaceDocumentState | null> {
     return this.#withFlush(() => this.#workspace.documentState());

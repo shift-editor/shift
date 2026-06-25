@@ -46,12 +46,15 @@ export type WorkspaceDocumentState = {
  *
  * @remarks
  * `workspace.connect` carries the renderer's sync-lane port as a transferred
- * port, not as payload. Save is NOT here: it rides the sync lane as a committed
- * operation so FIFO orders it behind edits (see `workspace.save`). Main reads
- * `document.state` to decide Save vs Save As and learns save outcomes from the
- * `document.changed` event.
+ * port, not as payload. Create/open return document lifecycle state only; font
+ * records stay on the sync lane. Save is NOT here: it rides the sync lane as a
+ * committed operation so FIFO orders it behind edits (see `workspace.save`).
+ * Main reads `document.state` to decide Save vs Save As and learns save
+ * outcomes from the `document.changed` event.
  */
 export type ShellCallMap = {
+  "workspace.create": { request: void; response: WorkspaceDocumentState };
+  "workspace.open": { request: { path: string }; response: WorkspaceDocumentState };
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
 };
@@ -66,12 +69,10 @@ export type ShellEventMap = {
  *
  * @remarks
  * Convention: **every sync-lane response is the renderer's next state** —
- * states, not acks. `workspace.create` takes void because the utility mints
- * the documentId and allocates the store path; the renderer never sees a
- * filesystem path.
+ * states, not acks. Create/open are main-owned shell-lane operations; the
+ * renderer catches up by reading `workspace.snapshot`.
  */
 export type SyncCallMap = {
-  "workspace.create": { request: void; response: WorkspaceSnapshot };
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
   /**
@@ -97,7 +98,6 @@ export type SyncCallMap = {
    * needs a path. Rides the edit lane so the utility serializes it behind every
    * committed edit — no cross-lane watermark required.
    */
-  "workspace.open": { request: { path: string }; response: WorkspaceSnapshot };
   "workspace.save": { request: void; response: WorkspaceDocumentState };
   /** Saves to `path` (main's Save As dialog choice) and adopts it as target. */
   "workspace.saveAs": { request: { path: string }; response: WorkspaceDocumentState };

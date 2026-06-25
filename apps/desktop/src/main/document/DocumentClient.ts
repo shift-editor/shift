@@ -7,18 +7,15 @@ import { createShiftLogger, type ShiftLogger } from "../logging";
 export interface Document {
   readonly connected: boolean;
   state(): Promise<WorkspaceDocumentState | null>;
-  create(): Promise<void>;
   save(path: string | null): Promise<WorkspaceDocumentState>;
-  open(path: string): Promise<void>;
 }
 
 /**
  * Main-process client for document operations served by the renderer.
  *
  * @remarks
- * The renderer owns the committed edit lane, so main routes document state,
- * create, save, and open requests through this client instead of reading or
- * mutating the utility process directly.
+ * The renderer owns the committed edit lane, so main routes document state
+ * reads and saves through this client to flush pending edits first.
  */
 export class DocumentClient implements Document {
   readonly #log: ShiftLogger;
@@ -49,16 +46,8 @@ export class DocumentClient implements Document {
     return this.#call("document.state", undefined);
   }
 
-  create(): Promise<void> {
-    return this.#call("document.create", undefined);
-  }
-
   save(path: string | null): Promise<WorkspaceDocumentState> {
     return this.#call("document.save", { path });
-  }
-
-  open(path: string): Promise<void> {
-    return this.#call("document.open", { path });
   }
 
   /** Disconnects the active renderer document lane. */

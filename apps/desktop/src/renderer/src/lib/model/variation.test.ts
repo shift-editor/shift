@@ -59,7 +59,7 @@ async function variableFont(): Promise<{
   bold: Source;
 }> {
   const stack = createWorkspaceStack();
-  await stack.client.create();
+  await stack.createWorkspace();
 
   const glyphId = mintGlyphId();
   const regularLayerId = mintLayerId();

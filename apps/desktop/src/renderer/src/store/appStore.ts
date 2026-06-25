@@ -24,14 +24,34 @@ registerBuiltInTools(editor);
 // Set select tool as ready on startup
 editor.setActiveTool("select");
 
-void workspace.connected();
-
 const host = getShiftHost();
 let documentRequests: ChannelServer<DocumentEventMap> | null = null;
+let workspaceRuntimeLoad: Promise<void> | null = null;
 
-void serveDocumentRequests().catch((error) => {
-  console.error("document request lane failed", error);
-});
+export function connectWorkspaceRuntime(): Promise<void> {
+  if (!workspaceRuntimeLoad) {
+    const attempt = connectWorkspaceRuntimeOnce().catch((error) => {
+      if (workspaceRuntimeLoad === attempt) {
+        workspaceRuntimeLoad = null;
+      }
+      throw error;
+    });
+    workspaceRuntimeLoad = attempt;
+  }
+
+  return workspaceRuntimeLoad;
+}
+
+async function connectWorkspaceRuntimeOnce(): Promise<void> {
+  await workspace.connected();
+
+  const snapshot = workspace.workspaceCell.peek();
+  if (!snapshot) {
+    throw new Error("workspace connected without a snapshot");
+  }
+
+  await serveDocumentRequests();
+}
 
 async function serveDocumentRequests(): Promise<void> {
   const port = nextDocumentPort();
@@ -48,9 +68,7 @@ async function serveDocumentRequests(): Promise<void> {
     domPortTransport(await port.received),
     {
       "document.state": () => editQueue.state(),
-      "document.create": () => editQueue.create(),
       "document.save": ({ path }) => editQueue.save(path),
-      "document.open": ({ path }) => editQueue.open(path),
     },
   );
 }

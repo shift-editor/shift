@@ -8,15 +8,13 @@ export const Landing = () => {
   const host = getShiftHost();
 
   const handleNewFont = () => {
-    void host.commands
-      .run("file.new")
+    void host.workspace
+      .create()
       .catch((error) => console.error("creating a new font failed", error));
   };
 
   const handleOpenFont = () => {
-    void host.commands
-      .run("file.open")
-      .catch((error) => console.error("opening a font failed", error));
+    void host.workspace.open().catch((error) => console.error("opening a font failed", error));
   };
 
   return (

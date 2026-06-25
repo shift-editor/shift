@@ -13,6 +13,7 @@ export type WorkspaceStack = {
   client: WorkspaceSession;
   editQueue: WorkspaceEditQueue;
   font: Font;
+  createWorkspace(): Promise<void>;
 };
 
 /**
@@ -42,5 +43,17 @@ export function createWorkspaceStack(): WorkspaceStack {
   const editQueue = new WorkspaceEditQueue(client);
   const font = new Font(client.workspaceCell, editQueue);
 
-  return { client, editQueue, font };
+  return {
+    client,
+    editQueue,
+    font,
+    async createWorkspace(): Promise<void> {
+      await shell.call("workspace.create", undefined);
+      await client.connected();
+
+      if (!client.workspaceCell.peek()) {
+        throw new Error("workspace stack connected without a snapshot");
+      }
+    },
+  };
 }

@@ -91,6 +91,8 @@ export type CommandContext = {
     /** Creates a new untitled workspace through main's document workflow. */
     create: () => Promise<void>;
     open: () => Promise<void>;
+    /** Returns whether the active window is attached to a workspace. */
+    hasWorkspace: () => boolean;
     /** Saves through main's native document workflow. */
     save: () => Promise<void>;
     /** Runs main's native Save As workflow. */

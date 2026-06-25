@@ -14,6 +14,8 @@ const shiftHost: ShiftHost = {
     connect: invoke(ipcRenderer, "document.connect"),
   },
   workspace: {
+    create: invoke(ipcRenderer, "workspace.create"),
+    open: invoke(ipcRenderer, "workspace.open"),
     connect: invoke(ipcRenderer, "workspace.connect"),
   },
   ui: {

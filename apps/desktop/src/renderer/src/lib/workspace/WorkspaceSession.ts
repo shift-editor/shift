@@ -41,7 +41,7 @@ export class WorkspaceSession {
   }
 
   /**
-   * Memoized connection to the workspace process; safe to call repeatedly.
+   * Connects this renderer runtime to its bound workspace.
    *
    * @remarks
    * A failed attempt clears the memo so the next call retries instead of
@@ -57,13 +57,6 @@ export class WorkspaceSession {
     }
 
     return this.#connected;
-  }
-
-  /** Creates an untitled workspace; `workspaceCell` becomes the returned state. */
-  async create(): Promise<void> {
-    await this.connected();
-
-    this.workspaceCell.set(await this.#require().call("workspace.create", undefined));
   }
 
   /**
@@ -98,14 +91,6 @@ export class WorkspaceSession {
     const { applied, documentState } = await this.#require().call("workspace.redo", undefined);
     this.documentStateCell.set(documentState);
     return applied === null ? null : this.#fold(applied);
-  }
-
-  async open(path: string): Promise<WorkspaceSnapshot> {
-    await this.connected();
-
-    const snapshot = await this.#require().call("workspace.open", { path });
-    this.workspaceCell.set(snapshot);
-    return snapshot;
   }
 
   /** Reads utility-owned document state through the renderer sync lane. */
