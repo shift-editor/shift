@@ -9,6 +9,7 @@
 - Avoid `void promise.catch(...)` in React event handlers and normal command handlers. Use an `async` function with `try`/`catch` instead.
 - Use `void promise.catch(...)` only for genuinely fire-and-forget boundaries that cannot be awaited by the caller, such as Electron menu callbacks. Keep those cases local and log or surface the failure.
 - Avoid async IIFEs assigned into state, for example `state = (async () => { ... })().catch(...)`. Extract a named helper so the shared-state/memoization code and the async work are readable separately.
+- Do not prefix commit messages or pull request titles with `[codex]`.
 
 ## Naming
 
