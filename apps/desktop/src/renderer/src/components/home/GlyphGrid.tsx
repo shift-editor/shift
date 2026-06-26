@@ -45,7 +45,8 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
-import { getEditor, getGlyphInfo } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
+import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button, Input } from "@shift/ui";
 import type { GlyphName } from "@shift/types";
@@ -66,7 +67,7 @@ function computeLayout(width: number) {
 
 export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
-  const editor = getEditor();
+  const editor = useEditor();
   const { filteredGlyphs: glyphs } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -175,7 +176,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
 });
 
 function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
-  const editor = getEditor();
+  const editor = useEditor();
   const glyphInfo = getGlyphInfo();
   const glyphName = glyph.name;
   const [draft, setDraft] = useState(glyphName);

@@ -2,7 +2,7 @@ import type { AppliedChange, FontIntent, GlyphState, LayerId } from "@shift/type
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import { signal, type Signal } from "@/lib/signals/signal";
 import type { GlyphLayerState } from "@/lib/model/GlyphLayerState";
-import type { WorkspaceSession } from "./WorkspaceSession";
+import type { WorkspaceClient } from "./WorkspaceClient";
 
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
@@ -28,8 +28,8 @@ type FoldTarget = {
  * utility serializes the write behind every committed edit with no cross-lane
  * watermark.
  */
-export class WorkspaceEditQueue {
-  readonly #workspace: WorkspaceSession;
+export class WorkspaceEditCoordinator {
+  readonly #workspace: WorkspaceClient;
   readonly #targets = new Map<LayerId, FoldTarget>();
   readonly #settledCell = signal(true);
   readonly #commitState = signal<WorkspaceCommitState>("idle", {
@@ -41,7 +41,7 @@ export class WorkspaceEditQueue {
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
 
-  constructor(workspace: WorkspaceSession) {
+  constructor(workspace: WorkspaceClient) {
     this.#workspace = workspace;
   }
 

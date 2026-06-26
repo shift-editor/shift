@@ -186,7 +186,7 @@ describe("font-level intents make the font variable", () => {
     expect(record.layers).toHaveLength(1);
     expect(record.layers[0]?.sourceId).toBe(source.id);
 
-    await stack.editQueue.settled();
+    await stack.editCoordinator.settled();
 
     const committed = stack.font.recordForId(record.id);
     expect(committed?.layers).toEqual(record.layers);

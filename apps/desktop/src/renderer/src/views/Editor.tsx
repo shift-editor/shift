@@ -8,7 +8,7 @@ import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { GlyphFinder } from "@/components/editor/GlyphFinder";
 import { Canvas } from "@/components/editor/Canvas";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -17,7 +17,7 @@ import type { Unicode } from "@shift/types";
 
 export const Editor = () => {
   const { glyphId } = useParams();
-  const editor = getEditor();
+  const editor = useEditor();
 
   const { activeZone } = useFocusZone();
 
@@ -50,7 +50,6 @@ export const Editor = () => {
   );
 
   useEffect(() => {
-    const editor = getEditor();
     const toolManager = editor.toolManager;
     const keyboardRouter = new KeyboardRouter(() => ({
       canvasActive: activeZone === "canvas" || toolManager.isDragging,
@@ -74,12 +73,11 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [glyphId, activeZone]);
+  }, [glyphId, activeZone, editor]);
 
   useEffect(() => {
-    const editor = getEditor();
     editor.setZone(activeZone);
-  }, [activeZone]);
+  }, [activeZone, editor]);
 
   if (!glyphId) return null;
 

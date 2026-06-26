@@ -844,11 +844,11 @@ export class Editor {
 
   public undo() {
     // One undo authority: the workspace ledger (state-pair replay).
-    void this.font.editQueue.undo();
+    void this.font.editCoordinator.undo();
   }
 
   public redo() {
-    void this.font.editQueue.redo();
+    void this.font.editCoordinator.redo();
   }
 
   public setCameraRect(rect: Rect2D) {

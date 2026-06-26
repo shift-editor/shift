@@ -156,11 +156,11 @@ describe("variable editing across sources", () => {
     const point = boldSource.allPoints[1]!;
 
     boldSource.commitPositionPatch([{ kind: "point", id: point.id, x: 250, y: 0 }]);
-    await stack.editQueue.settled();
+    await stack.editCoordinator.settled();
 
     expect(boldSource.point(point.id)).toMatchObject({ x: 250, y: 0 });
 
-    const undone = await stack.editQueue.undo();
+    const undone = await stack.editCoordinator.undo();
     expect(undone).not.toBeNull();
     expect(boldSource.point(point.id)).toMatchObject({ x: 200, y: 0 });
   });

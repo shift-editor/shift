@@ -1,5 +1,5 @@
 import type { Bounds } from "@shift/geo";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 
 /**
@@ -16,6 +16,6 @@ import { useSignalState } from "@/lib/signals";
  * unavailable or nothing is selected.
  */
 export function useSelectionBounds(): Bounds | null {
-  const editor = getEditor();
+  const editor = useEditor();
   return useSignalState(editor.selection.boundsCell, { schedule: "frame" });
 }

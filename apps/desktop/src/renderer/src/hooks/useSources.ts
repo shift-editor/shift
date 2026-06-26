@@ -1,5 +1,5 @@
 import type { Source } from "@shift/types";
-import { getEditor } from "@/store/appStore";
+import { useFont } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 
 /**
@@ -8,6 +8,6 @@ import { useSignalState } from "@/lib/signals";
  * (filled with axis defaults), so callers can index it directly by tag.
  */
 export const useSources = (): Source[] => {
-  const font = getEditor().font;
+  const font = useFont();
   return useSignalState(font.sourcesCell);
 };

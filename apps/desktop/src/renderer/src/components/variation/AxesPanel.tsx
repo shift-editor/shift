@@ -14,11 +14,12 @@ import { EditableSidebarInput } from "@/components/editor/sidebar-right/Editable
 import { useAxes } from "@/hooks/useAxes";
 import { useDesignLocation } from "@/hooks/useDesignLocation";
 import { axisValue, withAxisValue } from "@/lib/variation/location";
-import { getFont } from "@/store/appStore";
+import { useFont } from "@/workspace/WorkspaceContext";
 
 import VerticalElipsis from "@/assets/vertical-ellipsis.svg";
 
 export const AxesPanel = () => {
+  const font = useFont();
   const axes = useAxes();
   const [location, setDesignLocation] = useDesignLocation();
 
@@ -34,7 +35,7 @@ export const AxesPanel = () => {
   };
 
   const deleteAxis = (axis: Axis) => {
-    getFont().deleteAxis(axis.id);
+    font.deleteAxis(axis.id);
   };
 
   return (

@@ -12,7 +12,7 @@ const createGlyph = (name: string, unicode: number): FontIntent => ({
 
 const savePath = (): string => join(mkdtempSync(join(tmpdir(), "shift-save-")), "Saved.shift");
 
-describe("WorkspaceEditQueue issues save on the committed-op lane", () => {
+describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => {
   let stack: WorkspaceStack;
 
   beforeEach(async () => {
@@ -21,35 +21,35 @@ describe("WorkspaceEditQueue issues save on the committed-op lane", () => {
   });
 
   it("flushes queued edits before the save so the write includes them", async () => {
-    const { client, editQueue } = stack;
+    const { client, editCoordinator } = stack;
 
-    editQueue.push(createGlyph("A", 65)); // queued, not yet applied
-    const saved = await editQueue.save(savePath()); // flushes the push, then saves behind it
+    editCoordinator.push(createGlyph("A", 65)); // queued, not yet applied
+    const saved = await editCoordinator.save(savePath()); // flushes the push, then saves behind it
 
     expect(client.workspaceCell.peek()?.glyphs).toHaveLength(1); // the apply was folded
     expect(saved).toMatchObject({ dirty: false, needsSaveAs: false });
   });
 
   it("a current-target save serializes behind a later edit", async () => {
-    const { client, editQueue } = stack;
-    await editQueue.save(savePath()); // adopt a package target
+    const { client, editCoordinator } = stack;
+    await editCoordinator.save(savePath()); // adopt a package target
 
-    editQueue.push(createGlyph("B", 66));
-    const saved = await editQueue.save(null); // null = save to current target
+    editCoordinator.push(createGlyph("B", 66));
+    const saved = await editCoordinator.save(null); // null = save to current target
 
     expect(client.workspaceCell.peek()?.glyphs).toHaveLength(1);
     expect(saved).toMatchObject({ dirty: false });
   });
 
   it("marks locally committed edits as queued until the utility echo settles", async () => {
-    const { client, editQueue } = stack;
-    await editQueue.save(savePath());
+    const { client, editCoordinator } = stack;
+    await editCoordinator.save(savePath());
 
-    editQueue.push(createGlyph("C", 67));
+    editCoordinator.push(createGlyph("C", 67));
 
-    expect(editQueue.commitStateCell.peek()).toBe("queued");
-    await editQueue.settled();
-    expect(editQueue.commitStateCell.peek()).toBe("idle");
+    expect(editCoordinator.commitStateCell.peek()).toBe("queued");
+    await editCoordinator.settled();
+    expect(editCoordinator.commitStateCell.peek()).toBe("idle");
     expect(client.documentStateCell.peek()).toMatchObject({ dirty: true });
   });
 });

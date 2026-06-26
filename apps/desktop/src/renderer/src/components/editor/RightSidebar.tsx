@@ -3,7 +3,7 @@ import { Separator } from "@shift/ui";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
@@ -11,7 +11,7 @@ import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { BooleanOps } from "./BooleanOps";
 
 export const RightSidebar = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const zoom = useSignalState(editor.zoomCell);
   const zoomPercent = Math.round(zoom * 100);
   const { familyName } = editor.font.metadata;

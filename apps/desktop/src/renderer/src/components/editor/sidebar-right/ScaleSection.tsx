@@ -3,14 +3,14 @@ import { SidebarSection } from "./SidebarSection";
 import { TransformGrid } from "./TransformGrid";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { Bounds } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 export const ScaleSection = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const { anchor, setAnchor } = useTransformOrigin();
   const selectionBounds = useSelectionBounds();
 

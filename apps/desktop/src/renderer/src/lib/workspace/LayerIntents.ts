@@ -14,7 +14,7 @@ import type {
   SetXAdvanceIntent,
   TranslatePointsIntent,
 } from "@shift/types";
-import type { WorkspaceEditQueue } from "./WorkspaceEditQueue";
+import type { WorkspaceEditCoordinator } from "./WorkspaceEditCoordinator";
 
 /** An intent payload minus the layer id this channel already carries. */
 type Payload<TIntent> = Omit<TIntent, "layerId">;
@@ -30,97 +30,100 @@ type Payload<TIntent> = Omit<TIntent, "layerId">;
  * for the ledger, not the renderer.
  */
 export class LayerIntents {
-  readonly #editQueue: WorkspaceEditQueue;
+  readonly #editCoordinator: WorkspaceEditCoordinator;
   readonly #layerId: LayerId;
 
-  constructor(editQueue: WorkspaceEditQueue, layerId: LayerId) {
-    this.#editQueue = editQueue;
+  constructor(editCoordinator: WorkspaceEditCoordinator, layerId: LayerId) {
+    this.#editCoordinator = editCoordinator;
     this.#layerId = layerId;
   }
 
   addPoints(payload: Payload<AddPointsIntent>): void {
-    this.#editQueue.push({ kind: "addPoints", addPoints: { layerId: this.#layerId, ...payload } });
+    this.#editCoordinator.push({
+      kind: "addPoints",
+      addPoints: { layerId: this.#layerId, ...payload },
+    });
   }
 
   addContour(payload: Payload<AddContourIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "addContour",
       addContour: { layerId: this.#layerId, ...payload },
     });
   }
 
   setContourClosed(payload: Payload<SetContourClosedIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "setContourClosed",
       setContourClosed: { layerId: this.#layerId, ...payload },
     });
   }
 
   movePoints(payload: Payload<MovePointsIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "movePoints",
       movePoints: { layerId: this.#layerId, ...payload },
     });
   }
 
   setPointSmooth(payload: Payload<SetPointSmoothIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "setPointSmooth",
       setPointSmooth: { layerId: this.#layerId, ...payload },
     });
   }
 
   removePoints(payload: Payload<RemovePointsIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "removePoints",
       removePoints: { layerId: this.#layerId, ...payload },
     });
   }
 
   reverseContour(payload: Payload<ReverseContourIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "reverseContour",
       reverseContour: { layerId: this.#layerId, ...payload },
     });
   }
 
   translatePoints(payload: Payload<TranslatePointsIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "translatePoints",
       translatePoints: { layerId: this.#layerId, ...payload },
     });
   }
 
   setXAdvance(payload: Payload<SetXAdvanceIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "setXAdvance",
       setXAdvance: { layerId: this.#layerId, ...payload },
     });
   }
 
   applyBooleanOp(payload: Payload<BooleanOpIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "applyBooleanOp",
       applyBooleanOp: { layerId: this.#layerId, ...payload },
     });
   }
 
   addAnchors(payload: Payload<AddAnchorsIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "addAnchors",
       addAnchors: { layerId: this.#layerId, ...payload },
     });
   }
 
   moveAnchors(payload: Payload<MoveAnchorsIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "moveAnchors",
       moveAnchors: { layerId: this.#layerId, ...payload },
     });
   }
 
   removeAnchors(payload: Payload<RemoveAnchorsIntent>): void {
-    this.#editQueue.push({
+    this.#editCoordinator.push({
       kind: "removeAnchors",
       removeAnchors: { layerId: this.#layerId, ...payload },
     });

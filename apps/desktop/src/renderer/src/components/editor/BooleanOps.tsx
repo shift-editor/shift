@@ -4,10 +4,10 @@ import { SidebarSection } from "./sidebar-right/SidebarSection";
 import UnionIcon from "@/assets/sidebar-right/union.svg";
 import IntersectIcon from "@/assets/sidebar-right/intersect.svg";
 import SubtractIcon from "@/assets/sidebar-right/subtract.svg";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 
 export const BooleanOps = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const selectedContourIds = editor.selection.contourIds;
 
   if (selectedContourIds.size < 2) return null;

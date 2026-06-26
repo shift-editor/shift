@@ -1,5 +1,5 @@
 import type { GlyphSidebearings } from "@/lib/model/Glyph";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState, useSignalTrigger } from "@/lib/signals";
 
 const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
@@ -19,7 +19,7 @@ export interface GlyphSidebearingsState {
  * @returns Current values and whether the displayed instance can be edited.
  */
 export function useGlyphSidebearings(): GlyphSidebearingsState {
-  const editor = getEditor();
+  const editor = useEditor();
   const instance = useSignalState(editor.glyphInstanceCell);
 
   useSignalTrigger(instance?.sidebearingsCell, { schedule: "frame" });

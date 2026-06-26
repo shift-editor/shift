@@ -1,13 +1,13 @@
 import { useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { useState } from "react";
 import type { AnchorId } from "@shift/types";
 
 export const AnchorSection = () => {
-  const editor = getEditor();
+  const editor = useEditor();
 
   const [singleAnchorId, setSingleAnchorId] = useState<AnchorId | null>(null);
 

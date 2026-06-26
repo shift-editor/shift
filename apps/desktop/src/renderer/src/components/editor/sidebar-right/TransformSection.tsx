@@ -3,7 +3,7 @@ import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { useSignalState } from "@/lib/signals";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
@@ -90,7 +90,7 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 });
 
 export const TransformSection = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const { anchor } = useTransformOrigin();
   const selectedPointIds = useSignalState(editor.selection.stateCell).pointIds;
   const selectionBounds = useSelectionBounds();

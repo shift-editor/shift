@@ -2,7 +2,7 @@ import { FC } from "react";
 
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from "@shift/ui";
 import { useSignalState } from "@/lib/signals";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { SVG } from "@/types/common";
 import type { ToolName } from "@/lib/tools/core";
 
@@ -41,7 +41,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeT
 };
 
 export const ToolsPane: FC = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const activeTool = useSignalState(editor.activeToolCell);
 
   return (

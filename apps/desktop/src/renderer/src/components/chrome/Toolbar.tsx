@@ -2,11 +2,12 @@ import { NavigationPane } from "./NavigationPane";
 import { Titlebar } from "./Titlebar";
 import { ToolsPane } from "@/components/editor/ToolsPane";
 import { useDocumentChromeState } from "@/hooks/useDocumentChromeState";
-import { getFont } from "@/store/appStore";
+import { useFont } from "@/workspace/WorkspaceContext";
 
 export const Toolbar = () => {
+  const font = useFont();
   const { filename, dirty } = useDocumentChromeState();
-  const familyName = getFont().metadata.familyName;
+  const familyName = font.metadata.familyName;
   const editedFilename = `${filename} — Edited`;
 
   return (

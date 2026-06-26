@@ -11,7 +11,7 @@ import {
   X,
   cn,
 } from "@shift/ui";
-import { getFont } from "@/store/appStore";
+import { useFont } from "@/workspace/WorkspaceContext";
 
 interface CreateAxisDialogProps {
   open: boolean;
@@ -37,7 +37,7 @@ const DEFAULT_AXIS_VALUES: CreateAxisFormValues = {
 };
 
 export const CreateAxisDialog = ({ open, onOpenChange }: CreateAxisDialogProps) => {
-  const font = getFont();
+  const font = useFont();
   const [values, setValues] = useState<CreateAxisFormValues>(DEFAULT_AXIS_VALUES);
 
   const updateValue =

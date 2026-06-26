@@ -11,7 +11,7 @@ import {
 import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
 import type { SearchResult } from "@shift/glyph-info";
 import { useFocusZone } from "@/context/FocusZoneContext";
-import { getGlyphInfo } from "@/store/appStore";
+import { getGlyphInfo } from "@/workspace/glyphInfo";
 
 interface GlyphFinderProps {
   open: boolean;

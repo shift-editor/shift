@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useSignalText } from "@/hooks/useSignalText";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { Separator } from "@shift/ui";
 import { effect } from "@/lib/signals";
 import { useSignalState, useSignalTrigger } from "@/lib/signals/useSignal";
@@ -16,7 +16,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function DebugPanel() {
-  const editor = getEditor();
+  const editor = useEditor();
   const instance = useSignalState(editor.glyphInstanceCell);
   useSignalTrigger(instance?.xAdvanceCell);
 

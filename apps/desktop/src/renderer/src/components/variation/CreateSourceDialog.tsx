@@ -14,7 +14,7 @@ import {
 import type { Axis, AxisId, Source } from "@shift/types";
 import { useAxes } from "@/hooks/useAxes";
 import { useSources } from "@/hooks/useSources";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 
 interface CreateSourceDialogProps {
   open: boolean;
@@ -51,7 +51,7 @@ function defaultValues(axes: readonly Axis[], sources: readonly Source[]): Creat
 }
 
 export const CreateSourceDialog = ({ open, onOpenChange }: CreateSourceDialogProps) => {
-  const editor = getEditor();
+  const editor = useEditor();
   const axes = useAxes();
   const sources = useSources();
   const [values, setValues] = useState<CreateSourceFormValues>(emptyValues);
