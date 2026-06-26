@@ -1,17 +1,59 @@
 import { BrowserWindow, type WebContents } from "electron";
+import { DocumentClient } from "../document/DocumentClient";
 import type { Window } from "../windows/Window";
+import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import { WorkspaceProcess } from "./WorkspaceProcess";
 import { type WorkspaceId, WorkspaceSession } from "./WorkspaceSession";
+
+/** Provides app-owned values required when a workspace session is created. */
+export interface WorkspaceManagerOptions {
+  readonly documentsRoot: () => string;
+  readonly applicationName: () => string;
+}
 
 /**
  * Tracks live font workspace sessions by workspace identity.
  *
  * @remarks
  * Commands and IPC handlers resolve a workspace from the focused or sending
- * window before acting on document state.
+ * window before acting on document state. The manager also creates sessions
+ * so each loaded font gets its own process and renderer-mediated document
+ * lane.
  */
 export class WorkspaceManager {
+  readonly #documentsRoot: () => string;
+  readonly #applicationName: () => string;
   readonly #sessionsById = new Map<WorkspaceId, WorkspaceSession>();
   readonly #sessionIdByWindowId = new Map<number, WorkspaceId>();
+
+  /**
+   * Creates a manager for live font workspace sessions.
+   *
+   * @param options - Callbacks that provide app-level values when a session is created.
+   */
+  constructor(options: WorkspaceManagerOptions) {
+    this.#documentsRoot = options.documentsRoot;
+    this.#applicationName = options.applicationName;
+  }
+
+  /**
+   * Creates an untitled workspace session.
+   *
+   * @returns the live session that owns the new workspace.
+   */
+  async createUntitled(): Promise<WorkspaceSession> {
+    return this.#createSession((workspaceProcess) => workspaceProcess.createWorkspace());
+  }
+
+  /**
+   * Opens a font source path in a workspace session.
+   *
+   * @param sourcePath - User-selected font source path.
+   * @returns a live session for the opened source; existing sessions are reused by workspace id.
+   */
+  async openPath(sourcePath: string): Promise<WorkspaceSession> {
+    return this.#createSession((workspaceProcess) => workspaceProcess.openWorkspace(sourcePath));
+  }
 
   /**
    * Returns the live workspace session for an id.
@@ -120,5 +162,37 @@ export class WorkspaceManager {
     const session = this.#sessionsById.get(workspaceId);
     if (!session) throw new Error(`Workspace session is not registered: ${workspaceId}`);
     return session;
+  }
+
+  async #createSession(
+    load: (workspaceProcess: WorkspaceProcess) => Promise<WorkspaceDocumentState>,
+  ): Promise<WorkspaceSession> {
+    const workspaceProcess = new WorkspaceProcess();
+    workspaceProcess.start(this.#documentsRoot());
+
+    try {
+      await workspaceProcess.whenReady();
+      const state = await load(workspaceProcess);
+      const existing = this.get(state.documentId);
+      if (existing) {
+        workspaceProcess.stop();
+        existing.document.acceptState(state);
+        return existing;
+      }
+
+      const session = new WorkspaceSession({
+        workspaceId: state.documentId,
+        workspaceProcess,
+        documentClient: new DocumentClient(),
+        applicationName: this.#applicationName,
+      });
+
+      session.document.acceptState(state);
+      this.register(session);
+      return session;
+    } catch (error) {
+      workspaceProcess.stop();
+      throw error;
+    }
   }
 }

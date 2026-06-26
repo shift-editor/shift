@@ -7,14 +7,20 @@ import { getShiftHost } from "@/host/shiftHost";
 export const Landing = () => {
   const host = getShiftHost();
 
-  const handleNewFont = () => {
-    void host.workspace
-      .create()
-      .catch((error) => console.error("creating a new font failed", error));
+  const handleNewFont = async () => {
+    try {
+      await host.commands.run("file.new");
+    } catch (error) {
+      console.error("new font failed", error);
+    }
   };
 
-  const handleOpenFont = () => {
-    void host.workspace.open().catch((error) => console.error("opening a font failed", error));
+  const handleOpenFont = async () => {
+    try {
+      await host.commands.run("file.open");
+    } catch (error) {
+      console.error("opening a font failed", error);
+    }
   };
 
   return (

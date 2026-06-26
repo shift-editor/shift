@@ -30,27 +30,22 @@ let workspaceRuntimeLoad: Promise<void> | null = null;
 
 export function connectWorkspaceRuntime(): Promise<void> {
   if (!workspaceRuntimeLoad) {
-    const attempt = connectWorkspaceRuntimeOnce().catch((error) => {
-      if (workspaceRuntimeLoad === attempt) {
-        workspaceRuntimeLoad = null;
+    workspaceRuntimeLoad = (async () => {
+      await workspace.connected();
+
+      const snapshot = workspace.workspaceCell.peek();
+      if (!snapshot) {
+        throw new Error("workspace connected without a snapshot");
       }
+
+      await serveDocumentRequests();
+    })().catch((error) => {
+      workspaceRuntimeLoad = null;
       throw error;
     });
-    workspaceRuntimeLoad = attempt;
   }
 
   return workspaceRuntimeLoad;
-}
-
-async function connectWorkspaceRuntimeOnce(): Promise<void> {
-  await workspace.connected();
-
-  const snapshot = workspace.workspaceCell.peek();
-  if (!snapshot) {
-    throw new Error("workspace connected without a snapshot");
-  }
-
-  await serveDocumentRequests();
 }
 
 async function serveDocumentRequests(): Promise<void> {

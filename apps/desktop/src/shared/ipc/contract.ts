@@ -17,10 +17,6 @@ export type DocumentEventMap = Record<string, never>;
  */
 export type RendererToMain = {
   "commands.run": (id: CommandId) => void;
-  /** Creates an untitled workspace in a new bound window. */
-  "workspace.create": () => void;
-  /** Opens a workspace through main's native open dialog in a new bound window. */
-  "workspace.open": () => void;
   /**
    * Asks main to transfer a document request lane to the renderer. The port
    * arrives separately on the `document.port` postMessage channel because ports

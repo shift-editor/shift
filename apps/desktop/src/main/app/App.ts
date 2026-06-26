@@ -9,17 +9,13 @@ import { CommandRegistry, type CommandContext } from "../commands/Command";
 import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
 import { createShiftLogger, type ShiftLogger } from "../logging";
-import { WorkspaceProcess } from "../workspace/WorkspaceProcess";
-import { DocumentClient } from "../document/DocumentClient";
 import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
 import { WorkspaceSession } from "../workspace/WorkspaceSession";
-import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import { showOpenFontDialog } from "../document/openFontDialog";
 
 const APP_NAME = "Shift";
-type RendererRoute = "launcher" | "workspace";
 
 /**
  * Owns Electron app startup and the first main-process service graph.
@@ -35,7 +31,10 @@ export class App {
 
   #commands = new CommandRegistry();
   #windows = new WindowManager();
-  #workspaces = new WorkspaceManager();
+  #workspaces = new WorkspaceManager({
+    documentsRoot: () => this.#requireDocumentsRoot(),
+    applicationName: () => this.applicationName,
+  });
   #documentsRoot: string | null = null;
 
   #appIcon = new AppIcon();
@@ -95,8 +94,7 @@ export class App {
       this.#appIcon.install();
       this.#applicationMenu.install();
 
-      const window = this.#createWindow();
-      this.#loadRenderer(window, "launcher");
+      this.#openLauncher();
 
       this.#log.info("finished when ready callback");
     });
@@ -129,9 +127,22 @@ export class App {
     return window;
   }
 
-  #loadRenderer(window: Window, route: RendererRoute) {
+  #openLauncher(): Window {
+    const window = this.#createWindow();
+    this.#loadLauncher(window);
+    return window;
+  }
+
+  #loadLauncher(window: Window): void {
+    this.#loadRenderer(window, "/launcher");
+  }
+
+  #loadWorkspace(window: Window): void {
+    this.#loadRenderer(window, "/home");
+  }
+
+  #loadRenderer(window: Window, hash: string): void {
     const source = getRendererSource();
-    const hash = route === "workspace" ? "/home" : "/launcher";
     if (source.type === "url") {
       // in dev load the renderer from vite at MAIN_WINDOW_VITE_DEV_SERVER_URL
       const url = new URL(source.source);
@@ -153,12 +164,6 @@ export class App {
   #registerIpcHandlers(): void {
     ipc.handle(ipcMain, "commands.run", (_event, id) => {
       return this.#commands.run(id, this.#commandContext());
-    });
-    ipc.handle(ipcMain, "workspace.create", async (event) => {
-      await this.#createWorkspaceForSender(event.sender);
-    });
-    ipc.handle(ipcMain, "workspace.open", async (event) => {
-      await this.#openWorkspaceForSender(event.sender);
     });
     ipc.handle(ipcMain, "document.connect", (event) => {
       this.#log.info("document connect requested");
@@ -218,73 +223,24 @@ export class App {
     };
   }
 
-  async #createWorkspaceForSender(sender: WebContents): Promise<void> {
-    await this.#createWorkspaceFromWindow(this.#requireWindowForWebContents(sender));
-  }
-
-  async #openWorkspaceForSender(sender: WebContents): Promise<void> {
-    await this.#openWorkspaceFromWindow(this.#requireWindowForWebContents(sender));
-  }
-
   async #createWorkspaceFromWindow(opener: Window): Promise<void> {
-    const { session, state } = await this.#createWorkspaceSession((workspaceProcess) =>
-      workspaceProcess.createWorkspace(),
-    );
-    this.#openWorkspaceWindow(opener, session, state);
+    const session = await this.#workspaces.createUntitled();
+    this.#openWorkspaceWindow(opener, session);
   }
 
   async #openWorkspaceFromWindow(opener: Window): Promise<void> {
     const openPath = await showOpenFontDialog(opener);
     if (!openPath) return;
 
-    const { session, state } = await this.#createWorkspaceSession((workspaceProcess) =>
-      workspaceProcess.openWorkspace(openPath),
-    );
-    this.#openWorkspaceWindow(opener, session, state);
+    const session = await this.#workspaces.openPath(openPath);
+    this.#openWorkspaceWindow(opener, session);
   }
 
-  async #createWorkspaceSession(
-    load: (workspaceProcess: WorkspaceProcess) => Promise<WorkspaceDocumentState>,
-  ): Promise<{ session: WorkspaceSession; state: WorkspaceDocumentState }> {
-    const workspaceProcess = new WorkspaceProcess();
-    workspaceProcess.start(this.#requireDocumentsRoot());
-
-    try {
-      await workspaceProcess.whenReady();
-      const state = await load(workspaceProcess);
-      const existing = this.#workspaces.get(state.documentId);
-      if (existing) {
-        workspaceProcess.stop();
-        existing.document.acceptState(state);
-        return { session: existing, state };
-      }
-
-      const session = new WorkspaceSession({
-        workspaceId: state.documentId,
-        workspaceProcess,
-        documentClient: new DocumentClient(),
-        applicationName: () => this.applicationName,
-      });
-
-      session.document.acceptState(state);
-      this.#workspaces.register(session);
-      return { session, state };
-    } catch (error) {
-      workspaceProcess.stop();
-      throw error;
-    }
-  }
-
-  #openWorkspaceWindow(
-    opener: Window,
-    session: WorkspaceSession,
-    state: WorkspaceDocumentState,
-  ): void {
+  #openWorkspaceWindow(opener: Window, session: WorkspaceSession): void {
     const closeOpener = this.#workspaces.getForBrowserWindow(opener.window) === null;
     const workspaceWindow = this.#createWindow();
     this.#workspaces.attachWindow(session.workspaceId, workspaceWindow);
-    session.document.acceptState(state);
-    this.#loadRenderer(workspaceWindow, "workspace");
+    this.#loadWorkspace(workspaceWindow);
     if (closeOpener) opener.close();
   }
 

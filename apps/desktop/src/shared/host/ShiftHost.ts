@@ -34,14 +34,6 @@ export interface ShiftHost {
   /** Connects the renderer to the workspace utility process. */
   workspace: {
     /**
-     * Requests a new untitled workspace in a new bound renderer window.
-     */
-    create: () => Promise<void>;
-    /**
-     * Requests that main show an open dialog and open the result in a new bound window.
-     */
-    open: () => Promise<void>;
-    /**
      * Asks main to transfer a fresh sync-lane port to the workspace process.
      *
      * @remarks
