@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 
 import { useSignalState } from "@/lib/signals";
-import { getEditQueue, getEditor, getWorkspace } from "@/store/appStore";
+import { useEditor, useWorkspace } from "@/workspace/WorkspaceContext";
 
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
-import type { WorkspaceCommitState } from "@/lib/workspace/WorkspaceEditQueue";
+import type { WorkspaceCommitState } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 export type DocumentActivity = "clean" | "editing" | "committing" | "dirty";
 
@@ -16,9 +16,11 @@ type DocumentChromeState = {
 };
 
 export function useDocumentChromeState(): DocumentChromeState {
-  const documentState = useSignalState(getWorkspace().documentStateCell);
-  const isEditing = useSignalState(getEditor().isEditingCell);
-  const commitState = useSignalState(getEditQueue().commitStateCell);
+  const workspace = useWorkspace();
+  const editor = useEditor();
+  const documentState = useSignalState(workspace.documentStateCell);
+  const isEditing = useSignalState(editor.isEditingCell);
+  const commitState = useSignalState(workspace.commitStateCell);
 
   return useMemo(() => {
     const activity = activityForDocument(documentState, isEditing, commitState);

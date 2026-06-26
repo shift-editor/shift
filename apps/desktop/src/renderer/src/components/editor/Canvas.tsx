@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useSignalState } from "@/lib/signals";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
@@ -14,7 +14,7 @@ import { Vec2 } from "@shift/geo";
 import { asGlyphId } from "@shift/types";
 
 export const Canvas: FC = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const debug = useDebugSafe();
   const { glyphId: glyphIdParam } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);

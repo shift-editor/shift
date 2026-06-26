@@ -1,5 +1,5 @@
 import type { Axis } from "@shift/types";
-import { getEditor } from "@/store/appStore";
+import { useFont } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 
 /**
@@ -8,6 +8,6 @@ import { useSignalState } from "@/lib/signals";
  * design location, not the axis list, so they do not re-render subscribers.
  */
 export const useAxes = (): Axis[] => {
-  const font = getEditor().font;
+  const font = useFont();
   return useSignalState(font.axesCell);
 };

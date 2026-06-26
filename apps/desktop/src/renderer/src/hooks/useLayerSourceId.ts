@@ -1,6 +1,7 @@
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 
 export const useLayerSourceId = (): string | null => {
-  return useSignalState(getEditor().$layerSourceId);
+  const editor = useEditor();
+  return useSignalState(editor.$layerSourceId);
 };

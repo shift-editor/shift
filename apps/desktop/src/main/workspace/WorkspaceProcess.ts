@@ -55,12 +55,15 @@ export class WorkspaceProcess {
 
   /** Stops the utility process; in-flight shell-lane calls reject. */
   stop(): void {
+    const proc = this.#process;
     if (this.#unlistenDocumentChanged) this.#unlistenDocumentChanged();
     if (this.#channel) this.#channel.dispose();
     this.#process = null;
     this.#channel = null;
     this.#ready = null;
     this.#unlistenDocumentChanged = null;
+    this.#documentListeners.clear();
+    proc?.kill();
   }
 
   /**
@@ -80,6 +83,27 @@ export class WorkspaceProcess {
     }
 
     return this.#channel.call("workspace.connect", undefined, [port]);
+  }
+
+  /**
+   * Creates an untitled workspace through the shell lane.
+   *
+   * @returns utility-owned document state for the created workspace.
+   * @throws {Error} when the utility process is not running or rejects the call.
+   */
+  createWorkspace(): Promise<WorkspaceDocumentState> {
+    return this.#requireChannel().call("workspace.create", undefined);
+  }
+
+  /**
+   * Opens a workspace from a source path through the shell lane.
+   *
+   * @param path - User-selected source path to open.
+   * @returns utility-owned document state for the opened workspace.
+   * @throws {Error} when the utility process is not running or rejects the call.
+   */
+  openWorkspace(path: string): Promise<WorkspaceDocumentState> {
+    return this.#requireChannel().call("workspace.open", { path });
   }
 
   /**

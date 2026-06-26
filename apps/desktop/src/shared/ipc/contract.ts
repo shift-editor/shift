@@ -3,9 +3,7 @@ import type { WorkspaceDocumentState } from "../workspace/protocol";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
-  "document.create": { request: void; response: void };
   "document.save": { request: { path: string | null }; response: WorkspaceDocumentState };
-  "document.open": { request: { path: string }; response: void };
 };
 
 export type DocumentEventMap = Record<string, never>;

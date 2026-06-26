@@ -18,7 +18,7 @@ import { signal } from "@/lib/signals/signal";
  * disconnected/empty/crashed — it becomes a tagged union when recovery lands,
  * so do not derive connectedness from it.
  */
-export type WorkspaceSessionOptions = {
+export type WorkspaceClientOptions = {
   /**
    * Test seam: supplies the sync-lane transport directly (in-process
    * WorkspaceHost over node ports). Production uses the preload port relay.
@@ -26,44 +26,37 @@ export type WorkspaceSessionOptions = {
   transport?: () => Promise<Transport>;
 };
 
-export class WorkspaceSession {
+export class WorkspaceClient {
   readonly workspaceCell = signal<WorkspaceSnapshot | null>(null);
   readonly documentStateCell = signal<WorkspaceDocumentState | null>(null);
 
   readonly #host: ShiftHost | null;
   readonly #transport: (() => Promise<Transport>) | null;
   #channel: Channel<SyncCallMap, SyncEventMap> | null = null;
-  #connected: Promise<void> | null = null;
+  #connection: Promise<void> | null = null;
 
-  constructor(host: ShiftHost | null, options: WorkspaceSessionOptions = {}) {
+  constructor(host: ShiftHost | null, options: WorkspaceClientOptions = {}) {
     this.#host = host;
     this.#transport = options.transport ?? null;
   }
 
   /**
-   * Memoized connection to the workspace process; safe to call repeatedly.
-   *
-   * @remarks
-   * A failed attempt clears the memo so the next call retries instead of
-   * re-awaiting a cached rejection for the rest of the session.
+   * Connects this renderer client to its bound workspace.
    */
-  connected(): Promise<void> {
-    if (!this.#connected) {
-      const attempt = this.#connect();
-      this.#connected = attempt;
-      attempt.catch(() => {
-        if (this.#connected === attempt) this.#connected = null;
-      });
+  connect(): Promise<void> {
+    if (!this.#connection) {
+      this.#connection = this.#connect();
     }
 
-    return this.#connected;
+    return this.#connection;
   }
 
-  /** Creates an untitled workspace; `workspaceCell` becomes the returned state. */
-  async create(): Promise<void> {
-    await this.connected();
-
-    this.workspaceCell.set(await this.#require().call("workspace.create", undefined));
+  dispose(): void {
+    this.#channel?.dispose();
+    this.#channel = null;
+    this.#connection = null;
+    this.workspaceCell.set(null);
+    this.documentStateCell.set(null);
   }
 
   /**
@@ -71,11 +64,11 @@ export class WorkspaceSession {
    *
    * @remarks
    * The record fold happens here (directory follows `$workspace`); layer
-   * folds belong to the glyph model and land with the CS3 WorkspaceEditQueue —
+   * folds belong to the glyph model and land with the CS3 WorkspaceEditCoordinator —
    * callers receive the AppliedChange to fold geometry themselves until then.
    */
   async apply(intents: FontIntent[]): Promise<AppliedChange> {
-    await this.connected();
+    await this.connect();
 
     const { applied, documentState } = await this.#require().call("workspace.apply", { intents });
     this.#setDocumentState(documentState);
@@ -84,7 +77,7 @@ export class WorkspaceSession {
 
   /** Replays the latest ledger entry; null when nothing is undoable. */
   async undo(): Promise<AppliedChange | null> {
-    await this.connected();
+    await this.connect();
 
     const { applied, documentState } = await this.#require().call("workspace.undo", undefined);
     this.documentStateCell.set(documentState);
@@ -93,24 +86,16 @@ export class WorkspaceSession {
 
   /** Replays the latest undone entry; null when nothing is redoable. */
   async redo(): Promise<AppliedChange | null> {
-    await this.connected();
+    await this.connect();
 
     const { applied, documentState } = await this.#require().call("workspace.redo", undefined);
     this.documentStateCell.set(documentState);
     return applied === null ? null : this.#fold(applied);
   }
 
-  async open(path: string): Promise<WorkspaceSnapshot> {
-    await this.connected();
-
-    const snapshot = await this.#require().call("workspace.open", { path });
-    this.workspaceCell.set(snapshot);
-    return snapshot;
-  }
-
   /** Reads utility-owned document state through the renderer sync lane. */
   async documentState(): Promise<WorkspaceDocumentState | null> {
-    await this.connected();
+    await this.connect();
 
     const state = await this.#require().call("document.state", undefined);
     this.documentStateCell.set(state);
@@ -119,21 +104,21 @@ export class WorkspaceSession {
 
   /** Saves to the current target; rejects when the document still needs a path. */
   async save(): Promise<WorkspaceDocumentState> {
-    await this.connected();
+    await this.connect();
 
     return this.#setDocumentState(await this.#require().call("workspace.save", undefined));
   }
 
   /** Saves to `path` and adopts it as the document's target. */
   async saveAs(path: string): Promise<WorkspaceDocumentState> {
-    await this.connected();
+    await this.connect();
 
     return this.#setDocumentState(await this.#require().call("workspace.saveAs", { path }));
   }
 
   /** Pulls replace-grade glyph state by stable layer id. */
   async layer(layerId: LayerId): Promise<GlyphState | null> {
-    await this.connected();
+    await this.connect();
 
     return this.#require().call("workspace.layer", { layerId });
   }
@@ -155,35 +140,40 @@ export class WorkspaceSession {
   }
 
   async #connect(): Promise<void> {
-    if (this.#transport) {
-      const channel = new Channel<SyncCallMap, SyncEventMap>(await this.#transport());
+    try {
+      if (this.#transport) {
+        const channel = new Channel<SyncCallMap, SyncEventMap>(await this.#transport());
+        this.#installChannel(channel);
+        this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
+        this.documentStateCell.set(await channel.call("document.state", undefined));
+        return;
+      }
+
+      if (!this.#host) {
+        throw new Error("WorkspaceClient needs a ShiftHost or a transport option");
+      }
+
+      // Install the port listener before asking main to post the port.
+      const port = this.#nextWorkspacePort();
+
+      try {
+        await this.#host.workspace.connect();
+      } catch (error) {
+        port.cancel();
+        throw error;
+      }
+
+      const channel = new Channel<SyncCallMap, SyncEventMap>(domPortTransport(await port.received));
       this.#installChannel(channel);
+
+      // Catch-up pull: covers renderer reattach (Vite hot reload now, crash
+      // recovery later). Ports are FIFO, so this cannot overtake a later create.
       this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
       this.documentStateCell.set(await channel.call("document.state", undefined));
-      return;
-    }
-
-    if (!this.#host) {
-      throw new Error("WorkspaceSession needs a ShiftHost or a transport option");
-    }
-
-    // Install the port listener before asking main to post the port.
-    const port = this.#nextWorkspacePort();
-
-    try {
-      await this.#host.workspace.connect();
     } catch (error) {
-      port.cancel();
+      this.#connection = null;
       throw error;
     }
-
-    const channel = new Channel<SyncCallMap, SyncEventMap>(domPortTransport(await port.received));
-    this.#installChannel(channel);
-
-    // Catch-up pull: covers renderer reattach (Vite hot reload now, crash
-    // recovery later). Ports are FIFO, so this cannot overtake a later create.
-    this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
-    this.documentStateCell.set(await channel.call("document.state", undefined));
   }
 
   #installChannel(channel: Channel<SyncCallMap, SyncEventMap>): void {

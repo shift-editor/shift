@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, ReactNode } from "react";
 import { isDev } from "@/lib/utils/utils";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import type { DebugOverlays } from "@/types/uiState";
 
 const DEFAULT_OVERLAYS: DebugOverlays = {
@@ -27,9 +27,9 @@ export function DebugProvider({ children }: DebugProviderProps) {
   const reactScanEnabled = false;
   const debugPanelOpen = false;
   const overlays = DEFAULT_OVERLAYS;
+  const editor = useEditor();
 
   const dumpSnapshot = useCallback(() => {
-    const editor = getEditor();
     const glyph = editor.glyph.peek();
     if (!glyph) {
       return;
@@ -37,11 +37,11 @@ export function DebugProvider({ children }: DebugProviderProps) {
 
     const json = JSON.stringify(glyph, null, 2);
     void navigator.clipboard?.writeText(json);
-  }, []);
+  }, [editor]);
 
   useEffect(() => {
-    getEditor().setDebugOverlays(overlays);
-  }, [overlays]);
+    editor.setDebugOverlays(overlays);
+  }, [editor, overlays]);
 
   if (!isDev) {
     return <>{children}</>;

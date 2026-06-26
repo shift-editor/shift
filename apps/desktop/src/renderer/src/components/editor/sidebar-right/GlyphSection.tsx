@@ -2,13 +2,14 @@ import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
-import { getEditor, getGlyphInfo } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
+import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useSignalState } from "@/lib/signals";
 import { useGlyphSidebearings } from "@/hooks/useGlyphSidebearings";
 import { useGlyphXAdvance } from "@/hooks/useGlyphXAdvance";
 
 export const GlyphSection = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const glyph = useSignalState(editor.glyph);
   const sidebearings = useGlyphSidebearings();
   const xAdvance = useGlyphXAdvance();

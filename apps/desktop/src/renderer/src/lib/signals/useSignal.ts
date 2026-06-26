@@ -21,7 +21,7 @@ function scheduleFrame(execute: () => void): void {
  * with proper subscriptions (no polling).
  *
  * @example
- * const editor = getEditor();
+ * const editor = useEditor();
  * const activeTool = useSignalState(editor.activeTool);
  */
 export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions): T {

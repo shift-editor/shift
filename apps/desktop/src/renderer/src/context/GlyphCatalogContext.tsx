@@ -2,7 +2,8 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import type { GlyphCategory, GlyphCategoryCatalog, GlyphCategorySummary } from "@shift/glyph-info";
 import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
 import { useSignalState } from "@/lib/signals";
-import { getEditor, getGlyphInfo } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
+import { getGlyphInfo } from "@/workspace/glyphInfo";
 
 export type GlyphCatalogItem =
   | {
@@ -46,8 +47,9 @@ export const useGlyphCatalog = (): GlyphCatalogState => {
 };
 
 const useGlyphCatalogState = (): GlyphCatalogState => {
+  const editor = useEditor();
   const glyphInfo = getGlyphInfo();
-  const font = getEditor().font;
+  const font = editor.font;
 
   const fontLoaded = useSignalState(font.$loaded);
   const glyphRecords = useSignalState(font.glyphRecordsCell);
@@ -123,7 +125,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     selectedSubCategoryKey,
     setQuery,
     createQuickGlyph: () => {
-      const record = getEditor().createGlyph("newGlyph" as GlyphName);
+      const record = editor.createGlyph("newGlyph" as GlyphName);
       setQuery("");
       setSelectedCategory(null);
       setSelectedSubCategoryKey(null);

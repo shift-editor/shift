@@ -16,7 +16,7 @@ import type {
 } from "@shift/types";
 import { mintAxisId, mintGlyphId, mintLayerId, mintSourceId } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals/signal";
-import type { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
+import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { Glyph, type GlyphLayer } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
@@ -300,20 +300,23 @@ export class Font {
   /** Open glyph models keyed by stable id; survives directory re-keys. */
   readonly #glyphsById = new Map<GlyphId, Glyph>();
   readonly #glyphLayers = new Map<GlyphLayerKey, GlyphLayer>();
-  readonly #editQueue: WorkspaceEditQueue | null;
+  readonly #editCoordinator: WorkspaceEditCoordinator | null;
   #cachesKeyedTo: GlyphDirectory | null = null;
 
   /**
    * Projects the renderer's workspace snapshot into the font domain model.
    *
    * @param $workspace - Single source of workspace truth owned by
-   *   `WorkspaceSession`. There is no load: every derived value follows this
+   *   `WorkspaceClient`. There is no load: every derived value follows this
    *   signal, and `null` means no font is open.
-   * @param editQueue - Optional queue used by authored layer projections to submit
+   * @param editCoordinator - Optional queue used by authored layer projections to submit
    *   committed edits to the utility workspace.
    */
-  constructor($workspace: Signal<WorkspaceSnapshot | null>, editQueue?: WorkspaceEditQueue) {
-    this.#editQueue = editQueue ?? null;
+  constructor(
+    $workspace: Signal<WorkspaceSnapshot | null>,
+    editCoordinator?: WorkspaceEditCoordinator,
+  ) {
+    this.#editCoordinator = editCoordinator ?? null;
     this.#$loaded = computed(() => $workspace.value !== null);
     this.#$metrics = computed(() => $workspace.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#$metadata = computed(() => $workspace.value?.metadata ?? {});
@@ -498,7 +501,7 @@ export class Font {
    * @throws {Error} always — glyph mutations return with workspace change sets.
    */
   updateGlyphIdentity(glyphId: GlyphId, newName: GlyphName, newUnicodes: Unicode[]): void {
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "updateGlyph",
       updateGlyph: { glyphId, newName, newUnicodes },
     });
@@ -526,11 +529,11 @@ export class Font {
     const layerId = mintLayerId();
     const sourceId = this.defaultSource.id;
 
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "createGlyph",
       createGlyph: { glyphId, name: finalName, unicodes },
     });
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "createGlyphLayer",
       createGlyphLayer: { layerId, glyphId, sourceId },
     });
@@ -558,7 +561,7 @@ export class Font {
    */
   createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId {
     const layerId = mintLayerId();
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "createGlyphLayer",
       createGlyphLayer: { layerId, glyphId, sourceId },
     });
@@ -821,12 +824,12 @@ export class Font {
    * @throws {Error} when constructed without a workspace (pure projection
    *   tests) — same not-wired contract as the legacy bridge getter.
    */
-  get editQueue(): WorkspaceEditQueue {
-    if (!this.#editQueue) {
+  get editCoordinator(): WorkspaceEditCoordinator {
+    if (!this.#editCoordinator) {
       throw new Error("editing is not wired to the workspace yet");
     }
 
-    return this.#editQueue;
+    return this.#editCoordinator;
   }
 
   /**
@@ -848,7 +851,7 @@ export class Font {
     const cached = this.#glyphsById.get(glyphId);
     if (cached) return cached;
 
-    const state = await this.editQueue.layer(layer.id);
+    const state = await this.editCoordinator.layer(layer.id);
     if (!state) return null;
 
     const handle = directory.glyphHandleForName(record.name);
@@ -880,7 +883,7 @@ export class Font {
     const cached = this.glyphLayer(glyph.handle, source);
     if (cached) return cached;
 
-    const state = await this.editQueue.layer(layer.id);
+    const state = await this.editCoordinator.layer(layer.id);
     if (!state) return null;
 
     const glyphLayer = glyph.createGlyphLayer(source, state);
@@ -892,7 +895,7 @@ export class Font {
 
   createSource(name: string, location: Location): SourceId {
     const sourceId = mintSourceId();
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "createSource",
       createSource: { sourceId, name, location },
     });
@@ -910,7 +913,7 @@ export class Font {
     hidden: boolean = false,
   ): AxisId {
     const axisId = mintAxisId();
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "createAxis",
       createAxis: { axisId, name, tag, min, default: def, max, hidden },
     });
@@ -920,14 +923,14 @@ export class Font {
 
   /** @knipclassignore — used by VariationPanel component */
   deleteAxis(axisId: AxisId): void {
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "deleteAxis",
       deleteAxis: { axisId },
     });
   }
 
   deleteSource(sourceId: SourceId): void {
-    this.editQueue.push({
+    this.editCoordinator.push({
       kind: "deleteSource",
       deleteSource: { sourceId },
     });

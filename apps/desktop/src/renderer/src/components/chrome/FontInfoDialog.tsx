@@ -11,7 +11,7 @@ import {
   X,
   cn,
 } from "@shift/ui";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 
 interface FontInfoDialogProps {
   open: boolean;
@@ -29,7 +29,7 @@ const CATEGORIES: { id: CategoryId; label: string }[] = [
 ];
 
 export const FontInfoDialog = ({ open, onOpenChange }: FontInfoDialogProps) => {
-  const editor = getEditor();
+  const editor = useEditor();
   const [category, setCategory] = useState<CategoryId>("font");
 
   if (!editor.font.loaded) return null;
@@ -95,7 +95,7 @@ const CategoryPanel = ({ category }: { category: CategoryId }) => {
 };
 
 const FontPanel = () => {
-  const editor = getEditor();
+  const editor = useEditor();
   const m = editor.font.metadata;
   const version = m.versionMajor !== undefined ? `${m.versionMajor}.${m.versionMinor ?? 0}` : "";
 

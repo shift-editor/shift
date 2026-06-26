@@ -5,20 +5,21 @@ import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker
 import { Channel, nodePortTransport } from "@shared/workspace/channel";
 import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
-import { WorkspaceSession } from "@/lib/workspace/WorkspaceSession";
-import { WorkspaceEditQueue } from "@/lib/workspace/WorkspaceEditQueue";
+import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
+import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import { Font } from "@/lib/model/Font";
 
 export type WorkspaceStack = {
-  client: WorkspaceSession;
-  editQueue: WorkspaceEditQueue;
+  client: WorkspaceClient;
+  editCoordinator: WorkspaceEditCoordinator;
   font: Font;
+  createWorkspace(): Promise<void>;
 };
 
 /**
  * The full production editing stack, in-process: real WorkspaceHost (real
  * NAPI, real SQLite in a temp dir) served over real node MessagePorts, with
- * the real client/editQueue/font wiring. No Electron, no mocks — the same
+ * the real client/editCoordinator/font wiring. No Electron, no mocks — the same
  * pattern as WorkspaceHost.test.ts, extended to the renderer side.
  */
 export function createWorkspaceStack(): WorkspaceStack {
@@ -32,15 +33,27 @@ export function createWorkspaceStack(): WorkspaceStack {
   }).start();
   const shell = new Channel<ShellCallMap, ShellEventMap>(nodePortTransport(shellLane.port1));
 
-  const client = new WorkspaceSession(null, {
+  const client = new WorkspaceClient(null, {
     transport: async () => {
       const lane = new MessageChannel();
       await shell.call("workspace.connect", undefined, [lane.port1]);
       return nodePortTransport(lane.port2);
     },
   });
-  const editQueue = new WorkspaceEditQueue(client);
-  const font = new Font(client.workspaceCell, editQueue);
+  const editCoordinator = new WorkspaceEditCoordinator(client);
+  const font = new Font(client.workspaceCell, editCoordinator);
 
-  return { client, editQueue, font };
+  return {
+    client,
+    editCoordinator,
+    font,
+    async createWorkspace(): Promise<void> {
+      await shell.call("workspace.create", undefined);
+      await client.connect();
+
+      if (!client.workspaceCell.peek()) {
+        throw new Error("workspace stack connected without a snapshot");
+      }
+    },
+  };
 }

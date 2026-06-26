@@ -6,12 +6,12 @@
  * feed into `editor.textRun`; rendering updates reactively via signals.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { effect } from "@/lib/signals/signal";
 import { lineBreakTextItem } from "@/lib/text/layout";
 
 export function TextInput() {
-  const editor = getEditor();
+  const editor = useEditor();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [isTextTool, setIsTextTool] = useState(false);
 
@@ -59,7 +59,7 @@ export function TextInput() {
     textarea.value = "";
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const extend = e.shiftKey;
     const run = editor.textRun;
 
@@ -140,15 +140,18 @@ export function TextInput() {
 
       case "v":
         if (e.metaKey || e.ctrlKey) {
-          navigator.clipboard?.readText().then((text) => {
+          e.preventDefault();
+          try {
+            const text = (await navigator.clipboard?.readText()) ?? "";
             for (const char of text) {
               const codepoint = char.codePointAt(0);
               if (codepoint !== undefined) {
                 editor.insertTextCodepoint(codepoint);
               }
             }
-          });
-          e.preventDefault();
+          } catch (error) {
+            console.error("reading text clipboard failed", error);
+          }
           return;
         }
         break;

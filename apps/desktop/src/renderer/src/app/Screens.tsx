@@ -1,46 +1,94 @@
-import { useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { Landing } from "@/views/Landing";
 import { Home } from "@/views/Home";
 import { Editor } from "@/views/Editor";
-import { getEditor, getFont } from "@/store/appStore";
 import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@/lib/signals/useSignal";
+import { useEditor, useFont, useWorkspace, WorkspaceProvider } from "@/workspace/WorkspaceContext";
+import { DebugProvider } from "@/context/DebugContext";
 
 /**
- * The entire top-level screen structure, in one place.
+ * Routes launcher and workspace windows to their screen trees.
  *
  * @remarks
- * Whether a document is loaded — not the URL — decides the launcher vs. the
- * workspace, so it reads top-to-bottom as a guard. URL routing only addresses
- * what's *inside* the workspace (which glyph). Loading a document is what flips
- * the screen, regardless of trigger (New, Open, future recovery); views never
- * navigate to make it happen.
+ * Main chooses the initial route when it creates a window. Launcher routes do
+ * not connect to a workspace; workspace routes connect through the sender
+ * window and fail if main has not attached that window to a session.
  */
 export const Screens = () => {
-  const font = getFont();
-  const editor = getEditor();
+  return (
+    <Routes>
+      <Route path="/launcher" element={<Landing />} />
+      <Route
+        element={
+          <WorkspaceProvider>
+            <DebugProvider>
+              <WorkspaceScreens />
+            </DebugProvider>
+          </WorkspaceProvider>
+        }
+      >
+        <Route path="/home" element={<Home />} />
+        <Route path="/editor/:glyphId" element={<Editor />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/launcher" replace />} />
+    </Routes>
+  );
+};
+
+const WorkspaceScreens = () => {
+  const workspace = useWorkspace();
+  const font = useFont();
+  const editor = useEditor();
   const documentLoaded = useSignalState(font.$loaded);
+  const [connectionError, setConnectionError] = useState<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function connectWorkspace(): Promise<void> {
+      try {
+        await workspace.connect();
+      } catch (error) {
+        console.error("workspace failed to connect", error);
+        if (!cancelled) setConnectionError(error);
+      }
+    }
+
+    void connectWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace]);
 
   // Side effect of a document loading: give the editor room.
   useEffect(() => {
     if (!documentLoaded) return;
 
-    editor.scene.setLocation(font.defaultLocation());
+    async function maximiseWorkspaceWindow(): Promise<void> {
+      try {
+        await getShiftHost().commands.run("window.maximise");
+      } catch (error) {
+        console.error("maximise on document load failed", error);
+      }
+    }
 
-    void getShiftHost()
-      .commands.run("window.maximise")
-      .catch((error) => console.error("maximise on document load failed", error));
+    editor.scene.setLocation(font.defaultLocation());
+    void maximiseWorkspaceWindow();
   }, [documentLoaded, editor, font]);
 
-  if (!documentLoaded) return <Landing />;
+  if (connectionError) {
+    return (
+      <main className="grid h-screen place-items-center bg-canvas text-primary">
+        Workspace failed to load.
+      </main>
+    );
+  }
 
-  return (
-    <Routes>
-      <Route path="/home" element={<Home />} />
-      <Route path="/editor/:glyphId" element={<Editor />} />
-      <Route path="*" element={<Navigate to="/home" replace />} />
-    </Routes>
-  );
+  if (!documentLoaded) return null;
+
+  return <Outlet />;
 };

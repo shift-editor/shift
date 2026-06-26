@@ -2,7 +2,7 @@ import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/model/Font";
 import type { Glyph } from "@/lib/model/Glyph";
 import { useSignalState } from "@/lib/signals";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import type { GlyphHandle } from "@shift/bridge";
 
 export const CELL_HEIGHT = 75;
@@ -64,7 +64,7 @@ export function GlyphPreview({ handle, font, height = CELL_HEIGHT }: GlyphPrevie
 }
 
 function GlyphCell({ font, height, glyph }: { font: Font; height: number; glyph: Glyph }) {
-  const editor = getEditor();
+  const editor = useEditor();
   const outline = glyph.instance(editor.$designLocation).render.outline;
 
   const svgPath = useSignalState(outline.$svgPath);

@@ -22,11 +22,12 @@ export interface ShiftHost {
   /** Connects the renderer to main-owned document requests. */
   document: {
     /**
-     * Asks main to transfer a document request lane.
+     * Asks main to transfer a document request lane for the sender's workspace.
      *
      * @remarks
      * The renderer half arrives via the `document.port` postMessage relay;
-     * install that listener before calling.
+     * install that listener before calling. Main rejects the request when the
+     * sender window is not bound to a workspace.
      */
     connect: () => Promise<void>;
   };
@@ -37,7 +38,8 @@ export interface ShiftHost {
      *
      * @remarks
      * The lane's renderer half arrives via the `workspace.port` postMessage
-     * relay; install that listener before calling.
+     * relay; install that listener before calling. Main resolves the workspace
+     * from the sender window.
      */
     connect: () => Promise<void>;
   };

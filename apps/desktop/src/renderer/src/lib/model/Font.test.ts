@@ -106,7 +106,7 @@ describe("Font projects the workspace snapshot", () => {
 describe("font-level intents make the font variable", () => {
   it("createAxis and createSource project axes and sources without creating glyph layers", async () => {
     const stack = createWorkspaceStack();
-    await stack.client.create();
+    await stack.createWorkspace();
     const glyphId = mintGlyphId();
     await stack.client.apply([
       {
@@ -154,7 +154,7 @@ describe("font-level intents make the font variable", () => {
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
     const stack = createWorkspaceStack();
-    await stack.client.create();
+    await stack.createWorkspace();
     const glyphId = mintGlyphId();
     await stack.client.apply([
       {
@@ -178,7 +178,7 @@ describe("font-level intents make the font variable", () => {
 
   it("createGlyph authors a default layer for fresh glyphs", async () => {
     const stack = createWorkspaceStack();
-    await stack.client.create();
+    await stack.createWorkspace();
 
     const record = stack.font.createGlyph("A" as GlyphName);
     const source = stack.font.defaultSource;
@@ -186,7 +186,7 @@ describe("font-level intents make the font variable", () => {
     expect(record.layers).toHaveLength(1);
     expect(record.layers[0]?.sourceId).toBe(source.id);
 
-    await stack.editQueue.settled();
+    await stack.editCoordinator.settled();
 
     const committed = stack.font.recordForId(record.id);
     expect(committed?.layers).toEqual(record.layers);
@@ -198,7 +198,7 @@ describe("font-level intents make the font variable", () => {
 
   it("exact sources without glyph layers have no live layer and do not render default geometry", async () => {
     const stack = createWorkspaceStack();
-    await stack.client.create();
+    await stack.createWorkspace();
     const glyphId = mintGlyphId();
     const defaultLayerId = mintLayerId();
     await stack.client.apply([

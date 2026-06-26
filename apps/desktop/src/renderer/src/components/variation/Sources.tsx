@@ -10,7 +10,7 @@ import {
 import type { SourceId } from "@shift/types";
 import { useSources } from "@/hooks/useSources";
 import { useLayerSourceId } from "@/hooks/useLayerSourceId";
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarActionRow } from "@/components/sidebar";
 
 import VerticalElipsis from "@/assets/vertical-ellipsis.svg";
@@ -18,7 +18,7 @@ import VerticalElipsis from "@/assets/vertical-ellipsis.svg";
 export const Sources = () => {
   const sources = useSources();
   const layerSourceId = useLayerSourceId();
-  const editor = getEditor();
+  const editor = useEditor();
 
   if (sources.length === 0) return null;
 

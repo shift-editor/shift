@@ -22,7 +22,7 @@ const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
 
 export async function layoutTestFont(): Promise<Font> {
   const stack = createWorkspaceStack();
-  await stack.client.create();
+  await stack.createWorkspace();
 
   for (const [name, unicode, advance] of GLYPHS) {
     const glyphId = mintGlyphId();
@@ -57,7 +57,7 @@ export async function layoutTestFont(): Promise<Font> {
   a.addOnCurvePoint(contourId, { x: 100, y: 0 });
   a.addOnCurvePoint(contourId, { x: 50, y: 100 });
   a.closeContour(contourId);
-  await stack.editQueue.settled();
+  await stack.editCoordinator.settled();
 
   return stack.font;
 }

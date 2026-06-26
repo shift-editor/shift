@@ -55,6 +55,8 @@ export class WorkspaceHost {
   /** Serves the shell lane and announces readiness. Drafts are retained. */
   start(): void {
     this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
+      "workspace.create": () => this.#serialize(() => this.#create()),
+      "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);
       },
@@ -72,7 +74,6 @@ export class WorkspaceHost {
 
     this.#sync?.dispose();
     this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#syncTransport(port), {
-      "workspace.create": () => this.#serialize(() => this.#create()),
       "workspace.snapshot": () =>
         this.#serialize(() =>
           this.#documentId === null ? null : this.#snapshot(this.#documentId),
@@ -97,23 +98,20 @@ export class WorkspaceHost {
         }),
       // Save rides the edit lane: the same #serialize queue orders it behind
       // every committed apply/undo/redo, so it never writes stale state.
-      "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.layer": ({ layerId }) => this.#serialize(() => this.#bridge.getLayer(layerId)),
     });
   }
 
-  #create(): WorkspaceSnapshot {
+  #create(): WorkspaceDocumentState {
     const draft = this.#documents.createDraft();
 
     this.#bridge.createUntitledWorkspace(draft.storePath);
     this.#bridge.setDocumentId(draft.documentId);
     this.#documentId = draft.documentId;
 
-    const snapshot = this.#snapshot(draft.documentId);
-    this.#emitDocumentChanged();
-    return snapshot;
+    return this.#emitDocumentChanged();
   }
 
   #snapshot(documentId: string): WorkspaceSnapshot {
@@ -127,7 +125,7 @@ export class WorkspaceHost {
     };
   }
 
-  #open(path: string): WorkspaceSnapshot {
+  #open(path: string): WorkspaceDocumentState {
     const recovery = this.#bridge.findRecoverableWorkspace(path, this.#documents.listDrafts());
     const document = recovery ?? this.#documents.createDraft();
 
@@ -139,10 +137,8 @@ export class WorkspaceHost {
 
     this.#bridge.setDocumentId(document.documentId);
     this.#documentId = document.documentId;
-    const snapshot = this.#snapshot(document.documentId);
-    this.#emitDocumentChanged();
 
-    return snapshot;
+    return this.#emitDocumentChanged();
   }
 
   #save(): WorkspaceDocumentState {

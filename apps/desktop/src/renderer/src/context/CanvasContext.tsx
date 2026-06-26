@@ -1,6 +1,6 @@
 import { createContext, useEffect, useRef } from "react";
 
-import { getEditor } from "@/store/appStore";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { CanvasRef } from "@/types/graphics";
 import { Canvas2DSurface, MarkerCanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
 
@@ -19,14 +19,13 @@ export const CanvasContext = createContext<CanvasContext>({
 });
 
 export const CanvasContextProvider = ({ children }: { children: React.ReactNode }) => {
+  const editor = useEditor();
   const markerCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const sceneCanvasRef = useRef<HTMLCanvasElement>(null);
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const editor = getEditor();
-
     const setUpContexts = ({
       markerCanvas,
       overlayCanvas,
@@ -92,7 +91,7 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
     });
 
     return cleanup;
-  }, []);
+  }, [editor]);
 
   return (
     <CanvasContext.Provider
