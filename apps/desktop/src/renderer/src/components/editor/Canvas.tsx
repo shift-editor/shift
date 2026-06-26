@@ -24,22 +24,21 @@ export const Canvas: FC = () => {
   useEffect(() => {
     if (!glyphIdParam) {
       editor.scene.clear();
-      return;
+      return undefined;
     }
 
     const glyphId = asGlyphId(glyphIdParam);
-    if (!editor.font.hasGlyph(glyphId)) {
+    if (!editor.font.recordForId(glyphId)) {
       editor.scene.clear();
-      return;
+      return undefined;
     }
 
+    editor.scene.clear();
     const itemId = editor.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
     editor.scene.setGeometryItems([itemId]);
 
-    return () => {
-      editor.scene.clear();
-    };
-  }, [glyphIdParam]);
+    return () => editor.scene.clear();
+  }, [editor, glyphIdParam]);
 
   useEffect(() => {
     const element = containerRef.current;

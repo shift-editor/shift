@@ -28,6 +28,39 @@ describe("Editor", () => {
       expect(itemId && editor.layerForItem(itemId)).not.toBeNull();
     });
 
+    it("derives active glyph from the geometry-shown scene item", () => {
+      const record = editor.font.recordForName("S")!;
+
+      editor.scene.clear();
+      const itemId = editor.scene.addGlyph({ glyphId: record.id, origin: { x: 0, y: 0 } });
+      editor.scene.setGeometryItems([itemId]);
+
+      expect(editor.scene.value.items).toHaveLength(1);
+      expect(editor.scene.item(itemId)).toMatchObject({
+        kind: "glyph",
+        glyphId: record.id,
+        placement: { origin: { x: 0, y: 0 } },
+      });
+      expect(editor.scene.isGeometryShown(itemId)).toBe(true);
+      expect(editor.glyph.peek()?.id).toBe(record.id);
+      expect(editor.layerForItem(itemId)).not.toBeNull();
+    });
+
+    it("clearing the scene clears the derived active glyph", () => {
+      const record = editor.font.recordForName("S")!;
+
+      editor.scene.clear();
+      const itemId = editor.scene.addGlyph({ glyphId: record.id, origin: { x: 0, y: 0 } });
+      editor.scene.setGeometryItems([itemId]);
+
+      expect(editor.glyph.peek()?.id).toBe(record.id);
+
+      editor.scene.clear();
+
+      expect(editor.scene.value.items).toEqual([]);
+      expect(editor.glyph.peek()).toBeNull();
+    });
+
     it("can place the same glyph id twice with distinct item ids", async () => {
       const record = editor.font.recordForName("A")!;
       const left = mintItemId();
@@ -100,49 +133,8 @@ describe("Editor", () => {
     });
   });
 
-  // Regression: the text run is owned by the *main* glyph (the one opened
-  // from the grid), not by the *active* editing glyph. Double-clicking a
-  // slot to drill into editing switches the active glyph but the run owner
-  // stays put. So switching tools (Select↔Text) mid-slot-edit must keep
-  // the run intact.
-  describe("text-run owner = main glyph (not active editing glyph)", () => {
-    it("keeps the run's items when switching back to Text after a slot drill-in", () => {
-      // A is the main glyph (the one the user "opened from the grid").
-      const owner = editor.font.glyphHandleForUnicode(65)!;
-      const ownerKey = owner.name;
-      editor.setRootGlyphHandle(owner);
-
-      editor.selectTool("text");
-      editor.textRun.insert(glyphTextItem("S", 83));
-      expect(editor.textRun.buffer.items).toHaveLength(2);
-
-      // Drill into slot 1 (the S): mirrors what TextRunEdit does on dblclick.
-      editor.selectTool("select");
-      const sItem = editor.textRun.buffer.items[1];
-      expect(sItem.kind).toBe("glyph");
-      editor.setGlyphFocus({ runId: editor.textRun.id, itemId: sItem.id });
-      expect(editor.focusedGlyph?.glyph.name).toBe("S");
-      // Main glyph (run owner) hasn't moved.
-      expect(editor.rootGlyphHandle!.name).toBe(ownerKey);
-
-      // Toggle back to Text. The run should still be the A-keyed run, with
-      // its items preserved — not a fresh S-keyed run.
-      editor.selectTool("text");
-
-      expect(editor.textRun.buffer.items).toHaveLength(2);
-      expect(editor.textRun.buffer.items[0]).toMatchObject({
-        kind: "glyph",
-        glyphName: ownerKey,
-        codepoint: 65,
-      });
-      expect(editor.textRun.buffer.items[1]).toBe(sItem);
-    });
-  });
-
   describe("glyph focus placement", () => {
     it("recomputes drawOffset from the focused item after inserting a linebreak before it", () => {
-      const owner = editor.font.glyphHandleForUnicode(65)!;
-      editor.setRootGlyphHandle(owner);
       editor.selectTool("text");
       const s = glyphTextItem("S", 83);
       editor.textRun.insert(s);

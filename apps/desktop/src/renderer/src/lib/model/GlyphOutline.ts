@@ -1,15 +1,14 @@
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel, type Point2D } from "@shift/geo";
-import type { GlyphHandle } from "@shift/bridge";
 import type { Signal } from "@/lib/signals/signal";
 import { computed, signal, track, type ComputedSignal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
 import { Contour, Segment } from "@shift/glyph-state";
 import type { Glyph } from "./Glyph";
-import type { ContourData } from "@shift/types";
+import type { ContourData, GlyphId } from "@shift/types";
 import type { LayerContourCoordinates } from "./GlyphLayerState";
 
 interface GlyphResolver {
-  glyph(handle: GlyphHandle): Glyph | null;
+  glyphForId(glyphId: GlyphId): Glyph | null;
 }
 
 type OutlineCommand =
@@ -355,7 +354,7 @@ export class GlyphOutline {
 class GlyphOutlineBuilder {
   readonly #location: AxisLocation;
   readonly #resolver: GlyphResolver;
-  readonly #stack = new Set<string>();
+  readonly #stack = new Set<GlyphId>();
 
   constructor(location: AxisLocation, resolver: GlyphResolver) {
     this.#location = location;
@@ -367,8 +366,8 @@ class GlyphOutlineBuilder {
   }
 
   #collect(glyph: Glyph, matrix: MatModel): OutlineData {
-    if (this.#stack.has(glyph.name)) return { parts: [] };
-    this.#stack.add(glyph.name);
+    if (this.#stack.has(glyph.id)) return { parts: [] };
+    this.#stack.add(glyph.id);
 
     const parts: OutlinePart[] = [];
     const source = glyph.layerAt(this.#location);
@@ -391,9 +390,7 @@ class GlyphOutlineBuilder {
         const componentValues = coordinates.components[index];
         if (!componentValues) continue;
 
-        const componentGlyph = this.#resolver.glyph({
-          name: component.baseGlyphName,
-        });
+        const componentGlyph = this.#resolver.glyphForId(component.baseGlyphId);
         if (!componentGlyph) continue;
 
         track(componentValues.matrix);
@@ -410,9 +407,7 @@ class GlyphOutlineBuilder {
       }
 
       for (const component of geometry.components) {
-        const componentGlyph = this.#resolver.glyph({
-          name: component.baseGlyphName,
-        });
+        const componentGlyph = this.#resolver.glyphForId(component.baseGlyphId);
         if (!componentGlyph) continue;
 
         const child = this.#collect(componentGlyph, Mat.Compose(matrix, component.matrix));
@@ -420,7 +415,7 @@ class GlyphOutlineBuilder {
       }
     }
 
-    this.#stack.delete(glyph.name);
+    this.#stack.delete(glyph.id);
     return { parts };
   }
 }

@@ -47,8 +47,8 @@ export interface BridgeApi {
    * redo stack is empty.
    */
   redo(): AppliedChange | null
-  /** Layer-addressed glyph state. LayerId is the stable edit identity. */
-  getLayer(layerId: LayerId): GlyphState | null
+  /** Glyph-addressed snapshots for renderer-local synchronous font state. */
+  getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getSources(): Array<Source>
@@ -309,6 +309,12 @@ export interface GlyphLayerRecord {
   sourceId: SourceId
 }
 
+export interface GlyphLayerSnapshot {
+  glyphId: GlyphId
+  sourceId: SourceId
+  state: GlyphState
+}
+
 export interface GlyphMaster {
   sourceId: SourceId
   sourceName: string
@@ -326,12 +332,22 @@ export interface GlyphRecord {
   layers: Array<GlyphLayerRecord>
 }
 
+export interface GlyphSnapshot {
+  glyphId: GlyphId
+  variationData?: GlyphVariationData
+  layers: Array<GlyphLayerSnapshot>
+}
+
+export interface GlyphSnapshotRequest {
+  glyphId: GlyphId
+  sourceIds: SourceId[]
+}
+
 export interface GlyphState {
   layerId: LayerId
   structure: GlyphStructure
   /** Numeric glyph state ordered to match `GlyphStructure`. */
   values: Float64Array
-  variationData?: GlyphVariationData
 }
 
 export interface GlyphStructure {

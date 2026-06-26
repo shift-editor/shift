@@ -4,10 +4,12 @@ import type {
   FontIntent,
   FontMetadata,
   FontMetrics,
+  GlyphId,
   GlyphRecord,
   GlyphState,
-  LayerId,
+  GlyphVariationData,
   Source,
+  SourceId,
 } from "@shift/types";
 
 /**
@@ -20,6 +22,23 @@ export type WorkspaceSnapshot = {
   glyphs: GlyphRecord[];
   sources: Source[];
   axes: Axis[];
+};
+
+export type WorkspaceGlyphLayerSnapshot = {
+  glyphId: GlyphId;
+  sourceId: SourceId;
+  state: GlyphState;
+};
+
+export type WorkspaceGlyphSnapshotRequest = {
+  glyphId: GlyphId;
+  sourceIds: SourceId[];
+};
+
+export type WorkspaceGlyphSnapshot = {
+  glyphId: GlyphId;
+  variationData?: GlyphVariationData;
+  layers: WorkspaceGlyphLayerSnapshot[];
 };
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
@@ -101,13 +120,9 @@ export type SyncCallMap = {
   "workspace.save": { request: void; response: WorkspaceDocumentState };
   /** Saves to `path` (main's Save As dialog choice) and adopts it as target. */
   "workspace.saveAs": { request: { path: string }; response: WorkspaceDocumentState };
-  /**
-   * Pulls replace-grade glyph state for one layer (resync + editor open).
-   * Addressed by stable LayerId — the edit identity.
-   */
-  "workspace.layer": {
-    request: { layerId: LayerId };
-    response: GlyphState | null;
+  "workspace.glyphSnapshots": {
+    request: { requests: WorkspaceGlyphSnapshotRequest[] };
+    response: WorkspaceGlyphSnapshot[];
   };
 };
 

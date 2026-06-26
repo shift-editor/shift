@@ -6,7 +6,7 @@
  * outline bounds flow through positioning. No fakes; tests assert against
  * values read back from the workspace, not hardcoded advances.
  */
-import { mintGlyphId, mintLayerId, type GlyphName, type Unicode } from "@shift/types";
+import { mintGlyphId, mintLayerId, type GlyphName } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 import type { Font } from "@/lib/model/Font";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
@@ -27,7 +27,7 @@ export async function layoutTestFont(): Promise<Font> {
   for (const [name, unicode, advance] of GLYPHS) {
     const glyphId = mintGlyphId();
     const layerId = mintLayerId();
-    const applied = await stack.client.apply([
+    const applied = await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
         createGlyph: { glyphId, name: name as GlyphName, unicodes: [unicode] },
@@ -44,12 +44,14 @@ export async function layoutTestFont(): Promise<Font> {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error(`createGlyph did not echo ${name}`);
 
-    await stack.client.apply([{ kind: "setXAdvance", setXAdvance: { layerId, width: advance } }]);
-    await stack.font.openGlyph(record.id, stack.font.defaultSource);
+    await stack.editCoordinator.apply([
+      { kind: "setXAdvance", setXAdvance: { layerId, width: advance } },
+    ]);
+    await stack.font.loadGlyph(record.id);
   }
 
-  const handle = stack.font.glyphHandleForUnicode(65 as Unicode);
-  const a = stack.font.glyphLayer(handle, stack.font.defaultSource);
+  const record = stack.font.recordForName("A" as GlyphName);
+  const a = record ? stack.font.glyphLayerForId(record.id, stack.font.defaultSource.id) : null;
   if (!a) throw new Error("Expected authored glyph layer for A");
 
   const contourId = a.addContour();

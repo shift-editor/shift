@@ -3,20 +3,21 @@ import type {
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentState,
+  WorkspaceGlyphSnapshot,
+  WorkspaceGlyphSnapshotRequest,
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { AppliedChange, FontIntent, GlyphState, LayerId } from "@shift/types";
+import type { AppliedChange, FontIntent } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
 /**
  * Renderer side of the workspace sync lane.
  *
  * @remarks
- * `workspaceCell` is the renderer's single source of workspace truth; every
- * sync-lane response is the next state. `null` currently conflates
- * disconnected/empty/crashed — it becomes a tagged union when recovery lands,
- * so do not derive connectedness from it.
+ * `workspaceCell` is the renderer's latest workspace summary. `FontStore`
+ * owns the font-domain projection and glyph snapshot cache; this client only
+ * transports workspace calls and mirrors the summary for catch-up/recovery.
  */
 export type WorkspaceClientOptions = {
   /**
@@ -61,11 +62,6 @@ export class WorkspaceClient {
 
   /**
    * Applies an intent set; the response is pure replace-grade state.
-   *
-   * @remarks
-   * The record fold happens here (directory follows `$workspace`); layer
-   * folds belong to the glyph model and land with the CS3 WorkspaceEditCoordinator —
-   * callers receive the AppliedChange to fold geometry themselves until then.
    */
   async apply(intents: FontIntent[]): Promise<AppliedChange> {
     await this.connect();
@@ -93,6 +89,14 @@ export class WorkspaceClient {
     return applied === null ? null : this.#fold(applied);
   }
 
+  async snapshot(): Promise<WorkspaceSnapshot | null> {
+    await this.connect();
+
+    const snapshot = await this.#require().call("workspace.snapshot", undefined);
+    this.workspaceCell.set(snapshot);
+    return snapshot;
+  }
+
   /** Reads utility-owned document state through the renderer sync lane. */
   async documentState(): Promise<WorkspaceDocumentState | null> {
     await this.connect();
@@ -116,11 +120,13 @@ export class WorkspaceClient {
     return this.#setDocumentState(await this.#require().call("workspace.saveAs", { path }));
   }
 
-  /** Pulls replace-grade glyph state by stable layer id. */
-  async layer(layerId: LayerId): Promise<GlyphState | null> {
+  /** Pulls replace-grade glyph snapshots by stable glyph id and exact sources. */
+  async glyphSnapshots(
+    requests: readonly WorkspaceGlyphSnapshotRequest[],
+  ): Promise<WorkspaceGlyphSnapshot[]> {
     await this.connect();
 
-    return this.#require().call("workspace.layer", { layerId });
+    return this.#require().call("workspace.glyphSnapshots", { requests: [...requests] });
   }
 
   #fold(applied: AppliedChange): AppliedChange {

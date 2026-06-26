@@ -1,10 +1,10 @@
 import { displayAdvance, isNonSpacingGlyph } from "@/lib/utils/unicode";
 import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
-import { Font } from "@/lib/model/Font";
+import type { Font } from "@/lib/model/Font";
 import type { Signal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
 import type { Bounds, Point2D } from "@shift/geo";
-import type { Source } from "@shift/types";
+import type { GlyphRecord, Source } from "@shift/types";
 
 /**
  * No-shape positioner — literal LTR advance walk, `cluster = clusterStart + i`.
@@ -21,8 +21,8 @@ export class Positioner {
     const source = font.sourceAtOrDefault(designLocation.peek());
 
     for (const [idx, g] of run.glyphs.entries()) {
-      const handle = { name: g.glyphName };
-      const glyph = font.glyph(handle);
+      const record = font.recordForName(g.glyphName);
+      const glyph = record ? font.glyphForId(record.id) : null;
       let glyphName = g.glyphName;
       let bounds: Bounds | null = null;
 
@@ -37,6 +37,7 @@ export class Positioner {
       totalAdvance += xAdvance;
 
       glyphs.push({
+        glyphId: record?.id ?? null,
         glyphName,
         sourceItemIds: [g.id],
         origin,
@@ -55,7 +56,8 @@ export class Positioner {
 
 /** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
 export function resolveAdvance(item: GlyphTextItem, font: Font, source: Source | null): number {
-  const raw = source ? (font.glyphLayer({ name: item.glyphName }, source)?.xAdvance ?? 0) : 0;
+  const record = recordForTextItem(item, font);
+  const raw = source && record ? (font.glyphLayerForId(record.id, source.id)?.xAdvance ?? 0) : 0;
   return displayAdvance(raw, item.glyphName, item.codepoint);
 }
 
@@ -67,7 +69,8 @@ export function resolveGlyphOffset(
   if (!isNonSpacingGlyph(item.glyphName, item.codepoint)) return { x: 0, y: 0 };
   if (!source) return { x: 0, y: 0 };
 
-  const glyph = font.glyphLayer({ name: item.glyphName }, source);
+  const record = recordForTextItem(item, font);
+  const glyph = record ? font.glyphLayerForId(record.id, source.id) : null;
   if (!glyph) return { x: 0, y: 0 };
 
   const metrics = font.metrics;
@@ -107,4 +110,8 @@ export function resolveGlyphOffset(
     x: targetX - centerX,
     y: (metrics.ascender + metrics.descender) / 2 - centerY,
   };
+}
+
+function recordForTextItem(item: GlyphTextItem, font: Font): GlyphRecord | null {
+  return font.recordForName(item.glyphName);
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { PointId } from "@shift/types";
+import type { GlyphName, PointId } from "@shift/types";
 import type { Point } from "@shift/glyph-state";
 import { effect } from "@/lib/signals/signal";
 import { axisLocationFromLocation } from "@/lib/variation/location";
@@ -51,7 +51,8 @@ describe("Glyph", () => {
     editor = new TestEditor();
     await editor.startSession();
     layer = editor.editingGlyphLayer!;
-    glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
+    const record = editor.font.recordForName("A" as GlyphName)!;
+    glyph = editor.font.glyphForId(record.id)!;
   });
 
   it("hydrates identity and state from the workspace", () => {
@@ -180,7 +181,8 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     editor = new TestEditor();
     await editor.startSession();
     layer = editor.editingGlyphLayer!;
-    glyph = editor.font.glyph(editor.rootGlyphHandle!)!;
+    const record = editor.font.recordForName("A" as GlyphName)!;
+    glyph = editor.font.glyphForId(record.id)!;
   });
 
   it("previews point patches through every public layer geometry view", async () => {

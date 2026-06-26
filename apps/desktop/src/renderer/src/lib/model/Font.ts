@@ -6,8 +6,8 @@ import type {
   GlyphId,
   GlyphRecord,
   GlyphLayerRecord,
-  GlyphState,
   GlyphName,
+  GlyphVariationData,
   SourceId,
   Unicode,
   AxisId,
@@ -17,9 +17,11 @@ import type {
 import { mintAxisId, mintGlyphId, mintLayerId, mintSourceId } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals/signal";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
-import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
+import type { WorkspaceGlyphSnapshotRequest } from "@shared/workspace/protocol";
 import { Glyph, type GlyphLayer } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
+import type { FontStore, GlyphSnapshotStatus } from "./FontStore";
+import type { GlyphLayerState } from "./GlyphLayerState";
 import type { GlyphHandle } from "@shift/bridge";
 import {
   axisLocationDistanceSquared,
@@ -31,6 +33,17 @@ import {
 import type { AxisLocation } from "@/types/variation";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
+
+export type GlyphLoadOptions = {
+  readonly sourceIds?: readonly SourceId[];
+};
+
+type SnapshotRequest = {
+  glyphId: GlyphId;
+  sourceIds: SourceId[];
+};
+
+type InFlightKey = string & { readonly __inFlightKey: unique symbol };
 
 /**
  * Immutable lookup index for committed glyph records.
@@ -263,8 +276,6 @@ class GlyphDirectory {
   }
 }
 
-type GlyphLayerKey = string & { readonly __glyphLayerKey: unique symbol };
-
 const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
   ascender: 800,
@@ -274,12 +285,12 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
 };
 
 /**
- * Reactive domain model for the loaded font.
+ * Reactive facade for the loaded font.
  *
- * `Font` owns font-level metadata, source lookup, glyph identity lookup, and
- * cached glyph models. Getters such as `metrics`, `unicodes`, and `sources`
- * are signal-backed: reading them inside a computed or effect subscribes to
- * later font loads/resets.
+ * `Font` exposes font-level metadata, source lookup, and domain editing verbs
+ * over `FontStore`. Getters such as `metrics`, `unicodes`, and `sources` are
+ * signal-backed: reading them inside a computed or effect subscribes to later
+ * font loads/resets.
  *
  * A glyph handle is only an identity. It may name a glyph that is not committed
  * in the font yet. Use {@link glyph} for existing glyph data, and use the
@@ -296,33 +307,27 @@ export class Font {
   readonly #$glyphRecords: Signal<readonly GlyphRecord[]>;
 
   readonly #directory: Signal<GlyphDirectory>;
-  readonly #glyphs = new Map<GlyphName, Glyph>();
-  /** Open glyph models keyed by stable id; survives directory re-keys. */
-  readonly #glyphsById = new Map<GlyphId, Glyph>();
-  readonly #glyphLayers = new Map<GlyphLayerKey, GlyphLayer>();
+  readonly #store: FontStore;
   readonly #editCoordinator: WorkspaceEditCoordinator | null;
-  #cachesKeyedTo: GlyphDirectory | null = null;
+  readonly #glyphLoadsInFlight = new Map<InFlightKey, Promise<void>>();
 
   /**
    * Projects the renderer's workspace snapshot into the font domain model.
    *
-   * @param $workspace - Single source of workspace truth owned by
-   *   `WorkspaceClient`. There is no load: every derived value follows this
-   *   signal, and `null` means no font is open.
-   * @param editCoordinator - Optional queue used by authored layer projections to submit
+   * @param store - Renderer-local owner of committed records and loaded glyph snapshots.
+   * @param editCoordinator - Optional sync lane used by authored layer projections to submit
    *   committed edits to the utility workspace.
    */
-  constructor(
-    $workspace: Signal<WorkspaceSnapshot | null>,
-    editCoordinator?: WorkspaceEditCoordinator,
-  ) {
+  constructor(store: FontStore, editCoordinator?: WorkspaceEditCoordinator) {
+    this.#store = store;
     this.#editCoordinator = editCoordinator ?? null;
-    this.#$loaded = computed(() => $workspace.value !== null);
-    this.#$metrics = computed(() => $workspace.value?.metrics ?? DEFAULT_FONT_METRICS);
-    this.#$metadata = computed(() => $workspace.value?.metadata ?? {});
-    this.#$sources = computed(() => $workspace.value?.sources ?? []);
-    this.#$axes = computed(() => $workspace.value?.axes ?? []);
-    this.#directory = computed(() => GlyphDirectory.fromRecords($workspace.value?.glyphs ?? []));
+    const workspaceCell = store.workspaceCell;
+    this.#$loaded = computed(() => workspaceCell.value !== null);
+    this.#$metrics = computed(() => workspaceCell.value?.metrics ?? DEFAULT_FONT_METRICS);
+    this.#$metadata = computed(() => workspaceCell.value?.metadata ?? {});
+    this.#$sources = computed(() => workspaceCell.value?.sources ?? []);
+    this.#$axes = computed(() => workspaceCell.value?.axes ?? []);
+    this.#directory = computed(() => GlyphDirectory.fromRecords(workspaceCell.value?.glyphs ?? []));
     this.#$unicodes = computed(() => [...this.#directory.value.unicodes]);
     this.#$glyphRecords = computed(() => this.#directory.value.records);
   }
@@ -377,6 +382,11 @@ export class Font {
     return this.#$glyphRecords;
   }
 
+  /** Reactive glyph snapshot freshness for model consumers that derive loaded glyph views. */
+  get glyphSnapshotStatusCell(): Signal<ReadonlyMap<GlyphId, GlyphSnapshotStatus>> {
+    return this.#store.snapshotStatusCell;
+  }
+
   /** @knipclassignore */
   get metadata(): FontMetadata {
     return this.#$metadata.peek();
@@ -413,7 +423,7 @@ export class Font {
    * @knipclassignore
    */
   hasGlyph(glyphId: GlyphId): boolean {
-    return this.#directory.peek().hasGlyph(glyphId);
+    return this.#store.hasGlyph(glyphId);
   }
 
   /**
@@ -429,12 +439,7 @@ export class Font {
 
   /** Returns the committed glyph record for a stable glyph id. */
   recordForId(glyphId: GlyphId): GlyphRecord | null {
-    return this.#directory.peek().recordForId(glyphId);
-  }
-
-  /** Returns the committed layer record for an exact glyph/source pair. */
-  layerForGlyphAtSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.#directory.peek().layerForGlyphAtSource(glyphId, sourceId);
+    return this.#store.recordForId(glyphId);
   }
 
   /**
@@ -575,8 +580,8 @@ export class Font {
    * @param sourceId - Source whose authored glyph data is requested.
    * @returns The sparse layer record, or `null` when that source has no layer for the glyph.
    */
-  glyphLayerRecord(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.#directory.peek().layerForGlyphAtSource(glyphId, sourceId);
+  layerRecordForId(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
+    return this.#store.layerRecordForId(glyphId, sourceId);
   }
 
   /**
@@ -616,85 +621,220 @@ export class Font {
   }
 
   /**
-   * Get the cached model for an existing glyph.
+   * Returns the local glyph model for a stable glyph id.
    *
-   * This is a read/data access API. It asks the bridge for glyph state at the
-   * font's default source and returns `null` when no state exists. It does not
-   * create missing glyphs or select a layer source.
-   *
-   * @example
-   * ```ts
-   * const glyph = font.glyph(handle)
-   * const outline = glyph?.outlineAt(location)
-   * ```
-   *
-   * @returns The glyph model, or `null` when the glyph has no state for the default source.
+   * @param glyphId - document glyph identity to resolve.
+   * @returns the id-keyed glyph model, or null when the glyph is missing or not loaded.
    */
-  glyph(handle: GlyphHandle): Glyph | null {
+  glyphForId(glyphId: GlyphId): Glyph | null {
     if (!this.loaded) return null;
 
-    this.#syncCaches();
-
-    const cached = this.#glyphs.get(handle.name);
-    if (cached) return cached;
-
-    // Open models survive directory re-keys under their stable id; re-link
-    // the name cache after #syncCaches cleared it.
     const directory = this.#directory.peek();
-    const record = directory.recordForName(handle.name);
-    const openModel = record ? this.#glyphsById.get(record.id) : undefined;
-    if (openModel) {
-      this.#glyphs.set(handle.name, openModel);
-      return openModel;
-    }
+    const record = this.#store.recordForId(glyphId);
+    if (!record) return null;
 
-    const source = this.defaultSource;
-    const layer = record ? directory.layerForGlyphAtSource(record.id, source.id) : null;
-    if (!layer) return null;
+    return this.#store.glyphModel(glyphId, () => {
+      const source = this.defaultSource;
+      const layer = directory.layerForGlyphAtSource(glyphId, source.id);
+      if (!layer) return null;
 
-    const state = this.layerState(layer.id);
-    if (!state) return null;
+      const state = this.layerState(layer.id);
+      if (!state) return null;
 
-    const glyph = new Glyph(this, handle, source, state);
-    this.#glyphs.set(handle.name, glyph);
-    return glyph;
+      return new Glyph(this, glyphId, directory.glyphHandleForName(record.name), source, state);
+    });
   }
 
   /**
-   * Get authored layer data for a glyph at an exact source.
+   * Returns local authored layer data for an exact glyph/source pair.
    *
-   * A source is a designspace location. This method returns the authored glyph
-   * layer model when both the source and glyph layer state exist.
-   * It does not choose a fallback source and does not create missing glyph data.
-   *
-   * @example
-   * ```ts
-   * const source = font.defaultSource
-   * const glyphLayer = font.glyphLayer(handle, source)
-   * ```
-   *
-   * @returns The authored glyph layer, or `null` when the source or layer state is unavailable.
+   * @param glyphId - document glyph identity to resolve.
+   * @param sourceId - exact source whose authored layer should be loaded.
+   * @returns the id-keyed glyph layer model, or null when record or geometry is unavailable.
    */
-  glyphLayer(handle: GlyphHandle, source: Source): GlyphLayer | null {
-    if (!this.source(source.id)) return null;
+  glyphLayerForId(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null {
+    const source = this.source(sourceId);
+    if (!source) return null;
 
-    this.#syncCaches();
-    const layer = this.#directory.peek().layerForGlyphNameAtSource(handle.name, source.id);
+    const layer = this.#store.layerRecordForId(glyphId, source.id);
     if (!layer) return null;
 
-    const key = glyphLayerModelKey(handle.name, source.id);
-    const cached = this.#glyphLayers.get(key);
-    if (cached) return cached;
+    return this.#store.glyphLayerModel(glyphId, source.id, () => {
+      const glyph = this.glyphForId(glyphId);
+      if (!glyph) return null;
 
-    const glyph = this.glyph(handle);
-    if (!glyph) return null;
+      const state = glyph.isPrimarySource(source) ? undefined : this.layerState(layer.id);
+      return glyph.createGlyphLayer(source, state);
+    });
+  }
 
-    const state = glyph.isPrimarySource(source) ? undefined : this.layerState(layer.id);
-    const glyphLayer = glyph.createGlyphLayer(source, state);
-    if (!glyphLayer) return null;
+  /**
+   * Reports whether every authored source for each glyph has local geometry.
+   *
+   * @param glyphIds - Stable glyph identities to inspect.
+   */
+  areGlyphsLoaded(glyphIds: readonly GlyphId[]): boolean {
+    for (const glyphId of glyphIds) {
+      if (!this.recordForId(glyphId)) return false;
+      for (const sourceId of this.#store.sourceIdsForGlyph(glyphId)) {
+        if (this.#store.needsGlyphSource(glyphId, sourceId)) return false;
+      }
+    }
+    return true;
+  }
 
-    this.#glyphLayers.set(key, glyphLayer);
-    return glyphLayer;
+  /**
+   * Loads one glyph's geometry and returns its live model.
+   *
+   * @param glyphId - Stable glyph identity whose local geometry should be available.
+   * @param options - Optional source scope; omitted means every authored layer for the glyph.
+   * @returns null when the glyph is not present in the current font.
+   * @see {@link loadGlyphs}
+   */
+  async loadGlyph(glyphId: GlyphId, options: GlyphLoadOptions = {}): Promise<Glyph | null> {
+    return (await this.loadGlyphs([glyphId], options)).get(glyphId) ?? null;
+  }
+
+  /**
+   * Loads missing or stale glyph geometry and returns the requested live models.
+   *
+   * @remarks
+   * Component bases discovered while loading are hydrated as a side effect, but
+   * the returned map is keyed only by the glyph IDs requested by the caller.
+   *
+   * @param glyphIds - Stable glyph identities whose local geometry should be available.
+   * @param options - Optional source scope; omitted means every authored layer for each glyph.
+   * @returns A fresh map containing the requested glyphs that exist in the current font.
+   */
+  async loadGlyphs(
+    glyphIds: readonly GlyphId[],
+    options: GlyphLoadOptions = {},
+  ): Promise<ReadonlyMap<GlyphId, Glyph>> {
+    await this.#loadGlyphSnapshots(glyphIds, options);
+
+    const glyphs = new Map<GlyphId, Glyph>();
+    for (const glyphId of uniqueGlyphIds(glyphIds)) {
+      const glyph = this.glyphForId(glyphId);
+      if (glyph) glyphs.set(glyphId, glyph);
+    }
+    return glyphs;
+  }
+
+  async #loadGlyphSnapshots(
+    glyphIds: readonly GlyphId[],
+    options: GlyphLoadOptions = {},
+  ): Promise<void> {
+    if (!this.#editCoordinator || glyphIds.length === 0) return;
+
+    await this.#editCoordinator.settled();
+
+    const queue = uniqueGlyphIds(glyphIds);
+    const seen = new Set<GlyphId>(queue);
+
+    while (queue.length > 0) {
+      const batchGlyphIds = queue.splice(0);
+      const inFlight = this.#inFlightLoadsFor(batchGlyphIds, options);
+      if (inFlight.length > 0) {
+        await Promise.all(inFlight);
+      }
+
+      const requests = this.#requestableGlyphs(batchGlyphIds, options);
+      if (requests.length > 0) {
+        await this.#loadGlyphRequests(requests);
+      }
+
+      for (const glyphId of batchGlyphIds) {
+        for (const baseGlyphId of this.#store.loadedComponentBaseGlyphIds(glyphId)) {
+          if (seen.has(baseGlyphId)) continue;
+          seen.add(baseGlyphId);
+          queue.push(baseGlyphId);
+        }
+      }
+    }
+  }
+
+  #requestableGlyphs(
+    glyphIds: readonly GlyphId[],
+    options: GlyphLoadOptions,
+  ): WorkspaceGlyphSnapshotRequest[] {
+    const result: SnapshotRequest[] = [];
+    const seen = new Set<GlyphId>();
+    for (const glyphId of glyphIds) {
+      if (seen.has(glyphId)) continue;
+      const sourceIds = this.#neededSourceIds(glyphId, options);
+      if (sourceIds.length === 0) continue;
+      seen.add(glyphId);
+      result.push({ glyphId, sourceIds });
+    }
+    return result;
+  }
+
+  #neededSourceIds(glyphId: GlyphId, options: GlyphLoadOptions): SourceId[] {
+    const sourceIds = options.sourceIds ?? this.#store.sourceIdsForGlyph(glyphId);
+    const needed: SourceId[] = [];
+    const seen = new Set<SourceId>();
+
+    for (const sourceId of sourceIds) {
+      if (seen.has(sourceId)) continue;
+      seen.add(sourceId);
+      if (this.#store.needsGlyphSource(glyphId, sourceId)) needed.push(sourceId);
+    }
+
+    return needed;
+  }
+
+  #inFlightLoadsFor(glyphIds: readonly GlyphId[], options: GlyphLoadOptions): Promise<void>[] {
+    const promises: Promise<void>[] = [];
+    const seen = new Set<Promise<void>>();
+
+    for (const glyphId of uniqueGlyphIds(glyphIds)) {
+      const sourceIds = options.sourceIds ?? this.#store.sourceIdsForGlyph(glyphId);
+      for (const sourceId of sourceIds) {
+        const promise = this.#glyphLoadsInFlight.get(inFlightKey(glyphId, sourceId));
+        if (!promise || seen.has(promise)) continue;
+        seen.add(promise);
+        promises.push(promise);
+      }
+    }
+
+    return promises;
+  }
+
+  async #loadGlyphRequests(requests: readonly WorkspaceGlyphSnapshotRequest[]): Promise<void> {
+    const promise = this.#readAndApplyGlyphRequests(requests);
+
+    for (const request of requests) {
+      for (const sourceId of request.sourceIds) {
+        this.#glyphLoadsInFlight.set(inFlightKey(request.glyphId, sourceId), promise);
+      }
+    }
+
+    try {
+      await promise;
+    } finally {
+      for (const request of requests) {
+        for (const sourceId of request.sourceIds) {
+          const key = inFlightKey(request.glyphId, sourceId);
+          if (this.#glyphLoadsInFlight.get(key) === promise) {
+            this.#glyphLoadsInFlight.delete(key);
+          }
+        }
+      }
+    }
+  }
+
+  async #readAndApplyGlyphRequests(
+    requests: readonly WorkspaceGlyphSnapshotRequest[],
+  ): Promise<void> {
+    if (!this.#editCoordinator) return;
+
+    const load = this.#store.beginGlyphLoad(requests);
+    try {
+      this.#store.finishGlyphLoad(load, await this.#editCoordinator.readGlyphSnapshots(requests));
+    } catch (error) {
+      this.#store.failGlyphLoad(load);
+      throw error;
+    }
   }
 
   /**
@@ -710,15 +850,17 @@ export class Font {
   }
 
   /**
-   * Read raw glyph state for an authored layer from the bridge.
+   * Returns the store-owned layer state for loaded glyph geometry.
    *
-   * @param layerId - Stable layer identity to read.
-   * @returns Raw glyph state, or `null` when the bridge cannot provide state.
+   * @param layerId - stable authored layer identity to resolve.
+   * @returns the loaded layer state, or null when its glyph snapshot is not loaded.
    */
-  layerState(_layerId: LayerId): GlyphState | null {
-    // Geometry is not part of the workspace snapshot yet; "no state" is the
-    // honest answer for every layer until change sets land.
-    return null;
+  layerState(layerId: LayerId): GlyphLayerState | null {
+    return this.#store.layerState(layerId);
+  }
+
+  variationData(glyphId: GlyphId): GlyphVariationData | null {
+    return this.#store.variationData(glyphId);
   }
 
   /**
@@ -832,67 +974,6 @@ export class Font {
     return this.#editCoordinator;
   }
 
-  /**
-   * Opens (or returns the cached) glyph model, pulling
-   * replace-grade state from the workspace.
-   *
-   * @remarks
-   * Models are cached by stable GlyphId, so open sessions survive directory
-   * re-keys and renames. Returns null when the glyph or layer is missing.
-   */
-  async openGlyph(glyphId: GlyphId, source: Source): Promise<Glyph | null> {
-    const directory = this.#directory.peek();
-    const record = directory.recordForId(glyphId);
-    if (!record) return null;
-
-    const layer = directory.layerForGlyphAtSource(glyphId, source.id);
-    if (!layer) return null;
-
-    const cached = this.#glyphsById.get(glyphId);
-    if (cached) return cached;
-
-    const state = await this.editCoordinator.layer(layer.id);
-    if (!state) return null;
-
-    const handle = directory.glyphHandleForName(record.name);
-    const glyph = new Glyph(this, handle, source, state, glyphId);
-
-    this.#glyphsById.set(glyphId, glyph);
-    this.#glyphs.set(record.name, glyph);
-    return glyph;
-  }
-
-  /**
-   * Opens (or returns the cached) authored glyph layer at any source,
-   * pulling replace-grade state from the workspace.
-   *
-   * @remarks
-   * This is the async entry point for non-primary sources; once opened, the
-   * sync {@link glyphLayer} resolves from cache (instance resolution,
-   * tools). Echoes for the source's layer fold into the opened state.
-   */
-  async openGlyphLayer(glyphId: GlyphId, source: Source): Promise<GlyphLayer | null> {
-    this.#syncCaches();
-    const layer = this.#directory.peek().layerForGlyphAtSource(glyphId, source.id);
-    if (!layer) return null;
-
-    const glyph =
-      this.#glyphsById.get(glyphId) ?? (await this.openGlyph(glyphId, this.defaultSource));
-    if (!glyph) return null;
-
-    const cached = this.glyphLayer(glyph.handle, source);
-    if (cached) return cached;
-
-    const state = await this.editCoordinator.layer(layer.id);
-    if (!state) return null;
-
-    const glyphLayer = glyph.createGlyphLayer(source, state);
-    if (!glyphLayer) return null;
-
-    this.#glyphLayers.set(glyphLayerModelKey(glyph.handle.name, source.id), glyphLayer);
-    return glyphLayer;
-  }
-
   createSource(name: string, location: Location): SourceId {
     const sourceId = mintSourceId();
     this.editCoordinator.push({
@@ -946,25 +1027,19 @@ export class Font {
     return this.#$sources.peek();
   }
 
-  /** Drops cached glyph models when the directory they were built from changes. */
-  #syncCaches(): void {
-    const directory = this.#directory.peek();
-    if (this.#cachesKeyedTo === directory) return;
-
-    this.#glyphs.clear();
-    this.#glyphLayers.clear();
-    this.#cachesKeyedTo = directory;
-  }
-
   defaultLocation(): AxisLocation {
     return this.isVariable() ? defaultAxisLocation(this.getAxes()) : emptyAxisLocation();
   }
 }
 
-function glyphLayerModelKey(name: GlyphName, sourceId: SourceId): GlyphLayerKey {
-  return `${sourceId}:${name}` as GlyphLayerKey;
-}
-
 function glyphLayerKey(glyphId: GlyphId, sourceId: SourceId): string {
   return `${glyphId}:${sourceId}`;
+}
+
+function inFlightKey(glyphId: GlyphId, sourceId: SourceId): InFlightKey {
+  return `${glyphId}:${sourceId}` as InFlightKey;
+}
+
+function uniqueGlyphIds(glyphIds: readonly GlyphId[]): GlyphId[] {
+  return [...new Set(glyphIds)];
 }

@@ -6,11 +6,11 @@ import type {
   GlyphName,
   GlyphState,
   GlyphStructure,
-  GlyphVariationData,
   LayerId,
   PointId,
   PointSeed,
   Source,
+  SourceId,
   Unicode,
 } from "@shift/types";
 import { mintAnchorId, mintContourId, mintPointId } from "@shift/types";
@@ -155,7 +155,7 @@ class GlyphEditSession {
       }
     }
 
-    // Mixed patches push two intents in the same tick; the editCoordinator coalesces
+    // Mixed patches push two intents in the same tick; the edit coordinator coalesces
     // them into one apply and therefore one undo step.
     if (pointIds.length > 0) {
       this.#intents.movePoints({ pointIds, coords: pointCoords });
@@ -291,13 +291,17 @@ export class GlyphLayer {
     this.#edit = edit;
   }
 
-  /** @knipclassignore — convenience alias for source identity. */
-  get id() {
-    return this.source.id;
+  /** @knipclassignore — stable edit identity for this authored glyph layer. */
+  get id(): LayerId {
+    return this.#edit.layerState.state.layerId;
+  }
+
+  get layerId(): LayerId {
+    return this.id;
   }
 
   /** @knipclassignore — convenience alias for source identity. */
-  get sourceId() {
+  get sourceId(): SourceId {
     return this.source.id;
   }
 
@@ -1315,14 +1319,12 @@ class ContourCache {
  * location.
  */
 export class Glyph {
-  readonly handle: GlyphHandle;
-
   readonly #font: Font;
   readonly #source: Source;
+  readonly #fallbackHandle: GlyphHandle;
 
   readonly #layerState: GlyphLayerState;
-  readonly #variationData: GlyphVariationData | null;
-  readonly #glyphId: GlyphId | null;
+  readonly #glyphId: GlyphId;
 
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
@@ -1333,34 +1335,37 @@ export class Glyph {
 
   constructor(
     font: Font,
+    glyphId: GlyphId,
     handle: GlyphHandle,
     source: Source,
-    state: GlyphState,
-    glyphId?: GlyphId,
+    state: GlyphLayerState,
   ) {
-    this.handle = handle;
+    this.#fallbackHandle = handle;
     this.#font = font;
     this.#source = source;
-    this.#glyphId = glyphId ?? null;
+    this.#glyphId = glyphId;
 
-    this.#layerState = new GlyphLayerState(state);
-    this.#variationData = state.variationData ?? null;
-
+    this.#layerState = state;
     this.#geometry = computed(() => this.#layerState.geometryCell.value);
 
     this.#xAdvance = computed(() => this.#layerState.coordinateBuffersCell.value.xAdvance.value);
 
-    this.#edit = new GlyphEditSession(font, state.layerId, {
+    this.#edit = new GlyphEditSession(font, state.state.layerId, {
       state: this.#layerState,
       geometry: this.#geometry,
     });
+  }
 
-    if (glyphId) {
-      // Echoes (apply/undo/redo) fold into this session's state by layerId.
-      font.editCoordinator.register(state.layerId, {
-        state: this.#layerState,
-      });
-    }
+  get id(): GlyphId {
+    return this.#glyphId;
+  }
+
+  get handle(): GlyphHandle {
+    const record = this.#font.recordForId(this.#glyphId);
+    if (!record) return this.#fallbackHandle;
+
+    const unicode = record.unicodes[0];
+    return unicode === undefined ? { name: record.name } : { name: record.name, unicode };
   }
 
   get name(): GlyphName {
@@ -1451,14 +1456,17 @@ export class Glyph {
 
     const exactSource = this.#font.sourceAt(location);
     if (exactSource) {
-      return this.#font.glyphLayer(this.handle, exactSource)?.geometry ?? emptyGlyphGeometry();
+      return (
+        this.#font.glyphLayerForId(this.#glyphId, exactSource.id)?.geometry ?? emptyGlyphGeometry()
+      );
     }
 
-    if (!this.#variationData) {
+    const variationData = this.#font.variationData(this.#glyphId);
+    if (!variationData) {
       return this.#geometry.peek();
     }
 
-    const values = interpolate(this.#variationData, normalize(location, [...this.#font.getAxes()]));
+    const values = interpolate(variationData, normalize(location, [...this.#font.getAxes()]));
 
     if (values.length === 0) {
       return this.#geometry.peek();
@@ -1477,7 +1485,7 @@ export class Glyph {
     const exactSource = this.#font.sourceAt(location);
     if (!exactSource) return null;
 
-    return this.#font.glyphLayer(this.handle, exactSource);
+    return this.#font.glyphLayerForId(this.#glyphId, exactSource.id);
   }
 
   /**
@@ -1512,25 +1520,17 @@ export class Glyph {
     return source.id === this.#source.id;
   }
 
-  /** @internal GlyphLayer caching is owned by Font.glyphLayer(). */
-  createGlyphLayer(source: Source, state?: GlyphState | null): GlyphLayer | null {
+  /** @internal GlyphLayer caching is owned by the id-keyed FontStore model cache. */
+  createGlyphLayer(source: Source, state?: GlyphLayerState | null): GlyphLayer | null {
     if (!this.#font.source(source.id)) return null;
     if (this.isPrimarySource(source)) return new GlyphLayer(source, this.#edit);
     if (!state) return null;
 
-    const layerState = new GlyphLayerState(state);
-    const geometry = computed(() => layerState.geometryCell.value);
-    const edit = new GlyphEditSession(this.#font, state.layerId, {
-      state: layerState,
+    const geometry = computed(() => state.geometryCell.value);
+    const edit = new GlyphEditSession(this.#font, state.state.layerId, {
+      state,
       geometry,
     });
-
-    if (this.#glyphId) {
-      // Echoes for this source's layer fold here, same as the primary.
-      this.#font.editCoordinator.register(state.layerId, {
-        state: layerState,
-      });
-    }
 
     return new GlyphLayer(source, edit);
   }
@@ -1556,15 +1556,6 @@ export class Glyph {
   }
 
   toState(): GlyphState {
-    const state = this.#layerState.state;
-    const variationData = this.#variationData;
-    if (!variationData) return state;
-
-    return {
-      layerId: state.layerId,
-      structure: state.structure,
-      values: state.values,
-      variationData,
-    };
+    return this.#layerState.state;
   }
 }

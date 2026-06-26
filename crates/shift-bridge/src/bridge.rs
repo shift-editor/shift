@@ -12,11 +12,12 @@ use shift_font::{
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
-    NapiGlyphRecord, NapiGlyphState, NapiLayerReplaced, NapiLocation, NapiPointSeed, NapiSource,
+    NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
+    NapiPointSeed, NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
-  Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
-  Source,
+  Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot, GlyphRecord,
+  GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, Source,
 };
 use shift_workspace::{
   FontWorkspace, NewWorkspace, RecoverySelection, WorkspaceError, WorkspaceRecoveryCandidate,
@@ -472,30 +473,45 @@ impl Bridge {
     Ok(Some(self.applied_echo(outcome)?))
   }
 
-  /// Layer-addressed glyph state. LayerId is the stable edit identity.
+  /// Glyph-addressed snapshots for renderer-local synchronous font state.
   #[napi]
-  pub fn get_layer(
+  pub fn get_glyph_snapshots(
     &self,
-    #[napi(ts_arg_type = "LayerId")] layer_id: String,
-  ) -> errors::Result<Option<NapiGlyphState>> {
-    let layer_id = parse::<LayerId>(&layer_id)?;
-
+    requests: Vec<NapiGlyphSnapshotRequest>,
+  ) -> errors::Result<Vec<NapiGlyphSnapshot>> {
     let font = self.font()?;
-    let Some(glyph_id) = font.glyph_id_by_layer(layer_id.clone()) else {
-      return Ok(None);
-    };
-    let Some(glyph) = font.glyph(glyph_id) else {
-      return Ok(None);
-    };
-    let Some(layer) = font.layer(layer_id) else {
-      return Ok(None);
-    };
+    let mut snapshots = Vec::new();
 
-    let variation_data = self
-      .variation_build_for_glyph(glyph)?
-      .and_then(|(_, build)| build.variation_data);
+    for request in requests {
+      let request = GlyphSnapshotRequest::from(request);
+      let glyph_id = request.glyph_id;
+      let source_ids = request.source_ids;
+      let Some(glyph) = font.glyph(glyph_id.clone()) else {
+        continue;
+      };
 
-    Ok(Some(GlyphState::from_layer(layer, variation_data).into()))
+      let variation_data = self
+        .variation_build_for_glyph(glyph)?
+        .and_then(|(_, build)| build.variation_data);
+
+      let layers = source_ids
+        .into_iter()
+        .filter_map(|source_id| glyph.layer_for_source(source_id))
+        .map(|layer| GlyphLayerSnapshot {
+          glyph_id: glyph_id.clone(),
+          source_id: layer.source_id(),
+          state: GlyphState::from_layer(layer),
+        })
+        .collect();
+
+      snapshots.push(GlyphSnapshot {
+        glyph_id,
+        variation_data,
+        layers,
+      });
+    }
+
+    Ok(snapshots.into_iter().map(Into::into).collect())
   }
 
   #[napi]
@@ -868,10 +884,11 @@ mod tests {
   use shift_wire::bridges::napi::{
     NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCreateAxisIntent,
     NapiCreateGlyphIntent, NapiCreateGlyphLayerIntent, NapiCreateSourceIntent,
-    NapiDeleteAxisIntent, NapiDeleteSourceIntent, NapiLocation, NapiMoveAnchorsIntent,
-    NapiMovePointsIntent, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
-    NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
+    NapiDeleteAxisIntent, NapiDeleteSourceIntent, NapiGlyphSnapshotRequest, NapiGlyphState,
+    NapiLocation, NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
+    NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
+    NapiSetContourClosedIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
+    NapiTranslatePointsIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1475,18 +1492,27 @@ mod tests {
       .find(|record| record.name == name)
       .expect("glyph record should exist");
     let source_id = default_source_id(bridge);
-    let layer_id = record
-      .layers
-      .iter()
-      .find(|layer| layer.source_id == source_id)
-      .expect("glyph default layer should exist")
-      .id
-      .clone();
 
-    bridge
-      .get_layer(layer_id)
-      .unwrap()
-      .expect("glyph state should be readable")
+    glyph_source_state(bridge, &record.id, &source_id).expect("glyph state should be readable")
+  }
+
+  fn glyph_source_state(
+    bridge: &Bridge,
+    glyph_id: &str,
+    source_id: &str,
+  ) -> Option<NapiGlyphState> {
+    let snapshots = bridge
+      .get_glyph_snapshots(vec![NapiGlyphSnapshotRequest {
+        glyph_id: glyph_id.to_string(),
+        source_ids: vec![source_id.to_string()],
+      }])
+      .unwrap();
+
+    snapshots
+      .into_iter()
+      .next()
+      .and_then(|snapshot| snapshot.layers.into_iter().next())
+      .map(|layer| layer.state)
   }
 
   fn contour_point_count(bridge: &Bridge) -> usize {
@@ -1961,10 +1987,8 @@ mod tests {
       )
       .unwrap();
 
-    let state = bridge
-      .get_layer(layer_id.clone())
-      .unwrap()
-      .expect("the explicit layer must resolve by LayerId");
+    let state = glyph_source_state(&bridge, &glyph_id, "source_bold")
+      .expect("the explicit layer must resolve by glyph and source");
     assert_eq!(state.layer_id, layer_id);
     assert_eq!(applied.layers[0].layer_id, layer_id);
     let glyphs = applied
@@ -2065,7 +2089,7 @@ mod tests {
         None,
       )
       .unwrap();
-    assert!(bridge.get_layer(bold_layer_id.clone()).unwrap().is_some());
+    assert!(glyph_source_state(&bridge, &glyph_id, "source_bold").is_some());
 
     let applied = bridge
       .apply(vec![delete_source_intent("source_bold")], None)
@@ -2079,10 +2103,8 @@ mod tests {
       .expect("deleteSource layer removal must echo glyph records");
     assert_eq!(glyphs[0].layers.len(), 1);
     assert!(applied.layers.is_empty());
-    assert!(bridge.get_layer(bold_layer_id).unwrap().is_none());
-    let default_state = bridge
-      .get_layer(default_layer_id.clone())
-      .unwrap()
+    assert!(glyph_source_state(&bridge, &glyph_id, "source_bold").is_none());
+    let default_state = glyph_source_state(&bridge, &glyph_id, &default_source_id(&bridge))
       .expect("default source must keep its layer");
     assert_eq!(default_state.layer_id, default_layer_id);
   }
@@ -2234,7 +2256,7 @@ mod tests {
   }
 
   #[test]
-  fn get_layer_reads_applied_edits() {
+  fn get_glyph_snapshots_read_applied_edits() {
     let mut bridge = bridge_with_workspace();
     let (layer_id, contour_id) = pen_setup(&mut bridge);
     let point_id = shift_font::PointId::new().to_string();
@@ -2259,11 +2281,19 @@ mod tests {
   }
 
   #[test]
-  fn get_layer_returns_none_for_missing_layer() {
+  fn get_glyph_snapshots_returns_none_for_missing_glyph() {
     let bridge = bridge_with_workspace();
-    let missing_layer_id = shift_font::LayerId::new().to_string();
+    let missing_glyph_id = shift_font::GlyphId::new().to_string();
+    let source_id = default_source_id(&bridge);
 
-    assert!(bridge.get_layer(missing_layer_id).unwrap().is_none());
+    let snapshots = bridge
+      .get_glyph_snapshots(vec![NapiGlyphSnapshotRequest {
+        glyph_id: missing_glyph_id,
+        source_ids: vec![source_id],
+      }])
+      .unwrap();
+
+    assert!(snapshots.is_empty());
   }
 
   #[test]

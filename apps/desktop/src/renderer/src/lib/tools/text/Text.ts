@@ -18,13 +18,7 @@ export class TextTool extends BaseTool<TextState> {
   }
 
   override activate(): void {
-    // Run owner = MAIN glyph, not the currently-active editing glyph.
-    // Double-clicking a slot changes the active glyph (so its outline becomes
-    // editable in place) but the run still belongs to whoever owned it —
-    // the main glyph the user opened from the grid. Keying on activeGlyph
-    // here would silently switch to a fresh per-active-glyph run when the
-    // user toggles tools mid-slot-edit, wiping the run they were in.
-    const owner = this.editor.rootGlyphHandle;
+    const owner = this.editor.glyph.peek()?.handle ?? null;
     if (!owner) {
       this.state = { type: "typing" };
       this.editor.glyphDisplay;
@@ -32,6 +26,13 @@ export class TextTool extends BaseTool<TextState> {
     }
 
     const ownerName = owner.name;
+    const record = this.editor.font.recordForName(ownerName);
+    if (record) {
+      this.editor.font.loadGlyph(record.id).catch((error) => {
+        console.error("failed to load text owner glyph", error);
+      });
+    }
+
     const run = this.editor.textRuns.switchTo(ownerName);
     run.seed(glyphTextItem(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);
     run.interaction.suspend();

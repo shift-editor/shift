@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Font } from "@/lib/model/Font";
-import type { Unicode } from "@shift/types";
 import { Positioner } from "./Positioner";
 import { glyphTextItem as glyph } from "./types";
 import { layoutTestFont, ltrRun } from "./testUtils";
@@ -42,10 +41,12 @@ describe("Positioner", () => {
     const run = ltrRun([a]);
 
     const positioned = positioner.position(run, font, signal(font.defaultLocation()));
-    const expectedBounds = font
-      .glyph(font.glyphHandleForUnicode(65 as Unicode))
-      ?.outline(signal(font.defaultLocation())).bounds;
+    const record = font.recordForName("A");
+    const expectedBounds = record
+      ? font.glyphForId(record.id)?.outline(signal(font.defaultLocation())).bounds
+      : null;
 
+    expect(positioned.glyphs[0].glyphId).toBe(record?.id);
     expect(positioned.glyphs[0].bounds).toEqual(expectedBounds);
     expect(positioned.glyphs[0].sourceItemIds).toEqual([a.id]);
     expect(positioned.glyphs[0].origin).toEqual({ x: 0, y: 0 });
@@ -60,6 +61,7 @@ describe("Positioner", () => {
 
     expect(positioned.glyphs[0].xAdvance).toBe(0);
     expect(positioned.glyphs[0].bounds).toBeNull();
+    expect(positioned.glyphs[0].glyphId).toBeNull();
   });
 
   // Empty run → empty positioned glyphs, zero advance.

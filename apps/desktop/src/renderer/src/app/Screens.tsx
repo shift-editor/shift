@@ -76,7 +76,8 @@ const WorkspaceScreens = () => {
       }
     }
 
-    editor.scene.setLocation(font.defaultLocation());
+    editor.setDesignLocation(font.defaultLocation());
+
     void maximiseWorkspaceWindow();
   }, [documentLoaded, editor, font]);
 

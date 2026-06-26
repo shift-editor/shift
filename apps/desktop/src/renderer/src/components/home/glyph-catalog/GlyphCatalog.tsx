@@ -17,7 +17,7 @@ import { SubCategory } from "./SubCategory";
 
 export const GlyphCatalog = () => {
   const {
-    availableGlyphs,
+    availableGlyphs: allGlyphs,
     filteredGlyphs,
     categories,
     query,
@@ -30,6 +30,9 @@ export const GlyphCatalog = () => {
     selectSubCategory,
   } = useGlyphCatalog();
 
+  const allGlyphCount = allGlyphs.length;
+  const filteredGlyphCount = filteredGlyphs.length;
+  const allGlyphsSelected = selectedCategory === null && selectedSubCategoryKey === null;
   const isTopLevelCategorySelected = selectedCategory !== null && selectedSubCategoryKey === null;
 
   return (
@@ -62,13 +65,13 @@ export const GlyphCatalog = () => {
             variant="ghost"
             size="sm"
             onClick={selectAll}
-            isActive={selectedCategory === null && selectedSubCategoryKey === null}
+            isActive={allGlyphsSelected}
           >
             <div className="flex gap-2 items-center justify-center">
               <AllIcon className="w-4 h-4" />
               <span className="text-sm">All</span>
             </div>
-            <span className="text-xs">{`${filteredGlyphs.length}/${availableGlyphs.length}`}</span>
+            <span className="text-xs">{`${filteredGlyphCount}/${allGlyphCount}`}</span>
           </Button>
         </div>
 
