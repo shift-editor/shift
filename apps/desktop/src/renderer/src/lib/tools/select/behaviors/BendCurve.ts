@@ -15,8 +15,8 @@ export class BendCurve implements SelectBehavior {
   ): boolean {
     if (state.type !== "ready" || !event.metaKey) return false;
 
-    const instance = ctx.editor.glyphInstance;
-    if (!instance?.layer) return false;
+    const instance = ctx.editor.previewGlyphInstance;
+    if (!instance || !ctx.editor.editingGlyphLayer) return false;
 
     const geometry = instance.geometry;
     const hit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);

@@ -10,7 +10,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
 
-**Architecture Invariant: CRITICAL:** `Camera` owns the affine matrices (`$upmToScreenMatrix`, `$screenToUpmMatrix`) as lazily computed signals. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
+**Architecture Invariant: CRITICAL:** `Camera` owns the affine matrices as lazily computed cells. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
 
 **Architecture Invariant: CRITICAL:** Rendering is driven by named reactive effects owned by `Renderer`. Each effect reads explicit dependency signals before drawing. If editor state should trigger a redraw, add a named read to the correct render dependency boundary -- do not request redraw imperatively from tools or UI handlers.
 
@@ -20,7 +20,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
 
-**Architecture Invariant:** `Selection` uses discriminated `Selectable` unions (`{ kind: "point" | "anchor" | "segment", id }`). Mutations go through `select()`, `add()`, `remove()`, `toggle()`. Derived contour and bounds queries are computed from the single `$state` signal and the current glyph geometry.
+**Architecture Invariant:** `Selection` uses discriminated `Selectable` unions (`{ kind: "point" | "anchor" | "segment", id }`). Mutations go through `select()`, `add()`, `remove()`, `toggle()`. Derived contour and bounds queries are computed from `stateCell` and the current glyph geometry.
 
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
 
@@ -58,7 +58,7 @@ editor/
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
 - **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `Theme`.
 - **`CameraTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, layoutHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
-- **`Selection`** -- Unified selection state for points, anchors, and segments. Computed `DerivedSelection` tracks selected contours and bounds. Exposes one raw `$state` signal plus unwrapped ID getters.
+- **`Selection`** -- Unified selection state for points, anchors, and segments. Computed `DerivedSelection` tracks selected contours and bounds. Exposes `stateCell` plus unwrapped ID getters.
 - **`Selectable`** -- Discriminated union: `{ kind: "point" | "anchor" | "segment", id }`.
 - **`Coordinates`** -- Triple of `{ screen, scene, glyphLocal }` for a single position. Built via `Editor.fromScreen()` etc.
 - **`GlyphLayerEditDraft`** -- Transactional interface for continuous layer manipulation: `previewPositionPatch()` / `previewTranslate()` / `previewRotate()` / `previewScale()` during drag, `commit(label)` or `discard()` at end.

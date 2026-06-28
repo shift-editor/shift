@@ -12,7 +12,7 @@ export const AnchorSection = () => {
   const [singleAnchorId, setSingleAnchorId] = useState<AnchorId | null>(null);
 
   const [anchorName, setAnchorName] = useState<string | null>(null);
-  const [hasLayer, setHasLayer] = useState(false);
+  const [editable, setEditable] = useState(false);
 
   const [anchorX, setAnchorX] = useState(0);
   const [anchorY, setAnchorY] = useState(0);
@@ -21,10 +21,11 @@ export const AnchorSection = () => {
   const yRef = useRef<EditableSidebarInputHandle>(null);
 
   useSignalEffect(() => {
-    const instance = editor.glyphInstanceCell.value;
+    const instance = editor.previewGlyphInstanceCell.value;
+    const layer = editor.editingGlyphLayerCell.value;
     const ids = [...editor.selection.stateCell.value.anchorIds];
 
-    setHasLayer(instance?.hasLayer ?? false);
+    setEditable(layer !== null);
 
     if (!instance || ids.length !== 1) {
       setSingleAnchorId(null);
@@ -54,7 +55,7 @@ export const AnchorSection = () => {
   const handlePositionChange = (axis: "x" | "y", value: number) => {
     if (!singleAnchorId) return;
 
-    const layer = editor.glyphInstanceCell.peek()?.layer;
+    const layer = editor.editingGlyphLayer;
     if (!layer) return;
 
     const nextX = axis === "x" ? value : anchorX;
@@ -69,13 +70,13 @@ export const AnchorSection = () => {
         <EditableSidebarInput
           ref={xRef}
           label="X"
-          disabled={singleAnchorId === null || !hasLayer}
+          disabled={singleAnchorId === null || !editable}
           onValueChange={(value) => handlePositionChange("x", value)}
         />
         <EditableSidebarInput
           ref={yRef}
           label="Y"
-          disabled={singleAnchorId === null || !hasLayer}
+          disabled={singleAnchorId === null || !editable}
           onValueChange={(value) => handlePositionChange("y", value)}
         />
       </div>

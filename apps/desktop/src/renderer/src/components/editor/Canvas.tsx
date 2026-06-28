@@ -28,7 +28,7 @@ export const Canvas: FC = () => {
     }
 
     const glyphId = asGlyphId(glyphIdParam);
-    if (!editor.font.recordForId(glyphId)) {
+    if (!editor.font.glyph(glyphId)) {
       editor.scene.clear();
       return undefined;
     }

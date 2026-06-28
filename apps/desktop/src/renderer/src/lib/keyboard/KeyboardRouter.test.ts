@@ -41,8 +41,8 @@ describe("KeyboardRouter", () => {
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    // setActiveTool short-circuits if the target matches the current $activeTool,
-    // and $activeTool defaults to "select" without actually activating a tool
+    // setActiveTool short-circuits if the target matches the activeToolCell value,
+    // and activeToolCell defaults to "select" without actually activating a tool
     // instance. Force activation directly so primaryTool is populated.
     editor.toolManager.activate("select");
     canvasActive = true;

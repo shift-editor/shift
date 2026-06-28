@@ -92,10 +92,9 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override drawScene(canvas: Canvas): void {
-    const display = this.editor.glyphDisplay;
-    if (display.proofMode || !display.focusedGlyphVisible) return;
+    if (this.editor.proofMode || !this.editor.focusedGlyphVisible()) return;
 
-    const instance = this.editor.glyphInstance;
+    const instance = this.editor.previewGlyphInstance;
     if (!instance) return;
 
     this.#segments.draw(canvas, instance.geometry, this.editor.selection, this.editor.hover);

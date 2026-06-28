@@ -3,13 +3,13 @@ import type { Signal } from "@/lib/signals/signal";
 import { computed, signal, track, type ComputedSignal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
 import { Contour, Segment } from "@shift/glyph-state";
-import type { Glyph } from "./Glyph";
+import type { Glyph, GlyphGeometry, GlyphLayer } from "./Glyph";
 import type { ContourData, GlyphId } from "@shift/types";
 import type { LayerContourCoordinates } from "./GlyphLayerState";
 
-interface GlyphResolver {
-  glyphForId(glyphId: GlyphId): Glyph | null;
-}
+type GlyphForComponent = (glyphId: GlyphId) => Glyph | null;
+type AuthoredLayerForLocation = (glyphId: GlyphId, location: AxisLocation) => GlyphLayer | null;
+type ResolvedGeometryForLocation = (glyphId: GlyphId, location: AxisLocation) => GlyphGeometry;
 
 type OutlineCommand =
   | { readonly kind: "move"; readonly to: Point2D }
@@ -229,7 +229,9 @@ class GeometryOutlinePart implements OutlinePart {
 export class GlyphOutline {
   readonly #glyph: Glyph;
   readonly #variationLocation: Signal<AxisLocation>;
-  readonly #resolver: GlyphResolver;
+  readonly #glyphForComponent: GlyphForComponent;
+  readonly #authoredLayerForLocation: AuthoredLayerForLocation;
+  readonly #resolvedGeometryForLocation: ResolvedGeometryForLocation;
   readonly #data: ComputedSignal<OutlineData>;
   readonly #bounds: ComputedSignal<BoundsType | null>;
   readonly #drawPath: ComputedSignal<Path2D>;
@@ -240,15 +242,30 @@ export class GlyphOutline {
    *
    * @param glyph - Glyph whose contours and components are expanded.
    * @param variationLocation - Design location that selects layer-backed or geometry-backed outline parts.
-   * @param resolver - Glyph lookup used to expand component references.
+   * @param glyphForComponent - Glyph lookup used to expand component references.
+   * @param authoredLayerForLocation - Exact authored layer lookup for layer-backed outline parts.
+   * @param resolvedGeometryForLocation - Resolved geometry lookup for interpolated outline parts.
    */
-  constructor(glyph: Glyph, variationLocation: Signal<AxisLocation>, resolver: GlyphResolver) {
+  constructor(
+    glyph: Glyph,
+    variationLocation: Signal<AxisLocation>,
+    glyphForComponent: GlyphForComponent,
+    authoredLayerForLocation: AuthoredLayerForLocation,
+    resolvedGeometryForLocation: ResolvedGeometryForLocation,
+  ) {
     this.#glyph = glyph;
     this.#variationLocation = variationLocation;
-    this.#resolver = resolver;
+    this.#glyphForComponent = glyphForComponent;
+    this.#authoredLayerForLocation = authoredLayerForLocation;
+    this.#resolvedGeometryForLocation = resolvedGeometryForLocation;
 
     this.#data = computed(() =>
-      new GlyphOutlineBuilder(this.#variationLocation.value, this.#resolver).build(this.#glyph),
+      new GlyphOutlineBuilder(
+        this.#variationLocation.value,
+        this.#glyphForComponent,
+        this.#authoredLayerForLocation,
+        this.#resolvedGeometryForLocation,
+      ).build(this.#glyph),
     );
 
     this.#bounds = computed(() => {
@@ -308,7 +325,7 @@ export class GlyphOutline {
    *
    * @returns A signal that invalidates when the current SVG path data changes.
    */
-  get $svgPath(): Signal<string> {
+  get svgPathCell(): Signal<string> {
     return this.#svgPath;
   }
 
@@ -353,12 +370,21 @@ export class GlyphOutline {
  */
 class GlyphOutlineBuilder {
   readonly #location: AxisLocation;
-  readonly #resolver: GlyphResolver;
+  readonly #glyphForComponent: GlyphForComponent;
+  readonly #authoredLayerForLocation: AuthoredLayerForLocation;
+  readonly #resolvedGeometryForLocation: ResolvedGeometryForLocation;
   readonly #stack = new Set<GlyphId>();
 
-  constructor(location: AxisLocation, resolver: GlyphResolver) {
+  constructor(
+    location: AxisLocation,
+    glyphForComponent: GlyphForComponent,
+    authoredLayerForLocation: AuthoredLayerForLocation,
+    resolvedGeometryForLocation: ResolvedGeometryForLocation,
+  ) {
     this.#location = location;
-    this.#resolver = resolver;
+    this.#glyphForComponent = glyphForComponent;
+    this.#authoredLayerForLocation = authoredLayerForLocation;
+    this.#resolvedGeometryForLocation = resolvedGeometryForLocation;
   }
 
   build(glyph: Glyph): OutlineData {
@@ -370,7 +396,7 @@ class GlyphOutlineBuilder {
     this.#stack.add(glyph.id);
 
     const parts: OutlinePart[] = [];
-    const source = glyph.layerAt(this.#location);
+    const source = this.#authoredLayerForLocation(glyph.id, this.#location);
 
     if (source) {
       track(source.structureCell);
@@ -390,7 +416,7 @@ class GlyphOutlineBuilder {
         const componentValues = coordinates.components[index];
         if (!componentValues) continue;
 
-        const componentGlyph = this.#resolver.glyphForId(component.baseGlyphId);
+        const componentGlyph = this.#glyphForComponent(component.baseGlyphId);
         if (!componentGlyph) continue;
 
         track(componentValues.matrix);
@@ -401,13 +427,13 @@ class GlyphOutlineBuilder {
         parts.push(...child.parts);
       }
     } else {
-      const geometry = glyph.geometryAt(this.#location);
+      const geometry = this.#resolvedGeometryForLocation(glyph.id, this.#location);
       for (const contour of geometry.contours) {
         parts.push(new GeometryOutlinePart(contour, matrix));
       }
 
       for (const component of geometry.components) {
-        const componentGlyph = this.#resolver.glyphForId(component.baseGlyphId);
+        const componentGlyph = this.#glyphForComponent(component.baseGlyphId);
         if (!componentGlyph) continue;
 
         const child = this.#collect(componentGlyph, Mat.Compose(matrix, component.matrix));

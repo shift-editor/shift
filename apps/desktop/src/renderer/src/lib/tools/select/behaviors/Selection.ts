@@ -8,7 +8,7 @@ export class Selection implements SelectBehavior {
     if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
 
     const editor = ctx.editor;
-    const instance = editor.glyphInstance;
+    const instance = editor.previewGlyphInstance;
     if (!instance) return false;
 
     const geometry = instance.geometry;

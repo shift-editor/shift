@@ -36,11 +36,9 @@ function createBoundingBox(rect: Rect2D) {
     camera: {
       trackViewportTransform: () => {},
     },
-    glyphDisplayCell: signal({
-      proofMode: false,
-      handlesVisible: true,
-      focusedGlyphVisible: true,
-    }),
+    proofModeCell: signal(false),
+    handlesVisibleCell: signal(true),
+    focusedGlyphVisibleCell: signal(true),
     fromGlyphLocal: project,
     screenToUpmDistance: (pixels: number) => pixels,
   } as unknown as Editor;

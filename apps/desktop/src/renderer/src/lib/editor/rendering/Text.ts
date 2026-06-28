@@ -68,10 +68,10 @@ export class Text {
             continue;
           }
 
-          const glyph = g.glyphId ? font.glyphForId(g.glyphId) : null;
-          if (!glyph) continue;
+          const instance = g.glyphId ? font.instance(g.glyphId, designLocation) : null;
+          if (!instance) continue;
 
-          const outline = glyph.instance(designLocation).render.outline;
+          const outline = instance.render.outline;
 
           canvas.save();
           canvas.translate(runBase + g.origin.x + g.xOffset, line.y + g.origin.y + g.yOffset);

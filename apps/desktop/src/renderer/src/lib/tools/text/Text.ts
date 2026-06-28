@@ -18,23 +18,20 @@ export class TextTool extends BaseTool<TextState> {
   }
 
   override activate(): void {
-    const owner = this.editor.glyph.peek()?.handle ?? null;
+    const owner = this.editor.previewGlyphRecordCell.peek();
     if (!owner) {
       this.state = { type: "typing" };
-      this.editor.glyphDisplay;
       return;
     }
 
     const ownerName = owner.name;
-    const record = this.editor.font.recordForName(ownerName);
-    if (record) {
-      this.editor.font.loadGlyph(record.id).catch((error) => {
-        console.error("failed to load text owner glyph", error);
-      });
-    }
+    const ownerUnicode = owner.unicodes[0] ?? null;
+    this.editor.font.loadGlyph(owner.id).catch((error) => {
+      console.error("failed to load text owner glyph", error);
+    });
 
     const run = this.editor.textRuns.switchTo(ownerName);
-    run.seed(glyphTextItem(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);
+    run.seed(glyphTextItem(ownerName, ownerUnicode), this.editor.drawOffset.x);
     run.interaction.suspend();
     run.setCursorVisible(true);
 

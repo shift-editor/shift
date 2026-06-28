@@ -12,10 +12,16 @@
  */
 
 import { Editor } from "@/lib/editor/Editor";
-import type { Glyph } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { mintGlyphId, mintLayerId, type GlyphId, type GlyphName, type Unicode } from "@shift/types";
+import {
+  mintGlyphId,
+  mintLayerId,
+  type GlyphId,
+  type GlyphName,
+  type GlyphRecord,
+  type Unicode,
+} from "@shift/types";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 
@@ -56,9 +62,7 @@ export class TestEditor extends Editor {
   async startSession(name = "A", unicode: number | null = 65): Promise<this> {
     await this.#stack.createWorkspace();
 
-    const glyph = await this.#createAndOpenGlyph(name, unicode);
-    const record = this.font.recordForName(glyph.handle.name);
-    if (!record) throw new Error("created glyph did not appear in the font directory");
+    const record = await this.#createAndOpenGlyph(name, unicode);
     this.#placeGlyph(record.id);
     return this;
   }
@@ -68,7 +72,7 @@ export class TestEditor extends Editor {
     await this.#createAndOpenGlyph(name, unicode);
   }
 
-  async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
+  async #createAndOpenGlyph(name: string, unicode: number | null): Promise<GlyphRecord> {
     const glyphId = mintGlyphId();
     const sourceId = this.font.defaultSource.id;
     const applied = await this.#stack.editCoordinator.apply([
@@ -93,9 +97,11 @@ export class TestEditor extends Editor {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    const glyph = await this.font.loadGlyph(record.id, { sourceIds: [sourceId] });
-    if (!glyph) throw new Error("glyphForId returned null for a loaded glyph");
-    return glyph;
+    const loaded = await this.font.loadGlyph(record.id, {
+      sourceIds: [sourceId],
+    });
+    if (!loaded) throw new Error("created glyph did not load");
+    return record;
   }
 
   #placeGlyph(glyphId: GlyphId): void {

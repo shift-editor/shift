@@ -6,8 +6,8 @@ export class UpgradeSegment implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
     if (state.type !== "ready" || !event.altKey) return false;
 
-    const instance = ctx.editor.glyphInstance;
-    if (!instance?.layer) return false;
+    const instance = ctx.editor.previewGlyphInstance;
+    if (!instance || !ctx.editor.editingGlyphLayer) return false;
 
     const geometry = instance.geometry;
     const hit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);

@@ -1,6 +1,6 @@
-import type { FontMetrics } from "@shift/types";
-import type { Glyph } from "@/lib/model/Glyph";
-import { type Signal, useSignalState } from "@/lib/signals";
+import type { FontMetrics, GlyphId } from "@shift/types";
+import type { Font } from "@/lib/model/Font";
+import { type Signal, useSignalTrigger } from "@/lib/signals";
 import type { AxisLocation } from "@/types/variation";
 
 export const CELL_HEIGHT = 75;
@@ -43,7 +43,8 @@ export function computeCellWidth(
 }
 
 interface GlyphPreviewProps {
-  glyph: Glyph | null;
+  font: Font;
+  glyphId: GlyphId | null;
   unicode: number | null;
   metrics: FontMetrics;
   designLocation: Signal<AxisLocation>;
@@ -51,21 +52,23 @@ interface GlyphPreviewProps {
 }
 
 export function GlyphPreview({
-  glyph,
+  font,
+  glyphId,
   unicode,
   metrics,
   designLocation,
   height = CELL_HEIGHT,
 }: GlyphPreviewProps) {
-  if (!glyph) {
+  if (!glyphId) {
     return <FallbackCell metrics={metrics} height={height} unicode={unicode} advance={null} />;
   }
 
   return (
     <GlyphCell
+      font={font}
       metrics={metrics}
       height={height}
-      glyph={glyph}
+      glyphId={glyphId}
       unicode={unicode}
       designLocation={designLocation}
     />
@@ -73,35 +76,33 @@ export function GlyphPreview({
 }
 
 function GlyphCell({
+  font,
   metrics,
   height,
-  glyph,
+  glyphId,
   unicode,
   designLocation,
 }: {
+  font: Font;
   metrics: FontMetrics;
   height: number;
-  glyph: Glyph;
+  glyphId: GlyphId;
   unicode: number | null;
   designLocation: Signal<AxisLocation>;
 }) {
-  const outline = glyph.instance(designLocation).render.outline;
+  const instance = font.instance(glyphId, designLocation);
+  const outline = instance?.render.outline ?? null;
 
-  const svgPath = useSignalState(outline.$svgPath);
-  const advance = useSignalState(glyph.$xAdvance);
+  useSignalTrigger(outline?.svgPathCell);
+  useSignalTrigger(instance?.xAdvanceCell);
+  const svgPath = outline?.svgPath ?? "";
+  const advance = instance?.xAdvance ?? null;
 
   const cellWidth = computeCellWidth(metrics, advance, height);
   const containerStyle = { width: cellWidth, height };
 
   if (!svgPath) {
-    return (
-      <FallbackCell
-        metrics={metrics}
-        height={height}
-        unicode={glyph.handle.unicode ?? unicode}
-        advance={advance}
-      />
-    );
+    return <FallbackCell metrics={metrics} height={height} unicode={unicode} advance={advance} />;
   }
 
   const viewBox = glyphPreviewViewBox(metrics, advance);

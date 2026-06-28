@@ -28,11 +28,14 @@ describe("Editor", () => {
       expect(itemId && editor.layerForItem(itemId)).not.toBeNull();
     });
 
-    it("derives active glyph from the geometry-shown scene item", () => {
+    it("derives the preview glyph record from the geometry-shown scene item", () => {
       const record = editor.font.recordForName("S")!;
 
       editor.scene.clear();
-      const itemId = editor.scene.addGlyph({ glyphId: record.id, origin: { x: 0, y: 0 } });
+      const itemId = editor.scene.addGlyph({
+        glyphId: record.id,
+        origin: { x: 0, y: 0 },
+      });
       editor.scene.setGeometryItems([itemId]);
 
       expect(editor.scene.value.items).toHaveLength(1);
@@ -42,23 +45,26 @@ describe("Editor", () => {
         placement: { origin: { x: 0, y: 0 } },
       });
       expect(editor.scene.isGeometryShown(itemId)).toBe(true);
-      expect(editor.glyph.peek()?.id).toBe(record.id);
+      expect(editor.previewGlyphRecordCell.peek()?.id).toBe(record.id);
       expect(editor.layerForItem(itemId)).not.toBeNull();
     });
 
-    it("clearing the scene clears the derived active glyph", () => {
+    it("clearing the scene clears the derived preview glyph record", () => {
       const record = editor.font.recordForName("S")!;
 
       editor.scene.clear();
-      const itemId = editor.scene.addGlyph({ glyphId: record.id, origin: { x: 0, y: 0 } });
+      const itemId = editor.scene.addGlyph({
+        glyphId: record.id,
+        origin: { x: 0, y: 0 },
+      });
       editor.scene.setGeometryItems([itemId]);
 
-      expect(editor.glyph.peek()?.id).toBe(record.id);
+      expect(editor.previewGlyphRecordCell.peek()?.id).toBe(record.id);
 
       editor.scene.clear();
 
       expect(editor.scene.value.items).toEqual([]);
-      expect(editor.glyph.peek()).toBeNull();
+      expect(editor.previewGlyphRecordCell.peek()).toBeNull();
     });
 
     it("can place the same glyph id twice with distinct item ids", async () => {
@@ -98,7 +104,10 @@ describe("Editor", () => {
       expect(editor.scene.isGeometryShown(right)).toBe(false);
 
       editor.scene.moveItemBy(right, { x: 30, y: 5 });
-      expect(editor.scene.item(right)?.placement.origin).toEqual({ x: 730, y: 5 });
+      expect(editor.scene.item(right)?.placement.origin).toEqual({
+        x: 730,
+        y: 5,
+      });
     });
   });
 

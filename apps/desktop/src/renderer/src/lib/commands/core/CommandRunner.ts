@@ -11,10 +11,10 @@ import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { Command, CommandContext } from "./Command";
 
 export class CommandRunner {
-  readonly #$layer: Signal<GlyphLayer | null>;
+  readonly #layerCell: Signal<GlyphLayer | null>;
 
-  constructor($layer: Signal<GlyphLayer | null>) {
-    this.#$layer = $layer;
+  constructor(layerCell: Signal<GlyphLayer | null>) {
+    this.#layerCell = layerCell;
   }
 
   run<TResult>(command: Command<TResult>): TResult {
@@ -22,7 +22,7 @@ export class CommandRunner {
   }
 
   #context(): CommandContext {
-    const layer = this.#$layer.peek();
+    const layer = this.#layerCell.peek();
     if (!layer) {
       throw new Error("Cannot execute command without an active glyph layer");
     }

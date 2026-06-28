@@ -1,11 +1,11 @@
 import type { Canvas } from "../Canvas";
-import type { Glyph } from "@/lib/model/Glyph";
+import type { GlyphInstanceGeometry } from "@/lib/model/Glyph";
 import type { SegmentId } from "@/types/indicator";
 
 export class DebugOverlays {
   draw(
     canvas: Canvas,
-    glyph: Glyph,
+    geometry: GlyphInstanceGeometry,
     overlays: {
       segmentBounds: boolean;
       tightBounds: boolean;
@@ -18,50 +18,59 @@ export class DebugOverlays {
     const { debug } = canvas.theme;
 
     if (overlays.segmentBounds) {
-      this.#drawSegmentBounds(canvas, glyph, debug.segmentBounds);
+      this.#drawSegmentBounds(canvas, geometry, debug.segmentBounds);
     }
     if (overlays.tightBounds) {
-      this.#drawTightBounds(canvas, glyph, hoveredSegmentId, debug.tightBounds);
+      this.#drawTightBounds(canvas, geometry, hoveredSegmentId, debug.tightBounds);
     }
     if (overlays.hitRadii) {
-      this.#drawHitRadii(canvas, glyph, hitRadiusUpm, debug.hitRadii);
+      this.#drawHitRadii(canvas, geometry, hitRadiusUpm, debug.hitRadii);
     }
     if (overlays.glyphBbox) {
-      this.#drawGlyphBbox(canvas, glyph, debug.glyphBbox);
+      this.#drawGlyphBbox(canvas, geometry, debug.glyphBbox);
     }
   }
 
-  #drawSegmentBounds(canvas: Canvas, glyph: Glyph, color: string): void {
-    for (const { segment } of glyph.segments()) {
-      const b = segment.bounds;
-      canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
+  #drawSegmentBounds(canvas: Canvas, geometry: GlyphInstanceGeometry, color: string): void {
+    for (const contour of geometry.contours) {
+      for (const segment of contour.segments()) {
+        const b = segment.bounds;
+        canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
+      }
     }
   }
 
   #drawTightBounds(
     canvas: Canvas,
-    glyph: Glyph,
+    geometry: GlyphInstanceGeometry,
     hoveredSegmentId: SegmentId | null,
     color: string,
   ): void {
     if (hoveredSegmentId === null) return;
-    for (const { segment } of glyph.segments()) {
-      if (segment.id !== hoveredSegmentId) continue;
-      const b = segment.bounds;
-      canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
-      return;
+    for (const contour of geometry.contours) {
+      for (const segment of contour.segments()) {
+        if (segment.id !== hoveredSegmentId) continue;
+        const b = segment.bounds;
+        canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
+        return;
+      }
     }
   }
 
-  #drawHitRadii(canvas: Canvas, glyph: Glyph, hitRadiusUpm: number, color: string): void {
+  #drawHitRadii(
+    canvas: Canvas,
+    geometry: GlyphInstanceGeometry,
+    hitRadiusUpm: number,
+    color: string,
+  ): void {
     const r = hitRadiusUpm * canvas.camera.upmScale * canvas.camera.zoom;
-    for (const point of glyph.allPoints) {
+    for (const point of geometry.allPoints) {
       canvas.strokeCircle({ x: point.x, y: point.y }, r, color, 1);
     }
   }
 
-  #drawGlyphBbox(canvas: Canvas, glyph: Glyph, color: string): void {
-    const b = glyph.bounds;
+  #drawGlyphBbox(canvas: Canvas, geometry: GlyphInstanceGeometry, color: string): void {
+    const b = geometry.bounds;
     if (!b) return;
     canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
   }

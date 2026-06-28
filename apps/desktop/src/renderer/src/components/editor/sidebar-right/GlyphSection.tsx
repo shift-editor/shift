@@ -10,17 +10,18 @@ import { useGlyphXAdvance } from "@/hooks/useGlyphXAdvance";
 
 export const GlyphSection = () => {
   const editor = useEditor();
-  const glyph = useSignalState(editor.glyph);
+  const glyph = useSignalState(editor.previewGlyphRecordCell);
   const sidebearings = useGlyphSidebearings();
   const xAdvance = useGlyphXAdvance();
   const glyphInfo = getGlyphInfo();
 
-  const unicode = formatCodepointAsUPlus(glyph?.unicode ?? 0);
+  const unicodeValue = glyph?.unicodes[0] ?? 0;
+  const unicode = formatCodepointAsUPlus(unicodeValue);
   const lsb =
     sidebearings.sidebearings.lsb === null ? null : Math.round(sidebearings.sidebearings.lsb);
   const rsb =
     sidebearings.sidebearings.rsb === null ? null : Math.round(sidebearings.sidebearings.rsb);
-  const sidebearingsEnabled = sidebearings.hasLayer && lsb !== null && rsb !== null;
+  const sidebearingsEnabled = sidebearings.editable && lsb !== null && rsb !== null;
 
   return (
     <SidebarSection title="Glyph">
@@ -52,11 +53,11 @@ export const GlyphSection = () => {
           <EditableSidebarInput
             className="text-center"
             value={Math.round(xAdvance.xAdvance)}
-            disabled={!xAdvance.hasLayer}
+            disabled={!xAdvance.editable}
             onValueChange={(width) => editor.setXAdvance(width)}
           />
         </div>
-        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph?.unicode ?? 0)}</div>
+        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(unicodeValue)}</div>
       </main>
     </SidebarSection>
   );
