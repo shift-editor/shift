@@ -104,5 +104,5 @@ describe("TextLayout", () => {
 
 function xAdvance(name: string, font: Font): number {
   const record = font.recordForName(name);
-  return record ? (font.glyphLayerForId(record.id, font.defaultSource.id)?.xAdvance ?? 0) : 0;
+  return record ? (font.layer(record.id, font.defaultSource.id)?.xAdvance ?? 0) : 0;
 }

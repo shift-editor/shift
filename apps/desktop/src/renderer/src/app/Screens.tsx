@@ -42,7 +42,7 @@ const WorkspaceScreens = () => {
   const workspace = useWorkspace();
   const font = useFont();
   const editor = useEditor();
-  const documentLoaded = useSignalState(font.$loaded);
+  const documentLoaded = useSignalState(font.loadedCell);
   const [connectionError, setConnectionError] = useState<unknown>(null);
 
   useEffect(() => {

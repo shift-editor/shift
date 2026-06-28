@@ -104,8 +104,8 @@ class TranslateTarget {
   }
 
   static fromDragStart(editor: Editor, event: ToolEventOf<"dragStart">): TranslateTarget | null {
-    const instance = editor.glyphInstance;
-    if (!instance?.layer) return null;
+    const instance = editor.previewGlyphInstance;
+    if (!instance || !editor.editingGlyphLayer) return null;
 
     const geometry = instance.geometry;
     const pos = event.coords.glyphLocal;
@@ -272,7 +272,7 @@ class TranslateDrag {
 
   constructor(editor: Editor, target: TranslateTarget, pointerStart: Point2D) {
     this.#target = target;
-    const instance = editor.glyphInstance;
+    const instance = editor.previewGlyphInstance;
 
     this.#draft = editor.beginGlyphLayerEditDraft({
       points: target.pointIds,

@@ -16,12 +16,10 @@ import json as json_mod
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
-from markdown_it import MarkdownIt
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MD_PARSER = MarkdownIt("commonmark")
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -43,7 +41,7 @@ EXPECTED_DOCS = [
     "apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/commands/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/lib/reactive/docs/DOCS.md",
+    "apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md",
     "packages/types/docs/DOCS.md",
     "packages/geo/docs/DOCS.md",
     "packages/glyph-state/docs/DOCS.md",
@@ -96,7 +94,7 @@ class Issue:
 
     def __str__(self) -> str:
         prefix = "WARN" if self.severity == "warning" else self.category.upper().replace("_", " ")
-        return f"{prefix}: {self.message}"
+        return f"{prefix}: {self.doc}: {self.message}"
 
     def to_dict(self) -> dict:
         return {
@@ -107,13 +105,122 @@ class Issue:
         }
 
 
+@dataclass
+class MarkdownToken:
+    """Small token shape for the markdown constructs this checker needs."""
+
+    type: str
+    tag: str = ""
+    info: str = ""
+    content: str = ""
+    children: list["MarkdownToken"] | None = None
+    attrs: dict[str, str] | None = None
+
+
 # ---------------------------------------------------------------------------
 # AST helpers
 # ---------------------------------------------------------------------------
 
 def parse_doc(path: Path) -> list:
-    """Parse a markdown file and return its token list."""
-    return MD_PARSER.parse(path.read_text())
+    """Parse a markdown file and return the token list used by this checker."""
+    tokens: list[MarkdownToken] = []
+    in_fence = False
+    fence_marker = ""
+    fence_info = ""
+    fence_content: list[str] = []
+
+    for line in path.read_text().splitlines():
+        stripped = line.lstrip()
+        fence_match = re.match(r"^(```+|~~~+)\s*(.*)$", stripped)
+
+        if in_fence:
+            if fence_match and fence_match.group(1).startswith(fence_marker[0]):
+                tokens.append(MarkdownToken(
+                    type="fence",
+                    info=fence_info,
+                    content="\n".join(fence_content),
+                ))
+                in_fence = False
+                fence_marker = ""
+                fence_info = ""
+                fence_content = []
+            else:
+                fence_content.append(line)
+            continue
+
+        if fence_match:
+            in_fence = True
+            fence_marker = fence_match.group(1)
+            fence_info = fence_match.group(2).strip()
+            fence_content = []
+            continue
+
+        heading_match = re.match(r"^(#{1,6})\s+(.+?)\s*#*\s*$", stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            content = heading_match.group(2).strip()
+            tokens.append(MarkdownToken(type="heading_open", tag=f"h{level}"))
+            tokens.append(MarkdownToken(
+                type="inline",
+                content=content,
+                children=_parse_inline(content),
+            ))
+            continue
+
+        if stripped:
+            tokens.append(MarkdownToken(
+                type="inline",
+                content=stripped,
+                children=_parse_inline(stripped),
+            ))
+
+    if in_fence:
+        tokens.append(MarkdownToken(
+            type="fence",
+            info=fence_info,
+            content="\n".join(fence_content),
+        ))
+
+    return tokens
+
+
+def _parse_inline(text: str) -> list[MarkdownToken]:
+    """Parse links and inline code spans from a single markdown line."""
+    children: list[MarkdownToken] = []
+    i = 0
+
+    while i < len(text):
+        if text[i] == "`":
+            end = text.find("`", i + 1)
+            if end == -1:
+                children.append(MarkdownToken(type="text", content=text[i:]))
+                break
+            children.append(MarkdownToken(type="code_inline", content=text[i + 1:end]))
+            i = end + 1
+            continue
+
+        if text[i] == "[":
+            label_end = text.find("]", i + 1)
+            if label_end != -1 and label_end + 1 < len(text) and text[label_end + 1] == "(":
+                href_end = text.find(")", label_end + 2)
+                if href_end != -1:
+                    label = text[i + 1:label_end]
+                    href = text[label_end + 2:href_end]
+                    children.append(MarkdownToken(type="link_open", attrs={"href": href}))
+                    children.append(MarkdownToken(type="text", content=label))
+                    children.append(MarkdownToken(type="link_close"))
+                    i = href_end + 1
+                    continue
+
+        next_code = text.find("`", i)
+        next_link = text.find("[", i)
+        stops = [pos for pos in (next_code, next_link) if pos != -1]
+        end = min(stops) if stops else len(text)
+        children.append(MarkdownToken(type="text", content=text[i:end]))
+        i = end
+
+    return children
+
 
 
 def extract_headings(tokens: list) -> list[tuple[int, str]]:
@@ -403,7 +510,16 @@ def _last_commit_date(path: str) -> str | None:
 def _symbol_exists(symbol: str) -> bool:
     """Check if a symbol exists anywhere in the codebase source files."""
     result = subprocess.run(
-        ["git", "grep", "-lq", symbol, "--", "*.ts", "*.rs", "*.tsx"],
+        [
+            "git",
+            "grep",
+            "-lq",
+            symbol,
+            "--",
+            ":(glob)**/*.ts",
+            ":(glob)**/*.tsx",
+            ":(glob)**/*.rs",
+        ],
         capture_output=True, text=True, cwd=REPO_ROOT,
     )
     return result.returncode == 0
@@ -500,10 +616,12 @@ def main():
 
     # Report
     if json_output:
+        errors = [i for i in all_issues if i.severity == "error"]
+        warnings = [i for i in all_issues if i.severity == "warning"]
         output = {
             "total": len(all_issues),
-            "errors": len([i for i in all_issues if i.severity == "error"]),
-            "warnings": len([i for i in all_issues if i.severity == "warning"]),
+            "errors": len(errors),
+            "warnings": len(warnings),
             "by_category": {},
             "issues": [i.to_dict() for i in all_issues],
         }
@@ -511,6 +629,7 @@ def main():
             output["by_category"].setdefault(issue.category, 0)
             output["by_category"][issue.category] += 1
         print(json_mod.dumps(output, indent=2))
+        sys.exit(1 if errors or warnings else 0)
     else:
         print()
         errors = [i for i in all_issues if i.severity == "error"]

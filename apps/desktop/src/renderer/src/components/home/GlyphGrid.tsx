@@ -50,7 +50,6 @@ import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button, Input } from "@shift/ui";
 import type { GlyphId, GlyphName } from "@shift/types";
-import type { Glyph } from "@/lib/model/Glyph";
 
 const ROW_HEIGHT = CELL_HEIGHT + 40 + 8;
 const NOMINAL_CELL_WIDTH = 100;
@@ -87,7 +86,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const editor = useEditor();
   const font = editor.font;
   const metrics = font.metrics;
-  const designLocation = editor.$designLocation;
+  const designLocation = editor.designLocationCell;
   const { filteredGlyphs: glyphs } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +96,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
   // is the single source for that. We avoid a sync width read on mount so layout doesn't jitter when
   // the container isn't laid out yet or when navigating back. We only set state when the computed
   // layout (columns, cellWidth) actually changes.
-  const [layout, setLayout] = useState(() => ({ columns: 1, cellWidth: NOMINAL_CELL_WIDTH }));
+  const [layout, setLayout] = useState(() => ({
+    columns: 1,
+    cellWidth: NOMINAL_CELL_WIDTH,
+  }));
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -130,7 +132,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     () => visibleGlyphIdsForRows(glyphs, columns, virtualRows),
     [glyphs, columns, visibleRowsKey],
   );
-  const [loadedGlyphs, setLoadedGlyphs] = useState<ReadonlyMap<GlyphId, Glyph>>(() => new Map());
+  const [loadedGlyphIds, setLoadedGlyphIds] = useState<ReadonlySet<GlyphId>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -138,10 +140,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
     async function load(): Promise<void> {
       try {
         const loaded = await font.loadGlyphs(visibleGlyphIds);
-        if (!cancelled) setLoadedGlyphs(loaded);
+        if (!cancelled) setLoadedGlyphIds(loaded);
       } catch (error) {
         console.error("failed to load visible glyphs", error);
-        if (!cancelled) setLoadedGlyphs(new Map());
+        if (!cancelled) setLoadedGlyphIds(new Set());
       }
     }
 
@@ -155,8 +157,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const handleCellClick = useCallback(
     async (glyph: GlyphCatalogItem) => {
       try {
-        const loadedGlyph = await font.loadGlyph(glyph.id);
-        if (!loadedGlyph) return;
+        const loaded = await font.loadGlyph(glyph.id);
+        if (!loaded) return;
 
         navigate(`/editor/${encodeURIComponent(glyph.id)}`);
       } catch (error) {
@@ -199,7 +201,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
                 className="flex gap-2 px-4"
               >
                 {rowGlyphs.map((glyph) => {
-                  const previewGlyph = loadedGlyphs.get(glyph.id) ?? null;
+                  const previewGlyphId = loadedGlyphIds.has(glyph.id) ? glyph.id : null;
                   return (
                     <div
                       key={glyph.id}
@@ -217,7 +219,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
                         onClick={() => handleCellClick(glyph)}
                       >
                         <GlyphPreview
-                          glyph={previewGlyph}
+                          font={font}
+                          glyphId={previewGlyphId}
                           unicode={glyph.unicode}
                           metrics={metrics}
                           designLocation={designLocation}

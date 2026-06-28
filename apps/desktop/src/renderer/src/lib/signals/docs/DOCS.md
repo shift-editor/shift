@@ -10,14 +10,14 @@ Fine-grained reactivity system providing automatic dependency tracking and effic
 - **Architecture Invariant:** During `batch`, only effects are deferred. Computed values remain available with fresh data inside the batch body.
 - **Architecture Invariant: CRITICAL:** The module-level `currentComputation` variable is the sole mechanism for dependency tracking. Any code that saves/restores it incorrectly will silently break the entire reactive graph. `untracked` and the internal `#recompute`/`execute` methods carefully save and restore this variable.
 - **Architecture Invariant: CRITICAL:** Re-entrant notification is guarded by the `isNotifying` flag. Signals written during notification are queued in `pendingNotifications` and flushed after the current notification pass. Without this, subscribers could see inconsistent state.
-- **Architecture Invariant:** Classes expose `WritableSignal` fields with a `$` prefix (e.g., `$zoom`). Public getters return the read-only `Signal<T>` type. Use `private` (not `#`) for `$`-prefixed fields to avoid `#$` awkwardness.
-- **Architecture Invariant: Convention:** `$foo` public accessors are for **raw state** — writable signals or cheap computeds — safe to subscribe to via `useSignalState`/`useSignalTrigger`. **Derived values** (bounds, paths, sidebearings) are exposed only as plain getters (`.foo`) and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time. Subscribing directly to an expensive ComputedSignal forces it to re-run on every input fire — that's the footgun to avoid.
+- **Architecture Invariant:** Signal-bearing fields and accessors use the `*Cell` suffix. The plain noun is the unwrapped snapshot value: `zoomCell` is `Signal<number>`, `zoom` is `number`.
+- **Architecture Invariant: Convention:** `fooCell` accessors are for raw state or cheap computeds that are safe to subscribe to via `useSignalState`/`useSignalTrigger`. Expensive derived values (bounds, paths, sidebearings) are exposed as plain getters and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time.
 - **Architecture Invariant:** `ComputedSignal.dispose()` clears both its `dependencies` and its `#subscribers`. Anything that was reaching the source signal _through_ this computed loses that path. If the consumer needs to keep firing across the lifetime of the source, it must hold a **direct** subscription to the source — not rely on a chain that passes through a disposable intermediate (e.g. an LRU-cached object's computed).
 
 ## Codemap
 
 ```
-reactive/
+signals/
   signal.ts          — signal, computed, effect, batch, untracked, isTracking
   useSignal.ts       — useSignalState, useSignalTrigger (React bridges)
   index.ts           — public re-exports
@@ -58,14 +58,15 @@ Purpose-specific hooks for derived values live under `hooks/`:
 
 ### Add a new reactive property to a manager class
 
-1. Add a `private $fieldName: WritableSignal<T>` field.
-2. Initialize it in the constructor: `this.$fieldName = signal(initialValue)`.
-3. Add a public getter returning `Signal<T>`: `get fieldName(): Signal<T> { return this.$fieldName; }`.
-4. Write mutators that call `this.$fieldName.set(newValue)` or `.update(fn)`.
+1. Add a private `fieldNameCell: WritableSignal<T>` field.
+2. Initialize it in the constructor: `this.fieldNameCell = signal(initialValue)`.
+3. Add a public getter for the snapshot value: `get fieldName(): T { return this.fieldNameCell.peek(); }`.
+4. Add a public getter for the signal when callers need reactivity: `get fieldNameCell(): Signal<T> { return this.fieldNameCell; }`.
+5. Write mutators that call `this.fieldNameCell.set(newValue)` or `.update(fn)`.
 
 ### Subscribe to a signal in a React component
 
-1. Import `useSignalState` from `@/lib/reactive`.
+1. Import `useSignalState` from `@/lib/signals`.
 2. Call `const value = useSignalState(someSignal)` in the component body.
 3. The component re-renders when the signal changes.
 
@@ -88,6 +89,7 @@ Pass `{ equals: () => false }` as the second argument to `signal()`. This is use
 - **Effects run synchronously.** Setting a signal inside an effect body can trigger other effects immediately (unless inside a `batch`). Careless writes inside effects can cause cascading re-executions.
 - **Computed propagates eagerly on dirty, evaluates lazily.** When a computed's dependency changes, it marks itself dirty and immediately notifies its own subscribers (which may be other computeds or effects). But it does not recompute its value until `.value` is accessed.
 - **`peek()` inside a computed breaks reactivity.** If a computed reads a signal via `.peek()`, it will not re-derive when that signal changes. This is intentional but easy to forget.
+- **Use `track(cell)` for invalidation-only dependencies.** Inside a computed/effect, prefer `track(fooCell)` when the code needs to subscribe to `fooCell` but does not need the current value. Prefer `const foo = fooCell.value` when the value is actually used.
 - **Circular computed chains.** There is no cycle detection. A computed that reads itself (directly or indirectly) will hit the `#computing` re-entrancy guard and return the stale value.
 - **`useSignalState` must not be called conditionally.** It is a React hook and follows the rules of hooks.
 - **Disposing a computed silently breaks chains that flowed through it.** If `A -> B -> C` (A is a source signal, B is a computed, C subscribes to B), and B is disposed, A no longer notifies C -- but C does not know it has been orphaned. Pattern: when C's lifetime can outlive B's, give C a direct edge to A in addition to the indirect one. The canonical case is `GlyphOutline`: it reads the variation-location signal directly so composite outlines stay reactive through base glyph lookups.
@@ -96,7 +98,7 @@ Pass `{ equals: () => false }` as the second argument to `signal()`. This is use
 
 ```bash
 # Run reactive module tests
-cd apps/desktop && npx vitest run src/renderer/src/lib/reactive/signal.test.ts
+cd apps/desktop && npx vitest run src/renderer/src/lib/signals/signal.test.ts
 
 # Run full test suite
 cd apps/desktop && npm test
@@ -105,10 +107,10 @@ cd apps/desktop && npm test
 ## Related
 
 - `Editor` -- primary consumer; holds `WritableSignal` fields for tool state, cursor, preview mode
-- `Camera` -- uses `$zoom`, `$panX`, `$panY` as `WritableSignal` fields
-- `HoverManager` -- uses `$hoveredPointId`, `$hoveredSegmentId`, etc.
+- `Camera` -- uses `zoomCell`, pan cells, and affine transform cells
+- `Hover` -- uses `targetCell` for hovered editor state
 - `Selection` -- uses `WritableSignal` fields for selected point/anchor/segment state
-- `NativeBridge` -- `$glyph` signal with `equals: () => false` for identity changes
+- `NativeBridge` -- uses a glyph identity cell with `equals: () => false` for identity changes
 - `useSignalState` -- React bridge hook (in this module)
 - `useSignalEffect` -- lifecycle-aware effect hook (in `@/hooks/useSignalEffect`)
 - `CommandHistory` -- imports from reactive for undo/redo state signals

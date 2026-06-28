@@ -47,7 +47,10 @@ async function drawSquare(stack: WorkspaceStack, layerId: LayerId, width: number
         })),
       },
     },
-    { kind: "setContourClosed", setContourClosed: { layerId, contourId, closed: true } },
+    {
+      kind: "setContourClosed",
+      setContourClosed: { layerId, contourId, closed: true },
+    },
   ]);
 }
 
@@ -66,7 +69,11 @@ async function variableFont(): Promise<{
   const created = await stack.editCoordinator.apply([
     {
       kind: "createGlyph",
-      createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      createGlyph: {
+        glyphId,
+        name: "A" as GlyphName,
+        unicodes: [65 as Unicode],
+      },
     },
     {
       kind: "createGlyphLayer",
@@ -116,7 +123,11 @@ async function variableFont(): Promise<{
   await stack.editCoordinator.apply([
     {
       kind: "createGlyphLayer",
-      createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldSourceId },
+      createGlyphLayer: {
+        layerId: boldLayerId,
+        glyphId,
+        sourceId: boldSourceId,
+      },
     },
   ]);
 
@@ -125,7 +136,10 @@ async function variableFont(): Promise<{
   await drawSquare(stack, regularLayerId, 100);
   await drawSquare(stack, boldLayerId, 200);
   await stack.editCoordinator.apply([
-    { kind: "setXAdvance", setXAdvance: { layerId: regularLayerId, width: 300 } },
+    {
+      kind: "setXAdvance",
+      setXAdvance: { layerId: regularLayerId, width: 300 },
+    },
   ]);
   await stack.editCoordinator.apply([
     { kind: "setXAdvance", setXAdvance: { layerId: boldLayerId, width: 500 } },
@@ -135,18 +149,17 @@ async function variableFont(): Promise<{
 }
 
 async function loadGlyph(stack: WorkspaceStack, glyphId: GlyphId) {
-  const glyph = await stack.font.loadGlyph(glyphId, {
+  const loaded = await stack.font.loadGlyph(glyphId, {
     sourceIds: [stack.font.defaultSource.id],
   });
-  if (!glyph) throw new Error("Expected default glyph layer to load");
-  return glyph;
+  if (!loaded) throw new Error("Expected default glyph layer to load");
 }
 
 async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: Source) {
   await stack.font.loadGlyph(glyphId, {
     sourceIds: [stack.font.defaultSource.id, source.id],
   });
-  const layer = stack.font.glyphLayerForId(glyphId, source.id);
+  const layer = stack.font.layer(glyphId, source.id);
   if (!layer) throw new Error("Expected glyph layer to load");
   return layer;
 }
@@ -182,14 +195,15 @@ describe("variable editing across sources", () => {
   });
 
   it("interpolates geometry and metrics between masters", async () => {
-    const glyph = await loadGlyph(stack, glyphId);
+    await loadGlyph(stack, glyphId);
     const axis = stack.font.getAxes()[0]!;
 
     // wght 550 is halfway between the masters at 400 and 700.
     const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
-    const instance = glyph.instanceAt(mid);
+    const instance = stack.font.instance(glyphId, mid);
+    if (!instance) throw new Error("Expected glyph instance");
 
-    expect(instance.hasLayer).toBe(false);
+    expect(stack.font.editableLayerAt(glyphId, mid)).toBeNull();
     expect(instance.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
 
     const xs = instance.geometry.allPoints.map((point) => point.x);
@@ -197,15 +211,34 @@ describe("variable editing across sources", () => {
   });
 
   it("resolves live layer geometry at exact master locations", async () => {
-    const glyph = await loadGlyph(stack, glyphId);
+    await loadGlyph(stack, glyphId);
     await loadGlyphLayer(stack, glyphId, bold);
 
     const axis = stack.font.getAxes()[0]!;
     const atBold = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 700);
-    const instance = glyph.instanceAt(atBold);
+    const instance = stack.font.instance(glyphId, atBold);
+    if (!instance) throw new Error("Expected glyph instance");
 
-    expect(instance.hasLayer).toBe(true);
-    expect(instance.hasLayer).toBe(true);
+    expect(stack.font.editableLayerAt(glyphId, atBold)).not.toBeNull();
     expect(instance.xAdvance).toBe(500);
+  });
+
+  it("refreshes an existing instance when its exact source layer loads", async () => {
+    await loadGlyph(stack, glyphId);
+
+    const axis = stack.font.getAxes()[0]!;
+    const atBold = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 700);
+    const instance = stack.font.instance(glyphId, atBold);
+    if (!instance) throw new Error("Expected glyph instance");
+
+    expect(stack.font.editableLayerAt(glyphId, atBold)).toBeNull();
+    expect(instance.xAdvance).toBe(0);
+    expect(instance.render.outline.bounds).toBeNull();
+
+    await loadGlyphLayer(stack, glyphId, bold);
+
+    expect(stack.font.editableLayerAt(glyphId, atBold)).not.toBeNull();
+    expect(instance.xAdvance).toBe(500);
+    expect(instance.render.outline.bounds?.max.x).toBe(200);
   });
 });

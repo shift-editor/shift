@@ -3,5 +3,5 @@ import { useSignalState } from "@/lib/signals";
 
 export const useLayerSourceId = (): string | null => {
   const editor = useEditor();
-  return useSignalState(editor.$layerSourceId);
+  return useSignalState(editor.layerSourceIdCell);
 };

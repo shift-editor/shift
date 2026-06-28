@@ -30,7 +30,7 @@ export function DebugProvider({ children }: DebugProviderProps) {
   const editor = useEditor();
 
   const dumpSnapshot = useCallback(() => {
-    const glyph = editor.glyph.peek();
+    const glyph = editor.previewGlyphRecordCell.peek();
     if (!glyph) {
       return;
     }

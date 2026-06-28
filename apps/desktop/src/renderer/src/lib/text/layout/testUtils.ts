@@ -51,7 +51,7 @@ export async function layoutTestFont(): Promise<Font> {
   }
 
   const record = stack.font.recordForName("A" as GlyphName);
-  const a = record ? stack.font.glyphLayerForId(record.id, stack.font.defaultSource.id) : null;
+  const a = record ? stack.font.layer(record.id, stack.font.defaultSource.id) : null;
   if (!a) throw new Error("Expected authored glyph layer for A");
 
   const contourId = a.addContour();

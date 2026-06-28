@@ -15,6 +15,8 @@
 
 - **Domain types are plain nouns.** `Glyph`, `Contour`, `Point`, `Anchor` — not `Glyph`, `GlyphInfo`, `GlyphState`, `GlyphRenderData`. If you need a modifier, it should describe the _kind_ of thing (`EditableGlyph`, `RenderContour`), not append generic suffixes.
 - **Avoid `-Data`, `-Info`, `-State` suffixes** on types unless it genuinely represents transient mutable state (e.g. `TextRunRenderState` for a signal value consumed by a render pass). If the type represents a domain concept, name it after the concept.
+- **Signals are named `*Cell`; values use the plain noun.** A `Signal<Glyph | null>` is `glyphCell`, and the unwrapped value is `glyph`. Do not introduce new dollar-prefixed signal names; those are legacy style.
+- **Use `track(cell)` for invalidation-only subscriptions.** Inside `computed`/`effect`, use `track(fooCell)` when the code needs to rerun on `fooCell` changes but does not use the value. Use `const foo = fooCell.value` when the value is actually read.
 
 ## Roadmap
 
@@ -161,7 +163,7 @@ Rules enforced by `scripts/oxlint/shift-plugin.mjs` are omitted here — the lin
 
 **NEVER call `bridge.setNodePositions()` inside the draft hot path.** That sends N individual NAPI struct marshals to Rust per frame. For glyphs with thousands of points this causes ~450ms frames + GC pressure. The draft exists specifically to avoid this.
 
-**Render effects track `glyph.contours` and `glyph.anchors`**, not `$glyph`. The `$glyph` signal on NativeBridge is for glyph identity (loaded/unloaded). Glyph data changes propagate through the Glyph model's internal signals. `#patchPositions` fires `#contours` with a new array reference so glyph-level effects see the change.
+**Render effects track `glyph.contours` and `glyph.anchors`**, not a bridge glyph identity cell. Bridge glyph identity signals are for loaded/unloaded identity changes. Glyph data changes propagate through the Glyph model's internal signals. `#patchPositions` fires the contour cell with a new array reference so glyph-level effects see the change.
 
 ## Documentation Routing
 

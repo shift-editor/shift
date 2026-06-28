@@ -1,11 +1,11 @@
 import type { Point2D } from "@shift/geo";
-import type { ContourId, LayerId, Source, SourceId } from "@shift/types";
+import type { ContourId, GlyphId, GlyphRecord, Source, SourceId } from "@shift/types";
 import type { Coordinates } from "@/types/coordinates";
 import type { AxisLocation } from "@/types/variation";
 import type { DebugOverlays } from "@/types/uiState";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type { Font } from "../model/Font";
-import type { Glyph, GlyphInstance, GlyphLayer } from "../model/Glyph";
+import type { GlyphInstance, GlyphLayer } from "../model/Glyph";
 import type { Scene } from "./Scene";
 import type { FocusedGlyph } from "../text/TextRun";
 import type { GlyphAnchor } from "../text/layout";
@@ -31,7 +31,7 @@ const DEFAULT_DEBUG_OVERLAYS: DebugOverlays = {
   glyphBbox: false,
 };
 
-export interface GlyphDisplayState {
+export interface GlyphPresentationState {
   readonly proofMode: boolean;
   readonly handlesVisible: boolean;
   readonly focusedGlyphVisible: boolean;
@@ -82,37 +82,29 @@ export class EditorGesture {
   }
 }
 
-export class GlyphDisplay {
+export class GlyphPresentation {
   readonly proofModeCell: WritableSignal<boolean>;
   readonly handlesVisibleCell: WritableSignal<boolean>;
-  readonly cell: ComputedSignal<GlyphDisplayState>;
+  readonly focusedGlyphVisibleCell: ComputedSignal<boolean>;
 
   constructor(text: TextEditingState, textRuns: TextRuns) {
     this.proofModeCell = signal(false, {
-      name: "editor.glyph.display.proofMode",
+      name: "editor.glyph.presentation.proofMode",
     });
     this.handlesVisibleCell = signal(true, {
-      name: "editor.glyph.display.handlesVisible",
+      name: "editor.glyph.presentation.handlesVisible",
     });
-    this.cell = computed(
+    this.focusedGlyphVisibleCell = computed(
       () => {
         const run = textRuns.activeCell.value;
         const focusedGlyph = text.focusedGlyph.value;
         const hasTextActivity =
           run.buffer.itemsCell.value.length > 0 || run.cursorVisibleCell.value;
 
-        return {
-          proofMode: this.proofModeCell.value,
-          handlesVisible: this.handlesVisibleCell.value,
-          focusedGlyphVisible: !hasTextActivity || focusedGlyph?.anchor.runId === run.id,
-        };
+        return !hasTextActivity || focusedGlyph?.anchor.runId === run.id;
       },
-      { name: "editor.glyph.display" },
+      { name: "editor.glyph.presentation.focusedGlyphVisible" },
     );
-  }
-
-  get value(): GlyphDisplayState {
-    return this.cell.peek();
   }
 
   get proofMode(): boolean {
@@ -182,38 +174,35 @@ export class EditorViewState {
   }
 }
 
-/** Active glyph state derived from placed scene items. */
-export class ActiveGlyphState {
-  /** Glyph model for the first geometry-shown glyph item, or first placed glyph. */
-  readonly glyph: Signal<Glyph | null>;
+/** Glyph preview state derived from placed scene items. */
+export class SceneGlyphPreviewState {
+  /** Glyph id for the first geometry-shown glyph item, or first placed glyph. */
+  readonly glyphId: Signal<GlyphId | null>;
+
+  /** Identity record for the first geometry-shown glyph item, or first placed glyph. */
+  readonly record: Signal<GlyphRecord | null>;
 
   /** Contour receiving appended pen points, or `null` when no contour is active. */
   readonly activeContourId: WritableSignal<ContourId | null>;
 
   constructor(font: Font, scene: Scene) {
-    this.glyph = computed(
+    this.glyphId = computed(
       () => {
         const value = scene.cell.value;
-        font.glyphRecordsCell.value;
-        font.glyphSnapshotStatusCell.value;
         const geometryItem = value.geometryItems
           .map((itemId) => value.items.find((item) => item.id === itemId) ?? null)
           .find((item) => item?.kind === "glyph");
         const fallbackItem = value.items.find((item) => item.kind === "glyph") ?? null;
         const item = geometryItem ?? fallbackItem;
-        return item?.kind === "glyph" ? font.glyphForId(item.glyphId) : null;
+        return item?.kind === "glyph" ? item.glyphId : null;
       },
-      { name: "editor.glyph.active" },
+      { name: "editor.glyph.previewRecordId" },
     );
+    this.record = font.glyphCell(this.glyphId);
     this.activeContourId = signal<ContourId | null>(null, {
       name: "editor.glyph.activeContourId",
     });
   }
-}
-
-export interface GlyphLayerResolution {
-  readonly sourceId: SourceId;
-  readonly layerId: LayerId | null;
 }
 
 /**
@@ -229,50 +218,16 @@ export class GlyphLayerEditingState {
   /** Exact font source selected by the current design location. */
   readonly selectedSource: Signal<Source | null>;
 
-  /** Selected source with the current glyph's authored layer when one exists. */
-  readonly layer: Signal<GlyphLayerResolution | null>;
-
   /** Authored glyph layer data for the selected source. */
   readonly glyphLayer: Signal<GlyphLayer | null>;
 
-  constructor(font: Font, glyph: Signal<Glyph | null>, location: Signal<AxisLocation>) {
-    this.selectedSource = computed(
-      () => {
-        return font.sourceAt(location.value);
-      },
-      { name: "editor.glyph.layerEditing.source" },
-    );
+  constructor(font: Font, glyphId: Signal<GlyphId | null>, location: Signal<AxisLocation>) {
+    this.selectedSource = font.sourceAtCell(location);
     this.sourceId = computed(() => this.selectedSource.value?.id ?? null, {
       name: "editor.glyph.layerEditing.sourceId",
     });
 
-    this.layer = computed(
-      () => {
-        const source = this.selectedSource.value;
-        if (!source) return null;
-
-        const activeGlyph = glyph.value;
-        if (!activeGlyph) return { sourceId: source.id, layerId: null };
-
-        const layerId = font.layerRecordForId(activeGlyph.id, source.id)?.id ?? null;
-        return { sourceId: source.id, layerId };
-      },
-      { name: "editor.glyph.layerEditing.layer" },
-    );
-
-    this.glyphLayer = computed(
-      () => {
-        const activeGlyph = glyph.value;
-        if (!activeGlyph) return null;
-
-        const source = this.selectedSource.value;
-        if (!source) return null;
-        if (this.layer.value?.layerId === null) return null;
-
-        return font.glyphLayerForId(activeGlyph.id, source.id);
-      },
-      { name: "editor.glyph.layerEditing.glyphLayer" },
-    );
+    this.glyphLayer = font.layerCell(glyphId, this.sourceId);
   }
 }
 
@@ -287,16 +242,8 @@ export class PreviewGlyphState {
   /** Glyph resolved at the current design location. */
   readonly instance: Signal<GlyphInstance | null>;
 
-  constructor(glyph: Signal<Glyph | null>, location: Signal<AxisLocation>) {
-    this.instance = computed(
-      () => {
-        const activeGlyph = glyph.value;
-        if (!activeGlyph) return null;
-
-        return activeGlyph.instance(location);
-      },
-      { name: "editor.glyph.preview.instance" },
-    );
+  constructor(font: Font, glyphId: Signal<GlyphId | null>, location: Signal<AxisLocation>) {
+    this.instance = font.instanceCell(glyphId, location);
   }
 }
 /**
@@ -306,14 +253,14 @@ export class PreviewGlyphState {
  * displayed glyph model at the current design location.
  */
 export class EditorGlyphState {
-  readonly active: ActiveGlyphState;
+  readonly sceneGlyph: SceneGlyphPreviewState;
   readonly layerEditing: GlyphLayerEditingState;
   readonly preview: PreviewGlyphState;
 
   constructor(font: Font, scene: Scene, location: Signal<AxisLocation>) {
-    this.active = new ActiveGlyphState(font, scene);
-    this.layerEditing = new GlyphLayerEditingState(font, this.active.glyph, location);
-    this.preview = new PreviewGlyphState(this.active.glyph, location);
+    this.sceneGlyph = new SceneGlyphPreviewState(font, scene);
+    this.layerEditing = new GlyphLayerEditingState(font, this.sceneGlyph.glyphId, location);
+    this.preview = new PreviewGlyphState(font, this.sceneGlyph.glyphId, location);
   }
 }
 

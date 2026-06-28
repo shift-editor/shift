@@ -21,7 +21,7 @@ export class SelectHover implements SelectBehavior {
       return false;
     }
 
-    const instance = ctx.editor.glyphInstance;
+    const instance = ctx.editor.previewGlyphInstance;
     if (!instance) {
       ctx.editor.hover.clear();
       return false;

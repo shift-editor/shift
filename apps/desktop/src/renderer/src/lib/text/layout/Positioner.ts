@@ -22,13 +22,13 @@ export class Positioner {
 
     for (const [idx, g] of run.glyphs.entries()) {
       const record = font.recordForName(g.glyphName);
-      const glyph = record ? font.glyphForId(record.id) : null;
+      const instance = record ? font.instance(record.id, designLocation) : null;
       let glyphName = g.glyphName;
       let bounds: Bounds | null = null;
 
-      if (glyph) {
-        glyphName = glyph.name;
-        bounds = glyph.instance(designLocation).render.outline.bounds;
+      if (record && instance) {
+        glyphName = record.name;
+        bounds = instance.render.outline.bounds;
       }
 
       const xAdvance = resolveAdvance(g, font, source);
@@ -57,7 +57,7 @@ export class Positioner {
 /** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
 export function resolveAdvance(item: GlyphTextItem, font: Font, source: Source | null): number {
   const record = recordForTextItem(item, font);
-  const raw = source && record ? (font.glyphLayerForId(record.id, source.id)?.xAdvance ?? 0) : 0;
+  const raw = source && record ? (font.layer(record.id, source.id)?.xAdvance ?? 0) : 0;
   return displayAdvance(raw, item.glyphName, item.codepoint);
 }
 
@@ -70,8 +70,8 @@ export function resolveGlyphOffset(
   if (!source) return { x: 0, y: 0 };
 
   const record = recordForTextItem(item, font);
-  const glyph = record ? font.glyphLayerForId(record.id, source.id) : null;
-  if (!glyph) return { x: 0, y: 0 };
+  const layer = record ? font.layer(record.id, source.id) : null;
+  if (!layer) return { x: 0, y: 0 };
 
   const metrics = font.metrics;
   const targetX = 300;
@@ -88,7 +88,7 @@ export function resolveGlyphOffset(
     }
   };
 
-  const attachingAnchor = glyph.anchors.find((anchor) => {
+  const attachingAnchor = layer.anchors.find((anchor) => {
     const name = anchor.name ?? "";
     return name.startsWith("_") && name.length > 1;
   });
@@ -101,7 +101,7 @@ export function resolveGlyphOffset(
     };
   }
 
-  const bounds = glyph.bounds;
+  const bounds = layer.bounds;
   if (!bounds) return { x: 0, y: 0 };
 
   const centerX = (bounds.min.x + bounds.max.x) / 2;

@@ -3,7 +3,7 @@ import { useSignalState, useSignalTrigger } from "@/lib/signals";
 
 export interface GlyphXAdvanceState {
   readonly xAdvance: number;
-  readonly hasLayer: boolean;
+  readonly editable: boolean;
 }
 
 /**
@@ -11,12 +11,13 @@ export interface GlyphXAdvanceState {
  */
 export function useGlyphXAdvance(): GlyphXAdvanceState {
   const editor = useEditor();
-  const instance = useSignalState(editor.glyphInstanceCell);
+  const instance = useSignalState(editor.previewGlyphInstanceCell);
+  const layer = useSignalState(editor.editingGlyphLayerCell);
 
   useSignalTrigger(instance?.xAdvanceCell, { schedule: "frame" });
 
   return {
     xAdvance: instance?.xAdvance ?? 0,
-    hasLayer: instance?.hasLayer ?? false,
+    editable: layer !== null,
   };
 }

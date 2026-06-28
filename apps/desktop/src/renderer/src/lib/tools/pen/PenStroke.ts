@@ -19,10 +19,11 @@ export class PenStroke {
   }
 
   static active(editor: Editor): PenStroke | null {
-    const instance = editor.glyphInstance;
-    if (!instance?.layer) return null;
+    const instance = editor.previewGlyphInstance;
+    const edit = editor.editingGlyphLayer;
+    if (!instance || !edit) return null;
 
-    return new PenStroke(editor, instance.geometry, instance.layer);
+    return new PenStroke(editor, instance.geometry, edit);
   }
 
   get activeContour(): Contour | null {

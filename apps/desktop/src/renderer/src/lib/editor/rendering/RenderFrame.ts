@@ -1,11 +1,11 @@
 import type { Point2D } from "@shift/geo";
 import type { DebugOverlays as DebugOverlayState } from "@/types/uiState";
-import type { Glyph, GlyphInstance } from "@/lib/model/Glyph";
+import type { GlyphInstance } from "@/lib/model/Glyph";
 import type { FocusedGlyph, TextRun } from "@/lib/text/TextRun";
 import type { SelectionState } from "@/lib/editor/Selection";
 import type { HoverState } from "@/lib/editor/Hover";
 import type { Editor } from "@/lib/editor/Editor";
-import type { GlyphDisplayState } from "@/lib/editor/EditorState";
+import type { GlyphPresentationState } from "@/lib/editor/EditorState";
 import type { SceneGlyph } from "@/lib/editor/Scene";
 import type { AxisLocation } from "@/types/variation";
 import type { GlyphRecord, Unicode } from "@shift/types";
@@ -27,7 +27,6 @@ interface BackgroundGlyphFrame {
 
 interface GuideAdvanceInput {
   readonly record: GlyphRecord;
-  readonly model: Glyph | null;
   readonly xAdvance: number;
 }
 
@@ -37,7 +36,7 @@ export interface BackgroundLayerProps {
 
 interface SceneGlyphFrame {
   readonly item: SceneGlyph;
-  readonly model: Glyph | null;
+  readonly record: GlyphRecord | null;
   readonly instance: GlyphInstance | null;
   readonly geometryShown: boolean;
 }
@@ -53,7 +52,7 @@ interface SceneViewProps {
 
 export interface SceneLayerProps {
   readonly glyphs: readonly SceneGlyphFrame[];
-  readonly display: GlyphDisplayState;
+  readonly display: GlyphPresentationState;
   readonly interaction: SceneInteractionProps;
   readonly view: SceneViewProps;
 }
@@ -109,16 +108,14 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
       const geometryShown = scene.geometryItems.includes(item.id);
       if (!geometryShown) continue;
 
-      const record = this.#editor.font.recordForId(item.glyphId);
+      const record = this.#editor.font.glyph(item.glyphId);
       if (!record) continue;
 
-      const glyph = this.#editor.glyphForItem(item.id);
       const instance = this.#editor.instanceForItem(item.id);
       glyphs.push({
         item,
         advance: guideAdvance({
           record,
-          model: glyph,
           xAdvance: instance?.xAdvanceCell.value ?? this.#editor.font.defaultXAdvance,
         }),
         geometryShown,
@@ -143,17 +140,10 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
 }
 
 function guideAdvance(input: GuideAdvanceInput): number {
-  return displayAdvance(
-    input.xAdvance,
-    input.record.name,
-    primaryUnicode(input.model, input.record),
-  );
+  return displayAdvance(input.xAdvance, input.record.name, primaryUnicode(input.record));
 }
 
-function primaryUnicode(glyph: Glyph | null, record: GlyphRecord): Unicode | null {
-  const unicode = glyph?.unicode;
-  if (unicode !== null && unicode !== undefined && Number.isFinite(unicode)) return unicode;
-
+function primaryUnicode(record: GlyphRecord): Unicode | null {
   return record.unicodes[0] ?? null;
 }
 
@@ -191,7 +181,7 @@ export class TextLayer extends CanvasItem<TextLayerProps> {
 
     return {
       run,
-      designLocation: this.#editor.$designLocation,
+      designLocation: this.#editor.designLocationCell,
       drawOffset: { x: 0, y: 0 },
       focusedGlyph: this.#editor.focusedGlyphCell.value,
     };
@@ -274,7 +264,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
 
       glyphs.push({
         item,
-        model: this.#editor.glyphForItem(item.id),
+        record: this.#editor.glyphForItem(item.id),
         instance,
         geometryShown: scene.geometryItems.includes(item.id),
       });
@@ -282,7 +272,11 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
 
     return {
       glyphs,
-      display: this.#editor.glyphDisplayCell.value,
+      display: {
+        proofMode: this.#editor.proofModeCell.value,
+        handlesVisible: this.#editor.handlesVisibleCell.value,
+        focusedGlyphVisible: this.#editor.focusedGlyphVisibleCell.value,
+      },
       interaction: {
         selection: this.#editor.selection.stateCell.value,
         hover: this.#editor.hover.targetCell.value,
@@ -315,9 +309,9 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
   }
 
   #drawGlyphOutline(canvas: Canvas, props: SceneLayerProps, glyph: SceneGlyphFrame): void {
-    const { model, instance, geometryShown } = glyph;
+    const { record, instance, geometryShown } = glyph;
     const { display } = props;
-    if (!model || !instance) return;
+    if (!record || !instance) return;
     if (geometryShown && !display.focusedGlyphVisible) return;
 
     canvas.withTranslation(glyph.item.placement.origin, () => {
@@ -339,16 +333,16 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
   }
 
   #drawDebugOverlays(canvas: Canvas, props: SceneLayerProps, glyph: SceneGlyphFrame): void {
-    const { model, geometryShown } = glyph;
+    const { instance, geometryShown } = glyph;
     const { display } = props;
-    if (!geometryShown || !model || display.proofMode || !display.focusedGlyphVisible) return;
+    if (!geometryShown || !instance || display.proofMode || !display.focusedGlyphVisible) return;
     const { hover } = props.interaction;
     const hoveredSegmentId = hover?.type === "segment" ? hover.segmentId : null;
 
     canvas.withTranslation(glyph.item.placement.origin, () => {
       this.#debugOverlays.draw(
         canvas,
-        model,
+        instance.geometry,
         props.view.debugOverlays,
         hoveredSegmentId,
         canvas.pxToUpm(SCREEN_HIT_RADIUS),

@@ -10,7 +10,7 @@ import type {
 } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
-import type { Glyph, GlyphInstance, GlyphLayer } from "@/lib/model/Glyph";
+import type { GlyphInstance, GlyphLayer } from "@/lib/model/Glyph";
 import {
   axisLocationFromLocation,
   cloneAxisLocation,
@@ -89,11 +89,10 @@ import { Scene } from "./Scene";
 import {
   EditorGlyphState,
   EditorGesture,
-  GlyphDisplay,
+  GlyphPresentation,
   EditorInput,
   EditorViewState,
   TextEditingState,
-  type GlyphDisplayState,
   type GlyphPlacement,
 } from "./EditorState";
 
@@ -129,7 +128,7 @@ export class Editor {
   /**
    * User-facing editor display toggles.
    *
-   * These are session preferences for how the active glyph is presented. They
+   * These are session preferences for how preview geometry is presented. They
    * are not glyph data and should eventually live behind an `EditorViewState`
    * object so rendering code can consume them as one named concept.
    */
@@ -212,7 +211,7 @@ export class Editor {
    */
   #text: TextEditingState;
   readonly gesture: EditorGesture;
-  #glyphDisplay: GlyphDisplay;
+  #glyphPresentation: GlyphPresentation;
   readonly input: EditorInput;
   #toolState: {
     app: Map<string, unknown>;
@@ -229,7 +228,9 @@ export class Editor {
 
     this.font = options.font;
     this.scene = new Scene();
-    this.#designLocation = signal(emptyAxisLocation(), { name: "editor.designLocation" });
+    this.#designLocation = signal(emptyAxisLocation(), {
+      name: "editor.designLocation",
+    });
     this.#glyph = new EditorGlyphState(this.font, this.scene, this.#designLocation);
 
     this.#view = new EditorViewState();
@@ -271,13 +272,13 @@ export class Editor {
 
     this.#textRuns = new TextRuns(this.font, new Positioner(), this.#designLocation);
     this.#text = new TextEditingState(this.#textRuns);
-    this.#glyphDisplay = new GlyphDisplay(this.#text, this.#textRuns);
+    this.#glyphPresentation = new GlyphPresentation(this.#text, this.#textRuns);
 
     this.#renderer = new Renderer(this);
 
     this.#cameraMetricsEffect = effect(
       () => {
-        this.font.$loaded.value;
+        this.font.loadedCell.value;
         this.updateMetricsFromFont();
       },
       { name: "editor.cameraMetrics" },
@@ -421,11 +422,11 @@ export class Editor {
   }
 
   public get proofMode(): boolean {
-    return this.#glyphDisplay.proofMode;
+    return this.#glyphPresentation.proofMode;
   }
 
   public get proofModeCell(): Signal<boolean> {
-    return this.#glyphDisplay.proofModeCell;
+    return this.#glyphPresentation.proofModeCell;
   }
 
   /**
@@ -434,25 +435,25 @@ export class Editor {
    * @param enabled - `true` to show proof artwork and suppress edit handles.
    */
   public setProofMode(enabled: boolean): void {
-    this.#glyphDisplay.setProofMode(enabled);
+    this.#glyphPresentation.setProofMode(enabled);
   }
 
-  /** Enables proof rendering for the active glyph. */
+  /** Enables proof rendering for preview geometry. */
   public enableProofMode(): void {
     this.setProofMode(true);
   }
 
-  /** Disables proof rendering for the active glyph. */
+  /** Disables proof rendering for preview geometry. */
   public disableProofMode(): void {
     this.setProofMode(false);
   }
 
   public get handlesVisible(): boolean {
-    return this.#glyphDisplay.handlesVisible;
+    return this.#glyphPresentation.handlesVisible;
   }
 
   public get handlesVisibleCell(): Signal<boolean> {
-    return this.#glyphDisplay.handlesVisibleCell;
+    return this.#glyphPresentation.handlesVisibleCell;
   }
 
   /**
@@ -461,7 +462,7 @@ export class Editor {
    * @param visible - `true` to draw handles for focused glyph instances.
    */
   public setHandlesVisible(visible: boolean): void {
-    this.#glyphDisplay.setHandlesVisible(visible);
+    this.#glyphPresentation.setHandlesVisible(visible);
   }
 
   /** Shows point handles and structured geometry controls. */
@@ -472,20 +473,6 @@ export class Editor {
   /** Hides point handles and structured geometry controls. */
   public hideHandles(): void {
     this.setHandlesVisible(false);
-  }
-
-  /**
-   * Display state for the active glyph in the editor canvas.
-   *
-   * @returns A snapshot combining glyph display toggles and text-focus visibility.
-   */
-  public get glyphDisplay(): GlyphDisplayState {
-    return this.#glyphDisplay.cell.peek();
-  }
-
-  /** Reactive display state for render layers and canvas items. */
-  public get glyphDisplayCell(): Signal<GlyphDisplayState> {
-    return this.#glyphDisplay.cell;
   }
 
   public setBackgroundSurface(surface: Canvas2DSurface): void {
@@ -565,13 +552,13 @@ export class Editor {
     return this.#text.glyphPlacement.peek();
   }
 
-  /** Clears the current glyph focus and active contour selection. */
+  /** Clears scene glyph focus and the active contour selection. */
   public close(): void {
     this.scene.clear();
-    this.#glyph.active.activeContourId.set(null);
+    this.#glyph.sceneGlyph.activeContourId.set(null);
   }
 
-  public get $designLocation(): Signal<AxisLocation> {
+  public get designLocationCell(): Signal<AxisLocation> {
     return this.#designLocation;
   }
 
@@ -585,7 +572,7 @@ export class Editor {
    *
    * `null` means the current design location does not exactly match a source.
    */
-  public get $layerSourceId(): Signal<SourceId | null> {
+  public get layerSourceIdCell(): Signal<SourceId | null> {
     return this.#glyph.layerEditing.sourceId;
   }
 
@@ -613,8 +600,13 @@ export class Editor {
     return this.#glyph.layerEditing.glyphLayer.peek();
   }
 
-  /** Glyph instance resolved at the current design location. */
-  public get glyphInstance(): GlyphInstance | null {
+  /** Reactive authored glyph layer currently mutated by edit commands. */
+  public get editingGlyphLayerCell(): Signal<GlyphLayer | null> {
+    return this.#glyph.layerEditing.glyphLayer;
+  }
+
+  /** Glyph instance shown by the editor preview at the current design location. */
+  public get previewGlyphInstance(): GlyphInstance | null {
     return this.#glyph.preview.instance.peek();
   }
 
@@ -626,15 +618,16 @@ export class Editor {
   }
 
   /**
-   * Select every point in the active authored glyph layer.
+   * Select every point in the current authored glyph layer.
    *
    * This intentionally uses the authored glyph layer rather than interpolated
    * design-location geometry: selection mutates an authored layer, so it must
    * refer to point IDs that commands can mutate.
    */
   public selectAll(): void {
-    const instance = this.glyphInstance;
-    if (!instance?.layer) return;
+    if (!this.editingGlyphLayer) return;
+    const instance = this.previewGlyphInstance;
+    if (!instance) return;
 
     this.selection.select(
       instance.geometry.allPoints.map((point) => ({
@@ -689,7 +682,11 @@ export class Editor {
 
   /** @knipclassignore Indirectly consumed through Renderer. */
   public focusedGlyphVisible(): boolean {
-    return this.#glyphDisplay.cell.peek().focusedGlyphVisible;
+    return this.#glyphPresentation.focusedGlyphVisibleCell.peek();
+  }
+
+  public get focusedGlyphVisibleCell(): Signal<boolean> {
+    return this.#glyphPresentation.focusedGlyphVisibleCell;
   }
 
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
@@ -709,34 +706,33 @@ export class Editor {
     if (!scopedState.delete(stateKey)) return;
   }
 
-  public get glyph(): Signal<Glyph | null> {
-    return this.#glyph.active.glyph;
+  public get previewGlyphRecordCell(): Signal<GlyphRecord | null> {
+    return this.#glyph.sceneGlyph.record;
   }
 
-  public get glyphInstanceCell(): Signal<GlyphInstance | null> {
+  public get previewGlyphInstanceCell(): Signal<GlyphInstance | null> {
     return this.#glyph.preview.instance;
   }
 
-  public glyphForItem(itemId: ItemId): Glyph | null {
+  public glyphForItem(itemId: ItemId): GlyphRecord | null {
     const item = this.scene.glyphItem(itemId);
     if (!item) return null;
 
-    return this.font.glyphForId(item.glyphId);
+    return this.font.glyph(item.glyphId);
   }
 
   public instanceForItem(itemId: ItemId): GlyphInstance | null {
     const item = this.scene.glyphItem(itemId);
-    const glyph = item ? this.glyphForItem(itemId) : null;
-    if (!item || !glyph) return null;
-    return glyph.instance(this.#designLocation);
+    if (!item) return null;
+
+    return this.font.instance(item.glyphId, this.#designLocation);
   }
 
   public layerForItem(itemId: ItemId): GlyphLayer | null {
     const item = this.scene.glyphItem(itemId);
     if (!item) return null;
-    const source = this.font.sourceAt(this.designLocation);
-    if (!source) return null;
-    return this.font.glyphLayerForId(item.glyphId, source.id);
+
+    return this.font.editableLayerAt(item.glyphId, this.designLocation);
   }
 
   /** Stateless command executor; undo authority is the workspace ledger. */
@@ -801,17 +797,18 @@ export class Editor {
   }
 
   public get xAdvance(): number {
-    return this.glyphInstance?.xAdvance ?? 0;
+    return this.previewGlyphInstance?.xAdvance ?? 0;
   }
 
   /**
-   * Sets the active glyph layer's horizontal advance through command history.
+   * Sets the editable glyph layer's horizontal advance through command history.
    *
    * @param width - New advance width in UPM units.
    */
   public setXAdvance(width: number): void {
-    const instance = this.glyphInstance;
-    if (!instance?.layer) return;
+    if (!this.editingGlyphLayer) return;
+    const instance = this.previewGlyphInstance;
+    if (!instance) return;
 
     if (instance.xAdvance === width) return;
 
@@ -819,13 +816,14 @@ export class Editor {
   }
 
   /**
-   * Sets the active glyph layer's left sidebearing by translating its outline.
+   * Sets the editable glyph layer's left sidebearing by translating its outline.
    *
    * @param value - Desired left sidebearing in UPM units.
    */
   public setLeftSidebearing(value: number): void {
-    const instance = this.glyphInstance;
-    if (!instance?.layer) return;
+    if (!this.editingGlyphLayer) return;
+    const instance = this.previewGlyphInstance;
+    if (!instance) return;
 
     const bbox = instance.render.outline.bounds;
     if (!bbox) return;
@@ -837,13 +835,14 @@ export class Editor {
   }
 
   /**
-   * Sets the active glyph layer's right sidebearing by changing its advance.
+   * Sets the editable glyph layer's right sidebearing by changing its advance.
    *
    * @param value - Desired right sidebearing in UPM units.
    */
   public setRightSidebearing(value: number): void {
-    const instance = this.glyphInstance;
-    if (!instance?.layer) return;
+    if (!this.editingGlyphLayer) return;
+    const instance = this.previewGlyphInstance;
+    if (!instance) return;
 
     const bbox = instance.render.outline.bounds;
     if (!bbox) return;
@@ -998,9 +997,9 @@ export class Editor {
     this.#renderer.fpsMonitor.stop();
   }
 
-  /** Deletes currently selected points from the active authored glyph layer. */
+  /** Deletes currently selected points from the editable authored glyph layer. */
   public deleteSelectedPoints(): void {
-    const edit = this.glyphInstance?.layer;
+    const edit = this.editingGlyphLayer;
     if (!edit) return;
 
     const selectedIds = [...this.selection.pointIds];
@@ -1014,7 +1013,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.glyph.peek();
+    const glyph = this.#glyph.sceneGlyph.record.peek();
     if (!glyph) return false;
 
     return this.#clipboard.write(content, { sourceGlyph: glyph.name });
@@ -1024,7 +1023,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.glyph.peek();
+    const glyph = this.#glyph.sceneGlyph.record.peek();
     if (!glyph) return false;
 
     const written = await this.#clipboard.write(content, {
@@ -1155,33 +1154,33 @@ export class Editor {
   }
 
   public get activeContourIdCell(): Signal<ContourId | null> {
-    return this.#glyph.active.activeContourId;
+    return this.#glyph.sceneGlyph.activeContourId;
   }
 
   public getActiveContourId(): ContourId | null {
-    const id = this.#glyph.active.activeContourId.peek();
+    const id = this.#glyph.sceneGlyph.activeContourId.peek();
     if (!id) return null;
 
     return id;
   }
 
   public setActiveContour(contourId: ContourId | null): void {
-    this.#glyph.active.activeContourId.set(contourId);
+    this.#glyph.sceneGlyph.activeContourId.set(contourId);
   }
 
   public clearActiveContour(): void {
-    this.#glyph.active.activeContourId.set(null);
+    this.#glyph.sceneGlyph.activeContourId.set(null);
   }
 
   public getActiveContour(): Contour | null {
     const activeContourId = this.getActiveContourId();
     if (!activeContourId) return null;
 
-    return this.glyphInstance?.geometry.contour(activeContourId) ?? null;
+    return this.previewGlyphInstance?.geometry.contour(activeContourId) ?? null;
   }
 
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
-    this.#glyph.active.activeContourId.set(contourId);
+    this.#glyph.sceneGlyph.activeContourId.set(contourId);
     if (fromStart) {
       this.#commands.run(new ReverseContourCommand(contourId));
     }
@@ -1233,7 +1232,7 @@ export class Editor {
   }
 
   /** @knipclassignore */
-  public get $drawOffset(): Signal<Point2D> {
+  public get drawOffsetCell(): Signal<Point2D> {
     return this.#text.drawOffset;
   }
 

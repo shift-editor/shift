@@ -15,9 +15,7 @@ import type {
 } from "@shift/types";
 import { mintAnchorId, mintContourId, mintPointId } from "@shift/types";
 import type { GlyphHandle } from "@shift/bridge";
-import { computed, keyedCache, signal, type ComputedSignal, type Signal } from "@/lib/signals";
-import { interpolate, normalize } from "@/lib/interpolation/interpolate";
-import { axisLocationFromLocation, axisLocationsEqual } from "@/lib/variation/location";
+import { computed, keyedCache, type ComputedSignal, type Signal } from "@/lib/signals";
 import type { AxisLocation } from "@/types/variation";
 import { Transform } from "@/lib/transform/Transform";
 import { Alignment } from "@/lib/transform/Alignment";
@@ -69,19 +67,23 @@ export {
   type GlyphLayerPositionTarget,
 };
 
-const EMPTY_GLYPH_STRUCTURE: GlyphStructure = {
-  contours: [],
-  anchors: [],
-  components: [],
-};
-
-function emptyGlyphGeometry(): GlyphGeometry {
-  return new GlyphGeometry(EMPTY_GLYPH_STRUCTURE, new Float64Array([0]));
-}
-
 interface GlyphEditState {
   readonly state: GlyphLayerState;
   readonly geometry: Signal<GlyphGeometry>;
+}
+
+/**
+ * Resolved reactive inputs used to construct one read-only glyph instance.
+ *
+ * @remarks
+ * `Font` owns these signals so source matching, interpolation, and outline
+ * component lookup stay outside `GlyphInstance`.
+ */
+export interface GlyphInstanceInput {
+  readonly location: Signal<AxisLocation>;
+  readonly layer: Signal<GlyphLayer | null>;
+  readonly geometry: Signal<GlyphGeometry>;
+  readonly outline: GlyphOutline;
 }
 
 /**
@@ -98,6 +100,7 @@ export interface GlyphInstanceGeometry {
   readonly xAdvanceCell: Signal<number>;
   readonly sidebearings: GlyphSidebearings;
   readonly sidebearingsCell: Signal<GlyphSidebearings>;
+  readonly bounds: BoundsType | null;
   readonly contours: readonly Contour[];
   readonly allPoints: readonly Point[];
   contour(contourId: ContourId): Contour | null;
@@ -204,7 +207,10 @@ class GlyphEditSession {
 
     // No contourId: Rust derives the contour from the anchor point — the
     // renderer never bookkeeps pending point→contour maps.
-    this.#intents.addPoints({ before: beforePointId, points: [this.#seed(pointId, edit)] });
+    this.#intents.addPoints({
+      before: beforePointId,
+      points: [this.#seed(pointId, edit)],
+    });
 
     return pointId;
   }
@@ -240,7 +246,14 @@ class GlyphEditSession {
     const anchorId = mintAnchorId();
 
     this.#intents.addAnchors({
-      anchors: [{ id: anchorId, x: position.x, y: position.y, ...(name === null ? {} : { name }) }],
+      anchors: [
+        {
+          id: anchorId,
+          x: position.x,
+          y: position.y,
+          ...(name === null ? {} : { name }),
+        },
+      ],
     });
 
     return anchorId;
@@ -742,46 +755,29 @@ export class GlyphLayer {
  * Represents one glyph resolved at one designspace location.
  *
  * @remarks
- * `geometry` is the lookup and hit-testing surface, `render` is the drawing
- * surface, and `edit` is present only when this location maps to an authored
- * source that can be mutated. Interpolated locations still read like normal
- * glyph instances: they render and hit-test through the same API, while
- * mutation is absent until a source exists at that location.
+ * `geometry` is the lookup and hit-testing surface, and `render` is the drawing
+ * surface. Editability is resolved separately through `Font.layer` or
+ * `Font.editableLayerAt`; instances are read/render views only.
  */
 export class GlyphInstance {
   readonly #location: Signal<AxisLocation>;
-  readonly #layer: ComputedSignal<GlyphLayer | null>;
   readonly geometry: GlyphInstanceGeometry;
   readonly render: GlyphRenderModel;
 
   /**
    * Creates a glyph instance tied to a live designspace location.
    *
-   * @param glyph - Glyph identity whose sources and variation data are resolved.
-   * @param location - Live designspace location for geometry, rendering, and editability.
+   * @param input - Resolved reactive inputs assembled by the owning font.
    */
-  constructor(glyph: Glyph, location: Signal<AxisLocation>) {
-    this.#location = location;
+  constructor(input: GlyphInstanceInput) {
+    this.#location = input.location;
 
-    this.#layer = computed(() => glyph.layerAt(location.value), {
-      name: "glyphInstance.layer",
-    });
-
-    this.geometry = new InstanceGeometry(glyph, location);
-    this.render = new InstanceRender(glyph, location).model;
+    this.geometry = new InstanceGeometry(input.layer, input.geometry);
+    this.render = new InstanceRender(input.layer, input.geometry, input.outline).model;
   }
 
   get location(): AxisLocation {
     return this.#location.peek();
-  }
-
-  /**
-   * Returns the authored glyph layer at this instance location.
-   *
-   * @returns The matching glyph layer, or `null` when this instance is interpolated.
-   */
-  get layer(): GlyphLayer | null {
-    return this.#layer.peek();
   }
 
   get xAdvance(): number {
@@ -798,15 +794,6 @@ export class GlyphInstance {
 
   get sidebearingsCell(): Signal<GlyphSidebearings> {
     return this.geometry.sidebearingsCell;
-  }
-
-  /**
-   * Returns whether this instance sits on an authored glyph layer location.
-   *
-   * @returns `true` when {@link layer} is present.
-   */
-  get hasLayer(): boolean {
-    return this.layer !== null;
   }
 }
 
@@ -825,27 +812,27 @@ class InstanceRender {
 
   readonly model: GlyphRenderModel;
 
-  constructor(glyph: Glyph, location: Signal<AxisLocation>) {
-    const outline = glyph.outline(location);
-
+  constructor(
+    layer: Signal<GlyphLayer | null>,
+    geometry: Signal<GlyphGeometry>,
+    outline: GlyphOutline,
+  ) {
     const contours = computed<readonly RenderContour[]>(() => {
-      const currentLocation = location.value;
-      const source = glyph.layerAt(currentLocation);
+      const source = layer.value;
       if (source) {
         return this.#sourceContours(source.structureCell.value, source.coordinateBuffersCell.value);
       }
 
-      return GlyphRenderModel.geometryContours(glyph.geometryAt(currentLocation));
+      return GlyphRenderModel.geometryContours(geometry.value);
     });
 
     const anchors = computed<readonly RenderAnchor[]>(() => {
-      const currentLocation = location.value;
-      const source = glyph.layerAt(currentLocation);
+      const source = layer.value;
       if (source) {
         return this.#sourceAnchors(source.structureCell.value, source.coordinateBuffersCell.value);
       }
 
-      return GlyphRenderModel.geometryAnchors(glyph.geometryAt(currentLocation));
+      return GlyphRenderModel.geometryAnchors(geometry.value);
     });
 
     this.model = new GlyphRenderModel(contours, anchors, outline);
@@ -892,15 +879,13 @@ class InstanceGeometry implements GlyphInstanceGeometry {
   readonly #xAdvance: ComputedSignal<number>;
   readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
 
-  constructor(glyph: Glyph, location: Signal<AxisLocation>) {
+  constructor(layer: Signal<GlyphLayer | null>, geometry: Signal<GlyphGeometry>) {
     this.#resolved = computed(
       () => {
-        const currentLocation = location.value;
-
-        const source = glyph.layerAt(currentLocation);
+        const source = layer.value;
         if (source) return new SourceGeometryCache(source);
 
-        return new SnapshotGeometryCache(glyph.geometryAt(currentLocation));
+        return new SnapshotGeometryCache(geometry.value);
       },
       { name: "glyphInstance.geometry" },
     );
@@ -934,6 +919,10 @@ class InstanceGeometry implements GlyphInstanceGeometry {
 
   get contours(): readonly Contour[] {
     return this.#resolved.peek().contours;
+  }
+
+  get bounds(): BoundsType | null {
+    return this.#resolved.peek().bounds;
   }
 
   contour(contourId: ContourId): Contour | null {
@@ -1002,6 +991,10 @@ class SnapshotGeometryCache implements GlyphInstanceGeometry {
 
   get contours(): readonly Contour[] {
     return this.#geometry.contours;
+  }
+
+  get bounds(): BoundsType | null {
+    return this.#geometry.bounds;
   }
 
   contour(contourId: ContourId): Contour | null {
@@ -1103,6 +1096,10 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
 
   get contours(): readonly Contour[] {
     return this.#contours.peek();
+  }
+
+  get bounds(): BoundsType | null {
+    return this.#source.bounds;
   }
 
   contour(contourId: ContourId): Contour | null {
@@ -1310,13 +1307,11 @@ class ContourCache {
 }
 
 /**
- * Reactive model for one glyph identity.
+ * Reactive model for one local glyph source.
  *
- * `Glyph` exposes rendered/interpolated glyph data and can create exact
- * layer models through `Font.glyphLayer`. The primary
- * geometry is the source used when the glyph was constructed; use
- * {@link geometryAt} or {@link outlineAt} when rendering at another designspace
- * location.
+ * @remarks
+ * Public callers should resolve glyph identity, authored layers, and rendered
+ * instances through `Font.glyph`, `Font.layer`, and `Font.instance`.
  */
 export class Glyph {
   readonly #font: Font;
@@ -1331,7 +1326,6 @@ export class Glyph {
   readonly #xAdvance: ComputedSignal<number>;
   readonly #edit: GlyphEditSession;
   readonly #instances = new WeakMap<Signal<AxisLocation>, GlyphInstance>();
-  readonly #outlines = new WeakMap<Signal<AxisLocation>, GlyphOutline>();
 
   constructor(
     font: Font,
@@ -1361,7 +1355,7 @@ export class Glyph {
   }
 
   get handle(): GlyphHandle {
-    const record = this.#font.recordForId(this.#glyphId);
+    const record = this.#font.glyph(this.#glyphId);
     if (!record) return this.#fallbackHandle;
 
     const unicode = record.unicodes[0];
@@ -1406,114 +1400,46 @@ export class Glyph {
     return this.#geometry.peek().allPoints;
   }
 
-  /** @knipclassignore — reactive contour API for UI consumers. */
-  get $contours(): Signal<readonly Contour[]> {
-    return computed(() => this.contours);
-  }
-
-  get $xAdvance(): Signal<number> {
-    return this.#xAdvance;
-  }
-
-  /**
-   * Create a read-only location view for this glyph.
-   *
-   * @returns A wrapper whose geometry and outline are resolved at `location`.
-   */
-  instanceAt(location: AxisLocation): GlyphInstance {
-    return this.instance(signal(location));
-  }
-
   /**
    * Returns the cached instance for a live designspace location.
    *
    * @param location - Signal whose value controls source resolution and interpolation.
-   * @returns The stable instance object for this glyph/location signal pair.
+   * @returns The cached instance object for this glyph/location signal pair.
+   * @internal
    */
-  instance(location: Signal<AxisLocation>): GlyphInstance {
-    const existing = this.#instances.get(location);
+  cachedInstanceForFont(location: Signal<AxisLocation>): GlyphInstance | null {
+    return this.#instances.get(location) ?? null;
+  }
+
+  /**
+   * Stores a font-created instance for this glyph/location signal pair.
+   *
+   * @param input - Resolved reactive inputs assembled by the owning font.
+   * @returns The created instance object.
+   * @internal
+   */
+  createInstanceForFont(input: GlyphInstanceInput): GlyphInstance {
+    const existing = this.#instances.get(input.location);
     if (existing) return existing;
 
-    const instance = new GlyphInstance(this, location);
-    this.#instances.set(location, instance);
+    const instance = new GlyphInstance(input);
+    this.#instances.set(input.location, instance);
     return instance;
   }
 
-  /**
-   * Resolve glyph geometry at a designspace location.
-   *
-   * If the location matches an exact source, that layer geometry is used. If
-   * the glyph has variation data, interpolated geometry is returned. Otherwise
-   * the primary layer geometry is returned.
-   *
-   * @returns A geometry snapshot for rendering or hit testing at `location`.
-   */
-  geometryAt(location: AxisLocation): GlyphGeometry {
-    const sourceLocation = axisLocationFromLocation(this.#source.location);
-    if (axisLocationsEqual(location, sourceLocation, [...this.#font.getAxes()])) {
-      return this.#geometry.peek();
-    }
-
-    const exactSource = this.#font.sourceAt(location);
-    if (exactSource) {
-      return (
-        this.#font.glyphLayerForId(this.#glyphId, exactSource.id)?.geometry ?? emptyGlyphGeometry()
-      );
-    }
-
-    const variationData = this.#font.variationData(this.#glyphId);
-    if (!variationData) {
-      return this.#geometry.peek();
-    }
-
-    const values = interpolate(variationData, normalize(location, [...this.#font.getAxes()]));
-
-    if (values.length === 0) {
-      return this.#geometry.peek();
-    }
-
-    return new GlyphGeometry(this.#layerState.structure, values);
+  /** @internal Primary authored source backing the cached glyph model. */
+  get primarySourceForFont(): Source {
+    return this.#source;
   }
 
-  /**
-   * Resolve an authored glyph layer that exactly matches a designspace location.
-   *
-   * Interpolated locations return `null`; callers should use
-   * {@link geometryAt} for those snapshots.
-   */
-  layerAt(location: AxisLocation): GlyphLayer | null {
-    const exactSource = this.#font.sourceAt(location);
-    if (!exactSource) return null;
-
-    return this.#font.glyphLayerForId(this.#glyphId, exactSource.id);
+  /** @internal Primary source geometry backing fallback and interpolation. */
+  get primaryGeometryForFont(): GlyphGeometry {
+    return this.#geometry.peek();
   }
 
-  /**
-   * Create a reactive outline model for this glyph.
-   *
-   * The outline follows the provided variation-location signal and resolves
-   * component glyphs through the owning font. Calls with the same location
-   * signal return the same outline object, so repeated text glyph instances
-   * share reactive outline parts.
-   */
-  outline(location: Signal<AxisLocation>): GlyphOutline {
-    const existing = this.#outlines.get(location);
-    if (existing) return existing;
-
-    const outline = this.#font.outline(this, location);
-    this.#outlines.set(location, outline);
-    return outline;
-  }
-
-  /**
-   * Create an outline model at a fixed designspace location.
-   *
-   * @returns A new outline object backed by an internal constant location
-   * signal. Store the result when reading `parts`, `svgPath`, or `bounds`
-   * repeatedly.
-   */
-  outlineAt(location: AxisLocation): GlyphOutline {
-    return this.outline(signal(location));
+  /** @internal Structure used by variation interpolation values. */
+  get interpolationStructureForFont(): GlyphStructure {
+    return this.#layerState.structure;
   }
 
   isPrimarySource(source: Source): boolean {
