@@ -11,7 +11,7 @@ import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
-import { asGlyphId } from "@shift/types";
+import { asGlyphId, mintNodeId } from "@shift/types";
 
 export const Canvas: FC = () => {
   const editor = useEditor();
@@ -20,25 +20,25 @@ export const Canvas: FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const cursorStyle = useSignalState(editor.cursorCell);
+  const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
 
   useEffect(() => {
-    if (!glyphIdParam) {
-      editor.scene.clear();
-      return undefined;
-    }
-
-    const glyphId = asGlyphId(glyphIdParam);
-    if (!editor.font.glyph(glyphId)) {
+    if (!glyphId) {
       editor.scene.clear();
       return undefined;
     }
 
     editor.scene.clear();
-    const itemId = editor.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
-    editor.scene.setGeometryItems([itemId]);
+    editor.scene.addNode({
+      id: mintNodeId(),
+      kind: "glyph",
+      glyphId,
+      sourceId: editor.activeSourceId ?? editor.font.defaultSource.id,
+      position: { x: 0, y: 0 },
+    });
 
     return () => editor.scene.clear();
-  }, [editor, glyphIdParam]);
+  }, [editor, glyphId]);
 
   useEffect(() => {
     const element = containerRef.current;

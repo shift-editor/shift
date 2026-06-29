@@ -1,9 +1,7 @@
 import type { Point2D } from "@shift/geo";
 import { Point, type SegmentId } from "@shift/glyph-state";
 import type { ContourId, PointId } from "@shift/types";
-import type { Editor } from "@/lib/editor/Editor";
-import type { GlyphInstanceGeometry } from "@/lib/model/Glyph";
-import { PenStroke } from "./PenStroke";
+import type { GlyphGeometry } from "@/lib/model/Glyph";
 
 export type PenTarget =
   | {
@@ -20,19 +18,14 @@ export type PenTarget =
   | { readonly type: "empty" };
 
 export class PenTargets {
-  readonly #geometry: GlyphInstanceGeometry;
+  readonly #geometry: GlyphGeometry;
 
-  private constructor(geometry: GlyphInstanceGeometry) {
+  private constructor(geometry: GlyphGeometry) {
     this.#geometry = geometry;
   }
 
-  static active(editor: Editor): PenTargets | null {
-    const stroke = PenStroke.active(editor);
-    return stroke ? PenTargets.forStroke(stroke) : null;
-  }
-
-  static forStroke(stroke: PenStroke): PenTargets {
-    return new PenTargets(stroke.geometry);
+  static forGeometry(geometry: GlyphGeometry): PenTargets {
+    return new PenTargets(geometry);
   }
 
   at(pos: Point2D, radius: number): PenTarget {
@@ -43,7 +36,7 @@ export class PenTargets {
     if (segment) {
       return {
         type: "segment",
-        segmentId: segment.segmentId,
+        segmentId: segment.id,
         t: segment.t,
       };
     }

@@ -30,6 +30,7 @@ import {
   type GeometryAnchorHit,
   type GeometryPointHit,
   type GeometrySegmentHit,
+  type GlyphHit,
   Segment,
   type SegmentId,
   type GlyphPosition as GlyphLayerPosition,
@@ -103,12 +104,14 @@ export interface GlyphInstanceGeometry {
   readonly bounds: BoundsType | null;
   readonly contours: readonly Contour[];
   readonly allPoints: readonly Point[];
+
   contour(contourId: ContourId): Contour | null;
   point(pointId: PointId): Point | null;
   anchor(anchorId: AnchorId): Anchor | null;
   segment(segmentId: SegmentId): Segment | null;
   hitPoint(pos: Point2D, radius: number): GeometryPointHit | null;
   hitAnchor(pos: Point2D, radius: number): GeometryAnchorHit | null;
+  hitAt(pos: Point2D, radius: number): GlyphHit | null;
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null;
 }
 
@@ -949,6 +952,10 @@ class InstanceGeometry implements GlyphInstanceGeometry {
     return this.#resolved.peek().hitAnchor(pos, radius);
   }
 
+  hitAt(pos: Point2D, radius: number): GlyphHit | null {
+    return this.#resolved.peek().hitAt(pos, radius);
+  }
+
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
     return this.#resolved.peek().hitSegment(pos, radius);
   }
@@ -1019,6 +1026,10 @@ class SnapshotGeometryCache implements GlyphInstanceGeometry {
 
   hitAnchor(pos: Point2D, radius: number): GeometryAnchorHit | null {
     return this.#geometry.hitAnchor(pos, radius);
+  }
+
+  hitAt(pos: Point2D, radius: number): GlyphHit | null {
+    return this.#geometry.hitAt(pos, radius);
   }
 
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
@@ -1135,7 +1146,7 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
       for (const point of contour.pointsCell.peek()) {
         const hit = Point.hit(point, pos, radius);
         if (hit && (!best || hit.distance < best.distance)) {
-          best = { type: "point", pointId: point.id, distance: hit.distance };
+          best = { kind: "point", id: point.id, distance: hit.distance };
         }
       }
     }
@@ -1147,10 +1158,16 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
     for (const anchor of this.#anchors.all) {
       const hit = anchor.hit(pos, radius);
       if (hit && (!best || hit.distance < best.distance)) {
-        best = { type: "anchor", anchorId: anchor.id, distance: hit.distance };
+        best = { kind: "anchor", id: anchor.id, distance: hit.distance };
       }
     }
     return best;
+  }
+
+  hitAt(pos: Point2D, radius: number): GlyphHit | null {
+    return (
+      this.hitAnchor(pos, radius) ?? this.hitPoint(pos, radius) ?? this.hitSegment(pos, radius)
+    );
   }
 
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
@@ -1162,8 +1179,8 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
 
         if (hit && (!best || hit.distance < best.distance)) {
           best = {
-            type: "segment",
-            segmentId: segment.id,
+            kind: "segment",
+            id: segment.id,
             t: hit.t,
             closestPoint: hit.closestPoint,
             distance: hit.distance,

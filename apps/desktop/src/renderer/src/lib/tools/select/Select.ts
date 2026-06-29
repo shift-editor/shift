@@ -21,7 +21,6 @@ import { TextRunEdit } from "./behaviors/TextRunEdit";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
-import { SelectSegments } from "./Segments";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -29,7 +28,6 @@ export class Select extends BaseTool<SelectState, Select> {
   readonly id: ToolName = "select";
   readonly boundingBox = new SelectBoundingBox(this);
   readonly marquee = new SelectMarquee(this);
-  readonly #segments = new SelectSegments();
 
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
@@ -62,7 +60,7 @@ export class Select extends BaseTool<SelectState, Select> {
     }
 
     const modifiers = this.editor.input.modifiersCell.value;
-    const hover = this.editor.hover.targetCell.value;
+    const hover = this.editor.hover.entryCell.value;
     if (modifiers.altKey && hover) {
       return { type: "copy" };
     }
@@ -92,12 +90,7 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override drawScene(canvas: Canvas): void {
-    if (this.editor.proofMode || !this.editor.focusedGlyphVisible()) return;
-
-    const instance = this.editor.previewGlyphInstance;
-    if (!instance) return;
-
-    this.#segments.draw(canvas, instance.geometry, this.editor.selection, this.editor.hover);
+    void canvas;
   }
 
   override drawOverlay(canvas: Canvas): void {

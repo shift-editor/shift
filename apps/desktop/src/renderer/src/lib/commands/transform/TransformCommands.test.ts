@@ -23,7 +23,7 @@ describe("transform commands through the workspace", () => {
     await editor.settle();
   });
 
-  const source = () => editor.editingGlyphLayer!;
+  const source = () => editor.glyphLayer!;
   const pointIds = () => source().allPoints.map((point) => point.id);
   const positions = () => source().allPoints.map(({ x, y }) => ({ x, y }));
 

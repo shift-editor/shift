@@ -60,7 +60,7 @@ editor/
 - **`CameraTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, layoutHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
 - **`Selection`** -- Unified selection state for points, anchors, and segments. Computed `DerivedSelection` tracks selected contours and bounds. Exposes `stateCell` plus unwrapped ID getters.
 - **`Selectable`** -- Discriminated union: `{ kind: "point" | "anchor" | "segment", id }`.
-- **`Coordinates`** -- Triple of `{ screen, scene, glyphLocal }` for a single position. Built via `Editor.fromScreen()` etc.
+- **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
 - **`GlyphLayerEditDraft`** -- Transactional interface for continuous layer manipulation: `previewPositionPatch()` / `previewTranslate()` / `previewRotate()` / `previewScale()` during drag, `commit(label)` or `discard()` at end.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
@@ -81,11 +81,11 @@ editor/
 Screen (canvas pixels, Y-down)
   -> Camera.projectScreenToScene() [affine matrix inverse]
 Scene (UPM space, Y-up, viewport-relative)
-  -> Scene.toLocal(itemId, scenePoint) [subtract that item's placement origin]
-Item-local (origin defined by the placed scene item)
+  -> node-local transform for the hit scene node
+Node-local (origin defined by the placed node)
 ```
 
-Existing tools still receive `coords.glyphLocal` for the active glyph path. New scene-aware code should not treat that coordinate as global; use `Scene.toLocal(itemId, scenePoint)` after hit testing identifies the item.
+Tools receive screen and scene coordinates from the pointer pipeline. Scene/node hit testing resolves any node-local coordinates needed by glyph editing tools.
 
 `Camera` computes the UPM-to-screen matrix as: baseline positioning + Y-flip + scale, composed with pan + zoom. The inverse is lazily computed. Both are `ComputedSignal<Mat>` so any dependent computed/effect auto-invalidates.
 
@@ -154,7 +154,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 - **Draft lifecycle** -- A `GlyphLayerEditDraft` must be committed or discarded. Calling `commit()` twice is safe (no-op), but forgetting both leaks the preview state.
 - **Hover mutual exclusion** -- `Hover` stores one glyph-domain target at a time. Tool-specific hover state should stay with the owning tool.
 - **Marker fallback** -- `Handles.draw()` tries the accelerated marker layer first. If WebGL is unavailable, it falls back to CPU canvas drawing internally.
-- **Item-local coordinates** -- `glyphLocal` is transitional active-glyph state. Scene item-local conversion requires an `ItemId` through `Scene.toLocal()` / `Scene.toScene()`.
+- **Node-local coordinates** -- Derived after hit testing identifies the scene node being acted on. Do not add editor-global glyph-local coordinates back to tool events.
 
 ## Verification
 

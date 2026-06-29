@@ -2,13 +2,27 @@ import type { Point2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
-import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
+import {
+  GestureDetector,
+  normalizeModifiers,
+  type GestureEvent,
+  type ToolEvent,
+  type Modifiers,
+} from "./GestureDetector";
 import type { BaseTool } from "./BaseTool";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { ToolManifest } from "./ToolManifest";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolInstance = BaseTool<any, any, any>;
+
+const DEFAULT_MODIFIERS: Modifiers = {
+  shiftKey: false,
+  altKey: false,
+  metaKey: false,
+  ctrlKey: false,
+  accelKey: false,
+};
 
 export class ToolManager implements ToolSwitchHandler {
   private registry = new Map<ToolName, ToolManifest>();
@@ -121,7 +135,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);
     this.editor.gesture.setPressed();
-    this.gesture.pointerDown(coords, screenPoint, modifiers);
+    this.gesture.pointerDown(coords, modifiers);
   }
 
   handlePointerMove(
@@ -179,25 +193,28 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);
 
-    const events = this.gesture.pointerMove(coords, screenPoint, modifiers);
+    const events = this.gesture.pointerMove(coords, modifiers);
     if (this.gesture.isDragging) this.editor.gesture.setDragging();
     this.dispatchEvents(events);
   }
 
-  handlePointerUp(screenPoint: Point2D): void {
+  handlePointerUp(screenPoint: Point2D, modifiers: Modifiers = DEFAULT_MODIFIERS): void {
     const coords = this.editor.fromScreen(screenPoint);
+    this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);
-    const events = this.gesture.pointerUp(coords, screenPoint);
+    const events = this.gesture.pointerUp(coords, modifiers);
     this.dispatchEvents(events);
     this.editor.gesture.reset();
   }
 
   handleKeyDown(e: KeyboardEvent): boolean {
-    this.editor.input.setModifiers({
+    const modifiers = normalizeModifiers({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
-      metaKey: e.metaKey || e.ctrlKey,
+      metaKey: e.metaKey,
+      ctrlKey: e.ctrlKey,
     });
+    this.editor.input.setModifiers(modifiers);
 
     if (e.key === "Escape" && this.gesture.isDragging) {
       this.gesture.reset();
@@ -210,24 +227,25 @@ export class ToolManager implements ToolSwitchHandler {
       this.activeTool?.handleEvent({
         type: "keyDown",
         key: e.key,
-        shiftKey: e.shiftKey,
-        altKey: e.altKey,
-        metaKey: e.metaKey || e.ctrlKey,
+        ...modifiers,
       }) ?? false
     );
   }
 
   handleKeyUp(e: KeyboardEvent): boolean {
-    this.editor.input.setModifiers({
+    const modifiers = normalizeModifiers({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
-      metaKey: e.metaKey || e.ctrlKey,
+      metaKey: e.metaKey,
+      ctrlKey: e.ctrlKey,
     });
+    this.editor.input.setModifiers(modifiers);
 
     return (
       this.activeTool?.handleEvent({
         type: "keyUp",
         key: e.key,
+        ...modifiers,
       }) ?? false
     );
   }
@@ -244,9 +262,29 @@ export class ToolManager implements ToolSwitchHandler {
     if (this.activeTool?.drawOverlay) this.activeTool.drawOverlay(canvas);
   }
 
-  private dispatchEvents(events: ToolEvent[]): void {
+  private dispatchEvents(events: GestureEvent[]): void {
     for (const event of events) {
-      this.activeTool?.handleEvent(event);
+      this.activeTool?.handleEvent(this.withPointerTarget(event));
+    }
+  }
+
+  private withPointerTarget(event: GestureEvent): ToolEvent {
+    switch (event.type) {
+      case "pointerMove":
+      case "click":
+      case "doubleClick":
+      case "dragStart":
+      case "drag":
+      case "dragEnd":
+        return {
+          ...event,
+          target: this.editor.getPointerTarget(event.coords.scene),
+        };
+      case "dragCancel":
+      case "keyDown":
+      case "keyUp":
+      case "selectionChanged":
+        return event;
     }
   }
 

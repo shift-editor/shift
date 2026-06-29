@@ -15,9 +15,9 @@ export class Anchors {
   }
 
   #anchorState(anchor: GlyphRenderAnchor, source: HandleStateSource): HandleState {
-    if (source.selection.anchorIds.has(anchor.id)) return "selected";
+    if (source.selection.has(anchor.id)) return "selected";
 
-    if (source.hover?.type === "anchor" && source.hover.anchorId === anchor.id) return "hovered";
+    if (source.hover.has(anchor.id)) return "hovered";
 
     return "idle";
   }

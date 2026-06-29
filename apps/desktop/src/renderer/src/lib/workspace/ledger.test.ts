@@ -16,7 +16,7 @@ describe("workspace ledger semantics (via TestEditor)", () => {
     editor.selectTool("pen");
   });
 
-  const source = () => editor.editingGlyphLayer!;
+  const source = () => editor.glyphLayer!;
 
   it("undoes settled ticks in reverse order", async () => {
     editor.clickGlyphLocal(10, 10);

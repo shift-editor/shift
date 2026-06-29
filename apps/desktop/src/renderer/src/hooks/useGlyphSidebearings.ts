@@ -1,12 +1,10 @@
 import type { GlyphSidebearings } from "@/lib/model/Glyph";
-import { useEditor } from "@/workspace/WorkspaceContext";
-import { useSignalState, useSignalTrigger } from "@/lib/signals";
 
 const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
 
 export interface GlyphSidebearingsState {
   readonly sidebearings: GlyphSidebearings;
-  readonly editable: boolean;
+  readonly hasLayer: boolean;
 }
 
 /**
@@ -19,13 +17,8 @@ export interface GlyphSidebearingsState {
  * @returns Current values and whether the displayed instance can be edited.
  */
 export function useGlyphSidebearings(): GlyphSidebearingsState {
-  const editor = useEditor();
-  const instance = useSignalState(editor.previewGlyphInstanceCell);
-  const layer = useSignalState(editor.editingGlyphLayerCell);
-
-  useSignalTrigger(instance?.sidebearingsCell, { schedule: "frame" });
   return {
-    sidebearings: instance?.sidebearings ?? EMPTY_SIDEBEARINGS,
-    editable: layer !== null,
+    sidebearings: EMPTY_SIDEBEARINGS,
+    hasLayer: false,
   };
 }

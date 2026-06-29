@@ -1,66 +1,30 @@
 import { useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
-import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { useState } from "react";
 import type { AnchorId } from "@shift/types";
 
 export const AnchorSection = () => {
-  const editor = useEditor();
-
   const [singleAnchorId, setSingleAnchorId] = useState<AnchorId | null>(null);
 
   const [anchorName, setAnchorName] = useState<string | null>(null);
-  const [editable, setEditable] = useState(false);
-
-  const [anchorX, setAnchorX] = useState(0);
-  const [anchorY, setAnchorY] = useState(0);
+  const [hasLayer, setHasLayer] = useState(false);
 
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
 
   useSignalEffect(() => {
-    const instance = editor.previewGlyphInstanceCell.value;
-    const layer = editor.editingGlyphLayerCell.value;
-    const ids = [...editor.selection.stateCell.value.anchorIds];
-
-    setEditable(layer !== null);
-
-    if (!instance || ids.length !== 1) {
-      setSingleAnchorId(null);
-      setAnchorName(ids.length > 1 ? "Multiple" : null);
-      setAnchorX(0);
-      setAnchorY(0);
-      xRef.current?.setValue(0);
-      yRef.current?.setValue(0);
-      return;
-    }
-
-    const selected = ids[0] ? instance.geometry.anchor(ids[0]) : null;
-    if (!selected) {
-      setSingleAnchorId(null);
-      setAnchorName(null);
-      return;
-    }
-
-    setSingleAnchorId(ids[0] ?? null);
-    setAnchorName(selected.name ?? "Unnamed");
-    setAnchorX(selected.x);
-    setAnchorY(selected.y);
-    xRef.current?.setValue(Math.round(selected.x));
-    yRef.current?.setValue(Math.round(selected.y));
+    setHasLayer(false);
+    setSingleAnchorId(null);
+    setAnchorName(null);
+    xRef.current?.setValue(0);
+    yRef.current?.setValue(0);
   });
 
   const handlePositionChange = (axis: "x" | "y", value: number) => {
-    if (!singleAnchorId) return;
-
-    const layer = editor.editingGlyphLayer;
-    if (!layer) return;
-
-    const nextX = axis === "x" ? value : anchorX;
-    const nextY = axis === "y" ? value : anchorY;
-    layer.applyPositionPatch([{ kind: "anchor", id: singleAnchorId, x: nextX, y: nextY }]);
+    void axis;
+    void value;
   };
 
   return (
@@ -70,13 +34,13 @@ export const AnchorSection = () => {
         <EditableSidebarInput
           ref={xRef}
           label="X"
-          disabled={singleAnchorId === null || !editable}
+          disabled={singleAnchorId === null || !hasLayer}
           onValueChange={(value) => handlePositionChange("x", value)}
         />
         <EditableSidebarInput
           ref={yRef}
           label="Y"
-          disabled={singleAnchorId === null || !editable}
+          disabled={singleAnchorId === null || !hasLayer}
           onValueChange={(value) => handlePositionChange("y", value)}
         />
       </div>

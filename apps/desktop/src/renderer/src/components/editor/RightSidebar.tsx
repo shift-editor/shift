@@ -20,9 +20,9 @@ export const RightSidebar = () => {
   const [hasAnchorSelection, setHasAnchorSelection] = useState(false);
 
   useSignalEffect(() => {
-    const { pointIds, anchorIds } = editor.selection.stateCell.value;
-    const nextPoints = pointIds.size > 0;
-    const nextAnchors = anchorIds.size > 0;
+    editor.selection.stateCell.value;
+    const nextPoints = editor.selection.pointIds.size > 0;
+    const nextAnchors = editor.selection.anchorIds.size > 0;
     setHasPointSelection((prev) => (prev === nextPoints ? prev : nextPoints));
     setHasAnchorSelection((prev) => (prev === nextAnchors ? prev : nextAnchors));
   });

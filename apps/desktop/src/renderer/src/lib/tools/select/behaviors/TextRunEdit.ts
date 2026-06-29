@@ -1,4 +1,4 @@
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { DoubleClickEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { SelectBehavior, SelectState } from "../types";
 
@@ -12,15 +12,11 @@ export class TextRunEdit implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"doubleClick">,
+    event: DoubleClickEvent,
   ): boolean {
+    void ctx;
+    void event;
     if (state.type !== "ready") return false;
-
-    const run = ctx.editor.textRun;
-    const anchor = run.anchorAtPoint(event.point, ctx.editor.hitRadius);
-    if (!anchor) return false;
-    ctx.editor.setGlyphFocus(anchor);
-
-    return true;
+    return false;
   }
 }

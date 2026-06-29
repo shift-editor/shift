@@ -1,37 +1,15 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useSignalText } from "@/hooks/useSignalText";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { Separator } from "@shift/ui";
 import { effect } from "@/lib/signals";
-import { useSignalState, useSignalTrigger } from "@/lib/signals/useSignal";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 export function DebugPanel() {
   const editor = useEditor();
-  const instance = useSignalState(editor.previewGlyphInstanceCell);
-  const layer = useSignalState(editor.editingGlyphLayerCell);
-  useSignalTrigger(instance?.xAdvanceCell);
-
-  const glyphStats = useMemo(() => {
-    if (!instance) return { pointCount: "0", snapshotSize: "—" };
-
-    const snapshot = layer?.state ?? null;
-    const bytes = snapshot ? new Blob([JSON.stringify(snapshot)]).size : null;
-
-    return {
-      pointCount: `${instance.geometry.allPoints.length}`,
-      snapshotSize: bytes === null ? "—" : formatBytes(bytes),
-    };
-  }, [instance, layer]);
 
   useEffect(() => {
     editor.startFpsMonitor();
@@ -61,7 +39,7 @@ export function DebugPanel() {
       if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
       if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
       if (worldRef.current)
-        worldRef.current.textContent = formatCoords(coords.glyphLocal.x, coords.glyphLocal.y);
+        worldRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
     });
     return () => fx.dispose();
   }, [editor]);
@@ -86,19 +64,6 @@ export function DebugPanel() {
           <h2 className="text-ui font-medium">FPS</h2>
           <span ref={fpsRef} className="text-ui text-muted font-mono tabular-nums" />
         </div>
-        <Separator className="bg-gray-300" />
-        <div className="flex flex-col">
-          <h2 className="text-ui font-medium">Canvas</h2>
-          <div className="flex items-center justify-between gap-4 text-ui text-muted">
-            <span>Total Points</span>
-            <span className="font-mono tabular-nums">{glyphStats.pointCount}</span>
-          </div>
-          <div className="flex items-center justify-between gap-4 text-ui text-muted">
-            <span>Snapshot Size</span>
-            <span className="font-mono tabular-nums">{glyphStats.snapshotSize}</span>
-          </div>
-        </div>
-        <Separator className="bg-gray-300" />
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">
           <h2 className="text-sm font-medium">Coordinates</h2>

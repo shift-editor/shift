@@ -136,8 +136,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
       match: (event) => event.key === "Delete" || event.key === "Backspace",
-      run: (ctx) => {
-        ctx.editor.deleteSelectedPoints();
+      run: () => {
         return true;
       },
     },

@@ -12,18 +12,22 @@
  */
 
 import { Editor } from "@/lib/editor/Editor";
+import type { Glyph, GlyphInstance, GlyphLayer } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import {
   mintGlyphId,
   mintLayerId,
+  mintNodeId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
   type Unicode,
 } from "@shift/types";
+import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
+import type { GlyphNode } from "@/types/node";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -61,8 +65,11 @@ export class TestEditor extends Editor {
    */
   async startSession(name = "A", unicode: number | null = 65): Promise<this> {
     await this.#stack.createWorkspace();
+    this.selectSource(this.font.defaultSource.id);
 
-    const record = await this.#createAndOpenGlyph(name, unicode);
+    const glyph = await this.#createAndOpenGlyph(name, unicode);
+    const record = this.font.recordForName(glyph.handle.name);
+    if (!record) throw new Error("created glyph did not appear in the font directory");
     this.#placeGlyph(record.id);
     return this;
   }
@@ -72,7 +79,7 @@ export class TestEditor extends Editor {
     await this.#createAndOpenGlyph(name, unicode);
   }
 
-  async #createAndOpenGlyph(name: string, unicode: number | null): Promise<GlyphRecord> {
+  async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
     const glyphId = mintGlyphId();
     const sourceId = this.font.defaultSource.id;
     const applied = await this.#stack.editCoordinator.apply([
@@ -97,17 +104,21 @@ export class TestEditor extends Editor {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    const loaded = await this.font.loadGlyph(record.id, {
+    const glyph = await this.font.loadGlyph(record.id, {
       sourceIds: [sourceId],
     });
-    if (!loaded) throw new Error("created glyph did not load");
-    return record;
+    return glyph;
   }
 
   #placeGlyph(glyphId: GlyphId): void {
     this.scene.clear();
-    const itemId = this.scene.addGlyph({ glyphId, origin: { x: 0, y: 0 } });
-    this.scene.setGeometryItems([itemId]);
+    this.scene.addNode({
+      id: mintNodeId(),
+      kind: "glyph",
+      glyphId,
+      sourceId: this.font.defaultSource.id,
+      position: { x: 0, y: 0 },
+    });
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
@@ -133,7 +144,43 @@ export class TestEditor extends Editor {
   }
 
   get pointCount(): number {
-    return this.editingGlyphLayer?.allPoints.length ?? 0;
+    return this.glyphLayer?.pointCount ?? 0;
+  }
+
+  get glyphLayer(): GlyphLayer | null {
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return null;
+
+    const node = this.glyphNode;
+    if (!node) return null;
+
+    return this.font.layer(node.glyphId, sourceId);
+  }
+
+  get glyphNode(): GlyphNode | null {
+    return this.scene.nodes().find((node) => node.kind === "glyph") ?? null;
+  }
+
+  get sceneGlyphInstance(): GlyphInstance | null {
+    const node = this.glyphNode;
+    if (!node) return null;
+
+    return this.font.instance(node.glyphId, this.designLocationCell);
+  }
+
+  get glyphRecord(): GlyphRecord | null {
+    const node = this.glyphNode;
+    if (!node) return null;
+
+    return this.font.glyph(node.glyphId);
+  }
+
+  get glyphContours(): readonly Contour[] {
+    return this.glyphLayer?.contours ?? [];
+  }
+
+  get openContour(): Contour | null {
+    return this.glyphContours.find((contour) => !contour.closed) ?? null;
   }
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
@@ -149,7 +196,7 @@ export class TestEditor extends Editor {
    * screen coordinates, which the viewport y-flips.
    */
   clickGlyphLocal(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    const { screen } = this.fromGlyphLocal({ x, y });
+    const screen = this.projectSceneToScreen({ x, y });
     return this.click(screen.x, screen.y, options);
   }
 

@@ -94,7 +94,7 @@ export const CreateSourceDialog = ({ open, onOpenChange }: CreateSourceDialogPro
         <DialogPopup
           className={cn(
             "fixed left-1/2 top-1/2 w-[360px] -translate-x-1/2 -translate-y-1/2",
-            "rounded-lg border border-line-subtle bg-canvas p-5 shadow-lg",
+            "rounded-lg border border-line-subtle bg-canvas p-2 shadow-lg",
           )}
         >
           <div className="mb-4 flex items-center justify-between">

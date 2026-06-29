@@ -30,14 +30,8 @@ export function DebugProvider({ children }: DebugProviderProps) {
   const editor = useEditor();
 
   const dumpSnapshot = useCallback(() => {
-    const glyph = editor.previewGlyphRecordCell.peek();
-    if (!glyph) {
-      return;
-    }
-
-    const json = JSON.stringify(glyph, null, 2);
-    void navigator.clipboard?.writeText(json);
-  }, [editor]);
+    void navigator.clipboard?.writeText("{}");
+  }, []);
 
   useEffect(() => {
     editor.setDebugOverlays(overlays);

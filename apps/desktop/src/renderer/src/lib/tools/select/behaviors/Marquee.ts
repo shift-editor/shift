@@ -1,41 +1,38 @@
 import { Rect, type Rect2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
 export class Marquee implements SelectBehavior {
-  onDragStart(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"dragStart">,
-  ): boolean {
+  onDragStart(state: SelectState, ctx: ToolContext<SelectState>, event: DragStartEvent): boolean {
     if (state.type !== "ready") return false;
 
-    const localPoint = event.coords.glyphLocal;
     if (ctx.editor.selection.hasSelection()) {
       ctx.editor.selection.clear();
     }
 
     ctx.setState({
       type: "brushing",
-      selection: { startPos: localPoint, currentPos: localPoint },
+      selection: {
+        startPos: event.coords.scene,
+        currentPos: event.coords.scene,
+      },
     });
 
     return true;
   }
 
-  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: DragEvent): boolean {
     if (state.type !== "brushing") return false;
-    const localPoint = event.coords.glyphLocal;
 
     const rect = Rect.fromPoints(state.selection.startPos, state.selection.currentPos);
     const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.selection.select([...pointIds].map((id) => ({ kind: "point", id })));
+    ctx.editor.selection.select([...pointIds].map((pointId) => ({ kind: "point", pointId })));
 
     ctx.setState({
       type: "brushing",
-      selection: { ...state.selection, currentPos: localPoint },
+      selection: { ...state.selection, currentPos: event.coords.scene },
     });
     return true;
   }
@@ -45,7 +42,7 @@ export class Marquee implements SelectBehavior {
 
     const rect = Rect.fromPoints(state.selection.startPos, state.selection.currentPos);
     const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.selection.select([...pointIds].map((id) => ({ kind: "point", id })));
+    ctx.editor.selection.select([...pointIds].map((pointId) => ({ kind: "point", pointId })));
 
     ctx.setState({ type: "ready" });
     return true;
@@ -61,10 +58,8 @@ export class Marquee implements SelectBehavior {
   }
 
   private getPointsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<PointId> {
-    const instance = ctx.editor.previewGlyphInstance;
-    if (!instance) return new Set();
-
-    const hitPoints = instance.geometry.allPoints.filter((p) => Rect.containsPoint(rect, p));
-    return new Set(hitPoints.map((p) => p.id));
+    void rect;
+    void ctx;
+    return new Set();
   }
 }

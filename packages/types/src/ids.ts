@@ -16,8 +16,8 @@ declare const AxisIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
-declare const ItemIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
+declare const NodeIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 
 /**
@@ -65,19 +65,19 @@ export type GuidelineId = string & { readonly [GuidelineIdBrand]: typeof Guideli
 export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
 
 /**
- * A scene item identifier minted by the renderer.
- *
- * Item ids identify a placed object on an editor scene. They are placement
- * identity only; commands that mutate authored glyph geometry must resolve the
- * glyph layer separately from document glyph identity and designspace location.
- */
-export type ItemId = string & { readonly [ItemIdBrand]: typeof ItemIdBrand };
-
-/**
  * A layer identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
  */
 export type LayerId = string & { readonly [LayerIdBrand]: typeof LayerIdBrand };
+
+/**
+ * A scene node identifier minted by the renderer.
+ *
+ * Node ids identify placed editor nodes. They are placement identity only;
+ * commands that mutate authored glyph geometry must resolve the glyph layer
+ * separately from document glyph identity and designspace location.
+ */
+export type NodeId = string & { readonly [NodeIdBrand]: typeof NodeIdBrand };
 
 /**
  * A source identifier from Rust.
@@ -142,19 +142,19 @@ export function asGlyphId(id: string): GlyphId {
 }
 
 /**
- * Convert a scene item ID string to a typed ItemId.
- * Use this only for persisted or test-provided scene item identities.
- */
-export function asItemId(id: string): ItemId {
-  return id as ItemId;
-}
-
-/**
  * Convert a string ID from Rust to a typed LayerId.
  * Use this when receiving IDs from Rust snapshots.
  */
 export function asLayerId(id: string): LayerId {
   return id as LayerId;
+}
+
+/**
+ * Convert a scene node ID string to a typed NodeId.
+ * Use this only for persisted or test-provided scene node identities.
+ */
+export function asNodeId(id: string): NodeId {
+  return id as NodeId;
 }
 
 /**
@@ -222,18 +222,18 @@ export function isValidGlyphId(id: unknown): id is GlyphId {
 }
 
 /**
- * Type guard to check if a value is a valid ItemId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidItemId(id: unknown): id is ItemId {
-  return typeof id === "string" && id.length > 0;
-}
-
-/**
  * Type guard to check if a value is a valid LayerId.
  * Useful for runtime validation in debug builds.
  */
 export function isValidLayerId(id: unknown): id is LayerId {
+  return typeof id === "string" && id.length > 0;
+}
+
+/**
+ * Type guard to check if a value is a valid NodeId.
+ * Useful for runtime validation in debug builds.
+ */
+export function isValidNodeId(id: unknown): id is NodeId {
   return typeof id === "string" && id.length > 0;
 }
 
@@ -257,8 +257,8 @@ type MintedIdByPrefix = {
   component: ComponentId;
   guideline: GuidelineId;
   glyph: GlyphId;
-  item: ItemId;
   layer: LayerId;
+  node: NodeId;
   source: SourceId;
 };
 
@@ -312,14 +312,14 @@ export function mintGlyphId(): GlyphId {
   return mintPrefixedId("glyph");
 }
 
-/** Mints a new scene item id. See {@link ItemId}. */
-export function mintItemId(): ItemId {
-  return mintPrefixedId("item");
-}
-
 /** Mints a new layer id. See {@link mintPointId}. */
 export function mintLayerId(): LayerId {
   return mintPrefixedId("layer");
+}
+
+/** Mints a new scene node id. See {@link NodeId}. */
+export function mintNodeId(): NodeId {
+  return mintPrefixedId("node");
 }
 
 /** Mints a new source id. See {@link mintPointId}. */

@@ -1,13 +1,10 @@
-import { Bounds, Vec2, type Point2D, type Rect2D } from "@shift/geo";
-import type { Editor } from "@/lib/editor/Editor";
+import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { CanvasItem } from "@/lib/editor/rendering/CanvasItem";
 import type { Coordinates } from "@/types/coordinates";
 import type { CursorType } from "@/types/editor";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { Select } from "./Select";
-
-type YAxisDirection = "up" | "down";
 
 export type CornerHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -83,13 +80,6 @@ interface HandlePositions {
   };
 }
 
-interface ExpandedHandleRect {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}
-
 export interface SelectBoundingBoxProps {
   readonly rect: Rect2D;
   readonly screenRect: Rect2D;
@@ -100,57 +90,15 @@ export interface SelectBoundingBoxProps {
 
 export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   readonly #select: Select;
-  readonly #editor: Editor;
 
   constructor(select: Select) {
     super();
     this.#select = select;
-    this.#editor = select.editor;
   }
 
   protected props(): SelectBoundingBoxProps | null {
-    const state = this.#select.stateCell.value;
-    if (state.type === "brushing") return null;
-
-    if (
-      !this.#editor.handlesVisibleCell.value ||
-      this.#editor.proofModeCell.value ||
-      !this.#editor.focusedGlyphVisibleCell.value
-    ) {
-      return null;
-    }
-
-    const selection = this.#editor.selection.stateCell.value;
-    const selectedCount =
-      selection.pointIds.size + selection.anchorIds.size + selection.segmentIds.size;
-    if (selectedCount <= 1) return null;
-
-    const bounds = this.#editor.selection.boundsCell.value;
-    if (!bounds) return null;
-
-    this.#editor.camera.trackViewportTransform();
-
-    const rect = Bounds.toRect(bounds);
-    const screenRect = this.#screenRect(rect);
-    const upmHandles = getHandlePositions(
-      rect,
-      this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
-      this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx),
-    );
-    const screenHandles = getHandlePositions(
-      screenRect,
-      SELECT_BOUNDING_BOX_STYLE.handle.offsetPx,
-      SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
-      "down",
-    );
-
-    return {
-      rect,
-      screenRect,
-      upmHandles,
-      screenHandles,
-      hitRadiusPx: SELECT_BOUNDING_BOX_STYLE.hitRadiusPx,
-    };
+    void this.#select;
+    return null;
   }
 
   get rect(): Rect2D | null {
@@ -234,33 +182,6 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     this.#drawHandles(canvas, props.upmHandles);
   }
 
-  #screenRect(rect: Rect2D): Rect2D {
-    const topLeft = this.#editor.fromGlyphLocal({
-      x: rect.left,
-      y: rect.bottom,
-    }).screen;
-    const bottomRight = this.#editor.fromGlyphLocal({
-      x: rect.right,
-      y: rect.top,
-    }).screen;
-
-    const left = Math.min(topLeft.x, bottomRight.x);
-    const right = Math.max(topLeft.x, bottomRight.x);
-    const top = Math.min(topLeft.y, bottomRight.y);
-    const bottom = Math.max(topLeft.y, bottomRight.y);
-
-    return {
-      x: left,
-      y: top,
-      width: right - left,
-      height: bottom - top,
-      left,
-      top,
-      right,
-      bottom,
-    };
-  }
-
   #drawRect(canvas: Canvas, rect: Rect2D): void {
     const { stroke, widthPx, dashPx } = SELECT_BOUNDING_BOX_STYLE;
     canvas.strokeRect(rect.x, rect.y, rect.width, rect.height, stroke, widthPx, dashPx);
@@ -294,91 +215,6 @@ function drawHandle(
   canvas.ctx.strokeRect(center.x - half, center.y - half, size, size);
 
   canvas.ctx.restore();
-}
-
-function getExpandedHandleRect(
-  rect: Rect2D,
-  offset: number,
-  yAxisDirection: YAxisDirection,
-): ExpandedHandleRect {
-  const left = rect.left - offset;
-  const right = rect.right + offset;
-
-  if (yAxisDirection === "up") {
-    return {
-      left,
-      right,
-      top: rect.bottom + offset,
-      bottom: rect.top - offset,
-    };
-  }
-
-  return {
-    left,
-    right,
-    top: rect.top - offset,
-    bottom: rect.bottom + offset,
-  };
-}
-
-function getHandlePositions(
-  rect: Rect2D,
-  handleOffset: number,
-  rotationZoneOffset: number,
-  yAxisDirection: YAxisDirection = "up",
-): HandlePositions {
-  const alignmentRect = getExpandedHandleRect(rect, handleOffset, yAxisDirection);
-  const rotationRect = getExpandedHandleRect(rect, rotationZoneOffset, yAxisDirection);
-  const centerX = (alignmentRect.left + alignmentRect.right) / 2;
-  const centerY = (alignmentRect.top + alignmentRect.bottom) / 2;
-
-  return {
-    corners: {
-      topLeft: {
-        x: alignmentRect.left,
-        y: alignmentRect.top,
-      },
-      topRight: {
-        x: alignmentRect.right,
-        y: alignmentRect.top,
-      },
-      bottomLeft: {
-        x: alignmentRect.left,
-        y: alignmentRect.bottom,
-      },
-      bottomRight: {
-        x: alignmentRect.right,
-        y: alignmentRect.bottom,
-      },
-    },
-    midpoints: {
-      top: { x: centerX, y: alignmentRect.top },
-      bottom: {
-        x: centerX,
-        y: alignmentRect.bottom,
-      },
-      left: { x: alignmentRect.left, y: centerY },
-      right: { x: alignmentRect.right, y: centerY },
-    },
-    rotationZones: {
-      topLeft: {
-        x: rotationRect.left,
-        y: rotationRect.top,
-      },
-      topRight: {
-        x: rotationRect.right,
-        y: rotationRect.top,
-      },
-      bottomLeft: {
-        x: rotationRect.left,
-        y: rotationRect.bottom,
-      },
-      bottomRight: {
-        x: rotationRect.right,
-        y: rotationRect.bottom,
-      },
-    },
-  };
 }
 
 function hitTestRotationZones(

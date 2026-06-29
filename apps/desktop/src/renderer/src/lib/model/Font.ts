@@ -864,41 +864,54 @@ export class Font {
   }
 
   /**
-   * Loads one glyph's geometry.
+   * Loads one current-font glyph and returns its live model.
    *
-   * @param glyphId - Stable glyph identity whose local geometry should be available.
-   * @param options - Optional source scope; omitted means every authored layer for the glyph.
-   * @returns `true` when the glyph exists and is locally available after the load.
+   * @param glyphId - Current-font glyph identity whose local model should be available.
+   * @param options - Optional additional source scope; the default source is always loaded.
+   * @returns The loaded glyph model for `glyphId`.
+   * @throws {Error} when `glyphId` is not a current-font glyph or its model cannot be loaded.
    * @see {@link loadGlyphs}
    */
-  async loadGlyph(glyphId: GlyphId, options: GlyphLoadOptions = {}): Promise<boolean> {
-    return (await this.loadGlyphs([glyphId], options)).has(glyphId);
+  async loadGlyph(glyphId: GlyphId, options: GlyphLoadOptions = {}): Promise<Glyph> {
+    const glyph = (await this.loadGlyphs([glyphId], options))[0];
+    if (!glyph) throw new Error(`current-font glyph ${glyphId} did not load`);
+    return glyph;
   }
 
   /**
-   * Requests local glyph geometry and returns the requested glyph ids that are available.
+   * Loads current-font glyphs and returns their live models in request order.
    *
    * @remarks
-   * Component bases discovered while reading snapshots are requested as a side
-   * effect, but the returned set is keyed only by the glyph IDs requested by the
-   * caller.
+   * Component bases discovered while loading are hydrated as a side effect, but
+   * the returned list contains only the glyph IDs requested by the caller.
    *
-   * @param glyphIds - Stable glyph identities whose local geometry should be available.
-   * @param options - Optional source scope; omitted means every authored layer for each glyph.
-   * @returns A fresh set containing requested glyph ids that exist in the current font.
+   * @param glyphIds - Current-font glyph identities whose local models should be available.
+   * @param options - Optional additional source scope; default sources are always loaded.
+   * @returns Loaded glyph models aligned with `glyphIds`, including duplicate requests.
+   * @throws {Error} when any requested glyph ID is not in the current font or cannot load.
    */
   async loadGlyphs(
     glyphIds: readonly GlyphId[],
     options: GlyphLoadOptions = {},
-  ): Promise<ReadonlySet<GlyphId>> {
-    await this.#loadGlyphSnapshots(glyphIds, options);
-
-    const loaded = new Set<GlyphId>();
-    for (const glyphId of uniqueGlyphIds(glyphIds)) {
-      const glyph = this.#glyphModel(glyphId);
-      if (glyph) loaded.add(glyphId);
+  ): Promise<readonly Glyph[]> {
+    const uniqueIds = uniqueGlyphIds(glyphIds);
+    for (const glyphId of uniqueIds) {
+      if (!this.#store.recordForId(glyphId)) {
+        throw new Error(`glyph ${glyphId} is not in the current font`);
+      }
     }
-    return loaded;
+    await this.#loadGlyphSnapshots(uniqueIds, options);
+
+    const glyphs = new Map<GlyphId, Glyph>();
+    for (const glyphId of uniqueIds) {
+      const glyph = this.#glyphModel(glyphId);
+      if (!glyph) {
+        throw new Error(`current-font glyph ${glyphId} did not load`);
+      }
+      glyphs.set(glyphId, glyph);
+    }
+
+    return glyphIds.map((glyphId) => glyphs.get(glyphId)!);
   }
 
   async #loadGlyphSnapshots(
@@ -951,7 +964,7 @@ export class Font {
   }
 
   #neededSourceIds(glyphId: GlyphId, options: GlyphLoadOptions): SourceId[] {
-    const sourceIds = options.sourceIds ?? this.#store.sourceIdsForGlyph(glyphId);
+    const sourceIds = this.#sourceIdsForGlyphLoad(glyphId, options);
     const needed: SourceId[] = [];
     const seen = new Set<SourceId>();
 
@@ -969,7 +982,7 @@ export class Font {
     const seen = new Set<Promise<void>>();
 
     for (const glyphId of uniqueGlyphIds(glyphIds)) {
-      const sourceIds = options.sourceIds ?? this.#store.sourceIdsForGlyph(glyphId);
+      const sourceIds = this.#sourceIdsForGlyphLoad(glyphId, options);
       for (const sourceId of sourceIds) {
         const promise = this.#glyphLoadsInFlight.get(inFlightKey(glyphId, sourceId));
         if (!promise || seen.has(promise)) continue;
@@ -979,6 +992,11 @@ export class Font {
     }
 
     return promises;
+  }
+
+  #sourceIdsForGlyphLoad(glyphId: GlyphId, options: GlyphLoadOptions): readonly SourceId[] {
+    const sourceIds = options.sourceIds ?? this.#store.sourceIdsForGlyph(glyphId);
+    return uniqueSourceIds([...sourceIds, this.defaultSource.id]);
   }
 
   async #loadGlyphRequests(requests: readonly WorkspaceGlyphSnapshotRequest[]): Promise<void> {
@@ -1279,4 +1297,8 @@ function isSignal<T>(value: T | Signal<T>): value is Signal<T> {
 
 function uniqueGlyphIds(glyphIds: readonly GlyphId[]): GlyphId[] {
   return [...new Set(glyphIds)];
+}
+
+function uniqueSourceIds(sourceIds: readonly SourceId[]): SourceId[] {
+  return [...new Set(sourceIds)];
 }

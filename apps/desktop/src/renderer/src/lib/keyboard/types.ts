@@ -10,7 +10,6 @@ export interface KeyboardEditorActions {
   undo(): void;
   redo(): void;
   selectAll(): void;
-  deleteSelectedPoints(): void;
   setActiveTool(toolName: ToolName): void;
   getToolShortcuts(): ToolShortcutEntry[];
   requestTemporaryTool(
@@ -18,8 +17,6 @@ export interface KeyboardEditorActions {
     options?: { onActivate?: () => void; onReturn?: () => void },
   ): void;
   returnFromTemporaryTool(): void;
-  readonly proofMode: boolean;
-  setProofMode(enabled: boolean): void;
   openGlyphFinder(): void;
 }
 

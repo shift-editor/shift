@@ -1,13 +1,13 @@
 import type { PointId } from "@shift/types";
 import type { HandleState } from "@/types/graphics";
-import type { HoverState } from "@/lib/editor/Hover";
-import type { SelectionState } from "@/lib/editor/Selection";
+import type { Hover } from "@/lib/editor/Hover";
+import type { Selection } from "@/lib/editor/Selection";
 import type { GlyphRenderContour } from "@/lib/model/GlyphRenderModel";
 import { PointHandleItem } from "./PointHandleItem";
 
 export interface HandleStateSource {
-  readonly selection: SelectionState;
-  readonly hover: HoverState;
+  readonly selection: Selection;
+  readonly hover: Hover;
 }
 
 export class HandleDisplayList {
@@ -62,9 +62,9 @@ export class HandleItems {
   }
 
   #state(pointId: PointId, source: HandleStateSource): HandleState {
-    if (source.selection.pointIds.has(pointId)) return "selected";
+    if (source.selection.has(pointId)) return "selected";
 
-    if (source.hover?.type === "point" && source.hover.pointId === pointId) return "hovered";
+    if (source.hover.has(pointId)) return "hovered";
 
     return "idle";
   }

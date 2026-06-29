@@ -21,9 +21,9 @@ export class SelectSegments {
   }
 
   #hoveredSegment(geometry: GlyphInstanceGeometry, hover: Hover): Segment | null {
-    const segmentId = hover.segmentId;
-    if (!segmentId) return null;
+    const entry = hover.entry;
+    if (entry?.kind !== "segment") return null;
 
-    return geometry.segment(segmentId);
+    return geometry.segment(entry.segmentId);
   }
 }

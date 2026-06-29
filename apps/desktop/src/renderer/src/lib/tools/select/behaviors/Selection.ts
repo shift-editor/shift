@@ -1,43 +1,41 @@
-import type { Selectable } from "@/lib/editor/Selection";
+import type { SelectionEntry } from "@/lib/editor/Selection";
 import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { ClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
 export class Selection implements SelectBehavior {
-  onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
+  onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ClickEvent): boolean {
     if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
 
     const editor = ctx.editor;
-    const instance = editor.previewGlyphInstance;
-    if (!instance) return false;
+    let items: SelectionEntry[] | null = null;
+    const target = event.target;
 
-    const geometry = instance.geometry;
-    const pos = event.coords.glyphLocal;
-    const radius = editor.hitRadius;
-    let items: Selectable[] | null = null;
-
-    const anchorHit = geometry.hitAnchor(pos, radius);
-    if (anchorHit) {
-      items = [{ kind: "anchor", id: anchorHit.anchorId }];
-    }
-
-    if (!items) {
-      const pointHit = geometry.hitPoint(pos, radius);
-      if (pointHit) {
-        items = [{ kind: "point", id: pointHit.pointId }];
+    switch (target.kind) {
+      case "point": {
+        items = [{ kind: "point", pointId: target.id }];
+        break;
       }
-    }
 
-    if (!items) {
-      const segmentHit = geometry.hitSegment(pos, radius);
-      const segment = segmentHit ? geometry.segment(segmentHit.segmentId) : null;
-
-      if (segmentHit && segment) {
-        items = [
-          { kind: "segment", id: segmentHit.segmentId },
-          ...segment.pointIds.map((id) => ({ kind: "point" as const, id })),
-        ];
+      case "anchor": {
+        items = [{ kind: "anchor", anchorId: target.id }];
+        break;
       }
+
+      case "segment": {
+        const pointIds = target.pointIds;
+        const segmentPointSelection = pointIds.map((pointId) => ({
+          kind: "point" as const,
+          pointId,
+        }));
+
+        items = [{ kind: "segment", segmentId: target.id }, ...segmentPointSelection];
+        break;
+      }
+
+      case "canvas":
+      case "node":
+        break;
     }
 
     if (!items) {

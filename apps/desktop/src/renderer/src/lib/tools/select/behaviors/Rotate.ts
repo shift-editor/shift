@@ -1,7 +1,7 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import type { Point2D } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
 import type { Select } from "../Select";
@@ -13,7 +13,7 @@ export class Rotate implements SelectBehavior {
   onDragStart(
     _state: SelectState,
     ctx: ToolContext<SelectState, Select>,
-    event: ToolEventOf<"dragStart">,
+    event: DragStartEvent,
   ): boolean {
     if (!ctx.editor.selection.hasSelection()) return false;
 
@@ -24,11 +24,7 @@ export class Rotate implements SelectBehavior {
     return true;
   }
 
-  onDrag(
-    state: SelectState,
-    ctx: ToolContext<SelectState, Select>,
-    event: ToolEventOf<"drag">,
-  ): boolean {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState, Select>, event: DragEvent): boolean {
     if (state.type !== "rotating") return false;
     if (!this.#draft || !this.#origin) return false;
 
@@ -78,64 +74,21 @@ export class Rotate implements SelectBehavior {
 
   private nextRotatingState(
     state: SelectState & { type: "rotating" },
-    event: ToolEventOf<"drag">,
+    event: DragEvent,
   ): SelectState & { type: "rotating" } {
-    const currentPos = event.coords.glyphLocal;
-    const rawAngle = Vec2.angleTo(state.rotate.center, currentPos);
-    const deltaAngle = rawAngle - state.rotate.startAngle;
-
-    const currentAngle = state.rotate.startAngle + deltaAngle;
-
-    this.#draft!.previewRotate(deltaAngle, this.#origin!);
-
+    void event;
     return {
       type: "rotating",
       rotate: {
         ...state.rotate,
-        lastPos: currentPos,
-        currentAngle,
       },
     };
   }
 
-  private tryStartRotate(
-    event: ToolEventOf<"dragStart">,
-    editor: Editor,
-    tool: Select,
-  ): SelectState | null {
-    const instance = editor.previewGlyphInstance;
-    if (!instance || !editor.editingGlyphLayer) return null;
-
-    const bbHit = tool.boundingBox.hit(event.coords);
-    if (!bbHit) return null;
-
-    if (bbHit.type !== "rotate") return null;
-
-    const corner = bbHit.corner;
-
-    const localPoint = event.coords.glyphLocal;
-
-    const center = bbHit.center;
-
-    const startAngle = Vec2.angleTo(center, localPoint);
-
-    this.#draft = editor.beginGlyphLayerEditDraft({
-      points: [...editor.selection.pointIds],
-      anchors: [...editor.selection.anchorIds],
-    });
-
-    this.#origin = center;
-
-    return {
-      type: "rotating",
-      rotate: {
-        corner,
-        startPos: localPoint,
-        lastPos: localPoint,
-        center,
-        startAngle,
-        currentAngle: startAngle,
-      },
-    };
+  private tryStartRotate(event: DragStartEvent, editor: Editor, tool: Select): SelectState | null {
+    void event;
+    void editor;
+    void tool;
+    return null;
   }
 }

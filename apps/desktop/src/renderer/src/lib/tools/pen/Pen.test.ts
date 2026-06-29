@@ -21,7 +21,7 @@ describe("Pen tool", () => {
       editor.click(100, 200);
       await editor.settle();
 
-      const contour = editor.getActiveContour();
+      const contour = editor.openContour;
       expect(contour?.points.length).toBe(1);
     });
   });
@@ -33,7 +33,7 @@ describe("Pen tool", () => {
       editor.click(300, 200);
       await editor.settle();
 
-      const segment = editor.getActiveContour()?.segments()[0];
+      const segment = editor.openContour?.segments()[0];
 
       expect(segment?.type).toBe("line");
     });
@@ -46,7 +46,7 @@ describe("Pen tool", () => {
       editor.click(500, 200);
       await editor.settle();
 
-      const contour = editor.getActiveContour();
+      const contour = editor.openContour;
       expect(contour?.segments().length).toBe(2);
 
       expect(contour?.segments()[0]?.type).toBe("line");
@@ -64,10 +64,10 @@ describe("Pen tool", () => {
       editor.click(100, 200); // back on the first point
       await editor.settle();
 
-      const contour = editor.editingGlyphLayer?.geometry.contours[0];
+      const contour = editor.glyphContours[0];
       expect(contour?.closed).toBe(true);
       expect(contour?.points.length).toBe(3);
-      expect(editor.getActiveContour()).toBeNull();
+      expect(editor.openContour).toBeNull();
     });
 
     it("two consecutive curve drags create two cubic segments joined by a smooth point", async () => {
@@ -88,7 +88,7 @@ describe("Pen tool", () => {
       editor.pointerUp(580, 180);
       await editor.settle();
 
-      const contour = editor.getActiveContour();
+      const contour = editor.openContour;
       expect(contour?.segments().map((segment) => segment.type)).toEqual(["cubic", "cubic"]);
 
       const junction = contour?.segments()[0]?.asCubic()?.end;
@@ -105,7 +105,7 @@ describe("Pen tool", () => {
       editor.pointerUp(200, -200);
       await editor.settle();
 
-      const contour = editor.getActiveContour();
+      const contour = editor.openContour;
       expect(contour?.segments().length).toBe(1);
       expect(contour?.segments()[0]?.type).toBe("cubic");
     });
@@ -134,7 +134,7 @@ describe("Pen tool", () => {
       await editor.undoAndSettle();
 
       expect(editor.pointCount).toBe(0);
-      expect(editor.editingGlyphLayer?.geometry.contours.length).toBe(0);
+      expect(editor.glyphContours.length).toBe(0);
     });
   });
 });

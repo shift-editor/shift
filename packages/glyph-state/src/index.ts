@@ -9,9 +9,14 @@ export {
   type GeometryHit,
   type GeometryPointHit,
   type GeometrySegmentHit,
+  type GlyphAnchorHit,
+  type GlyphHit,
+  type GlyphHitKind,
+  type GlyphPointHit,
   type GlyphPosition,
   type GlyphPositions,
   type GlyphPositionTarget,
+  type GlyphSegmentHit,
   type GlyphSidebearings,
 } from "./GlyphGeometry";
 export {

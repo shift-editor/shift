@@ -11,8 +11,9 @@
  *
  * @module
  */
-import type { Point2D } from "@shift/geo";
+import { Vec2, type Point2D } from "@shift/geo";
 import type { Coordinates } from "@/types/coordinates";
+import type { PointerTarget } from "@/types/target";
 
 /** Well-known key names that tools handle directly. */
 export type ToolKey = "Escape" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Backspace";
@@ -20,61 +21,105 @@ export type ToolKey = "Escape" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "Arrow
 /**
  * Discriminated union of all events a tool can receive.
  *
- * Pointer events include `coords` (screen + scene + glyphLocal) so tools use
- * `event.coords` for hit-test and layout. `point` is kept as `coords.scene`.
- * Drag events include cumulative `delta`/`screenDelta` from the drag origin.
+ * Pointer events include `coords` so tools use the captured event coordinate
+ * snapshot for hit-test and layout. Drag events include `origin` and `delta`
+ * with both screen and scene coordinates.
  */
+export interface ModifierKeys {
+  readonly shiftKey: boolean;
+  readonly altKey: boolean;
+  readonly metaKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly accelKey: boolean;
+}
+
+interface PointerGestureInfo extends ModifierKeys {
+  readonly coords: Coordinates;
+}
+
+export interface PointerDelta {
+  readonly screen: Point2D;
+  readonly scene: Point2D;
+}
+
+type PointerMoveGestureEvent = PointerGestureInfo & {
+  readonly type: "pointerMove";
+};
+
+type ClickGestureEvent = PointerGestureInfo & {
+  readonly type: "click";
+};
+
+type DoubleClickGestureEvent = PointerGestureInfo & {
+  readonly type: "doubleClick";
+};
+
+type DragStartGestureEvent = PointerGestureInfo & {
+  readonly type: "dragStart";
+  readonly origin: Coordinates;
+  readonly delta: PointerDelta;
+};
+
+type DragGestureEvent = PointerGestureInfo & {
+  readonly type: "drag";
+  readonly origin: Coordinates;
+  readonly delta: PointerDelta;
+};
+
+type DragEndGestureEvent = PointerGestureInfo & {
+  readonly type: "dragEnd";
+  readonly origin: Coordinates;
+  readonly delta: PointerDelta;
+};
+
+export type DragCancelEvent = { type: "dragCancel" };
+
+export type KeyDownEvent = ModifierKeys & {
+  readonly type: "keyDown";
+  readonly key: ToolKey | (string & {});
+};
+
+export type KeyUpEvent = ModifierKeys & {
+  readonly type: "keyUp";
+  readonly key: ToolKey | (string & {});
+};
+
+export type SelectionChangedEvent = { type: "selectionChanged" };
+
+export type GestureEvent =
+  | PointerMoveGestureEvent
+  | ClickGestureEvent
+  | DoubleClickGestureEvent
+  | DragStartGestureEvent
+  | DragGestureEvent
+  | DragEndGestureEvent
+  | DragCancelEvent
+  | KeyDownEvent
+  | KeyUpEvent
+  | SelectionChangedEvent;
+
+type WithTarget<TEvent extends PointerGestureInfo> = TEvent & {
+  readonly target: PointerTarget;
+};
+
+export type PointerMoveEvent = WithTarget<PointerMoveGestureEvent>;
+export type ClickEvent = WithTarget<ClickGestureEvent>;
+export type DoubleClickEvent = WithTarget<DoubleClickGestureEvent>;
+export type DragStartEvent = WithTarget<DragStartGestureEvent>;
+export type DragEvent = WithTarget<DragGestureEvent>;
+export type DragEndEvent = WithTarget<DragEndGestureEvent>;
+
 export type ToolEvent =
-  | { type: "pointerMove"; point: Point2D; coords: Coordinates }
-  | {
-      type: "click";
-      point: Point2D;
-      coords: Coordinates;
-      shiftKey: boolean;
-      altKey: boolean;
-      metaKey?: boolean;
-    }
-  | { type: "doubleClick"; point: Point2D; coords: Coordinates; metaKey?: boolean }
-  | {
-      type: "dragStart";
-      point: Point2D;
-      coords: Coordinates;
-      screenPoint: Point2D;
-      shiftKey: boolean;
-      altKey: boolean;
-      metaKey?: boolean;
-    }
-  | {
-      type: "drag";
-      point: Point2D;
-      coords: Coordinates;
-      screenPoint: Point2D;
-      origin: Point2D;
-      screenOrigin: Point2D;
-      delta: Point2D;
-      screenDelta: Point2D;
-      shiftKey: boolean;
-      altKey: boolean;
-      metaKey?: boolean;
-    }
-  | {
-      type: "dragEnd";
-      point: Point2D;
-      coords: Coordinates;
-      screenPoint: Point2D;
-      origin: Point2D;
-      screenOrigin: Point2D;
-    }
-  | { type: "dragCancel" }
-  | {
-      type: "keyDown";
-      key: ToolKey | (string & {});
-      shiftKey: boolean;
-      altKey: boolean;
-      metaKey: boolean;
-    }
-  | { type: "keyUp"; key: ToolKey | (string & {}) }
-  | { type: "selectionChanged" };
+  | PointerMoveEvent
+  | ClickEvent
+  | DoubleClickEvent
+  | DragStartEvent
+  | DragEvent
+  | DragEndEvent
+  | DragCancelEvent
+  | KeyDownEvent
+  | KeyUpEvent
+  | SelectionChangedEvent;
 
 /**
  * Modifier key state captured at the moment of a pointer or key event.
@@ -85,6 +130,21 @@ export interface Modifiers {
   shiftKey: boolean;
   altKey: boolean;
   metaKey?: boolean;
+  ctrlKey?: boolean;
+  accelKey?: boolean;
+}
+
+export function normalizeModifiers(modifiers: Modifiers): ModifierKeys {
+  const metaKey = modifiers.metaKey ?? false;
+  const ctrlKey = modifiers.ctrlKey ?? false;
+
+  return {
+    shiftKey: modifiers.shiftKey,
+    altKey: modifiers.altKey,
+    metaKey,
+    ctrlKey,
+    accelKey: modifiers.accelKey ?? (metaKey || ctrlKey),
+  };
 }
 
 /**
@@ -99,8 +159,6 @@ export interface GestureDetectorConfig {
   /** Maximum screen-pixel drift between clicks to count as a double-click. */
   doubleClickDistance?: number;
 }
-
-export type ToolEventOf<TType extends ToolEvent["type"]> = Extract<ToolEvent, { type: TType }>;
 
 const DEFAULT_CONFIG: Required<GestureDetectorConfig> = {
   dragThreshold: 3,
@@ -117,10 +175,8 @@ const DEFAULT_CONFIG: Required<GestureDetectorConfig> = {
  * the drag threshold, and times double-clicks.
  */
 export class GestureDetector {
-  private downPoint: Point2D | null = null;
   private downCoords: Coordinates | null = null;
-  private downScreenPoint: Point2D | null = null;
-  private downModifiers: Modifiers | null = null;
+  private downModifiers: ModifierKeys | null = null;
   private dragging = false;
   private lastClickTime = 0;
   private lastClickPoint: Point2D | null = null;
@@ -140,11 +196,9 @@ export class GestureDetector {
     return this.dragging;
   }
 
-  pointerDown(coords: Coordinates, screenPoint: Point2D, modifiers: Modifiers): void {
-    this.downPoint = coords.scene;
+  pointerDown(coords: Coordinates, modifiers: Modifiers): void {
     this.downCoords = coords;
-    this.downScreenPoint = screenPoint;
-    this.downModifiers = modifiers;
+    this.downModifiers = normalizeModifiers(modifiers);
     this.dragging = false;
   }
 
@@ -152,28 +206,28 @@ export class GestureDetector {
    * Process a pointer move. Returns `pointerMove` if not pressed, `dragStart`
    * on threshold crossing, or `drag` while dragging.
    */
-  pointerMove(coords: Coordinates, screenPoint: Point2D, modifiers: Modifiers): ToolEvent[] {
-    if (!this.downPoint || !this.downCoords || !this.downScreenPoint || !this.downModifiers) {
-      return [{ type: "pointerMove", point: coords.scene, coords }];
+  pointerMove(coords: Coordinates, modifiers: Modifiers): GestureEvent[] {
+    const modifierKeys = normalizeModifiers(modifiers);
+
+    if (!this.downCoords || !this.downModifiers) {
+      return [{ type: "pointerMove", coords, ...modifierKeys }];
     }
 
-    // TODO: make this use Vec library
     const distance = Math.hypot(
-      screenPoint.x - this.downScreenPoint.x,
-      screenPoint.y - this.downScreenPoint.y,
+      coords.screen.x - this.downCoords.screen.x,
+      coords.screen.y - this.downCoords.screen.y,
     );
+    const delta = pointerDelta(coords, this.downCoords);
 
     if (!this.dragging && distance > this.dragThreshold) {
       this.dragging = true;
       return [
         {
           type: "dragStart",
-          point: this.downPoint,
-          coords: this.downCoords,
-          screenPoint: this.downScreenPoint,
-          shiftKey: this.downModifiers.shiftKey,
-          altKey: this.downModifiers.altKey,
-          metaKey: this.downModifiers.metaKey ?? false,
+          coords,
+          origin: this.downCoords,
+          delta,
+          ...modifierKeys,
         },
       ];
     }
@@ -182,24 +236,10 @@ export class GestureDetector {
       return [
         {
           type: "drag",
-          point: coords.scene,
           coords,
-          screenPoint,
-          origin: this.downPoint,
-          screenOrigin: this.downScreenPoint,
-          // TODO: Vec
-          delta: {
-            x: coords.scene.x - this.downPoint.x,
-            y: coords.scene.y - this.downPoint.y,
-          },
-          // TODO: Vec
-          screenDelta: {
-            x: screenPoint.x - this.downScreenPoint.x,
-            y: screenPoint.y - this.downScreenPoint.y,
-          },
-          shiftKey: modifiers.shiftKey,
-          altKey: modifiers.altKey,
-          metaKey: modifiers.metaKey ?? false,
+          origin: this.downCoords,
+          delta,
+          ...modifierKeys,
         },
       ];
     }
@@ -211,28 +251,26 @@ export class GestureDetector {
    * Process a pointer release. Returns `dragEnd` if dragging, `doubleClick`
    * if within timing/distance thresholds, or `click` otherwise.
    */
-  pointerUp(coords: Coordinates, screenPoint: Point2D): ToolEvent[] {
-    if (!this.downPoint || !this.downCoords || !this.downScreenPoint || !this.downModifiers)
-      return [];
+  pointerUp(coords: Coordinates, modifiers: Modifiers): GestureEvent[] {
+    if (!this.downCoords || !this.downModifiers) return [];
 
-    const events: ToolEvent[] = [];
-    const point = coords.scene;
+    const modifierKeys = normalizeModifiers(modifiers);
+    const events: GestureEvent[] = [];
+    const delta = pointerDelta(coords, this.downCoords);
 
     if (this.dragging) {
       events.push({
         type: "dragEnd",
-        point,
         coords,
-        screenPoint,
-        origin: this.downPoint,
-        screenOrigin: this.downScreenPoint,
+        origin: this.downCoords,
+        delta,
+        ...modifierKeys,
       });
     } else {
       const now = Date.now();
       const timeSinceLastClick = now - this.lastClickTime;
       const distFromLastClick = this.lastClickPoint
-        ? //TODO: VEC
-          Math.hypot(point.x - this.lastClickPoint.x, point.y - this.lastClickPoint.y)
+        ? Math.hypot(coords.scene.x - this.lastClickPoint.x, coords.scene.y - this.lastClickPoint.y)
         : Infinity;
 
       if (
@@ -241,23 +279,19 @@ export class GestureDetector {
       ) {
         events.push({
           type: "doubleClick",
-          point,
           coords,
-          metaKey: this.downModifiers.metaKey ?? false,
+          ...modifierKeys,
         });
         this.lastClickTime = 0;
         this.lastClickPoint = null;
       } else {
         events.push({
           type: "click",
-          point,
           coords,
-          shiftKey: this.downModifiers.shiftKey,
-          altKey: this.downModifiers.altKey,
-          metaKey: this.downModifiers.metaKey ?? false,
+          ...modifierKeys,
         });
         this.lastClickTime = now;
-        this.lastClickPoint = point;
+        this.lastClickPoint = coords.scene;
       }
     }
 
@@ -272,10 +306,15 @@ export class GestureDetector {
   }
 
   private resetPointerState(): void {
-    this.downPoint = null;
     this.downCoords = null;
-    this.downScreenPoint = null;
     this.downModifiers = null;
     this.dragging = false;
   }
+}
+
+function pointerDelta(coords: Coordinates, origin: Coordinates): PointerDelta {
+  return {
+    screen: Vec2.sub(coords.screen, origin.screen),
+    scene: Vec2.sub(coords.scene, origin.scene),
+  };
 }

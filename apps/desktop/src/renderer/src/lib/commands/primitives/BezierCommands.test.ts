@@ -24,7 +24,7 @@ describe("NudgePointsCommand", () => {
     await editor.settle();
   });
 
-  const source = () => editor.editingGlyphLayer!;
+  const source = () => editor.glyphLayer!;
 
   it("moves points by the nudge delta", async () => {
     const ids = source().allPoints.map((point) => point.id);
@@ -74,7 +74,7 @@ describe("ReverseContourCommand", () => {
     await editor.settle();
   });
 
-  const source = () => editor.editingGlyphLayer!;
+  const source = () => editor.glyphLayer!;
 
   it("reverses the point order", async () => {
     const contour = source().contours[0]!;
@@ -104,7 +104,7 @@ describe("SplitSegmentCommand", () => {
     editor.selectTool("pen");
   });
 
-  const source = () => editor.editingGlyphLayer!;
+  const source = () => editor.glyphLayer!;
 
   describe("line segment", () => {
     beforeEach(async () => {
@@ -201,7 +201,7 @@ describe("UpgradeLineToCubicCommand", () => {
     await editor.settle();
   });
 
-  const source = () => editor.editingGlyphLayer!;
+  const source = () => editor.glyphLayer!;
 
   it("converts the line into a shape-preserving cubic", async () => {
     const line = source().contours[0]!.segments()[0]!.asLine()!;

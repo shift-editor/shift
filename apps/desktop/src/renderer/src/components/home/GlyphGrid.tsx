@@ -49,7 +49,8 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button, Input } from "@shift/ui";
-import type { GlyphId, GlyphName } from "@shift/types";
+import type { GlyphName } from "@shift/types";
+import type { Glyph } from "@/lib/model/Glyph";
 
 const ROW_HEIGHT = CELL_HEIGHT + 40 + 8;
 const NOMINAL_CELL_WIDTH = 100;
@@ -65,20 +66,26 @@ function computeLayout(width: number) {
   return { columns, cellWidth };
 }
 
-function visibleGlyphIdsForRows(
+interface VisibleGlyphRow {
+  readonly virtualRow: VirtualItem;
+  readonly glyphs: readonly GlyphCatalogItem[];
+  readonly glyphOffset: number;
+}
+
+function visibleGlyphRowsForRows(
   glyphs: readonly GlyphCatalogItem[],
   columns: number,
   rows: readonly VirtualItem[],
-): readonly GlyphId[] {
-  const glyphIds: GlyphId[] = [];
+): readonly VisibleGlyphRow[] {
+  const visibleRows: VisibleGlyphRow[] = [];
+  let glyphOffset = 0;
   for (const row of rows) {
     const startIndex = row.index * columns;
     const rowGlyphs = glyphs.slice(startIndex, startIndex + columns);
-    for (const glyph of rowGlyphs) {
-      glyphIds.push(glyph.id);
-    }
+    visibleRows.push({ virtualRow: row, glyphs: rowGlyphs, glyphOffset });
+    glyphOffset += rowGlyphs.length;
   }
-  return glyphIds;
+  return visibleRows;
 }
 
 export const GlyphGrid = memo(function GlyphGrid() {
@@ -87,7 +94,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const font = editor.font;
   const metrics = font.metrics;
   const designLocation = editor.designLocationCell;
-  const { filteredGlyphs: glyphs } = useGlyphCatalog();
+  const { filteredGlyphs: catalogGlyphs } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -118,7 +125,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
 
   const { columns, cellWidth } = layout;
 
-  const rowCount = Math.ceil(glyphs.length / columns);
+  const rowCount = Math.ceil(catalogGlyphs.length / columns);
 
   const virtualizer = useVirtualizer({
     count: rowCount,
@@ -128,26 +135,30 @@ export const GlyphGrid = memo(function GlyphGrid() {
   });
   const virtualRows = virtualizer.getVirtualItems();
   const visibleRowsKey = virtualRows.map((row) => row.index).join(",");
-  const visibleGlyphIds = useMemo(
-    () => visibleGlyphIdsForRows(glyphs, columns, virtualRows),
-    [glyphs, columns, visibleRowsKey],
+  const visibleGlyphRows = useMemo(
+    () => visibleGlyphRowsForRows(catalogGlyphs, columns, virtualRows),
+    [catalogGlyphs, columns, visibleRowsKey],
   );
-  const [loadedGlyphIds, setLoadedGlyphIds] = useState<ReadonlySet<GlyphId>>(() => new Set());
+  const visibleGlyphIds = useMemo(
+    () => visibleGlyphRows.flatMap((row) => row.glyphs.map((glyph) => glyph.id)),
+    [visibleGlyphRows],
+  );
+  const [visibleGlyphs, setVisibleGlyphs] = useState<readonly Glyph[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load(): Promise<void> {
+    async function prepareVisibleGlyphs(): Promise<void> {
       try {
-        const loaded = await font.loadGlyphs(visibleGlyphIds);
-        if (!cancelled) setLoadedGlyphIds(loaded);
+        const glyphs = await font.loadGlyphs(visibleGlyphIds);
+        if (!cancelled) setVisibleGlyphs(glyphs);
       } catch (error) {
-        console.error("failed to load visible glyphs", error);
-        if (!cancelled) setLoadedGlyphIds(new Set());
+        console.error("failed to prepare visible glyphs", error);
+        if (!cancelled) setVisibleGlyphs([]);
       }
     }
 
-    void load();
+    void prepareVisibleGlyphs();
 
     return () => {
       cancelled = true;
@@ -157,9 +168,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const handleCellClick = useCallback(
     async (glyph: GlyphCatalogItem) => {
       try {
-        const loaded = await font.loadGlyph(glyph.id);
-        if (!loaded) return;
-
+        await font.loadGlyph(glyph.id);
         navigate(`/editor/${encodeURIComponent(glyph.id)}`);
       } catch (error) {
         console.error("failed to load glyph", error);
@@ -173,7 +182,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
       ref={scrollContainerRef}
       className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden p-5"
     >
-      {glyphs.length === 0 ? (
+      {catalogGlyphs.length === 0 ? (
         <div className="flex h-full items-center justify-center px-4 text-sm text-muted">
           No glyphs match this filter.
         </div>
@@ -185,9 +194,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
             position: "relative",
           }}
         >
-          {virtualRows.map((virtualRow) => {
-            const startIndex = virtualRow.index * columns;
-            const rowGlyphs = glyphs.slice(startIndex, startIndex + columns);
+          {visibleGlyphRows.map(({ virtualRow, glyphs: rowGlyphs, glyphOffset }) => {
             return (
               <div
                 key={virtualRow.key}
@@ -200,8 +207,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
                 }}
                 className="flex gap-2 px-4"
               >
-                {rowGlyphs.map((glyph) => {
-                  const previewGlyphId = loadedGlyphIds.has(glyph.id) ? glyph.id : null;
+                {rowGlyphs.map((glyph, glyphIndex) => {
+                  const previewGlyph = visibleGlyphs[glyphOffset + glyphIndex] ?? null;
                   return (
                     <div
                       key={glyph.id}
@@ -220,7 +227,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
                       >
                         <GlyphPreview
                           font={font}
-                          glyphId={previewGlyphId}
+                          glyphId={previewGlyph?.id ?? null}
                           unicode={glyph.unicode}
                           metrics={metrics}
                           designLocation={designLocation}

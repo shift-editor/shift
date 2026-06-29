@@ -92,7 +92,8 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 export const TransformSection = () => {
   const editor = useEditor();
   const { anchor } = useTransformOrigin();
-  const selectedPointIds = useSignalState(editor.selection.stateCell).pointIds;
+  useSignalState(editor.selection.stateCell);
+  const selectedPointIds = editor.selection.pointIds;
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);
 

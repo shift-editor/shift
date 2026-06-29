@@ -1,4 +1,4 @@
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { PointerMoveEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { SelectBehavior, SelectState } from "../types";
 
@@ -12,7 +12,7 @@ export class TextRunHover implements SelectBehavior {
   onPointerMove(
     state: SelectState,
     ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"pointerMove">,
+    event: PointerMoveEvent,
   ): boolean {
     if (state.type !== "ready") return false;
 
@@ -23,7 +23,7 @@ export class TextRunHover implements SelectBehavior {
       return false;
     }
 
-    const hit = layout.hitTest(event.point, ctx.editor.hitRadius);
+    const hit = layout.hitTest(event.coords.scene, ctx.editor.hitRadius);
     run.interaction.setHovered(hit?.cluster ?? null);
 
     return false;
