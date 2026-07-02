@@ -16,6 +16,7 @@ pub trait FontView {
     fn features(&self) -> &FeatureData;
     fn guidelines(&self) -> &[Guideline];
     fn lib(&self) -> &LibData;
+    fn fontinfo_remainder(&self) -> &LibData;
     fn data_files(&self) -> &BinaryData;
     fn images(&self) -> &BinaryData;
 }
@@ -63,6 +64,10 @@ impl FontView for Font {
 
     fn lib(&self) -> &LibData {
         self.lib()
+    }
+
+    fn fontinfo_remainder(&self) -> &LibData {
+        self.fontinfo_remainder()
     }
 
     fn data_files(&self) -> &BinaryData {

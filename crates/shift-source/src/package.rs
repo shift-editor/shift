@@ -26,6 +26,7 @@ pub const DATA_DIR: &str = "data";
 pub const IMAGES_DIR: &str = "images";
 pub const MODULES_DIR: &str = "modules";
 pub const LIB_MODULE_FILE: &str = "modules/shift.libData.json";
+pub const FONTINFO_MODULE_FILE: &str = "modules/shift.fontInfo.json";
 
 pub const FORMAT_ID: &str = "shift-source";
 pub const SCHEMA_VERSION: u32 = 1;
@@ -33,6 +34,8 @@ const KERNING_SCHEMA_VERSION: u32 = 1;
 const LIB_MODULE_OWNER: &str = "shift";
 const LIB_MODULE_NAME: &str = "libData";
 const LIB_MODULE_SCHEMA_VERSION: u32 = 1;
+const FONTINFO_MODULE_NAME: &str = "fontInfo";
+const FONTINFO_MODULE_SCHEMA_VERSION: u32 = 1;
 
 pub type PackageTree = Vec<(String, Vec<u8>)>;
 
@@ -401,6 +404,32 @@ struct SourceLibDoc {
     lib: BTreeMap<String, LibValueDoc>,
 }
 
+/// Source-format font-info fields Shift does not model, preserved verbatim
+/// so a UFO round-trip through a `.shift` package stays lossless.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FontInfoModuleDoc {
+    owner: String,
+    module: String,
+    schema_version: u32,
+    fields: BTreeMap<String, LibValueDoc>,
+}
+
+impl FontInfoModuleDoc {
+    fn from_font(font: &Font) -> Option<Self> {
+        if font.fontinfo_remainder().is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            owner: LIB_MODULE_OWNER.to_string(),
+            module: FONTINFO_MODULE_NAME.to_string(),
+            schema_version: FONTINFO_MODULE_SCHEMA_VERSION,
+            fields: lib_to_doc(font.fontinfo_remainder()),
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GlyphLibDoc {
@@ -484,6 +513,10 @@ pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
         tree.push(json_entry(LIB_MODULE_FILE, &lib_module_doc)?);
     }
 
+    if let Some(fontinfo_module_doc) = FontInfoModuleDoc::from_font(font) {
+        tree.push(json_entry(FONTINFO_MODULE_FILE, &fontinfo_module_doc)?);
+    }
+
     let mut glyph_entries = font
         .glyphs()
         .map(|glyph| {
@@ -522,6 +555,11 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     if let Some(module_doc) = &lib_module_doc {
         validate_lib_module(module_doc)?;
     }
+    let fontinfo_module_doc: Option<FontInfoModuleDoc> =
+        take_optional_json(&mut entries, FONTINFO_MODULE_FILE)?;
+    if let Some(module_doc) = &fontinfo_module_doc {
+        validate_fontinfo_module(module_doc)?;
+    }
 
     let mut font = Font::empty();
     *font.metadata_mut() = FontMetadata::from(font_doc.metadata);
@@ -536,6 +574,10 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
 
     if let Some(module_doc) = &mut lib_module_doc {
         *font.lib_mut() = lib_from_doc(std::mem::take(&mut module_doc.font))?;
+    }
+
+    if let Some(module_doc) = fontinfo_module_doc {
+        *font.fontinfo_remainder_mut() = lib_from_doc(module_doc.fields)?;
     }
 
     for axis_doc in axes_doc.axes {
@@ -1010,6 +1052,31 @@ fn validate_lib_module(module_doc: &LibModuleDoc) -> Result<(), SourcePackageErr
     if module_doc.schema_version != LIB_MODULE_SCHEMA_VERSION {
         return Err(SourcePackageError::InvalidModule {
             path: LIB_MODULE_FILE.to_string(),
+            message: format!("unsupported schema version {}", module_doc.schema_version),
+        });
+    }
+
+    Ok(())
+}
+
+fn validate_fontinfo_module(module_doc: &FontInfoModuleDoc) -> Result<(), SourcePackageError> {
+    if module_doc.owner != LIB_MODULE_OWNER {
+        return Err(SourcePackageError::InvalidModule {
+            path: FONTINFO_MODULE_FILE.to_string(),
+            message: format!("expected owner {LIB_MODULE_OWNER:?}"),
+        });
+    }
+
+    if module_doc.module != FONTINFO_MODULE_NAME {
+        return Err(SourcePackageError::InvalidModule {
+            path: FONTINFO_MODULE_FILE.to_string(),
+            message: format!("expected module {FONTINFO_MODULE_NAME:?}"),
+        });
+    }
+
+    if module_doc.schema_version != FONTINFO_MODULE_SCHEMA_VERSION {
+        return Err(SourcePackageError::InvalidModule {
+            path: FONTINFO_MODULE_FILE.to_string(),
             message: format!("unsupported schema version {}", module_doc.schema_version),
         });
     }

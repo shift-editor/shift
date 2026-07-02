@@ -16,6 +16,7 @@ impl ShiftStore {
 
         *font.features_mut() = load_feature_data(&self.conn)?;
         *font.lib_mut() = load_lib_data(&self.conn, "font_lib", None)?;
+        *font.fontinfo_remainder_mut() = load_lib_data(&self.conn, "fontinfo_remainder", None)?;
         *font.data_files_mut() = load_font_binaries(&self.conn, "data")?;
         *font.images_mut() = load_font_binaries(&self.conn, "image")?;
 

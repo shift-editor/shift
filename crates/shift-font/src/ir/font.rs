@@ -103,6 +103,8 @@ struct FontData {
     guidelines: Vec<Guideline>,
     lib: LibData,
     #[serde(default)]
+    fontinfo_remainder: LibData,
+    #[serde(default)]
     data_files: BinaryData,
     #[serde(default)]
     images: BinaryData,
@@ -298,6 +300,7 @@ impl Default for Font {
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
                     lib: LibData::new(),
+                    fontinfo_remainder: LibData::new(),
                     data_files: BinaryData::new(),
                     images: BinaryData::new(),
                 },
@@ -326,6 +329,7 @@ impl Font {
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
                     lib: LibData::new(),
+                    fontinfo_remainder: LibData::new(),
                     data_files: BinaryData::new(),
                     images: BinaryData::new(),
                 },
@@ -664,6 +668,18 @@ impl Font {
 
     pub fn lib_mut(&mut self) -> &mut LibData {
         &mut self.data_mut().lib
+    }
+
+    /// Source-format font-info fields that Shift does not model, preserved
+    /// as a plist-shaped map keyed by the format's field names (e.g. UFO
+    /// `fontinfo.plist` keys). Modeled fields never appear here; they live
+    /// on [`FontMetadata`] and [`FontMetrics`] and win on save.
+    pub fn fontinfo_remainder(&self) -> &LibData {
+        &self.data().fontinfo_remainder
+    }
+
+    pub fn fontinfo_remainder_mut(&mut self) -> &mut LibData {
+        &mut self.data_mut().fontinfo_remainder
     }
 
     /// Opaque files from the source format's `data/` directory, preserved

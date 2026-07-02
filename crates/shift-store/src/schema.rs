@@ -235,6 +235,11 @@ CREATE TABLE IF NOT EXISTS font_lib (
     value_json TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS fontinfo_remainder (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS source_lib (
     source_id TEXT NOT NULL,
     key TEXT NOT NULL,

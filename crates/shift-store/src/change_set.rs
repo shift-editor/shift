@@ -22,6 +22,7 @@ impl ShiftStore {
         tx.execute("DELETE FROM glyph_layer_lib", [])?;
         tx.execute("DELETE FROM glyph_lib", [])?;
         tx.execute("DELETE FROM font_lib", [])?;
+        tx.execute("DELETE FROM fontinfo_remainder", [])?;
         tx.execute("DELETE FROM font_binaries", [])?;
         tx.execute("DELETE FROM kerning_pairs", [])?;
         tx.execute("DELETE FROM kerning_group_members", [])?;
@@ -45,6 +46,13 @@ impl ShiftStore {
         replace_feature_text(&tx, font.features().fea_source())?;
         replace_font_guidelines(&tx, font.guidelines())?;
         replace_lib_data(&tx, "font_lib", "key", None, font.lib())?;
+        replace_lib_data(
+            &tx,
+            "fontinfo_remainder",
+            "key",
+            None,
+            font.fontinfo_remainder(),
+        )?;
         replace_font_binaries(&tx, "data", font.data_files())?;
         replace_font_binaries(&tx, "image", font.images())?;
         replace_kerning(&tx, font.kerning())?;
@@ -804,16 +812,11 @@ fn replace_lib_data(
             }
         }
         None => {
-            debug_assert_eq!(table, "font_lib");
-            tx.execute("DELETE FROM font_lib", [])?;
+            let delete_sql = format!("DELETE FROM {table}");
+            tx.execute(&delete_sql, [])?;
+            let insert_sql = format!("INSERT INTO {table} (key, value_json) VALUES (?1, ?2)");
             for (key, value) in lib.iter() {
-                tx.execute(
-                    "
-                    INSERT INTO font_lib (key, value_json)
-                    VALUES (?1, ?2)
-                    ",
-                    params![key, lib_value_json(value)?],
-                )?;
+                tx.execute(&insert_sql, params![key, lib_value_json(value)?])?;
             }
         }
     }

@@ -87,6 +87,22 @@ pub fn sample_font() -> Font {
         ]),
     );
 
+    font.fontinfo_remainder_mut().set(
+        "postscriptBlueValues".to_string(),
+        LibValue::Array(vec![LibValue::Integer(-16), LibValue::Integer(0)]),
+    );
+    font.fontinfo_remainder_mut()
+        .set("openTypeOS2WeightClass".to_string(), LibValue::Integer(700));
+    let mut woff_metadata = HashMap::new();
+    woff_metadata.insert(
+        "id".to_string(),
+        LibValue::String("dogfood-unique-id".to_string()),
+    );
+    font.fontinfo_remainder_mut().set(
+        "woffMetadataUniqueID".to_string(),
+        LibValue::Dict(woff_metadata),
+    );
+
     font.data_files_mut().insert(
         "com.shift.testdata/nested/blob.bin".to_string(),
         vec![0x00, 0xFF, 0x10, 0x20],

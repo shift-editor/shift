@@ -214,7 +214,12 @@ impl UfoWriter {
             .name()
             .map(|name| ufo_name("guideline", name))
             .transpose()?;
-        Ok(norad::Guideline::new(line, name, None, None))
+        // Colors that are not valid UFO color strings (possible for
+        // app-authored guidelines) cannot be written and are dropped.
+        let color = guideline
+            .color()
+            .and_then(|color| color.parse::<norad::Color>().ok());
+        Ok(norad::Guideline::new(line, name, color, None))
     }
 
     fn convert_lib_value_to_plist(value: &LibValue) -> plist::Value {
@@ -329,31 +334,48 @@ impl UfoWriter {
         Self::write_atomic(&norad_font, Path::new(path))
     }
 
+    /// Rebuilds `fontinfo.plist` from the carried remainder, then writes every
+    /// Shift-modeled field from the IR so the IR always wins for those keys.
+    fn build_font_info(font: &impl FontView) -> FormatBackendResult<norad::FontInfo> {
+        let remainder = font.fontinfo_remainder();
+        let mut font_info = if remainder.is_empty() {
+            norad::FontInfo::default()
+        } else {
+            let dict = Self::convert_lib(remainder);
+            plist::from_value(&plist::Value::Dictionary(dict)).map_err(|e| {
+                FormatBackendError::Ufo(format!("invalid preserved fontinfo data: {e}"))
+            })?
+        };
+
+        font_info.family_name = font.metadata().family_name.clone();
+        font_info.style_name = font.metadata().style_name.clone();
+        font_info.version_major = font.metadata().version_major;
+        font_info.version_minor = font.metadata().version_minor.map(|v| v as u32);
+        font_info.copyright = font.metadata().copyright.clone();
+        font_info.trademark = font.metadata().trademark.clone();
+        font_info.open_type_name_designer = font.metadata().designer.clone();
+        font_info.open_type_name_designer_url = font.metadata().designer_url.clone();
+        font_info.open_type_name_manufacturer = font.metadata().manufacturer.clone();
+        font_info.open_type_name_manufacturer_url = font.metadata().manufacturer_url.clone();
+        font_info.open_type_name_license = font.metadata().license.clone();
+        font_info.open_type_name_license_url = font.metadata().license_url.clone();
+        font_info.open_type_name_description = font.metadata().description.clone();
+        font_info.note = font.metadata().note.clone();
+
+        font_info.units_per_em = Some((font.metrics().units_per_em as u32).into());
+        font_info.ascender = Some(font.metrics().ascender);
+        font_info.descender = Some(font.metrics().descender);
+        font_info.cap_height = font.metrics().cap_height;
+        font_info.x_height = font.metrics().x_height;
+        font_info.italic_angle = font.metrics().italic_angle;
+        font_info.guidelines = None;
+
+        Ok(font_info)
+    }
+
     fn build_norad_font(font: &impl FontView) -> FormatBackendResult<NoradFont> {
         let mut norad_font = NoradFont::new();
-
-        norad_font.font_info.family_name = font.metadata().family_name.clone();
-        norad_font.font_info.style_name = font.metadata().style_name.clone();
-        norad_font.font_info.version_major = font.metadata().version_major;
-        norad_font.font_info.version_minor = font.metadata().version_minor.map(|v| v as u32);
-        norad_font.font_info.copyright = font.metadata().copyright.clone();
-        norad_font.font_info.trademark = font.metadata().trademark.clone();
-        norad_font.font_info.open_type_name_designer = font.metadata().designer.clone();
-        norad_font.font_info.open_type_name_designer_url = font.metadata().designer_url.clone();
-        norad_font.font_info.open_type_name_manufacturer = font.metadata().manufacturer.clone();
-        norad_font.font_info.open_type_name_manufacturer_url =
-            font.metadata().manufacturer_url.clone();
-        norad_font.font_info.open_type_name_license = font.metadata().license.clone();
-        norad_font.font_info.open_type_name_license_url = font.metadata().license_url.clone();
-        norad_font.font_info.open_type_name_description = font.metadata().description.clone();
-        norad_font.font_info.note = font.metadata().note.clone();
-
-        norad_font.font_info.units_per_em = Some((font.metrics().units_per_em as u32).into());
-        norad_font.font_info.ascender = Some(font.metrics().ascender);
-        norad_font.font_info.descender = Some(font.metrics().descender);
-        norad_font.font_info.cap_height = font.metrics().cap_height;
-        norad_font.font_info.x_height = font.metrics().x_height;
-        norad_font.font_info.italic_angle = font.metrics().italic_angle;
+        norad_font.font_info = Self::build_font_info(font)?;
 
         let groups = font
             .kerning()

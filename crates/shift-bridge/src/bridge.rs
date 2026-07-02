@@ -198,6 +198,10 @@ impl FontView for FontSaveSnapshot {
     self.font.lib()
   }
 
+  fn fontinfo_remainder(&self) -> &shift_font::LibData {
+    self.font.fontinfo_remainder()
+  }
+
   fn data_files(&self) -> &shift_font::BinaryData {
     self.font.data_files()
   }

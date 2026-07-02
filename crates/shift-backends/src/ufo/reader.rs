@@ -11,6 +11,34 @@ use std::path::Path;
 
 pub struct UfoReader;
 
+/// The `fontinfo.plist` keys Shift models on [`shift_font::FontMetadata`],
+/// [`shift_font::FontMetrics`], and font guidelines. These keys are owned by
+/// the IR: they never enter the fontinfo remainder, and on save they are
+/// written from the IR fields.
+pub(crate) const MAPPED_FONTINFO_KEYS: &[&str] = &[
+    "familyName",
+    "styleName",
+    "versionMajor",
+    "versionMinor",
+    "copyright",
+    "trademark",
+    "openTypeNameDesigner",
+    "openTypeNameDesignerURL",
+    "openTypeNameManufacturer",
+    "openTypeNameManufacturerURL",
+    "openTypeNameLicense",
+    "openTypeNameLicenseURL",
+    "openTypeNameDescription",
+    "note",
+    "unitsPerEm",
+    "ascender",
+    "descender",
+    "capHeight",
+    "xHeight",
+    "italicAngle",
+    "guidelines",
+];
+
 struct PendingComponent {
     layer_id: LayerId,
     base_glyph_name: String,
@@ -72,11 +100,14 @@ impl UfoReader {
     }
 
     fn convert_guideline(guideline: &norad::Guideline) -> Guideline {
-        match guideline.line {
+        let mut converted = match guideline.line {
             Line::Horizontal(y) => Guideline::horizontal(y),
             Line::Vertical(x) => Guideline::vertical(x),
             Line::Angle { x, y, degrees } => Guideline::angled(x, y, degrees),
-        }
+        };
+        converted.set_name(guideline.name.as_ref().map(|name| name.to_string()));
+        converted.set_color(guideline.color.as_ref().map(|color| color.to_rgba_string()));
+        converted
     }
 
     fn convert_plist_to_lib_value(plist: &plist::Value) -> LibValue {
@@ -105,6 +136,39 @@ impl UfoReader {
             plist::Value::Date(d) => LibValue::Date(d.to_xml_format()),
             plist::Value::Uid(u) => LibValue::Uid(u.get()),
             _ => LibValue::String(String::new()),
+        }
+    }
+
+    /// Captures every `fontinfo.plist` field Shift does not model as a
+    /// plist-shaped map, so unknown-to-Shift fields survive a round-trip.
+    fn convert_fontinfo_remainder(
+        font_info: &norad::FontInfo,
+    ) -> FormatBackendResult<Option<LibData>> {
+        let value = plist::to_value(font_info)
+            .map_err(|e| FormatBackendError::Ufo(format!("failed to capture fontinfo: {e}")))?;
+        let plist::Value::Dictionary(mut dict) = value else {
+            return Ok(None);
+        };
+
+        for key in MAPPED_FONTINFO_KEYS {
+            dict.remove(key);
+        }
+
+        // An empty style-map family is "unset" to the reference Python
+        // toolchain but poisons compilers that consume it verbatim (it
+        // becomes the exported family name), so it is not carried.
+        if dict
+            .get("styleMapFamilyName")
+            .and_then(plist::Value::as_string)
+            == Some("")
+        {
+            dict.remove("styleMapFamilyName");
+        }
+
+        if dict.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(Self::convert_lib(&dict)))
         }
     }
 
@@ -292,6 +356,10 @@ impl FontReader for UfoReader {
         font.metrics_mut().cap_height = norad_font.font_info.cap_height;
         font.metrics_mut().x_height = norad_font.font_info.x_height;
         font.metrics_mut().italic_angle = norad_font.font_info.italic_angle;
+
+        if let Some(remainder) = Self::convert_fontinfo_remainder(&norad_font.font_info)? {
+            *font.fontinfo_remainder_mut() = remainder;
+        }
 
         let norad_default_layer_name = norad_font.layers.default_layer().name().clone();
         let mut pending_components = Vec::new();
