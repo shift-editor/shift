@@ -146,6 +146,77 @@ fn loads_binary_fonts_with_contours() {
     }
 }
 
+fn assert_cubic_point_runs(contour: &Contour, context: &str) {
+    let points = contour.points();
+    assert!(!points.is_empty(), "empty contour in {context}");
+    assert!(
+        points[0].is_on_curve(),
+        "contour should start with an on-curve point in {context}"
+    );
+
+    let mut off_run = 0;
+    for point in &points[1..] {
+        match point.point_type() {
+            PointType::OffCurve => off_run += 1,
+            PointType::OnCurve => {
+                assert!(
+                    off_run == 0 || off_run == 2,
+                    "on-curve point preceded by {off_run} off-curves in {context}"
+                );
+                off_run = 0;
+            }
+            other => panic!("unexpected point type {other:?} in {context}"),
+        }
+    }
+
+    if contour.is_closed() {
+        assert!(
+            off_run == 0 || off_run == 2,
+            "closing segment has {off_run} off-curves in {context}"
+        );
+        let first = &points[0];
+        let last = &points[points.len() - 1];
+        assert!(
+            points.len() == 1
+                || !(last.is_on_curve() && last.x() == first.x() && last.y() == first.y()),
+            "closed contour duplicates its start point in {context}"
+        );
+    } else {
+        assert_eq!(
+            off_run, 0,
+            "open contour ends with {off_run} dangling off-curves in {context}"
+        );
+    }
+}
+
+#[test]
+fn binary_import_produces_valid_cubic_point_runs() {
+    for path in [mutatorsans_ttf_path(), mutatorsans_otf_path()] {
+        let font = load_font(&path);
+        let mut curve_contours = 0;
+        for glyph in font.glyphs() {
+            for layer in glyph.layers().values() {
+                for contour in layer.contours_iter() {
+                    let context = format!("glyph '{}' in {}", glyph.name(), path.display());
+                    assert_cubic_point_runs(contour, &context);
+                    if contour
+                        .points()
+                        .iter()
+                        .any(|point| point.point_type() == PointType::OffCurve)
+                    {
+                        curve_contours += 1;
+                    }
+                }
+            }
+        }
+        assert!(
+            curve_contours > 0,
+            "{} should import contours with curve segments",
+            path.display()
+        );
+    }
+}
+
 #[test]
 fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
     let mut bytes = std::fs::read(mutatorsans_ttf_path()).unwrap();

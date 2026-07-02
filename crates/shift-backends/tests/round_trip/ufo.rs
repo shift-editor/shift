@@ -16,6 +16,10 @@ fn mutatorsans_ufo_path() -> PathBuf {
     fixtures_path().join("fonts/mutatorsans/MutatorSansLightCondensed.ufo")
 }
 
+fn mutatorsans_ttf_path() -> PathBuf {
+    fixtures_path().join("fonts/mutatorsans/MutatorSans.ttf")
+}
+
 fn load_font(path: &Path) -> Font {
     assert!(path.exists(), "missing font fixture at {}", path.display());
     FontLoader::new()
@@ -501,4 +505,72 @@ fn preserves_components_anchors_layers_and_kerning() {
 
     assert_eq!(reloaded.kerning().get_kerning("T", "A"), Some(-75.0));
     assert_eq!(reloaded.kerning().get_kerning("V", "A"), Some(-100.0));
+}
+
+#[test]
+fn ttf_import_saves_spec_valid_ufo_curves() {
+    let font = load_font(&mutatorsans_ttf_path());
+
+    let temp_dir = tempfile::tempdir().expect("tempdir should be created");
+    let output_path = temp_dir.path().join("from-ttf.ufo");
+    FontLoader::new()
+        .write_font(&font, output_path.to_str().unwrap())
+        .expect("UFO writer should save the TTF-imported font");
+
+    let norad_font = norad::Font::load(&output_path)
+        .expect("norad should parse every glif written from a TTF import");
+
+    let mut curve_points = 0;
+    for layer in norad_font.layers.iter() {
+        for glyph in layer.iter() {
+            for contour in &glyph.contours {
+                let points = &contour.points;
+                for (index, point) in points.iter().enumerate() {
+                    match point.typ {
+                        norad::PointType::Curve => {
+                            assert!(
+                                points.len() >= 3,
+                                "curve point without room for controls in glyph '{}'",
+                                glyph.name()
+                            );
+                            let len = points.len();
+                            let prev = &points[(index + len - 1) % len];
+                            let prev_prev = &points[(index + len - 2) % len];
+                            let before_controls = &points[(index + len - 3) % len];
+                            assert!(
+                                prev.typ == norad::PointType::OffCurve
+                                    && prev_prev.typ == norad::PointType::OffCurve
+                                    && before_controls.typ != norad::PointType::OffCurve,
+                                "curve point in glyph '{}' is not preceded by exactly two off-curves",
+                                glyph.name()
+                            );
+                            curve_points += 1;
+                        }
+                        norad::PointType::OffCurve => {
+                            let next = &points[(index + 1) % points.len()];
+                            assert!(
+                                matches!(
+                                    next.typ,
+                                    norad::PointType::OffCurve | norad::PointType::Curve
+                                ),
+                                "off-curve in glyph '{}' is not part of a cubic curve segment",
+                                glyph.name()
+                            );
+                        }
+                        norad::PointType::QCurve => {
+                            panic!(
+                                "TTF import should not produce qcurve points (glyph '{}')",
+                                glyph.name()
+                            );
+                        }
+                        norad::PointType::Line | norad::PointType::Move => {}
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        curve_points > 0,
+        "TTF import round trip should contain curve segments"
+    );
 }
