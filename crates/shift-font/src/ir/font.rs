@@ -391,6 +391,13 @@ impl Font {
         &self.data().sources
     }
 
+    pub fn source_mut(&mut self, source_id: SourceId) -> Option<&mut Source> {
+        self.data_mut()
+            .sources
+            .iter_mut()
+            .find(|source| source.id() == source_id)
+    }
+
     pub fn add_source(&mut self, source: Source) -> SourceId {
         let source_id = source.id();
         let data = self.data_mut();

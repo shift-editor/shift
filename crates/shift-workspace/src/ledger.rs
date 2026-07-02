@@ -7,7 +7,7 @@
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
-use shift_font::{Axis, Glyph, GlyphId, GlyphLayer, Source};
+use shift_font::{Axis, Glyph, GlyphId, GlyphLayer, GlyphName, Source, SourceId};
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
 /// oldest entries fall off first.
@@ -26,6 +26,10 @@ pub enum LedgerStep {
     Axis {
         pre: Option<Axis>,
         post: Option<Axis>,
+        /// Source location values on this axis at pre time. Deleting an
+        /// axis strips them from every source, so restoring the axis
+        /// restores them too.
+        pre_locations: Vec<(SourceId, f64)>,
     },
     /// Source existence. Sparse glyph-layer existence is represented by
     /// separate [`LedgerStep::GlyphLayer`] entries.
@@ -39,6 +43,20 @@ pub enum LedgerStep {
         pre: Option<Box<GlyphLayer>>,
         post: Option<Box<GlyphLayer>>,
     },
+    /// Glyph rename / unicode reassignment. Both sides always exist; the
+    /// glyph and its layers are untouched.
+    GlyphIdentity {
+        glyph_id: GlyphId,
+        pre: GlyphIdentity,
+        post: GlyphIdentity,
+    },
+}
+
+/// One side of a glyph identity change: the name and unicode assignments.
+#[derive(Clone)]
+pub struct GlyphIdentity {
+    pub name: GlyphName,
+    pub unicodes: Vec<u32>,
 }
 
 #[derive(Clone)]
