@@ -134,12 +134,18 @@ pub fn sample_font() -> Font {
         regular_location,
         Some("Regular.ufo".to_string()),
     ));
-    font.add_source(Source::with_id(
+    let mut bold_source = Source::with_id(
         bold_id.clone(),
         "Bold".to_string(),
         bold_location,
         Some("Bold.ufo".to_string()),
-    ));
+    );
+    bold_source.set_color(Some("1,0.75,0,0.7".to_string()));
+    bold_source.lib_mut().set(
+        "com.shift.sourceNote".to_string(),
+        LibValue::String("bold layer note".to_string()),
+    );
+    font.add_source(bold_source);
     font.set_default_source_id(regular_id.clone());
 
     let acute_id = GlyphId::from_raw("acute");

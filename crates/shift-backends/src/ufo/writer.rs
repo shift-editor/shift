@@ -302,6 +302,28 @@ impl Default for UfoWriter {
 }
 
 impl UfoWriter {
+    /// Writes a source's carried `layerinfo.plist` metadata (color and layer
+    /// lib) onto the norad layer it maps to.
+    fn apply_layer_metadata(
+        source: &shift_font::Source,
+        layer: &mut norad::Layer,
+    ) -> FormatBackendResult<()> {
+        layer.color = source
+            .color()
+            .map(|color| {
+                color
+                    .parse::<norad::Color>()
+                    .map_err(|_| FormatBackendError::Ufo(format!("invalid layer color {color:?}")))
+            })
+            .transpose()?;
+
+        if !source.lib().is_empty() {
+            layer.lib = Self::convert_lib(source.lib());
+        }
+
+        Ok(())
+    }
+
     pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
         let norad_font = Self::build_norad_font(font)?;
         Self::write_atomic(&norad_font, Path::new(path))
@@ -388,6 +410,14 @@ impl UfoWriter {
             }
         }
 
+        if let Some(default_source) = font
+            .sources()
+            .iter()
+            .find(|source| Some(source.id()) == default_source_id)
+        {
+            Self::apply_layer_metadata(default_source, default_layer)?;
+        }
+
         for source in font.sources() {
             if Some(source.id()) == default_source_id {
                 continue;
@@ -397,6 +427,7 @@ impl UfoWriter {
                 .layers
                 .new_layer(source.name())
                 .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
+            Self::apply_layer_metadata(source, norad_layer)?;
 
             for glyph in font.glyphs() {
                 if let Some(layer_data) = glyph.layer_for_source(source.id()) {

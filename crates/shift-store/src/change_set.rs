@@ -37,6 +37,7 @@ impl ShiftStore {
         tx.execute("DELETE FROM glyph_unicodes", [])?;
         tx.execute("DELETE FROM glyphs", [])?;
         tx.execute("DELETE FROM source_locations", [])?;
+        tx.execute("DELETE FROM source_lib", [])?;
         tx.execute("DELETE FROM sources", [])?;
         tx.execute("DELETE FROM axes", [])?;
 
@@ -58,7 +59,15 @@ impl ShiftStore {
                 &source.id(),
                 Some(source.name()),
                 source.filename(),
+                source.color(),
                 order_index as i64,
+            )?;
+            replace_lib_data(
+                &tx,
+                "source_lib",
+                "source_id",
+                Some(&source.id().to_string()),
+                source.lib(),
             )?;
 
             for (axis_id, value) in source.location().iter() {
@@ -112,7 +121,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::SourceCreated(change) => {
-            upsert_source(tx, &change.source_id, Some(&change.name), None, 0)?;
+            upsert_source(tx, &change.source_id, Some(&change.name), None, None, 0)?;
 
             for axis_value in &change.location {
                 upsert_source_location(
@@ -301,18 +310,20 @@ fn upsert_source(
     source_id: &font::SourceId,
     name: Option<&str>,
     filename: Option<&str>,
+    color: Option<&str>,
     order_index: i64,
 ) -> Result<(), StoreError> {
     tx.execute(
         "
-        INSERT INTO sources (id, name, filename, kind, order_index)
-        VALUES (?1, ?2, ?3, 'master', ?4)
+        INSERT INTO sources (id, name, filename, color, kind, order_index)
+        VALUES (?1, ?2, ?3, ?4, 'master', ?5)
         ON CONFLICT(id) DO UPDATE SET
             name = COALESCE(excluded.name, sources.name),
             filename = excluded.filename,
+            color = excluded.color,
             order_index = excluded.order_index
         ",
-        params![source_id.to_string(), name, filename, order_index],
+        params![source_id.to_string(), name, filename, color, order_index],
     )?;
     Ok(())
 }

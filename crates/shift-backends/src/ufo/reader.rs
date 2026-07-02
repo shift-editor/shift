@@ -302,6 +302,13 @@ impl FontReader for UfoReader {
                 font.add_source(Source::new(layer.name().to_string(), Location::new()))
             };
 
+            if let Some(source) = font.source_mut(source_id.clone()) {
+                source.set_color(layer.color.as_ref().map(|color| color.to_rgba_string()));
+                if !layer.lib.is_empty() {
+                    *source.lib_mut() = Self::convert_lib(&layer.lib);
+                }
+            }
+
             for norad_glyph in layer.iter() {
                 let (glyph, glyph_components) =
                     Self::convert_glyph_layer(norad_glyph, LayerId::new(), source_id.clone());

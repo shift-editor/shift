@@ -264,6 +264,8 @@ struct SourceDoc {
     name: String,
     location: BTreeMap<String, f64>,
     filename: Option<String>,
+    #[serde(default)]
+    color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -386,8 +388,17 @@ struct LibModuleDoc {
     module: String,
     schema_version: u32,
     font: BTreeMap<String, LibValueDoc>,
+    #[serde(default)]
+    sources: BTreeMap<String, SourceLibDoc>,
     glyphs: BTreeMap<String, GlyphLibDoc>,
     layers: BTreeMap<String, LayerLibDoc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SourceLibDoc {
+    name: String,
+    lib: BTreeMap<String, LibValueDoc>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -535,6 +546,10 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     for source_doc in sources_doc.sources {
         validate_source_axis_references(&source_doc, &axis_ids)?;
         font.add_source(Source::try_from(source_doc)?);
+    }
+
+    if let Some(module_doc) = &mut lib_module_doc {
+        apply_lib_module_to_sources(&mut font, module_doc)?;
     }
 
     let source_ids = font
@@ -1002,6 +1017,40 @@ fn validate_lib_module(module_doc: &LibModuleDoc) -> Result<(), SourcePackageErr
     Ok(())
 }
 
+fn apply_lib_module_to_sources(
+    font: &mut Font,
+    module_doc: &mut LibModuleDoc,
+) -> Result<(), SourcePackageError> {
+    let source_ids = font.sources().iter().map(Source::id).collect::<Vec<_>>();
+    for source_id in source_ids {
+        let Some(source_doc) = module_doc.sources.remove(&source_id.to_string()) else {
+            continue;
+        };
+
+        let source = font.source_mut(source_id.clone()).ok_or_else(|| {
+            SourcePackageError::DanglingReference {
+                field: "lib source",
+                id: source_id.to_string(),
+            }
+        })?;
+
+        if source_doc.name != source.name() {
+            return Err(SourcePackageError::InvalidModule {
+                path: LIB_MODULE_FILE.to_string(),
+                message: format!(
+                    "source lib name cache {:?} does not match source {:?}",
+                    source_doc.name,
+                    source.name()
+                ),
+            });
+        }
+
+        *source.lib_mut() = lib_from_doc(source_doc.lib)?;
+    }
+
+    Ok(())
+}
+
 fn apply_lib_module_to_glyph(
     glyph: &mut Glyph,
     module_doc: &mut LibModuleDoc,
@@ -1074,6 +1123,13 @@ fn apply_lib_module_to_glyph(
 }
 
 fn ensure_lib_module_consumed(module_doc: LibModuleDoc) -> Result<(), SourcePackageError> {
+    if let Some(source_id) = module_doc.sources.keys().next() {
+        return Err(SourcePackageError::DanglingReference {
+            field: "lib source",
+            id: source_id.clone(),
+        });
+    }
+
     if let Some(glyph_id) = module_doc.glyphs.keys().next() {
         return Err(SourcePackageError::DanglingReference {
             field: "lib glyph",
@@ -1108,8 +1164,23 @@ fn lib_from_doc(doc: BTreeMap<String, LibValueDoc>) -> Result<LibData, SourcePac
 impl LibModuleDoc {
     fn from_font(font: &Font) -> Option<Self> {
         let font_lib = lib_to_doc(font.lib());
+        let mut sources = BTreeMap::new();
         let mut glyphs = BTreeMap::new();
         let mut layers = BTreeMap::new();
+
+        for source in font.sources() {
+            if source.lib().is_empty() {
+                continue;
+            }
+
+            sources.insert(
+                source.id().to_string(),
+                SourceLibDoc {
+                    name: source.name().to_string(),
+                    lib: lib_to_doc(source.lib()),
+                },
+            );
+        }
 
         for glyph in font.glyphs() {
             if !glyph.lib().is_empty() {
@@ -1139,7 +1210,7 @@ impl LibModuleDoc {
             }
         }
 
-        if font_lib.is_empty() && glyphs.is_empty() && layers.is_empty() {
+        if font_lib.is_empty() && sources.is_empty() && glyphs.is_empty() && layers.is_empty() {
             return None;
         }
 
@@ -1148,6 +1219,7 @@ impl LibModuleDoc {
             module: LIB_MODULE_NAME.to_string(),
             schema_version: LIB_MODULE_SCHEMA_VERSION,
             font: font_lib,
+            sources,
             glyphs,
             layers,
         })
@@ -1570,6 +1642,7 @@ impl TryFrom<&Source> for SourceDoc {
             name: source.name().to_string(),
             location,
             filename: source.filename().map(str::to_string),
+            color: source.color().map(str::to_string),
         })
     }
 }
@@ -1587,12 +1660,14 @@ impl TryFrom<SourceDoc> for Source {
             );
         }
 
-        Ok(Self::with_id(
+        let mut source = Self::with_id(
             parse_id("source", &doc.id)?,
             doc.name,
             Location::from_map(location),
             doc.filename,
-        ))
+        );
+        source.set_color(doc.color);
+        Ok(source)
     }
 }
 

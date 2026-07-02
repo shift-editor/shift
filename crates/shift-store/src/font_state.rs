@@ -140,7 +140,7 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
 fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreError> {
     let mut stmt = conn.prepare(
         "
-        SELECT id, name, filename
+        SELECT id, name, filename, color
         FROM sources
         ORDER BY order_index, id
         ",
@@ -149,16 +149,29 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
     let rows = stmt.query_map([], |row| {
         let source_id = font::SourceId::from_raw(row.get::<_, String>(0)?);
         let location = load_source_location(conn, &source_id)?;
-        Ok(font::Source::with_id(
+        let mut source = font::Source::with_id(
             source_id,
             row.get::<_, Option<String>>(1)?.unwrap_or_default(),
             location,
             row.get(2)?,
-        ))
+        );
+        source.set_color(row.get(3)?);
+        Ok(source)
     })?;
 
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)
+    let mut sources = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)?;
+
+    for source in &mut sources {
+        *source.lib_mut() = load_lib_data(
+            conn,
+            "source_lib",
+            Some(("source_id", &source.id().to_string())),
+        )?;
+    }
+
+    Ok(sources)
 }
 
 fn load_source_location(

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS sources (
     family_name TEXT,
     style_name TEXT,
     filename TEXT,
+    color TEXT,
     kind TEXT NOT NULL,
     order_index INTEGER NOT NULL DEFAULT 0
 );
@@ -232,6 +233,14 @@ CREATE TABLE IF NOT EXISTS kerning_pairs (
 CREATE TABLE IF NOT EXISTS font_lib (
     key TEXT PRIMARY KEY,
     value_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS source_lib (
+    source_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    PRIMARY KEY (source_id, key),
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS glyph_lib (
