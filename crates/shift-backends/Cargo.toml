@@ -20,3 +20,6 @@ plist = "1"
 quick-xml = "0.37.5"
 tempfile = "3"
 thiserror = "2.0.18"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

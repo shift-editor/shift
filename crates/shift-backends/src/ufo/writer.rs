@@ -56,6 +56,63 @@ fn sync_tree(_root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Atomically exchanges `staged` and `target` in one filesystem operation,
+/// so there is never an instant without a UFO at `target`.
+#[cfg(target_os = "macos")]
+fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
+    let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    let result = unsafe { libc::renamex_np(staged.as_ptr(), target.as_ptr(), libc::RENAME_SWAP) };
+
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
+    let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    let result = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            staged.as_ptr(),
+            libc::AT_FDCWD,
+            target.as_ptr(),
+            libc::RENAME_EXCHANGE,
+        )
+    };
+
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn exchange(_staged: &Path, _target: &Path) -> std::io::Result<()> {
+    Err(std::io::ErrorKind::Unsupported.into())
+}
+
+fn exchange_unsupported(error: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    if matches!(
+        error.raw_os_error(),
+        Some(libc::ENOTSUP) | Some(libc::EINVAL) | Some(libc::ENOSYS)
+    ) {
+        return true;
+    }
+
+    error.kind() == std::io::ErrorKind::Unsupported
+}
+
 impl UfoWriter {
     pub fn new() -> Self {
         Self
@@ -352,9 +409,9 @@ impl UfoWriter {
     }
 
     /// Writes the UFO without ever destroying the existing target: the new
-    /// UFO is fully staged in a temp sibling directory, the old UFO is moved
-    /// aside, the staged one is swapped in, and only then is the old copy
-    /// dropped. If the swap fails the old UFO is restored.
+    /// UFO is fully staged (and fsynced) in a temp sibling directory, then
+    /// swapped into place — atomically where the platform supports a rename
+    /// exchange, otherwise via move-aside-and-replace with restore on failure.
     fn write_atomic(norad_font: &NoradFont, target: &Path) -> FormatBackendResult<()> {
         let file_name = target.file_name().ok_or_else(|| {
             FormatBackendError::Ufo(format!("invalid UFO path '{}'", target.display()))
@@ -378,22 +435,7 @@ impl UfoWriter {
         sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, e))?;
 
         if target.exists() {
-            let backup = staging.path().join("previous");
-            std::fs::rename(target, &backup)
-                .map_err(|e| io_error("move aside existing UFO at", target, e))?;
-
-            if let Err(error) = std::fs::rename(&staged_ufo, target) {
-                if std::fs::rename(&backup, target).is_err() {
-                    // Keep the staging directory alive so the original UFO survives.
-                    let staging_path = staging.keep();
-                    return Err(FormatBackendError::Ufo(format!(
-                        "failed to move new UFO into place at '{}': {error}; the original UFO was preserved at '{}'",
-                        target.display(),
-                        staging_path.join("previous").display(),
-                    )));
-                }
-                return Err(io_error("move new UFO into place at", target, error));
-            }
+            Self::exchange_or_swap(target, &staged_ufo, staging)?;
         } else {
             std::fs::rename(&staged_ufo, target)
                 .map_err(|e| io_error("move new UFO into place at", target, e))?;
@@ -402,10 +444,105 @@ impl UfoWriter {
         sync_parent(target).map_err(|e| io_error("sync parent directory of", target, e))?;
         Ok(())
     }
+
+    fn exchange_or_swap(
+        target: &Path,
+        staged: &Path,
+        staging: tempfile::TempDir,
+    ) -> FormatBackendResult<()> {
+        match exchange(staged, target) {
+            // The previous UFO now sits at the staged path and is removed
+            // when the staging directory drops.
+            Ok(()) => Ok(()),
+            Err(error) if exchange_unsupported(&error) => {
+                Self::swap_with_backup(target, staged, staging)
+            }
+            Err(error) => Err(io_error("swap new UFO into place at", target, error)),
+        }
+    }
+
+    fn swap_with_backup(
+        target: &Path,
+        staged: &Path,
+        staging: tempfile::TempDir,
+    ) -> FormatBackendResult<()> {
+        let backup = staging.path().join("previous");
+        std::fs::rename(target, &backup)
+            .map_err(|e| io_error("move aside existing UFO at", target, e))?;
+
+        if let Err(error) = std::fs::rename(staged, target) {
+            if std::fs::rename(&backup, target).is_err() {
+                // Keep the staging directory alive so the original UFO survives.
+                let staging_path = staging.keep();
+                return Err(FormatBackendError::Ufo(format!(
+                    "failed to move new UFO into place at '{}': {error}; the original UFO was preserved at '{}'",
+                    target.display(),
+                    staging_path.join("previous").display(),
+                )));
+            }
+            return Err(io_error("move new UFO into place at", target, error));
+        }
+
+        Ok(())
+    }
 }
 
 impl FontWriter for UfoWriter {
     fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
         self.save_view(font, path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exchange_swaps_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("a");
+        let b = temp.path().join("b");
+        std::fs::create_dir(&a).unwrap();
+        std::fs::create_dir(&b).unwrap();
+        std::fs::write(a.join("marker"), b"a").unwrap();
+        std::fs::write(b.join("marker"), b"b").unwrap();
+
+        match exchange(&a, &b) {
+            Ok(()) => {
+                assert_eq!(std::fs::read(a.join("marker")).unwrap(), b"b");
+                assert_eq!(std::fs::read(b.join("marker")).unwrap(), b"a");
+            }
+            Err(error) => assert!(
+                exchange_unsupported(&error),
+                "exchange failed with unexpected error: {error}"
+            ),
+        }
+    }
+
+    #[test]
+    fn swap_with_backup_restores_target_when_swap_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target.ufo");
+        std::fs::create_dir(&target).unwrap();
+        std::fs::write(target.join("metainfo.plist"), b"original").unwrap();
+
+        let staging = tempfile::Builder::new()
+            .prefix(".shift-ufo-staging-")
+            .tempdir_in(temp.path())
+            .unwrap();
+        // The staged UFO is deliberately missing so the swap-in rename fails.
+        let staged = staging.path().join("target.ufo");
+
+        let error = UfoWriter::swap_with_backup(&target, &staged, staging)
+            .expect_err("swap should fail without a staged UFO");
+
+        assert!(
+            error.to_string().contains("move new UFO into place"),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            std::fs::read(target.join("metainfo.plist")).unwrap(),
+            b"original"
+        );
     }
 }
