@@ -113,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn writer_rounds_coordinates_and_skips_empty_contours() {
+    fn writer_preserves_fractional_coordinates_and_skips_empty_contours() {
         let mut font = Font::new();
         let default_source_id = font.default_source_id().unwrap();
 
@@ -146,12 +146,9 @@ mod tests {
         glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
 
-        let temp_dir = std::env::temp_dir().join("shift_test_ufo_writer_format");
-        let ufo_path = temp_dir.join("writer_format.ufo");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("writer_format.ufo");
         let ufo_path_str = ufo_path.to_str().unwrap();
-
-        let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
 
         UfoWriter::new().save(&font, ufo_path_str).unwrap();
 
@@ -163,13 +160,56 @@ mod tests {
         assert!(contents.contains("<key>A</key>"));
         assert!(contents.contains("<string>A_.glif</string>"));
         assert!(glif.contains("<unicode hex=\"0041\"/>"));
-        assert!(glif.contains("<advance width=\"500\"/>"));
+        assert!(glif.contains("<advance width=\"500.4\"/>"));
         assert!(glif.contains("<glyph name=\"A\""));
-        assert!(glif.contains("x=\"115\""));
-        assert!(glif.contains("y=\"453\""));
-        assert!(!glif.contains("115.29469168717605"));
+        assert!(glif.contains("x=\"115.29469168717605\""));
+        assert!(glif.contains("y=\"452.51873449628556\""));
         assert_eq!(glif.matches("<contour>").count(), 1);
+    }
 
-        let _ = fs::remove_dir_all(&temp_dir);
+    #[test]
+    fn round_trip_preserves_fractional_coordinates_exactly() {
+        let mut font = Font::new();
+        let default_source_id = font.default_source_id().unwrap();
+
+        let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 512.5);
+
+        let mut contour = Contour::new();
+        contour.add_point(100.5, 33.25, PointType::OnCurve, false);
+        contour.add_point(300.125, 700.75, PointType::OnCurve, false);
+        contour.add_point(600.0625, 0.5, PointType::OnCurve, false);
+        contour.close();
+        layer.add_contour(contour);
+        layer.add_anchor(shift_font::Anchor::new("top".to_string(), 10.75, 720.5));
+
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("fractional.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+        let loaded = UfoReader::new().load(ufo_path_str).unwrap();
+
+        let loaded_glyph = loaded.glyph_by_name("A").unwrap();
+        let loaded_layer = loaded_glyph
+            .layer_for_source(loaded.default_source_id().unwrap())
+            .unwrap();
+
+        assert_eq!(loaded_layer.width(), 512.5);
+
+        let expected = [(100.5, 33.25), (300.125, 700.75), (600.0625, 0.5)];
+        let loaded_contour = loaded_layer.contours_iter().next().unwrap();
+        assert_eq!(loaded_contour.points().len(), expected.len());
+        for (point, (x, y)) in loaded_contour.points().iter().zip(expected) {
+            assert_eq!(point.x(), x);
+            assert_eq!(point.y(), y);
+        }
+
+        let anchor = loaded_layer.anchors_iter().next().unwrap();
+        assert_eq!(anchor.x(), 10.75);
+        assert_eq!(anchor.y(), 720.5);
     }
 }
