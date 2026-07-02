@@ -4,7 +4,7 @@ use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_font::{
     Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, Point, PointType,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct UfoWriter;
 
@@ -408,6 +408,24 @@ impl UfoWriter {
 
         if let Some(fea_source) = font.features().fea_source() {
             norad_font.features = fea_source.to_string();
+        }
+
+        for (data_path, bytes) in font.data_files().iter() {
+            norad_font
+                .data
+                .insert(PathBuf::from(data_path), bytes.clone())
+                .map_err(|e| {
+                    FormatBackendError::Ufo(format!("invalid data file {data_path:?}: {e}"))
+                })?;
+        }
+
+        for (image_path, bytes) in font.images().iter() {
+            norad_font
+                .images
+                .insert(PathBuf::from(image_path), bytes.clone())
+                .map_err(|e| {
+                    FormatBackendError::Ufo(format!("invalid image file {image_path:?}: {e}"))
+                })?;
         }
 
         Ok(norad_font)

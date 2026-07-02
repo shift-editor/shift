@@ -329,6 +329,22 @@ impl FontReader for UfoReader {
             *font.lib_mut() = Self::convert_lib(&norad_font.lib);
         }
 
+        for (data_path, contents) in norad_font.data.iter() {
+            let bytes = contents.map_err(|e| {
+                FormatBackendError::Ufo(format!("failed to read data file {data_path:?}: {e}"))
+            })?;
+            font.data_files_mut()
+                .insert(data_path.to_string_lossy().into_owned(), bytes.to_vec());
+        }
+
+        for (image_path, contents) in norad_font.images.iter() {
+            let bytes = contents.map_err(|e| {
+                FormatBackendError::Ufo(format!("failed to read image file {image_path:?}: {e}"))
+            })?;
+            font.images_mut()
+                .insert(image_path.to_string_lossy().into_owned(), bytes.to_vec());
+        }
+
         Ok(font)
     }
 }

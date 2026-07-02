@@ -1,5 +1,6 @@
 pub mod anchor;
 pub mod axis;
+pub mod binary_data;
 pub mod boolean;
 pub mod component;
 pub mod contour;
@@ -19,6 +20,7 @@ pub mod variation;
 
 pub use anchor::Anchor;
 pub use axis::{Axis, Location};
+pub use binary_data::BinaryData;
 pub use boolean::{boolean, BooleanOp};
 pub use component::{Component, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};

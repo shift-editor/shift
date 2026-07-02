@@ -87,6 +87,17 @@ pub fn sample_font() -> Font {
         ]),
     );
 
+    font.data_files_mut().insert(
+        "com.shift.testdata/nested/blob.bin".to_string(),
+        vec![0x00, 0xFF, 0x10, 0x20],
+    );
+    font.data_files_mut()
+        .insert("notes.txt".to_string(), b"dogfood data".to_vec());
+    font.images_mut().insert(
+        "swatch.png".to_string(),
+        vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01],
+    );
+
     let weight_id = AxisId::from_raw("weight");
     let mut weight = Axis::with_id(
         weight_id.clone(),

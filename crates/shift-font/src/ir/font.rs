@@ -1,4 +1,5 @@
 use crate::axis::{Axis, Location};
+use crate::binary_data::BinaryData;
 use crate::entity::{AxisId, GlyphId, LayerId, SourceId};
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
@@ -101,6 +102,10 @@ struct FontData {
     features: FeatureData,
     guidelines: Vec<Guideline>,
     lib: LibData,
+    #[serde(default)]
+    data_files: BinaryData,
+    #[serde(default)]
+    images: BinaryData,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -293,6 +298,8 @@ impl Default for Font {
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
                     lib: LibData::new(),
+                    data_files: BinaryData::new(),
+                    images: BinaryData::new(),
                 },
                 index: FontIndex::default(),
             }),
@@ -319,6 +326,8 @@ impl Font {
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
                     lib: LibData::new(),
+                    data_files: BinaryData::new(),
+                    images: BinaryData::new(),
                 },
                 index: FontIndex::default(),
             }),
@@ -648,6 +657,26 @@ impl Font {
 
     pub fn lib_mut(&mut self) -> &mut LibData {
         &mut self.data_mut().lib
+    }
+
+    /// Opaque files from the source format's `data/` directory, preserved
+    /// verbatim across load and save.
+    pub fn data_files(&self) -> &BinaryData {
+        &self.data().data_files
+    }
+
+    pub fn data_files_mut(&mut self) -> &mut BinaryData {
+        &mut self.data_mut().data_files
+    }
+
+    /// Opaque files from the source format's `images/` directory, preserved
+    /// verbatim across load and save.
+    pub fn images(&self) -> &BinaryData {
+        &self.data().images
+    }
+
+    pub fn images_mut(&mut self) -> &mut BinaryData {
+        &mut self.data_mut().images
     }
 }
 

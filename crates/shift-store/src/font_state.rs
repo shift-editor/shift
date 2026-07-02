@@ -16,6 +16,8 @@ impl ShiftStore {
 
         *font.features_mut() = load_feature_data(&self.conn)?;
         *font.lib_mut() = load_lib_data(&self.conn, "font_lib", None)?;
+        *font.data_files_mut() = load_font_binaries(&self.conn, "data")?;
+        *font.images_mut() = load_font_binaries(&self.conn, "image")?;
 
         for guideline in load_font_guidelines(&self.conn)? {
             font.add_guideline(guideline);
@@ -591,6 +593,28 @@ fn load_lib_data(
         }
     }
     Ok(font::LibData::from_map(values))
+}
+
+fn load_font_binaries(
+    conn: &rusqlite::Connection,
+    kind: &str,
+) -> Result<font::BinaryData, StoreError> {
+    let mut binaries = font::BinaryData::new();
+    let mut stmt = conn.prepare(
+        "
+        SELECT path, bytes
+        FROM font_binaries
+        WHERE kind = ?1
+        ",
+    )?;
+    let rows = stmt.query_map([kind], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+    })?;
+    for row in rows {
+        let (path, bytes) = row?;
+        binaries.insert(path, bytes);
+    }
+    Ok(binaries)
 }
 
 fn lib_value_from_json(value_json: &str) -> Result<font::LibValue, StoreError> {

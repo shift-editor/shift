@@ -250,6 +250,13 @@ CREATE TABLE IF NOT EXISTS glyph_layer_lib (
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS font_binaries (
+    kind TEXT NOT NULL CHECK (kind IN ('data', 'image')),
+    path TEXT NOT NULL,
+    bytes BLOB NOT NULL,
+    PRIMARY KEY (kind, path)
+);
+
 CREATE TABLE IF NOT EXISTS workspace_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     document_id TEXT,

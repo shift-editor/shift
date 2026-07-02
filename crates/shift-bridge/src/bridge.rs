@@ -197,6 +197,14 @@ impl FontView for FontSaveSnapshot {
   fn lib(&self) -> &shift_font::LibData {
     self.font.lib()
   }
+
+  fn data_files(&self) -> &shift_font::BinaryData {
+    self.font.data_files()
+  }
+
+  fn images(&self) -> &shift_font::BinaryData {
+    self.font.images()
+  }
 }
 
 pub struct ExportFontTask {

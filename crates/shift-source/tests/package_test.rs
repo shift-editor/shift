@@ -4,9 +4,9 @@ use shift_font::{
     Axis, AxisId, Font, KerningPair, Location, Source, SourceId, test_support::sample_font,
 };
 use shift_source::{
-    AXES_FILE, FEATURES_FILE, FONT_FILE, GLYPHS_DIR, KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE,
-    PackageTree, SOURCES_FILE, ShiftSourcePackage, SourcePackageError, font_to_tree, tree_to_font,
-    write_tree_atomic,
+    AXES_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, GLYPHS_DIR, IMAGES_DIR, KERNING_FILE,
+    LIB_MODULE_FILE, MANIFEST_FILE, PackageTree, SOURCES_FILE, ShiftSourcePackage,
+    SourcePackageError, font_to_tree, tree_to_font, write_tree_atomic,
 };
 use zip::{CompressionMethod, ZipArchive};
 
@@ -81,7 +81,10 @@ fn serializes_same_font_to_byte_identical_tree() {
             KERNING_FILE,
             LIB_MODULE_FILE,
             &format!("{GLYPHS_DIR}/glyph_A.json"),
-            &format!("{GLYPHS_DIR}/glyph_acute.json")
+            &format!("{GLYPHS_DIR}/glyph_acute.json"),
+            &format!("{DATA_DIR}/com.shift.testdata/nested/blob.bin"),
+            &format!("{DATA_DIR}/notes.txt"),
+            &format!("{IMAGES_DIR}/swatch.png")
         ]
     );
 }

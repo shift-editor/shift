@@ -22,6 +22,8 @@ pub const SOURCES_FILE: &str = "sources.json";
 pub const FEATURES_FILE: &str = "features.fea";
 pub const KERNING_FILE: &str = "kerning.json";
 pub const GLYPHS_DIR: &str = "glyphs";
+pub const DATA_DIR: &str = "data";
+pub const IMAGES_DIR: &str = "images";
 pub const MODULES_DIR: &str = "modules";
 pub const LIB_MODULE_FILE: &str = "modules/shift.libData.json";
 
@@ -482,6 +484,14 @@ pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
     glyph_entries.sort_by(|(left, _), (right, _)| left.cmp(right));
     tree.extend(glyph_entries);
 
+    for (path, bytes) in font.data_files().iter() {
+        tree.push((format!("{DATA_DIR}/{path}"), bytes.clone()));
+    }
+
+    for (path, bytes) in font.images().iter() {
+        tree.push((format!("{IMAGES_DIR}/{path}"), bytes.clone()));
+    }
+
     Ok(tree)
 }
 
@@ -543,6 +553,10 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     for (path, bytes) in entries {
         if path.starts_with(&format!("{GLYPHS_DIR}/glyph_")) {
             glyph_entries.push((path, bytes));
+        } else if let Some(rel_path) = binary_entry_rel_path(&path, DATA_DIR)? {
+            font.data_files_mut().insert(rel_path, bytes);
+        } else if let Some(rel_path) = binary_entry_rel_path(&path, IMAGES_DIR)? {
+            font.images_mut().insert(rel_path, bytes);
         } else {
             return Err(SourcePackageError::UnexpectedEntry(path));
         }
@@ -689,6 +703,27 @@ fn validate_manifest(manifest: &ManifestDoc) -> Result<(), SourcePackageError> {
     }
 
     Ok(())
+}
+
+/// Extracts the path relative to `dir` for binary package entries, rejecting
+/// entries that could escape the directory when written back to disk.
+fn binary_entry_rel_path(path: &str, dir: &str) -> Result<Option<String>, SourcePackageError> {
+    let Some(rel_path) = path
+        .strip_prefix(dir)
+        .and_then(|rest| rest.strip_prefix('/'))
+    else {
+        return Ok(None);
+    };
+
+    let is_safe = !rel_path.is_empty()
+        && Path::new(rel_path)
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)));
+    if is_safe {
+        Ok(Some(rel_path.to_string()))
+    } else {
+        Err(SourcePackageError::UnexpectedEntry(path.to_string()))
+    }
 }
 
 fn validate_glyph_path_id(path: &str, id: &str) -> Result<(), SourcePackageError> {

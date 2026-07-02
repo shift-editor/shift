@@ -22,6 +22,7 @@ impl ShiftStore {
         tx.execute("DELETE FROM glyph_layer_lib", [])?;
         tx.execute("DELETE FROM glyph_lib", [])?;
         tx.execute("DELETE FROM font_lib", [])?;
+        tx.execute("DELETE FROM font_binaries", [])?;
         tx.execute("DELETE FROM kerning_pairs", [])?;
         tx.execute("DELETE FROM kerning_group_members", [])?;
         tx.execute("DELETE FROM kerning_groups", [])?;
@@ -43,6 +44,8 @@ impl ShiftStore {
         replace_feature_text(&tx, font.features().fea_source())?;
         replace_font_guidelines(&tx, font.guidelines())?;
         replace_lib_data(&tx, "font_lib", "key", None, font.lib())?;
+        replace_font_binaries(&tx, "data", font.data_files())?;
+        replace_font_binaries(&tx, "image", font.images())?;
         replace_kerning(&tx, font.kerning())?;
 
         for (order_index, axis) in font.axes().iter().enumerate() {
@@ -802,6 +805,23 @@ fn replace_lib_data(
                 )?;
             }
         }
+    }
+    Ok(())
+}
+
+fn replace_font_binaries(
+    tx: &Transaction<'_>,
+    kind: &str,
+    binaries: &font::BinaryData,
+) -> Result<(), StoreError> {
+    for (path, bytes) in binaries.iter() {
+        tx.execute(
+            "
+            INSERT INTO font_binaries (kind, path, bytes)
+            VALUES (?1, ?2, ?3)
+            ",
+            params![kind, path, bytes],
+        )?;
     }
     Ok(())
 }
