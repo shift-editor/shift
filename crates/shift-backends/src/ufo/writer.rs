@@ -1,3 +1,4 @@
+use crate::atomic::sync_parent;
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
@@ -17,22 +18,6 @@ fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Name> {
 
 fn io_error(action: &str, path: &Path, error: std::io::Error) -> FormatBackendError {
     FormatBackendError::Ufo(format!("failed to {action} '{}': {error}", path.display()))
-}
-
-#[cfg(unix)]
-fn sync_parent(path: &Path) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::File::open(parent)?.sync_all()?;
-        }
-    }
-    Ok(())
-}
-
-// Windows cannot open directory handles this way; NTFS journals metadata itself.
-#[cfg(not(unix))]
-fn sync_parent(_path: &Path) -> std::io::Result<()> {
-    Ok(())
 }
 
 /// Fsyncs every file under `root`, then each directory bottom-up, so the
