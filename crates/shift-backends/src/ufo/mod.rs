@@ -168,6 +168,87 @@ mod tests {
     }
 
     #[test]
+    fn failed_save_preserves_existing_ufo() {
+        let font = create_test_font();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("target.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+
+        // norad refuses to serialize fonts carrying public.objectLibs, so this
+        // save fails during the write phase, after conversion succeeded.
+        let mut broken = create_test_font();
+        broken.lib_mut().set(
+            "public.objectLibs".to_string(),
+            shift_font::LibValue::Dict(std::collections::HashMap::new()),
+        );
+        UfoWriter::new()
+            .save(&broken, ufo_path_str)
+            .expect_err("save should fail");
+
+        let reloaded = UfoReader::new()
+            .load(ufo_path_str)
+            .expect("original UFO should still load after a failed save");
+        assert_eq!(
+            reloaded.metadata().family_name.as_deref(),
+            Some("TestFamily")
+        );
+        assert_eq!(reloaded.glyph_count(), font.glyph_count());
+
+        let entries: Vec<_> = fs::read_dir(temp_dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries, vec!["target.ufo"], "no staging leftovers");
+    }
+
+    #[test]
+    fn save_replaces_existing_ufo() {
+        let font = create_test_font();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("target.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+
+        let mut updated = create_test_font();
+        updated.metadata_mut().family_name = Some("UpdatedFamily".to_string());
+        UfoWriter::new().save(&updated, ufo_path_str).unwrap();
+
+        let reloaded = UfoReader::new().load(ufo_path_str).unwrap();
+        assert_eq!(
+            reloaded.metadata().family_name.as_deref(),
+            Some("UpdatedFamily")
+        );
+
+        let entries: Vec<_> = fs::read_dir(temp_dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries, vec!["target.ufo"], "no staging leftovers");
+    }
+
+    #[test]
+    fn round_trip_preserves_feature_source() {
+        let mut font = create_test_font();
+        font.features_mut()
+            .set_fea_source(Some("feature liga {\n} liga;\n".to_string()));
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("features.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+        let loaded = UfoReader::new().load(ufo_path_str).unwrap();
+
+        assert_eq!(
+            loaded.features().fea_source(),
+            Some("feature liga {\n} liga;\n")
+        );
+    }
+
+    #[test]
     fn save_fails_loudly_on_invalid_glyph_name() {
         let mut font = Font::new();
         let default_source_id = font.default_source_id().unwrap();

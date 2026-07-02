@@ -15,6 +15,19 @@ fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Name> {
     })
 }
 
+fn io_error(action: &str, path: &Path, error: std::io::Error) -> FormatBackendError {
+    FormatBackendError::Ufo(format!("failed to {action} '{}': {error}", path.display()))
+}
+
+fn sync_parent(path: &Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::File::open(parent)?.sync_all()?;
+        }
+    }
+    Ok(())
+}
+
 impl UfoWriter {
     pub fn new() -> Self {
         Self
@@ -200,13 +213,11 @@ impl Default for UfoWriter {
 
 impl UfoWriter {
     pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
-        let path_obj = Path::new(path);
-        if path_obj.exists() {
-            std::fs::remove_dir_all(path_obj).map_err(|e| {
-                FormatBackendError::Ufo(format!("failed to remove existing UFO: {e}"))
-            })?;
-        }
+        let norad_font = Self::build_norad_font(font)?;
+        Self::write_atomic(&norad_font, Path::new(path))
+    }
 
+    fn build_norad_font(font: &impl FontView) -> FormatBackendResult<NoradFont> {
         let mut norad_font = NoradFont::new();
 
         norad_font.font_info.family_name = font.metadata().family_name.clone();
@@ -306,15 +317,61 @@ impl UfoWriter {
         }
 
         if let Some(fea_source) = font.features().fea_source() {
-            std::fs::create_dir_all(path).map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
-            let fea_path = Path::new(path).join("features.fea");
-            std::fs::write(fea_path, fea_source)
-                .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
+            norad_font.features = fea_source.to_string();
         }
 
+        Ok(norad_font)
+    }
+
+    /// Writes the UFO without ever destroying the existing target: the new
+    /// UFO is fully staged in a temp sibling directory, the old UFO is moved
+    /// aside, the staged one is swapped in, and only then is the old copy
+    /// dropped. If the swap fails the old UFO is restored.
+    fn write_atomic(norad_font: &NoradFont, target: &Path) -> FormatBackendResult<()> {
+        let file_name = target.file_name().ok_or_else(|| {
+            FormatBackendError::Ufo(format!("invalid UFO path '{}'", target.display()))
+        })?;
+        let parent = match target.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent,
+            _ => Path::new("."),
+        };
+        std::fs::create_dir_all(parent)
+            .map_err(|e| io_error("create parent directory for", target, e))?;
+
+        // Staged in the target's parent so the swap is a same-filesystem rename.
+        let staging = tempfile::Builder::new()
+            .prefix(".shift-ufo-staging-")
+            .tempdir_in(parent)
+            .map_err(|e| io_error("create staging directory for", target, e))?;
+        let staged_ufo = staging.path().join(file_name);
         norad_font
-            .save(path)
-            .map_err(|e| FormatBackendError::Ufo(e.to_string()))
+            .save(&staged_ufo)
+            .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
+
+        if target.exists() {
+            let backup = staging.path().join("previous");
+            std::fs::rename(target, &backup)
+                .map_err(|e| io_error("move aside existing UFO at", target, e))?;
+
+            if let Err(error) = std::fs::rename(&staged_ufo, target) {
+                if std::fs::rename(&backup, target).is_err() {
+                    // Keep the staging directory alive so the original UFO survives.
+                    let staging_path = staging.keep();
+                    return Err(FormatBackendError::Ufo(format!(
+                        "failed to move new UFO into place at '{}': {error}; the original UFO was preserved at '{}'",
+                        target.display(),
+                        staging_path.join("previous").display(),
+                    )));
+                }
+                return Err(io_error("move new UFO into place at", target, error));
+            }
+        } else {
+            std::fs::rename(&staged_ufo, target)
+                .map_err(|e| io_error("move new UFO into place at", target, e))?;
+        }
+
+        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, e))?;
+        Ok(())
     }
 }
 
