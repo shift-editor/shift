@@ -19,12 +19,19 @@ fn io_error(action: &str, path: &Path, error: std::io::Error) -> FormatBackendEr
     FormatBackendError::Ufo(format!("failed to {action} '{}': {error}", path.display()))
 }
 
+#[cfg(unix)]
 fn sync_parent(path: &Path) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::File::open(parent)?.sync_all()?;
         }
     }
+    Ok(())
+}
+
+// Windows cannot open directory handles this way; NTFS journals metadata itself.
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
