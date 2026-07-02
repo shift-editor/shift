@@ -70,9 +70,23 @@ fn exports_mutatorsans_ufo_to_readable_ttf() {
         exported_family.contains(source_family),
         "exported family name should include source family: {exported_family}"
     );
+    // A source-declared style map wins the exported subfamily name, so the
+    // style name is either the source style or its declared style-map style.
+    let source_style_map = match source.fontinfo_remainder().get("styleMapStyleName") {
+        Some(shift_font::LibValue::String(style_map)) => Some(style_map.as_str()),
+        _ => None,
+    };
     assert!(
         exported_family.contains(source_style)
-            || exported.metadata().style_name.as_deref() == Some(source_style),
+            || exported.metadata().style_name.as_deref() == Some(source_style)
+            || exported
+                .metadata()
+                .style_name
+                .as_deref()
+                .zip(source_style_map)
+                .is_some_and(|(exported_style, style_map)| {
+                    exported_style.eq_ignore_ascii_case(style_map)
+                }),
         "exported name data should include source style: family={exported_family}, style={:?}",
         exported.metadata().style_name
     );

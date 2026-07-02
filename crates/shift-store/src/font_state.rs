@@ -16,6 +16,9 @@ impl ShiftStore {
 
         *font.features_mut() = load_feature_data(&self.conn)?;
         *font.lib_mut() = load_lib_data(&self.conn, "font_lib", None)?;
+        *font.fontinfo_remainder_mut() = load_lib_data(&self.conn, "fontinfo_remainder", None)?;
+        *font.data_files_mut() = load_font_binaries(&self.conn, "data")?;
+        *font.images_mut() = load_font_binaries(&self.conn, "image")?;
 
         for guideline in load_font_guidelines(&self.conn)? {
             font.add_guideline(guideline);
@@ -138,7 +141,7 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
 fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreError> {
     let mut stmt = conn.prepare(
         "
-        SELECT id, name, filename
+        SELECT id, name, filename, color
         FROM sources
         ORDER BY order_index, id
         ",
@@ -147,16 +150,29 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
     let rows = stmt.query_map([], |row| {
         let source_id = font::SourceId::from_raw(row.get::<_, String>(0)?);
         let location = load_source_location(conn, &source_id)?;
-        Ok(font::Source::with_id(
+        let mut source = font::Source::with_id(
             source_id,
             row.get::<_, Option<String>>(1)?.unwrap_or_default(),
             location,
             row.get(2)?,
-        ))
+        );
+        source.set_color(row.get(3)?);
+        Ok(source)
     })?;
 
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)
+    let mut sources = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)?;
+
+    for source in &mut sources {
+        *source.lib_mut() = load_lib_data(
+            conn,
+            "source_lib",
+            Some(("source_id", &source.id().to_string())),
+        )?;
+    }
+
+    Ok(sources)
 }
 
 fn load_source_location(
@@ -593,6 +609,28 @@ fn load_lib_data(
     Ok(font::LibData::from_map(values))
 }
 
+fn load_font_binaries(
+    conn: &rusqlite::Connection,
+    kind: &str,
+) -> Result<font::BinaryData, StoreError> {
+    let mut binaries = font::BinaryData::new();
+    let mut stmt = conn.prepare(
+        "
+        SELECT path, bytes
+        FROM font_binaries
+        WHERE kind = ?1
+        ",
+    )?;
+    let rows = stmt.query_map([kind], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+    })?;
+    for row in rows {
+        let (path, bytes) = row?;
+        binaries.insert(path, bytes);
+    }
+    Ok(binaries)
+}
+
 fn lib_value_from_json(value_json: &str) -> Result<font::LibValue, StoreError> {
     let value: serde_json::Value = serde_json::from_str(value_json)?;
     lib_value_from_value(value)
@@ -618,6 +656,10 @@ fn lib_value_from_value(value: serde_json::Value) -> Result<font::LibValue, Stor
             .as_i64()
             .map(font::LibValue::Integer)
             .ok_or_else(|| StoreError::InvalidLibValue("expected integer".to_string())),
+        "unsignedInteger" => value
+            .as_u64()
+            .map(font::LibValue::UnsignedInteger)
+            .ok_or_else(|| StoreError::InvalidLibValue("expected unsigned integer".to_string())),
         "float" => value
             .as_f64()
             .map(font::LibValue::Float)
@@ -657,6 +699,14 @@ fn lib_value_from_value(value: serde_json::Value) -> Result<font::LibValue, Stor
                 .map(font::LibValue::Data),
             _ => Err(StoreError::InvalidLibValue("expected data".to_string())),
         },
+        "date" => match value {
+            serde_json::Value::String(value) => Ok(font::LibValue::Date(value)),
+            _ => Err(StoreError::InvalidLibValue("expected date".to_string())),
+        },
+        "uid" => value
+            .as_u64()
+            .map(font::LibValue::Uid)
+            .ok_or_else(|| StoreError::InvalidLibValue("expected uid".to_string())),
         _ => Err(StoreError::InvalidLibValue(format!("unknown type {kind}"))),
     }
 }

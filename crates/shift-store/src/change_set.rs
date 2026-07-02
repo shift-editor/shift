@@ -22,6 +22,8 @@ impl ShiftStore {
         tx.execute("DELETE FROM glyph_layer_lib", [])?;
         tx.execute("DELETE FROM glyph_lib", [])?;
         tx.execute("DELETE FROM font_lib", [])?;
+        tx.execute("DELETE FROM fontinfo_remainder", [])?;
+        tx.execute("DELETE FROM font_binaries", [])?;
         tx.execute("DELETE FROM kerning_pairs", [])?;
         tx.execute("DELETE FROM kerning_group_members", [])?;
         tx.execute("DELETE FROM kerning_groups", [])?;
@@ -36,6 +38,7 @@ impl ShiftStore {
         tx.execute("DELETE FROM glyph_unicodes", [])?;
         tx.execute("DELETE FROM glyphs", [])?;
         tx.execute("DELETE FROM source_locations", [])?;
+        tx.execute("DELETE FROM source_lib", [])?;
         tx.execute("DELETE FROM sources", [])?;
         tx.execute("DELETE FROM axes", [])?;
 
@@ -43,6 +46,15 @@ impl ShiftStore {
         replace_feature_text(&tx, font.features().fea_source())?;
         replace_font_guidelines(&tx, font.guidelines())?;
         replace_lib_data(&tx, "font_lib", "key", None, font.lib())?;
+        replace_lib_data(
+            &tx,
+            "fontinfo_remainder",
+            "key",
+            None,
+            font.fontinfo_remainder(),
+        )?;
+        replace_font_binaries(&tx, "data", font.data_files())?;
+        replace_font_binaries(&tx, "image", font.images())?;
         replace_kerning(&tx, font.kerning())?;
 
         for (order_index, axis) in font.axes().iter().enumerate() {
@@ -55,7 +67,15 @@ impl ShiftStore {
                 &source.id(),
                 Some(source.name()),
                 source.filename(),
+                source.color(),
                 order_index as i64,
+            )?;
+            replace_lib_data(
+                &tx,
+                "source_lib",
+                "source_id",
+                Some(&source.id().to_string()),
+                source.lib(),
             )?;
 
             for (axis_id, value) in source.location().iter() {
@@ -109,7 +129,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::SourceCreated(change) => {
-            upsert_source(tx, &change.source_id, Some(&change.name), None, 0)?;
+            upsert_source(tx, &change.source_id, Some(&change.name), None, None, 0)?;
 
             for axis_value in &change.location {
                 upsert_source_location(
@@ -298,18 +318,20 @@ fn upsert_source(
     source_id: &font::SourceId,
     name: Option<&str>,
     filename: Option<&str>,
+    color: Option<&str>,
     order_index: i64,
 ) -> Result<(), StoreError> {
     tx.execute(
         "
-        INSERT INTO sources (id, name, filename, kind, order_index)
-        VALUES (?1, ?2, ?3, 'master', ?4)
+        INSERT INTO sources (id, name, filename, color, kind, order_index)
+        VALUES (?1, ?2, ?3, ?4, 'master', ?5)
         ON CONFLICT(id) DO UPDATE SET
             name = COALESCE(excluded.name, sources.name),
             filename = excluded.filename,
+            color = excluded.color,
             order_index = excluded.order_index
         ",
-        params![source_id.to_string(), name, filename, order_index],
+        params![source_id.to_string(), name, filename, color, order_index],
     )?;
     Ok(())
 }
@@ -790,18 +812,30 @@ fn replace_lib_data(
             }
         }
         None => {
-            debug_assert_eq!(table, "font_lib");
-            tx.execute("DELETE FROM font_lib", [])?;
+            let delete_sql = format!("DELETE FROM {table}");
+            tx.execute(&delete_sql, [])?;
+            let insert_sql = format!("INSERT INTO {table} (key, value_json) VALUES (?1, ?2)");
             for (key, value) in lib.iter() {
-                tx.execute(
-                    "
-                    INSERT INTO font_lib (key, value_json)
-                    VALUES (?1, ?2)
-                    ",
-                    params![key, lib_value_json(value)?],
-                )?;
+                tx.execute(&insert_sql, params![key, lib_value_json(value)?])?;
             }
         }
+    }
+    Ok(())
+}
+
+fn replace_font_binaries(
+    tx: &Transaction<'_>,
+    kind: &str,
+    binaries: &font::BinaryData,
+) -> Result<(), StoreError> {
+    for (path, bytes) in binaries.iter() {
+        tx.execute(
+            "
+            INSERT INTO font_binaries (kind, path, bytes)
+            VALUES (?1, ?2, ?3)
+            ",
+            params![kind, path, bytes],
+        )?;
     }
     Ok(())
 }
@@ -816,6 +850,9 @@ fn lib_value_to_json(value: &font::LibValue) -> serde_json::Value {
             typed_json("string", serde_json::Value::String(value.clone()))
         }
         font::LibValue::Integer(value) => typed_json("integer", serde_json::json!(value)),
+        font::LibValue::UnsignedInteger(value) => {
+            typed_json("unsignedInteger", serde_json::json!(value))
+        }
         font::LibValue::Float(value) => typed_json("float", serde_json::json!(value)),
         font::LibValue::Boolean(value) => typed_json("boolean", serde_json::json!(value)),
         font::LibValue::Array(values) => typed_json(
@@ -832,6 +869,8 @@ fn lib_value_to_json(value: &font::LibValue) -> serde_json::Value {
             ),
         ),
         font::LibValue::Data(values) => typed_json("data", serde_json::json!(values)),
+        font::LibValue::Date(value) => typed_json("date", serde_json::Value::String(value.clone())),
+        font::LibValue::Uid(value) => typed_json("uid", serde_json::json!(value)),
     }
 }
 
