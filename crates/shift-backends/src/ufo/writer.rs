@@ -8,6 +8,13 @@ use std::path::Path;
 
 pub struct UfoWriter;
 
+fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Name> {
+    Name::new(name).map_err(|_| FormatBackendError::UfoName {
+        kind,
+        name: name.to_string(),
+    })
+}
+
 impl UfoWriter {
     pub fn new() -> Self {
         Self
@@ -66,10 +73,12 @@ impl UfoWriter {
         norad::Contour::new(points, None)
     }
 
-    fn convert_component(component: &shift_font::Component) -> norad::Component {
+    fn convert_component(
+        component: &shift_font::Component,
+    ) -> FormatBackendResult<norad::Component> {
         let matrix = component.matrix();
-        norad::Component::new(
-            Name::new(component.base_glyph_name()).unwrap(),
+        Ok(norad::Component::new(
+            ufo_name("component base glyph", component.base_glyph_name())?,
             norad::AffineTransform {
                 x_scale: matrix.xx,
                 xy_scale: matrix.xy,
@@ -79,20 +88,18 @@ impl UfoWriter {
                 y_offset: matrix.dy,
             },
             None,
-        )
+        ))
     }
 
-    fn convert_anchor(anchor: &shift_font::Anchor) -> norad::Anchor {
-        norad::Anchor::new(
-            anchor.x(),
-            anchor.y(),
-            anchor.name().map(|name| Name::new(name).unwrap()),
-            None,
-            None,
-        )
+    fn convert_anchor(anchor: &shift_font::Anchor) -> FormatBackendResult<norad::Anchor> {
+        let name = anchor
+            .name()
+            .map(|name| ufo_name("anchor", name))
+            .transpose()?;
+        Ok(norad::Anchor::new(anchor.x(), anchor.y(), name, None, None))
     }
 
-    fn convert_guideline(guideline: &Guideline) -> norad::Guideline {
+    fn convert_guideline(guideline: &Guideline) -> FormatBackendResult<norad::Guideline> {
         let line = match (guideline.x(), guideline.y(), guideline.angle()) {
             (None, Some(y), None) => Line::Horizontal(y),
             (Some(x), None, None) => Line::Vertical(x),
@@ -105,12 +112,11 @@ impl UfoWriter {
             _ => Line::Horizontal(0.0),
         };
 
-        norad::Guideline::new(
-            line,
-            guideline.name().map(|n| Name::new(n).unwrap()),
-            None,
-            None,
-        )
+        let name = guideline
+            .name()
+            .map(|name| ufo_name("guideline", name))
+            .transpose()?;
+        Ok(norad::Guideline::new(line, name, None, None))
     }
 
     fn convert_lib_value_to_plist(value: &LibValue) -> plist::Value {
@@ -141,8 +147,10 @@ impl UfoWriter {
         dict
     }
 
-    fn convert_glyph(glyph: &Glyph, layer: &GlyphLayer) -> NoradGlyph {
-        let mut norad_glyph = NoradGlyph::new(glyph.name());
+    fn convert_glyph(glyph: &Glyph, layer: &GlyphLayer) -> FormatBackendResult<NoradGlyph> {
+        // NoradGlyph::new panics on invalid names, so validate first.
+        let name = ufo_name("glyph", glyph.name())?;
+        let mut norad_glyph = NoradGlyph::new(name.as_str());
 
         norad_glyph.width = layer.width();
         norad_glyph.height = layer.height().unwrap_or(0.0);
@@ -163,24 +171,24 @@ impl UfoWriter {
         for component in layer.components_iter() {
             norad_glyph
                 .components
-                .push(Self::convert_component(component));
+                .push(Self::convert_component(component)?);
         }
 
         for anchor in layer.anchors_iter() {
-            norad_glyph.anchors.push(Self::convert_anchor(anchor));
+            norad_glyph.anchors.push(Self::convert_anchor(anchor)?);
         }
 
         for guideline in layer.guidelines() {
             norad_glyph
                 .guidelines
-                .push(Self::convert_guideline(guideline));
+                .push(Self::convert_guideline(guideline)?);
         }
 
         if !layer.lib().is_empty() {
             norad_glyph.lib = Self::convert_lib(layer.lib());
         }
 
-        norad_glyph
+        Ok(norad_glyph)
     }
 }
 
@@ -191,11 +199,12 @@ impl Default for UfoWriter {
 }
 
 impl UfoWriter {
-    pub fn save_view(&self, font: &impl FontView, path: &str) -> Result<(), String> {
+    pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
         let path_obj = Path::new(path);
         if path_obj.exists() {
-            std::fs::remove_dir_all(path_obj)
-                .map_err(|e| format!("Failed to remove existing UFO: {e}"))?;
+            std::fs::remove_dir_all(path_obj).map_err(|e| {
+                FormatBackendError::Ufo(format!("failed to remove existing UFO: {e}"))
+            })?;
         }
 
         let mut norad_font = NoradFont::new();
@@ -223,28 +232,29 @@ impl UfoWriter {
         norad_font.font_info.x_height = font.metrics().x_height;
         norad_font.font_info.italic_angle = font.metrics().italic_angle;
 
-        for (group_name, members) in font.kerning().groups1() {
+        let groups = font
+            .kerning()
+            .groups1()
+            .iter()
+            .chain(font.kerning().groups2());
+        for (group_name, members) in groups {
             norad_font.groups.insert(
-                Name::new(group_name).unwrap(),
-                members.iter().map(|n| Name::new(n).unwrap()).collect(),
-            );
-        }
-
-        for (group_name, members) in font.kerning().groups2() {
-            norad_font.groups.insert(
-                Name::new(group_name).unwrap(),
-                members.iter().map(|n| Name::new(n).unwrap()).collect(),
+                ufo_name("kerning group", group_name)?,
+                members
+                    .iter()
+                    .map(|n| ufo_name("kerning group member", n))
+                    .collect::<FormatBackendResult<_>>()?,
             );
         }
 
         for pair in font.kerning().pairs() {
             let first = match &pair.first {
-                KerningSide::Glyph(g) => Name::new(g).unwrap(),
-                KerningSide::Group(g) => Name::new(g).unwrap(),
+                KerningSide::Glyph(g) => ufo_name("kerning glyph", g)?,
+                KerningSide::Group(g) => ufo_name("kerning group", g)?,
             };
             let second = match &pair.second {
-                KerningSide::Glyph(g) => Name::new(g).unwrap(),
-                KerningSide::Group(g) => Name::new(g).unwrap(),
+                KerningSide::Glyph(g) => ufo_name("kerning glyph", g)?,
+                KerningSide::Group(g) => ufo_name("kerning group", g)?,
             };
 
             norad_font
@@ -257,7 +267,7 @@ impl UfoWriter {
         for guideline in font.guidelines() {
             norad_font
                 .guidelines_mut()
-                .push(Self::convert_guideline(guideline));
+                .push(Self::convert_guideline(guideline)?);
         }
 
         if !font.lib().is_empty() {
@@ -272,7 +282,7 @@ impl UfoWriter {
                 continue;
             };
             if let Some(layer_data) = glyph.layer_for_source(source_id.clone()) {
-                let norad_glyph = Self::convert_glyph(glyph, layer_data);
+                let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                 default_layer.insert_glyph(norad_glyph);
             }
         }
@@ -285,29 +295,31 @@ impl UfoWriter {
             let norad_layer = norad_font
                 .layers
                 .new_layer(source.name())
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
 
             for glyph in font.glyphs() {
                 if let Some(layer_data) = glyph.layer_for_source(source.id()) {
-                    let norad_glyph = Self::convert_glyph(glyph, layer_data);
+                    let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                     norad_layer.insert_glyph(norad_glyph);
                 }
             }
         }
 
         if let Some(fea_source) = font.features().fea_source() {
-            std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(path).map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
             let fea_path = Path::new(path).join("features.fea");
-            std::fs::write(fea_path, fea_source).map_err(|e| e.to_string())?;
+            std::fs::write(fea_path, fea_source)
+                .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
         }
 
-        norad_font.save(path).map_err(|e| e.to_string())
+        norad_font
+            .save(path)
+            .map_err(|e| FormatBackendError::Ufo(e.to_string()))
     }
 }
 
 impl FontWriter for UfoWriter {
     fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
         self.save_view(font, path)
-            .map_err(|error| FormatBackendError::Ufo(error.to_string()))
     }
 }

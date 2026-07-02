@@ -168,6 +168,58 @@ mod tests {
     }
 
     #[test]
+    fn save_fails_loudly_on_invalid_glyph_name() {
+        let mut font = Font::new();
+        let default_source_id = font.default_source_id().unwrap();
+
+        let bad_name = "A\u{0001}B".to_string();
+        let mut glyph = Glyph::with_unicode(bad_name.clone(), 0x0041);
+        glyph.set_layer(GlyphLayer::with_width(
+            LayerId::new(),
+            default_source_id,
+            600.0,
+        ));
+        font.insert_glyph(glyph).unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("invalid_name.ufo");
+
+        let error = UfoWriter::new()
+            .save(&font, ufo_path.to_str().unwrap())
+            .expect_err("glyph name with control character should fail to save");
+
+        let message = error.to_string();
+        assert!(message.contains("glyph"), "unexpected error: {message}");
+        assert!(
+            message.contains("A\\u{1}B"),
+            "error should include the offending name: {message}"
+        );
+        assert!(!ufo_path.exists(), "no partial UFO should be left behind");
+    }
+
+    #[test]
+    fn save_fails_loudly_on_invalid_kerning_group_name() {
+        let mut font = Font::new();
+        font.kerning_mut().set_group1(
+            "public.kern1.bad\u{0000}group".to_string(),
+            vec!["A".to_string().into()],
+        );
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("invalid_group.ufo");
+
+        let error = UfoWriter::new()
+            .save(&font, ufo_path.to_str().unwrap())
+            .expect_err("kerning group name with control character should fail to save");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("kerning group"),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[test]
     fn round_trip_preserves_fractional_coordinates_exactly() {
         let mut font = Font::new();
         let default_source_id = font.default_source_id().unwrap();

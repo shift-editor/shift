@@ -103,7 +103,9 @@ impl FontExporter {
 
         UfoWriter::new()
             .save_view(font, ufo_path_str)
-            .map_err(|message| ExportError::PrepareUfo { message })?;
+            .map_err(|error| ExportError::PrepareUfo {
+                message: error.to_string(),
+            })?;
 
         compile_ttf(ufo_path_str, &build_dir, output_path)
     }
