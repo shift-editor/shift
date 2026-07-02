@@ -445,9 +445,12 @@ impl UfoWriter {
                 continue;
             }
 
+            // A designspace-declared layer binding wins over the source name
+            // so `<source layer="...">` data returns to the layer it came from.
+            let layer_name = source.layer_name().unwrap_or_else(|| source.name());
             let norad_layer = norad_font
                 .layers
-                .new_layer(source.name())
+                .new_layer(layer_name)
                 .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
             Self::apply_layer_metadata(source, norad_layer)?;
 
