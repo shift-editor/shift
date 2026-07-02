@@ -22,8 +22,11 @@ pub const SOURCES_FILE: &str = "sources.json";
 pub const FEATURES_FILE: &str = "features.fea";
 pub const KERNING_FILE: &str = "kerning.json";
 pub const GLYPHS_DIR: &str = "glyphs";
+pub const DATA_DIR: &str = "data";
+pub const IMAGES_DIR: &str = "images";
 pub const MODULES_DIR: &str = "modules";
 pub const LIB_MODULE_FILE: &str = "modules/shift.libData.json";
+pub const FONTINFO_MODULE_FILE: &str = "modules/shift.fontInfo.json";
 
 pub const FORMAT_ID: &str = "shift-source";
 pub const SCHEMA_VERSION: u32 = 1;
@@ -31,6 +34,8 @@ const KERNING_SCHEMA_VERSION: u32 = 1;
 const LIB_MODULE_OWNER: &str = "shift";
 const LIB_MODULE_NAME: &str = "libData";
 const LIB_MODULE_SCHEMA_VERSION: u32 = 1;
+const FONTINFO_MODULE_NAME: &str = "fontInfo";
+const FONTINFO_MODULE_SCHEMA_VERSION: u32 = 1;
 
 pub type PackageTree = Vec<(String, Vec<u8>)>;
 
@@ -262,6 +267,8 @@ struct SourceDoc {
     name: String,
     location: BTreeMap<String, f64>,
     filename: Option<String>,
+    #[serde(default)]
+    color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -384,8 +391,43 @@ struct LibModuleDoc {
     module: String,
     schema_version: u32,
     font: BTreeMap<String, LibValueDoc>,
+    #[serde(default)]
+    sources: BTreeMap<String, SourceLibDoc>,
     glyphs: BTreeMap<String, GlyphLibDoc>,
     layers: BTreeMap<String, LayerLibDoc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SourceLibDoc {
+    name: String,
+    lib: BTreeMap<String, LibValueDoc>,
+}
+
+/// Source-format font-info fields Shift does not model, preserved verbatim
+/// so a UFO round-trip through a `.shift` package stays lossless.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FontInfoModuleDoc {
+    owner: String,
+    module: String,
+    schema_version: u32,
+    fields: BTreeMap<String, LibValueDoc>,
+}
+
+impl FontInfoModuleDoc {
+    fn from_font(font: &Font) -> Option<Self> {
+        if font.fontinfo_remainder().is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            owner: LIB_MODULE_OWNER.to_string(),
+            module: FONTINFO_MODULE_NAME.to_string(),
+            schema_version: FONTINFO_MODULE_SCHEMA_VERSION,
+            fields: lib_to_doc(font.fontinfo_remainder()),
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -409,11 +451,14 @@ struct LayerLibDoc {
 enum LibValueDoc {
     String(String),
     Integer(i64),
+    UnsignedInteger(u64),
     Float(f64),
     Boolean(bool),
     Array(Vec<LibValueDoc>),
     Dict(BTreeMap<String, LibValueDoc>),
     Data(Vec<u8>),
+    Date(String),
+    Uid(u64),
 }
 
 pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
@@ -468,6 +513,10 @@ pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
         tree.push(json_entry(LIB_MODULE_FILE, &lib_module_doc)?);
     }
 
+    if let Some(fontinfo_module_doc) = FontInfoModuleDoc::from_font(font) {
+        tree.push(json_entry(FONTINFO_MODULE_FILE, &fontinfo_module_doc)?);
+    }
+
     let mut glyph_entries = font
         .glyphs()
         .map(|glyph| {
@@ -478,6 +527,14 @@ pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
         .collect::<Result<Vec<_>, _>>()?;
     glyph_entries.sort_by(|(left, _), (right, _)| left.cmp(right));
     tree.extend(glyph_entries);
+
+    for (path, bytes) in font.data_files().iter() {
+        tree.push((format!("{DATA_DIR}/{path}"), bytes.clone()));
+    }
+
+    for (path, bytes) in font.images().iter() {
+        tree.push((format!("{IMAGES_DIR}/{path}"), bytes.clone()));
+    }
 
     Ok(tree)
 }
@@ -498,6 +555,11 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     if let Some(module_doc) = &lib_module_doc {
         validate_lib_module(module_doc)?;
     }
+    let fontinfo_module_doc: Option<FontInfoModuleDoc> =
+        take_optional_json(&mut entries, FONTINFO_MODULE_FILE)?;
+    if let Some(module_doc) = &fontinfo_module_doc {
+        validate_fontinfo_module(module_doc)?;
+    }
 
     let mut font = Font::empty();
     *font.metadata_mut() = FontMetadata::from(font_doc.metadata);
@@ -514,6 +576,10 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
         *font.lib_mut() = lib_from_doc(std::mem::take(&mut module_doc.font))?;
     }
 
+    if let Some(module_doc) = fontinfo_module_doc {
+        *font.fontinfo_remainder_mut() = lib_from_doc(module_doc.fields)?;
+    }
+
     for axis_doc in axes_doc.axes {
         font.add_axis(Axis::try_from(axis_doc)?);
     }
@@ -522,6 +588,10 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     for source_doc in sources_doc.sources {
         validate_source_axis_references(&source_doc, &axis_ids)?;
         font.add_source(Source::try_from(source_doc)?);
+    }
+
+    if let Some(module_doc) = &mut lib_module_doc {
+        apply_lib_module_to_sources(&mut font, module_doc)?;
     }
 
     let source_ids = font
@@ -540,6 +610,10 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     for (path, bytes) in entries {
         if path.starts_with(&format!("{GLYPHS_DIR}/glyph_")) {
             glyph_entries.push((path, bytes));
+        } else if let Some(rel_path) = binary_entry_rel_path(&path, DATA_DIR)? {
+            font.data_files_mut().insert(rel_path, bytes);
+        } else if let Some(rel_path) = binary_entry_rel_path(&path, IMAGES_DIR)? {
+            font.images_mut().insert(rel_path, bytes);
         } else {
             return Err(SourcePackageError::UnexpectedEntry(path));
         }
@@ -686,6 +760,27 @@ fn validate_manifest(manifest: &ManifestDoc) -> Result<(), SourcePackageError> {
     }
 
     Ok(())
+}
+
+/// Extracts the path relative to `dir` for binary package entries, rejecting
+/// entries that could escape the directory when written back to disk.
+fn binary_entry_rel_path(path: &str, dir: &str) -> Result<Option<String>, SourcePackageError> {
+    let Some(rel_path) = path
+        .strip_prefix(dir)
+        .and_then(|rest| rest.strip_prefix('/'))
+    else {
+        return Ok(None);
+    };
+
+    let is_safe = !rel_path.is_empty()
+        && Path::new(rel_path)
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)));
+    if is_safe {
+        Ok(Some(rel_path.to_string()))
+    } else {
+        Err(SourcePackageError::UnexpectedEntry(path.to_string()))
+    }
 }
 
 fn validate_glyph_path_id(path: &str, id: &str) -> Result<(), SourcePackageError> {
@@ -964,6 +1059,65 @@ fn validate_lib_module(module_doc: &LibModuleDoc) -> Result<(), SourcePackageErr
     Ok(())
 }
 
+fn validate_fontinfo_module(module_doc: &FontInfoModuleDoc) -> Result<(), SourcePackageError> {
+    if module_doc.owner != LIB_MODULE_OWNER {
+        return Err(SourcePackageError::InvalidModule {
+            path: FONTINFO_MODULE_FILE.to_string(),
+            message: format!("expected owner {LIB_MODULE_OWNER:?}"),
+        });
+    }
+
+    if module_doc.module != FONTINFO_MODULE_NAME {
+        return Err(SourcePackageError::InvalidModule {
+            path: FONTINFO_MODULE_FILE.to_string(),
+            message: format!("expected module {FONTINFO_MODULE_NAME:?}"),
+        });
+    }
+
+    if module_doc.schema_version != FONTINFO_MODULE_SCHEMA_VERSION {
+        return Err(SourcePackageError::InvalidModule {
+            path: FONTINFO_MODULE_FILE.to_string(),
+            message: format!("unsupported schema version {}", module_doc.schema_version),
+        });
+    }
+
+    Ok(())
+}
+
+fn apply_lib_module_to_sources(
+    font: &mut Font,
+    module_doc: &mut LibModuleDoc,
+) -> Result<(), SourcePackageError> {
+    let source_ids = font.sources().iter().map(Source::id).collect::<Vec<_>>();
+    for source_id in source_ids {
+        let Some(source_doc) = module_doc.sources.remove(&source_id.to_string()) else {
+            continue;
+        };
+
+        let source = font.source_mut(source_id.clone()).ok_or_else(|| {
+            SourcePackageError::DanglingReference {
+                field: "lib source",
+                id: source_id.to_string(),
+            }
+        })?;
+
+        if source_doc.name != source.name() {
+            return Err(SourcePackageError::InvalidModule {
+                path: LIB_MODULE_FILE.to_string(),
+                message: format!(
+                    "source lib name cache {:?} does not match source {:?}",
+                    source_doc.name,
+                    source.name()
+                ),
+            });
+        }
+
+        *source.lib_mut() = lib_from_doc(source_doc.lib)?;
+    }
+
+    Ok(())
+}
+
 fn apply_lib_module_to_glyph(
     glyph: &mut Glyph,
     module_doc: &mut LibModuleDoc,
@@ -1036,6 +1190,13 @@ fn apply_lib_module_to_glyph(
 }
 
 fn ensure_lib_module_consumed(module_doc: LibModuleDoc) -> Result<(), SourcePackageError> {
+    if let Some(source_id) = module_doc.sources.keys().next() {
+        return Err(SourcePackageError::DanglingReference {
+            field: "lib source",
+            id: source_id.clone(),
+        });
+    }
+
     if let Some(glyph_id) = module_doc.glyphs.keys().next() {
         return Err(SourcePackageError::DanglingReference {
             field: "lib glyph",
@@ -1070,8 +1231,23 @@ fn lib_from_doc(doc: BTreeMap<String, LibValueDoc>) -> Result<LibData, SourcePac
 impl LibModuleDoc {
     fn from_font(font: &Font) -> Option<Self> {
         let font_lib = lib_to_doc(font.lib());
+        let mut sources = BTreeMap::new();
         let mut glyphs = BTreeMap::new();
         let mut layers = BTreeMap::new();
+
+        for source in font.sources() {
+            if source.lib().is_empty() {
+                continue;
+            }
+
+            sources.insert(
+                source.id().to_string(),
+                SourceLibDoc {
+                    name: source.name().to_string(),
+                    lib: lib_to_doc(source.lib()),
+                },
+            );
+        }
 
         for glyph in font.glyphs() {
             if !glyph.lib().is_empty() {
@@ -1101,7 +1277,7 @@ impl LibModuleDoc {
             }
         }
 
-        if font_lib.is_empty() && glyphs.is_empty() && layers.is_empty() {
+        if font_lib.is_empty() && sources.is_empty() && glyphs.is_empty() && layers.is_empty() {
             return None;
         }
 
@@ -1110,6 +1286,7 @@ impl LibModuleDoc {
             module: LIB_MODULE_NAME.to_string(),
             schema_version: LIB_MODULE_SCHEMA_VERSION,
             font: font_lib,
+            sources,
             glyphs,
             layers,
         })
@@ -1121,6 +1298,7 @@ impl From<&LibValue> for LibValueDoc {
         match value {
             LibValue::String(value) => Self::String(value.clone()),
             LibValue::Integer(value) => Self::Integer(*value),
+            LibValue::UnsignedInteger(value) => Self::UnsignedInteger(*value),
             LibValue::Float(value) => Self::Float(*value),
             LibValue::Boolean(value) => Self::Boolean(*value),
             LibValue::Array(values) => Self::Array(values.iter().map(Self::from).collect()),
@@ -1131,6 +1309,8 @@ impl From<&LibValue> for LibValueDoc {
                     .collect(),
             ),
             LibValue::Data(value) => Self::Data(value.clone()),
+            LibValue::Date(value) => Self::Date(value.clone()),
+            LibValue::Uid(value) => Self::Uid(*value),
         }
     }
 }
@@ -1142,6 +1322,7 @@ impl TryFrom<LibValueDoc> for LibValue {
         Ok(match doc {
             LibValueDoc::String(value) => Self::String(value),
             LibValueDoc::Integer(value) => Self::Integer(value),
+            LibValueDoc::UnsignedInteger(value) => Self::UnsignedInteger(value),
             LibValueDoc::Float(value) => Self::Float(value),
             LibValueDoc::Boolean(value) => Self::Boolean(value),
             LibValueDoc::Array(values) => Self::Array(
@@ -1157,6 +1338,8 @@ impl TryFrom<LibValueDoc> for LibValue {
                     .collect::<Result<HashMap<_, _>, _>>()?,
             ),
             LibValueDoc::Data(value) => Self::Data(value),
+            LibValueDoc::Date(value) => Self::Date(value),
+            LibValueDoc::Uid(value) => Self::Uid(value),
         })
     }
 }
@@ -1526,6 +1709,7 @@ impl TryFrom<&Source> for SourceDoc {
             name: source.name().to_string(),
             location,
             filename: source.filename().map(str::to_string),
+            color: source.color().map(str::to_string),
         })
     }
 }
@@ -1543,12 +1727,14 @@ impl TryFrom<SourceDoc> for Source {
             );
         }
 
-        Ok(Self::with_id(
+        let mut source = Self::with_id(
             parse_id("source", &doc.id)?,
             doc.name,
             Location::from_map(location),
             doc.filename,
-        ))
+        );
+        source.set_color(doc.color);
+        Ok(source)
     }
 }
 

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS sources (
     family_name TEXT,
     style_name TEXT,
     filename TEXT,
+    color TEXT,
     kind TEXT NOT NULL,
     order_index INTEGER NOT NULL DEFAULT 0
 );
@@ -234,6 +235,19 @@ CREATE TABLE IF NOT EXISTS font_lib (
     value_json TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS fontinfo_remainder (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS source_lib (
+    source_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    PRIMARY KEY (source_id, key),
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS glyph_lib (
     glyph_id TEXT NOT NULL,
     key TEXT NOT NULL,
@@ -248,6 +262,13 @@ CREATE TABLE IF NOT EXISTS glyph_layer_lib (
     value_json TEXT NOT NULL,
     PRIMARY KEY (layer_id, key),
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS font_binaries (
+    kind TEXT NOT NULL CHECK (kind IN ('data', 'image')),
+    path TEXT NOT NULL,
+    bytes BLOB NOT NULL,
+    PRIMARY KEY (kind, path)
 );
 
 CREATE TABLE IF NOT EXISTS workspace_state (

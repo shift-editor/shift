@@ -76,11 +76,42 @@ pub fn sample_font() -> Font {
         LibValue::Array(vec![
             LibValue::String("array string".to_string()),
             LibValue::Integer(12),
+            LibValue::Integer(-12),
+            LibValue::UnsignedInteger(u64::MAX),
             LibValue::Float(1.5),
             LibValue::Boolean(false),
             LibValue::Dict(nested),
             LibValue::Data(vec![0, 1, 2, 255]),
+            LibValue::Date("2024-02-02T02:02:02Z".to_string()),
+            LibValue::Uid(9),
         ]),
+    );
+
+    font.fontinfo_remainder_mut().set(
+        "postscriptBlueValues".to_string(),
+        LibValue::Array(vec![LibValue::Integer(-16), LibValue::Integer(0)]),
+    );
+    font.fontinfo_remainder_mut()
+        .set("openTypeOS2WeightClass".to_string(), LibValue::Integer(700));
+    let mut woff_metadata = HashMap::new();
+    woff_metadata.insert(
+        "id".to_string(),
+        LibValue::String("dogfood-unique-id".to_string()),
+    );
+    font.fontinfo_remainder_mut().set(
+        "woffMetadataUniqueID".to_string(),
+        LibValue::Dict(woff_metadata),
+    );
+
+    font.data_files_mut().insert(
+        "com.shift.testdata/nested/blob.bin".to_string(),
+        vec![0x00, 0xFF, 0x10, 0x20],
+    );
+    font.data_files_mut()
+        .insert("notes.txt".to_string(), b"dogfood data".to_vec());
+    font.images_mut().insert(
+        "swatch.png".to_string(),
+        vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01],
     );
 
     let weight_id = AxisId::from_raw("weight");
@@ -119,12 +150,18 @@ pub fn sample_font() -> Font {
         regular_location,
         Some("Regular.ufo".to_string()),
     ));
-    font.add_source(Source::with_id(
+    let mut bold_source = Source::with_id(
         bold_id.clone(),
         "Bold".to_string(),
         bold_location,
         Some("Bold.ufo".to_string()),
-    ));
+    );
+    bold_source.set_color(Some("1,0.75,0,0.7".to_string()));
+    bold_source.lib_mut().set(
+        "com.shift.sourceNote".to_string(),
+        LibValue::String("bold layer note".to_string()),
+    );
+    font.add_source(bold_source);
     font.set_default_source_id(regular_id.clone());
 
     let acute_id = GlyphId::from_raw("acute");

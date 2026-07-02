@@ -4,7 +4,7 @@ use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_font::{
     Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, Point, PointType,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct UfoWriter;
 
@@ -214,13 +214,19 @@ impl UfoWriter {
             .name()
             .map(|name| ufo_name("guideline", name))
             .transpose()?;
-        Ok(norad::Guideline::new(line, name, None, None))
+        // Colors that are not valid UFO color strings (possible for
+        // app-authored guidelines) cannot be written and are dropped.
+        let color = guideline
+            .color()
+            .and_then(|color| color.parse::<norad::Color>().ok());
+        Ok(norad::Guideline::new(line, name, color, None))
     }
 
     fn convert_lib_value_to_plist(value: &LibValue) -> plist::Value {
         match value {
             LibValue::String(s) => plist::Value::String(s.clone()),
             LibValue::Integer(i) => plist::Value::Integer((*i).into()),
+            LibValue::UnsignedInteger(u) => plist::Value::Integer((*u).into()),
             LibValue::Float(f) => plist::Value::Real(*f),
             LibValue::Boolean(b) => plist::Value::Boolean(*b),
             LibValue::Array(arr) => {
@@ -234,6 +240,10 @@ impl UfoWriter {
                 plist::Value::Dictionary(plist_dict)
             }
             LibValue::Data(d) => plist::Value::Data(d.clone()),
+            LibValue::Date(d) => plist::Date::from_xml_format(d)
+                .map(plist::Value::Date)
+                .unwrap_or_else(|_| plist::Value::String(d.clone())),
+            LibValue::Uid(u) => plist::Value::Uid(plist::Uid::new(*u)),
         }
     }
 
@@ -297,36 +307,75 @@ impl Default for UfoWriter {
 }
 
 impl UfoWriter {
+    /// Writes a source's carried `layerinfo.plist` metadata (color and layer
+    /// lib) onto the norad layer it maps to.
+    fn apply_layer_metadata(
+        source: &shift_font::Source,
+        layer: &mut norad::Layer,
+    ) -> FormatBackendResult<()> {
+        layer.color = source
+            .color()
+            .map(|color| {
+                color
+                    .parse::<norad::Color>()
+                    .map_err(|_| FormatBackendError::Ufo(format!("invalid layer color {color:?}")))
+            })
+            .transpose()?;
+
+        if !source.lib().is_empty() {
+            layer.lib = Self::convert_lib(source.lib());
+        }
+
+        Ok(())
+    }
+
     pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
         let norad_font = Self::build_norad_font(font)?;
         Self::write_atomic(&norad_font, Path::new(path))
     }
 
+    /// Rebuilds `fontinfo.plist` from the carried remainder, then writes every
+    /// Shift-modeled field from the IR so the IR always wins for those keys.
+    fn build_font_info(font: &impl FontView) -> FormatBackendResult<norad::FontInfo> {
+        let remainder = font.fontinfo_remainder();
+        let mut font_info = if remainder.is_empty() {
+            norad::FontInfo::default()
+        } else {
+            let dict = Self::convert_lib(remainder);
+            plist::from_value(&plist::Value::Dictionary(dict)).map_err(|e| {
+                FormatBackendError::Ufo(format!("invalid preserved fontinfo data: {e}"))
+            })?
+        };
+
+        font_info.family_name = font.metadata().family_name.clone();
+        font_info.style_name = font.metadata().style_name.clone();
+        font_info.version_major = font.metadata().version_major;
+        font_info.version_minor = font.metadata().version_minor.map(|v| v as u32);
+        font_info.copyright = font.metadata().copyright.clone();
+        font_info.trademark = font.metadata().trademark.clone();
+        font_info.open_type_name_designer = font.metadata().designer.clone();
+        font_info.open_type_name_designer_url = font.metadata().designer_url.clone();
+        font_info.open_type_name_manufacturer = font.metadata().manufacturer.clone();
+        font_info.open_type_name_manufacturer_url = font.metadata().manufacturer_url.clone();
+        font_info.open_type_name_license = font.metadata().license.clone();
+        font_info.open_type_name_license_url = font.metadata().license_url.clone();
+        font_info.open_type_name_description = font.metadata().description.clone();
+        font_info.note = font.metadata().note.clone();
+
+        font_info.units_per_em = Some((font.metrics().units_per_em as u32).into());
+        font_info.ascender = Some(font.metrics().ascender);
+        font_info.descender = Some(font.metrics().descender);
+        font_info.cap_height = font.metrics().cap_height;
+        font_info.x_height = font.metrics().x_height;
+        font_info.italic_angle = font.metrics().italic_angle;
+        font_info.guidelines = None;
+
+        Ok(font_info)
+    }
+
     fn build_norad_font(font: &impl FontView) -> FormatBackendResult<NoradFont> {
         let mut norad_font = NoradFont::new();
-
-        norad_font.font_info.family_name = font.metadata().family_name.clone();
-        norad_font.font_info.style_name = font.metadata().style_name.clone();
-        norad_font.font_info.version_major = font.metadata().version_major;
-        norad_font.font_info.version_minor = font.metadata().version_minor.map(|v| v as u32);
-        norad_font.font_info.copyright = font.metadata().copyright.clone();
-        norad_font.font_info.trademark = font.metadata().trademark.clone();
-        norad_font.font_info.open_type_name_designer = font.metadata().designer.clone();
-        norad_font.font_info.open_type_name_designer_url = font.metadata().designer_url.clone();
-        norad_font.font_info.open_type_name_manufacturer = font.metadata().manufacturer.clone();
-        norad_font.font_info.open_type_name_manufacturer_url =
-            font.metadata().manufacturer_url.clone();
-        norad_font.font_info.open_type_name_license = font.metadata().license.clone();
-        norad_font.font_info.open_type_name_license_url = font.metadata().license_url.clone();
-        norad_font.font_info.open_type_name_description = font.metadata().description.clone();
-        norad_font.font_info.note = font.metadata().note.clone();
-
-        norad_font.font_info.units_per_em = Some((font.metrics().units_per_em as u32).into());
-        norad_font.font_info.ascender = Some(font.metrics().ascender);
-        norad_font.font_info.descender = Some(font.metrics().descender);
-        norad_font.font_info.cap_height = font.metrics().cap_height;
-        norad_font.font_info.x_height = font.metrics().x_height;
-        norad_font.font_info.italic_angle = font.metrics().italic_angle;
+        norad_font.font_info = Self::build_font_info(font)?;
 
         let groups = font
             .kerning()
@@ -383,6 +432,14 @@ impl UfoWriter {
             }
         }
 
+        if let Some(default_source) = font
+            .sources()
+            .iter()
+            .find(|source| Some(source.id()) == default_source_id)
+        {
+            Self::apply_layer_metadata(default_source, default_layer)?;
+        }
+
         for source in font.sources() {
             if Some(source.id()) == default_source_id {
                 continue;
@@ -392,6 +449,7 @@ impl UfoWriter {
                 .layers
                 .new_layer(source.name())
                 .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
+            Self::apply_layer_metadata(source, norad_layer)?;
 
             for glyph in font.glyphs() {
                 if let Some(layer_data) = glyph.layer_for_source(source.id()) {
@@ -403,6 +461,24 @@ impl UfoWriter {
 
         if let Some(fea_source) = font.features().fea_source() {
             norad_font.features = fea_source.to_string();
+        }
+
+        for (data_path, bytes) in font.data_files().iter() {
+            norad_font
+                .data
+                .insert(PathBuf::from(data_path), bytes.clone())
+                .map_err(|e| {
+                    FormatBackendError::Ufo(format!("invalid data file {data_path:?}: {e}"))
+                })?;
+        }
+
+        for (image_path, bytes) in font.images().iter() {
+            norad_font
+                .images
+                .insert(PathBuf::from(image_path), bytes.clone())
+                .map_err(|e| {
+                    FormatBackendError::Ufo(format!("invalid image file {image_path:?}: {e}"))
+                })?;
         }
 
         Ok(norad_font)

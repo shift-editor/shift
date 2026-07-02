@@ -1,5 +1,6 @@
 use crate::axis::Location;
 use crate::entity::SourceId;
+use crate::lib_data::LibData;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -9,6 +10,10 @@ pub struct Source {
     name: String,
     location: Location,
     filename: Option<String>,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    lib: LibData,
 }
 
 impl Source {
@@ -18,6 +23,8 @@ impl Source {
             name,
             location,
             filename: None,
+            color: None,
+            lib: LibData::new(),
         }
     }
 
@@ -27,6 +34,8 @@ impl Source {
             name,
             location,
             filename: Some(filename),
+            color: None,
+            lib: LibData::new(),
         }
     }
 
@@ -41,6 +50,8 @@ impl Source {
             name,
             location,
             filename,
+            color: None,
+            lib: LibData::new(),
         }
     }
 
@@ -58,6 +69,26 @@ impl Source {
 
     pub fn filename(&self) -> Option<&str> {
         self.filename.as_deref()
+    }
+
+    /// The source's display color from the format's layer metadata
+    /// (e.g. UFO `layerinfo.plist`), as an `r,g,b,a` string.
+    pub fn color(&self) -> Option<&str> {
+        self.color.as_deref()
+    }
+
+    pub fn set_color(&mut self, color: Option<String>) {
+        self.color = color;
+    }
+
+    /// Layer-level lib data from the format's layer metadata
+    /// (e.g. UFO `layerinfo.plist`).
+    pub fn lib(&self) -> &LibData {
+        &self.lib
+    }
+
+    pub fn lib_mut(&mut self) -> &mut LibData {
+        &mut self.lib
     }
 
     pub fn set_name(&mut self, name: String) {
