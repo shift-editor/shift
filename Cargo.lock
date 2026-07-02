@@ -1887,6 +1887,7 @@ dependencies = [
  "norad 0.16.0",
  "plist",
  "quick-xml",
+ "serde",
  "shift-font",
  "shift-source",
  "skrifa",

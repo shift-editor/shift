@@ -1069,3 +1069,38 @@ fn refuses_stores_from_newer_schema_versions() {
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }
+
+#[test]
+fn replace_and_load_font_state_preserves_source_roles_and_layer_names() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let mut font = shift_font::Font::new();
+    let mut medium = shift_font::Source::with_filename(
+        "Medium".to_string(),
+        shift_font::Location::new(),
+        "Family-Bold.ufo".to_string(),
+    );
+    medium.set_layer_name(Some("Medium".to_string()));
+    font.add_source(medium);
+    font.add_source(shift_font::Source::layer("background".to_string()));
+
+    store.replace_font_state(&font).expect("replace font state");
+    let loaded = store.load_font_state().expect("load font state");
+
+    let medium = loaded
+        .sources()
+        .iter()
+        .find(|source| source.name() == "Medium")
+        .expect("Medium source should survive");
+    assert_eq!(medium.role(), shift_font::SourceRole::Master);
+    assert_eq!(medium.layer_name(), Some("Medium"));
+    assert_eq!(medium.filename(), Some("Family-Bold.ufo"));
+
+    let background = loaded
+        .sources()
+        .iter()
+        .find(|source| source.name() == "background")
+        .expect("background source should survive");
+    assert_eq!(background.role(), shift_font::SourceRole::Layer);
+    assert_eq!(background.layer_name(), None);
+}

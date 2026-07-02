@@ -3,6 +3,20 @@ use crate::entity::SourceId;
 use crate::lib_data::LibData;
 use serde::{Deserialize, Serialize};
 
+/// How a source participates in the font. A `Master` is a genuine
+/// designspace source: it has a design-space location and earns a
+/// `<source>` entry when the font is written as a designspace. A `Layer`
+/// only carries a format layer that rides along with its file's masters
+/// (e.g. a plain UFO background layer) and must never gain a designspace
+/// `<source>` entry on save.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceRole {
+    #[default]
+    Master,
+    Layer,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
@@ -14,6 +28,10 @@ pub struct Source {
     color: Option<String>,
     #[serde(default)]
     lib: LibData,
+    #[serde(default)]
+    role: SourceRole,
+    #[serde(default)]
+    layer_name: Option<String>,
 }
 
 impl Source {
@@ -25,6 +43,8 @@ impl Source {
             filename: None,
             color: None,
             lib: LibData::new(),
+            role: SourceRole::Master,
+            layer_name: None,
         }
     }
 
@@ -36,6 +56,8 @@ impl Source {
             filename: Some(filename),
             color: None,
             lib: LibData::new(),
+            role: SourceRole::Master,
+            layer_name: None,
         }
     }
 
@@ -52,6 +74,23 @@ impl Source {
             filename,
             color: None,
             lib: LibData::new(),
+            role: SourceRole::Master,
+            layer_name: None,
+        }
+    }
+
+    /// A layer-only source: it carries a format layer named `name` (e.g. a
+    /// UFO background layer) but is not a designspace master.
+    pub fn layer(name: String) -> Self {
+        Self {
+            id: SourceId::new(),
+            name,
+            location: Location::new(),
+            filename: None,
+            color: None,
+            lib: LibData::new(),
+            role: SourceRole::Layer,
+            layer_name: None,
         }
     }
 
@@ -69,6 +108,30 @@ impl Source {
 
     pub fn filename(&self) -> Option<&str> {
         self.filename.as_deref()
+    }
+
+    pub fn role(&self) -> SourceRole {
+        self.role
+    }
+
+    pub fn is_master(&self) -> bool {
+        self.role == SourceRole::Master
+    }
+
+    pub fn set_role(&mut self, role: SourceRole) {
+        self.role = role;
+    }
+
+    /// The UFO layer inside [`Self::filename`] that holds this source's
+    /// data, when a designspace `<source>` declared it explicitly with a
+    /// `layer` attribute. `None` means the file's default layer for
+    /// masters, or a layer named after the source for layer-only sources.
+    pub fn layer_name(&self) -> Option<&str> {
+        self.layer_name.as_deref()
+    }
+
+    pub fn set_layer_name(&mut self, layer_name: Option<String>) {
+        self.layer_name = layer_name;
     }
 
     /// The source's display color from the format's layer metadata

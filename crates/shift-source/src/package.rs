@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use shift_font::{
     Anchor, Axis, AxisId, Component, ComponentId, Contour, DecomposedTransform, FeatureData, Font,
     FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, Guideline, KerningData, KerningPair,
-    KerningSide, LibData, LibValue, Location, Point, PointType, Source, SourceId,
+    KerningSide, LibData, LibValue, Location, Point, PointType, Source, SourceId, SourceRole,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, result::ZipError, write::SimpleFileOptions};
 
@@ -269,6 +269,10 @@ struct SourceDoc {
     filename: Option<String>,
     #[serde(default)]
     color: Option<String>,
+    #[serde(default)]
+    role: SourceRole,
+    #[serde(default)]
+    layer_name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1710,6 +1714,8 @@ impl TryFrom<&Source> for SourceDoc {
             location,
             filename: source.filename().map(str::to_string),
             color: source.color().map(str::to_string),
+            role: source.role(),
+            layer_name: source.layer_name().map(str::to_string),
         })
     }
 }
@@ -1734,6 +1740,8 @@ impl TryFrom<SourceDoc> for Source {
             doc.filename,
         );
         source.set_color(doc.color);
+        source.set_role(doc.role);
+        source.set_layer_name(doc.layer_name);
         Ok(source)
     }
 }

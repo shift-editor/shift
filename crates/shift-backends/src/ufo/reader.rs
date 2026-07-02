@@ -3,8 +3,7 @@ use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, Guideline, KerningData,
-    KerningPair, KerningSide, LayerId, LibData, LibValue, Location, PointType, Source, SourceId,
-    Transform,
+    KerningPair, KerningSide, LayerId, LibData, LibValue, PointType, Source, SourceId, Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -367,7 +366,10 @@ impl FontReader for UfoReader {
             let source_id = if layer.name() == &norad_default_layer_name {
                 default_source_id.clone()
             } else {
-                font.add_source(Source::new(layer.name().to_string(), Location::new()))
+                // Non-default UFO layers are carried as layer-only sources:
+                // they are not designspace masters and must not gain
+                // `<source>` entries if the font is saved as a designspace.
+                font.add_source(Source::layer(layer.name().to_string()))
             };
 
             if let Some(source) = font.source_mut(source_id.clone()) {
