@@ -89,8 +89,9 @@ impl Ledger {
     }
 
     /// Pops the entry to undo; the caller replays its pre states and must
-    /// hand the entry back via [`Ledger::record_undone`] only after the
-    /// replay durably succeeded.
+    /// hand the entry back — via [`Ledger::record_undone`] after the replay
+    /// durably succeeded, or [`Ledger::restore_undo`] when it failed so the
+    /// step stays available for retry.
     pub fn pop_undo(&mut self) -> Option<LedgerEntry> {
         self.undo.pop()
     }
@@ -99,13 +100,24 @@ impl Ledger {
         self.redo.push(entry);
     }
 
+    /// Hands a popped undo entry back after a failed replay.
+    pub fn restore_undo(&mut self, entry: LedgerEntry) {
+        self.undo.push(entry);
+    }
+
     /// Pops the entry to redo; hand back via [`Ledger::record_redone`] after
-    /// the replay durably succeeded.
+    /// the replay durably succeeded, or [`Ledger::restore_redo`] when it
+    /// failed so the step stays available for retry.
     pub fn pop_redo(&mut self) -> Option<LedgerEntry> {
         self.redo.pop()
     }
 
     pub fn record_redone(&mut self, entry: LedgerEntry) {
         self.undo.push(entry);
+    }
+
+    /// Hands a popped redo entry back after a failed replay.
+    pub fn restore_redo(&mut self, entry: LedgerEntry) {
+        self.redo.push(entry);
     }
 }

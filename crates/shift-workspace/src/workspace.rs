@@ -378,26 +378,43 @@ impl FontWorkspace {
 
     /// Replays the most recent entry's pre states in reverse step order.
     /// `None` when the undo stack is empty. The echo is the same
-    /// replace-grade shape as `apply`.
+    /// replace-grade shape as `apply`. A failed replay hands the entry back
+    /// so the step stays available for retry.
     pub fn undo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
         let Some(entry) = self.ledger.pop_undo() else {
             return Ok(None);
         };
 
-        let outcome = self.replay(&entry, ReplaySide::Pre)?;
-        self.ledger.record_undone(entry);
-        Ok(Some(outcome))
+        match self.replay(&entry, ReplaySide::Pre) {
+            Ok(outcome) => {
+                self.ledger.record_undone(entry);
+                Ok(Some(outcome))
+            }
+            Err(error) => {
+                self.ledger.restore_undo(entry);
+                Err(error)
+            }
+        }
     }
 
     /// Replays the most recent undone entry's post states in step order.
+    /// A failed replay hands the entry back so the step stays available
+    /// for retry.
     pub fn redo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
         let Some(entry) = self.ledger.pop_redo() else {
             return Ok(None);
         };
 
-        let outcome = self.replay(&entry, ReplaySide::Post)?;
-        self.ledger.record_redone(entry);
-        Ok(Some(outcome))
+        match self.replay(&entry, ReplaySide::Post) {
+            Ok(outcome) => {
+                self.ledger.record_redone(entry);
+                Ok(Some(outcome))
+            }
+            Err(error) => {
+                self.ledger.restore_redo(entry);
+                Err(error)
+            }
+        }
     }
 
     fn replay(
