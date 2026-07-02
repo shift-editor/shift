@@ -1,7 +1,8 @@
 use std::fs::File;
 
 use shift_font::{
-    Axis, AxisId, Font, KerningPair, Location, Source, SourceId, test_support::sample_font,
+    Axis, AxisId, Font, KerningPair, LibValue, Location, Source, SourceId,
+    test_support::sample_font,
 };
 use shift_source::{
     AXES_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, FONTINFO_MODULE_FILE, GLYPHS_DIR, IMAGES_DIR,
@@ -48,6 +49,48 @@ fn shift_round_trip_preserves_whole_font() {
     let loaded = ShiftSourcePackage::load_font(&package_path).unwrap();
 
     assert_eq!(loaded, original);
+}
+
+#[test]
+fn shift_round_trip_preserves_exotic_lib_values_binaries_and_remainders() {
+    let temp = tempfile::tempdir().unwrap();
+    let package_path = temp.path().join("Dogfood.shift");
+
+    ShiftSourcePackage::save_font(&package_path, &sample_font()).unwrap();
+    let loaded = ShiftSourcePackage::load_font(&package_path).unwrap();
+
+    let Some(LibValue::Array(variants)) = loaded.lib().get("com.shift.allLibVariants") else {
+        panic!("font lib should carry the variant corpus");
+    };
+    assert!(variants.contains(&LibValue::Integer(-12)));
+    assert!(variants.contains(&LibValue::UnsignedInteger(u64::MAX)));
+    assert!(variants.contains(&LibValue::Date("2024-02-02T02:02:02Z".to_string())));
+    assert!(variants.contains(&LibValue::Uid(9)));
+    assert!(variants.contains(&LibValue::Data(vec![0, 1, 2, 255])));
+
+    assert_eq!(
+        loaded
+            .data_files()
+            .get("com.shift.testdata/nested/blob.bin"),
+        Some([0x00, 0xFF, 0x10, 0x20].as_slice())
+    );
+    assert!(loaded.images().get("swatch.png").is_some());
+
+    let bold = loaded
+        .sources()
+        .iter()
+        .find(|source| source.name() == "Bold")
+        .expect("bold source should survive");
+    assert_eq!(bold.color(), Some("1,0.75,0,0.7"));
+    assert_eq!(
+        bold.lib().get("com.shift.sourceNote"),
+        Some(&LibValue::String("bold layer note".to_string()))
+    );
+
+    assert_eq!(
+        loaded.fontinfo_remainder().get("openTypeOS2WeightClass"),
+        Some(&LibValue::Integer(700))
+    );
 }
 
 #[test]
