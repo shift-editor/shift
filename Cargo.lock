@@ -1883,6 +1883,7 @@ version = "0.1.0"
 dependencies = [
  "fontc",
  "glyphs-reader",
+ "libc",
  "norad 0.16.0",
  "plist",
  "quick-xml",

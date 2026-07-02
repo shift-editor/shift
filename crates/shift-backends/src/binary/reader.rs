@@ -122,6 +122,9 @@ fn detect_smooth_points(contours: &mut [Contour]) {
 fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     let outlines = font.outline_glyphs();
     let char_map = font.charmap();
+    let hmtx = font
+        .hmtx()
+        .map_err(|e| FormatBackendError::Binary(format!("failed to read hmtx table: {e}")))?;
 
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
     let mut ir_font = Font::new();
@@ -143,13 +146,24 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     }
 
     for (unicode, glyph_id) in char_map.mappings() {
-        let outline = outlines.get(glyph_id).unwrap();
+        let outline = outlines.get(glyph_id).ok_or_else(|| {
+            FormatBackendError::Binary(format!(
+                "missing outline for glyph {glyph_id} (U+{unicode:04X})"
+            ))
+        })?;
         let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
         let mut pen = ShiftPen::default();
-        outline.draw(settings, &mut pen).unwrap();
+        outline.draw(settings, &mut pen).map_err(|e| {
+            FormatBackendError::Binary(format!(
+                "failed to draw outline for glyph {glyph_id} (U+{unicode:04X}): {e}"
+            ))
+        })?;
 
-        let hmtx = font.hmtx().unwrap();
-        let advance_width = hmtx.advance(glyph_id).unwrap();
+        let advance_width = hmtx.advance(glyph_id).ok_or_else(|| {
+            FormatBackendError::Binary(format!(
+                "missing advance width for glyph {glyph_id} (U+{unicode:04X})"
+            ))
+        })?;
 
         let glyph_name = char::from_u32(unicode)
             .map(|c| c.to_string())

@@ -814,12 +814,19 @@ fn tmp_path_for(path: &Path) -> PathBuf {
     path.with_file_name(filename)
 }
 
+#[cfg(unix)]
 fn sync_parent(path: &Path) -> Result<(), SourcePackageError> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
     {
         File::open(parent)?.sync_all()?;
     }
+    Ok(())
+}
+
+// Windows cannot open directory handles this way; NTFS journals metadata itself.
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) -> Result<(), SourcePackageError> {
     Ok(())
 }
 

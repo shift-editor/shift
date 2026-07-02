@@ -72,6 +72,9 @@ pub enum FormatBackendError {
     #[error("UFO backend error: {0}")]
     Ufo(String),
 
+    #[error("invalid {kind} name {name:?}: UFO names must be non-empty and contain no control characters")]
+    UfoName { kind: &'static str, name: String },
+
     #[error("Glyphs backend error: {0}")]
     Glyphs(String),
 

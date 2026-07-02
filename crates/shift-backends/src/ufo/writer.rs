@@ -8,14 +8,109 @@ use std::path::Path;
 
 pub struct UfoWriter;
 
-trait UfoRound {
-    fn ufo_round(self) -> f64;
+fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Name> {
+    Name::new(name).map_err(|_| FormatBackendError::UfoName {
+        kind,
+        name: name.to_string(),
+    })
 }
 
-impl UfoRound for f64 {
-    fn ufo_round(self) -> f64 {
-        self.round()
+fn io_error(action: &str, path: &Path, error: std::io::Error) -> FormatBackendError {
+    FormatBackendError::Ufo(format!("failed to {action} '{}': {error}", path.display()))
+}
+
+#[cfg(unix)]
+fn sync_parent(path: &Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::File::open(parent)?.sync_all()?;
+        }
     }
+    Ok(())
+}
+
+// Windows cannot open directory handles this way; NTFS journals metadata itself.
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+/// Fsyncs every file under `root`, then each directory bottom-up, so the
+/// staged UFO is durable before it is renamed into place.
+#[cfg(unix)]
+fn sync_tree(root: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(root)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            sync_tree(&path)?;
+        } else {
+            std::fs::File::open(&path)?.sync_all()?;
+        }
+    }
+    std::fs::File::open(root)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_tree(_root: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+/// Atomically exchanges `staged` and `target` in one filesystem operation,
+/// so there is never an instant without a UFO at `target`.
+#[cfg(target_os = "macos")]
+fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
+    let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    let result = unsafe { libc::renamex_np(staged.as_ptr(), target.as_ptr(), libc::RENAME_SWAP) };
+
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
+    let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    let result = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            staged.as_ptr(),
+            libc::AT_FDCWD,
+            target.as_ptr(),
+            libc::RENAME_EXCHANGE,
+        )
+    };
+
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn exchange(_staged: &Path, _target: &Path) -> std::io::Result<()> {
+    Err(std::io::ErrorKind::Unsupported.into())
+}
+
+fn exchange_unsupported(error: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    if matches!(
+        error.raw_os_error(),
+        Some(libc::ENOTSUP) | Some(libc::EINVAL) | Some(libc::ENOSYS)
+    ) {
+        return true;
+    }
+
+    error.kind() == std::io::ErrorKind::Unsupported
 }
 
 impl UfoWriter {
@@ -63,8 +158,8 @@ impl UfoWriter {
             .enumerate()
             .map(|(i, p)| {
                 norad::ContourPoint::new(
-                    p.x().ufo_round(),
-                    p.y().ufo_round(),
+                    p.x(),
+                    p.y(),
                     Self::convert_point_type(p, i, contour.points(), contour.is_closed()),
                     p.is_smooth(),
                     None,
@@ -76,55 +171,50 @@ impl UfoWriter {
         norad::Contour::new(points, None)
     }
 
-    fn convert_component(component: &shift_font::Component) -> norad::Component {
+    fn convert_component(
+        component: &shift_font::Component,
+    ) -> FormatBackendResult<norad::Component> {
         let matrix = component.matrix();
-        norad::Component::new(
-            Name::new(component.base_glyph_name()).unwrap(),
+        Ok(norad::Component::new(
+            ufo_name("component base glyph", component.base_glyph_name())?,
             norad::AffineTransform {
                 x_scale: matrix.xx,
                 xy_scale: matrix.xy,
                 yx_scale: matrix.yx,
                 y_scale: matrix.yy,
-                x_offset: matrix.dx.ufo_round(),
-                y_offset: matrix.dy.ufo_round(),
+                x_offset: matrix.dx,
+                y_offset: matrix.dy,
             },
             None,
-        )
+        ))
     }
 
-    fn convert_anchor(anchor: &shift_font::Anchor) -> norad::Anchor {
-        norad::Anchor::new(
-            anchor.x().ufo_round(),
-            anchor.y().ufo_round(),
-            anchor.name().map(|name| Name::new(name).unwrap()),
-            None,
-            None,
-        )
+    fn convert_anchor(anchor: &shift_font::Anchor) -> FormatBackendResult<norad::Anchor> {
+        let name = anchor
+            .name()
+            .map(|name| ufo_name("anchor", name))
+            .transpose()?;
+        Ok(norad::Anchor::new(anchor.x(), anchor.y(), name, None, None))
     }
 
-    fn convert_guideline(guideline: &Guideline) -> norad::Guideline {
+    fn convert_guideline(guideline: &Guideline) -> FormatBackendResult<norad::Guideline> {
         let line = match (guideline.x(), guideline.y(), guideline.angle()) {
-            (None, Some(y), None) => Line::Horizontal(y.ufo_round()),
-            (Some(x), None, None) => Line::Vertical(x.ufo_round()),
+            (None, Some(y), None) => Line::Horizontal(y),
+            (Some(x), None, None) => Line::Vertical(x),
             (Some(x), Some(y), Some(angle)) => Line::Angle {
-                x: x.ufo_round(),
-                y: y.ufo_round(),
+                x,
+                y,
                 degrees: angle,
             },
-            (Some(x), Some(y), None) => Line::Angle {
-                x: x.ufo_round(),
-                y: y.ufo_round(),
-                degrees: 0.0,
-            },
+            (Some(x), Some(y), None) => Line::Angle { x, y, degrees: 0.0 },
             _ => Line::Horizontal(0.0),
         };
 
-        norad::Guideline::new(
-            line,
-            guideline.name().map(|n| Name::new(n).unwrap()),
-            None,
-            None,
-        )
+        let name = guideline
+            .name()
+            .map(|name| ufo_name("guideline", name))
+            .transpose()?;
+        Ok(norad::Guideline::new(line, name, None, None))
     }
 
     fn convert_lib_value_to_plist(value: &LibValue) -> plist::Value {
@@ -155,11 +245,13 @@ impl UfoWriter {
         dict
     }
 
-    fn convert_glyph(glyph: &Glyph, layer: &GlyphLayer) -> NoradGlyph {
-        let mut norad_glyph = NoradGlyph::new(glyph.name());
+    fn convert_glyph(glyph: &Glyph, layer: &GlyphLayer) -> FormatBackendResult<NoradGlyph> {
+        // NoradGlyph::new panics on invalid names, so validate first.
+        let name = ufo_name("glyph", glyph.name())?;
+        let mut norad_glyph = NoradGlyph::new(name.as_str());
 
-        norad_glyph.width = layer.width().ufo_round();
-        norad_glyph.height = layer.height().unwrap_or(0.0).ufo_round();
+        norad_glyph.width = layer.width();
+        norad_glyph.height = layer.height().unwrap_or(0.0);
 
         for codepoint in glyph.unicodes() {
             if let Some(c) = char::from_u32(*codepoint) {
@@ -177,24 +269,24 @@ impl UfoWriter {
         for component in layer.components_iter() {
             norad_glyph
                 .components
-                .push(Self::convert_component(component));
+                .push(Self::convert_component(component)?);
         }
 
         for anchor in layer.anchors_iter() {
-            norad_glyph.anchors.push(Self::convert_anchor(anchor));
+            norad_glyph.anchors.push(Self::convert_anchor(anchor)?);
         }
 
         for guideline in layer.guidelines() {
             norad_glyph
                 .guidelines
-                .push(Self::convert_guideline(guideline));
+                .push(Self::convert_guideline(guideline)?);
         }
 
         if !layer.lib().is_empty() {
             norad_glyph.lib = Self::convert_lib(layer.lib());
         }
 
-        norad_glyph
+        Ok(norad_glyph)
     }
 }
 
@@ -205,13 +297,12 @@ impl Default for UfoWriter {
 }
 
 impl UfoWriter {
-    pub fn save_view(&self, font: &impl FontView, path: &str) -> Result<(), String> {
-        let path_obj = Path::new(path);
-        if path_obj.exists() {
-            std::fs::remove_dir_all(path_obj)
-                .map_err(|e| format!("Failed to remove existing UFO: {e}"))?;
-        }
+    pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
+        let norad_font = Self::build_norad_font(font)?;
+        Self::write_atomic(&norad_font, Path::new(path))
+    }
 
+    fn build_norad_font(font: &impl FontView) -> FormatBackendResult<NoradFont> {
         let mut norad_font = NoradFont::new();
 
         norad_font.font_info.family_name = font.metadata().family_name.clone();
@@ -237,28 +328,29 @@ impl UfoWriter {
         norad_font.font_info.x_height = font.metrics().x_height;
         norad_font.font_info.italic_angle = font.metrics().italic_angle;
 
-        for (group_name, members) in font.kerning().groups1() {
+        let groups = font
+            .kerning()
+            .groups1()
+            .iter()
+            .chain(font.kerning().groups2());
+        for (group_name, members) in groups {
             norad_font.groups.insert(
-                Name::new(group_name).unwrap(),
-                members.iter().map(|n| Name::new(n).unwrap()).collect(),
-            );
-        }
-
-        for (group_name, members) in font.kerning().groups2() {
-            norad_font.groups.insert(
-                Name::new(group_name).unwrap(),
-                members.iter().map(|n| Name::new(n).unwrap()).collect(),
+                ufo_name("kerning group", group_name)?,
+                members
+                    .iter()
+                    .map(|n| ufo_name("kerning group member", n))
+                    .collect::<FormatBackendResult<_>>()?,
             );
         }
 
         for pair in font.kerning().pairs() {
             let first = match &pair.first {
-                KerningSide::Glyph(g) => Name::new(g).unwrap(),
-                KerningSide::Group(g) => Name::new(g).unwrap(),
+                KerningSide::Glyph(g) => ufo_name("kerning glyph", g)?,
+                KerningSide::Group(g) => ufo_name("kerning group", g)?,
             };
             let second = match &pair.second {
-                KerningSide::Glyph(g) => Name::new(g).unwrap(),
-                KerningSide::Group(g) => Name::new(g).unwrap(),
+                KerningSide::Glyph(g) => ufo_name("kerning glyph", g)?,
+                KerningSide::Group(g) => ufo_name("kerning group", g)?,
             };
 
             norad_font
@@ -271,7 +363,7 @@ impl UfoWriter {
         for guideline in font.guidelines() {
             norad_font
                 .guidelines_mut()
-                .push(Self::convert_guideline(guideline));
+                .push(Self::convert_guideline(guideline)?);
         }
 
         if !font.lib().is_empty() {
@@ -286,7 +378,7 @@ impl UfoWriter {
                 continue;
             };
             if let Some(layer_data) = glyph.layer_for_source(source_id.clone()) {
-                let norad_glyph = Self::convert_glyph(glyph, layer_data);
+                let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                 default_layer.insert_glyph(norad_glyph);
             }
         }
@@ -299,29 +391,158 @@ impl UfoWriter {
             let norad_layer = norad_font
                 .layers
                 .new_layer(source.name())
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
 
             for glyph in font.glyphs() {
                 if let Some(layer_data) = glyph.layer_for_source(source.id()) {
-                    let norad_glyph = Self::convert_glyph(glyph, layer_data);
+                    let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                     norad_layer.insert_glyph(norad_glyph);
                 }
             }
         }
 
         if let Some(fea_source) = font.features().fea_source() {
-            std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
-            let fea_path = Path::new(path).join("features.fea");
-            std::fs::write(fea_path, fea_source).map_err(|e| e.to_string())?;
+            norad_font.features = fea_source.to_string();
         }
 
-        norad_font.save(path).map_err(|e| e.to_string())
+        Ok(norad_font)
+    }
+
+    /// Writes the UFO without ever destroying the existing target: the new
+    /// UFO is fully staged (and fsynced) in a temp sibling directory, then
+    /// swapped into place — atomically where the platform supports a rename
+    /// exchange, otherwise via move-aside-and-replace with restore on failure.
+    fn write_atomic(norad_font: &NoradFont, target: &Path) -> FormatBackendResult<()> {
+        let file_name = target.file_name().ok_or_else(|| {
+            FormatBackendError::Ufo(format!("invalid UFO path '{}'", target.display()))
+        })?;
+        let parent = match target.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent,
+            _ => Path::new("."),
+        };
+        std::fs::create_dir_all(parent)
+            .map_err(|e| io_error("create parent directory for", target, e))?;
+
+        // Staged in the target's parent so the swap is a same-filesystem rename.
+        let staging = tempfile::Builder::new()
+            .prefix(".shift-ufo-staging-")
+            .tempdir_in(parent)
+            .map_err(|e| io_error("create staging directory for", target, e))?;
+        let staged_ufo = staging.path().join(file_name);
+        norad_font
+            .save(&staged_ufo)
+            .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
+        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, e))?;
+
+        if target.exists() {
+            Self::exchange_or_swap(target, &staged_ufo, staging)?;
+        } else {
+            std::fs::rename(&staged_ufo, target)
+                .map_err(|e| io_error("move new UFO into place at", target, e))?;
+        }
+
+        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, e))?;
+        Ok(())
+    }
+
+    fn exchange_or_swap(
+        target: &Path,
+        staged: &Path,
+        staging: tempfile::TempDir,
+    ) -> FormatBackendResult<()> {
+        match exchange(staged, target) {
+            // The previous UFO now sits at the staged path and is removed
+            // when the staging directory drops.
+            Ok(()) => Ok(()),
+            Err(error) if exchange_unsupported(&error) => {
+                Self::swap_with_backup(target, staged, staging)
+            }
+            Err(error) => Err(io_error("swap new UFO into place at", target, error)),
+        }
+    }
+
+    fn swap_with_backup(
+        target: &Path,
+        staged: &Path,
+        staging: tempfile::TempDir,
+    ) -> FormatBackendResult<()> {
+        let backup = staging.path().join("previous");
+        std::fs::rename(target, &backup)
+            .map_err(|e| io_error("move aside existing UFO at", target, e))?;
+
+        if let Err(error) = std::fs::rename(staged, target) {
+            if std::fs::rename(&backup, target).is_err() {
+                // Keep the staging directory alive so the original UFO survives.
+                let staging_path = staging.keep();
+                return Err(FormatBackendError::Ufo(format!(
+                    "failed to move new UFO into place at '{}': {error}; the original UFO was preserved at '{}'",
+                    target.display(),
+                    staging_path.join("previous").display(),
+                )));
+            }
+            return Err(io_error("move new UFO into place at", target, error));
+        }
+
+        Ok(())
     }
 }
 
 impl FontWriter for UfoWriter {
     fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
         self.save_view(font, path)
-            .map_err(|error| FormatBackendError::Ufo(error.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exchange_swaps_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("a");
+        let b = temp.path().join("b");
+        std::fs::create_dir(&a).unwrap();
+        std::fs::create_dir(&b).unwrap();
+        std::fs::write(a.join("marker"), b"a").unwrap();
+        std::fs::write(b.join("marker"), b"b").unwrap();
+
+        match exchange(&a, &b) {
+            Ok(()) => {
+                assert_eq!(std::fs::read(a.join("marker")).unwrap(), b"b");
+                assert_eq!(std::fs::read(b.join("marker")).unwrap(), b"a");
+            }
+            Err(error) => assert!(
+                exchange_unsupported(&error),
+                "exchange failed with unexpected error: {error}"
+            ),
+        }
+    }
+
+    #[test]
+    fn swap_with_backup_restores_target_when_swap_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target.ufo");
+        std::fs::create_dir(&target).unwrap();
+        std::fs::write(target.join("metainfo.plist"), b"original").unwrap();
+
+        let staging = tempfile::Builder::new()
+            .prefix(".shift-ufo-staging-")
+            .tempdir_in(temp.path())
+            .unwrap();
+        // The staged UFO is deliberately missing so the swap-in rename fails.
+        let staged = staging.path().join("target.ufo");
+
+        let error = UfoWriter::swap_with_backup(&target, &staged, staging)
+            .expect_err("swap should fail without a staged UFO");
+
+        assert!(
+            error.to_string().contains("move new UFO into place"),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            std::fs::read(target.join("metainfo.plist")).unwrap(),
+            b"original"
+        );
     }
 }

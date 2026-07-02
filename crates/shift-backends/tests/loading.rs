@@ -147,6 +147,45 @@ fn loads_binary_fonts_with_contours() {
 }
 
 #[test]
+fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
+    let mut bytes = std::fs::read(mutatorsans_ttf_path()).unwrap();
+
+    // Rename the hmtx tag in the table directory so the table lookup fails
+    // while the rest of the font stays parseable.
+    let num_tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+    let record_offset = (0..num_tables)
+        .map(|index| 12 + index * 16)
+        .find(|&offset| &bytes[offset..offset + 4] == b"hmtx")
+        .expect("fixture should contain an hmtx table");
+    bytes[record_offset..record_offset + 4].copy_from_slice(b"zzzz");
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("missing-hmtx.ttf");
+    std::fs::write(&path, bytes).unwrap();
+
+    let error = FontLoader::new()
+        .read_font(path.to_str().unwrap())
+        .expect_err("font without hmtx should fail to load");
+    assert!(
+        error.to_string().contains("hmtx"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn truncated_binary_font_returns_error_instead_of_panicking() {
+    let bytes = std::fs::read(mutatorsans_ttf_path()).unwrap();
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("truncated.ttf");
+    std::fs::write(&path, &bytes[..200]).unwrap();
+
+    FontLoader::new()
+        .read_font(path.to_str().unwrap())
+        .expect_err("truncated font should fail to load");
+}
+
+#[test]
 fn loads_glyphs_file_features_kerning_components_and_anchors() {
     let font = load_font(&homenaje_glyphs_path());
 
