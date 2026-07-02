@@ -76,10 +76,14 @@ pub fn sample_font() -> Font {
         LibValue::Array(vec![
             LibValue::String("array string".to_string()),
             LibValue::Integer(12),
+            LibValue::Integer(-12),
+            LibValue::UnsignedInteger(u64::MAX),
             LibValue::Float(1.5),
             LibValue::Boolean(false),
             LibValue::Dict(nested),
             LibValue::Data(vec![0, 1, 2, 255]),
+            LibValue::Date("2024-02-02T02:02:02Z".to_string()),
+            LibValue::Uid(9),
         ]),
     );
 

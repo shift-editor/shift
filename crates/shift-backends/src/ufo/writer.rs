@@ -221,6 +221,7 @@ impl UfoWriter {
         match value {
             LibValue::String(s) => plist::Value::String(s.clone()),
             LibValue::Integer(i) => plist::Value::Integer((*i).into()),
+            LibValue::UnsignedInteger(u) => plist::Value::Integer((*u).into()),
             LibValue::Float(f) => plist::Value::Real(*f),
             LibValue::Boolean(b) => plist::Value::Boolean(*b),
             LibValue::Array(arr) => {
@@ -234,6 +235,10 @@ impl UfoWriter {
                 plist::Value::Dictionary(plist_dict)
             }
             LibValue::Data(d) => plist::Value::Data(d.clone()),
+            LibValue::Date(d) => plist::Date::from_xml_format(d)
+                .map(plist::Value::Date)
+                .unwrap_or_else(|_| plist::Value::String(d.clone())),
+            LibValue::Uid(u) => plist::Value::Uid(plist::Uid::new(*u)),
         }
     }
 

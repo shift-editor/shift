@@ -7,15 +7,23 @@ pub struct LibData {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "value", rename_all = "camelCase")]
 pub enum LibValue {
     String(String),
     Integer(i64),
+    /// Unsigned integers above `i64::MAX`; anything smaller uses `Integer`.
+    UnsignedInteger(u64),
     Float(f64),
     Boolean(bool),
     Array(Vec<LibValue>),
     Dict(HashMap<String, LibValue>),
     Data(Vec<u8>),
+    /// A plist date, carried as the RFC 3339 / ISO 8601 string used by XML
+    /// plists (`plist::Date::to_xml_format`), e.g. `2024-02-02T02:02:02Z`.
+    Date(String),
+    /// A plist archive UID payload. XML plists cannot represent UIDs, so this
+    /// only occurs in binary plists; it is carried verbatim.
+    Uid(u64),
 }
 
 impl LibData {

@@ -82,7 +82,13 @@ impl UfoReader {
     fn convert_plist_to_lib_value(plist: &plist::Value) -> LibValue {
         match plist {
             plist::Value::String(s) => LibValue::String(s.clone()),
-            plist::Value::Integer(i) => LibValue::Integer(i.as_signed().unwrap_or(0)),
+            plist::Value::Integer(i) => match i.as_signed() {
+                Some(value) => LibValue::Integer(value),
+                None => LibValue::UnsignedInteger(
+                    i.as_unsigned()
+                        .expect("plist integer is signed or unsigned"),
+                ),
+            },
             plist::Value::Real(f) => LibValue::Float(*f),
             plist::Value::Boolean(b) => LibValue::Boolean(*b),
             plist::Value::Array(arr) => {
@@ -96,6 +102,8 @@ impl UfoReader {
                 LibValue::Dict(map)
             }
             plist::Value::Data(d) => LibValue::Data(d.clone()),
+            plist::Value::Date(d) => LibValue::Date(d.to_xml_format()),
+            plist::Value::Uid(u) => LibValue::Uid(u.get()),
             _ => LibValue::String(String::new()),
         }
     }

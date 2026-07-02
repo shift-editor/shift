@@ -409,11 +409,14 @@ struct LayerLibDoc {
 enum LibValueDoc {
     String(String),
     Integer(i64),
+    UnsignedInteger(u64),
     Float(f64),
     Boolean(bool),
     Array(Vec<LibValueDoc>),
     Dict(BTreeMap<String, LibValueDoc>),
     Data(Vec<u8>),
+    Date(String),
+    Uid(u64),
 }
 
 pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
@@ -1121,6 +1124,7 @@ impl From<&LibValue> for LibValueDoc {
         match value {
             LibValue::String(value) => Self::String(value.clone()),
             LibValue::Integer(value) => Self::Integer(*value),
+            LibValue::UnsignedInteger(value) => Self::UnsignedInteger(*value),
             LibValue::Float(value) => Self::Float(*value),
             LibValue::Boolean(value) => Self::Boolean(*value),
             LibValue::Array(values) => Self::Array(values.iter().map(Self::from).collect()),
@@ -1131,6 +1135,8 @@ impl From<&LibValue> for LibValueDoc {
                     .collect(),
             ),
             LibValue::Data(value) => Self::Data(value.clone()),
+            LibValue::Date(value) => Self::Date(value.clone()),
+            LibValue::Uid(value) => Self::Uid(*value),
         }
     }
 }
@@ -1142,6 +1148,7 @@ impl TryFrom<LibValueDoc> for LibValue {
         Ok(match doc {
             LibValueDoc::String(value) => Self::String(value),
             LibValueDoc::Integer(value) => Self::Integer(value),
+            LibValueDoc::UnsignedInteger(value) => Self::UnsignedInteger(value),
             LibValueDoc::Float(value) => Self::Float(value),
             LibValueDoc::Boolean(value) => Self::Boolean(value),
             LibValueDoc::Array(values) => Self::Array(
@@ -1157,6 +1164,8 @@ impl TryFrom<LibValueDoc> for LibValue {
                     .collect::<Result<HashMap<_, _>, _>>()?,
             ),
             LibValueDoc::Data(value) => Self::Data(value),
+            LibValueDoc::Date(value) => Self::Date(value),
+            LibValueDoc::Uid(value) => Self::Uid(value),
         })
     }
 }

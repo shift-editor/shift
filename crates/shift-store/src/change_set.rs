@@ -816,6 +816,9 @@ fn lib_value_to_json(value: &font::LibValue) -> serde_json::Value {
             typed_json("string", serde_json::Value::String(value.clone()))
         }
         font::LibValue::Integer(value) => typed_json("integer", serde_json::json!(value)),
+        font::LibValue::UnsignedInteger(value) => {
+            typed_json("unsignedInteger", serde_json::json!(value))
+        }
         font::LibValue::Float(value) => typed_json("float", serde_json::json!(value)),
         font::LibValue::Boolean(value) => typed_json("boolean", serde_json::json!(value)),
         font::LibValue::Array(values) => typed_json(
@@ -832,6 +835,8 @@ fn lib_value_to_json(value: &font::LibValue) -> serde_json::Value {
             ),
         ),
         font::LibValue::Data(values) => typed_json("data", serde_json::json!(values)),
+        font::LibValue::Date(value) => typed_json("date", serde_json::Value::String(value.clone())),
+        font::LibValue::Uid(value) => typed_json("uid", serde_json::json!(value)),
     }
 }
 

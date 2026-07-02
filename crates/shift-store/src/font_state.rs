@@ -618,6 +618,10 @@ fn lib_value_from_value(value: serde_json::Value) -> Result<font::LibValue, Stor
             .as_i64()
             .map(font::LibValue::Integer)
             .ok_or_else(|| StoreError::InvalidLibValue("expected integer".to_string())),
+        "unsignedInteger" => value
+            .as_u64()
+            .map(font::LibValue::UnsignedInteger)
+            .ok_or_else(|| StoreError::InvalidLibValue("expected unsigned integer".to_string())),
         "float" => value
             .as_f64()
             .map(font::LibValue::Float)
@@ -657,6 +661,14 @@ fn lib_value_from_value(value: serde_json::Value) -> Result<font::LibValue, Stor
                 .map(font::LibValue::Data),
             _ => Err(StoreError::InvalidLibValue("expected data".to_string())),
         },
+        "date" => match value {
+            serde_json::Value::String(value) => Ok(font::LibValue::Date(value)),
+            _ => Err(StoreError::InvalidLibValue("expected date".to_string())),
+        },
+        "uid" => value
+            .as_u64()
+            .map(font::LibValue::Uid)
+            .ok_or_else(|| StoreError::InvalidLibValue("expected uid".to_string())),
         _ => Err(StoreError::InvalidLibValue(format!("unknown type {kind}"))),
     }
 }
