@@ -7,7 +7,7 @@
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
-use shift_font::{Axis, Glyph, GlyphId, GlyphLayer, Source};
+use shift_font::{Axis, Glyph, GlyphId, GlyphLayer, GlyphName, Source, SourceId};
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
 /// oldest entries fall off first.
@@ -26,6 +26,10 @@ pub enum LedgerStep {
     Axis {
         pre: Option<Axis>,
         post: Option<Axis>,
+        /// Source location values on this axis at pre time. Deleting an
+        /// axis strips them from every source, so restoring the axis
+        /// restores them too.
+        pre_locations: Vec<(SourceId, f64)>,
     },
     /// Source existence. Sparse glyph-layer existence is represented by
     /// separate [`LedgerStep::GlyphLayer`] entries.
@@ -39,6 +43,20 @@ pub enum LedgerStep {
         pre: Option<Box<GlyphLayer>>,
         post: Option<Box<GlyphLayer>>,
     },
+    /// Glyph rename / unicode reassignment. Both sides always exist; the
+    /// glyph and its layers are untouched.
+    GlyphIdentity {
+        glyph_id: GlyphId,
+        pre: GlyphIdentity,
+        post: GlyphIdentity,
+    },
+}
+
+/// One side of a glyph identity change: the name and unicode assignments.
+#[derive(Clone)]
+pub struct GlyphIdentity {
+    pub name: GlyphName,
+    pub unicodes: Vec<u32>,
 }
 
 #[derive(Clone)]
@@ -71,8 +89,9 @@ impl Ledger {
     }
 
     /// Pops the entry to undo; the caller replays its pre states and must
-    /// hand the entry back via [`Ledger::record_undone`] only after the
-    /// replay durably succeeded.
+    /// hand the entry back — via [`Ledger::record_undone`] after the replay
+    /// durably succeeded, or [`Ledger::restore_undo`] when it failed so the
+    /// step stays available for retry.
     pub fn pop_undo(&mut self) -> Option<LedgerEntry> {
         self.undo.pop()
     }
@@ -81,13 +100,24 @@ impl Ledger {
         self.redo.push(entry);
     }
 
+    /// Hands a popped undo entry back after a failed replay.
+    pub fn restore_undo(&mut self, entry: LedgerEntry) {
+        self.undo.push(entry);
+    }
+
     /// Pops the entry to redo; hand back via [`Ledger::record_redone`] after
-    /// the replay durably succeeded.
+    /// the replay durably succeeded, or [`Ledger::restore_redo`] when it
+    /// failed so the step stays available for retry.
     pub fn pop_redo(&mut self) -> Option<LedgerEntry> {
         self.redo.pop()
     }
 
     pub fn record_redone(&mut self, entry: LedgerEntry) {
         self.undo.push(entry);
+    }
+
+    /// Hands a popped redo entry back after a failed replay.
+    pub fn restore_redo(&mut self, entry: LedgerEntry) {
+        self.redo.push(entry);
     }
 }
