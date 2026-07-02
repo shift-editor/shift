@@ -35,6 +35,27 @@ fn sync_parent(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Fsyncs every file under `root`, then each directory bottom-up, so the
+/// staged UFO is durable before it is renamed into place.
+#[cfg(unix)]
+fn sync_tree(root: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(root)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            sync_tree(&path)?;
+        } else {
+            std::fs::File::open(&path)?.sync_all()?;
+        }
+    }
+    std::fs::File::open(root)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_tree(_root: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
 impl UfoWriter {
     pub fn new() -> Self {
         Self
@@ -354,6 +375,7 @@ impl UfoWriter {
         norad_font
             .save(&staged_ufo)
             .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
+        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, e))?;
 
         if target.exists() {
             let backup = staging.path().join("previous");

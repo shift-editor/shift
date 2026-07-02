@@ -204,6 +204,41 @@ mod tests {
     }
 
     #[test]
+    fn saves_multi_glyph_multi_layer_font() {
+        let mut font = create_test_font();
+        let default_source_id = font.default_source_id().unwrap();
+        let bold_source_id = font.add_source(shift_font::Source::new(
+            "Bold".to_string(),
+            shift_font::Location::new(),
+        ));
+
+        for (name, unicode) in [("B", 0x0042_u32), ("C", 0x0043)] {
+            let mut glyph = Glyph::with_unicode(name.to_string(), unicode);
+            glyph.set_layer(GlyphLayer::with_width(
+                LayerId::new(),
+                default_source_id.clone(),
+                500.0,
+            ));
+            glyph.set_layer(GlyphLayer::with_width(
+                LayerId::new(),
+                bold_source_id.clone(),
+                550.0,
+            ));
+            font.insert_glyph(glyph).unwrap();
+        }
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("multi.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+
+        let loaded = UfoReader::new().load(ufo_path_str).unwrap();
+        assert_eq!(loaded.glyph_count(), 3);
+        assert_eq!(loaded.sources().len(), 2);
+    }
+
+    #[test]
     fn save_replaces_existing_ufo() {
         let font = create_test_font();
         let temp_dir = tempfile::tempdir().unwrap();
