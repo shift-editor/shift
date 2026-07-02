@@ -1,7 +1,9 @@
 use rusqlite::{Transaction, params};
 use shift_font as font;
 
-use crate::{ShiftStore, StoreError, workspace_state::mark_workspace_dirty_in_tx};
+use crate::{
+    ShiftStore, StoreError, source::SourceKind, workspace_state::mark_workspace_dirty_in_tx,
+};
 
 impl ShiftStore {
     pub fn apply_change_set(&mut self, change_set: &font::FontChangeSet) -> Result<(), StoreError> {
@@ -65,10 +67,14 @@ impl ShiftStore {
             upsert_source(
                 &tx,
                 &source.id(),
-                Some(source.name()),
-                source.filename(),
-                source.color(),
-                order_index as i64,
+                SourceRow {
+                    name: Some(source.name()),
+                    filename: source.filename(),
+                    color: source.color(),
+                    kind: SourceKind::from(source.role()),
+                    layer_name: source.layer_name(),
+                    order_index: order_index as i64,
+                },
             )?;
             replace_lib_data(
                 &tx,
@@ -129,7 +135,18 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::SourceCreated(change) => {
-            upsert_source(tx, &change.source_id, Some(&change.name), None, None, 0)?;
+            upsert_source(
+                tx,
+                &change.source_id,
+                SourceRow {
+                    name: Some(&change.name),
+                    filename: None,
+                    color: None,
+                    kind: SourceKind::Master,
+                    layer_name: None,
+                    order_index: 0,
+                },
+            )?;
 
             for axis_value in &change.location {
                 upsert_source_location(
@@ -313,25 +330,41 @@ fn upsert_source_location(
     Ok(())
 }
 
+struct SourceRow<'a> {
+    name: Option<&'a str>,
+    filename: Option<&'a str>,
+    color: Option<&'a str>,
+    kind: SourceKind,
+    layer_name: Option<&'a str>,
+    order_index: i64,
+}
+
 fn upsert_source(
     tx: &Transaction<'_>,
     source_id: &font::SourceId,
-    name: Option<&str>,
-    filename: Option<&str>,
-    color: Option<&str>,
-    order_index: i64,
+    row: SourceRow<'_>,
 ) -> Result<(), StoreError> {
     tx.execute(
         "
-        INSERT INTO sources (id, name, filename, color, kind, order_index)
-        VALUES (?1, ?2, ?3, ?4, 'master', ?5)
+        INSERT INTO sources (id, name, filename, color, kind, layer_name, order_index)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
         ON CONFLICT(id) DO UPDATE SET
             name = COALESCE(excluded.name, sources.name),
             filename = excluded.filename,
             color = excluded.color,
+            kind = excluded.kind,
+            layer_name = excluded.layer_name,
             order_index = excluded.order_index
         ",
-        params![source_id.to_string(), name, filename, color, order_index],
+        params![
+            source_id.to_string(),
+            row.name,
+            row.filename,
+            row.color,
+            row.kind.as_str(),
+            row.layer_name,
+            row.order_index
+        ],
     )?;
     Ok(())
 }

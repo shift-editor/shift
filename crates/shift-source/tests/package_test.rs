@@ -1,7 +1,7 @@
 use std::fs::File;
 
 use shift_font::{
-    Axis, AxisId, Font, KerningPair, LibValue, Location, Source, SourceId,
+    Axis, AxisId, Font, KerningPair, LibValue, Location, Source, SourceId, SourceRole,
     test_support::sample_font,
 };
 use shift_source::{
@@ -400,4 +400,40 @@ fn writes_handwritten_tree_as_openable_zip() {
     write_tree_atomic(&package_path, tree).unwrap();
 
     ShiftSourcePackage::open(&package_path).unwrap();
+}
+
+#[test]
+fn shift_round_trip_preserves_source_roles_and_layer_names() {
+    let temp = tempfile::tempdir().unwrap();
+    let package_path = temp.path().join("Roles.shift");
+
+    let mut font = Font::new();
+    let mut medium = Source::with_filename(
+        "Medium".to_string(),
+        Location::new(),
+        "Family-Bold.ufo".to_string(),
+    );
+    medium.set_layer_name(Some("Medium".to_string()));
+    font.add_source(medium);
+    font.add_source(Source::layer("background".to_string()));
+
+    ShiftSourcePackage::save_font(&package_path, &font).unwrap();
+    let loaded = ShiftSourcePackage::load_font(&package_path).unwrap();
+
+    let medium = loaded
+        .sources()
+        .iter()
+        .find(|source| source.name() == "Medium")
+        .expect("Medium source should survive");
+    assert_eq!(medium.role(), SourceRole::Master);
+    assert_eq!(medium.layer_name(), Some("Medium"));
+    assert_eq!(medium.filename(), Some("Family-Bold.ufo"));
+
+    let background = loaded
+        .sources()
+        .iter()
+        .find(|source| source.name() == "background")
+        .expect("background source should survive");
+    assert_eq!(background.role(), SourceRole::Layer);
+    assert_eq!(background.layer_name(), None);
 }

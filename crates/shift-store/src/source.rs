@@ -43,19 +43,40 @@ pub struct SourceRecord {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SourceKind {
     Master,
+    Layer,
 }
 
 impl SourceKind {
-    fn as_str(&self) -> &'static str {
+    pub(crate) fn as_str(&self) -> &'static str {
         match self {
             SourceKind::Master => "master",
+            SourceKind::Layer => "layer",
         }
     }
 
-    fn parse(value: String) -> Result<Self, StoreError> {
+    pub(crate) fn parse(value: String) -> Result<Self, StoreError> {
         match value.as_str() {
             "master" => Ok(SourceKind::Master),
+            "layer" => Ok(SourceKind::Layer),
             _ => Err(StoreError::UnknownSourceKind(value)),
+        }
+    }
+}
+
+impl From<shift_font::SourceRole> for SourceKind {
+    fn from(role: shift_font::SourceRole) -> Self {
+        match role {
+            shift_font::SourceRole::Master => SourceKind::Master,
+            shift_font::SourceRole::Layer => SourceKind::Layer,
+        }
+    }
+}
+
+impl From<SourceKind> for shift_font::SourceRole {
+    fn from(kind: SourceKind) -> Self {
+        match kind {
+            SourceKind::Master => shift_font::SourceRole::Master,
+            SourceKind::Layer => shift_font::SourceRole::Layer,
         }
     }
 }

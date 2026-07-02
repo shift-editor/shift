@@ -118,6 +118,10 @@ impl Source {
         self.role == SourceRole::Master
     }
 
+    pub fn set_role(&mut self, role: SourceRole) {
+        self.role = role;
+    }
+
     /// The UFO layer inside [`Self::filename`] that holds this source's
     /// data, when a designspace `<source>` declared it explicitly with a
     /// `layer` attribute. `None` means the file's default layer for

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use rusqlite::params;
 use shift_font as font;
 
-use crate::{FontInfo, ShiftStore, StoreError};
+use crate::{FontInfo, ShiftStore, StoreError, source::SourceKind};
 
 impl ShiftStore {
     pub fn load_font_state(&self) -> Result<font::Font, StoreError> {
@@ -141,7 +141,7 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
 fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreError> {
     let mut stmt = conn.prepare(
         "
-        SELECT id, name, filename, color
+        SELECT id, name, filename, color, kind, layer_name
         FROM sources
         ORDER BY order_index, id
         ",
@@ -157,6 +157,12 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
             row.get(2)?,
         );
         source.set_color(row.get(3)?);
+
+        let kind = SourceKind::parse(row.get(4)?).map_err(|err| {
+            rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(err))
+        })?;
+        source.set_role(kind.into());
+        source.set_layer_name(row.get(5)?);
         Ok(source)
     })?;
 
