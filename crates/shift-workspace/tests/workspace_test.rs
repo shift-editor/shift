@@ -1,9 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use shift_font::{
-    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, FontChange, FontIntent,
-    FontIntentSet, GlyphId, GlyphName, LayerId, Location, PointId, PointSeed, PointType, SourceId,
-    error::CoreError,
+    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, Font, FontChange, FontIntent,
+    FontIntentSet, GlyphId, GlyphName, LayerId, LibValue, Location, PointId, PointSeed, PointType,
+    SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_workspace::{
@@ -423,6 +423,92 @@ fn clean_package_workspace_is_not_recovered_after_source_file_changes() {
     .unwrap();
 
     assert_eq!(recovery, RecoverySelection::None);
+}
+
+#[test]
+fn create_source_rejects_names_unwritable_as_ufo_layers() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+
+    for bad_name in ["Bo\u{0001}ld", "public.default"] {
+        let result = workspace.apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateSource {
+                    source_id: SourceId::new(),
+                    name: bad_name.to_string(),
+                    location: Location::new(),
+                }],
+            },
+            None,
+        );
+        let Err(error) = result else {
+            panic!("source name {bad_name:?} unwritable as a UFO layer must be rejected");
+        };
+
+        assert!(
+            matches!(
+                &error,
+                WorkspaceError::Font(CoreError::InvalidSourceName(name)) if name == bad_name
+            ),
+            "unexpected error for {bad_name:?}: {error:?}"
+        );
+    }
+
+    assert_eq!(workspace.font().sources().len(), 1);
+}
+
+#[test]
+fn tampered_package_fontinfo_remainder_fails_at_open() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join("Tampered.shift");
+    let store_path = temp.path().join("working.sqlite");
+
+    // A package can carry a remainder value norad could never write back to
+    // fontinfo.plist (as if the file was edited outside Shift). Opening it
+    // must fail up front instead of leaving a workspace that errors on save.
+    let mut font = Font::new();
+    font.fontinfo_remainder_mut().set(
+        "openTypeOS2WeightClass".to_string(),
+        LibValue::String("heavy".to_string()),
+    );
+    ShiftSourcePackage::save_font(&source_path, &font).unwrap();
+
+    let Err(error) = FontWorkspace::open(&source_path, &store_path) else {
+        panic!("tampered fontinfo remainder should fail at open");
+    };
+
+    assert!(
+        matches!(&error, WorkspaceError::UnsavableFontState(message)
+            if message.contains("openTypeOS2WeightClass")),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn tampered_store_fontinfo_remainder_fails_at_resume() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    drop(FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap());
+
+    let mut store = shift_store::ShiftStore::open(&store_path).unwrap();
+    let mut font = Font::new();
+    font.fontinfo_remainder_mut().set(
+        "openTypeOS2WeightClass".to_string(),
+        LibValue::String("heavy".to_string()),
+    );
+    store.replace_font_state(&font).unwrap();
+    drop(store);
+
+    let Err(error) = FontWorkspace::resume(&store_path) else {
+        panic!("tampered fontinfo remainder should fail at resume");
+    };
+
+    assert!(
+        matches!(&error, WorkspaceError::UnsavableFontState(message)
+            if message.contains("openTypeOS2WeightClass")),
+        "unexpected error: {error:?}"
+    );
 }
 
 fn set_x_advance_intents(layer_id: LayerId, width: f64) -> FontIntentSet {

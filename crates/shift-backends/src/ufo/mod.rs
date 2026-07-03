@@ -2,6 +2,7 @@ mod fontinfo;
 mod reader;
 mod writer;
 
+pub use fontinfo::validate_fontinfo_remainder;
 pub use reader::UfoReader;
 pub use writer::UfoWriter;
 

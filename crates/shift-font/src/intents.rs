@@ -401,7 +401,7 @@ impl Font {
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
         let name = name.trim();
-        if name.is_empty() {
+        if !is_valid_source_name(name) {
             return Err(CoreError::InvalidSourceName(name.to_string()));
         }
         if self.sources().iter().any(|source| source.name() == name) {
@@ -812,4 +812,18 @@ impl Font {
         self.layer_mut(layer_id.clone())
             .ok_or(CoreError::LayerNotFound(layer_id.clone()))
     }
+}
+
+/// A source name must be a valid UFO layer name, or the font can be built
+/// but never saved: no control characters (the UFO name rule) and not the
+/// reserved default-layer name.
+fn is_valid_source_name(name: &str) -> bool {
+    if name.is_empty() || name == "public.default" {
+        return false;
+    }
+
+    !name.chars().any(|c| {
+        let c = c as u32;
+        c <= 0x1f || c == 0x7f || (0x80..=0x9f).contains(&c)
+    })
 }

@@ -232,7 +232,7 @@ impl UfoWriter {
         }
     }
 
-    fn convert_lib(lib: &LibData) -> plist::Dictionary {
+    pub(crate) fn convert_lib(lib: &LibData) -> plist::Dictionary {
         let mut dict = plist::Dictionary::new();
         for (k, v) in lib.iter() {
             dict.insert(k.clone(), Self::convert_lib_value_to_plist(v));

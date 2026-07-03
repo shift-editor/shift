@@ -45,6 +45,22 @@ fn is_unknown_field(error: &plist::Error) -> bool {
     error.to_string().contains("unknown field")
 }
 
+/// Checks that a carried fontinfo remainder can be written back out as
+/// `fontinfo.plist`. Callers that load persisted font state run this where
+/// the state is created, so a tampered remainder surfaces at load time
+/// instead of failing the next save.
+pub fn validate_fontinfo_remainder(remainder: &shift_font::LibData) -> FormatBackendResult<()> {
+    if remainder.is_empty() {
+        return Ok(());
+    }
+
+    let dict = super::writer::UfoWriter::convert_lib(remainder);
+    let (known, _unknown) = partition_fontinfo(dict, "preserved fontinfo")?;
+    plist::from_value::<norad::FontInfo>(&plist::Value::Dictionary(known))
+        .map(|_| ())
+        .map_err(|e| FormatBackendError::Ufo(format!("invalid preserved fontinfo data: {e}")))
+}
+
 /// Loads a UFO through norad even when `fontinfo.plist` carries keys norad
 /// does not model. Returns the loaded font, the unknown fontinfo keys, and —
 /// when a sanitized shadow was needed — the temp directory backing the load,
@@ -212,6 +228,32 @@ mod tests {
 
         let error = partition_fontinfo(dict, "preserved fontinfo")
             .expect_err("invalid value for a norad-known key should fail");
+        assert!(
+            error.to_string().contains("openTypeOS2WeightClass"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_unknown_keys_and_rejects_unwritable_known_keys() {
+        let mut valid = shift_font::LibData::new();
+        valid.set(
+            "com.example.customTool".to_string(),
+            shift_font::LibValue::String("kept".to_string()),
+        );
+        valid.set(
+            "openTypeOS2WeightClass".to_string(),
+            shift_font::LibValue::Integer(700),
+        );
+        validate_fontinfo_remainder(&valid).expect("unknown keys are writable");
+
+        let mut tampered = shift_font::LibData::new();
+        tampered.set(
+            "openTypeOS2WeightClass".to_string(),
+            shift_font::LibValue::String("heavy".to_string()),
+        );
+        let error = validate_fontinfo_remainder(&tampered)
+            .expect_err("a remainder norad cannot write must be rejected");
         assert!(
             error.to_string().contains("openTypeOS2WeightClass"),
             "unexpected error: {error}"
