@@ -2,8 +2,10 @@ use shift_font::test_support::sample_font;
 use shift_store::{
     AxisId, ComponentId, Evidence, FileIdentity, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph,
     NewGlyphComponent, NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceIdentitySnapshot,
-    SourceKind, WorkspaceState,
+    SourceKind, StoreError, WorkspaceState,
 };
+
+const OLD_SCHEMA_V1: &str = include_str!("fixtures/old_schema_v1.sql");
 
 #[test]
 fn opens_memory_store() {
@@ -916,7 +918,7 @@ fn file_stores_run_wal_with_verified_pragmas() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
-    assert_eq!(version, 1);
+    assert_eq!(version, 2);
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }
@@ -1066,6 +1068,36 @@ fn refuses_stores_from_newer_schema_versions() {
 
     let result = ShiftStore::open(&path);
     assert!(result.is_err(), "a future-versioned store must be refused");
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn refuses_stores_from_older_schema_versions() {
+    let path = temp_store_path("outdated");
+
+    {
+        let conn = rusqlite::Connection::open(&path).expect("raw create");
+        conn.execute_batch(OLD_SCHEMA_V1).expect("old schema");
+        conn.pragma_update(None, "user_version", 1)
+            .expect("stamp v1");
+    }
+
+    let error = match ShiftStore::open(&path) {
+        Ok(_) => panic!("an older draft store must be refused"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        StoreError::OutdatedSchemaVersion {
+            found: 1,
+            supported: 2
+        }
+    ));
+    assert!(
+        error.to_string().contains("delete the draft store"),
+        "refusal must tell the user what to do, got: {error}"
+    );
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }
