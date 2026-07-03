@@ -1,4 +1,4 @@
-use crate::atomic::sync_parent;
+use crate::atomic::{resolve_existing_target, sync_parent};
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
@@ -477,6 +477,11 @@ impl UfoWriter {
     /// swapped into place — atomically where the platform supports a rename
     /// exchange, otherwise via move-aside-and-replace with restore on failure.
     fn write_atomic(norad_font: &NoradFont, target: &Path) -> FormatBackendResult<()> {
+        // Saving through a symlink must update the linked UFO, not turn the
+        // link itself into a real directory, so the target is resolved to its
+        // real path and staging happens next to the resolved location.
+        let target = &resolve_existing_target(target)
+            .map_err(|e| io_error("resolve UFO path", target, e))?;
         let file_name = target.file_name().ok_or_else(|| {
             FormatBackendError::Ufo(format!("invalid UFO path '{}'", target.display()))
         })?;
