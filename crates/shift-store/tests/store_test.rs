@@ -1103,6 +1103,103 @@ fn refuses_stores_from_older_schema_versions() {
 }
 
 #[test]
+fn source_created_change_persists_full_source_state() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let axis_id = shift_font::AxisId::from_raw("axis_weight");
+    let axis = shift_font::Axis::with_id(
+        axis_id.clone(),
+        "wght".to_string(),
+        "Weight".to_string(),
+        100.0,
+        400.0,
+        900.0,
+    );
+    let mut location = shift_font::Location::new();
+    location.set(axis_id, 700.0);
+    let mut source =
+        shift_font::Source::with_filename("Bold".to_string(), location, "Bold.ufo".to_string());
+    source.set_color(Some("1,0,0,1".to_string()));
+    source.set_layer_name(Some("bold".to_string()));
+    source.lib_mut().set(
+        "com.shift.sourceNote".to_string(),
+        shift_font::LibValue::String("bold note".to_string()),
+    );
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::axis_created(&axis),
+            shift_font::FontChange::source_created(&source),
+        ]))
+        .expect("apply change set");
+
+    let loaded = store.load_font_state().expect("load font state");
+    assert_eq!(loaded.sources(), std::slice::from_ref(&source));
+}
+
+#[test]
+fn source_created_change_skips_locations_on_missing_axes() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let mut location = shift_font::Location::new();
+    location.set(shift_font::AxisId::from_raw("ghost"), 500.0);
+    let source = shift_font::Source::new("Bold".to_string(), location);
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::source_created(&source),
+        ]))
+        .expect("locations on axes without rows must not violate foreign keys");
+
+    let loaded = store.load_font_state().expect("load font state");
+    assert_eq!(loaded.sources().len(), 1);
+    assert!(loaded.sources()[0].location().is_empty());
+}
+
+#[test]
+fn font_level_creates_append_order_and_deletes_compact_it() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+
+    let sources: Vec<shift_font::Source> = ["Light", "Regular", "Bold"]
+        .into_iter()
+        .map(|name| shift_font::Source::new(name.to_string(), shift_font::Location::new()))
+        .collect();
+    let glyphs: Vec<shift_font::Glyph> = ["A", "B", "C"]
+        .into_iter()
+        .map(shift_font::Glyph::new)
+        .collect();
+    let mut changes: Vec<shift_font::FontChange> = sources
+        .iter()
+        .map(shift_font::FontChange::source_created)
+        .collect();
+    changes.extend(glyphs.iter().map(shift_font::FontChange::glyph_created));
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(changes))
+        .expect("apply creates");
+
+    let heavy = shift_font::Source::new("Heavy".to_string(), shift_font::Location::new());
+    let glyph_d = shift_font::Glyph::new("D");
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::source_deleted(sources[1].id()),
+            shift_font::FontChange::source_created(&heavy),
+            shift_font::FontChange::glyph_deleted(glyphs[1].id()),
+            shift_font::FontChange::glyph_created(&glyph_d),
+        ]))
+        .expect("apply deletes and appends");
+
+    let loaded = store.load_font_state().expect("load font state");
+    let source_names: Vec<&str> = loaded
+        .sources()
+        .iter()
+        .map(|source| source.name())
+        .collect();
+    assert_eq!(source_names, ["Light", "Bold", "Heavy"]);
+    let glyph_names: Vec<&str> = loaded.glyphs().map(|glyph| glyph.name()).collect();
+    assert_eq!(glyph_names, ["A", "C", "D"]);
+}
+
+#[test]
 fn replace_and_load_font_state_preserves_source_roles_and_layer_names() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 

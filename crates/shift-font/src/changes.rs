@@ -1,6 +1,7 @@
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName,
-    LayerId, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, Component, ComponentId, Contour, ContourId,
+    DecomposedTransform, Glyph, GlyphId, GlyphLayer, GlyphName, Guideline, LayerId, LibData, Point,
+    PointId, PointType, Source, SourceId, SourceRole,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -187,11 +188,19 @@ impl From<&Axis> for AxisCreated {
     }
 }
 
+/// Full source snapshot: replays (undo of a source delete, crash-recovery
+/// change application) must restore every persisted field, not just the
+/// name and location.
 #[derive(Clone, Debug)]
 pub struct SourceCreated {
     pub source_id: SourceId,
     pub name: String,
     pub location: Vec<SourceAxisValue>,
+    pub filename: Option<String>,
+    pub color: Option<String>,
+    pub role: SourceRole,
+    pub layer_name: Option<String>,
+    pub lib: LibData,
 }
 
 impl From<&Source> for SourceCreated {
@@ -207,6 +216,11 @@ impl From<&Source> for SourceCreated {
                     value: *value,
                 })
                 .collect(),
+            filename: source.filename().map(str::to_owned),
+            color: source.color().map(str::to_owned),
+            role: source.role(),
+            layer_name: source.layer_name().map(str::to_owned),
+            lib: source.lib().clone(),
         }
     }
 }
@@ -371,12 +385,18 @@ pub struct LayerGeometryReplaced {
     pub layer: GlyphLayerValue,
 }
 
+/// The layer's full authored content. Replays restore deleted layers from
+/// this value, so it must cover everything the store persists per layer —
+/// not just the editable geometry.
 #[derive(Clone, Debug)]
 pub struct GlyphLayerValue {
     pub width: f64,
     pub height: Option<f64>,
     pub contours: Vec<ContourValue>,
     pub anchors: Vec<AnchorValue>,
+    pub components: Vec<ComponentValue>,
+    pub guidelines: Vec<Guideline>,
+    pub lib: LibData,
 }
 
 impl From<&GlyphLayer> for GlyphLayerValue {
@@ -390,6 +410,36 @@ impl From<&GlyphLayer> for GlyphLayerValue {
                 .enumerate()
                 .map(|(order_index, anchor)| AnchorValue::from_anchor(order_index, anchor))
                 .collect(),
+            components: layer
+                .components_iter()
+                .enumerate()
+                .map(|(order_index, component)| {
+                    ComponentValue::from_component(order_index, component)
+                })
+                .collect(),
+            guidelines: layer.guidelines().to_vec(),
+            lib: layer.lib().clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ComponentValue {
+    pub id: ComponentId,
+    pub order_index: usize,
+    pub base_glyph_id: GlyphId,
+    pub base_glyph_name: GlyphName,
+    pub transform: DecomposedTransform,
+}
+
+impl ComponentValue {
+    pub fn from_component(order_index: usize, component: &Component) -> Self {
+        Self {
+            id: component.id(),
+            order_index,
+            base_glyph_id: component.base_glyph_id(),
+            base_glyph_name: component.base_glyph_name().clone(),
+            transform: *component.transform(),
         }
     }
 }

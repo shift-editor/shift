@@ -1,4 +1,4 @@
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 use shift_font as font;
 
 use crate::{
@@ -59,11 +59,11 @@ impl ShiftStore {
         replace_font_binaries(&tx, "image", font.images())?;
         replace_kerning(&tx, font.kerning())?;
 
-        for (order_index, axis) in font.axes().iter().enumerate() {
-            insert_axis_with_order(&tx, &font::AxisCreated::from(axis), order_index as i64)?;
+        for axis in font.axes() {
+            insert_axis(&tx, &font::AxisCreated::from(axis))?;
         }
 
-        for (order_index, source) in font.sources().iter().enumerate() {
+        for source in font.sources() {
             upsert_source(
                 &tx,
                 &source.id(),
@@ -73,7 +73,6 @@ impl ShiftStore {
                     color: source.color(),
                     kind: SourceKind::from(source.role()),
                     layer_name: source.layer_name(),
-                    order_index: order_index as i64,
                 },
             )?;
             replace_lib_data(
@@ -92,8 +91,8 @@ impl ShiftStore {
             }
         }
 
-        for (order_index, glyph) in font.glyphs().enumerate() {
-            upsert_glyph(&tx, &glyph.id(), glyph.glyph_name(), order_index as i64)?;
+        for glyph in font.glyphs() {
+            upsert_glyph(&tx, &glyph.id(), glyph.glyph_name())?;
             replace_glyph_unicodes(&tx, &glyph.id(), glyph.unicodes())?;
             replace_lib_data(
                 &tx,
@@ -113,7 +112,7 @@ impl ShiftStore {
                     layer.width(),
                     layer.height(),
                 )?;
-                replace_full_layer_state(&tx, layer)?;
+                replace_layer_state(&tx, &layer.id(), &font::GlyphLayerValue::from(layer))?;
             }
         }
 
@@ -124,15 +123,10 @@ impl ShiftStore {
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
-        font::FontChange::AxisCreated(change) => insert_axis_with_order(tx, change, 0),
+        font::FontChange::AxisCreated(change) => insert_axis(tx, change),
         font::FontChange::AxisDeleted(change) => {
             // source_locations cascade from the axis row.
-            let rows_changed = tx.execute(
-                "DELETE FROM axes WHERE id = ?1",
-                [change.axis_id.to_string()],
-            )?;
-            require_changed(rows_changed, "axis", change.axis_id.to_string())?;
-            Ok(())
+            delete_ordered_row(tx, "axes", "axis", change.axis_id.to_string())
         }
         font::FontChange::SourceCreated(change) => {
             upsert_source(
@@ -140,48 +134,55 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                 &change.source_id,
                 SourceRow {
                     name: Some(&change.name),
-                    filename: None,
-                    color: None,
-                    kind: SourceKind::Master,
-                    layer_name: None,
-                    order_index: 0,
+                    filename: change.filename.as_deref(),
+                    color: change.color.as_deref(),
+                    kind: SourceKind::from(change.role),
+                    layer_name: change.layer_name.as_deref(),
                 },
+            )?;
+            replace_lib_data(
+                tx,
+                "source_lib",
+                "source_id",
+                Some(&change.source_id.to_string()),
+                &change.lib,
             )?;
 
             for axis_value in &change.location {
-                upsert_source_location(
-                    tx,
-                    &change.source_id,
-                    &axis_value.axis_id,
-                    axis_value.value,
-                )?;
+                // Location entries on axes with no row have nothing to
+                // reference: the axis either never existed in the store
+                // (source formats allow locations on undefined axes) or a
+                // later step of the same undo replay restores it and
+                // re-emits this source's locations.
+                if axis_exists(tx, &axis_value.axis_id)? {
+                    upsert_source_location(
+                        tx,
+                        &change.source_id,
+                        &axis_value.axis_id,
+                        axis_value.value,
+                    )?;
+                }
             }
 
             Ok(())
         }
         font::FontChange::SourceDeleted(change) => {
             // glyph_layers and source_locations cascade on the source row.
-            let rows_changed = tx.execute(
-                "DELETE FROM sources WHERE id = ?1",
-                [change.source_id.to_string()],
-            )?;
-            require_changed(rows_changed, "source", change.source_id.to_string())?;
-            Ok(())
+            delete_ordered_row(tx, "sources", "source", change.source_id.to_string())
         }
         font::FontChange::GlyphCreated(change) => {
-            upsert_glyph(tx, &change.glyph_id, &change.name, 0)?;
+            upsert_glyph(tx, &change.glyph_id, &change.name)?;
             replace_glyph_unicodes(tx, &change.glyph_id, &change.unicodes)
         }
         font::FontChange::GlyphDeleted(change) => {
-            let rows_changed = tx.execute(
-                "DELETE FROM glyphs WHERE id = ?1",
-                [change.glyph_id.to_string()],
-            )?;
-            require_changed(rows_changed, "glyph", change.glyph_id.to_string())?;
-            Ok(())
+            delete_ordered_row(tx, "glyphs", "glyph", change.glyph_id.to_string())
         }
         font::FontChange::GlyphIdentityChanged(change) => {
-            upsert_glyph(tx, &change.glyph_id, &change.to_name, 0)?;
+            let rows_changed = tx.execute(
+                "UPDATE glyphs SET name = ?2 WHERE id = ?1",
+                params![change.glyph_id.to_string(), change.to_name.as_str()],
+            )?;
+            require_changed(rows_changed, "glyph", change.glyph_id.to_string())?;
             replace_glyph_unicodes(tx, &change.glyph_id, &change.to_unicodes)
         }
         font::FontChange::GlyphLayerCreated(change) => upsert_layer(
@@ -283,20 +284,16 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         }
         font::FontChange::LayerGeometryReplaced(change) => {
             require_layer_exists(tx, &change.layer_id)?;
-            replace_layer_geometry(tx, &change.layer_id, &change.layer)
+            replace_layer_state(tx, &change.layer_id, &change.layer)
         }
     }
 }
 
-fn insert_axis_with_order(
-    tx: &Transaction<'_>,
-    axis: &font::AxisCreated,
-    order_index: i64,
-) -> Result<(), StoreError> {
+fn insert_axis(tx: &Transaction<'_>, axis: &font::AxisCreated) -> Result<(), StoreError> {
     tx.execute(
         "
         INSERT INTO axes (id, tag, name, min_value, default_value, max_value, hidden, order_index)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, (SELECT COUNT(*) FROM axes))
         ",
         params![
             axis.axis_id.to_string(),
@@ -306,9 +303,44 @@ fn insert_axis_with_order(
             axis.default,
             axis.maximum,
             axis.hidden,
-            order_index,
         ],
     )?;
+    Ok(())
+}
+
+fn axis_exists(tx: &Transaction<'_>, axis_id: &font::AxisId) -> Result<bool, StoreError> {
+    let exists: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM axes WHERE id = ?1)",
+        [axis_id.to_string()],
+        |row| row.get(0),
+    )?;
+    Ok(exists)
+}
+
+/// Deletes an ordered row and shifts later rows down, mirroring the
+/// in-memory `Vec::remove` so `order_index` stays a dense 0..n sequence
+/// and creations can always append at `COUNT(*)`.
+fn delete_ordered_row(
+    tx: &Transaction<'_>,
+    table: &'static str,
+    kind: &'static str,
+    id: String,
+) -> Result<(), StoreError> {
+    let select_sql = format!("SELECT order_index FROM {table} WHERE id = ?1");
+    let order_index: i64 = tx
+        .query_row(&select_sql, [id.as_str()], |row| row.get(0))
+        .optional()?
+        .ok_or(StoreError::MissingEntity {
+            kind,
+            id: id.clone(),
+        })?;
+
+    let delete_sql = format!("DELETE FROM {table} WHERE id = ?1");
+    tx.execute(&delete_sql, [id.as_str()])?;
+
+    let shift_sql =
+        format!("UPDATE {table} SET order_index = order_index - 1 WHERE order_index > ?1");
+    tx.execute(&shift_sql, [order_index])?;
     Ok(())
 }
 
@@ -336,9 +368,11 @@ struct SourceRow<'a> {
     color: Option<&'a str>,
     kind: SourceKind,
     layer_name: Option<&'a str>,
-    order_index: i64,
 }
 
+/// A fresh row appends at the end (order_index = current row count,
+/// mirroring the in-memory `Vec::push`); a conflicting upsert keeps the
+/// existing row's position.
 fn upsert_source(
     tx: &Transaction<'_>,
     source_id: &font::SourceId,
@@ -347,14 +381,13 @@ fn upsert_source(
     tx.execute(
         "
         INSERT INTO sources (id, name, filename, color, kind, layer_name, order_index)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, (SELECT COUNT(*) FROM sources))
         ON CONFLICT(id) DO UPDATE SET
             name = COALESCE(excluded.name, sources.name),
             filename = excluded.filename,
             color = excluded.color,
             kind = excluded.kind,
-            layer_name = excluded.layer_name,
-            order_index = excluded.order_index
+            layer_name = excluded.layer_name
         ",
         params![
             source_id.to_string(),
@@ -363,27 +396,26 @@ fn upsert_source(
             row.color,
             row.kind.as_str(),
             row.layer_name,
-            row.order_index
         ],
     )?;
     Ok(())
 }
 
+/// A fresh row appends at the end (order_index = current row count); a
+/// conflicting upsert keeps the existing row's position.
 fn upsert_glyph(
     tx: &Transaction<'_>,
     glyph_id: &font::GlyphId,
     name: &font::GlyphName,
-    order_index: i64,
 ) -> Result<(), StoreError> {
     tx.execute(
         "
         INSERT INTO glyphs (id, name, order_index)
-        VALUES (?1, ?2, ?3)
+        VALUES (?1, ?2, (SELECT COUNT(*) FROM glyphs))
         ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name,
-            order_index = excluded.order_index
+            name = excluded.name
         ",
-        params![glyph_id.to_string(), name.as_str(), order_index],
+        params![glyph_id.to_string(), name.as_str()],
     )?;
     Ok(())
 }
@@ -441,7 +473,11 @@ fn upsert_layer(
     Ok(())
 }
 
-fn replace_layer_geometry(
+/// Replaces the layer's full persisted content — metrics, contours,
+/// anchors, components, guidelines, and lib — from a
+/// [`font::GlyphLayerValue`] snapshot, so replays restoring a deleted
+/// layer are lossless.
+fn replace_layer_state(
     tx: &Transaction<'_>,
     layer_id: &font::LayerId,
     layer: &font::GlyphLayerValue,
@@ -479,34 +515,25 @@ fn replace_layer_geometry(
         insert_anchor(tx, layer_id, anchor)?;
     }
 
-    Ok(())
-}
-
-fn replace_full_layer_state(
-    tx: &Transaction<'_>,
-    layer: &font::GlyphLayer,
-) -> Result<(), StoreError> {
-    replace_layer_geometry(tx, &layer.id(), &font::GlyphLayerValue::from(layer))?;
-
     tx.execute(
         "
         DELETE FROM glyph_components
         WHERE layer_id = ?1
         ",
-        [layer_row_id(&layer.id())],
+        [layer_row_id(layer_id)],
     )?;
 
-    for (order_index, component) in layer.components_iter().enumerate() {
-        insert_component(tx, &layer.id(), component, order_index)?;
+    for component in &layer.components {
+        insert_component(tx, layer_id, component)?;
     }
 
-    replace_layer_guidelines(tx, &layer.id(), layer.guidelines())?;
+    replace_layer_guidelines(tx, layer_id, &layer.guidelines)?;
     replace_lib_data(
         tx,
         "glyph_layer_lib",
         "layer_id",
-        Some(&layer.id().to_string()),
-        layer.lib(),
+        Some(&layer_row_id(layer_id)),
+        &layer.lib,
     )?;
 
     Ok(())
@@ -711,10 +738,9 @@ fn insert_guideline(
 fn insert_component(
     tx: &Transaction<'_>,
     layer_id: &font::LayerId,
-    component: &font::Component,
-    order_index: usize,
+    component: &font::ComponentValue,
 ) -> Result<(), StoreError> {
-    let transform = component.transform();
+    let transform = &component.transform;
     tx.execute(
         "
         INSERT INTO glyph_components (
@@ -736,10 +762,10 @@ fn insert_component(
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ",
         params![
-            component.id().to_string(),
+            component.id.to_string(),
             layer_row_id(layer_id),
-            component.base_glyph_id().to_string(),
-            component.base_glyph_name().as_str(),
+            component.base_glyph_id.to_string(),
+            component.base_glyph_name.as_str(),
             transform.translate_x,
             transform.translate_y,
             transform.rotation,
@@ -749,7 +775,7 @@ fn insert_component(
             transform.skew_y,
             transform.t_center_x,
             transform.t_center_y,
-            order_index as i64,
+            component.order_index as i64,
         ],
     )?;
     Ok(())

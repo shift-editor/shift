@@ -735,10 +735,9 @@ fn replay_layer_pairs(
             .ok_or(CoreError::LayerNotFound(layer_id))?;
         *layer = replacement;
 
-        // Geometry replace persists contours only; metrics ride their
-        // own change so width/height restores reach SQLite too.
+        // The geometry-replace change carries the layer's full persisted
+        // content (metrics included), so one change restores everything.
         changes.push(FontChange::layer_geometry_replaced(layer));
-        changes.push(FontChange::layer_metrics_changed(layer));
         touched.push(TouchedLayer {
             layer: layer.clone(),
             structural: true,
@@ -772,6 +771,10 @@ fn replay_glyph(
                 Some(glyph.glyph_name().clone()),
                 &layer,
             ));
+            // The created row is bare identity + metrics; the layer's
+            // contents ride a geometry-replace so the store restores the
+            // whole layer, not an empty shell.
+            changes.push(FontChange::layer_geometry_replaced(&layer));
             touched.push(TouchedLayer {
                 layer,
                 structural: true,
@@ -882,6 +885,10 @@ fn replay_glyph_layer(
             glyph_name,
             &layer,
         ));
+        // The created row is bare identity + metrics; the layer's
+        // contents ride a geometry-replace so the store restores the
+        // whole layer, not an empty shell.
+        changes.push(FontChange::layer_geometry_replaced(&layer));
         font.insert_glyph_layer(glyph_id, layer.clone())?;
         touched.push(TouchedLayer {
             layer,
