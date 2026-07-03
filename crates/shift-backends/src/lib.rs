@@ -1,3 +1,4 @@
+mod atomic;
 pub mod binary;
 pub mod designspace;
 pub mod errors;

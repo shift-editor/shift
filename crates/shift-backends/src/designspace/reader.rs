@@ -158,11 +158,9 @@ impl DesignspaceReader {
 
             let name = source_name(ds_source, idx);
             let location = location_from_dimensions(&ds_source.location, &doc, font.axes());
-            let source_id = font.add_source(Source::with_filename(
-                name,
-                location,
-                ds_source.filename.clone(),
-            ));
+            let mut source = Source::with_filename(name, location, ds_source.filename.clone());
+            source.set_layer_name(ds_source.layer.clone());
+            let source_id = font.add_source(source);
 
             // Copy glyphs from the resolved layer into the new layer.
             for source_glyph in source_font.glyphs() {
@@ -289,11 +287,9 @@ fn load_axisless_designspace(
         };
 
         let name = axisless_source_name(ds_source, idx);
-        let source_id = font.add_source(Source::with_filename(
-            name,
-            Location::new(),
-            ds_source.filename.clone(),
-        ));
+        let mut source = Source::with_filename(name, Location::new(), ds_source.filename.clone());
+        source.set_layer_name(ds_source.layer.clone());
+        let source_id = font.add_source(source);
 
         for source_glyph in source_font.glyphs() {
             if let Some(source_layer) = source_glyph.layer_for_source(source_source_id.clone()) {

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS sources (
     style_name TEXT,
     filename TEXT,
     color TEXT,
+    layer_name TEXT,
     kind TEXT NOT NULL,
     order_index INTEGER NOT NULL DEFAULT 0
 );

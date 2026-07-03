@@ -38,4 +38,4 @@ pub use lib_data::{LibData, LibValue};
 pub use metrics::FontMetrics;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};
-pub use source::Source;
+pub use source::{Source, SourceRole};
