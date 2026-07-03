@@ -185,6 +185,22 @@ fn preservation_fixture_ufo(dir: &Path) -> PathBuf {
         "com.shift.glyphDate".into(),
         plist::Value::Date(plist::Date::from_xml_format("2025-12-31T23:59:59Z").unwrap()),
     );
+    glyph.note = Some("traced from a scan".to_string());
+    glyph.image = Some(
+        norad::Image::new(
+            PathBuf::from("glyph-photo.png"),
+            Some("0,1,0,0.25".parse().unwrap()),
+            norad::AffineTransform {
+                x_scale: 0.5,
+                xy_scale: 0.0,
+                yx_scale: 0.0,
+                y_scale: 0.75,
+                x_offset: 10.0,
+                y_offset: -20.5,
+            },
+        )
+        .unwrap(),
+    );
     norad_font.layers.default_layer_mut().insert_glyph(glyph);
 
     let background = norad_font.layers.new_layer("background").unwrap();
@@ -215,6 +231,29 @@ fn preservation_fixture_ufo(dir: &Path) -> PathBuf {
 
     let ufo_path = dir.join("Preservation.ufo");
     norad_font.save(&ufo_path).expect("fixture UFO should save");
+
+    // Non-spec fontinfo keys (as other tools write them) go in behind
+    // norad's back — norad itself refuses to serialize unknown keys.
+    let fontinfo_path = ufo_path.join("fontinfo.plist");
+    let plist::Value::Dictionary(mut fontinfo) =
+        plist::Value::from_file(&fontinfo_path).expect("fixture fontinfo should parse")
+    else {
+        panic!("fixture fontinfo should be a dictionary");
+    };
+    fontinfo.insert(
+        "com.example.customFontinfo".into(),
+        plist::Value::String("survives".into()),
+    );
+    let mut custom = plist::Dictionary::new();
+    custom.insert("depth".into(), plist::Value::Integer(2.into()));
+    fontinfo.insert(
+        "com.example.customDict".into(),
+        plist::Value::Dictionary(custom),
+    );
+    plist::Value::Dictionary(fontinfo)
+        .to_file_xml(&fontinfo_path)
+        .expect("fixture fontinfo should be writable");
+
     ufo_path
 }
 
@@ -377,6 +416,95 @@ fn preserves_libs_binaries_layerinfo_and_fontinfo_through_round_trip() {
     assert_eq!(original_guideline.color(), Some("0,0.5,1,1"));
     assert_eq!(reloaded_guideline.y(), original_guideline.y());
     assert_eq!(reloaded_guideline.color(), original_guideline.color());
+}
+
+#[test]
+fn preserves_glyph_image_reference_note_and_unknown_fontinfo_keys() {
+    let temp_dir = tempfile::tempdir().expect("tempdir should be created");
+    let fixture = preservation_fixture_ufo(temp_dir.path());
+
+    // Loading at all is the first regression: an unknown fontinfo key used
+    // to fail the entire UFO load.
+    let original = load_font(&fixture);
+    assert_eq!(
+        original
+            .fontinfo_remainder()
+            .get("com.example.customFontinfo"),
+        Some(&LibValue::String("survives".into()))
+    );
+    match original.fontinfo_remainder().get("com.example.customDict") {
+        Some(LibValue::Dict(custom)) => {
+            assert_eq!(custom.get("depth"), Some(&LibValue::Integer(2)))
+        }
+        other => panic!("expected custom dict in remainder, got {other:?}"),
+    }
+
+    let out_dir = tempfile::tempdir().expect("tempdir should be created");
+    let saved = out_dir.path().join("saved.ufo");
+    FontLoader::new()
+        .write_font(&original, saved.to_str().unwrap())
+        .expect("font with image reference and unknown fontinfo keys should save");
+
+    let glif = std::fs::read_to_string(saved.join("glyphs/A_.glif")).expect("A glif should exist");
+    assert!(glif.contains("<image"), "image element missing: {glif}");
+    assert!(glif.contains(r#"fileName="glyph-photo.png""#));
+    assert!(glif.contains(r#"xScale="0.5""#));
+    assert!(glif.contains(r#"yScale="0.75""#));
+    assert!(glif.contains(r#"xOffset="10""#));
+    assert!(glif.contains(r#"yOffset="-20.5""#));
+    assert!(glif.contains("traced from a scan"));
+    assert!(
+        !glif.contains("com.shift-editor.preserved"),
+        "preservation records must not leak into the written glif lib: {glif}"
+    );
+
+    let fontinfo =
+        std::fs::read_to_string(saved.join("fontinfo.plist")).expect("fontinfo should exist");
+    assert!(fontinfo.contains("com.example.customFontinfo"));
+    assert!(fontinfo.contains("survives"));
+    assert!(fontinfo.contains("com.example.customDict"));
+    assert!(
+        fontinfo.contains("Preservation Sans"),
+        "modeled fields must still be written: {fontinfo}"
+    );
+
+    let reloaded = load_font(&saved);
+    assert_eq!(reloaded.fontinfo_remainder(), original.fontinfo_remainder());
+
+    let original_layer = original
+        .glyph_by_name("A")
+        .unwrap()
+        .layer_for_source(original.default_source_id().unwrap())
+        .unwrap();
+    let reloaded_layer = reloaded
+        .glyph_by_name("A")
+        .unwrap()
+        .layer_for_source(reloaded.default_source_id().unwrap())
+        .unwrap();
+    let image_record =
+        |layer: &GlyphLayer| match layer.lib().get("com.shift-editor.preserved.image") {
+            Some(LibValue::Dict(record)) => record.clone(),
+            other => panic!("expected preserved image record, got {other:?}"),
+        };
+    let original_record = image_record(original_layer);
+    assert_eq!(
+        original_record.get("fileName"),
+        Some(&LibValue::String("glyph-photo.png".into()))
+    );
+    assert_eq!(original_record.get("xScale"), Some(&LibValue::Float(0.5)));
+    assert_eq!(
+        original_record.get("yOffset"),
+        Some(&LibValue::Float(-20.5))
+    );
+    assert_eq!(
+        original_record.get("color"),
+        Some(&LibValue::String("0,1,0,0.25".into()))
+    );
+    assert_eq!(image_record(reloaded_layer), original_record);
+    assert_eq!(
+        reloaded_layer.lib().get("com.shift-editor.preserved.note"),
+        Some(&LibValue::String("traced from a scan".into()))
+    );
 }
 
 #[test]

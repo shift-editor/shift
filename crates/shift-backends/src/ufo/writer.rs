@@ -277,11 +277,63 @@ impl UfoWriter {
                 .push(Self::convert_guideline(guideline)?);
         }
 
-        if !layer.lib().is_empty() {
-            norad_glyph.lib = Self::convert_lib(layer.lib());
+        let mut lib = layer.lib().clone();
+        if let Some(record) = lib.remove(super::PRESERVED_GLYPH_IMAGE_KEY) {
+            norad_glyph.image = Some(Self::convert_image_from_record(glyph.name(), &record)?);
+        }
+        if let Some(LibValue::String(note)) = lib.remove(super::PRESERVED_GLYPH_NOTE_KEY) {
+            norad_glyph.note = Some(note);
+        }
+        if !lib.is_empty() {
+            norad_glyph.lib = Self::convert_lib(&lib);
         }
 
         Ok(norad_glyph)
+    }
+
+    /// Rebuilds a glif `<image>` element from the opaque record the reader
+    /// stashed in the layer lib.
+    fn convert_image_from_record(
+        glyph_name: &str,
+        record: &LibValue,
+    ) -> FormatBackendResult<norad::Image> {
+        let invalid = || {
+            FormatBackendError::Ufo(format!(
+                "invalid preserved image record on glyph {glyph_name:?}"
+            ))
+        };
+        let LibValue::Dict(record) = record else {
+            return Err(invalid());
+        };
+
+        let file_name = match record.get("fileName") {
+            Some(LibValue::String(file_name)) => file_name,
+            _ => return Err(invalid()),
+        };
+        let number = |key: &str| match record.get(key) {
+            Some(LibValue::Float(value)) => Ok(*value),
+            Some(LibValue::Integer(value)) => Ok(*value as f64),
+            _ => Err(invalid()),
+        };
+        let transform = norad::AffineTransform {
+            x_scale: number("xScale")?,
+            xy_scale: number("xyScale")?,
+            yx_scale: number("yxScale")?,
+            y_scale: number("yScale")?,
+            x_offset: number("xOffset")?,
+            y_offset: number("yOffset")?,
+        };
+        let color = match record.get("color") {
+            Some(LibValue::String(color)) => Some(color.parse().map_err(|_| invalid())?),
+            Some(_) => return Err(invalid()),
+            None => None,
+        };
+
+        norad::Image::new(PathBuf::from(file_name), color, transform).map_err(|e| {
+            FormatBackendError::Ufo(format!(
+                "invalid preserved image file name on glyph {glyph_name:?}: {e}"
+            ))
+        })
     }
 }
 
@@ -315,21 +367,28 @@ impl UfoWriter {
     }
 
     pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
-        let norad_font = Self::build_norad_font(font)?;
-        Self::write_atomic(&norad_font, Path::new(path))
+        let (norad_font, unknown_fontinfo) = Self::build_norad_font(font)?;
+        Self::write_atomic(&norad_font, &unknown_fontinfo, Path::new(path))
     }
 
     /// Rebuilds `fontinfo.plist` from the carried remainder, then writes every
     /// Shift-modeled field from the IR so the IR always wins for those keys.
-    fn build_font_info(font: &impl FontView) -> FormatBackendResult<norad::FontInfo> {
+    /// Remainder keys norad does not model cannot pass through
+    /// [`norad::FontInfo`]; they are returned separately and merged into the
+    /// staged `fontinfo.plist` after norad has written it.
+    fn build_font_info(
+        font: &impl FontView,
+    ) -> FormatBackendResult<(norad::FontInfo, plist::Dictionary)> {
         let remainder = font.fontinfo_remainder();
-        let mut font_info = if remainder.is_empty() {
-            norad::FontInfo::default()
+        let (mut font_info, unknown) = if remainder.is_empty() {
+            (norad::FontInfo::default(), plist::Dictionary::new())
         } else {
             let dict = Self::convert_lib(remainder);
-            plist::from_value(&plist::Value::Dictionary(dict)).map_err(|e| {
+            let (known, unknown) = super::fontinfo::partition_fontinfo(dict, "preserved fontinfo")?;
+            let font_info = plist::from_value(&plist::Value::Dictionary(known)).map_err(|e| {
                 FormatBackendError::Ufo(format!("invalid preserved fontinfo data: {e}"))
-            })?
+            })?;
+            (font_info, unknown)
         };
 
         font_info.family_name = font.metadata().family_name.clone();
@@ -355,12 +414,15 @@ impl UfoWriter {
         font_info.italic_angle = font.metrics().italic_angle;
         font_info.guidelines = None;
 
-        Ok(font_info)
+        Ok((font_info, unknown))
     }
 
-    fn build_norad_font(font: &impl FontView) -> FormatBackendResult<NoradFont> {
+    fn build_norad_font(
+        font: &impl FontView,
+    ) -> FormatBackendResult<(NoradFont, plist::Dictionary)> {
         let mut norad_font = NoradFont::new();
-        norad_font.font_info = Self::build_font_info(font)?;
+        let (font_info, unknown_fontinfo) = Self::build_font_info(font)?;
+        norad_font.font_info = font_info;
 
         let groups = font
             .kerning()
@@ -469,14 +531,18 @@ impl UfoWriter {
                 })?;
         }
 
-        Ok(norad_font)
+        Ok((norad_font, unknown_fontinfo))
     }
 
     /// Writes the UFO without ever destroying the existing target: the new
     /// UFO is fully staged (and fsynced) in a temp sibling directory, then
     /// swapped into place — atomically where the platform supports a rename
     /// exchange, otherwise via move-aside-and-replace with restore on failure.
-    fn write_atomic(norad_font: &NoradFont, target: &Path) -> FormatBackendResult<()> {
+    fn write_atomic(
+        norad_font: &NoradFont,
+        unknown_fontinfo: &plist::Dictionary,
+        target: &Path,
+    ) -> FormatBackendResult<()> {
         // Saving through a symlink must update the linked UFO, not turn the
         // link itself into a real directory, so the target is resolved to its
         // real path and staging happens next to the resolved location.
@@ -501,6 +567,10 @@ impl UfoWriter {
         norad_font
             .save(&staged_ufo)
             .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
+        super::fontinfo::merge_unknown_fontinfo(
+            &staged_ufo.join("fontinfo.plist"),
+            unknown_fontinfo,
+        )?;
         sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, e))?;
 
         if target.exists() {

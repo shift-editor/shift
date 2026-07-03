@@ -1,8 +1,17 @@
+mod fontinfo;
 mod reader;
 mod writer;
 
 pub use reader::UfoReader;
 pub use writer::UfoWriter;
+
+/// Layer-lib key carrying a glif `<image>` element (file name, transform,
+/// color) as an opaque record, so image placements survive a round-trip
+/// alongside the image bytes in `images/`. Shift does not model or edit it.
+pub(crate) const PRESERVED_GLYPH_IMAGE_KEY: &str = "com.shift-editor.preserved.image";
+
+/// Layer-lib key carrying a glif `<note>` as an opaque record.
+pub(crate) const PRESERVED_GLYPH_NOTE_KEY: &str = "com.shift-editor.preserved.note";
 
 use crate::traits::{FontReader, FontWriter};
 use crate::FormatBackendResult;
