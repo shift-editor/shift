@@ -1,18 +1,25 @@
-import type { PointId } from "@shift/types";
+import { isPointId, type PointId } from "@shift/types";
 import { Validate } from "@shift/validation";
-import type { SegmentId } from "@/types/indicator";
 import type { Contour, Point } from "@shift/glyph-state";
-import type { ClipboardContent, ContourContent, PointContent } from "./types";
+import type { ContourContent, PointContent, ShiftContent } from "./types";
+import type { SelectableId } from "@/types";
 
 export interface ClipboardContourSource {
   readonly contours: readonly Contour[];
 }
 
 export interface ClipboardSelectionSource {
-  readonly pointIds: ReadonlySet<PointId>;
-  readonly segmentIds: ReadonlySet<SegmentId>;
+  readonly ids: readonly SelectableId[];
 }
 
+/**
+ * Builds glyph clipboard content from selected point identities.
+ *
+ * @remarks
+ * This class does not resolve semantic selections such as segments or nodes.
+ * Callers must expand those selections against the appropriate layer first and
+ * pass only concrete point ids here.
+ */
 export class ClipboardSelection {
   readonly #pointIds: ReadonlySet<PointId>;
 
@@ -21,29 +28,36 @@ export class ClipboardSelection {
   }
 
   static fromSelection(selection: ClipboardSelectionSource): ClipboardSelection {
-    return ClipboardSelection.fromIds(selection.pointIds, selection.segmentIds);
+    return ClipboardSelection.fromPointIds(selection.ids.filter(isPointId));
   }
 
-  static fromIds(
-    pointIds: ReadonlySet<PointId>,
-    segmentIds: ReadonlySet<SegmentId>,
-  ): ClipboardSelection {
-    const resolved = new Set(pointIds);
-
-    for (const segmentId of segmentIds) {
-      const [id1, id2] = segmentId.split(":");
-      if (id1) resolved.add(id1 as PointId);
-      if (id2) resolved.add(id2 as PointId);
-    }
-
-    return new ClipboardSelection(resolved);
+  /**
+   * Captures the point ids that should be copied from a contour source.
+   *
+   * @param pointIds - Concrete point identities that belong to the contour
+   * source passed later to {@link contentFrom}.
+   * @returns a clipboard selection with its own copy of the id set.
+   */
+  static fromPointIds(pointIds: Iterable<PointId>): ClipboardSelection {
+    return new ClipboardSelection(new Set(pointIds));
   }
 
   get pointIds(): readonly PointId[] {
     return [...this.#pointIds];
   }
 
-  contentFrom(source: ClipboardContourSource): ClipboardContent | null {
+  /**
+   * Returns clipboard contour content resolved against the supplied contours.
+   *
+   * @remarks
+   * Partial selections are expanded to include neighboring off-curve points when
+   * needed to preserve valid curve fragments. The returned content is detached
+   * from the source contours and can be written to the system clipboard.
+   *
+   * @param source - Contours that own the selected point ids.
+   * @returns `null` when no selected points resolve to valid clipboard content.
+   */
+  contentFrom(source: ClipboardContourSource): ShiftContent | null {
     if (this.#pointIds.size === 0) return null;
 
     const contours: ContourContent[] = [];

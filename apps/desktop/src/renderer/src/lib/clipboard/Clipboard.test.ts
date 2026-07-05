@@ -1,99 +1,84 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { TestEditor } from "@/testing/TestEditor";
+import { Clipboard } from "./Clipboard";
+import type { ShiftContent, SystemClipboard } from "./types";
 
-// Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
-// the workspace stack with explicit settles around the echo round trip.
-describe("Clipboard (via Editor)", () => {
-  let editor: TestEditor;
+class MemoryClipboard implements SystemClipboard {
+  text = "";
 
-  beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    editor.selectTool("pen");
+  writeText(text: string): void {
+    this.text = text;
+  }
 
-    // Draw a small rectangle: 4 points.
-    editor.click(100, 100);
-    await editor.settle();
-    editor.click(200, 100);
-    await editor.settle();
-    editor.click(200, 200);
-    await editor.settle();
-    editor.click(100, 200);
-    await editor.settle();
+  readText(): string {
+    return this.text;
+  }
+}
+
+const content = (): ShiftContent => ({
+  contours: [
+    {
+      closed: true,
+      points: [
+        { x: 0, y: 0, pointType: "onCurve", smooth: false },
+        { x: 100, y: 0, pointType: "onCurve", smooth: false },
+      ],
+    },
+  ],
+});
+
+describe("Clipboard", () => {
+  let system: MemoryClipboard;
+  let clipboard: Clipboard;
+
+  beforeEach(() => {
+    system = new MemoryClipboard();
+    clipboard = new Clipboard(system);
   });
 
-  it("copy on empty selection returns false", async () => {
-    editor.selection.clear();
+  it("writes Shift content as a versioned clipboard payload", async () => {
+    const written = await clipboard.write(content());
 
-    const ok = await editor.copy();
+    expect(written).toBe(true);
 
-    expect(ok).toBe(false);
-    expect(editor.clipboardBuffer).toBe("");
-  });
-
-  it("copy writes a shift/glyph-data payload to the clipboard", async () => {
-    editor.selectAll();
-
-    const ok = await editor.copy();
-
-    expect(ok).toBe(true);
-    const payload = JSON.parse(editor.clipboardBuffer);
+    const payload = JSON.parse(system.text);
     expect(payload.format).toBe("shift/glyph-data");
+    expect(payload.version).toBe(1);
     expect(payload.content.contours).toHaveLength(1);
-    expect(payload.content.contours[0].points).toHaveLength(4);
+    expect(payload.metadata.sourceApp).toBe("shift");
   });
 
-  it("copy + paste duplicates the selected contour", async () => {
-    editor.selectAll();
-    const pointsBefore = editor.pointCount;
+  it("reads Shift clipboard payloads as glyph content", async () => {
+    await clipboard.write(content());
 
-    await editor.copy();
-    await editor.paste();
-    await editor.settle();
+    const result = await clipboard.read();
 
-    expect(editor.pointCount).toBe(pointsBefore * 2);
+    expect(result.kind).toBe("content");
+    if (result.kind !== "content") return;
+
+    expect(result.source).toBe("shift");
+    expect(result.content.contours[0]?.points).toHaveLength(2);
   });
 
-  it("cut removes the selected points from the glyph", async () => {
-    editor.selectAll();
-    expect(editor.pointCount).toBeGreaterThan(0);
+  it("returns unsupported for non-empty text that no importer accepts", async () => {
+    system.writeText("plain text");
 
-    await editor.cut();
-    await editor.settle();
+    const result = await clipboard.read();
 
-    expect(editor.pointCount).toBe(0);
+    expect(result.kind).toBe("unsupported");
   });
 
-  it("paste with an empty clipboard is a no-op", async () => {
-    editor.selection.clear();
-    const pointsBefore = editor.pointCount;
+  it("returns empty for an empty system clipboard", async () => {
+    const result = await clipboard.read();
 
-    await editor.paste();
-    await editor.settle();
-
-    expect(editor.pointCount).toBe(pointsBefore);
+    expect(result.kind).toBe("empty");
   });
 
-  it("repeated pastes compound the offset", async () => {
-    editor.selectAll();
-    await editor.copy();
-    await editor.paste();
-    await editor.paste();
-    await editor.settle();
+  it("compounds paste offsets until reset", () => {
+    expect(clipboard.nextPasteOffset()).toEqual({ x: 20, y: -20 });
+    expect(clipboard.nextPasteOffset()).toEqual({ x: 40, y: -40 });
 
-    const contours = (editor.editingGlyphLayer?.contours ?? []).filter(
-      (contour) => !contour.isEmpty,
-    );
-    expect(contours).toHaveLength(3);
+    clipboard.resetPasteOffset();
 
-    // Each paste translates the original by DEFAULT_PASTE_OFFSET (20) *
-    // pasteIndex. Sort by minX so the assertion is independent of the
-    // contour array's insertion order.
-    const sortedMinX = contours
-      .map((c) => Math.min(...c.points.map((p) => p.x)))
-      .sort((a, b) => a - b);
-
-    expect(sortedMinX[1]! - sortedMinX[0]!).toBe(20);
-    expect(sortedMinX[2]! - sortedMinX[0]!).toBe(40);
+    expect(clipboard.nextPasteOffset()).toEqual({ x: 20, y: -20 });
   });
 });

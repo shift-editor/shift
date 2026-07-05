@@ -1,6 +1,8 @@
 import type { Point2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
+import type { ContourId, PointId } from "@shift/types";
 import type { Behavior } from "../core/Behavior";
+import type { Pen } from "./Pen";
+import type { GlyphNode } from "@/types/node";
 
 export interface Anchor {
   position: Point2D;
@@ -23,4 +25,9 @@ export type PenState =
       mousePos: Point2D;
     };
 
-export type PenBehavior = Behavior<PenState>;
+export type PenBehavior = Behavior<PenState, Pen>;
+
+export interface PenContext {
+  glyphNode: GlyphNode;
+  activeContourId: ContourId | null;
+}

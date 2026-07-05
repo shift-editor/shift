@@ -20,7 +20,14 @@ import type { AxisLocation } from "@/types/variation";
 import { Transform } from "@/lib/transform/Transform";
 import { Alignment } from "@/lib/transform/Alignment";
 import type { AlignmentType, DistributeType, ReflectAxis } from "@/types/transform";
-import { Bounds, Vec2, type Bounds as BoundsType, type Point2D } from "@shift/geo";
+import {
+  Bounds,
+  Vec2,
+  type Bounds as BoundsType,
+  type CubicCurve,
+  type Point2D,
+  type QuadraticCurve,
+} from "@shift/geo";
 import {
   Anchor,
   Component,
@@ -30,6 +37,7 @@ import {
   type GeometryAnchorHit,
   type GeometryPointHit,
   type GeometrySegmentHit,
+  type GlyphHit,
   Segment,
   type SegmentId,
   type GlyphPosition as GlyphLayerPosition,
@@ -58,6 +66,7 @@ import {
 } from "./GlyphLayerState";
 import type { Font } from "./Font";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
+import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 export {
   GlyphGeometry,
@@ -103,20 +112,24 @@ export interface GlyphInstanceGeometry {
   readonly bounds: BoundsType | null;
   readonly contours: readonly Contour[];
   readonly allPoints: readonly Point[];
+
   contour(contourId: ContourId): Contour | null;
   point(pointId: PointId): Point | null;
   anchor(anchorId: AnchorId): Anchor | null;
   segment(segmentId: SegmentId): Segment | null;
   hitPoint(pos: Point2D, radius: number): GeometryPointHit | null;
   hitAnchor(pos: Point2D, radius: number): GeometryAnchorHit | null;
+  hitAt(pos: Point2D, radius: number): GlyphHit | null;
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null;
 }
 
 class GlyphEditSession {
+  readonly #editCoordinator: WorkspaceEditCoordinator;
   readonly #intents: LayerIntents;
   readonly #state: GlyphEditState;
 
   constructor(font: Font, layerId: LayerId, state: GlyphEditState) {
+    this.#editCoordinator = font.editCoordinator;
     this.#intents = new LayerIntents(font.editCoordinator, layerId);
     this.#state = state;
   }
@@ -127,6 +140,10 @@ class GlyphEditSession {
 
   get layerState(): GlyphLayerState {
     return this.#state.state;
+  }
+
+  transaction<TResult>(label: string, body: () => TResult): TResult {
+    return this.#editCoordinator.transaction(label, body);
   }
 
   setXAdvance(width: number): void {
@@ -158,15 +175,22 @@ class GlyphEditSession {
       }
     }
 
-    // Mixed patches push two intents in the same tick; the edit coordinator coalesces
-    // them into one apply and therefore one undo step.
-    if (pointIds.length > 0) {
-      this.#intents.movePoints({ pointIds, coords: pointCoords });
+    const commit = () => {
+      if (pointIds.length > 0) {
+        this.#intents.movePoints({ pointIds, coords: pointCoords });
+      }
+
+      if (anchorIds.length > 0) {
+        this.#intents.moveAnchors({ anchorIds, coords: anchorCoords });
+      }
+    };
+
+    if (pointIds.length > 0 && anchorIds.length > 0) {
+      this.transaction("Move positions", commit);
+      return;
     }
 
-    if (anchorIds.length > 0) {
-      this.#intents.moveAnchors({ anchorIds, coords: anchorCoords });
-    }
+    commit();
   }
 
   translateLayer(dx: number, dy: number): void {
@@ -405,6 +429,10 @@ export class GlyphLayer {
     return this.geometry.contour(contourId);
   }
 
+  segment(segmentId: SegmentId): Segment | null {
+    return this.geometry.segment(segmentId);
+  }
+
   contourIdOfPoint(pointId: PointId): ContourId | null {
     return this.#edit.layerState.contourIdOfPoint(pointId);
   }
@@ -440,9 +468,46 @@ export class GlyphLayer {
   }
 
   /**
+   * Sets this source's right sidebearing by changing horizontal advance.
+   *
+   * @param value - Desired distance from outline right edge to advance width.
+   */
+  setRightSidebearing(value: number): void {
+    const bounds = this.bounds;
+    if (!bounds) return;
+
+    const width = bounds.max.x + value;
+    if (width === this.xAdvance) return;
+
+    this.setXAdvance(width);
+  }
+
+  /**
+   * Sets this source's left sidebearing by translating outline geometry.
+   *
+   * @remarks
+   * The advance width changes by the same delta as the outline translation so
+   * the right sidebearing remains unchanged. Anchors are not translated.
+   *
+   * @param value - Desired outline left edge position.
+   */
+  setLeftSidebearing(value: number): void {
+    const current = this.sidebearings.lsb;
+    if (current === null) return;
+
+    const deltaX = value - current;
+    if (deltaX === 0) return;
+
+    this.#edit.transaction("Set left sidebearing", () => {
+      this.translateLayer(deltaX, 0);
+      this.setXAdvance(this.xAdvance + deltaX);
+    });
+  }
+
+  /**
    * Apply a sparse point/anchor position patch to Rust and local geometry.
    *
-   * Use this for one-shot edits and undo/redo of position commands. The bridge
+   * Use this for one-shot edits and undo/redo of position operations. The bridge
    * validates and commits the patch; TypeScript applies the same sparse patch
    * locally without reading back a full glyph values buffer.
    *
@@ -576,6 +641,87 @@ export class GlyphLayer {
    */
   reverseContour(contourId: ContourId): void {
     this.#edit.reverseContour(contourId);
+  }
+
+  /**
+   * Splits a current segment and preserves its shape.
+   *
+   * @param segmentId - Segment in this layer's current geometry to split.
+   * @param t - Parametric split position from 0 to 1.
+   * @returns The inserted on-curve point id, or `null` when the segment is unavailable.
+   */
+  splitSegment(segmentId: SegmentId, t: number): PointId | null {
+    const segment = this.geometry.segment(segmentId);
+    if (!segment) return null;
+
+    return this.#edit.transaction("Split segment", () => {
+      switch (segment.type) {
+        case "line":
+          return this.#splitLineSegment(segment, t);
+        case "quad":
+          return this.#splitQuadraticSegment(segment, t);
+        case "cubic":
+          return this.#splitCubicSegment(segment, t);
+      }
+    });
+  }
+
+  /**
+   * Converts a current line segment into a shape-preserving cubic segment.
+   *
+   * @param segmentId - Segment in this layer's current geometry to upgrade.
+   * @returns `true` when the segment was upgraded; `false` when it is missing or not a line.
+   */
+  upgradeLineToCubic(segmentId: SegmentId): boolean {
+    const segment = this.geometry.segment(segmentId);
+    if (!segment || segment.type !== "line") return false;
+
+    const points = segment.asLine();
+    if (!points) return false;
+
+    this.#edit.transaction("Upgrade line to cubic", () => {
+      const control1Pos = {
+        x: points.start.x + (points.end.x - points.start.x) / 3,
+        y: points.start.y + (points.end.y - points.start.y) / 3,
+      };
+      const control2Pos = {
+        x: points.start.x + ((points.end.x - points.start.x) * 2) / 3,
+        y: points.start.y + ((points.end.y - points.start.y) * 2) / 3,
+      };
+
+      const control2Id = this.insertPointBefore(points.end.id, Point.offCurve(control2Pos));
+      this.insertPointBefore(control2Id, Point.offCurve(control1Pos));
+    });
+
+    return true;
+  }
+
+  #splitLineSegment(segment: Segment, t: number): PointId {
+    return this.insertPointBefore(segment.endId, Point.onCurve(segment.pointAt(t)));
+  }
+
+  #splitQuadraticSegment(segment: Segment, t: number): PointId {
+    const points = segment.asQuad()!;
+    const [curveA, curveB] = segment.splitAt(t) as [QuadraticCurve, QuadraticCurve];
+
+    const splitPointId = this.insertPointBefore(points.end.id, Point.smooth(curveA.p1));
+    this.insertPointBefore(points.end.id, Point.offCurve(curveB.c));
+    this.movePointTo(points.control.id, curveA.c);
+
+    return splitPointId;
+  }
+
+  #splitCubicSegment(segment: Segment, t: number): PointId {
+    const points = segment.asCubic()!;
+    const [curveA, curveB] = segment.splitAt(t) as [CubicCurve, CubicCurve];
+
+    this.insertPointBefore(points.controlEnd.id, Point.offCurve(curveA.c1));
+    const splitPointId = this.insertPointBefore(points.controlEnd.id, Point.smooth(curveA.p1));
+    this.insertPointBefore(points.controlEnd.id, Point.offCurve(curveB.c0));
+    this.movePointTo(points.controlStart.id, curveA.c0);
+    this.movePointTo(points.controlEnd.id, curveB.c1);
+
+    return splitPointId;
   }
 
   /**
@@ -949,6 +1095,10 @@ class InstanceGeometry implements GlyphInstanceGeometry {
     return this.#resolved.peek().hitAnchor(pos, radius);
   }
 
+  hitAt(pos: Point2D, radius: number): GlyphHit | null {
+    return this.#resolved.peek().hitAt(pos, radius);
+  }
+
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
     return this.#resolved.peek().hitSegment(pos, radius);
   }
@@ -1019,6 +1169,10 @@ class SnapshotGeometryCache implements GlyphInstanceGeometry {
 
   hitAnchor(pos: Point2D, radius: number): GeometryAnchorHit | null {
     return this.#geometry.hitAnchor(pos, radius);
+  }
+
+  hitAt(pos: Point2D, radius: number): GlyphHit | null {
+    return this.#geometry.hitAt(pos, radius);
   }
 
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
@@ -1135,7 +1289,7 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
       for (const point of contour.pointsCell.peek()) {
         const hit = Point.hit(point, pos, radius);
         if (hit && (!best || hit.distance < best.distance)) {
-          best = { type: "point", pointId: point.id, distance: hit.distance };
+          best = { kind: "point", id: point.id, distance: hit.distance };
         }
       }
     }
@@ -1147,10 +1301,16 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
     for (const anchor of this.#anchors.all) {
       const hit = anchor.hit(pos, radius);
       if (hit && (!best || hit.distance < best.distance)) {
-        best = { type: "anchor", anchorId: anchor.id, distance: hit.distance };
+        best = { kind: "anchor", id: anchor.id, distance: hit.distance };
       }
     }
     return best;
+  }
+
+  hitAt(pos: Point2D, radius: number): GlyphHit | null {
+    return (
+      this.hitAnchor(pos, radius) ?? this.hitPoint(pos, radius) ?? this.hitSegment(pos, radius)
+    );
   }
 
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
@@ -1162,8 +1322,8 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
 
         if (hit && (!best || hit.distance < best.distance)) {
           best = {
-            type: "segment",
-            segmentId: segment.id,
+            kind: "segment",
+            id: segment.id,
             t: hit.t,
             closestPoint: hit.closestPoint,
             distance: hit.distance,

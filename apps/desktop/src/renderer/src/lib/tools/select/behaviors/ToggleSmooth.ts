@@ -1,28 +1,25 @@
-import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectBehavior, SelectState } from "../types";
 import { Validate } from "@shift/validation";
-import { ToggleSmoothCommand } from "@/lib/commands/primitives";
+import type { ToolContext } from "../../core/Behavior";
+import type { DoubleClickEvent } from "../../core/GestureDetector";
+import type { SelectBehavior, SelectState } from "../types";
+import { objectIsKindOf } from "@/types";
 
 export class ToggleSmooth implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"doubleClick">,
+    event: DoubleClickEvent,
   ): boolean {
-    if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
-    const instance = ctx.editor.previewGlyphInstance;
-    if (!instance || !ctx.editor.editingGlyphLayer) return false;
+    if (state.type !== "ready") return false;
+    if (event.target.kind !== "point") return false;
 
-    const geometry = instance.geometry;
-    const hit = geometry.hitPoint(event.coords.glyphLocal, ctx.editor.hitRadius);
-    if (!hit) return false;
+    const object = ctx.editor.object(event.target.id);
+    if (!objectIsKindOf(object, "point")) return false;
 
-    const pointId = hit.pointId;
-    const point = geometry.point(hit.pointId);
+    const point = object.layer.point(object.pointId);
     if (!point || !Validate.isOnCurve(point)) return false;
 
-    ctx.editor.commands.run(new ToggleSmoothCommand(pointId));
+    object.layer.toggleSmooth(object.pointId);
     return true;
   }
 }

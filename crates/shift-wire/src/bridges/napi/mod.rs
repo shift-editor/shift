@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
-use shift_font::{GlyphId, PointType as IrPointType, SourceId};
+use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
@@ -245,19 +245,12 @@ impl From<GlyphLayerSnapshot> for NapiGlyphLayerSnapshot {
 pub struct NapiGlyphSnapshotRequest {
     #[napi(ts_type = "GlyphId")]
     pub glyph_id: String,
-    #[napi(ts_type = "SourceId[]")]
-    pub source_ids: Vec<String>,
 }
 
 impl From<NapiGlyphSnapshotRequest> for GlyphSnapshotRequest {
     fn from(request: NapiGlyphSnapshotRequest) -> Self {
         Self {
             glyph_id: GlyphId::from_raw(request.glyph_id),
-            source_ids: request
-                .source_ids
-                .into_iter()
-                .map(SourceId::from_raw)
-                .collect(),
         }
     }
 }

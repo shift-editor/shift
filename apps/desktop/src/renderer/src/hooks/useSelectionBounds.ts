@@ -1,21 +1,16 @@
-import type { Bounds } from "@shift/geo";
+import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 
 /**
- * Current selection bounds (axis-aligned, point-based), live-updating.
+ * Current selection bounds.
  *
- * Subscribes to the raw inputs that affect bounds (glyph identity, glyph
- * contour patches, and selected point ids), then pulls the lazy
- * `selection.bounds` getter at render time. This keeps the bounds
- * computation out of the reactive hot path during drag — the compute only
- * runs when React actually renders, which happens at most once per
- * animation frame.
- *
- * @returns The current selection bounds, or `null` when the glyph is
- * unavailable or nothing is selected.
+ * @returns null when the current selection has no bounded objects.
  */
-export function useSelectionBounds(): Bounds | null {
+export function useSelectionBounds(): BoundsType | null {
   const editor = useEditor();
-  return useSignalState(editor.selection.boundsCell, { schedule: "frame" });
+  const rect = useSignalState(editor.selectionBoundsCell, { schedule: "frame" });
+  if (!rect) return null;
+
+  return Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height);
 }

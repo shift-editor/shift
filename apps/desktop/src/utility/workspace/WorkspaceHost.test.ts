@@ -628,7 +628,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     if (!glyphId) throw new Error("createGlyph did not echo glyph id");
 
     const snapshots = await sync.call("workspace.glyphSnapshots", {
-      requests: [{ glyphId, sourceIds: [snapshot.sources[0].id] }],
+      requests: [{ glyphId }],
     });
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0].glyphId).toBe(glyphId);
@@ -639,7 +639,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const missing = mintGlyphId();
     await expect(
       sync.call("workspace.glyphSnapshots", {
-        requests: [{ glyphId: missing, sourceIds: [snapshot.sources[0].id] }],
+        requests: [{ glyphId: missing }],
       }),
     ).resolves.toEqual([]);
   });

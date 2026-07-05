@@ -14,12 +14,12 @@ export type { WorkspaceCommitState } from "@/lib/model/FontStore";
  * Tracks optimistic renderer edits until the utility workspace echoes them.
  *
  * @remarks
- * Every editing verb pushes one intent; all intents in the same microtask
- * coalesce into ONE `workspace.apply` — one SQLite transaction, one undo
- * step. Echoes fold by substitution only (replace structure, replace
- * values); the queue contains zero change-application or save semantics.
- * Undo, redo, snapshot reads, and save are serialized through the same queue so
- * none can overtake a pending flush.
+ * Every editing verb pushes one operation by default. Use
+ * {@link transaction} to group multiple intents into one `workspace.apply`,
+ * one SQLite transaction, and one undo step. Echoes fold by substitution only
+ * (replace structure, replace values); the queue contains zero
+ * change-application or save semantics. Undo, redo, snapshot reads, and save
+ * are serialized through the same queue so none can overtake a committed edit.
  *
  * Save ownership lives in the utility. The renderer issues save as one more op
  * on this queue (see {@link save}); because it shares the FIFO edit lane, the
@@ -32,10 +32,9 @@ export class WorkspaceEditCoordinator {
   readonly #settledCell: WritableSignal<boolean>;
   readonly #commitState: WritableSignal<WorkspaceCommitState>;
 
-  #flushQueued = false;
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
-  #pendingIntents: FontIntent[] = [];
+  #transaction: { readonly label: string; readonly intents: FontIntent[] } | null = null;
 
   constructor(workspace: WorkspaceClient, store: FontStore) {
     this.#workspace = workspace;
@@ -66,24 +65,65 @@ export class WorkspaceEditCoordinator {
     return this.#commitState;
   }
 
-  /** Queues one intent; everything in the same microtask becomes one apply. */
+  /** Commits one intent as its own operation unless a transaction is open. */
   push(intent: FontIntent): void {
-    this.#pendingIntents.push(intent);
-    this.#settledCell.set(false);
-    if (this.#commitState.peek() === "idle") {
-      this.#commitState.set("queued");
+    const transaction = this.#transaction;
+    if (transaction) {
+      transaction.intents.push(intent);
+      return;
     }
 
-    if (!this.#flushQueued) {
-      this.#flushQueued = true;
-      queueMicrotask(() => this.#enqueueFlush());
+    this.#enqueueApply([intent]);
+  }
+
+  /**
+   * Groups synchronous edit intents into one workspace operation.
+   *
+   * @remarks
+   * Calls to {@link push} inside `body` are buffered and committed as one apply
+   * after the outermost transaction returns. Transactions are synchronous;
+   * callers must complete all edits before returning.
+   *
+   * @param label - Human-readable operation name for diagnostics and future ledger labels.
+   * @param body - Synchronous edit body that may call layer mutation APIs.
+   * @returns The value returned by `body`.
+   * @throws {Error} when `body` returns a Promise.
+   */
+  transaction<TResult>(label: string, body: () => TResult): TResult {
+    const active = this.#transaction;
+    if (active) {
+      return this.#runTransactionBody(label, body);
     }
+
+    this.#transaction = { label, intents: [] };
+
+    try {
+      const result = this.#runTransactionBody(label, body);
+      const transaction = this.#transaction;
+      this.#transaction = null;
+      this.#enqueueApply(transaction.intents);
+      return result;
+    } catch (error) {
+      this.#transaction = null;
+      throw error;
+    }
+  }
+
+  #runTransactionBody<TResult>(label: string, body: () => TResult): TResult {
+    const result = body();
+
+    if (result instanceof Promise) {
+      throw new Error(`workspace transaction "${label}" must be synchronous`);
+    }
+
+    return result;
   }
 
   /** Resolves when every queued and in-flight operation has settled. */
   async settled(): Promise<void> {
-    while (this.#pendingIntents.length > 0 || this.#busy > 0) {
-      this.#enqueueFlush();
+    this.#assertNoTransaction("settle workspace edits");
+
+    while (this.#busy > 0) {
       await this.#chain;
     }
   }
@@ -139,16 +179,17 @@ export class WorkspaceEditCoordinator {
   }
 
   #withFlush<T>(job: () => Promise<T>): Promise<T> {
-    this.#enqueueFlush();
+    this.#assertNoTransaction("run a serialized workspace operation");
     return this.#serialize(job);
   }
 
-  #enqueueFlush(): void {
-    this.#flushQueued = false;
-    if (this.#pendingIntents.length === 0) return;
+  #enqueueApply(intents: FontIntent[]): void {
+    if (intents.length === 0) return;
 
-    const intents = this.#pendingIntents;
-    this.#pendingIntents = [];
+    this.#settledCell.set(false);
+    if (this.#commitState.peek() === "idle") {
+      this.#commitState.set("queued");
+    }
 
     void this.#serialize(async () => {
       try {
@@ -176,10 +217,17 @@ export class WorkspaceEditCoordinator {
 
   #afterJob(): void {
     this.#busy -= 1;
-    if (this.#busy === 0 && this.#pendingIntents.length === 0) {
+    if (this.#busy === 0) {
       this.#settledCell.set(true);
       this.#commitState.set("idle");
     }
+  }
+
+  #assertNoTransaction(action: string): void {
+    const transaction = this.#transaction;
+    if (!transaction) return;
+
+    throw new Error(`cannot ${action} while workspace transaction "${transaction.label}" is open`);
   }
 
   /** Recovery: discard loaded projections and reload the workspace summary from utility. */

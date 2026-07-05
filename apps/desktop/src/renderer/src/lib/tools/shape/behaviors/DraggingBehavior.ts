@@ -1,11 +1,11 @@
 import { createBehavior, type ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { DragEvent } from "../../core/GestureDetector";
 import type { ShapeState } from "../types";
 
 export const ShapeDraggingBehavior = createBehavior<ShapeState>({
-  onDrag(state: ShapeState, ctx: ToolContext<ShapeState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(state: ShapeState, ctx: ToolContext<ShapeState>, event: DragEvent): boolean {
     if (state.type !== "dragging") return false;
-    ctx.setState({ ...state, currentPos: event.point });
+    ctx.setState({ ...state, currentPos: event.coords.scene });
     return true;
   },
 

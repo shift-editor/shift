@@ -1,15 +1,13 @@
 import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { PointerMoveEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
 export class SelectHover implements SelectBehavior {
   onPointerMove(
     state: SelectState,
     ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"pointerMove">,
+    event: PointerMoveEvent,
   ): boolean {
-    if (state.type === "idle") return false;
-
     if (
       state.type === "brushing" ||
       state.type === "translating" ||
@@ -21,39 +19,32 @@ export class SelectHover implements SelectBehavior {
       return false;
     }
 
-    const instance = ctx.editor.previewGlyphInstance;
-    if (!instance) {
-      ctx.editor.hover.clear();
-      return false;
+    const target = event.target;
+    switch (target.kind) {
+      case "canvas": {
+        ctx.editor.hover.clear();
+        return false;
+      }
+
+      case "node": {
+        ctx.editor.hover.clear();
+        return false;
+      }
+
+      case "point": {
+        ctx.editor.hover.set(target.id);
+        return true;
+      }
+
+      case "anchor": {
+        ctx.editor.hover.set(target.id);
+        return true;
+      }
+
+      case "segment": {
+        ctx.editor.hover.set(target.id);
+        return true;
+      }
     }
-
-    const geometry = instance.geometry;
-
-    const pos = event.coords.glyphLocal;
-    const radius = ctx.editor.hitRadius;
-
-    const anchorHit = geometry.hitAnchor(pos, radius);
-    if (anchorHit) {
-      ctx.editor.hover.set({ type: "anchor", anchorId: anchorHit.anchorId });
-      return false;
-    }
-
-    const pointHit = geometry.hitPoint(pos, radius);
-    if (pointHit) {
-      ctx.editor.hover.set({ type: "point", pointId: pointHit.pointId });
-      return false;
-    }
-
-    const segmentHit = geometry.hitSegment(pos, radius);
-    if (segmentHit) {
-      ctx.editor.hover.set({
-        type: "segment",
-        segmentId: segmentHit.segmentId,
-      });
-      return false;
-    }
-
-    ctx.editor.hover.clear();
-    return false;
   }
 }

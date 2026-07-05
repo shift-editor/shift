@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { Bounds, type Point2D, type Rect2D } from "@shift/geo";
+import { type Point2D, type Rect2D } from "@shift/geo";
+import { asPointId } from "@shift/types";
 import type { Editor } from "@/lib/editor/Editor";
 import { signal } from "@/lib/signals";
 import { SELECT_BOUNDING_BOX_STYLE, SelectBoundingBox } from "./BoundingBox";
@@ -17,29 +18,18 @@ const createRect = (x: number, y: number, width: number, height: number): Rect2D
 });
 
 function createBoundingBox(rect: Rect2D) {
-  const project = (glyphLocal: Point2D) => ({
-    screen: { x: glyphLocal.x, y: -glyphLocal.y },
-    scene: glyphLocal,
-    glyphLocal,
-  });
+  const projectSceneToScreen = (scene: Point2D) => ({ x: scene.x, y: -scene.y });
   const editor = {
     selection: {
-      bounds: Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height),
-      boundsCell: signal(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height)),
       stateCell: signal({
-        pointIds: new Set(["p1", "p2"]),
-        anchorIds: new Set(),
-        segmentIds: new Set(),
+        ids: [asPointId("point_a"), asPointId("point_b")],
       }),
-      hasSelection: () => true,
     },
+    selectionBoundsCell: signal(rect),
     camera: {
       trackViewportTransform: () => {},
     },
-    proofModeCell: signal(false),
-    handlesVisibleCell: signal(true),
-    focusedGlyphVisibleCell: signal(true),
-    fromGlyphLocal: project,
+    projectSceneToScreen,
     screenToUpmDistance: (pixels: number) => pixels,
   } as unknown as Editor;
   const select = {
@@ -49,7 +39,11 @@ function createBoundingBox(rect: Rect2D) {
 
   const boundingBox = new SelectBoundingBox(select);
 
-  return (glyphLocal: Point2D) => boundingBox.hit(project(glyphLocal));
+  return (scene: Point2D) =>
+    boundingBox.hit({
+      screen: projectSceneToScreen(scene),
+      scene,
+    });
 }
 
 describe("SelectBoundingBox.hit", () => {

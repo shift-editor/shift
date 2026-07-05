@@ -2,10 +2,10 @@
  * Branded ID types for type-safe identification of font entities.
  *
  * These types ensure compile-time safety when working with IDs across the
- * TS/Rust boundary. Ids are prefixed strings (`point_<short-id>`). The renderer
- * MINTS ids for entities it creates (client-minted ids: verbs return
- * identity synchronously; Rust validates and honors them); all other ids
- * come from Rust.
+ * TS/Rust boundary. Most ids are prefixed strings (`point_<short-id>`). The
+ * renderer MINTS ids for entities it creates (client-minted ids: verbs return
+ * identity synchronously; Rust validates and honors them); all other ids come
+ * from Rust.
  */
 
 // Branded type symbols (never exported, just for type branding)
@@ -16,8 +16,8 @@ declare const AxisIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
-declare const ItemIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
+declare const NodeIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 
 /**
@@ -65,19 +65,19 @@ export type GuidelineId = string & { readonly [GuidelineIdBrand]: typeof Guideli
 export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
 
 /**
- * A scene item identifier minted by the renderer.
- *
- * Item ids identify a placed object on an editor scene. They are placement
- * identity only; commands that mutate authored glyph geometry must resolve the
- * glyph layer separately from document glyph identity and designspace location.
- */
-export type ItemId = string & { readonly [ItemIdBrand]: typeof ItemIdBrand };
-
-/**
  * A layer identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
  */
 export type LayerId = string & { readonly [LayerIdBrand]: typeof LayerIdBrand };
+
+/**
+ * A scene node identifier minted by the renderer.
+ *
+ * Node ids identify placed editor nodes. They are placement identity only;
+ * commands that mutate authored glyph geometry must resolve the glyph layer
+ * separately from document glyph identity and designspace location.
+ */
+export type NodeId = string & { readonly [NodeIdBrand]: typeof NodeIdBrand };
 
 /**
  * A source identifier from Rust.
@@ -142,19 +142,19 @@ export function asGlyphId(id: string): GlyphId {
 }
 
 /**
- * Convert a scene item ID string to a typed ItemId.
- * Use this only for persisted or test-provided scene item identities.
- */
-export function asItemId(id: string): ItemId {
-  return id as ItemId;
-}
-
-/**
  * Convert a string ID from Rust to a typed LayerId.
  * Use this when receiving IDs from Rust snapshots.
  */
 export function asLayerId(id: string): LayerId {
   return id as LayerId;
+}
+
+/**
+ * Convert a scene node ID string to a typed NodeId.
+ * Use this only for persisted or test-provided scene node identities.
+ */
+export function asNodeId(id: string): NodeId {
+  return id as NodeId;
 }
 
 /**
@@ -165,84 +165,54 @@ export function asSourceId(id: string): SourceId {
   return id as SourceId;
 }
 
-/**
- * Type guard to check if a value is a valid PointId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidPointId(id: unknown): id is PointId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable point id. */
+export function isPointId(id: unknown): id is PointId {
+  return hasIdPrefix(id, "point");
 }
 
-/**
- * Type guard to check if a value is a valid ContourId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidContourId(id: unknown): id is ContourId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable contour id. */
+export function isContourId(id: unknown): id is ContourId {
+  return hasIdPrefix(id, "contour");
 }
 
-/**
- * Type guard to check if a value is a valid AnchorId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidAnchorId(id: unknown): id is AnchorId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable anchor id. */
+export function isAnchorId(id: unknown): id is AnchorId {
+  return hasIdPrefix(id, "anchor");
 }
 
-/**
- * Type guard to check if a value is a valid AxisId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidAxisId(id: unknown): id is AxisId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable axis id. */
+export function isAxisId(id: unknown): id is AxisId {
+  return hasIdPrefix(id, "axis");
 }
 
-/**
- * Type guard to check if a value is a valid ComponentId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidComponentId(id: unknown): id is ComponentId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable component id. */
+export function isComponentId(id: unknown): id is ComponentId {
+  return hasIdPrefix(id, "component");
 }
 
-/**
- * Type guard to check if a value is a valid GuidelineId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidGuidelineId(id: unknown): id is GuidelineId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable guideline id. */
+export function isGuidelineId(id: unknown): id is GuidelineId {
+  return hasIdPrefix(id, "guideline");
 }
 
-/**
- * Type guard to check if a value is a valid GlyphId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidGlyphId(id: unknown): id is GlyphId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable glyph id. */
+export function isGlyphId(id: unknown): id is GlyphId {
+  return hasIdPrefix(id, "glyph");
 }
 
-/**
- * Type guard to check if a value is a valid ItemId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidItemId(id: unknown): id is ItemId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable layer id. */
+export function isLayerId(id: unknown): id is LayerId {
+  return hasIdPrefix(id, "layer");
 }
 
-/**
- * Type guard to check if a value is a valid LayerId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidLayerId(id: unknown): id is LayerId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable scene node id. */
+export function isNodeId(id: unknown): id is NodeId {
+  return hasIdPrefix(id, "node");
 }
 
-/**
- * Type guard to check if a value is a valid SourceId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidSourceId(id: unknown): id is SourceId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable source id. */
+export function isSourceId(id: unknown): id is SourceId {
+  return hasIdPrefix(id, "source");
 }
 
 const SHORT_ID_ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
@@ -257,8 +227,8 @@ type MintedIdByPrefix = {
   component: ComponentId;
   guideline: GuidelineId;
   glyph: GlyphId;
-  item: ItemId;
   layer: LayerId;
+  node: NodeId;
   source: SourceId;
 };
 
@@ -282,6 +252,10 @@ function mintPrefixedId<Prefix extends keyof MintedIdByPrefix>(
   prefix: Prefix,
 ): MintedIdByPrefix[Prefix] {
   return `${prefix}_${mintShortIdSuffix()}` as MintedIdByPrefix[Prefix];
+}
+
+function hasIdPrefix(id: unknown, prefix: keyof MintedIdByPrefix): boolean {
+  return typeof id === "string" && id.startsWith(`${prefix}_`);
 }
 
 /**
@@ -312,14 +286,14 @@ export function mintGlyphId(): GlyphId {
   return mintPrefixedId("glyph");
 }
 
-/** Mints a new scene item id. See {@link ItemId}. */
-export function mintItemId(): ItemId {
-  return mintPrefixedId("item");
-}
-
 /** Mints a new layer id. See {@link mintPointId}. */
 export function mintLayerId(): LayerId {
   return mintPrefixedId("layer");
+}
+
+/** Mints a new scene node id. See {@link NodeId}. */
+export function mintNodeId(): NodeId {
+  return mintPrefixedId("node");
 }
 
 /** Mints a new source id. See {@link mintPointId}. */

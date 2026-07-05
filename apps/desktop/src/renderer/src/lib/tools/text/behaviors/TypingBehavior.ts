@@ -1,4 +1,4 @@
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { KeyDownEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { TextBehavior, TextState } from "../types";
 
@@ -7,7 +7,7 @@ import type { TextBehavior, TextState } from "../types";
  * text tool is active).
  */
 export class TypingBehavior implements TextBehavior {
-  onKeyDown(state: TextState, ctx: ToolContext<TextState>, event: ToolEventOf<"keyDown">): boolean {
+  onKeyDown(state: TextState, ctx: ToolContext<TextState>, event: KeyDownEvent): boolean {
     if (state.type !== "typing") return false;
     if (event.key === "Escape") {
       ctx.editor.setActiveTool("select");

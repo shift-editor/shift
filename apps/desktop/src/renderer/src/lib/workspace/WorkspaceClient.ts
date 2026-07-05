@@ -16,7 +16,7 @@ import { signal } from "@/lib/signals/signal";
  *
  * @remarks
  * `workspaceCell` is the renderer's latest workspace summary. `FontStore`
- * owns the font-domain projection and glyph snapshot cache; this client only
+ * owns the renderer-local font model state; this client only
  * transports workspace calls and mirrors the summary for catch-up/recovery.
  */
 export type WorkspaceClientOptions = {

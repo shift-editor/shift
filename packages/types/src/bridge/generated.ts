@@ -340,7 +340,6 @@ export interface GlyphSnapshot {
 
 export interface GlyphSnapshotRequest {
   glyphId: GlyphId
-  sourceIds: SourceId[]
 }
 
 export interface GlyphState {

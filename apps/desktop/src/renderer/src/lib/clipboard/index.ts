@@ -8,7 +8,6 @@ export { SvgImporter } from "./importers/SvgImporter";
 export { electronSystemClipboard } from "./electronSystemClipboard";
 export type {
   SystemClipboard,
-  ClipboardContent,
   ClipboardImporter,
   ClipboardOffer,
   ClipboardPayload,
@@ -16,6 +15,8 @@ export type {
   ClipboardSource,
   ClipboardWriteMetadata,
   ContourContent,
+  PasteOptions,
   PasteResult,
   PointContent,
+  ShiftContent,
 } from "./types";

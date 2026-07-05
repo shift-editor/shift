@@ -1,78 +1,59 @@
-import type { SegmentId } from "@shift/glyph-state";
-import type { AnchorId, PointId } from "@shift/types";
-import { signal, type Signal, type WritableSignal } from "../signals";
+import { computed, signal, type Signal, type WritableSignal } from "../signals";
+import type { SelectableId } from "@/types";
 
-interface PointHover {
-  type: "point";
-  pointId: PointId;
-}
-
-interface AnchorHover {
-  type: "anchor";
-  anchorId: AnchorId;
-}
-
-interface SegmentHover {
-  type: "segment";
-  segmentId: SegmentId;
-}
-
-export type HoverState = PointHover | AnchorHover | SegmentHover | null;
+export type HoverEntry = SelectableId;
+export type HoverableId = SelectableId;
 
 /**
- * Runtime hover state for glyph-domain targets in the editor session.
+ * Stores scene-scoped hover identity.
  *
- * `Hover` only records which glyph object is currently under the pointer. It
- * does not perform hit testing, decide priority between target kinds, or hold
- * tool-specific visual state such as bounding-box handles, pen endpoints, text
- * carets, or marquee feedback. Tools update this state from pointer behavior
- * after reading an explicit geometry surface.
+ * Hover is transient identity-only state. It owns no glyph models, glyph layers,
+ * geometry, or hit-test policy; tools replace it after resolving scene items.
  */
 export class Hover {
-  readonly #target: WritableSignal<HoverState>;
+  readonly #entry: WritableSignal<HoverEntry | null>;
+  readonly #id: Signal<HoverableId | null>;
 
   constructor() {
-    this.#target = signal<HoverState>(null, { name: "editor.hover.target" });
+    this.#entry = signal<HoverEntry | null>(null, { name: "editor.hover" });
+    this.#id = computed(
+      () => {
+        const entry = this.#entry.value;
+        return entry;
+      },
+      { name: "editor.hover.id" },
+    );
   }
 
-  get targetCell(): Signal<HoverState> {
-    return this.#target;
+  get entryCell(): Signal<HoverEntry | null> {
+    return this.#entry;
   }
 
-  get target(): HoverState | null {
-    return this.#target.peek();
+  get entry(): HoverEntry | null {
+    return this.#entry.peek();
   }
 
-  get hasTarget(): boolean {
-    return this.#target.peek() !== null;
+  get id(): HoverableId | null {
+    return this.#id.peek();
   }
 
-  get pointId(): PointId | null {
-    const target = this.#target.peek();
-    return target?.type === "point" ? target.pointId : null;
+  get hasHover(): boolean {
+    return this.#id.peek() !== null;
   }
 
-  get anchorId(): AnchorId | null {
-    const target = this.#target.peek();
-    return target?.type === "anchor" ? target.anchorId : null;
+  isHovered(entry: HoverEntry): boolean {
+    return this.has(entry);
   }
 
-  get segmentId(): SegmentId | null {
-    const target = this.#target.peek();
-    return target?.type === "segment" ? target.segmentId : null;
+  has(id: HoverableId): boolean {
+    return this.#id.peek() === id;
   }
 
-  /**
-   * Replace the current glyph hover target.
-   *
-   * Passing `null` clears hover. The caller owns the policy that chose this
-   * target, including which geometry surface was queried and which hit kind won.
-   */
-  set(target: HoverState | null): void {
-    this.#target.set(target);
+  set(entry: HoverEntry | null): void {
+    this.#entry.set(entry);
   }
 
   clear(): void {
-    this.#target.set(null);
+    this.#entry.set(null);
   }
 }

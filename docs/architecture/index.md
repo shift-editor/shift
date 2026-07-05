@@ -13,13 +13,13 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 ### Rust crates
 
-| Path pattern                | Canonical doc                                                                        | Purpose                                                        |
-| --------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)     | Font format backends for reading/writing various font formats  |
-| `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)             | First-class Rust font object model and editing behavior        |
-| `crates/shift-source/**`    | [`crates/shift-source/docs/DOCS.md`](../../crates/shift-source/docs/DOCS.md)         | User-authored `.shift` source package layout                   |
-| `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font       |
-| `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)         | NAPI bridge exposing Rust to Node.js/Electron                  |
+| Path pattern                | Canonical doc                                                                      | Purpose                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats |
+| `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior       |
+| `crates/shift-source/**`    | [`crates/shift-source/docs/DOCS.md`](../../crates/shift-source/docs/DOCS.md)       | User-authored `.shift` source package layout                  |
+| `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font      |
+| `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                 |
 
 ### Desktop app — Electron shell
 
@@ -38,7 +38,6 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `apps/desktop/src/renderer/src/lib/tools/**`     | [`apps/desktop/src/renderer/src/lib/tools/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/tools/docs/DOCS.md)         | State machine-based tool system (BaseTool, behaviors, actions)     |
 | `apps/desktop/src/renderer/src/lib/graphics/**`  | [`apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md)   | Rendering abstraction with Canvas 2D backend and path caching      |
 | `apps/desktop/src/renderer/src/lib/transform/**` | [`apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md) | Geometry transforms: rotate, scale, reflect selected points        |
-| `apps/desktop/src/renderer/src/lib/commands/**`  | [`apps/desktop/src/renderer/src/lib/commands/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/commands/docs/DOCS.md)   | Command pattern with undo/redo for all editing operations          |
 | `apps/desktop/src/renderer/src/lib/signals/**`   | [`apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md)     | Fine-grained reactivity: dependency tracking and efficient updates |
 
 ### Packages

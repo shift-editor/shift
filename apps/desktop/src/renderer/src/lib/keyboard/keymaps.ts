@@ -136,10 +136,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
       match: (event) => event.key === "Delete" || event.key === "Backspace",
-      run: (ctx) => {
-        ctx.editor.deleteSelectedPoints();
-        return true;
-      },
+      run: (ctx) => ctx.editor.deleteSelection(),
     },
     {
       id: "canvas.selectAll",
@@ -147,15 +144,6 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
       match: (event) => matchChord(event, { key: "a", primaryModifier: true }),
       run: (ctx) => {
         ctx.editor.selectAll();
-        return true;
-      },
-    },
-    {
-      id: "canvas.glyphFinder",
-      preventDefault: true,
-      match: (event) => matchChord(event, { key: "f", primaryModifier: true }),
-      run: (ctx) => {
-        ctx.editor.openGlyphFinder();
         return true;
       },
     },

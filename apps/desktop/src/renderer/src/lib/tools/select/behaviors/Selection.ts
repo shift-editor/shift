@@ -1,46 +1,38 @@
-import type { Selectable } from "@/lib/editor/Selection";
 import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { ClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
+import type { SelectableId } from "@/types";
 
 export class Selection implements SelectBehavior {
-  onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
+  onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ClickEvent): boolean {
     if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
 
     const editor = ctx.editor;
-    const instance = editor.previewGlyphInstance;
-    if (!instance) return false;
+    let ids: SelectableId[] | null = null;
+    const target = event.target;
 
-    const geometry = instance.geometry;
-    const pos = event.coords.glyphLocal;
-    const radius = editor.hitRadius;
-    let items: Selectable[] | null = null;
-
-    const anchorHit = geometry.hitAnchor(pos, radius);
-    if (anchorHit) {
-      items = [{ kind: "anchor", id: anchorHit.anchorId }];
-    }
-
-    if (!items) {
-      const pointHit = geometry.hitPoint(pos, radius);
-      if (pointHit) {
-        items = [{ kind: "point", id: pointHit.pointId }];
+    switch (target.kind) {
+      case "point": {
+        ids = [target.id];
+        break;
       }
-    }
 
-    if (!items) {
-      const segmentHit = geometry.hitSegment(pos, radius);
-      const segment = segmentHit ? geometry.segment(segmentHit.segmentId) : null;
-
-      if (segmentHit && segment) {
-        items = [
-          { kind: "segment", id: segmentHit.segmentId },
-          ...segment.pointIds.map((id) => ({ kind: "point" as const, id })),
-        ];
+      case "anchor": {
+        ids = [target.id];
+        break;
       }
+
+      case "segment": {
+        ids = [target.id];
+        break;
+      }
+
+      case "canvas":
+      case "node":
+        break;
     }
 
-    if (!items) {
+    if (!ids) {
       if (event.shiftKey || !editor.selection.hasSelection()) return false;
 
       editor.selection.clear();
@@ -49,17 +41,17 @@ export class Selection implements SelectBehavior {
     }
 
     if (event.shiftKey) {
-      const selected = items.every((item) => editor.selection.isSelected(item));
+      const selected = ids.every((id) => editor.selection.has(id));
 
-      for (const item of items) {
+      for (const id of ids) {
         if (selected) {
-          editor.selection.remove(item);
+          editor.selection.remove(id);
         } else {
-          editor.selection.add(item);
+          editor.selection.add(id);
         }
       }
     } else {
-      editor.selection.select(items);
+      editor.selection.select(ids);
     }
 
     ctx.setState({ type: "ready" });

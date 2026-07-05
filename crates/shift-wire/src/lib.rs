@@ -239,7 +239,6 @@ pub struct GlyphLayerSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct GlyphSnapshotRequest {
     pub glyph_id: GlyphId,
-    pub source_ids: Vec<SourceId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

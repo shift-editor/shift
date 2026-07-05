@@ -26,7 +26,7 @@ export class KeyboardRouter {
   #textKeyDown: KeyBinding[];
   #canvasKeyDown: KeyBinding[];
   #globalKeyUp: KeyBinding[];
-  #spaceProofModeBeforeTemporary: boolean | null = null;
+  #temporaryHandActive = false;
 
   constructor(getContext: () => KeyContext) {
     this.#getContext = getContext;
@@ -103,32 +103,22 @@ export class KeyboardRouter {
   }
 
   #activateTemporaryHand(ctx: KeyContext): boolean {
-    if (this.#spaceProofModeBeforeTemporary !== null) {
+    if (this.#temporaryHandActive) {
       return true;
     }
 
-    const wasProofMode = ctx.editor.proofMode;
-    this.#spaceProofModeBeforeTemporary = wasProofMode;
-    ctx.editor.requestTemporaryTool("hand", {
-      onActivate: () => {
-        ctx.editor.setProofMode(true);
-      },
-      onReturn: () => {
-        const restore = this.#spaceProofModeBeforeTemporary ?? wasProofMode;
-        ctx.editor.setProofMode(restore);
-        this.#spaceProofModeBeforeTemporary = null;
-      },
-    });
+    this.#temporaryHandActive = true;
+    ctx.editor.requestTemporaryTool("hand", {});
     return true;
   }
 
   #releaseTemporaryHand(ctx: KeyContext): boolean {
-    if (this.#spaceProofModeBeforeTemporary === null) {
+    if (!this.#temporaryHandActive) {
       return false;
     }
 
     ctx.editor.returnFromTemporaryTool();
-    this.#spaceProofModeBeforeTemporary = null;
+    this.#temporaryHandActive = false;
     return true;
   }
 }

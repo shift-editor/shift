@@ -1,13 +1,9 @@
 import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { KeyDownEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
 export class Escape implements SelectBehavior {
-  onKeyDown(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"keyDown">,
-  ): boolean {
+  onKeyDown(state: SelectState, ctx: ToolContext<SelectState>, event: KeyDownEvent): boolean {
     if (event.key !== "Escape") return false;
 
     if (ctx.editor.selection.hasSelection()) {

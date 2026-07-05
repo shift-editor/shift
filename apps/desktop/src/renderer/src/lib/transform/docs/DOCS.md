@@ -4,7 +4,7 @@ Pure geometry transformation system for rotating, scaling, reflecting, aligning,
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** All functions in `Transform` are pure -- they return new arrays and never mutate input points. Commands are the only path that writes back to the glyph.
+- **Architecture Invariant:** All functions in `Transform` are pure -- they return new arrays and never mutate input points. Glyph writes happen through `GlyphLayer` methods.
 - **Architecture Invariant:** Every geometric transform goes through `Transform.applyMatrix` internally. The three high-level functions (`rotatePoints`, `scalePoints`, `reflectPoints`) are thin wrappers that build a matrix and delegate. Custom transforms should follow the same pattern.
 - **Architecture Invariant: CRITICAL:** The composite matrix in `applyMatrix` must be assembled in the order `Translate(+origin) * Matrix * Translate(-origin)` (right-to-left application). Reversing the order silently produces wrong results around non-zero origins.
 - **Architecture Invariant:** `Alignment.distributePoints` requires at least 3 points. With fewer, it returns the input unchanged. The outermost points are always pinned; only interior points move.
@@ -20,7 +20,7 @@ transform/
   anchor.ts           — Maps a 9-position anchor grid to a concrete Point2D on bounds
   zoomFromWheel.ts    — Converts wheel deltaY into a zoom multiplier
   types.ts            — Re-exports centralized types from @/types/transform
-  index.ts            — Barrel; also re-exports command classes from commands/transform
+  index.ts            — Barrel for pure transform helpers
 ```
 
 ## Key Types
@@ -42,12 +42,12 @@ transform/
 
 The `matrices` namespace exposes the raw `Mat` builders (`Mat.Rotate`, `Mat.Scale`, etc.) for callers that need to compose custom transforms.
 
-### Command layer
+### Glyph layer writes
 
-Undo/redo is handled by command classes in `commands/transform/`, re-exported through the barrel `index.ts`:
-
-- `RotatePointsCommand`, `ScalePointsCommand`, `ReflectPointsCommand`, `MoveSelectionToCommand` all extend `BaseTransformCommand`. The base class captures original positions on first execute; subclasses now call glyph-domain verbs (`glyph.rotate`, `glyph.scale`, etc.) instead of manually iterating point writes.
-- `AlignPointsCommand` and `DistributePointsCommand` extend `BaseCommand` directly and call `Alignment.alignPoints` / `Alignment.distributePoints`.
+`GlyphLayer` owns the mutating transform API: `rotate`, `scale`, `reflect`,
+`moveSelectionTo`, `align`, and `distribute`. Those methods resolve point
+positions, call the pure transform/alignment helpers, and commit one sparse
+position patch through the workspace ledger.
 
 ### Alignment
 
@@ -70,16 +70,15 @@ Undo/redo is handled by command classes in `commands/transform/`, re-exported th
 ### Add a new transform type
 
 1. Add a pure function to `Transform` in `Transform.ts` that builds a matrix and calls `applyMatrix`.
-2. Create a command class in `commands/transform/TransformCommands.ts` extending `BaseTransformCommand`; implement `transformPoints` to call the new function.
-3. Re-export the command from `commands/transform/index.ts` and `transform/index.ts`.
-4. Add tests in `Transform.test.ts` and `TransformCommands.test.ts`.
+2. Add or update the corresponding `GlyphLayer` method if this transform should mutate glyph geometry.
+3. Add pure tests in `Transform.test.ts` and layer behavior tests in `GlyphLayerGeometry.test.ts`.
 
 ### Add a new alignment mode
 
 1. Add the new literal to `AlignmentType` in `@/types/transform`.
 2. Add a `case` branch in `Alignment.alignPoints`.
-3. Update `AlignPointsCommand` if it needs special bounds logic.
-4. Add tests in `Alignment.test.ts`.
+3. Update `GlyphLayer.align` if it needs special bounds logic.
+4. Add tests in `Alignment.test.ts` and `GlyphLayerGeometry.test.ts`.
 
 ### Use a custom compound transform
 
@@ -103,15 +102,14 @@ const result = Transform.applyMatrix(points, matrix, origin);
 # Unit tests for all transform files
 npx vitest run --reporter verbose src/renderer/src/lib/transform/
 
-# Command integration tests
-npx vitest run --reporter verbose src/renderer/src/lib/commands/transform/
+# Layer integration tests
+pnpm --filter @shift/desktop test -- src/renderer/src/lib/model/GlyphLayerGeometry.test.ts
 ```
 
 ## Related
 
-- `BaseTransformCommand`, `RotatePointsCommand`, `ScalePointsCommand`, `ReflectPointsCommand`, `MoveSelectionToCommand` -- command classes in `commands/transform`
-- `AlignPointsCommand`, `DistributePointsCommand` -- alignment command classes in `commands/transform`
+- `GlyphLayer` -- mutating transform API over authored glyph geometry
 - `Mat`, `MatModel`, `Bounds` -- matrix and bounds math from `@shift/geo`
 - `Segment` -- bezier segment utilities used by `getSegmentAwareBounds`
-- `TransformGrid`, `TransformSection`, `ScaleSection` -- sidebar UI components that drive transforms via commands
+- `TransformGrid`, `TransformSection`, `ScaleSection` -- sidebar UI components that drive transforms through `GlyphLayer`
 - `EditorView` -- consumes `zoomMultiplierFromWheel` for viewport zoom

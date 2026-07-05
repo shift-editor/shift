@@ -23,7 +23,7 @@ export const AxesPanel = () => {
   const axes = useAxes();
   const [location, setDesignLocation] = useDesignLocation();
 
-  if (axes.length === 0) return <p className="text-ui text-muted">No axes defined</p>;
+  if (axes.length === 0) return <p className="text-ui text-muted pl-2">No axes defined</p>;
 
   const onAxisChange = (axis: Axis, value: number) => {
     const nextLocation = withAxisValue(location, axis, value);

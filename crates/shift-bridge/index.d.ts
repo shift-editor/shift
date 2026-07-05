@@ -335,7 +335,6 @@ export interface NapiGlyphSnapshot {
 
 export interface NapiGlyphSnapshotRequest {
   glyphId: GlyphId
-  sourceIds: SourceId[]
 }
 
 export interface NapiGlyphState {

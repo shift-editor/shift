@@ -9,7 +9,7 @@ import {
 } from "@shift/ui";
 import type { SourceId } from "@shift/types";
 import { useSources } from "@/hooks/useSources";
-import { useLayerSourceId } from "@/hooks/useLayerSourceId";
+import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarActionRow } from "@/components/sidebar";
 
@@ -17,14 +17,14 @@ import VerticalElipsis from "@/assets/vertical-ellipsis.svg";
 
 export const Sources = () => {
   const sources = useSources();
-  const layerSourceId = useLayerSourceId();
+  const activeSourceId = useActiveSourceId();
   const editor = useEditor();
 
   if (sources.length === 0) return null;
 
   const deleteSource = (sourceId: SourceId) => {
     const fallbackSource = sources.find((source) => source.id !== sourceId);
-    if (layerSourceId === sourceId && fallbackSource) {
+    if (activeSourceId === sourceId && fallbackSource) {
       editor.selectSource(fallbackSource.id);
     }
     editor.font.deleteSource(sourceId);
@@ -35,7 +35,7 @@ export const Sources = () => {
       {sources.map((s) => (
         <SidebarActionRow
           key={s.id}
-          isActive={s.id === layerSourceId}
+          isActive={s.id === activeSourceId}
           onClick={() => editor.selectSource(s.id)}
           contentClassName="h-6 text-ui"
           actions={

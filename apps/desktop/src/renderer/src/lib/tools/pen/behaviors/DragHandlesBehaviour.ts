@@ -1,59 +1,59 @@
 import type { Point2D } from "@shift/geo";
 import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
-import type { Editor } from "@/lib/editor/Editor";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { DragEvent, KeyDownEvent } from "../../core/GestureDetector";
 import type { PenState, PenBehavior, Anchor, Handles } from "../types";
+import type { Pen } from "../Pen";
 import { PenStroke } from "../PenStroke";
 
 const DRAG_THRESHOLD = 3;
 
 export class HandleBehavior implements PenBehavior {
-  onDrag(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(state: PenState, ctx: ToolContext<PenState, Pen>, event: DragEvent): boolean {
     if (state.type === "anchored") {
-      const next = this.#nextAnchoredState(state, event, ctx.editor);
+      const next = this.#nextAnchoredState(state, event, ctx.tool);
       if (next) ctx.setState(next);
       return true;
     }
 
     if (state.type === "dragging") {
-      ctx.setState(this.#nextDraggingState(state, event, ctx.editor));
+      ctx.setState(this.#nextDraggingState(state, event, ctx.tool));
       return true;
     }
 
     return false;
   }
 
-  onDragEnd(state: PenState, ctx: ToolContext<PenState>): boolean {
+  onDragEnd(state: PenState, ctx: ToolContext<PenState, Pen>): boolean {
     if (state.type !== "anchored" && state.type !== "dragging") return false;
 
     if (state.type === "anchored" && !state.anchor.pointId) {
-      PenStroke.active(ctx.editor)?.commitAnchor(state.anchor);
+      PenStroke.active(ctx.tool)?.commitAnchor(state.anchor);
     }
 
     if (state.type === "dragging") {
-      PenStroke.active(ctx.editor)?.commitHandles();
+      PenStroke.active(ctx.tool)?.commitHandles();
     }
 
     ctx.setState({ type: "ready" });
     return true;
   }
 
-  onDragCancel(state: PenState, ctx: ToolContext<PenState>): boolean {
+  onDragCancel(state: PenState, ctx: ToolContext<PenState, Pen>): boolean {
     if (state.type !== "anchored" && state.type !== "dragging") return false;
 
     // Matches prior observable behavior: handle moves were durable per
     // move, so cancel never reverted them. True revert-on-escape can come
     // with the overlay rework.
     if (state.type === "dragging") {
-      PenStroke.active(ctx.editor)?.commitHandles();
+      PenStroke.active(ctx.tool)?.commitHandles();
     }
 
     ctx.setState({ type: "ready" });
     return true;
   }
 
-  onKeyDown(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"keyDown">): boolean {
+  onKeyDown(state: PenState, ctx: ToolContext<PenState, Pen>, event: KeyDownEvent): boolean {
     if (event.key !== "Escape") return false;
     if (state.type !== "anchored" && state.type !== "dragging") return false;
 
@@ -63,13 +63,16 @@ export class HandleBehavior implements PenBehavior {
 
   #nextAnchoredState(
     state: PenState & { type: "anchored" },
-    event: ToolEventOf<"drag">,
-    editor: Editor,
+    event: DragEvent,
+    pen: Pen,
   ): (PenState & { type: "dragging" }) | null {
-    const localPoint = event.coords.glyphLocal;
+    const stroke = PenStroke.active(pen);
+    if (!stroke) return null;
+
+    const localPoint = pen.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
     if (Vec2.dist(state.anchor.position, localPoint) <= DRAG_THRESHOLD) return null;
 
-    const handles = this.#createHandles(state.anchor, localPoint, editor);
+    const handles = this.#createHandles(state.anchor, localPoint, stroke);
 
     return {
       type: "dragging",
@@ -81,12 +84,15 @@ export class HandleBehavior implements PenBehavior {
 
   #nextDraggingState(
     state: PenState & { type: "dragging" },
-    event: ToolEventOf<"drag">,
-    editor: Editor,
+    event: DragEvent,
+    pen: Pen,
   ): PenState & { type: "dragging" } {
-    const localPoint = event.coords.glyphLocal;
+    const stroke = PenStroke.active(pen);
+    if (!stroke) return state;
 
-    this.#updateHandles(state.anchor, state.handles, localPoint, editor);
+    const localPoint = pen.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+
+    this.#updateHandles(state.anchor, state.handles, localPoint, stroke);
 
     return {
       ...state,
@@ -94,11 +100,11 @@ export class HandleBehavior implements PenBehavior {
     };
   }
 
-  #createHandles(anchor: Anchor, handlePos: Point2D, editor: Editor): Handles {
-    return PenStroke.active(editor)?.createHandles(anchor, handlePos) ?? {};
+  #createHandles(anchor: Anchor, handlePos: Point2D, stroke: PenStroke): Handles {
+    return stroke.createHandles(anchor, handlePos);
   }
 
-  #updateHandles(anchor: Anchor, handles: Handles, handlePos: Point2D, editor: Editor): void {
-    PenStroke.active(editor)?.moveHandles(anchor, handles, handlePos);
+  #updateHandles(anchor: Anchor, handles: Handles, handlePos: Point2D, stroke: PenStroke): void {
+    stroke.moveHandles(anchor, handles, handlePos);
   }
 }

@@ -1,10 +1,21 @@
 export {
   GestureDetector,
+  type ClickEvent,
+  type DoubleClickEvent,
+  type DragCancelEvent,
+  type DragEndEvent,
+  type DragEvent,
+  type DragStartEvent,
+  type GestureEvent,
   type GestureDetectorConfig,
-  type ToolEvent,
-  type ToolEventOf,
-  type ToolKey,
   type Modifiers,
+  type ModifierKeys,
+  type PointerDelta,
+  type PointerMoveEvent,
+  type KeyDownEvent,
+  type KeyUpEvent,
+  type ToolEvent,
+  type ToolKey,
 } from "./GestureDetector";
 export { BaseTool, type ToolState } from "./BaseTool";
 export { ToolManager } from "./ToolManager";

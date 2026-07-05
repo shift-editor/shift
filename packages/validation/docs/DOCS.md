@@ -26,7 +26,7 @@ validation/src/
 - `ValidationErrorCode` -- union of all failure codes: `EMPTY_SEQUENCE`, `MUST_START_WITH_ON_CURVE`, `MUST_END_WITH_ON_CURVE`, `TOO_MANY_CONSECUTIVE_OFF_CURVE`, `ORPHAN_OFF_CURVE`, `INCOMPLETE_SEGMENT`, `INVALID_CLIPBOARD_CONTENT`.
 - `PointLike` -- minimal `{ pointType: PointType }` interface accepted by all point-sequence validators. Full `Point` objects, snapshots, and test stubs all satisfy it.
 - `Validate` -- namespace object with point predicates (`isOnCurve`, `isOffCurve`), pattern matchers (`matchesLinePattern`, `matchesQuadPattern`, `matchesCubicPattern`), sequence validators (`sequence`, `canFormSegments`), boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`), and result constructors (`ok`, `fail`, `error`).
-- `ValidateClipboard` -- namespace object with `isClipboardContent` (validates contour array shape) and `isClipboardPayload` (validates full `shift/glyph-data` envelope with format, version, metadata, content).
+- `ValidateClipboard` -- namespace object with `isShiftContent` (validates portable contour content) and `isClipboardPayload` (validates full `shift/glyph-data` envelope with format, version, metadata, content).
 
 ## How it works
 
@@ -40,7 +40,7 @@ Boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`) 
 
 ### Clipboard validation
 
-`ValidateClipboard.isClipboardContent` validates the contour/point structure of clipboard data. `isClipboardPayload` checks the full envelope (format string `"shift/glyph-data"`, version number, metadata with timestamp). Used by `Clipboard` when parsing pasted content.
+`ValidateClipboard.isShiftContent` validates the contour/point structure of portable Shift content. `isClipboardPayload` checks the full envelope (format string `"shift/glyph-data"`, version number, metadata with timestamp). Used by `Clipboard` when parsing pasted content.
 
 ## Workflow recipes
 
@@ -68,6 +68,6 @@ cd packages/validation && npx tsc --noEmit
 
 ## Related
 
-- `Clipboard` -- uses `Validate.hasValidAnchor` for copy eligibility and `ValidateClipboard.isClipboardContent` for paste parsing
+- `Clipboard` -- uses `Validate.hasValidAnchor` for copy eligibility and `ValidateClipboard.isShiftContent` for paste parsing
 - `Segments` / `Segment` -- uses `Validate.isOnCurve` / `Validate.isOffCurve` for segment decomposition
 - `PointType` from `@shift/types` -- the underlying union (`"onCurve" | "offCurve"`) that `PointLike` wraps

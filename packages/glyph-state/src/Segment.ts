@@ -9,8 +9,40 @@ export type SegmentId = string & {
   readonly [SegmentIdBrand]: typeof SegmentIdBrand;
 };
 
+const SEGMENT_ID_PREFIX = "segment:";
+
 export function asSegmentId(id: string): SegmentId {
   return id as SegmentId;
+}
+
+/** Returns the derived segment id for a segment's endpoint point ids. */
+export function segmentIdFor(startPointId: PointId, endPointId: PointId): SegmentId {
+  return asSegmentId(`${SEGMENT_ID_PREFIX}${startPointId}:${endPointId}`);
+}
+
+/**
+ * Parses a runtime-discriminable segment id into endpoint point ids.
+ *
+ * @param segmentId - Candidate segment id using the `segment:start:end` format.
+ * @returns null when the value is not a prefixed segment id.
+ */
+export function parseSegmentId(
+  segmentId: string,
+): { startPointId: PointId; endPointId: PointId } | null {
+  if (!segmentId.startsWith(SEGMENT_ID_PREFIX)) return null;
+
+  const body = segmentId.slice(SEGMENT_ID_PREFIX.length);
+  const separatorIndex = body.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === body.length - 1) return null;
+
+  const startPointId = body.slice(0, separatorIndex) as PointId;
+  const endPointId = body.slice(separatorIndex + 1) as PointId;
+  return { startPointId, endPointId };
+}
+
+/** Returns whether a value is a runtime-discriminable segment id. */
+export function isSegmentId(id: unknown): id is SegmentId {
+  return typeof id === "string" && parseSegmentId(id) !== null;
 }
 
 export type LineSegment = {
@@ -185,8 +217,7 @@ export class Segment {
 
   get id(): SegmentId {
     if (this.#id === null) {
-      const id = asSegmentId(`${this.startId}:${this.endId}`);
-      this.#id = id;
+      this.#id = segmentIdFor(this.startId, this.endId);
     }
     return this.#id;
   }

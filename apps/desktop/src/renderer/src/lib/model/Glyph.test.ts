@@ -65,10 +65,10 @@ describe("Glyph", () => {
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    layer = editor.editingGlyphLayer!;
-    const previewRecord = editor.previewGlyphRecordCell.peek();
-    if (!previewRecord) throw new Error("Expected preview glyph record");
-    record = previewRecord;
+    layer = editor.glyphLayer!;
+    const glyphRecord = editor.glyphRecord;
+    if (!glyphRecord) throw new Error("Expected scene glyph record");
+    record = glyphRecord;
   });
 
   it("loads identity and state from the workspace", () => {
@@ -90,7 +90,7 @@ describe("Glyph", () => {
 
   it("updates positions synchronously and keeps them after the echo folds", async () => {
     const [first] = await addTriangle(editor, layer);
-    const instance = editor.previewGlyphInstance;
+    const instance = editor.sceneGlyphInstance;
     if (!instance) throw new Error("Expected glyph instance");
 
     layer.applyPositionPatch([{ kind: "point", id: first!.id, x: 25, y: 75 }]);
@@ -123,7 +123,7 @@ describe("anchors edit through the workspace", () => {
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    layer = editor.editingGlyphLayer!;
+    layer = editor.glyphLayer!;
   });
 
   it("addAnchor echoes a named anchor into confirmed geometry", async () => {
@@ -146,7 +146,7 @@ describe("anchors edit through the workspace", () => {
     expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
   });
 
-  it("mixed point and anchor commits coalesce into one undo step", async () => {
+  it("mixed point and anchor commits undo as one layer operation", async () => {
     const contourId = layer.addContour();
     layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
     const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
@@ -198,10 +198,10 @@ describe("glyph layers keep public geometry coherent across position edits", () 
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    layer = editor.editingGlyphLayer!;
-    const previewRecord = editor.previewGlyphRecordCell.peek();
-    if (!previewRecord) throw new Error("Expected preview glyph record");
-    record = previewRecord;
+    layer = editor.glyphLayer!;
+    const glyphRecord = editor.glyphRecord;
+    if (!glyphRecord) throw new Error("Expected scene glyph record");
+    record = glyphRecord;
   });
 
   it("previews point patches through every public layer geometry view", async () => {
@@ -216,7 +216,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
       x: 25,
       y: 75,
     });
-    expect(layer.bounds).toEqual(editor.previewGlyphInstance?.geometry.bounds);
+    expect(layer.bounds).toEqual(editor.sceneGlyphInstance?.geometry.bounds);
   });
 
   it("applies committed point patches to the source and owning glyph geometry", async () => {
@@ -227,10 +227,10 @@ describe("glyph layers keep public geometry coherent across position edits", () 
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
     expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(editor.previewGlyphInstance?.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(editor.sceneGlyphInstance?.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
-  it("commits a preview without stale geometry or double-applying local positions", async () => {
+  it("commits a preview without double-applying local positions", async () => {
     const [, second] = await addTriangle(editor, layer);
 
     layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);

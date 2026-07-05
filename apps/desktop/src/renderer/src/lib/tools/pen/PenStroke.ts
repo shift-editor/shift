@@ -1,61 +1,72 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import type { ContourId, PointId } from "@shift/types";
-import type { Editor } from "@/lib/editor/Editor";
-import type { GlyphLayer, GlyphInstanceGeometry, GlyphLayerPositions } from "@/lib/model/Glyph";
+import type { GlyphLayer, GlyphLayerPositions } from "@/lib/model/Glyph";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import { Anchor, Handles } from "./types";
+import type { Pen } from "./Pen";
+import type { GlyphNode } from "@/types/node";
 
 export class PenStroke {
   #pendingHandles: GlyphLayerPositions | null = null;
-  readonly #editor: Editor;
-  readonly #geometry: GlyphInstanceGeometry;
-  readonly #edit: GlyphLayer;
+  readonly #pen: Pen;
+  readonly #node: GlyphNode;
+  readonly #layer: GlyphLayer;
 
-  private constructor(editor: Editor, geometry: GlyphInstanceGeometry, edit: GlyphLayer) {
-    this.#editor = editor;
-    this.#geometry = geometry;
-    this.#edit = edit;
+  private constructor(pen: Pen, node: GlyphNode, layer: GlyphLayer) {
+    this.#pen = pen;
+    this.#node = node;
+    this.#layer = layer;
   }
 
-  static active(editor: Editor): PenStroke | null {
-    const instance = editor.previewGlyphInstance;
-    const edit = editor.editingGlyphLayer;
-    if (!instance || !edit) return null;
+  static active(pen: Pen): PenStroke | null {
+    const context = pen.context;
+    if (!context) return null;
 
-    return new PenStroke(editor, instance.geometry, edit);
+    const layer = pen.editor.font.layer(context.glyphNode.glyphId, context.glyphNode.sourceId);
+    if (!layer) return null;
+
+    return new PenStroke(pen, context.glyphNode, layer);
+  }
+
+  get node(): GlyphNode {
+    return this.#node;
+  }
+
+  get layer(): GlyphLayer {
+    return this.#layer;
   }
 
   get activeContour(): Contour | null {
-    const contourId = this.#editor.getActiveContourId();
+    const contourId = this.#pen.context?.activeContourId;
     if (!contourId) return null;
 
-    return this.#geometry.contour(contourId);
-  }
-
-  get geometry(): GlyphInstanceGeometry {
-    return this.#geometry;
+    return this.#layer.contour(contourId);
   }
 
   startContour(position: Point2D): PointId {
-    const contourId = this.#edit.addContour();
-    const pointId = this.#edit.addOnCurvePoint(contourId, position);
-    this.#editor.setActiveContour(contourId);
+    const [contourId, pointId] = this.#pen.editor.transaction("Start contour", () => {
+      const contourId = this.#layer.addContour();
+      const pointId = this.#layer.addOnCurvePoint(contourId, position);
+      return [contourId, pointId] as const;
+    });
+
+    this.#pen.setActiveContour(contourId);
     return pointId;
   }
 
   appendOnCurve(position: Point2D): PointId | null {
     const contour = this.activeContour;
     if (!contour) return null;
-    return this.#edit.addOnCurvePoint(contour.id, position);
+    return this.#layer.addOnCurvePoint(contour.id, position);
   }
 
   closeActiveContour(): boolean {
     const contour = this.activeContour;
     if (!contour) return false;
 
-    this.#edit.closeContour(contour.id);
-    this.#editor.clearActiveContour();
+    this.#layer.closeContour(contour.id);
+    this.#pen.clearActiveContour();
     return true;
   }
 
@@ -65,13 +76,15 @@ export class PenStroke {
   }
 
   continueContour(contourId: ContourId, side: "start" | "end", pointId: PointId): void {
-    this.#editor.continueContour(contourId, side === "start", pointId);
+    this.#pen.setActiveContour(contourId);
+    if (side === "start") {
+      this.#layer.reverseContour(contourId);
+    }
+    this.#pen.editor.selection.select([pointId]);
   }
 
   splitSegment(segmentId: SegmentId, t: number): PointId | null {
-    const segment = this.#geometry.segment(segmentId);
-    if (!segment) return null;
-    return this.#editor.splitSegment(segment, t);
+    return this.#layer.splitSegment(segmentId, t);
   }
 
   commitAnchor(anchor: Anchor): PointId | null {
@@ -91,11 +104,11 @@ export class PenStroke {
     const prevOnCurve = contour.lastOnCurvePoint;
     const isFirstPoint = contour.isEmpty;
 
-    const anchorId = this.#edit.addSmoothPoint(contour.id, position);
+    const anchorId = this.#layer.addSmoothPoint(contour.id, position);
     anchor.pointId = anchorId;
 
     if (isFirstPoint) {
-      const cpOutId = this.#edit.addOffCurvePoint(contour.id, handlePos);
+      const cpOutId = this.#layer.addOffCurvePoint(contour.id, handlePos);
       return { cpOut: cpOutId };
     }
 
@@ -103,8 +116,8 @@ export class PenStroke {
 
     if (prevIsOffCurve) {
       const cpInPos = Vec2.mirror(handlePos, position);
-      const cpInId = this.#edit.insertPointBefore(anchorId, Point.offCurve(cpInPos));
-      const cpOutId = this.#edit.addOffCurvePoint(contour.id, handlePos);
+      const cpInId = this.#layer.insertPointBefore(anchorId, Point.offCurve(cpInPos));
+      const cpOutId = this.#layer.addOffCurvePoint(contour.id, handlePos);
 
       return { cpIn: cpInId, cpOut: cpOutId };
     }
@@ -112,11 +125,11 @@ export class PenStroke {
     if (prevOnCurve) {
       const cp1Pos = Vec2.lerp(prevOnCurve, position, 1 / 3);
 
-      this.#edit.insertPointBefore(anchorId, Point.offCurve(cp1Pos));
+      this.#layer.insertPointBefore(anchorId, Point.offCurve(cp1Pos));
     }
 
     const cpInPos = Vec2.mirror(handlePos, position);
-    const cpInId = this.#edit.insertPointBefore(anchorId, Point.offCurve(cpInPos));
+    const cpInId = this.#layer.insertPointBefore(anchorId, Point.offCurve(cpInPos));
     return { cpIn: cpInId };
   }
 
@@ -144,14 +157,14 @@ export class PenStroke {
 
     // Live drag: local preview only; durability happens once at gesture end.
     this.#pendingHandles = positions;
-    this.#edit.previewPositionPatch(positions);
+    this.#layer.previewPositionPatch(positions);
   }
 
   /** Commits the last previewed handle positions as one durable move. */
   commitHandles(): void {
     if (!this.#pendingHandles) return;
 
-    this.#edit.commitPositionPatch(this.#pendingHandles);
+    this.#layer.commitPositionPatch(this.#pendingHandles);
     this.#pendingHandles = null;
   }
 }

@@ -1,37 +1,28 @@
 import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import type { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
+import { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
+import { objectIsKindOf } from "@/types";
 
 export class BendCurve implements SelectBehavior {
   #draft: GlyphLayerEditDraft | null = null;
   #hasChanges = false;
 
-  onDragStart(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"dragStart">,
-  ): boolean {
+  onDragStart(state: SelectState, ctx: ToolContext<SelectState>, event: DragStartEvent): boolean {
     if (state.type !== "ready" || !event.metaKey) return false;
+    if (event.target.kind !== "segment") return false;
 
-    const instance = ctx.editor.previewGlyphInstance;
-    if (!instance || !ctx.editor.editingGlyphLayer) return false;
+    const object = ctx.editor.object(event.target.id);
+    if (!objectIsKindOf(object, "segment")) return false;
 
-    const geometry = instance.geometry;
-    const hit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);
-    if (!hit) return false;
-
-    const { t, closestPoint, segmentId } = hit;
-    const segment = geometry.segment(segmentId);
-    if (!segment) return false;
-
-    const cubic = segment.asCubic();
+    const segment = object.layer.segment(object.segmentId);
+    const cubic = segment?.asCubic();
     if (!cubic) return false;
 
     const { controlStart, controlEnd } = cubic;
 
-    this.#draft = ctx.editor.beginGlyphLayerEditDraft({
+    this.#draft = new GlyphLayerEditDraft(object.layer, {
       points: [controlStart.id, controlEnd.id],
     });
     this.#hasChanges = false;
@@ -39,9 +30,9 @@ export class BendCurve implements SelectBehavior {
     ctx.setState({
       type: "bending",
       bend: {
-        t,
-        startPos: closestPoint,
-        segmentId,
+        t: event.target.t,
+        startPos: event.target.closestPoint,
+        segmentId: object.segmentId,
         controlOneId: controlStart.id,
         controlTwoId: controlEnd.id,
         initialControlOne: controlStart,
@@ -51,12 +42,15 @@ export class BendCurve implements SelectBehavior {
     return true;
   }
 
-  onDrag(state: SelectState, _ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: DragEvent): boolean {
     if (state.type !== "bending") return false;
     if (!this.#draft) return false;
 
-    const { glyphLocal } = event.coords;
-    const delta = Vec2.sub(glyphLocal, state.bend.startPos);
+    const object = ctx.editor.object(state.bend.segmentId);
+    if (!objectIsKindOf(object, "segment")) return false;
+
+    const point = ctx.editor.getPointInNodeSpace(event.coords.scene, object.node.position);
+    const delta = Vec2.sub(point, state.bend.startPos);
     const t = state.bend.t;
     const w1 = 3 * (1 - t) ** 2 * t;
     const w2 = 3 * (1 - t) * t ** 2;
@@ -69,21 +63,20 @@ export class BendCurve implements SelectBehavior {
     const newCp1 = Vec2.add(initialControlOne, delta1);
     const newCp2 = Vec2.add(initialControlTwo, delta2);
 
-    const updates = [
+    this.#draft.previewPositionPatch([
       {
-        kind: "point" as const,
+        kind: "point",
         id: state.bend.controlOneId,
         x: newCp1.x,
         y: newCp1.y,
       },
       {
-        kind: "point" as const,
+        kind: "point",
         id: state.bend.controlTwoId,
         x: newCp2.x,
         y: newCp2.y,
       },
-    ];
-    this.#draft.previewPositionPatch(updates);
+    ]);
     this.#hasChanges = true;
     return true;
   }

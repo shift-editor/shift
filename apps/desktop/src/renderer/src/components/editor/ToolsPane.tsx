@@ -10,7 +10,7 @@ interface ToolbarIconProps {
   Icon: SVG;
   name: ToolName;
   tooltip: string;
-  activeTool: ToolName;
+  activeTool: ToolName | null;
   onClick: () => void;
 }
 export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeTool, onClick }) => {

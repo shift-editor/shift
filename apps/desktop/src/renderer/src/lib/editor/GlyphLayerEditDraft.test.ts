@@ -36,7 +36,7 @@ describe("glyph layer edit drafts preserve committed preview bases", () => {
     await editor.settle();
   });
 
-  const source = () => editor.editingGlyphLayer!;
+  const source = () => editor.glyphLayer!;
 
   it("previews, commits, and undoes a layer edit through the real glyph layer", async () => {
     const point = source().allPoints[0]!;

@@ -61,7 +61,7 @@ export const InteractiveScene = () => {
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
-      toolManager.handlePointerUp(getScreenPoint(e));
+      toolManager.handlePointerUp(getScreenPoint(e), getModifiers(e));
       editor.stopEdgePan();
     },
     [toolManager, editor],

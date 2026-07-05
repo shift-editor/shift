@@ -18,7 +18,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** For drag operations that mutate the glyph (translate, resize, rotate, bend), use the glyph layer edit draft pattern: `editor.beginGlyphLayerEditDraft(subject)` on drag start, `draft.previewPositionPatch()` or another `draft.preview*()` method on each drag event, `draft.commit(label)` on drag end, `draft.discard()` on cancel. **CRITICAL**: forgetting `commit` or `discard` leaks the draft and leaves the glyph in preview state.
 
-- **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`, `glyphLocal`). Use `event.coords` for hit-testing and layout; `event.point` is an alias for `coords.scene`. **CRITICAL**: using raw `event.point` when glyph-local coordinates are needed (e.g. pen cursor position) produces wrong results when draw offset is non-zero.
+- **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`). Use `event.coords.scene` for scene-space hit-testing and resolve node-local coordinates from the hit target when a tool needs them.
 
 ## Codemap
 
@@ -54,7 +54,7 @@ tools/
 - `StateDiagram` — `{ states, initial, transitions }`. Declarative spec for compliance testing.
 - `ToolName` — `string` (not a fixed union; extensible for plugins).
 - `ToolState` — `{ type: string }` base interface for all tool state unions.
-- `Coordinates` — `{ screen, scene, glyphLocal }` bundle on pointer events.
+- `Coordinates` — `{ screen, scene }` bundle on pointer events.
 - `Modifiers` — `{ shiftKey, altKey, metaKey? }`.
 
 ## How it works
@@ -179,7 +179,13 @@ export class MyBehavior implements Behavior<MyState> {
 ```typescript
 onDragStart(state, ctx, event) {
   if (state.type !== "selected") return false;
-  this.#draft = ctx.editor.beginGlyphLayerEditDraft({ points: [...ctx.editor.selection.pointIds] });
+  const edit = resolveSelectedGlyphEdit(ctx.editor);
+  if (!edit) return false;
+
+  this.#draft = new GlyphLayerEditDraft(edit.layer, {
+    points: edit.pointIds,
+    anchors: edit.anchorIds,
+  });
   ctx.setState({ type: "translating", startPos: event.point, totalDelta: { x: 0, y: 0 } });
   return true;
 }
@@ -233,6 +239,6 @@ onDragCancel(state, ctx) {
 - `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph).
 - `Canvas` — rendering target passed to `drawOverlay` / `drawScene` / `drawBackground`.
 - `GlyphLayerEditDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
-- `Coordinates` — `{ screen, scene, glyphLocal }` coordinate bundle on pointer events.
+- `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
 - `TextRunController` — text input controller used by Text tool.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

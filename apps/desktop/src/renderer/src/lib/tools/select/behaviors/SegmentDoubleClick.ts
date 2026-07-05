@@ -1,26 +1,33 @@
 import type { ToolContext } from "../../core/Behavior";
-import type { ToolEventOf } from "../../core/GestureDetector";
+import type { DoubleClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
 export class SegmentDoubleClick implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"doubleClick">,
+    event: DoubleClickEvent,
   ): boolean {
     if (state.type !== "ready") return false;
+    if (event.target.kind != "segment") return false;
 
-    const instance = ctx.editor.previewGlyphInstance;
-    if (!instance || !ctx.editor.editingGlyphLayer) return false;
+    const node = ctx.editor.scene.node(event.target.nodeId);
+    if (node?.kind !== "glyph") return false;
 
-    const geometry = instance.geometry;
-    const segmentHit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);
-    if (!segmentHit) return false;
+    const layer = ctx.editor.font.layer(node.glyphId, node.sourceId);
+    if (!layer) return false;
 
-    const segment = geometry.segment(segmentHit.segmentId);
-    if (!segment) return false;
+    const firstPoint = event.target.pointIds[0];
+    if (!firstPoint) return false;
 
-    ctx.editor.selectAll();
+    const contourId = layer.contourIdOfPoint(firstPoint);
+    if (!contourId) return false;
+
+    const contour = layer.contour(contourId);
+    if (!contour) return false;
+
+    ctx.editor.selection.clear();
+    ctx.editor.selection.select([contourId, ...contour.points.map((point) => point.id)]);
     return true;
   }
 }

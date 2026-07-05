@@ -1,4 +1,4 @@
-import { Bounds, Vec2, type Point2D, type Rect2D } from "@shift/geo";
+import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { CanvasItem } from "@/lib/editor/rendering/CanvasItem";
@@ -91,9 +91,9 @@ interface ExpandedHandleRect {
 }
 
 export interface SelectBoundingBoxProps {
-  readonly rect: Rect2D;
+  readonly sceneRect: Rect2D;
   readonly screenRect: Rect2D;
-  readonly upmHandles: HandlePositions;
+  readonly sceneHandles: HandlePositions;
   readonly screenHandles: HandlePositions;
   readonly hitRadiusPx: number;
 }
@@ -112,28 +112,17 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const state = this.#select.stateCell.value;
     if (state.type === "brushing") return null;
 
-    if (
-      !this.#editor.handlesVisibleCell.value ||
-      this.#editor.proofModeCell.value ||
-      !this.#editor.focusedGlyphVisibleCell.value
-    ) {
-      return null;
-    }
-
-    const selection = this.#editor.selection.stateCell.value;
-    const selectedCount =
-      selection.pointIds.size + selection.anchorIds.size + selection.segmentIds.size;
+    const selectedCount = this.#editor.selection.stateCell.value.ids.length;
     if (selectedCount <= 1) return null;
 
-    const bounds = this.#editor.selection.boundsCell.value;
-    if (!bounds) return null;
+    const sceneRect = this.#editor.selectionBoundsCell.value;
+    if (!sceneRect) return null;
 
     this.#editor.camera.trackViewportTransform();
 
-    const rect = Bounds.toRect(bounds);
-    const screenRect = this.#screenRect(rect);
-    const upmHandles = getHandlePositions(
-      rect,
+    const screenRect = this.#screenRect(sceneRect);
+    const sceneHandles = getHandlePositions(
+      sceneRect,
       this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
       this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx),
     );
@@ -145,16 +134,16 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     );
 
     return {
-      rect,
+      sceneRect,
       screenRect,
-      upmHandles,
+      sceneHandles,
       screenHandles,
       hitRadiusPx: SELECT_BOUNDING_BOX_STYLE.hitRadiusPx,
     };
   }
 
   get rect(): Rect2D | null {
-    return this.propsSnapshot()?.rect ?? null;
+    return this.propsSnapshot()?.sceneRect ?? null;
   }
 
   get screenRect(): Rect2D | null {
@@ -182,7 +171,7 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
       return {
         type: resizeResult.type,
         edge: resizeResult.edge,
-        rect: props.rect,
+        rect: props.sceneRect,
         cursor: edgeToCursor(resizeResult.edge),
       };
     }
@@ -197,8 +186,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
       return {
         type: rotationResult.type,
         corner: rotationResult.corner,
-        rect: props.rect,
-        center: rectCenter(props.rect),
+        rect: props.sceneRect,
+        center: rectCenter(props.sceneRect),
         cursor: this.cursorForRotationCorner(rotationResult.corner),
       };
     }
@@ -230,35 +219,19 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
-    this.#drawRect(canvas, props.rect);
-    this.#drawHandles(canvas, props.upmHandles);
+    this.#drawRect(canvas, props.sceneRect);
+    this.#drawHandles(canvas, props.sceneHandles);
   }
 
   #screenRect(rect: Rect2D): Rect2D {
-    const topLeft = this.#editor.fromGlyphLocal({
-      x: rect.left,
-      y: rect.bottom,
-    }).screen;
-    const bottomRight = this.#editor.fromGlyphLocal({
-      x: rect.right,
-      y: rect.top,
-    }).screen;
-
-    const left = Math.min(topLeft.x, bottomRight.x);
-    const right = Math.max(topLeft.x, bottomRight.x);
-    const top = Math.min(topLeft.y, bottomRight.y);
-    const bottom = Math.max(topLeft.y, bottomRight.y);
-
-    return {
-      x: left,
-      y: top,
-      width: right - left,
-      height: bottom - top,
-      left,
-      top,
-      right,
-      bottom,
-    };
+    return rectFromPoints(
+      [
+        { x: rect.left, y: rect.top },
+        { x: rect.right, y: rect.top },
+        { x: rect.right, y: rect.bottom },
+        { x: rect.left, y: rect.bottom },
+      ].map((point) => this.#editor.projectSceneToScreen(point)),
+    );
   }
 
   #drawRect(canvas: Canvas, rect: Rect2D): void {
@@ -274,26 +247,6 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
       drawHandle(canvas, handles.corners[key], styles.handle);
     }
   }
-}
-
-function drawHandle(
-  canvas: Canvas,
-  center: Point2D,
-  style: SelectBoundingBoxStyle["handle"],
-): void {
-  canvas.ctx.save();
-
-  const radius = canvas.pxToUpm(style.radiusPx);
-  const size = radius * 2;
-  const half = radius;
-
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.widthPx);
-  canvas.ctx.fillStyle = style.fill;
-  canvas.ctx.strokeStyle = style.stroke;
-  canvas.ctx.fillRect(center.x - half, center.y - half, size, size);
-  canvas.ctx.strokeRect(center.x - half, center.y - half, size, size);
-
-  canvas.ctx.restore();
 }
 
 function getExpandedHandleRect(
@@ -379,6 +332,65 @@ function getHandlePositions(
       },
     },
   };
+}
+
+function rectFromPoints(points: readonly Point2D[]): Rect2D {
+  const first = points[0];
+  if (!first) {
+    return {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+    };
+  }
+
+  let left = first.x;
+  let right = first.x;
+  let top = first.y;
+  let bottom = first.y;
+
+  for (const point of points.slice(1)) {
+    left = Math.min(left, point.x);
+    right = Math.max(right, point.x);
+    top = Math.min(top, point.y);
+    bottom = Math.max(bottom, point.y);
+  }
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+    left,
+    top,
+    right,
+    bottom,
+  };
+}
+
+function drawHandle(
+  canvas: Canvas,
+  center: Point2D,
+  style: SelectBoundingBoxStyle["handle"],
+): void {
+  canvas.ctx.save();
+
+  const radius = canvas.pxToUpm(style.radiusPx);
+  const size = radius * 2;
+  const half = radius;
+
+  canvas.ctx.lineWidth = canvas.pxToUpm(style.widthPx);
+  canvas.ctx.fillStyle = style.fill;
+  canvas.ctx.strokeStyle = style.stroke;
+  canvas.ctx.fillRect(center.x - half, center.y - half, size, size);
+  canvas.ctx.strokeRect(center.x - half, center.y - half, size, size);
+
+  canvas.ctx.restore();
 }
 
 function hitTestRotationZones(

@@ -42,22 +42,35 @@ export type GlyphPosition =
 
 export type GlyphPositions = readonly GlyphPosition[];
 
-export interface GeometryPointHit extends PointHit {
-  readonly type: "point";
-  readonly pointId: PointId;
+type GlyphHitIdByKind = {
+  readonly point: PointId;
+  readonly anchor: AnchorId;
+  readonly segment: SegmentId;
+};
+
+export type GlyphHitKind = keyof GlyphHitIdByKind;
+
+interface GlyphHitBase<K extends GlyphHitKind> {
+  readonly kind: K;
+  readonly id: GlyphHitIdByKind[K];
+  readonly distance: number;
 }
 
-export interface GeometryAnchorHit extends AnchorHit {
-  readonly type: "anchor";
-  readonly anchorId: AnchorId;
-}
+export type GeometryPointHit = GlyphHitBase<"point"> & PointHit;
 
-export interface GeometrySegmentHit extends SegmentHit {
-  readonly type: "segment";
-  readonly segmentId: SegmentId;
-}
+export type GeometryAnchorHit = GlyphHitBase<"anchor"> & AnchorHit;
+
+export type GeometrySegmentHit = GlyphHitBase<"segment"> & SegmentHit;
 
 export type GeometryHit = GeometryPointHit | GeometryAnchorHit | GeometrySegmentHit;
+
+export type GlyphPointHit = GeometryPointHit;
+
+export type GlyphAnchorHit = GeometryAnchorHit;
+
+export type GlyphSegmentHit = GeometrySegmentHit;
+
+export type GlyphHit = GeometryHit;
 
 /**
  * Immutable geometry view over a glyph structure and value buffer.
@@ -155,8 +168,8 @@ export class GlyphGeometry {
       const hit = Point.hit(point, pos, radius);
       if (hit && (!best || hit.distance < best.distance)) {
         best = {
-          type: "point",
-          pointId: point.id,
+          kind: "point",
+          id: point.id,
           distance: hit.distance,
         };
       }
@@ -172,14 +185,20 @@ export class GlyphGeometry {
       const hit = anchor.hit(pos, radius);
       if (hit && (!best || hit.distance < best.distance)) {
         best = {
-          type: "anchor",
-          anchorId: anchor.id,
+          kind: "anchor",
+          id: anchor.id,
           distance: hit.distance,
         };
       }
     }
 
     return best;
+  }
+
+  hitAt(pos: Point2D, radius: number): GeometryHit | null {
+    return (
+      this.hitAnchor(pos, radius) ?? this.hitPoint(pos, radius) ?? this.hitSegment(pos, radius)
+    );
   }
 
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
@@ -189,8 +208,8 @@ export class GlyphGeometry {
       const hit = segment.hit(pos, radius);
       if (hit && (!best || hit.distance < best.distance)) {
         best = {
-          type: "segment",
-          segmentId: segment.id,
+          kind: "segment",
+          id: segment.id,
           t: hit.t,
           closestPoint: hit.closestPoint,
           distance: hit.distance,
