@@ -15,6 +15,7 @@ import { Editor } from "@/lib/editor/Editor";
 import type { Glyph, GlyphInstance, GlyphLayer } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
+import type { Point2D } from "@shift/geo";
 import {
   mintGlyphId,
   mintLayerId,
@@ -22,6 +23,7 @@ import {
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
+  type PointId,
   type Unicode,
 } from "@shift/types";
 import type { Contour } from "@shift/glyph-state";
@@ -57,6 +59,7 @@ export class TestEditor extends Editor {
     this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
+    this.setActiveTool("select");
   }
 
   /**
@@ -104,21 +107,22 @@ export class TestEditor extends Editor {
     const record = applied.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    const glyph = await this.font.loadGlyph(record.id, {
-      sourceIds: [sourceId],
-    });
-    return glyph;
+    return this.font.loadGlyph(record.id);
   }
 
   #placeGlyph(glyphId: GlyphId): void {
-    this.scene.clear();
-    this.scene.addNode({
-      id: mintNodeId(),
-      kind: "glyph",
-      glyphId,
-      sourceId: this.font.defaultSource.id,
-      position: { x: 0, y: 0 },
-    });
+    this.scene.setNodes([
+      {
+        id: mintNodeId(),
+        type: "node",
+        kind: "glyph",
+        parentId: null,
+        index: "a0",
+        glyphId,
+        sourceId: this.font.defaultSource.id,
+        position: { x: 0, y: 0 },
+      },
+    ]);
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
@@ -157,8 +161,22 @@ export class TestEditor extends Editor {
     return this.font.layer(node.glyphId, sourceId);
   }
 
+  requireGlyphLayer(): GlyphLayer {
+    const layer = this.glyphLayer;
+    if (!layer) throw new Error("Expected glyph layer");
+
+    return layer;
+  }
+
+  pointPosition(pointId: PointId): Point2D {
+    const point = this.requireGlyphLayer().point(pointId);
+    if (!point) throw new Error("Expected source point");
+
+    return { x: point.x, y: point.y };
+  }
+
   get glyphNode(): GlyphNode | null {
-    return this.scene.nodes().find((node) => node.kind === "glyph") ?? null;
+    return this.scene.nodesOfKind("glyph")[0] ?? null;
   }
 
   get sceneGlyphInstance(): GlyphInstance | null {
@@ -186,7 +204,7 @@ export class TestEditor extends Editor {
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
     this.toolManager.handlePointerDown({ x, y }, mods);
-    this.toolManager.handlePointerUp({ x, y });
+    this.toolManager.handlePointerUp({ x, y }, mods);
     return this;
   }
 
@@ -198,6 +216,44 @@ export class TestEditor extends Editor {
   clickGlyphLocal(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     const screen = this.projectSceneToScreen({ x, y });
     return this.click(screen.x, screen.y, options);
+  }
+
+  /**
+   * Drags through scene coordinates while preserving drag-start semantics.
+   *
+   * @param input - Scene-space pointer-down point, threshold-crossing first
+   * move, and final pointer position.
+   * @returns The scene-space drag points observed through the camera and the
+   * delta from `start` to `end`.
+   */
+  dragScene(input: {
+    down: Point2D;
+    start: Point2D;
+    end: Point2D;
+    options?: Partial<typeof DEFAULT_MODIFIERS>;
+  }): { down: Point2D; start: Point2D; end: Point2D; delta: Point2D } {
+    const downScreen = this.projectSceneToScreen(input.down);
+    const startScreen = this.projectSceneToScreen(input.start);
+    const endScreen = this.projectSceneToScreen(input.end);
+
+    this.pointerDown(downScreen.x, downScreen.y, input.options);
+    this.pointerMove(startScreen.x, startScreen.y, input.options);
+    this.pointerMove(endScreen.x, endScreen.y, input.options);
+    this.pointerUp(endScreen.x, endScreen.y, input.options);
+
+    const down = this.projectScreenToScene(downScreen);
+    const start = this.projectScreenToScene(startScreen);
+    const end = this.projectScreenToScene(endScreen);
+
+    return {
+      down,
+      start,
+      end,
+      delta: {
+        x: end.x - start.x,
+        y: end.y - start.y,
+      },
+    };
   }
 
   pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
@@ -215,8 +271,8 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  pointerUp(x: number, y: number): this {
-    this.toolManager.handlePointerUp({ x, y });
+  pointerUp(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    this.toolManager.handlePointerUp({ x, y }, { ...DEFAULT_MODIFIERS, ...options });
     return this;
   }
 

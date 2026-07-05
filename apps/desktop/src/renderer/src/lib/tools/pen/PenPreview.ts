@@ -89,13 +89,10 @@ export class PenPreview extends CanvasItem<PenPreviewProps> {
   }
 
   #lastOnCurvePoint(): Point2D | null {
-    const context = this.#pen.contextCell.value;
+    const context = this.#pen.contextCell.peek();
     if (!context?.activeContourId) return null;
 
-    const sourceId = this.#editor.activeSourceIdCell.value;
-    if (!sourceId) return null;
-
-    const layer = this.#editor.font.layer(context.glyphNode.glyphId, sourceId);
+    const layer = this.#editor.font.layer(context.glyphNode.glyphId, context.glyphNode.sourceId);
     if (!layer) return null;
 
     track(layer.structureCell);

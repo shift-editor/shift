@@ -8,8 +8,6 @@ export class SelectHover implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: PointerMoveEvent,
   ): boolean {
-    if (state.type === "idle") return false;
-
     if (
       state.type === "brushing" ||
       state.type === "translating" ||
@@ -34,22 +32,19 @@ export class SelectHover implements SelectBehavior {
       }
 
       case "point": {
-        ctx.editor.hover.set({ kind: "point", pointId: target.id });
+        ctx.editor.hover.set(target.id);
         return true;
       }
 
       case "anchor": {
-        ctx.editor.hover.set({ kind: "anchor", anchorId: target.id });
+        ctx.editor.hover.set(target.id);
         return true;
       }
 
       case "segment": {
-        ctx.editor.hover.set({ kind: "segment", segmentId: target.id });
+        ctx.editor.hover.set(target.id);
         return true;
       }
     }
-
-    ctx.editor.hover.clear();
-    return false;
   }
 }

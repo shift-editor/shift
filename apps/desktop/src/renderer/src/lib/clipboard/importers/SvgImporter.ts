@@ -1,9 +1,9 @@
 import type {
-  ClipboardContent,
   ClipboardImporter,
   ClipboardOffer,
   ContourContent,
   PointContent,
+  ShiftContent,
 } from "../types";
 
 type PathCommand = {
@@ -20,7 +20,7 @@ export class SvgImporter implements ClipboardImporter {
     );
   }
 
-  import(offer: ClipboardOffer): ClipboardContent | null {
+  import(offer: ClipboardOffer): ShiftContent | null {
     if (offer.text === undefined) return null;
     return this.importText(offer.text);
   }
@@ -29,7 +29,7 @@ export class SvgImporter implements ClipboardImporter {
     return this.#canImportText(text);
   }
 
-  importText(text: string): ClipboardContent | null {
+  importText(text: string): ShiftContent | null {
     const trimmed = text.trim();
 
     const pathData = this.#extractPathData(trimmed);

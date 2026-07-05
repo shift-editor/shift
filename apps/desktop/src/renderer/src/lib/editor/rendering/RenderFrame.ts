@@ -7,23 +7,17 @@ import { SCREEN_HIT_RADIUS } from "./constants";
 import { CanvasItem } from "./CanvasItem";
 import type { Canvas } from "./Canvas";
 import { OutlineRenderer } from "./Outline";
-import { Anchors, ControlLines, DebugOverlays, Guides, Handles } from "./overlays";
+import { Anchors, ControlLines, DebugOverlays, Guides, Handles, Segments } from "./overlays";
 import type { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 import type { GlyphNode } from "@/types/node";
 import type { Editor } from "../Editor";
+import type { SegmentId } from "@shift/glyph-state";
 
 class GlyphFrame {
   readonly node: GlyphNode;
   readonly instance: GlyphInstance;
 
-  constructor(editor: Editor, node: GlyphNode) {
-    const instance = editor.font.instance(node.glyphId, editor.designLocationCell);
-    if (!instance) {
-      throw new Error(
-        `glyph node ${node.id} references glyph ${node.glyphId} outside the editor font`,
-      );
-    }
-
+  constructor(node: GlyphNode, instance: GlyphInstance) {
     this.node = node;
     this.instance = instance;
   }
@@ -54,7 +48,7 @@ export interface SceneLayerProps {
 }
 
 export interface OverlayLayerProps {
-  readonly activeTool: string;
+  readonly activeTool: string | null;
   readonly activeToolState: unknown;
 }
 
@@ -88,15 +82,22 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     this.#editor.camera.trackViewportTransform();
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
+    this.#editor.scene.cell.value;
 
     const glyphs: BackgroundGlyphFrame[] = [];
-    for (const node of this.#editor.scene.cell.value.nodes) {
+    for (const node of this.#editor.scene.nodes()) {
       switch (node.kind) {
         case "glyph": {
           const record = this.#editor.font.glyph(node.glyphId);
           if (!record) break;
 
-          const frame = new GlyphFrame(this.#editor, node);
+          const instance = this.#editor.font.instance(
+            node.glyphId,
+            this.#editor.designLocationCell,
+          );
+          if (!instance) break;
+
+          const frame = new GlyphFrame(node, instance);
           const unicode = record.unicodes[0] ?? null;
 
           glyphs.push({
@@ -150,6 +151,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
   readonly #debugOverlays = new DebugOverlays();
   readonly #controlLines = new ControlLines();
   readonly #anchors = new Anchors();
+  readonly #segments = new Segments();
   readonly #handles: Handles;
 
   /**
@@ -170,16 +172,25 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
 
   protected props(): SceneLayerProps {
     this.#editor.camera.trackViewportTransform();
+
+    // TODO: should be track(thing)
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
     this.#editor.selection.stateCell.value;
     this.#editor.hover.entryCell.value;
+    this.#editor.scene.cell.value;
 
     const glyphs: GlyphFrame[] = [];
-    for (const node of this.#editor.scene.cell.value.nodes) {
+    for (const node of this.#editor.scene.nodes()) {
       switch (node.kind) {
         case "glyph": {
-          const frame = new GlyphFrame(this.#editor, node);
+          const instance = this.#editor.font.instance(
+            node.glyphId,
+            this.#editor.designLocationCell,
+          );
+          if (!instance) break;
+
+          const frame = new GlyphFrame(node, instance);
 
           frame.instance.render.trackShape();
           glyphs.push(frame);
@@ -233,7 +244,11 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
 
   #drawDebugOverlays(canvas: Canvas, props: SceneLayerProps, glyph: GlyphFrame): void {
     const { hover } = props.interaction;
-    const hoveredSegmentId = hover.entry?.kind === "segment" ? hover.entry.segmentId : null;
+    const hoveredObject = hover.entry ? this.#editor.object(hover.entry) : null;
+    const hoveredSegmentId =
+      hoveredObject?.kind === "segment" && hoveredObject.node.id === glyph.node.id
+        ? hoveredObject.segmentId
+        : null;
 
     canvas.withTranslation(glyph.node.position, () => {
       this.#debugOverlays.draw(
@@ -246,10 +261,43 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     });
   }
 
+  #selectedSegmentIds(glyph: GlyphFrame): readonly SegmentId[] {
+    const segmentIds: SegmentId[] = [];
+
+    for (const object of this.#editor.objects(this.#editor.selection.ids)) {
+      if (object.kind !== "segment") continue;
+      if (object.node.id !== glyph.node.id) continue;
+
+      segmentIds.push(object.segmentId);
+    }
+
+    return segmentIds;
+  }
+
+  #hoveredSegmentId(glyph: GlyphFrame): SegmentId | null {
+    const id = this.#editor.hover.id;
+    if (!id) return null;
+
+    const object = this.#editor.object(id);
+    if (object?.kind !== "segment") return null;
+    if (object.node.id !== glyph.node.id) return null;
+
+    return object.segmentId;
+  }
+
   #drawGlyphEditHandles(canvas: Canvas, props: SceneLayerProps, glyph: GlyphFrame): boolean {
     const renderModel = glyph.instance.render;
     const sceneBounds = this.#editor.camera.visibleSceneBounds(64);
     const origin = glyph.node.position;
+
+    canvas.withTranslation(origin, () => {
+      this.#segments.draw(
+        canvas,
+        glyph.instance.geometry,
+        this.#selectedSegmentIds(glyph),
+        this.#hoveredSegmentId(glyph),
+      );
+    });
 
     canvas.withTranslation(origin, () => {
       this.#controlLines.draw(canvas, renderModel.contours, (from, to) => {
@@ -269,7 +317,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#handles.draw(
       canvas,
       canvas.camera,
-      origin,
+      glyph.node,
       glyph.instance,
       props.interaction.selection,
       props.interaction.hover,

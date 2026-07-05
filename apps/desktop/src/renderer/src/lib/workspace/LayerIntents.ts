@@ -24,10 +24,9 @@ type Payload<TIntent> = Omit<TIntent, "layerId">;
  *
  * @remarks
  * This is the ONLY place wire envelopes (`{ kind, <payload> }`) are built;
- * everything above it speaks typed calls. Each call enters the edit queue's
- * coalescing window, so calls in the same tick become one apply and one
- * undo step. No display strings ride the calls; undo labels are a concern
- * for the ledger, not the renderer.
+ * everything above it speaks typed calls. Each call is one workspace operation
+ * unless the caller has opened a workspace transaction. No display strings
+ * ride the calls; undo labels are a concern for the ledger, not the renderer.
  */
 export class LayerIntents {
   readonly #editCoordinator: WorkspaceEditCoordinator;

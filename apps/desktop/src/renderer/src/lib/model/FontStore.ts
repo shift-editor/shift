@@ -1,62 +1,56 @@
 import type {
   AppliedChange,
+  AnchorId,
+  ContourData,
+  ContourId,
   GlyphId,
-  GlyphLayerRecord,
   GlyphRecord,
   GlyphStructure,
   GlyphState,
   GlyphVariationData,
   LayerId,
+  PointData,
+  PointId,
   SourceId,
 } from "@shift/types";
+import { segmentIdFor, type SegmentId } from "@shift/glyph-state";
+import { Validate } from "@shift/validation";
 import type {
   WorkspaceGlyphLayerSnapshot,
-  WorkspaceGlyphSnapshotRequest,
   WorkspaceGlyphSnapshot,
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
+import type { GlyphObjectIndex, GlyphObjectSegment } from "@/types";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { Glyph, GlyphLayer } from "./Glyph";
 
-export type GlyphSnapshotStatus = "missing" | "loading" | "loaded" | "stale" | "failed";
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
 type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
 
-const EMPTY_STATUS: ReadonlyMap<GlyphId, GlyphSnapshotStatus> = new Map();
-
-export interface GlyphLoadBatch {
-  readonly generation: number;
-  readonly glyphIds: readonly GlyphId[];
-}
-
 /**
- * Renderer-local owner for font records, loaded glyph snapshots, model caches,
- * and snapshot status.
+ * Renderer-local owner for font records, concrete glyph layer state, and model caches.
  *
- * Model reads and snapshot freshness live directly on the store. Workspace
- * mutation and async read ordering are owned by `WorkspaceEditCoordinator`; glyph-load
- * request selection is owned by `Font`.
+ * Workspace mutation and async read ordering are owned by
+ * `WorkspaceEditCoordinator`. This store materializes returned glyph snapshots
+ * into layer state and indexes objects from that concrete state.
  */
 export class FontStore {
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
-  readonly #snapshotStatus: WritableSignal<ReadonlyMap<GlyphId, GlyphSnapshotStatus>>;
 
-  readonly #layerStates = new Map<LayerId, GlyphLayerState>();
+  #glyphObjectIndex: GlyphObjectIndex = emptyGlyphObjectIndex();
+
+  readonly #layerStateCells = new Map<LayerId, WritableSignal<GlyphLayerState | null>>();
   readonly #layerByGlyphSource = new Map<GlyphSourceKey, LayerId>();
   readonly #glyphByLayer = new Map<LayerId, GlyphId>();
   readonly #glyphById = new Map<GlyphId, GlyphRecord>();
   readonly #glyphModels = new Map<GlyphId, Glyph>();
   readonly #glyphLayerModels = new Map<GlyphSourceKey, GlyphLayer>();
-  readonly #variationDataByGlyph = new Map<GlyphId, GlyphVariationData>();
-  readonly #snapshotGeneration = new Map<GlyphId, number>();
-
-  #generation = 0;
+  readonly #variationDataCells = new Map<GlyphId, WritableSignal<GlyphVariationData | null>>();
 
   constructor(workspace: WorkspaceSnapshot | null = null) {
     this.#workspace = signal(workspace, { name: "fontStore.workspace" });
-    this.#snapshotStatus = signal(EMPTY_STATUS, { name: "fontStore.snapshotStatus" });
     if (workspace) this.#indexWorkspace(workspace);
   }
 
@@ -64,77 +58,61 @@ export class FontStore {
     return this.#workspace;
   }
 
-  get snapshotStatusCell(): Signal<ReadonlyMap<GlyphId, GlyphSnapshotStatus>> {
-    return this.#snapshotStatus;
+  layerIdForPoint(pointId: PointId): LayerId | null {
+    return this.#glyphObjectIndex.layerIdByPointId.get(pointId) ?? null;
+  }
+
+  contourIdForPoint(pointId: PointId): ContourId | null {
+    return this.#glyphObjectIndex.contourIdByPointId.get(pointId) ?? null;
+  }
+
+  layerIdForAnchor(anchorId: AnchorId): LayerId | null {
+    return this.#glyphObjectIndex.layerIdByAnchorId.get(anchorId) ?? null;
+  }
+
+  layerIdForContour(contourId: ContourId): LayerId | null {
+    return this.#glyphObjectIndex.layerIdByContourId.get(contourId) ?? null;
+  }
+
+  layerIdForSegment(segmentId: SegmentId): LayerId | null {
+    return this.#glyphObjectIndex.layerIdBySegmentId.get(segmentId) ?? null;
+  }
+
+  contourIdForSegment(segmentId: SegmentId): ContourId | null {
+    return this.#glyphObjectIndex.contourIdBySegmentId.get(segmentId) ?? null;
+  }
+
+  pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null {
+    return this.#glyphObjectIndex.pointIdsBySegmentId.get(segmentId) ?? null;
   }
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
-      this.#generation += 1;
       this.#workspace.set(snapshot);
       this.#indexWorkspace(snapshot);
-      this.#layerStates.clear();
+      this.#clearLayerStates();
+      this.#clearVariationData();
       this.#glyphModels.clear();
       this.#glyphLayerModels.clear();
-      this.#variationDataByGlyph.clear();
-      this.#snapshotGeneration.clear();
-      this.#snapshotStatus.set(EMPTY_STATUS);
+      this.#rebuildGlyphObjectIndex();
     });
   }
 
-  beginGlyphLoad(requests: readonly WorkspaceGlyphSnapshotRequest[]): GlyphLoadBatch {
-    const generation = this.#generation;
-    const next = new Map(this.#snapshotStatus.peek());
-    const glyphIds = requests.map((request) => request.glyphId);
-    for (const glyphId of glyphIds) {
-      this.#snapshotGeneration.set(glyphId, generation);
-      next.set(glyphId, "loading");
-    }
-    this.#snapshotStatus.set(next);
-    return { generation, glyphIds };
-  }
-
-  failGlyphLoad(batch: GlyphLoadBatch): void {
-    if (batch.generation !== this.#generation) return;
-
-    const next = new Map(this.#snapshotStatus.peek());
-    for (const glyphId of batch.glyphIds) {
-      if (this.#snapshotGeneration.get(glyphId) === batch.generation) {
-        next.set(glyphId, "failed");
-      }
-    }
-    this.#snapshotStatus.set(next);
-  }
-
-  finishGlyphLoad(load: GlyphLoadBatch, snapshots: readonly WorkspaceGlyphSnapshot[]): void {
-    if (load.generation !== this.#generation) return;
-
-    const received = new Set(snapshots.map((snapshot) => snapshot.glyphId));
-    const nextStatus = new Map(this.#snapshotStatus.peek());
-
+  applyGlyphSnapshots(snapshots: readonly WorkspaceGlyphSnapshot[]): void {
     batch(() => {
-      for (const snapshot of snapshots) {
-        if (this.#snapshotGeneration.get(snapshot.glyphId) !== load.generation) continue;
+      let layerChanged = false;
 
-        if (snapshot.variationData) {
-          this.#variationDataByGlyph.set(snapshot.glyphId, snapshot.variationData);
-        } else {
-          this.#variationDataByGlyph.delete(snapshot.glyphId);
-        }
+      for (const snapshot of snapshots) {
+        if (!this.#glyphById.has(snapshot.glyphId)) continue;
+
+        this.#variationDataCell(snapshot.glyphId).set(snapshot.variationData ?? null);
 
         for (const layer of snapshot.layers) {
-          this.#applyLayerSnapshot(layer);
-        }
-        nextStatus.set(snapshot.glyphId, "loaded");
-      }
-
-      for (const glyphId of load.glyphIds) {
-        if (!received.has(glyphId) && this.#snapshotGeneration.get(glyphId) === load.generation) {
-          nextStatus.set(glyphId, "missing");
+          if (this.#applyLayerSnapshot(layer)) layerChanged = true;
         }
       }
 
-      this.#snapshotStatus.set(nextStatus);
+      if (layerChanged) this.#rebuildGlyphObjectIndex();
     });
   }
 
@@ -154,42 +132,50 @@ export class FontStore {
           : current;
 
       if (nextWorkspace !== current) {
-        this.#generation += 1;
         this.#workspace.set(nextWorkspace);
         this.#indexWorkspace(nextWorkspace);
       }
 
-      const staleGlyphIds = new Set<GlyphId>(applied.dependents);
-      for (const layer of applied.layers) {
-        const glyphId = this.#glyphByLayer.get(layer.layerId);
-        if (glyphId) staleGlyphIds.add(glyphId);
+      let layerSetChanged = false;
+      if (nextWorkspace !== current) {
+        for (const [layerId, cell] of this.#layerStateCells) {
+          if (this.#glyphByLayer.has(layerId)) continue;
 
-        const state = this.#layerStates.get(layer.layerId);
-        if (!state) continue;
+          cell.set(null);
+          this.#layerStateCells.delete(layerId);
+          layerSetChanged = true;
+        }
+
+        for (const [glyphId, cell] of this.#variationDataCells) {
+          if (this.#glyphById.has(glyphId)) continue;
+
+          cell.set(null);
+          this.#variationDataCells.delete(glyphId);
+        }
+      }
+
+      let structureChanged = false;
+      for (const layer of applied.layers) {
+        if (!this.#glyphByLayer.has(layer.layerId)) continue;
 
         if (layer.structure) {
-          state.replace({
+          this.#replaceLayerState({
             layerId: layer.layerId,
             structure: layer.structure,
             values: layer.values,
           });
+          structureChanged = true;
         } else {
-          state.replaceValues(layer.values);
+          this.#peekLayerState(layer.layerId)?.replaceValues(layer.values);
         }
       }
 
-      if (applied.axes || applied.sources) {
-        for (const glyphId of this.#snapshotStatus.peek().keys()) {
-          staleGlyphIds.add(glyphId);
-        }
-      }
-
-      this.#markLoadedSnapshotsStale(staleGlyphIds);
+      if (structureChanged || layerSetChanged) this.#rebuildGlyphObjectIndex();
     });
   }
 
   layerState(layerId: LayerId): GlyphLayerState | null {
-    return this.#layerStates.get(layerId) ?? null;
+    return this.#layerStateCell(layerId).peek();
   }
 
   hasGlyph(glyphId: GlyphId): boolean {
@@ -200,12 +186,8 @@ export class FontStore {
     return this.#glyphById.get(glyphId) ?? null;
   }
 
-  layerRecordForId(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.recordForId(glyphId)?.layers.find((layer) => layer.sourceId === sourceId) ?? null;
-  }
-
   variationData(glyphId: GlyphId): GlyphVariationData | null {
-    return this.#variationDataByGlyph.get(glyphId) ?? null;
+    return this.#variationDataCell(glyphId).peek();
   }
 
   glyphModel(glyphId: GlyphId, create: () => Glyph | null): Glyph | null {
@@ -231,29 +213,7 @@ export class FontStore {
     return created;
   }
 
-  sourceIdsForGlyph(glyphId: GlyphId): readonly SourceId[] {
-    return this.recordForId(glyphId)?.layers.map((layer) => layer.sourceId) ?? [];
-  }
-
-  snapshotStatus(glyphId: GlyphId): GlyphSnapshotStatus {
-    return this.#snapshotStatus.peek().get(glyphId) ?? "missing";
-  }
-
-  hasLayerSnapshot(glyphId: GlyphId, sourceId: SourceId): boolean {
-    return this.#layerStateForGlyphSource(glyphId, sourceId) !== null;
-  }
-
-  hasLayerRecord(glyphId: GlyphId, sourceId: SourceId): boolean {
-    return this.#layerByGlyphSource.has(glyphSourceKey(glyphId, sourceId));
-  }
-
-  needsGlyphSource(glyphId: GlyphId, sourceId: SourceId): boolean {
-    if (!this.hasLayerRecord(glyphId, sourceId)) return false;
-    const status = this.snapshotStatus(glyphId);
-    return status === "stale" || status === "failed" || !this.hasLayerSnapshot(glyphId, sourceId);
-  }
-
-  loadedComponentBaseGlyphIds(glyphId: GlyphId): readonly GlyphId[] {
+  componentBaseGlyphIdsInLayerState(glyphId: GlyphId): readonly GlyphId[] {
     const baseGlyphIds = new Set<GlyphId>();
     for (const state of this.#loadedLayerStatesForGlyph(glyphId)) {
       for (const baseGlyphId of componentBaseGlyphIds(state.structure)) {
@@ -263,29 +223,26 @@ export class FontStore {
     return [...baseGlyphIds];
   }
 
-  #layerStateForGlyphSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerState | null {
-    const layerId = this.#layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId));
-    return layerId ? (this.#layerStates.get(layerId) ?? null) : null;
-  }
-
-  #applyLayerSnapshot(snapshot: WorkspaceGlyphLayerSnapshot): void {
-    this.#glyphByLayer.set(snapshot.state.layerId, snapshot.glyphId);
-    this.#layerByGlyphSource.set(
+  #applyLayerSnapshot(snapshot: WorkspaceGlyphLayerSnapshot): boolean {
+    const layerId = this.#layerByGlyphSource.get(
       glyphSourceKey(snapshot.glyphId, snapshot.sourceId),
-      snapshot.state.layerId,
     );
+    if (layerId !== snapshot.state.layerId) return false;
+
     this.#replaceLayerState(snapshot.state);
+    return true;
   }
 
   #replaceLayerState(state: GlyphState): GlyphLayerState {
-    const existing = this.#layerStates.get(state.layerId);
+    const cell = this.#layerStateCell(state.layerId);
+    const existing = cell.peek();
     if (existing) {
       existing.replace(state);
       return existing;
     }
 
     const created = new GlyphLayerState(state);
-    this.#layerStates.set(state.layerId, created);
+    cell.set(created);
     return created;
   }
 
@@ -295,21 +252,91 @@ export class FontStore {
     if (!record) return [];
 
     return record.layers
-      .map((layer) => this.#layerStates.get(layer.id))
-      .filter((state): state is GlyphLayerState => state !== undefined);
+      .map((layer) => this.#peekLayerState(layer.id))
+      .filter((state): state is GlyphLayerState => state !== null);
   }
 
-  #markLoadedSnapshotsStale(glyphIds: Iterable<GlyphId>): void {
-    const nextStatus = new Map(this.#snapshotStatus.peek());
-    let changed = false;
+  #layerStateCell(layerId: LayerId): WritableSignal<GlyphLayerState | null> {
+    let cell = this.#layerStateCells.get(layerId);
+    if (!cell) {
+      cell = signal(null, { name: `fontStore.layerState.${layerId}` });
+      this.#layerStateCells.set(layerId, cell);
+    }
+    return cell;
+  }
 
-    for (const glyphId of glyphIds) {
-      if (nextStatus.get(glyphId) !== "loaded") continue;
-      nextStatus.set(glyphId, "stale");
-      changed = true;
+  #peekLayerState(layerId: LayerId): GlyphLayerState | null {
+    return this.#layerStateCells.get(layerId)?.peek() ?? null;
+  }
+
+  #clearLayerStates(): void {
+    for (const cell of this.#layerStateCells.values()) cell.set(null);
+    this.#layerStateCells.clear();
+  }
+
+  #variationDataCell(glyphId: GlyphId): WritableSignal<GlyphVariationData | null> {
+    let cell = this.#variationDataCells.get(glyphId);
+    if (!cell) {
+      cell = signal(null, { name: `fontStore.variationData.${glyphId}` });
+      this.#variationDataCells.set(glyphId, cell);
+    }
+    return cell;
+  }
+
+  #clearVariationData(): void {
+    for (const cell of this.#variationDataCells.values()) cell.set(null);
+    this.#variationDataCells.clear();
+  }
+
+  #rebuildGlyphObjectIndex(): void {
+    this.#glyphObjectIndex = this.#buildGlyphObjectIndex();
+  }
+
+  #buildGlyphObjectIndex(): GlyphObjectIndex {
+    const layerIdByPointId = new Map<PointId, LayerId>();
+    const contourIdByPointId = new Map<PointId, ContourId>();
+    const layerIdByContourId = new Map<ContourId, LayerId>();
+    const layerIdByAnchorId = new Map<AnchorId, LayerId>();
+    const layerIdBySegmentId = new Map<SegmentId, LayerId>();
+    const contourIdBySegmentId = new Map<SegmentId, ContourId>();
+    const pointIdsBySegmentId = new Map<SegmentId, readonly PointId[]>();
+
+    for (const cell of this.#layerStateCells.values()) {
+      const state = cell.peek();
+      if (!state) continue;
+
+      const layerId = state.layerId;
+      const structure = state.structure;
+
+      for (const contour of structure.contours) {
+        layerIdByContourId.set(contour.id, layerId);
+
+        for (const point of contour.points) {
+          layerIdByPointId.set(point.id, layerId);
+          contourIdByPointId.set(point.id, contour.id);
+        }
+
+        for (const segment of indexedSegments(contour)) {
+          layerIdBySegmentId.set(segment.id, layerId);
+          contourIdBySegmentId.set(segment.id, contour.id);
+          pointIdsBySegmentId.set(segment.id, segment.pointIds);
+        }
+      }
+
+      for (const anchor of structure.anchors) {
+        layerIdByAnchorId.set(anchor.id, layerId);
+      }
     }
 
-    if (changed) this.#snapshotStatus.set(nextStatus);
+    return {
+      layerIdByPointId,
+      contourIdByPointId,
+      layerIdByContourId,
+      layerIdByAnchorId,
+      layerIdBySegmentId,
+      contourIdBySegmentId,
+      pointIdsBySegmentId,
+    };
   }
 
   #indexWorkspace(snapshot: WorkspaceSnapshot | null): void {
@@ -334,4 +361,88 @@ function glyphSourceKey(glyphId: GlyphId, sourceId: SourceId): GlyphSourceKey {
 
 function componentBaseGlyphIds(structure: GlyphStructure): readonly GlyphId[] {
   return structure.components.map((component) => component.baseGlyphId);
+}
+
+function emptyGlyphObjectIndex(): GlyphObjectIndex {
+  return {
+    layerIdByPointId: new Map(),
+    contourIdByPointId: new Map(),
+    layerIdByContourId: new Map(),
+    layerIdByAnchorId: new Map(),
+    layerIdBySegmentId: new Map(),
+    contourIdBySegmentId: new Map(),
+    pointIdsBySegmentId: new Map(),
+  };
+}
+
+function indexedSegments(contour: ContourData): GlyphObjectSegment[] {
+  const { points, closed } = contour;
+  if (points.length < 2) return [];
+
+  const segments: GlyphObjectSegment[] = [];
+  let index = 0;
+
+  const limit = closed ? points.length : points.length - 1;
+
+  while (index < limit) {
+    const start = pointAt(points, closed, index);
+    const next = pointAt(points, closed, index + 1);
+    if (!start || !next) break;
+
+    if (isOnCurve(start) && isOnCurve(next)) {
+      segments.push(indexedSegment(start, next, [start.id, next.id]));
+      index += 1;
+      continue;
+    }
+
+    if (isOnCurve(start) && isOffCurve(next)) {
+      const maybeEnd = pointAt(points, closed, index + 2);
+      if (!maybeEnd) break;
+
+      if (isOnCurve(maybeEnd)) {
+        segments.push(indexedSegment(start, maybeEnd, [start.id, next.id, maybeEnd.id]));
+        index += 2;
+        continue;
+      }
+
+      if (isOffCurve(maybeEnd)) {
+        const end = pointAt(points, closed, index + 3);
+        if (!end) break;
+
+        segments.push(indexedSegment(start, end, [start.id, next.id, maybeEnd.id, end.id]));
+        index += 3;
+        continue;
+      }
+    }
+
+    index += 1;
+  }
+
+  return segments;
+}
+
+function indexedSegment(
+  start: PointData,
+  end: PointData,
+  pointIds: readonly PointId[],
+): GlyphObjectSegment {
+  return {
+    id: segmentIdFor(start.id, end.id),
+    pointIds,
+  };
+}
+
+function pointAt(points: readonly PointData[], closed: boolean, index: number): PointData | null {
+  if (index < points.length) return points[index] ?? null;
+  if (!closed) return null;
+
+  return points[index - points.length] ?? null;
+}
+
+function isOnCurve(point: PointData): boolean {
+  return Validate.isOnCurve(point);
+}
+
+function isOffCurve(point: PointData): boolean {
+  return Validate.isOffCurve(point);
 }

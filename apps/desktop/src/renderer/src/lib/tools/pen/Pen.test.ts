@@ -124,9 +124,8 @@ describe("Pen tool", () => {
       expect(editor.pointCount).toBe(1);
     });
 
-    it("first click coalesces contour + point into a single undo step", async () => {
-      // The first pen click creates the contour AND the point in one tick —
-      // one apply, one undo step.
+    it("first click groups contour + point into a single undo step", async () => {
+      // The first pen click creates the contour and the point as one user operation.
       editor.click(100, 200);
       await editor.settle();
       expect(editor.pointCount).toBe(1);

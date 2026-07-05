@@ -1,114 +1,123 @@
-import type { Point2D } from "@shift/geo";
 import type { NodeId } from "@shift/types";
-import { signal, type Signal, type WritableSignal } from "@/lib/signals";
+import { computed, type Signal } from "@/lib/signals";
+import type { ShiftStore } from "@/lib/store/ShiftStore";
+import type { ShiftEditorRecord, ShiftNodeRecord } from "@/types";
 import type { ShiftNode } from "@/types/node";
-
-export interface SceneInput {
-  readonly nodes: readonly ShiftNode[];
-}
 
 export interface SceneValue {
   readonly nodes: readonly ShiftNode[];
 }
 
 /**
- * Owns the placed nodes visible in the editor scene.
+ * Exposes the editor's placed node graph.
  *
- * @remarks
- * Scene stores canvas identity and position. It does not resolve glyph models,
- * glyph instances, glyph layers, or decide what authored data a command mutates.
+ * Scene is the semantic API over node records in the flat editor store. It owns
+ * node-level queries and replacement rules; the store only owns record storage.
  */
 export class Scene {
-  readonly #cell: WritableSignal<SceneValue>;
+  readonly #store: ShiftStore<ShiftEditorRecord>;
+  readonly #cell: Signal<SceneValue>;
+  readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
+  readonly #nodesByKind: Signal<ReadonlyMap<ShiftNode["kind"], readonly ShiftNode[]>>;
 
-  constructor() {
-    this.#cell = signal<SceneValue>(emptyScene(), { name: "editor.scene" });
+  constructor(store: ShiftStore<ShiftEditorRecord>) {
+    this.#store = store;
+    this.#cell = computed(
+      () => {
+        const nodes: ShiftNodeRecord[] = [];
+        for (const record of this.#store.cell.value.values()) {
+          if (record.type === "node") nodes.push(record);
+        }
+
+        return { nodes };
+      },
+      { name: "editor.scene" },
+    );
+    this.#nodesById = computed(
+      () => {
+        const nodes = new Map<NodeId, ShiftNode>();
+        for (const node of this.#cell.value.nodes) {
+          nodes.set(node.id, node);
+        }
+        return nodes;
+      },
+      { name: "editor.scene.nodesById" },
+    );
+    this.#nodesByKind = computed(
+      () => {
+        const nodes = new Map<ShiftNode["kind"], ShiftNode[]>();
+        for (const node of this.#cell.value.nodes) {
+          const list = nodes.get(node.kind);
+          if (list) {
+            list.push(node);
+          } else {
+            nodes.set(node.kind, [node]);
+          }
+        }
+        return nodes;
+      },
+      { name: "editor.scene.nodesByKind" },
+    );
   }
 
-  /** Returns the reactive scene snapshot. */
   get cell(): Signal<SceneValue> {
     return this.#cell;
   }
 
-  /** Returns the current scene snapshot. */
   get value(): SceneValue {
     return this.#cell.peek();
   }
 
-  /** Returns all placed nodes as a read-only snapshot. */
   nodes(): readonly ShiftNode[] {
     return this.#cell.peek().nodes;
   }
 
-  /**
-   * Resolves a placed node by id.
-   *
-   * @param nodeId - Placement identity to resolve.
-   * @returns The placed node, or `null` when the node is not in the scene.
-   */
   node(nodeId: NodeId | null): ShiftNode | null {
     if (!nodeId) return null;
 
-    return this.#cell.peek().nodes.find((node) => node.id === nodeId) ?? null;
+    return this.#nodesById.peek().get(nodeId) ?? null;
   }
 
-  /**
-   * Replaces the complete scene.
-   *
-   * @param scene - Complete scene description. Nodes are copied by value.
-   */
-  set(scene: SceneInput): void {
-    this.#cell.set({
-      nodes: scene.nodes.map(copyNode),
-    });
-  }
-
-  /** Clears all scene nodes. */
-  clear(): void {
-    this.#cell.set(emptyScene());
-  }
-
-  /**
-   * Adds one node to the scene.
-   *
-   * @param node - Complete node identity and scene-space position to add.
-   */
-  addNode(node: ShiftNode): void {
-    const scene = this.#cell.peek();
-    this.#cell.set({
-      nodes: [...scene.nodes, copyNode(node)],
-    });
-  }
-
-  /**
-   * Replaces a node's scene-space position.
-   *
-   * @param nodeId - Placement identity whose position is updated.
-   * @param position - Destination position in scene coordinates.
-   */
-  moveNodeTo(nodeId: NodeId, position: Point2D): void {
-    const scene = this.#cell.peek();
-    this.#cell.set({
-      nodes: scene.nodes.map((node) =>
-        node.id === nodeId ? copyNode({ ...node, position: { ...position } }) : node,
-      ),
-    });
-  }
-
-  /**
-   * Offsets a node's scene-space position.
-   *
-   * @param nodeId - Placement identity whose position is updated.
-   * @param delta - Relative movement in scene coordinates.
-   */
-  moveNodeBy(nodeId: NodeId, delta: Point2D): void {
+  nodeOfKind<K extends ShiftNode["kind"]>(
+    nodeId: NodeId | null,
+    kind: K,
+  ): Extract<ShiftNode, { kind: K }> | null {
     const node = this.node(nodeId);
-    if (!node) return;
+    if (node?.kind !== kind) return null;
 
-    this.moveNodeTo(nodeId, {
-      x: node.position.x + delta.x,
-      y: node.position.y + delta.y,
-    });
+    return node as Extract<ShiftNode, { kind: K }>;
+  }
+
+  nodesOfKind<K extends ShiftNode["kind"]>(kind: K): readonly Extract<ShiftNode, { kind: K }>[] {
+    return (this.#nodesByKind.peek().get(kind) ?? []) as readonly Extract<ShiftNode, { kind: K }>[];
+  }
+
+  setNodes(nodes: readonly ShiftNode[]): void {
+    this.#deleteNodes();
+
+    for (const node of nodes) {
+      this.#store.put(copyNode(node) as ShiftNodeRecord);
+    }
+  }
+
+  updateNode(node: ShiftNode): void {
+    if (!this.node(node.id)) return;
+
+    this.#store.put(copyNode(node) as ShiftNodeRecord);
+  }
+
+  deleteNode(nodeId: NodeId): void {
+    this.#store.delete(nodeId);
+  }
+
+  clear(): void {
+    this.#deleteNodes();
+  }
+
+  #deleteNodes(): void {
+    for (const node of this.nodes()) {
+      this.#store.delete(node.id);
+    }
   }
 }
 
@@ -117,8 +126,4 @@ function copyNode<T extends ShiftNode>(node: T): T {
     ...node,
     position: { ...node.position },
   };
-}
-
-function emptyScene(): SceneValue {
-  return { nodes: [] };
 }

@@ -41,10 +41,6 @@ describe("KeyboardRouter", () => {
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    // setActiveTool short-circuits if the target matches the activeToolCell value,
-    // and activeToolCell defaults to "select" without actually activating a tool
-    // instance. Force activation directly so primaryTool is populated.
-    editor.toolManager.activate("select");
     canvasActive = true;
 
     router = new KeyboardRouter(() => ({
@@ -196,6 +192,25 @@ describe("KeyboardRouter", () => {
     });
   });
 
+  describe("delete key", () => {
+    it("deletes the current canvas selection", async () => {
+      editor.selectTool("pen");
+      editor.click(100, 100);
+      await editor.settle();
+      editor.click(200, 100);
+      await editor.settle();
+      editor.selectTool("select");
+      editor.selectAll();
+
+      const handled = router.handleKeyDown(createKeyboardEvent({ key: "Delete", code: "Delete" }));
+      await editor.settle();
+
+      expect(handled).toBe(true);
+      expect(editor.pointCount).toBe(0);
+      expect(editor.selection.hasSelection()).toBe(false);
+    });
+  });
+
   describe("temporary hand tool (space)", () => {
     it("activates the hand tool on space and returns to the previous tool on keyup", () => {
       const down = createKeyboardEvent({ key: " ", code: "Space" });
@@ -206,11 +221,9 @@ describe("KeyboardRouter", () => {
       // reflects the override while primaryToolId stays on the base tool.
       expect(editor.toolManager.activeToolId).toBe("hand");
       expect(editor.toolManager.primaryToolId).toBe("select");
-      expect(editor.proofMode).toBe(true);
 
       router.handleKeyUp(up);
       expect(editor.toolManager.activeToolId).toBe("select");
-      expect(editor.proofMode).toBe(false);
     });
 
     it("does not activate the hand tool on space while the text tool is active", () => {
@@ -231,7 +244,7 @@ describe("KeyboardRouter", () => {
       const handled = router.handleKeyDown(e);
 
       expect(handled).toBe(false);
-      expect(editor.selection.pointIds.size).toBe(0);
+      expect(editor.selection.hasSelection()).toBe(false);
     });
   });
 });

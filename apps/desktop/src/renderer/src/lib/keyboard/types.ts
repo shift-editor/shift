@@ -7,6 +7,7 @@ export interface KeyboardEditorActions {
   copy(): void;
   cut(): void;
   paste(): void;
+  deleteSelection(): boolean;
   undo(): void;
   redo(): void;
   selectAll(): void;
@@ -17,7 +18,6 @@ export interface KeyboardEditorActions {
     options?: { onActivate?: () => void; onReturn?: () => void },
   ): void;
   returnFromTemporaryTool(): void;
-  openGlyphFinder(): void;
 }
 
 export interface KeyboardToolManagerActions {
@@ -27,7 +27,7 @@ export interface KeyboardToolManagerActions {
 
 export interface KeyContext {
   canvasActive: boolean;
-  activeTool: ToolName;
+  activeTool: ToolName | null;
   editor: KeyboardEditorActions;
   toolManager: KeyboardToolManagerActions;
 }

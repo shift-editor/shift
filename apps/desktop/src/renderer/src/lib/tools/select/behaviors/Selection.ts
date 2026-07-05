@@ -1,35 +1,29 @@
-import type { SelectionEntry } from "@/lib/editor/Selection";
 import type { ToolContext } from "../../core/Behavior";
 import type { ClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
+import type { SelectableId } from "@/types";
 
 export class Selection implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ClickEvent): boolean {
     if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
 
     const editor = ctx.editor;
-    let items: SelectionEntry[] | null = null;
+    let ids: SelectableId[] | null = null;
     const target = event.target;
 
     switch (target.kind) {
       case "point": {
-        items = [{ kind: "point", pointId: target.id }];
+        ids = [target.id];
         break;
       }
 
       case "anchor": {
-        items = [{ kind: "anchor", anchorId: target.id }];
+        ids = [target.id];
         break;
       }
 
       case "segment": {
-        const pointIds = target.pointIds;
-        const segmentPointSelection = pointIds.map((pointId) => ({
-          kind: "point" as const,
-          pointId,
-        }));
-
-        items = [{ kind: "segment", segmentId: target.id }, ...segmentPointSelection];
+        ids = [target.id];
         break;
       }
 
@@ -38,7 +32,7 @@ export class Selection implements SelectBehavior {
         break;
     }
 
-    if (!items) {
+    if (!ids) {
       if (event.shiftKey || !editor.selection.hasSelection()) return false;
 
       editor.selection.clear();
@@ -47,17 +41,17 @@ export class Selection implements SelectBehavior {
     }
 
     if (event.shiftKey) {
-      const selected = items.every((item) => editor.selection.isSelected(item));
+      const selected = ids.every((id) => editor.selection.has(id));
 
-      for (const item of items) {
+      for (const id of ids) {
         if (selected) {
-          editor.selection.remove(item);
+          editor.selection.remove(id);
         } else {
-          editor.selection.add(item);
+          editor.selection.add(id);
         }
       }
     } else {
-      editor.selection.select(items);
+      editor.selection.select(ids);
     }
 
     ctx.setState({ type: "ready" });

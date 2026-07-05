@@ -146,7 +146,7 @@ describe("anchors edit through the workspace", () => {
     expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
   });
 
-  it("mixed point and anchor commits coalesce into one undo step", async () => {
+  it("mixed point and anchor commits undo as one layer operation", async () => {
     const contourId = layer.addContour();
     layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
     const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
@@ -230,7 +230,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     expect(editor.sceneGlyphInstance?.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
-  it("commits a preview without stale geometry or double-applying local positions", async () => {
+  it("commits a preview without double-applying local positions", async () => {
     const [, second] = await addTriangle(editor, layer);
 
     layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);

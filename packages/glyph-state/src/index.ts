@@ -22,6 +22,9 @@ export {
 export {
   Segment,
   asSegmentId,
+  isSegmentId,
+  parseSegmentId,
+  segmentIdFor,
   type SegmentId,
   type SegmentHit,
   type SegmentType,

@@ -1,221 +1,131 @@
-import type { AnchorId, ContourId, PointId } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
-import { computed, signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
-
-export interface PointSelection {
-  readonly kind: "point";
-  readonly pointId: PointId;
-}
-
-export interface AnchorSelection {
-  readonly kind: "anchor";
-  readonly anchorId: AnchorId;
-}
-
-export interface ContourSelection {
-  readonly kind: "contour";
-  readonly contourId: ContourId;
-}
-
-export interface SegmentSelection {
-  readonly kind: "segment";
-  readonly segmentId: SegmentId;
-}
-
-export type SelectionEntry = PointSelection | AnchorSelection | ContourSelection | SegmentSelection;
-
-export type SelectableId = PointId | AnchorId | ContourId | SegmentId;
+import { computed, type Signal } from "@/lib/signals/signal";
+import type { ShiftStore } from "@/lib/store/ShiftStore";
+import { currentSelectionId, type SelectableId, type ShiftEditorRecord } from "@/types";
 
 export interface SelectionState {
-  readonly entries: readonly SelectionEntry[];
+  readonly ids: readonly SelectableId[];
 }
 
 function emptySelectionState(): SelectionState {
-  return { entries: [] };
+  return { ids: [] };
 }
 
 /**
- * Stores scene-scoped editor selection.
+ * Stores selected editor object identities.
  *
- * Selection is identity-only state. It owns no glyph models, glyph layers, or
- * geometry-derived data; callers resolve entries against scene and font state.
+ * @remarks
+ * Selection is intentionally a dumb ordered set. It does not know whether an id
+ * is a scene node, point, anchor, contour, or segment.
+ * Callers that need behavior must resolve ids through the editor/object layer.
  */
 export class Selection {
-  readonly #state: WritableSignal<SelectionState>;
+  readonly #store: ShiftStore<ShiftEditorRecord>;
+  readonly #ids: Signal<ReadonlySet<SelectableId>>;
   readonly stateCell: Signal<SelectionState>;
 
-  readonly #ids: Signal<ReadonlySet<SelectableId>>;
+  constructor(store: ShiftStore<ShiftEditorRecord>) {
+    this.#store = store;
+    this.stateCell = computed(
+      () => {
+        const record = this.#store.cell.value.get(currentSelectionId);
+        if (record?.type !== "selection") return emptySelectionState();
 
-  readonly #pointIds: Signal<ReadonlySet<PointId>>;
-  readonly #anchorIds: Signal<ReadonlySet<AnchorId>>;
-  readonly #contourIds: Signal<ReadonlySet<ContourId>>;
-  readonly #segmentIds: Signal<ReadonlySet<SegmentId>>;
-
-  constructor() {
-    this.#state = signal<SelectionState>(emptySelectionState(), {
-      name: "editor.selection.state",
-    });
-    this.stateCell = this.#state;
-    this.#ids = computed(() => new Set(this.#state.value.entries.map(selectionId)), {
+        return { ids: record.ids };
+      },
+      { name: "editor.selection.state" },
+    );
+    this.#ids = computed(() => new Set(this.stateCell.value.ids), {
       name: "editor.selection.ids",
-    });
-    this.#pointIds = computed(() => pointSelectionIds(this.#state.value.entries), {
-      name: "editor.selection.pointIds",
-    });
-    this.#anchorIds = computed(() => anchorSelectionIds(this.#state.value.entries), {
-      name: "editor.selection.anchorIds",
-    });
-    this.#contourIds = computed(() => contourSelectionIds(this.#state.value.entries), {
-      name: "editor.selection.contourIds",
-    });
-    this.#segmentIds = computed(() => segmentSelectionIds(this.#state.value.entries), {
-      name: "editor.selection.segmentIds",
     });
   }
 
   get snapshot(): SelectionState {
-    return this.#state.peek();
+    return this.stateCell.peek();
   }
 
-  get entries(): readonly SelectionEntry[] {
-    return this.#state.peek().entries;
-  }
-
-  get points(): readonly PointSelection[] {
-    return this.entries.filter((entry): entry is PointSelection => entry.kind === "point");
-  }
-
-  get anchors(): readonly AnchorSelection[] {
-    return this.entries.filter((entry): entry is AnchorSelection => entry.kind === "anchor");
-  }
-
-  get contours(): readonly ContourSelection[] {
-    return this.entries.filter((entry): entry is ContourSelection => entry.kind === "contour");
-  }
-
-  get segments(): readonly SegmentSelection[] {
-    return this.entries.filter((entry): entry is SegmentSelection => entry.kind === "segment");
-  }
-
-  get pointIds(): ReadonlySet<PointId> {
-    return this.#pointIds.peek();
-  }
-
-  get anchorIds(): ReadonlySet<AnchorId> {
-    return this.#anchorIds.peek();
-  }
-
-  get contourIds(): ReadonlySet<ContourId> {
-    return this.#contourIds.peek();
-  }
-
-  get segmentIds(): ReadonlySet<SegmentId> {
-    return this.#segmentIds.peek();
-  }
-
-  isSelected(entry: SelectionEntry): boolean {
-    return this.has(selectionId(entry));
+  /**
+   * Returns selected ids in selection order.
+   *
+   * @returns a fresh snapshot array; mutating it does not change selection.
+   */
+  get ids(): readonly SelectableId[] {
+    return [...this.stateCell.peek().ids];
   }
 
   has(id: SelectableId): boolean {
     return this.#ids.peek().has(id);
   }
 
+  isSelected(id: SelectableId): boolean {
+    return this.has(id);
+  }
+
   hasSelection(): boolean {
-    return this.entries.length > 0;
+    return this.stateCell.peek().ids.length > 0;
   }
 
-  select(entries: readonly SelectionEntry[]): void {
-    this.#state.set({ entries: uniqueEntries(entries) });
+  select(ids: readonly SelectableId[]): void {
+    this.#write(uniqueIds(ids));
   }
 
-  add(entry: SelectionEntry): void {
-    if (this.isSelected(entry)) return;
+  add(id: SelectableId): void {
+    if (this.has(id)) return;
 
-    this.#state.set({ entries: [...this.entries, entry] });
+    this.#write([...this.stateCell.peek().ids, id]);
   }
 
-  remove(entry: SelectionEntry): void {
-    if (!this.isSelected(entry)) return;
+  remove(id: SelectableId): void {
+    if (!this.has(id)) return;
 
-    const id = selectionId(entry);
-    this.#state.set({
-      entries: this.entries.filter((selected) => selectionId(selected) !== id),
-    });
-  }
-
-  toggle(entry: SelectionEntry): void {
-    if (this.isSelected(entry)) {
-      this.remove(entry);
+    const ids = this.stateCell.peek().ids.filter((selectedId) => selectedId !== id);
+    if (ids.length === 0) {
+      this.clear();
       return;
     }
 
-    this.add(entry);
+    this.#write(ids);
+  }
+
+  toggle(id: SelectableId): void {
+    if (this.has(id)) {
+      this.remove(id);
+      return;
+    }
+
+    this.add(id);
   }
 
   clear(): void {
-    if (this.entries.length === 0) return;
+    if (!this.hasSelection()) return;
 
-    this.#state.set(emptySelectionState());
+    this.#store.delete(currentSelectionId);
+  }
+
+  #write(ids: readonly SelectableId[]): void {
+    if (ids.length === 0) {
+      this.clear();
+      return;
+    }
+
+    this.#store.put({
+      id: currentSelectionId,
+      type: "selection",
+      scope: "session",
+      ids,
+    });
   }
 }
 
-function uniqueEntries(entries: readonly SelectionEntry[]): readonly SelectionEntry[] {
+function uniqueIds(ids: readonly SelectableId[]): readonly SelectableId[] {
   const seen = new Set<SelectableId>();
-  const unique: SelectionEntry[] = [];
+  const unique: SelectableId[] = [];
 
-  for (const entry of entries) {
-    const id = selectionId(entry);
+  for (const id of ids) {
     if (seen.has(id)) continue;
 
     seen.add(id);
-    unique.push(entry);
+    unique.push(id);
   }
 
   return unique;
-}
-
-function selectionId(entry: SelectionEntry): SelectableId {
-  switch (entry.kind) {
-    case "point":
-      return entry.pointId;
-    case "anchor":
-      return entry.anchorId;
-    case "contour":
-      return entry.contourId;
-    case "segment":
-      return entry.segmentId;
-  }
-}
-
-function pointSelectionIds(entries: readonly SelectionEntry[]): ReadonlySet<PointId> {
-  const ids = new Set<PointId>();
-  for (const entry of entries) {
-    if (entry.kind === "point") ids.add(entry.pointId);
-  }
-  return ids;
-}
-
-function anchorSelectionIds(entries: readonly SelectionEntry[]): ReadonlySet<AnchorId> {
-  const ids = new Set<AnchorId>();
-  for (const entry of entries) {
-    if (entry.kind === "anchor") ids.add(entry.anchorId);
-  }
-  return ids;
-}
-
-function contourSelectionIds(entries: readonly SelectionEntry[]): ReadonlySet<ContourId> {
-  const ids = new Set<ContourId>();
-  for (const entry of entries) {
-    if (entry.kind === "contour") ids.add(entry.contourId);
-  }
-  return ids;
-}
-
-function segmentSelectionIds(entries: readonly SelectionEntry[]): ReadonlySet<SegmentId> {
-  const ids = new Set<SegmentId>();
-  for (const entry of entries) {
-    if (entry.kind === "segment") ids.add(entry.segmentId);
-  }
-  return ids;
 }

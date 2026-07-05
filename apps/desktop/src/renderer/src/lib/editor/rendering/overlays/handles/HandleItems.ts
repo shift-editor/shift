@@ -1,4 +1,4 @@
-import type { PointId } from "@shift/types";
+import type { SelectableId } from "@/types";
 import type { HandleState } from "@/types/graphics";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
@@ -61,10 +61,10 @@ export class HandleItems {
     return new HandleDisplayList(this.#items);
   }
 
-  #state(pointId: PointId, source: HandleStateSource): HandleState {
-    if (source.selection.has(pointId)) return "selected";
+  #state(id: SelectableId, source: HandleStateSource): HandleState {
+    if (source.selection.has(id)) return "selected";
 
-    if (source.hover.has(pointId)) return "hovered";
+    if (source.hover.has(id)) return "hovered";
 
     return "idle";
   }

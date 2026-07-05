@@ -5,13 +5,17 @@ import UnionIcon from "@/assets/sidebar-right/union.svg";
 import IntersectIcon from "@/assets/sidebar-right/intersect.svg";
 import SubtractIcon from "@/assets/sidebar-right/subtract.svg";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useSignalState } from "@/lib/signals";
+import { isContourId } from "@shift/types";
 
 export const BooleanOps = () => {
   const editor = useEditor();
-  const selectedContourIds = editor.selection.contourIds;
+  const selection = useSignalState(editor.selection.stateCell);
+  const selectedContourIds = selection.ids.filter(isContourId);
 
-  if (selectedContourIds.size < 2) return null;
+  if (selectedContourIds.length < 2) return null;
   const [contourIdA, contourIdB] = selectedContourIds;
+  if (!contourIdA || !contourIdB) return null;
 
   return (
     <SidebarSection title="Boolean">

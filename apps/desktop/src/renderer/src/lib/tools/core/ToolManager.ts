@@ -273,12 +273,16 @@ export class ToolManager implements ToolSwitchHandler {
       case "pointerMove":
       case "click":
       case "doubleClick":
-      case "dragStart":
       case "drag":
       case "dragEnd":
         return {
           ...event,
           target: this.editor.getPointerTarget(event.coords.scene),
+        };
+      case "dragStart":
+        return {
+          ...event,
+          target: this.editor.getPointerTarget(event.origin.scene),
         };
       case "dragCancel":
       case "keyDown":

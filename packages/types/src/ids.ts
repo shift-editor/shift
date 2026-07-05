@@ -2,10 +2,10 @@
  * Branded ID types for type-safe identification of font entities.
  *
  * These types ensure compile-time safety when working with IDs across the
- * TS/Rust boundary. Ids are prefixed strings (`point_<short-id>`). The renderer
- * MINTS ids for entities it creates (client-minted ids: verbs return
- * identity synchronously; Rust validates and honors them); all other ids
- * come from Rust.
+ * TS/Rust boundary. Most ids are prefixed strings (`point_<short-id>`). The
+ * renderer MINTS ids for entities it creates (client-minted ids: verbs return
+ * identity synchronously; Rust validates and honors them); all other ids come
+ * from Rust.
  */
 
 // Branded type symbols (never exported, just for type branding)
@@ -165,84 +165,54 @@ export function asSourceId(id: string): SourceId {
   return id as SourceId;
 }
 
-/**
- * Type guard to check if a value is a valid PointId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidPointId(id: unknown): id is PointId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable point id. */
+export function isPointId(id: unknown): id is PointId {
+  return hasIdPrefix(id, "point");
 }
 
-/**
- * Type guard to check if a value is a valid ContourId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidContourId(id: unknown): id is ContourId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable contour id. */
+export function isContourId(id: unknown): id is ContourId {
+  return hasIdPrefix(id, "contour");
 }
 
-/**
- * Type guard to check if a value is a valid AnchorId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidAnchorId(id: unknown): id is AnchorId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable anchor id. */
+export function isAnchorId(id: unknown): id is AnchorId {
+  return hasIdPrefix(id, "anchor");
 }
 
-/**
- * Type guard to check if a value is a valid AxisId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidAxisId(id: unknown): id is AxisId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable axis id. */
+export function isAxisId(id: unknown): id is AxisId {
+  return hasIdPrefix(id, "axis");
 }
 
-/**
- * Type guard to check if a value is a valid ComponentId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidComponentId(id: unknown): id is ComponentId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable component id. */
+export function isComponentId(id: unknown): id is ComponentId {
+  return hasIdPrefix(id, "component");
 }
 
-/**
- * Type guard to check if a value is a valid GuidelineId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidGuidelineId(id: unknown): id is GuidelineId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable guideline id. */
+export function isGuidelineId(id: unknown): id is GuidelineId {
+  return hasIdPrefix(id, "guideline");
 }
 
-/**
- * Type guard to check if a value is a valid GlyphId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidGlyphId(id: unknown): id is GlyphId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable glyph id. */
+export function isGlyphId(id: unknown): id is GlyphId {
+  return hasIdPrefix(id, "glyph");
 }
 
-/**
- * Type guard to check if a value is a valid LayerId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidLayerId(id: unknown): id is LayerId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable layer id. */
+export function isLayerId(id: unknown): id is LayerId {
+  return hasIdPrefix(id, "layer");
 }
 
-/**
- * Type guard to check if a value is a valid NodeId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidNodeId(id: unknown): id is NodeId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable scene node id. */
+export function isNodeId(id: unknown): id is NodeId {
+  return hasIdPrefix(id, "node");
 }
 
-/**
- * Type guard to check if a value is a valid SourceId.
- * Useful for runtime validation in debug builds.
- */
-export function isValidSourceId(id: unknown): id is SourceId {
-  return typeof id === "string" && id.length > 0;
+/** Returns whether a value is a runtime-discriminable source id. */
+export function isSourceId(id: unknown): id is SourceId {
+  return hasIdPrefix(id, "source");
 }
 
 const SHORT_ID_ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
@@ -282,6 +252,10 @@ function mintPrefixedId<Prefix extends keyof MintedIdByPrefix>(
   prefix: Prefix,
 ): MintedIdByPrefix[Prefix] {
   return `${prefix}_${mintShortIdSuffix()}` as MintedIdByPrefix[Prefix];
+}
+
+function hasIdPrefix(id: unknown, prefix: keyof MintedIdByPrefix): boolean {
+  return typeof id === "string" && id.startsWith(`${prefix}_`);
 }
 
 /**

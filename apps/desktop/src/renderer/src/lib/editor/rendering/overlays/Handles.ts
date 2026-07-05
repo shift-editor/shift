@@ -1,9 +1,9 @@
-import type { Point2D } from "@shift/geo";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { CameraTransform } from "@/lib/editor/managers/Camera";
 import type { GlyphInstance } from "@/lib/model/Glyph";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
+import type { GlyphNode } from "@/types/node";
 import { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 import { HandleItems } from "./handles/HandleItems";
 import { MarkerHandleRenderer } from "./handles/MarkerHandleRenderer";
@@ -30,7 +30,7 @@ export class Handles {
   draw(
     canvas: Canvas,
     camera: CameraTransform,
-    drawOffset: Point2D,
+    node: GlyphNode,
     instance: GlyphInstance,
     selection: Selection,
     hover: Hover,
@@ -40,7 +40,7 @@ export class Handles {
       hover,
     });
 
-    if (this.#markers.draw(this.#markerLayer, list, camera, drawOffset)) return;
+    if (this.#markers.draw(this.#markerLayer, list, camera, node.position)) return;
 
     this.#canvas.draw(canvas, list.items);
   }

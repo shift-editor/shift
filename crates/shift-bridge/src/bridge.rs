@@ -485,7 +485,6 @@ impl Bridge {
     for request in requests {
       let request = GlyphSnapshotRequest::from(request);
       let glyph_id = request.glyph_id;
-      let source_ids = request.source_ids;
       let Some(glyph) = font.glyph(glyph_id.clone()) else {
         continue;
       };
@@ -494,9 +493,10 @@ impl Bridge {
         .variation_build_for_glyph(glyph)?
         .and_then(|(_, build)| build.variation_data);
 
-      let layers = source_ids
-        .into_iter()
-        .filter_map(|source_id| glyph.layer_for_source(source_id))
+      let layers = glyph
+        .layers()
+        .values()
+        .map(|layer| layer.as_ref())
         .map(|layer| GlyphLayerSnapshot {
           glyph_id: glyph_id.clone(),
           source_id: layer.source_id(),
@@ -1504,14 +1504,18 @@ mod tests {
     let snapshots = bridge
       .get_glyph_snapshots(vec![NapiGlyphSnapshotRequest {
         glyph_id: glyph_id.to_string(),
-        source_ids: vec![source_id.to_string()],
       }])
       .unwrap();
 
     snapshots
       .into_iter()
       .next()
-      .and_then(|snapshot| snapshot.layers.into_iter().next())
+      .and_then(|snapshot| {
+        snapshot
+          .layers
+          .into_iter()
+          .find(|layer| layer.source_id == source_id)
+      })
       .map(|layer| layer.state)
   }
 
@@ -2284,12 +2288,10 @@ mod tests {
   fn get_glyph_snapshots_returns_none_for_missing_glyph() {
     let bridge = bridge_with_workspace();
     let missing_glyph_id = shift_font::GlyphId::new().to_string();
-    let source_id = default_source_id(&bridge);
 
     let snapshots = bridge
       .get_glyph_snapshots(vec![NapiGlyphSnapshotRequest {
         glyph_id: missing_glyph_id,
-        source_ids: vec![source_id],
       }])
       .unwrap();
 

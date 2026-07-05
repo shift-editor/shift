@@ -1,5 +1,18 @@
 import type { CursorType, ToolRegistryItem } from "@/types/editor";
-import type { PointId, ContourId, Source, SourceId, GlyphName, GlyphRecord } from "@shift/types";
+import {
+  isAnchorId,
+  isContourId,
+  isNodeId,
+  isPointId,
+  type AnchorId,
+  type PointId,
+  type ContourId,
+  type Source,
+  type SourceId,
+  type GlyphName,
+  type GlyphRecord,
+} from "@shift/types";
+import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates, NodePoint, ScenePoint } from "@/types/coordinates";
 import {
@@ -9,30 +22,9 @@ import {
 } from "@/lib/variation/location";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
-import { Segment } from "@shift/glyph-state";
-import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
 
 import { Camera } from "./managers";
-import {
-  CommandRunner,
-  NudgePointsCommand,
-  SplitSegmentCommand,
-  UpgradeLineToCubicCommand,
-  BooleanOperationCommand,
-  CutCommand,
-  PasteCommand,
-} from "../commands";
-import {
-  RotatePointsCommand,
-  ScalePointsCommand,
-  ReflectPointsCommand,
-  MoveSelectionToCommand,
-  AlignPointsCommand,
-  DistributePointsCommand,
-  type ReflectAxis,
-  type AlignmentType,
-  type DistributeType,
-} from "../transform";
 import {
   computed,
   effect,
@@ -43,14 +35,16 @@ import {
 } from "../signals/signal";
 import {
   Clipboard,
-  ClipboardContent,
   ClipboardSelection,
+  type PasteOptions,
+  type ShiftContent,
   type SystemClipboard,
 } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { EdgePanManager } from "./managers";
 import { Hover } from "./Hover";
 import { Renderer } from "./rendering/Renderer";
+import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { CameraTransform } from "./managers";
 import type { FocusZone } from "@/types/focus";
@@ -68,11 +62,12 @@ import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
 import { EventEmitter } from "./lifecycle";
 
-import type { LineSegmentPoints } from "@shift/glyph-state";
-import { GlyphLayerEditDraft, type GlyphLayerEditSubject } from "./GlyphLayerEditDraft";
-import { Scene } from "./Scene";
+import { ShiftStore } from "@/lib/store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "@/types/target";
+import type { SelectableId, ShiftEditorRecord, ShiftId, ShiftObject } from "@/types";
+import type { GlyphNode } from "@/types/node";
+import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
 
 interface EditorOptions {
   font: Font;
@@ -97,8 +92,8 @@ interface EditorOptions {
  * 3. Call `setActiveTool()` to begin interaction.
  * 4. Call `destroy()` on teardown to dispose effects and the renderer.
  *
- * Font state arrives through the injected `Font` projection; there is no
- * load call on the editor.
+ * Font state arrives through the injected `Font` model; the editor does not
+ * expose a separate glyph loading API.
  *
  * @knipclassignore
  */
@@ -123,6 +118,7 @@ export class Editor {
   readonly hover: Hover;
   readonly font: Font;
   readonly scene: Scene;
+  readonly #store: ShiftStore<ShiftEditorRecord>;
 
   /**
    * Rendering and camera infrastructure.
@@ -143,19 +139,19 @@ export class Editor {
       shortcut?: string;
     }
   >;
-  #activeTool: WritableSignal<ToolName>;
+  #activeTool: Signal<ToolName | null>;
   #activeToolState: WritableSignal<ActiveToolState>;
   #isEditing: Signal<boolean>;
+  #selectionBounds: Signal<Rect2D | null>;
 
   /**
    * Runtime services with lifecycle or side effects.
    *
-   * These mutate process/editor state: camera, command history, bridge IO,
+   * These mutate process/editor state: camera, bridge IO,
    * event dispatch, and registered tool state. They should stay separate from
    * immutable glyph geometry and from render-only state.
    */
   #camera: Camera;
-  #commands: CommandRunner;
 
   #designLocation: WritableSignal<AxisLocation>;
   #activeSourceId: WritableSignal<SourceId | null>;
@@ -168,8 +164,6 @@ export class Editor {
   #events: EventEmitter;
 
   #textRuns: TextRuns;
-
-  #glyphFinderOpen: WritableSignal<boolean>;
 
   #zone: FocusZone = "canvas";
 
@@ -189,8 +183,11 @@ export class Editor {
     this.#camera = new Camera();
 
     this.font = options.font;
-    this.scene = new Scene();
+    this.#store = new ShiftStore();
+    this.scene = new Scene(this.#store);
+
     const initialDesignLocation = emptyAxisLocation();
+
     this.#designLocation = signal(initialDesignLocation, {
       name: "editor.designLocation",
     });
@@ -205,34 +202,33 @@ export class Editor {
     this.input = new EditorInput();
     this.gesture = new EditorGesture();
 
-    this.#commands = new CommandRunner(
-      signal<GlyphLayer | null>(null, { name: "editor.commands.unboundLayer" }),
-    );
-
     this.#toolState = {
       app: new Map<string, unknown>(),
       document: new Map<string, unknown>(),
     };
 
-    this.#glyphFinderOpen = signal(false, { name: "editor.glyphFinder.open" });
-
-    this.selection = new Selection();
+    this.selection = new Selection(this.#store);
     this.hover = new Hover();
+    this.#selectionBounds = computed(() => this.selectionBounds(), {
+      name: "editor.selection.bounds",
+    });
 
     this.#edgePan = new EdgePanManager(this);
 
     this.#toolMetadata = new Map();
-    this.#activeTool = signal<ToolName>("select", {
-      name: "editor.tool.active",
-    });
     this.#activeToolState = signal<ActiveToolState>(
       { type: "idle" },
       {
         name: "editor.tool.state",
       },
     );
+
+    // TODO: why not make editor extend EventEmitter?
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
+    this.#activeTool = computed(() => this.#toolManager.activeToolCell.value?.id ?? null, {
+      name: "editor.tool.active",
+    });
     this.#isEditing = computed(
       () => this.#toolManager.activeToolCell.value?.isEditingCell.value ?? false,
       { name: "editor.isEditing" },
@@ -294,16 +290,16 @@ export class Editor {
     return out;
   }
 
-  public get activeTool(): ToolName {
+  public get activeTool(): ToolName | null {
     return this.#activeTool.peek();
   }
 
-  public get activeToolCell(): Signal<ToolName> {
+  public get activeToolCell(): Signal<ToolName | null> {
     return this.#activeTool;
   }
 
   // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor
-  public getActiveTool(): ToolName {
+  public getActiveTool(): ToolName | null {
     return this.#activeTool.peek();
   }
 
@@ -337,11 +333,11 @@ export class Editor {
   }
 
   public setActiveTool(toolName: ToolName): void {
-    const currentToolName = this.#activeTool.peek();
-    if (currentToolName === toolName) return;
+    if (this.toolManager.primaryToolId === toolName && this.toolManager.activeToolId === toolName) {
+      return;
+    }
 
     this.toolManager.activate(toolName);
-    this.#activeTool.set(toolName);
   }
 
   public get toolManager(): ToolManager {
@@ -366,11 +362,6 @@ export class Editor {
 
   public setCurrentModifiers(modifiers: Modifiers): void {
     this.input.setModifiers(modifiers);
-  }
-
-  public beginGlyphLayerEditDraft(subject: GlyphLayerEditSubject): GlyphLayerEditDraft {
-    void subject;
-    throw new Error("Glyph layer edit drafts require an explicit glyph layer");
   }
 
   public get debugOverlays(): DebugOverlays {
@@ -448,14 +439,191 @@ export class Editor {
   }
 
   /**
+   * Resolves an editor-addressable id to the current live object.
+   *
+   * @param id - Object identity to resolve in the current editor state.
+   * @returns The resolved object, or `null` when no object exists for the id.
+   */
+  public object(id: ShiftId): ShiftObject | null {
+    if (isNodeId(id)) {
+      const node = this.scene.node(id);
+      if (!node) return null;
+
+      return new NodeObject(node);
+    }
+
+    if (isPointId(id)) {
+      const layer = this.#layerForPoint(id);
+      if (!layer) return null;
+
+      const node = this.#placedGlyphNodeForLayer(layer);
+      if (!node) return null;
+
+      return new PointObject(id, layer, node);
+    }
+
+    if (isAnchorId(id)) {
+      const layer = this.#layerForAnchor(id);
+      if (!layer) return null;
+
+      const node = this.#placedGlyphNodeForLayer(layer);
+      if (!node) return null;
+
+      return new AnchorObject(id, layer, node);
+    }
+
+    if (isSegmentId(id)) {
+      const layer = this.#layerForSegment(id);
+      if (!layer) return null;
+
+      const node = this.#placedGlyphNodeForLayer(layer);
+      if (!node) return null;
+
+      const pointIds = this.font.pointIdsForSegment(id);
+      if (!pointIds) return null;
+
+      return new SegmentObject(id, pointIds, layer, node);
+    }
+
+    if (isContourId(id)) {
+      const layer = this.#layerForContour(id);
+      if (!layer) return null;
+
+      const node = this.#placedGlyphNodeForLayer(layer);
+      if (!node) return null;
+
+      return new ContourObject(id, layer, node);
+    }
+
+    return null;
+  }
+
+  #layerForPoint(pointId: PointId): GlyphLayer | null {
+    const layerId = this.font.layerIdForPoint(pointId);
+    if (!layerId) return null;
+
+    const layer = this.font.layerById(layerId);
+    if (!layer?.point(pointId)) return null;
+
+    return layer;
+  }
+
+  #layerForAnchor(anchorId: AnchorId): GlyphLayer | null {
+    const layerId = this.font.layerIdForAnchor(anchorId);
+    if (!layerId) return null;
+
+    const layer = this.font.layerById(layerId);
+    if (!layer?.anchor(anchorId)) return null;
+
+    return layer;
+  }
+
+  #layerForSegment(segmentId: SegmentId): GlyphLayer | null {
+    const layerId = this.font.layerIdForSegment(segmentId);
+    if (!layerId) return null;
+
+    const layer = this.font.layerById(layerId);
+    if (!layer?.segment(segmentId)) return null;
+
+    return layer;
+  }
+
+  #layerForContour(contourId: ContourId): GlyphLayer | null {
+    const layerId = this.font.layerIdForContour(contourId);
+    if (!layerId) return null;
+
+    const layer = this.font.layerById(layerId);
+    if (!layer?.contour(contourId)) return null;
+
+    return layer;
+  }
+
+  #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
+    for (const node of this.scene.nodesOfKind("glyph")) {
+      if (node.sourceId !== layer.sourceId) continue;
+
+      const nodeLayer = this.font.layer(node.glyphId, node.sourceId);
+      if (nodeLayer?.id === layer.id) return node;
+    }
+
+    return null;
+  }
+
+  /**
+   * Resolves editor-addressable ids to objects.
+   *
+   * @param ids - Object identities to resolve in selection or command order.
+   * @returns Resolved objects in input order. Unresolved ids are omitted.
+   */
+  public objects(ids: readonly ShiftId[]): readonly ShiftObject[] {
+    const objects: ShiftObject[] = [];
+
+    for (const id of ids) {
+      const object = this.object(id);
+      if (object) objects.push(object);
+    }
+
+    return objects;
+  }
+
+  /**
+   * Returns the current selection bounds in scene coordinates.
+   *
+   * @remarks
+   * Selection stores IDs only. This method resolves those IDs against the
+   * current scene and font, asks each object for its live bounds, and returns a
+   * fresh axis-aligned rectangle enclosing the resolved objects.
+   *
+   * @returns null when nothing is selected or no selected object has bounds.
+   */
+  public selectionBounds(): Rect2D | null {
+    let bounds: BoundsType | null = null;
+
+    for (const id of this.selection.ids) {
+      const object = this.object(id);
+      if (!object) continue;
+
+      const objectBounds = object.bounds();
+      if (!objectBounds) continue;
+
+      const next = Bounds.fromXYWH(
+        objectBounds.x,
+        objectBounds.y,
+        objectBounds.width,
+        objectBounds.height,
+      );
+      bounds = bounds ? Bounds.union(bounds, next) : next;
+    }
+
+    return bounds ? Bounds.toRect(bounds) : null;
+  }
+
+  /** Reactive scene-space bounds for the current selection. */
+  public get selectionBoundsCell(): Signal<Rect2D | null> {
+    return this.#selectionBounds;
+  }
+
+  /**
    * Select every point in the active authored glyph layer.
    *
    * This intentionally uses the authored glyph layer rather than interpolated
    * design-location geometry: selection mutates an authored layer, so it must
-   * refer to point IDs that commands can mutate.
+   * refer to point IDs that layer operations can mutate.
    */
   public selectAll(): void {
-    return;
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    const layer = this.font.layer(node.glyphId, sourceId);
+    if (!layer) return;
+
+    this.selection.select(layer.allPoints.map((point) => point.id));
   }
 
   /**
@@ -550,26 +718,37 @@ export class Editor {
               nodeId: node.id,
               glyphId: node.glyphId,
               point: nodePoint,
+              segmentId: hit.id,
               pointIds: segment.pointIds,
             };
           }
 
-          return {
-            ...hit,
-            nodeId: node.id,
-            glyphId: node.glyphId,
-            point: nodePoint,
-          };
+          if (hit.kind === "point") {
+            return {
+              ...hit,
+              nodeId: node.id,
+              glyphId: node.glyphId,
+              point: nodePoint,
+              pointId: hit.id,
+            };
+          }
+
+          if (hit.kind === "anchor") {
+            return {
+              ...hit,
+              nodeId: node.id,
+              glyphId: node.glyphId,
+              point: nodePoint,
+              anchorId: hit.id,
+            };
+          }
+
+          break;
         }
       }
     }
 
     return { kind: "canvas", point };
-  }
-
-  /** Stateless command executor; undo authority is the workspace ledger. */
-  public get commands(): CommandRunner {
-    return this.#commands;
   }
 
   /** Subscribe to a lifecycle event. Returns an unsubscribe function. */
@@ -595,22 +774,6 @@ export class Editor {
     this.#zone = zone;
   }
 
-  public get glyphFinderOpen(): boolean {
-    return this.#glyphFinderOpen.peek();
-  }
-
-  public get glyphFinderOpenCell(): Signal<boolean> {
-    return this.#glyphFinderOpen;
-  }
-
-  public openGlyphFinder(): void {
-    this.#glyphFinderOpen.set(true);
-  }
-
-  public closeGlyphFinder(): void {
-    this.#glyphFinderOpen.set(false);
-  }
-
   public undo() {
     // One undo authority: the workspace ledger (state-pair replay).
     void this.font.editCoordinator.undo();
@@ -618,6 +781,17 @@ export class Editor {
 
   public redo() {
     void this.font.editCoordinator.redo();
+  }
+
+  /**
+   * Groups synchronous workspace edits into one undoable operation.
+   *
+   * @param label - Human-readable operation name for diagnostics and future ledger labels.
+   * @param body - Synchronous edit body that calls model mutation APIs.
+   * @returns The value returned by `body`.
+   */
+  public transaction<TResult>(label: string, body: () => TResult): TResult {
+    return this.font.editCoordinator.transaction(label, body);
   }
 
   public setCameraRect(rect: Rect2D) {
@@ -629,34 +803,70 @@ export class Editor {
   }
 
   public get xAdvance(): number {
-    return 0;
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return 0;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return 0;
+
+    const [node] = glyphNodes;
+    if (!node) return 0;
+
+    return this.font.layer(node.glyphId, sourceId)?.xAdvance ?? 0;
   }
 
   /**
-   * Sets the active glyph layer's horizontal advance through command history.
+   * Sets the current glyph layer's horizontal advance.
    *
    * @param width - New advance width in UPM units.
    */
   public setXAdvance(width: number): void {
-    void width;
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    this.font.layer(node.glyphId, sourceId)?.setXAdvance(width);
   }
 
   /**
-   * Sets the active glyph layer's left sidebearing by translating its outline.
+   * Sets the current glyph layer's left sidebearing.
    *
    * @param value - Desired left sidebearing in UPM units.
    */
   public setLeftSidebearing(value: number): void {
-    void value;
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    this.font.layer(node.glyphId, sourceId)?.setLeftSidebearing(value);
   }
 
   /**
-   * Sets the active glyph layer's right sidebearing by changing its advance.
+   * Sets the current glyph layer's right sidebearing.
    *
    * @param value - Desired right sidebearing in UPM units.
    */
   public setRightSidebearing(value: number): void {
-    void value;
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    this.font.layer(node.glyphId, sourceId)?.setRightSidebearing(value);
   }
 
   public updateMetricsFromFont(): void {
@@ -779,156 +989,203 @@ export class Editor {
     this.#renderer.fpsMonitor.stop();
   }
 
+  /**
+   * Builds portable editor content from live object ids.
+   *
+   * @remarks
+   * The first content producer supports glyph point, segment, and contour
+   * objects that resolve to one authored layer. Segment and contour objects are
+   * expanded to concrete points before content is detached from live state.
+   *
+   * @param ids - Object identities to snapshot.
+   * @returns Detached content, or `null` when ids are empty, unsupported,
+   * unresolved, span multiple layers, or produce no portable geometry.
+   */
+  public contentFrom(ids: readonly ShiftId[]): ShiftContent | null {
+    const selection = this.#pointSelectionFromIds(ids);
+    if (!selection) return null;
+
+    const content = ClipboardSelection.fromPointIds(selection.pointIds).contentFrom(
+      selection.layer,
+    );
+    if (!content || content.contours.length === 0) return null;
+
+    return content;
+  }
+
+  #pointSelectionFromIds(
+    ids: readonly ShiftId[],
+  ): { layer: GlyphLayer; pointIds: readonly PointId[] } | null {
+    const objects = this.objects(ids);
+    if (objects.length === 0 || objects.length !== ids.length) return null;
+
+    let layer: GlyphLayer | null = null;
+    const pointIds = new Set<PointId>();
+
+    const useLayer = (next: GlyphLayer): boolean => {
+      if (layer && layer.id !== next.id) return false;
+
+      layer = next;
+      return true;
+    };
+
+    for (const object of objects) {
+      switch (object.kind) {
+        case "point":
+          if (!useLayer(object.layer)) return null;
+
+          pointIds.add(object.pointId);
+          break;
+
+        case "segment":
+          if (!useLayer(object.layer)) return null;
+
+          for (const pointId of object.pointIds) pointIds.add(pointId);
+          break;
+
+        case "contour": {
+          if (!useLayer(object.layer)) return null;
+
+          const contour = object.layer.contour(object.contourId);
+          if (!contour) return null;
+
+          for (const point of contour.points) pointIds.add(point.id);
+          break;
+        }
+
+        case "anchor":
+        case "node":
+          return null;
+      }
+    }
+
+    if (!layer) return null;
+
+    return { layer, pointIds: [...pointIds] };
+  }
+
+  /**
+   * Inserts portable content into the current editor destination.
+   *
+   * @remarks
+   * The first insertion destination is conservative: exactly one glyph node in
+   * the scene plus an active source resolves to one authored glyph layer.
+   *
+   * @param content - Detached content produced by {@link contentFrom} or clipboard import.
+   * @param options - Placement options applied while minting destination objects.
+   * @returns Selection IDs for inserted objects, or `null` when no content can
+   * be inserted into the current destination.
+   */
+  public insertContent(
+    content: ShiftContent,
+    options: PasteOptions = { offset: { x: 0, y: 0 } },
+  ): readonly SelectableId[] | null {
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return null;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return null;
+
+    const [node] = glyphNodes;
+    if (!node) return null;
+
+    const layer = this.font.layer(node.glyphId, sourceId);
+    if (!layer) return null;
+
+    const inserted: SelectableId[] = [];
+
+    this.transaction("Insert content", () => {
+      for (const contour of content.contours) {
+        if (contour.points.length === 0) continue;
+
+        const contourId = layer.addContour();
+
+        for (const point of contour.points) {
+          const pointId = layer.addPoint(contourId, {
+            ...point,
+            x: point.x + options.offset.x,
+            y: point.y + options.offset.y,
+          });
+
+          inserted.push(pointId);
+        }
+
+        if (contour.closed) {
+          layer.closeContour(contourId);
+        }
+      }
+    });
+
+    return inserted.length === 0 ? null : inserted;
+  }
+
+  /**
+   * Writes selected editor content to the system clipboard.
+   *
+   * @returns `true` when portable content was written, otherwise `false`.
+   */
   public async copy(): Promise<boolean> {
-    const content = this.#selectedClipboardContent();
-    if (!content || content.contours.length === 0) return false;
+    const content = this.contentFrom(this.selection.ids);
+    if (!content) return false;
 
     return this.#clipboard.write(content);
   }
 
   public async cut(): Promise<boolean> {
-    const content = this.#selectedClipboardContent();
+    const selection = this.#pointSelectionFromIds(this.selection.ids);
+    if (!selection || selection.pointIds.length === 0) return false;
+
+    const content = ClipboardSelection.fromPointIds(selection.pointIds).contentFrom(
+      selection.layer,
+    );
     if (!content || content.contours.length === 0) return false;
 
     const written = await this.#clipboard.write(content);
     if (!written) return false;
 
-    const pointIds = this.#selectedClipboardPointIds();
-    this.#commands.run(new CutCommand(pointIds));
+    this.transaction("Cut", () => {
+      selection.layer.removePoints(selection.pointIds);
+    });
     this.selection.clear();
 
     return true;
   }
 
-  public async paste(): Promise<void> {
-    const result = await this.#clipboard.read();
-    if (result.kind !== "glyph" || result.content.contours.length === 0) return;
+  public deleteSelection(): boolean {
+    const selection = this.#pointSelectionFromIds(this.selection.ids);
+    if (!selection || selection.pointIds.length === 0) return false;
 
-    this.selection.clear();
-    const command = new PasteCommand(result.content, {
-      offset: this.#clipboard.nextPasteOffset(),
+    this.transaction("Delete selection", () => {
+      selection.layer.removePoints(selection.pointIds);
     });
-    this.#commands.run(command);
+    this.selection.clear();
 
-    if (command.createdPointIds.length > 0) {
-      this.selection.select(command.createdPointIds.map((pointId) => ({ kind: "point", pointId })));
+    return true;
+  }
+
+  /**
+   * Reads the system clipboard and inserts supported content.
+   *
+   * @returns `true` when content was inserted, otherwise `false`.
+   */
+  public async paste(): Promise<boolean> {
+    const result = await this.#clipboard.read();
+
+    switch (result.kind) {
+      case "content": {
+        const inserted = this.insertContent(result.content, {
+          offset: this.#clipboard.nextPasteOffset(),
+        });
+        if (!inserted) return false;
+
+        this.selection.select(inserted);
+        return true;
+      }
+
+      case "empty":
+      case "unsupported":
+        return false;
     }
-  }
-
-  #selectionCenter(): Point2D | null {
-    return null;
-  }
-
-  #selectedClipboardContent(): ClipboardContent | null {
-    return null;
-  }
-
-  #selectedClipboardPointIds(): PointId[] {
-    const selection = ClipboardSelection.fromSelection(this.selection);
-    if (selection.pointIds.length === 0) return [];
-
-    return [...selection.pointIds];
-  }
-
-  /** @param angle - Rotation in radians. */
-  public rotateSelection(angle: number, origin?: Point2D): void {
-    const pointIds = [...this.selection.pointIds];
-    if (pointIds.length === 0) return;
-
-    const center = origin ?? this.#selectionCenter();
-    if (!center) return;
-
-    const cmd = new RotatePointsCommand([...pointIds], angle, center);
-    this.#commands.run(cmd);
-  }
-
-  public scaleSelection(sx: number, sy: number, origin?: Point2D): void {
-    const pointIds = [...this.selection.pointIds];
-    if (pointIds.length === 0) return;
-
-    const o = origin ?? this.#selectionCenter();
-    if (!o) return;
-
-    const cmd = new ScalePointsCommand([...pointIds], sx, sy, o);
-    this.#commands.run(cmd);
-  }
-
-  public reflectSelection(axis: ReflectAxis, origin?: Point2D): void {
-    const pointIds = [...this.selection.pointIds];
-    if (pointIds.length === 0) return;
-
-    const center = origin ?? this.#selectionCenter();
-    if (!center) return;
-
-    const cmd = new ReflectPointsCommand([...pointIds], axis, center);
-    this.#commands.run(cmd);
-  }
-
-  public rotate90CCW(): void {
-    this.rotateSelection(Math.PI / 2);
-  }
-
-  public rotate90CW(): void {
-    this.rotateSelection(-Math.PI / 2);
-  }
-
-  public rotate180(): void {
-    this.rotateSelection(Math.PI);
-  }
-
-  public flipHorizontal(): void {
-    this.reflectSelection("horizontal");
-  }
-
-  public flipVertical(): void {
-    this.reflectSelection("vertical");
-  }
-
-  public moveSelectionTo(target: Point2D, anchor: Point2D): void {
-    const pointIds = [...this.selection.pointIds];
-    if (pointIds.length === 0) return;
-
-    const cmd = new MoveSelectionToCommand([...pointIds], target, anchor);
-    this.#commands.run(cmd);
-  }
-
-  public alignSelection(alignment: AlignmentType): void {
-    const pointIds = [...this.selection.pointIds];
-    if (pointIds.length === 0) return;
-
-    const cmd = new AlignPointsCommand([...pointIds], alignment);
-    this.#commands.run(cmd);
-  }
-
-  public distributeSelection(type: DistributeType): void {
-    const pointIds = [...this.selection.pointIds];
-    if (pointIds.length < 3) return;
-
-    const cmd = new DistributePointsCommand([...pointIds], type);
-    this.#commands.run(cmd);
-  }
-
-  public splitSegment(segment: Segment, t: number): PointId {
-    return this.#commands.run(new SplitSegmentCommand(segment, t));
-  }
-
-  public scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void {
-    if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
-    this.#commands.run(new ScalePointsCommand([...pointIds], sx, sy, anchor));
-  }
-
-  public rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void {
-    if (pointIds.length === 0 || angle === 0) return;
-    this.#commands.run(new RotatePointsCommand([...pointIds], angle, center));
-  }
-
-  public nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void {
-    if (pointIds.length === 0 || (dx === 0 && dy === 0)) return;
-    this.#commands.run(new NudgePointsCommand([...pointIds], dx, dy));
-  }
-
-  public upgradeLineToCubic(segment: LineSegmentPoints): void {
-    this.#commands.run(new UpgradeLineToCubicCommand(segment));
   }
 
   public boolean(
@@ -936,16 +1193,29 @@ export class Editor {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    this.#commands.run(new BooleanOperationCommand(contourIdA, contourIdB, operation));
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    const layer = this.font.layer(node.glyphId, sourceId);
+    if (!layer) return;
+
+    layer.applyBooleanOp(contourIdA, contourIdB, operation);
   }
 
   public duplicateSelection(): PointId[] {
-    const content = this.#selectedClipboardContent();
+    const content = this.contentFrom(this.selection.ids);
     if (!content || content.contours.length === 0) return [];
 
-    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-    this.#commands.run(command);
-    return command.createdPointIds;
+    const inserted = this.insertContent(content, { offset: { x: 0, y: 0 } });
+    if (!inserted) return [];
+
+    return inserted.filter(isPointId);
   }
 
   public destroy() {

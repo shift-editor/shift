@@ -179,7 +179,13 @@ export class MyBehavior implements Behavior<MyState> {
 ```typescript
 onDragStart(state, ctx, event) {
   if (state.type !== "selected") return false;
-  this.#draft = ctx.editor.beginGlyphLayerEditDraft({ points: [...ctx.editor.selection.pointIds] });
+  const edit = resolveSelectedGlyphEdit(ctx.editor);
+  if (!edit) return false;
+
+  this.#draft = new GlyphLayerEditDraft(edit.layer, {
+    points: edit.pointIds,
+    anchors: edit.anchorIds,
+  });
   ctx.setState({ type: "translating", startPos: event.point, totalDelta: { x: 0, y: 0 } });
   return true;
 }

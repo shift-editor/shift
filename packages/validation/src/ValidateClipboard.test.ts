@@ -28,63 +28,63 @@ const validPayload = () => ({
 });
 
 describe("ValidateClipboard", () => {
-  describe("isClipboardContent", () => {
+  describe("isShiftContent", () => {
     it("accepts valid content with multiple contours", () => {
       const content = { contours: [validContour(), validContour()] };
-      expect(ValidateClipboard.isClipboardContent(content)).toBe(true);
+      expect(ValidateClipboard.isShiftContent(content)).toBe(true);
     });
 
     it("accepts empty contours array", () => {
-      expect(ValidateClipboard.isClipboardContent({ contours: [] })).toBe(true);
+      expect(ValidateClipboard.isShiftContent({ contours: [] })).toBe(true);
     });
 
     it("rejects non-object", () => {
-      expect(ValidateClipboard.isClipboardContent(null)).toBe(false);
-      expect(ValidateClipboard.isClipboardContent("string")).toBe(false);
-      expect(ValidateClipboard.isClipboardContent(42)).toBe(false);
+      expect(ValidateClipboard.isShiftContent(null)).toBe(false);
+      expect(ValidateClipboard.isShiftContent("string")).toBe(false);
+      expect(ValidateClipboard.isShiftContent(42)).toBe(false);
     });
 
     it("rejects missing contours", () => {
-      expect(ValidateClipboard.isClipboardContent({})).toBe(false);
+      expect(ValidateClipboard.isShiftContent({})).toBe(false);
     });
 
     it("rejects non-array contours", () => {
-      expect(ValidateClipboard.isClipboardContent({ contours: "bad" })).toBe(false);
+      expect(ValidateClipboard.isShiftContent({ contours: "bad" })).toBe(false);
     });
 
     it("rejects contour with invalid point", () => {
       const content = {
         contours: [{ points: [{ x: 0, y: 0 }], closed: true }],
       };
-      expect(ValidateClipboard.isClipboardContent(content)).toBe(false);
+      expect(ValidateClipboard.isShiftContent(content)).toBe(false);
     });
 
     it("rejects contour with missing closed field", () => {
       const content = {
         contours: [{ points: [validPoint()] }],
       };
-      expect(ValidateClipboard.isClipboardContent(content)).toBe(false);
+      expect(ValidateClipboard.isShiftContent(content)).toBe(false);
     });
 
     it("rejects contour with non-array points", () => {
       const content = {
         contours: [{ points: "bad", closed: true }],
       };
-      expect(ValidateClipboard.isClipboardContent(content)).toBe(false);
+      expect(ValidateClipboard.isShiftContent(content)).toBe(false);
     });
 
     it("rejects point with non-finite coordinates", () => {
       const content = {
         contours: [{ points: [{ ...validPoint(), x: Infinity }], closed: true }],
       };
-      expect(ValidateClipboard.isClipboardContent(content)).toBe(false);
+      expect(ValidateClipboard.isShiftContent(content)).toBe(false);
     });
 
     it("rejects point with invalid pointType", () => {
       const content = {
         contours: [{ points: [{ ...validPoint(), pointType: "cubic" }], closed: true }],
       };
-      expect(ValidateClipboard.isClipboardContent(content)).toBe(false);
+      expect(ValidateClipboard.isShiftContent(content)).toBe(false);
     });
   });
 

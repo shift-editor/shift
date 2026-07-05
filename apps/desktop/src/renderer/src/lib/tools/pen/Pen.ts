@@ -93,7 +93,7 @@ export class Pen extends BaseTool<PenState, Pen> {
   override activate(): void {
     this.setState({ type: "ready" });
 
-    const glyphNodes = this.editor.scene.nodes().filter((node) => node.kind === "glyph");
+    const glyphNodes = this.editor.scene.nodesOfKind("glyph");
     if (glyphNodes.length !== 1) return;
 
     const [node] = glyphNodes;

@@ -20,25 +20,28 @@ export const Canvas: FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const cursorStyle = useSignalState(editor.cursorCell);
+  const activeSourceId = useSignalState(editor.activeSourceIdCell);
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
 
   useEffect(() => {
     if (!glyphId) {
       editor.scene.clear();
-      return undefined;
+      return;
     }
 
-    editor.scene.clear();
-    editor.scene.addNode({
-      id: mintNodeId(),
-      kind: "glyph",
-      glyphId,
-      sourceId: editor.activeSourceId ?? editor.font.defaultSource.id,
-      position: { x: 0, y: 0 },
-    });
-
-    return () => editor.scene.clear();
-  }, [editor, glyphId]);
+    editor.scene.setNodes([
+      {
+        id: mintNodeId(),
+        type: "node",
+        kind: "glyph",
+        parentId: null,
+        index: "a0",
+        glyphId,
+        sourceId: activeSourceId ?? editor.font.defaultSource.id,
+        position: { x: 0, y: 0 },
+      },
+    ]);
+  }, [activeSourceId, editor, glyphId]);
 
   useEffect(() => {
     const element = containerRef.current;

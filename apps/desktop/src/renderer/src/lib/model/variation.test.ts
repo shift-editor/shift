@@ -135,17 +135,12 @@ async function variableFont(): Promise<{
 }
 
 async function loadGlyph(stack: WorkspaceStack, glyphId: GlyphId) {
-  const glyph = await stack.font.loadGlyph(glyphId, {
-    sourceIds: [stack.font.defaultSource.id],
-  });
-  return glyph;
+  return stack.font.loadGlyph(glyphId);
 }
 
 async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: Source) {
-  await stack.font.loadGlyph(glyphId, {
-    sourceIds: [stack.font.defaultSource.id, source.id],
-  });
-  const layer = stack.font.glyphLayerForId(glyphId, source.id);
+  await stack.font.loadGlyph(glyphId);
+  const layer = stack.font.layer(glyphId, source.id);
   if (!layer) throw new Error("Expected glyph layer to load");
   return layer;
 }
@@ -153,10 +148,11 @@ async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: S
 describe("variable editing across sources", () => {
   let stack: WorkspaceStack;
   let glyphId: GlyphId;
+  let boldLayerId: LayerId;
   let bold: Source;
 
   beforeEach(async () => {
-    ({ stack, glyphId, bold } = await variableFont());
+    ({ stack, glyphId, boldLayerId, bold } = await variableFont());
   });
 
   it("opens an authored glyph layer at a non-default master", async () => {
@@ -186,9 +182,10 @@ describe("variable editing across sources", () => {
 
     // wght 550 is halfway between the masters at 400 and 700.
     const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
-    const instance = glyph.instanceAt(mid);
+    const instance = stack.font.instance(glyph.id, mid);
+    if (!instance) throw new Error("Expected glyph instance");
 
-    expect(instance.hasLayer).toBe(false);
+    expect(stack.font.editableLayerAt(glyph.id, mid)).toBeNull();
     expect(instance.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
 
     const xs = instance.geometry.allPoints.map((point) => point.x);
@@ -201,10 +198,10 @@ describe("variable editing across sources", () => {
 
     const axis = stack.font.getAxes()[0]!;
     const atBold = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 700);
-    const instance = glyph.instanceAt(atBold);
+    const instance = stack.font.instance(glyph.id, atBold);
+    if (!instance) throw new Error("Expected glyph instance");
 
-    expect(instance.hasLayer).toBe(true);
-    expect(instance.hasLayer).toBe(true);
+    expect(stack.font.editableLayerAt(glyph.id, atBold)?.id).toBe(boldLayerId);
     expect(instance.xAdvance).toBe(500);
   });
 });

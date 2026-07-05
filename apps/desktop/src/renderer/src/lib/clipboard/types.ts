@@ -3,7 +3,7 @@ import type { Rect2D } from "@shift/geo";
 
 export type { PasteResult } from "@/types/bridge";
 
-/** A point's data without its identity, used for clipboard serialization. */
+/** A point's portable geometry without its source identity. */
 export type PointContent = {
   x: number;
   y: number;
@@ -11,14 +11,22 @@ export type PointContent = {
   smooth: boolean;
 };
 
-/** A single contour as stored in the clipboard. */
+/** A contour's portable geometry without its source identity. */
 export type ContourContent = {
   points: PointContent[];
   closed: boolean;
 };
 
-/** The geometry that the clipboard carries -- one or more contours. */
-export type ClipboardContent = {
+/**
+ * Portable Shift content detached from live editor state.
+ *
+ * @remarks
+ * `ShiftContent` contains enough geometry to reconstruct editable contours in
+ * another layer, document, or clipboard round trip. It does not carry live
+ * glyph, layer, contour, point, node, or scene ids; those are minted by the
+ * destination when content is pasted or otherwise inserted.
+ */
+export type ShiftContent = {
   contours: ContourContent[];
 };
 
@@ -30,7 +38,7 @@ export type ClipboardContent = {
 export type ClipboardPayload = {
   version: 1;
   format: "shift/glyph-data";
-  content: ClipboardContent;
+  content: ShiftContent;
   metadata: {
     bounds: Rect2D;
     sourceGlyph?: string;
@@ -54,7 +62,7 @@ export type ClipboardSource = "shift" | "svg" | "fontra" | "glyphs" | "image";
 
 export type ClipboardReadResult =
   | { kind: "empty" }
-  | { kind: "glyph"; content: ClipboardContent; source: ClipboardSource }
+  | { kind: "content"; content: ShiftContent; source: ClipboardSource }
   | { kind: "unsupported"; offeredTypes: readonly string[]; reason?: string };
 
 export interface ClipboardWriteMetadata {
@@ -69,7 +77,7 @@ export interface ClipboardWriteMetadata {
 export interface ClipboardImporter {
   readonly id: ClipboardSource;
   pick(offers: readonly ClipboardOffer[]): ClipboardOffer | null;
-  import(offer: ClipboardOffer): ClipboardContent | null | Promise<ClipboardContent | null>;
+  import(offer: ClipboardOffer): ShiftContent | null | Promise<ShiftContent | null>;
 }
 
 /**

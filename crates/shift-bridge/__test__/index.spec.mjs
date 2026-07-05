@@ -78,9 +78,7 @@ describe("Bridge", () => {
 
   function glyphState(name) {
     const glyph = bridge.getGlyphs().find((record) => record.name === name);
-    const snapshots = bridge.getGlyphSnapshots([
-      { glyphId: glyph.id, sourceIds: [defaultSourceId()] },
-    ]);
+    const snapshots = bridge.getGlyphSnapshots([{ glyphId: glyph.id }]);
     return snapshots[0]?.layers[0]?.state;
   }
 

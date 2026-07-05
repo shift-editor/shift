@@ -1,53 +1,21 @@
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
-import { GlyphFinder } from "@/components/editor/GlyphFinder";
 import { Canvas } from "@/components/editor/Canvas";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
-import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
-
-import type { Unicode } from "@shift/types";
 
 export const Editor = () => {
   const { glyphId } = useParams();
   const editor = useEditor();
 
   const { activeZone } = useFocusZone();
-
-  const navigate = useNavigate();
-  const glyphFinderOpen = useSignalState(editor.glyphFinderOpenCell);
-
-  const handleGlyphFinderOpenChange = useCallback(
-    (open: boolean) => {
-      if (open) {
-        editor.openGlyphFinder();
-      } else {
-        editor.closeGlyphFinder();
-      }
-    },
-    [editor],
-  );
-
-  const handleGlyphFinderSelect = useCallback(
-    (codepoint: number) => {
-      if (editor.toolManager.activeToolId === "text") {
-        editor.insertTextCodepoint(codepoint);
-      } else {
-        const name = editor.font.nameForUnicode(codepoint as Unicode);
-        const record = name ? editor.font.recordForName(name) : null;
-        if (record) navigate(`/editor/${encodeURIComponent(record.id)}`);
-      }
-      editor.closeGlyphFinder();
-    },
-    [editor, navigate],
-  );
 
   useEffect(() => {
     const toolManager = editor.toolManager;
@@ -123,11 +91,6 @@ export const Editor = () => {
           </ZoneContainer>
         </ResizablePanel>
       </ResizablePanelGroup>
-      <GlyphFinder
-        open={glyphFinderOpen}
-        onOpenChange={handleGlyphFinderOpenChange}
-        onSelect={handleGlyphFinderSelect}
-      />
     </div>
   );
 };

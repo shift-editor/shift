@@ -3,9 +3,8 @@ import type { GlyphName } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 
 /**
- * The undo contracts that CommandHistory.test.ts protected before WS6, now
- * owned by the workspace ledger: one settled tick = one entry, undo/redo
- * replay in order, and a new edit truncates the redo branch.
+ * Workspace-owned undo semantics: one operation = one entry, undo/redo replay
+ * in order, and a new edit truncates the redo branch.
  */
 describe("workspace ledger semantics (via TestEditor)", () => {
   let editor: TestEditor;
@@ -18,7 +17,7 @@ describe("workspace ledger semantics (via TestEditor)", () => {
 
   const source = () => editor.glyphLayer!;
 
-  it("undoes settled ticks in reverse order", async () => {
+  it("undoes settled operations in reverse order", async () => {
     editor.clickGlyphLocal(10, 10);
     await editor.settle();
     editor.clickGlyphLocal(20, 20);
@@ -78,12 +77,14 @@ describe("workspace ledger semantics (via TestEditor)", () => {
     expect(editor.font.recordForName("A" as GlyphName)).not.toBe(null);
   });
 
-  it("coalesces every intent in one tick into a single entry", async () => {
+  it("groups transaction intents into a single entry", async () => {
     const initialAdvance = source().xAdvance;
 
-    const contourId = source().addContour();
-    source().addOnCurvePoint(contourId, { x: 1, y: 2 });
-    source().setXAdvance(640);
+    editor.transaction("Create contour and set advance", () => {
+      const contourId = source().addContour();
+      source().addOnCurvePoint(contourId, { x: 1, y: 2 });
+      source().setXAdvance(640);
+    });
     await editor.settle();
     expect(source().contours.length).toBe(1);
     expect(source().xAdvance).toBe(640);

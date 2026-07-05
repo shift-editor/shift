@@ -1,9 +1,9 @@
-import type { Point2D, Rect2D } from "@shift/geo";
+import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
+import { Point } from "@shift/glyph-state";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import type { ShapeState } from "./types";
 import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
-import { DrawRectangleCommand } from "@/lib/commands/primitives";
 import { CursorType } from "@/types/editor";
 
 export class Shape extends BaseTool<ShapeState> {
@@ -30,7 +30,7 @@ export class Shape extends BaseTool<ShapeState> {
   protected override onStateChange(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
     if (prev.type === "dragging" && next.type === "ready") {
       if (event.type === "dragEnd") {
-        this.commitRectangle(prev);
+        this.commitShape(prev);
       }
     }
   }
@@ -81,10 +81,32 @@ export class Shape extends BaseTool<ShapeState> {
     };
   }
 
-  private commitRectangle(state: { startPos: Point2D; currentPos: Point2D }): void {
+  private commitShape(state: { startPos: Point2D; currentPos: Point2D }): void {
     const rect = this.getRect(state);
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 
-    this.editor.commands.run(new DrawRectangleCommand(rect));
+    const glyphNodes = this.editor.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    const layer = this.editor.font.layer(node.glyphId, node.sourceId);
+    if (!layer) return;
+
+    this.editor.transaction("Draw rectangle", () => {
+      const contourId = layer.addContour();
+      const origin = Vec2.create(rect.x, rect.y);
+      const topLeft = origin;
+      const topRight = Vec2.add(origin, Vec2.create(rect.width, 0));
+      const bottomRight = Vec2.add(origin, Vec2.create(rect.width, rect.height));
+      const bottomLeft = Vec2.add(origin, Vec2.create(0, rect.height));
+
+      layer.addPoint(contourId, Point.onCurve(topLeft));
+      layer.addPoint(contourId, Point.onCurve(topRight));
+      layer.addPoint(contourId, Point.onCurve(bottomRight));
+      layer.addPoint(contourId, Point.onCurve(bottomLeft));
+      layer.closeContour(contourId);
+    });
   }
 }

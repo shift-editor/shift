@@ -53,7 +53,7 @@ editor/
 
 ## Key Types
 
-- **`Editor`** -- Facade class (~1750 lines). Owns `Selection`, `Hover`, `Camera`, `EdgePanManager`, `Renderer` (renderer), `ToolManager`, `CommandHistory`, `Clipboard`, `EventEmitter`. Passed directly to tools.
+- **`Editor`** -- Facade class (~1750 lines). Owns `Selection`, `Hover`, `Camera`, `EdgePanManager`, `Renderer` (renderer), `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Passed directly to tools.
 - **`Camera`** -- Owns zoom/pan/UPM signals, computed affine matrices (`Mat`), and all coordinate projection methods (`projectScreenToScene`, `projectSceneToScreen`, `screenToUpmDistance`).
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
 - **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `Theme`.
@@ -165,8 +165,8 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ## Related
 
-- `Font` -- State projection and glyph/layer lookup; `Editor` reads authored glyph layers through this boundary.
-- `CommandHistory` -- Undo/redo stack; `Editor.#commandHistory` records all mutations.
+- `Font` -- Font records and glyph/layer lookup; `Editor` reads authored glyph layers through this boundary.
+- `WorkspaceEditCoordinator` -- undo/redo boundary for layer mutations and explicit editor transactions.
 - `ToolManager` -- Tool lifecycle and dispatch; `Editor.#toolManager`. Tools receive `Editor` to access all subsystems.
 - `Clipboard` -- Copy/cut/paste via `Editor.#clipboard`.
 - `Font` -- Font model access; `Editor.font` for metrics, glyph names, composites.

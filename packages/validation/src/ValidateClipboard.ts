@@ -23,7 +23,7 @@ function isValidContour(v: unknown): boolean {
 }
 
 export const ValidateClipboard = {
-  isClipboardContent(v: unknown): boolean {
+  isShiftContent(v: unknown): boolean {
     if (!isRecord(v)) return false;
     if (!Array.isArray(v.contours)) return false;
     return v.contours.every((c: unknown) => isValidContour(c));
@@ -35,6 +35,6 @@ export const ValidateClipboard = {
     if (typeof v.version !== "number") return false;
     if (!isRecord(v.metadata)) return false;
     if (typeof v.metadata.timestamp !== "number") return false;
-    return ValidateClipboard.isClipboardContent(v.content);
+    return ValidateClipboard.isShiftContent(v.content);
   },
 } as const;

@@ -11,10 +11,10 @@ export class SegmentDoubleClick implements SelectBehavior {
     if (state.type !== "ready") return false;
     if (event.target.kind != "segment") return false;
 
-    const activeSourceId = ctx.editor.activeSourceId;
-    if (!activeSourceId) return false;
+    const node = ctx.editor.scene.node(event.target.nodeId);
+    if (node?.kind !== "glyph") return false;
 
-    const layer = ctx.editor.font.layer(event.target.glyphId, activeSourceId);
+    const layer = ctx.editor.font.layer(node.glyphId, node.sourceId);
     if (!layer) return false;
 
     const firstPoint = event.target.pointIds[0];
@@ -27,13 +27,7 @@ export class SegmentDoubleClick implements SelectBehavior {
     if (!contour) return false;
 
     ctx.editor.selection.clear();
-    ctx.editor.selection.select([
-      { kind: "contour", contourId },
-      ...contour.points.map((point) => ({
-        kind: "point" as const,
-        pointId: point.id,
-      })),
-    ]);
+    ctx.editor.selection.select([contourId, ...contour.points.map((point) => point.id)]);
     return true;
   }
 }

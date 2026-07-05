@@ -32,7 +32,6 @@ export type WorkspaceGlyphLayerSnapshot = {
 
 export type WorkspaceGlyphSnapshotRequest = {
   glyphId: GlyphId;
-  sourceIds: SourceId[];
 };
 
 export type WorkspaceGlyphSnapshot = {

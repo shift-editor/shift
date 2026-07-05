@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { Separator } from "@shift/ui";
+import { isAnchorId, isPointId } from "@shift/types";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
-import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { BooleanOps } from "./BooleanOps";
@@ -13,19 +12,12 @@ import { BooleanOps } from "./BooleanOps";
 export const RightSidebar = () => {
   const editor = useEditor();
   const zoom = useSignalState(editor.zoomCell);
+  const selection = useSignalState(editor.selection.stateCell);
   const zoomPercent = Math.round(zoom * 100);
   const { familyName } = editor.font.metadata;
 
-  const [hasPointSelection, setHasPointSelection] = useState(false);
-  const [hasAnchorSelection, setHasAnchorSelection] = useState(false);
-
-  useSignalEffect(() => {
-    editor.selection.stateCell.value;
-    const nextPoints = editor.selection.pointIds.size > 0;
-    const nextAnchors = editor.selection.anchorIds.size > 0;
-    setHasPointSelection((prev) => (prev === nextPoints ? prev : nextPoints));
-    setHasAnchorSelection((prev) => (prev === nextAnchors ? prev : nextAnchors));
-  });
+  const hasPointSelection = selection.ids.some(isPointId);
+  const hasAnchorSelection = selection.ids.some(isAnchorId);
 
   return (
     <aside className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden">

@@ -3,12 +3,12 @@ import { Polygon } from "@shift/geo";
 import { ValidateClipboard } from "@shift/validation";
 import type {
   SystemClipboard,
-  ClipboardContent,
   ClipboardImporter,
   ClipboardOffer,
   ClipboardPayload,
   ClipboardReadResult,
   ClipboardWriteMetadata,
+  ShiftContent,
 } from "./types";
 import { SvgImporter } from "./importers/SvgImporter";
 
@@ -26,7 +26,7 @@ const EMPTY_BOUNDS: Rect2D = {
 };
 
 interface ClipboardState {
-  content: ClipboardContent | null;
+  content: ShiftContent | null;
   bounds: Rect2D | null;
   timestamp: number;
 }
@@ -51,7 +51,7 @@ export class Clipboard {
     this.#importers.push(new SvgImporter());
   }
 
-  async write(content: ClipboardContent, metadata: ClipboardWriteMetadata = {}): Promise<boolean> {
+  async write(content: ShiftContent, metadata: ClipboardWriteMetadata = {}): Promise<boolean> {
     if (!content || content.contours.length === 0) return false;
 
     const bounds = Polygon.boundingRect(content.contours.flatMap((c) => c.points)) ?? EMPTY_BOUNDS;
@@ -85,14 +85,14 @@ export class Clipboard {
       const offers = this.#offersFromText(text);
 
       const native = tryDeserialize(text);
-      if (native) return { kind: "glyph", content: native, source: "shift" };
+      if (native) return { kind: "content", content: native, source: "shift" };
 
       for (const importer of this.#importers) {
         const offer = importer.pick(offers);
         if (!offer) continue;
 
         const imported = await importer.import(offer);
-        if (imported) return { kind: "glyph", content: imported, source: importer.id };
+        if (imported) return { kind: "content", content: imported, source: importer.id };
       }
 
       if (text.trim().length > 0) {
@@ -103,7 +103,7 @@ export class Clipboard {
       }
     } catch {
       if (this.#internalState.content) {
-        return { kind: "glyph", content: this.#internalState.content, source: "shift" };
+        return { kind: "content", content: this.#internalState.content, source: "shift" };
       }
     }
 
@@ -126,11 +126,11 @@ export class Clipboard {
   }
 }
 
-function tryDeserialize(text: string): ClipboardContent | null {
+function tryDeserialize(text: string): ShiftContent | null {
   try {
     const payload = JSON.parse(text);
     if (payload.format !== "shift/glyph-data" || payload.version > 1) return null;
-    if (!ValidateClipboard.isClipboardContent(payload.content)) return null;
+    if (!ValidateClipboard.isShiftContent(payload.content)) return null;
     return payload.content;
   } catch {
     return null;

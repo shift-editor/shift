@@ -64,18 +64,18 @@ describe("Font projects the workspace snapshot", () => {
     expect(font.sources.map((source) => source.name)).toEqual(["Regular"]);
   });
 
-  it("$loaded flips reactively when the snapshot changes", () => {
+  it("loadedCell flips reactively when the snapshot changes", () => {
     const store = new FontStore();
     const font = new Font(store);
 
-    expect(font.$loaded.value).toBe(false);
+    expect(font.loadedCell.value).toBe(false);
 
     store.replaceWorkspace(SNAPSHOT);
 
-    expect(font.$loaded.value).toBe(true);
+    expect(font.loadedCell.value).toBe(true);
   });
 
-  it("resets to the unloaded projection when the workspace goes null", () => {
+  it("resets to fallback font values when the workspace goes null", () => {
     const store = new FontStore(SNAPSHOT);
     const font = new Font(store);
 
@@ -149,7 +149,7 @@ describe("font-level intents make the font variable", () => {
     expect(bold?.id).toBe(boldSourceId);
     expect(applied.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
     expect(applied.layers).toEqual([]);
-    expect(stack.font.layerRecordForId(glyphId, boldSourceId)).toBeNull();
+    expect(stack.font.layer(glyphId, boldSourceId)).toBeNull();
   });
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
@@ -173,7 +173,7 @@ describe("font-level intents make the font variable", () => {
     ]);
 
     expect(applied.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
-    expect(stack.font.layerRecordForId(glyphId, sourceId)).toEqual({ id: layerId, sourceId });
+    expect(stack.font.glyph(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
   });
 
   it("createGlyph authors a default layer for fresh glyphs", async () => {
@@ -188,11 +188,11 @@ describe("font-level intents make the font variable", () => {
 
     await stack.editCoordinator.settled();
 
-    const committed = stack.font.recordForId(record.id);
+    const committed = stack.font.glyph(record.id);
     expect(committed?.layers).toEqual(record.layers);
-    expect(stack.font.layerRecordForId(record.id, source.id)).toEqual(record.layers[0]);
 
-    const glyph = await stack.font.loadGlyph(record.id, { sourceIds: [source.id] });
+    const glyph = await stack.font.loadGlyph(record.id);
+    expect(stack.font.layer(record.id, source.id)?.id).toBe(record.layers[0]?.id);
     expect(glyph.xAdvance).toBe(stack.font.defaultXAdvance);
   });
 
@@ -215,7 +215,7 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    expect(stack.font.glyphForId(record.id)).toBe(glyph);
+    expect(await stack.font.loadGlyph(record.id)).toBe(glyph);
     expect(glyph.name).toBe("A.alt");
     expect(glyph.unicode).toBe(0xe001);
   });
@@ -268,22 +268,21 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    const glyph = await stack.font.loadGlyph(glyphId, {
-      sourceIds: [stack.font.defaultSource.id],
-    });
+    const glyph = await stack.font.loadGlyph(glyphId);
     expect(glyph.xAdvance).toBe(640);
 
     const bold = stack.font.source(sourceId);
     if (!bold) throw new Error("Expected created source");
-    const instance = glyph.instanceAt(axisLocationFromLocation(bold.location));
+    const location = axisLocationFromLocation(bold.location);
+    const instance = stack.font.instance(glyph.id, location);
+    if (!instance) throw new Error("Expected glyph instance");
 
-    expect(instance.layer).toBeNull();
-    expect(instance.hasLayer).toBe(false);
+    expect(stack.font.editableLayerAt(glyph.id, location)).toBeNull();
     expect(instance.xAdvance).toBe(0);
     expect(instance.geometry.allPoints).toEqual([]);
   });
 
-  it("does not drop concurrent snapshot loads for different sources on one glyph", async () => {
+  it("loads every authored layer in one glyph snapshot", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();
     const glyphId = mintGlyphId();
@@ -332,16 +331,13 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    const regularSource = stack.font.source(defaultSourceId);
     const boldSource = stack.font.source(boldSourceId);
-    if (!regularSource || !boldSource) throw new Error("Expected both sources");
+    if (!boldSource) throw new Error("Expected bold source");
 
-    const regularLoad = stack.font.loadGlyph(glyphId, { sourceIds: [defaultSourceId] });
-    const boldLoad = stack.font.loadGlyph(glyphId, { sourceIds: [boldSourceId] });
-    await Promise.all([regularLoad, boldLoad]);
+    await stack.font.loadGlyph(glyphId);
 
-    expect(stack.font.glyphLayerForId(glyphId, regularSource.id)?.id).toBe(defaultLayerId);
-    expect(stack.font.glyphLayerForId(glyphId, boldSource.id)?.id).toBe(boldLayerId);
+    expect(stack.font.layer(glyphId, defaultSourceId)?.id).toBe(defaultLayerId);
+    expect(stack.font.layer(glyphId, boldSource.id)?.id).toBe(boldLayerId);
   });
 
   it("rejects glyph loads for ids outside the current font", async () => {

@@ -80,6 +80,10 @@ export class GlyphLayerState {
     return this.#structure;
   }
 
+  get layerId(): LayerId {
+    return this.#layerId;
+  }
+
   get coordinateBuffers(): LayerCoordinateBuffers {
     return this.#coordinates.peek();
   }

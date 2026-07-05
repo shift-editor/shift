@@ -60,10 +60,59 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     expect(client.documentStateCell.peek()).toMatchObject({ dirty: true });
   });
 
-  it("marks snapshot loads after queued workspace summary edits flush", async () => {
-    const { font, store, editCoordinator } = stack;
+  it("keeps separate pushes as separate undo entries", async () => {
+    const { store, editCoordinator } = stack;
+
+    editCoordinator.push(createGlyph("A", 65));
+    editCoordinator.push(createGlyph("B", 66));
+    await editCoordinator.settled();
+
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(2);
+
+    await editCoordinator.undo();
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(1);
+
+    await editCoordinator.undo();
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(0);
+  });
+
+  it("groups transaction pushes into one undo entry", async () => {
+    const { store, editCoordinator } = stack;
+
+    editCoordinator.transaction("Create glyph pair", () => {
+      editCoordinator.push(createGlyph("A", 65));
+      editCoordinator.push(createGlyph("B", 66));
+    });
+    await editCoordinator.settled();
+
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(2);
+
+    await editCoordinator.undo();
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(0);
+  });
+
+  it("flattens nested transaction pushes into the outer undo entry", async () => {
+    const { store, editCoordinator } = stack;
+
+    editCoordinator.transaction("Create outer pair", () => {
+      editCoordinator.push(createGlyph("A", 65));
+      editCoordinator.transaction("Create nested glyph", () => {
+        editCoordinator.push(createGlyph("B", 66));
+      });
+    });
+    await editCoordinator.settled();
+
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(2);
+
+    await editCoordinator.undo();
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(0);
+  });
+
+  it("loads glyph layers after queued workspace summary edits flush", async () => {
+    const { font, editCoordinator } = stack;
     const glyphId = mintGlyphId();
     const layerId = mintLayerId();
+    const sourceId = font.defaultSource.id;
     await editCoordinator.apply([
       {
         kind: "createGlyph",
@@ -71,7 +120,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
       },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId, sourceId: font.defaultSource.id },
+        createGlyphLayer: { layerId, glyphId, sourceId },
       },
     ]);
     await font.loadGlyph(glyphId);
@@ -93,6 +142,6 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     await font.loadGlyph(glyphId);
 
     expect(font.getAxes().map((axis) => axis.id)).toEqual([axisId]);
-    expect(store.snapshotStatus(glyphId)).toBe("loaded");
+    expect(font.layer(glyphId, sourceId)).not.toBeNull();
   });
 });

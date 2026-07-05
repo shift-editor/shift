@@ -5,7 +5,6 @@ import type { GlyphLayer, GlyphLayerPositions } from "@/lib/model/Glyph";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import { Anchor, Handles } from "./types";
 import type { Pen } from "./Pen";
-import { ReverseContourCommand } from "@/lib/commands";
 import type { GlyphNode } from "@/types/node";
 
 export class PenStroke {
@@ -24,10 +23,7 @@ export class PenStroke {
     const context = pen.context;
     if (!context) return null;
 
-    const sourceId = pen.editor.activeSourceId;
-    if (!sourceId) return null;
-
-    const layer = pen.editor.font.layer(context.glyphNode.glyphId, sourceId);
+    const layer = pen.editor.font.layer(context.glyphNode.glyphId, context.glyphNode.sourceId);
     if (!layer) return null;
 
     return new PenStroke(pen, context.glyphNode, layer);
@@ -49,8 +45,12 @@ export class PenStroke {
   }
 
   startContour(position: Point2D): PointId {
-    const contourId = this.#layer.addContour();
-    const pointId = this.#layer.addOnCurvePoint(contourId, position);
+    const [contourId, pointId] = this.#pen.editor.transaction("Start contour", () => {
+      const contourId = this.#layer.addContour();
+      const pointId = this.#layer.addOnCurvePoint(contourId, position);
+      return [contourId, pointId] as const;
+    });
+
     this.#pen.setActiveContour(contourId);
     return pointId;
   }
@@ -78,15 +78,13 @@ export class PenStroke {
   continueContour(contourId: ContourId, side: "start" | "end", pointId: PointId): void {
     this.#pen.setActiveContour(contourId);
     if (side === "start") {
-      this.#pen.editor.commands.run(new ReverseContourCommand(contourId));
+      this.#layer.reverseContour(contourId);
     }
-    this.#pen.editor.selection.select([{ kind: "point", pointId }]);
+    this.#pen.editor.selection.select([pointId]);
   }
 
   splitSegment(segmentId: SegmentId, t: number): PointId | null {
-    const segment = this.#layer.geometry.segment(segmentId);
-    if (!segment) return null;
-    return this.#pen.editor.splitSegment(segment, t);
+    return this.#layer.splitSegment(segmentId, t);
   }
 
   commitAnchor(anchor: Anchor): PointId | null {

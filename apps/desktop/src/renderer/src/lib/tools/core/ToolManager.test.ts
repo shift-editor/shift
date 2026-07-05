@@ -240,6 +240,8 @@ describe("ToolManager", () => {
         shiftKey: false,
         altKey: true,
         metaKey: false,
+        ctrlKey: false,
+        accelKey: false,
       });
     });
 
@@ -253,6 +255,8 @@ describe("ToolManager", () => {
         shiftKey: false,
         altKey: false,
         metaKey: false,
+        ctrlKey: false,
+        accelKey: false,
       });
     });
   });

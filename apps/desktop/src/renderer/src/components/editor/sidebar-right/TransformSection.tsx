@@ -4,6 +4,7 @@ import { EditableSidebarInput, type EditableSidebarInputHandle } from "./Editabl
 import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { useSignalState } from "@/lib/signals";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
@@ -22,6 +23,7 @@ import DistributeHorizontalIcon from "@/assets/sidebar-right/distribute-h.svg";
 import DistributeVerticalIcon from "@/assets/sidebar-right/distribute-v.svg";
 
 import { AlignmentType, DistributeType } from "@/lib/transform/types";
+import { isPointId } from "@shift/types";
 
 const AlignButtonsRow = React.memo(function AlignButtonsRow({
   onAlign,
@@ -91,17 +93,30 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 
 export const TransformSection = () => {
   const editor = useEditor();
+  const sourceId = useActiveSourceId();
+  const scene = useSignalState(editor.scene.cell);
   const { anchor } = useTransformOrigin();
-  useSignalState(editor.selection.stateCell);
-  const selectedPointIds = editor.selection.pointIds;
+  const selection = useSignalState(editor.selection.stateCell);
+  const selectedPointIds = useMemo(() => selection.ids.filter(isPointId), [selection]);
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);
 
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
+  const layer = useMemo(() => {
+    if (!sourceId) return null;
+
+    const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
+    if (glyphNodes.length !== 1) return null;
+
+    const [node] = glyphNodes;
+    if (!node) return null;
+
+    return editor.font.layer(node.glyphId, sourceId);
+  }, [editor, scene, sourceId]);
 
   useEffect(() => {
-    if (selectedPointIds.size === 0) {
+    if (selectedPointIds.length === 0) {
       xRef.current?.setValue(0);
       yRef.current?.setValue(0);
       return;
@@ -113,20 +128,24 @@ export const TransformSection = () => {
     yRef.current?.setValue(Math.round(selectionBounds.min.y));
   }, [selectedPointIds, selectionBounds]);
 
-  const canDistribute = selectedPointIds.size >= 3;
+  const canDistribute = selectedPointIds.length >= 3;
 
   const handleAlign = useCallback(
     (alignment: AlignmentType) => {
-      editor.alignSelection(alignment);
+      if (!layer) return;
+
+      layer.align(selectedPointIds, alignment);
     },
-    [editor],
+    [layer, selectedPointIds],
   );
 
   const handleDistribute = useCallback(
     (type: DistributeType) => {
-      editor.distributeSelection(type);
+      if (!layer) return;
+
+      layer.distribute(selectedPointIds, type);
     },
-    [editor],
+    [layer, selectedPointIds],
   );
 
   const origin = useMemo(
@@ -135,32 +154,42 @@ export const TransformSection = () => {
   );
 
   const handleRotate90 = () => {
-    editor.rotate90CW();
+    if (!layer || !origin) return;
+
+    layer.rotate(selectedPointIds, -Math.PI / 2, origin);
   };
 
   const handleRotate = (angle: number) => {
+    if (!layer || !origin) return;
+
     const wrapped = angle % 360;
     const radians = (wrapped * Math.PI) / 180;
-    editor.rotateSelection(radians, origin);
+    layer.rotate(selectedPointIds, radians, origin);
     setRotation(wrapped);
   };
 
   const handleFlipH = () => {
-    editor.reflectSelection("vertical", origin);
+    if (!layer || !origin) return;
+
+    layer.reflect(selectedPointIds, "vertical", origin);
   };
 
   const handleFlipV = () => {
-    editor.reflectSelection("horizontal", origin);
+    if (!layer || !origin) return;
+
+    layer.reflect(selectedPointIds, "horizontal", origin);
   };
 
   const handlePositionChange = useCallback(
     (axis: "x" | "y", value: number) => {
+      if (!layer) return;
       if (!selectionBounds) return;
+
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
       const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
-      editor.moveSelectionTo(target, anchorPoint);
+      layer.moveSelectionTo([...selectedPointIds], target, anchorPoint);
     },
-    [anchor, editor, selectionBounds],
+    [anchor, layer, selectedPointIds, selectionBounds],
   );
 
   return (

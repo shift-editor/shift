@@ -113,4 +113,4 @@ cd apps/desktop && npm test
 - `NativeBridge` -- uses a glyph identity cell with `equals: () => false` for identity changes
 - `useSignalState` -- React bridge hook (in this module)
 - `useSignalEffect` -- lifecycle-aware effect hook (in `@/hooks/useSignalEffect`)
-- `CommandHistory` -- imports from reactive for undo/redo state signals
+- `WorkspaceEditCoordinator` -- uses signals for settled and commit lifecycle state

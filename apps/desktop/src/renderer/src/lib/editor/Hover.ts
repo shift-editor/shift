@@ -1,24 +1,8 @@
-import type { SegmentId } from "@shift/glyph-state";
-import type { AnchorId, PointId } from "@shift/types";
 import { computed, signal, type Signal, type WritableSignal } from "../signals";
+import type { SelectableId } from "@/types";
 
-export interface PointHover {
-  readonly kind: "point";
-  readonly pointId: PointId;
-}
-
-export interface AnchorHover {
-  readonly kind: "anchor";
-  readonly anchorId: AnchorId;
-}
-
-export interface SegmentHover {
-  readonly kind: "segment";
-  readonly segmentId: SegmentId;
-}
-
-export type HoverEntry = PointHover | AnchorHover | SegmentHover;
-export type HoverableId = PointId | AnchorId | SegmentId;
+export type HoverEntry = SelectableId;
+export type HoverableId = SelectableId;
 
 /**
  * Stores scene-scoped hover identity.
@@ -35,7 +19,7 @@ export class Hover {
     this.#id = computed(
       () => {
         const entry = this.#entry.value;
-        return entry ? hoverId(entry) : null;
+        return entry;
       },
       { name: "editor.hover.id" },
     );
@@ -58,7 +42,7 @@ export class Hover {
   }
 
   isHovered(entry: HoverEntry): boolean {
-    return this.has(hoverId(entry));
+    return this.has(entry);
   }
 
   has(id: HoverableId): boolean {
@@ -71,16 +55,5 @@ export class Hover {
 
   clear(): void {
     this.#entry.set(null);
-  }
-}
-
-function hoverId(entry: HoverEntry): HoverableId {
-  switch (entry.kind) {
-    case "point":
-      return entry.pointId;
-    case "anchor":
-      return entry.anchorId;
-    case "segment":
-      return entry.segmentId;
   }
 }

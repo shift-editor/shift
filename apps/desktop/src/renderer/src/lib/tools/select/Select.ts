@@ -17,7 +17,6 @@ import {
 } from "./behaviors";
 import { TextRunHover } from "./behaviors/TextRunHover";
 import type { CursorType } from "@/types/editor";
-import { TextRunEdit } from "./behaviors/TextRunEdit";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
@@ -33,7 +32,6 @@ export class Select extends BaseTool<SelectState, Select> {
     new ToggleSmooth(),
     new SegmentDoubleClick(),
     new TextRunHover(),
-    new TextRunEdit(),
     new UpgradeSegment(),
     new Selection(),
     new Nudge(),
