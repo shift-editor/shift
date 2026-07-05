@@ -1,27 +1,10 @@
-import type { DebugOverlays as DebugOverlayState } from "@/types/uiState";
-import type { GlyphInstance } from "@/lib/model/Glyph";
-import type { Selection } from "@/lib/editor/Selection";
-import type { Hover } from "@/lib/editor/Hover";
 import { displayAdvance } from "@/lib/utils/unicode";
-import { SCREEN_HIT_RADIUS } from "./constants";
 import { CanvasItem } from "./CanvasItem";
 import type { Canvas } from "./Canvas";
-import { OutlineRenderer } from "./Outline";
-import { Anchors, ControlLines, DebugOverlays, Guides, Handles, Segments } from "./overlays";
-import type { GlyphNode } from "@/types/node";
-import type { RenderContext } from "@/types/rendering";
+import { Guides } from "./overlays";
+import type { GlyphNode, ShiftNode } from "@/types/node";
+import type { RenderContext, RenderPass } from "@/types/rendering";
 import type { Editor } from "../Editor";
-import type { SegmentId } from "@shift/glyph-state";
-
-class GlyphFrame {
-  readonly node: GlyphNode;
-  readonly instance: GlyphInstance;
-
-  constructor(node: GlyphNode, instance: GlyphInstance) {
-    this.node = node;
-    this.instance = instance;
-  }
-}
 
 interface BackgroundGlyphFrame {
   readonly node: GlyphNode;
@@ -32,19 +15,8 @@ export interface BackgroundLayerProps {
   readonly glyphs: readonly BackgroundGlyphFrame[];
 }
 
-interface SceneInteractionProps {
-  readonly selection: Selection;
-  readonly hover: Hover;
-}
-
-interface SceneViewProps {
-  readonly debugOverlays: DebugOverlayState;
-}
-
 export interface SceneLayerProps {
-  readonly glyphs: readonly GlyphFrame[];
-  readonly interaction: SceneInteractionProps;
-  readonly view: SceneViewProps;
+  readonly nodes: readonly ShiftNode[];
 }
 
 export interface OverlayLayerProps {
@@ -97,12 +69,11 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
           );
           if (!instance) break;
 
-          const frame = new GlyphFrame(node, instance);
           const unicode = record.unicodes[0] ?? null;
 
           glyphs.push({
-            node: frame.node,
-            advance: displayAdvance(frame.instance.xAdvanceCell.value, record.name, unicode),
+            node,
+            advance: displayAdvance(instance.xAdvanceCell.value, record.name, unicode),
           });
           break;
         }
@@ -147,12 +118,6 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
  */
 export class SceneLayer extends CanvasItem<SceneLayerProps> {
   readonly #editor: Editor;
-  readonly #outline = new OutlineRenderer();
-  readonly #debugOverlays = new DebugOverlays();
-  readonly #controlLines = new ControlLines();
-  readonly #anchors = new Anchors();
-  readonly #segments = new Segments();
-  readonly #handles: Handles;
 
   /**
    * Creates the scene layer for one editor.
@@ -162,7 +127,6 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
   constructor(editor: Editor) {
     super();
     this.#editor = editor;
-    this.#handles = new Handles();
   }
 
   protected props(): SceneLayerProps {
@@ -174,35 +138,10 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.selection.stateCell.value;
     this.#editor.hover.entryCell.value;
     this.#editor.scene.cell.value;
-
-    const glyphs: GlyphFrame[] = [];
-    for (const node of this.#editor.scene.nodes()) {
-      switch (node.kind) {
-        case "glyph": {
-          const instance = this.#editor.font.instance(
-            node.glyphId,
-            this.#editor.designLocationCell,
-          );
-          if (!instance) break;
-
-          const frame = new GlyphFrame(node, instance);
-
-          frame.instance.render.trackShape();
-          glyphs.push(frame);
-          break;
-        }
-      }
-    }
+    this.#editor.debugOverlaysCell.value;
 
     return {
-      glyphs,
-      interaction: {
-        selection: this.#editor.selection,
-        hover: this.#editor.hover,
-      },
-      view: {
-        debugOverlays: this.#editor.debugOverlaysCell.value,
-      },
+      nodes: this.#editor.scene.nodes(),
     };
   }
 
@@ -210,119 +149,29 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
-    const { canvas } = ctx;
+    for (const node of props.nodes) {
+      this.#drawNode(ctx, node, "content");
+    }
 
-    for (const glyph of props.glyphs) {
-      this.#drawGlyphOutline(canvas, glyph);
-      this.#drawDebugOverlays(canvas, props, glyph);
-      canvas.withTranslation(glyph.node.position, () => {
-        this.#editor.toolManager.drawScene(canvas);
+    for (const node of props.nodes) {
+      if (node.kind !== "glyph") continue;
+
+      ctx.canvas.withTranslation(node.position, () => {
+        this.#editor.toolManager.drawScene(ctx.canvas);
       });
     }
 
-    for (const glyph of props.glyphs) {
-      this.#drawGlyphEditHandles(ctx, props, glyph);
+    for (const node of props.nodes) {
+      this.#drawNode(ctx, node, "controls");
     }
   }
 
-  #drawGlyphOutline(canvas: Canvas, glyph: GlyphFrame): void {
-    canvas.withTranslation(glyph.node.position, () => {
-      this.#outline.draw(canvas, glyph.instance.render.outline, {
-        fill: null,
-        stroke: {
-          color: canvas.theme.glyph.stroke,
-          widthPx: canvas.theme.glyph.widthPx,
-        },
-      });
-    });
-  }
+  #drawNode(ctx: RenderContext, node: ShiftNode, pass: RenderPass): void {
+    const definition = this.#editor.nodeDefinition(node.kind);
+    if (!definition) return;
 
-  #drawDebugOverlays(canvas: Canvas, props: SceneLayerProps, glyph: GlyphFrame): void {
-    const { hover } = props.interaction;
-    const hoveredObject = hover.entry ? this.#editor.object(hover.entry) : null;
-    const hoveredSegmentId =
-      hoveredObject?.kind === "segment" && hoveredObject.node.id === glyph.node.id
-        ? hoveredObject.segmentId
-        : null;
-
-    canvas.withTranslation(glyph.node.position, () => {
-      this.#debugOverlays.draw(
-        canvas,
-        glyph.instance.geometry,
-        props.view.debugOverlays,
-        hoveredSegmentId,
-        canvas.pxToUpm(SCREEN_HIT_RADIUS),
-      );
-    });
-  }
-
-  #selectedSegmentIds(glyph: GlyphFrame): readonly SegmentId[] {
-    const segmentIds: SegmentId[] = [];
-
-    for (const object of this.#editor.objects(this.#editor.selection.ids)) {
-      if (object.kind !== "segment") continue;
-      if (object.node.id !== glyph.node.id) continue;
-
-      segmentIds.push(object.segmentId);
-    }
-
-    return segmentIds;
-  }
-
-  #hoveredSegmentId(glyph: GlyphFrame): SegmentId | null {
-    const id = this.#editor.hover.id;
-    if (!id) return null;
-
-    const object = this.#editor.object(id);
-    if (object?.kind !== "segment") return null;
-    if (object.node.id !== glyph.node.id) return null;
-
-    return object.segmentId;
-  }
-
-  #drawGlyphEditHandles(ctx: RenderContext, props: SceneLayerProps, glyph: GlyphFrame): void {
-    const { canvas } = ctx;
-    const renderModel = glyph.instance.render;
-    const sceneBounds = this.#editor.camera.visibleSceneBounds(64);
-    const origin = glyph.node.position;
-
-    canvas.withTranslation(origin, () => {
-      this.#segments.draw(
-        canvas,
-        glyph.instance.geometry,
-        this.#selectedSegmentIds(glyph),
-        this.#hoveredSegmentId(glyph),
-      );
-    });
-
-    canvas.withTranslation(origin, () => {
-      this.#controlLines.draw(canvas, renderModel.contours, (from, to) => {
-        const minX = Math.min(from.x, to.x) + origin.x;
-        const maxX = Math.max(from.x, to.x) + origin.x;
-        const minY = Math.min(from.y, to.y) + origin.y;
-        const maxY = Math.max(from.y, to.y) + origin.y;
-        return !(
-          maxX < sceneBounds.minX ||
-          minX > sceneBounds.maxX ||
-          maxY < sceneBounds.minY ||
-          minY > sceneBounds.maxY
-        );
-      });
-    });
-
-    this.#handles.draw(
-      ctx,
-      glyph.node,
-      glyph.instance,
-      props.interaction.selection,
-      props.interaction.hover,
-    );
-
-    canvas.withTranslation(origin, () => {
-      this.#anchors.draw(canvas, renderModel.anchors, {
-        selection: props.interaction.selection,
-        hover: props.interaction.hover,
-      });
+    ctx.canvas.withTranslation(node.position, () => {
+      definition.draw(node, ctx, pass);
     });
   }
 }

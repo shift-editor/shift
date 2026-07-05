@@ -463,7 +463,7 @@ export class Editor {
       const node = this.scene.node(id);
       if (!node) return null;
 
-      return new NodeObject(node);
+      return new NodeObject(node, this.nodeDefinition(node.kind));
     }
 
     if (isPointId(id)) {
