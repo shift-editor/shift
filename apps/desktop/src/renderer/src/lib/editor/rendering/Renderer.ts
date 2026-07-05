@@ -146,7 +146,7 @@ export class Renderer {
     const canvas = this.#getCanvas("background");
     if (!canvas) return;
 
-    canvas.withGlyphSpace({ x: 0, y: 0 }, () => {
+    canvas.withSceneSpace({ x: 0, y: 0 }, () => {
       this.#backgroundLayer.draw(canvas);
     });
   }
@@ -162,7 +162,7 @@ export class Renderer {
 
     this.#markerLayer.begin();
     try {
-      canvas.withGlyphSpace({ x: 0, y: 0 }, () => {
+      canvas.withSceneSpace({ x: 0, y: 0 }, () => {
         this.#sceneLayer.draw(ctx);
       });
     } finally {
@@ -174,7 +174,7 @@ export class Renderer {
     const canvas = this.#getCanvas("overlay");
     if (!canvas) return;
 
-    canvas.withGlyphSpace({ x: 0, y: 0 }, () => {
+    canvas.withSceneSpace({ x: 0, y: 0 }, () => {
       this.#overlayLayer.draw(canvas);
     });
   }
