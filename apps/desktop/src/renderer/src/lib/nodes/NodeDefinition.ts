@@ -1,10 +1,9 @@
 import type { Rect2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
-import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { NodePoint } from "@/types/coordinates";
 import type { ShiftNode } from "@/types/node";
 import type { PointerTarget } from "@/types/target";
-import type { RenderPass } from "@/types/rendering";
+import type { RenderContext, RenderPass } from "@/types/rendering";
 
 /**
  * Defines behavior shared by every scene node of one kind.
@@ -46,10 +45,10 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * Paints a node for one render pass.
    *
    * @param _node - scene node handled by this definition.
-   * @param _canvas - canvas already positioned in the coordinate space expected by the current pass.
+   * @param _ctx - renderer-owned resources for the current frame.
    * @param _pass - phase requested by the render layer.
    */
-  draw(_node: N, _canvas: Canvas, _pass: RenderPass): void {}
+  draw(_node: N, _ctx: RenderContext, _pass: RenderPass): void {}
 }
 
 /** Constructs a node definition bound to one editor runtime. */

@@ -8,8 +8,8 @@ import { CanvasItem } from "./CanvasItem";
 import type { Canvas } from "./Canvas";
 import { OutlineRenderer } from "./Outline";
 import { Anchors, ControlLines, DebugOverlays, Guides, Handles, Segments } from "./overlays";
-import type { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 import type { GlyphNode } from "@/types/node";
+import type { RenderContext } from "@/types/rendering";
 import type { Editor } from "../Editor";
 import type { SegmentId } from "@shift/glyph-state";
 
@@ -165,11 +165,6 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#handles = new Handles();
   }
 
-  /** Attach the marker layer used by accelerated handle drawing. */
-  setMarkerLayer(layer: MarkerLayer | null): void {
-    this.#handles.setMarkerLayer(layer);
-  }
-
   protected props(): SceneLayerProps {
     this.#editor.camera.trackViewportTransform();
 
@@ -211,9 +206,11 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     };
   }
 
-  draw(canvas: Canvas): void {
+  draw(ctx: RenderContext): void {
     const props = this.propsCell.value;
     if (!props) return;
+
+    const { canvas } = ctx;
 
     for (const glyph of props.glyphs) {
       this.#drawGlyphOutline(canvas, glyph);
@@ -223,11 +220,9 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
       });
     }
 
-    let drewHandles = false;
     for (const glyph of props.glyphs) {
-      drewHandles = this.#drawGlyphEditHandles(canvas, props, glyph) || drewHandles;
+      this.#drawGlyphEditHandles(ctx, props, glyph);
     }
-    if (!drewHandles) this.#handles.clear();
   }
 
   #drawGlyphOutline(canvas: Canvas, glyph: GlyphFrame): void {
@@ -285,7 +280,8 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     return object.segmentId;
   }
 
-  #drawGlyphEditHandles(canvas: Canvas, props: SceneLayerProps, glyph: GlyphFrame): boolean {
+  #drawGlyphEditHandles(ctx: RenderContext, props: SceneLayerProps, glyph: GlyphFrame): void {
+    const { canvas } = ctx;
     const renderModel = glyph.instance.render;
     const sceneBounds = this.#editor.camera.visibleSceneBounds(64);
     const origin = glyph.node.position;
@@ -315,8 +311,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     });
 
     this.#handles.draw(
-      canvas,
-      canvas.camera,
+      ctx,
       glyph.node,
       glyph.instance,
       props.interaction.selection,
@@ -329,8 +324,6 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
         hover: props.interaction.hover,
       });
     });
-
-    return true;
   }
 }
 

@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { CameraTransform } from "@/lib/editor/managers/Camera";
-import { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
+import type { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 import { MARKER_INSTANCE_FLOATS } from "../../markers/types";
 import { STYLES, type CachedInstanceStyle } from "../../markers/handleStyles";
 import type { HandleDisplayList } from "./HandleItems";
@@ -11,10 +11,11 @@ const EMPTY_PACKED_INSTANCES = new Float32Array(0);
 export class MarkerHandleRenderer {
   #packedInstances: Float32Array | null = null;
   #packedCapacity = 0;
+  #uploadedLayer: MarkerLayer | null = null;
   #uploadedList: HandleDisplayList | null = null;
   #uploadedInstanceCount = 0;
 
-  resetUpload(): void {
+  #resetUpload(): void {
     this.#uploadedList = null;
     this.#uploadedInstanceCount = 0;
   }
@@ -27,6 +28,11 @@ export class MarkerHandleRenderer {
   ): boolean {
     if (!layer) return false;
     if (!layer.isAvailable()) return false;
+
+    if (layer !== this.#uploadedLayer) {
+      this.#uploadedLayer = layer;
+      this.#resetUpload();
+    }
 
     if (list !== this.#uploadedList) {
       this.#uploadedInstanceCount = this.#pack(list);
