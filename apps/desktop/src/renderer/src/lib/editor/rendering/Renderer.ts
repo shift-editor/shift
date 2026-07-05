@@ -8,6 +8,7 @@ import type { Editor } from "../Editor";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./CanvasSurface";
 import { effect, signal, track, type Effect, type WritableSignal } from "@/lib/signals/signal";
 import { BackgroundLayer, OverlayLayer, SceneLayer } from "./RenderFrame";
+import type { RenderContext } from "@/types/rendering";
 
 type RenderLayer = "background" | "scene" | "overlay";
 
@@ -65,7 +66,6 @@ export class Renderer {
     this.#backgroundLayer = new BackgroundLayer(editor);
     this.#sceneLayer = new SceneLayer(editor);
     this.#overlayLayer = new OverlayLayer(editor);
-    this.#sceneLayer.setMarkerLayer(this.#markerLayer);
 
     this.#backgroundEffect = effect(
       () => {
@@ -136,7 +136,6 @@ export class Renderer {
     this.#markerSurface.set(null);
     this.#markerLayer.destroy();
     this.#markerLayer = new MarkerLayer();
-    this.#sceneLayer.setMarkerLayer(this.#markerLayer);
   }
 
   get markerLayer(): MarkerLayer {
@@ -147,7 +146,7 @@ export class Renderer {
     const canvas = this.#getCanvas("background");
     if (!canvas) return;
 
-    canvas.withGlyphSpace({ x: 0, y: 0 }, () => {
+    canvas.withSceneSpace({ x: 0, y: 0 }, () => {
       this.#backgroundLayer.draw(canvas);
     });
   }
@@ -156,16 +155,26 @@ export class Renderer {
     const canvas = this.#getCanvas("scene");
     if (!canvas) return;
 
-    canvas.withGlyphSpace({ x: 0, y: 0 }, () => {
-      this.#sceneLayer.draw(canvas);
-    });
+    const ctx: RenderContext = {
+      canvas,
+      markers: this.#markerLayer,
+    };
+
+    this.#markerLayer.begin();
+    try {
+      canvas.withSceneSpace({ x: 0, y: 0 }, () => {
+        this.#sceneLayer.draw(ctx);
+      });
+    } finally {
+      this.#markerLayer.commit();
+    }
   }
 
   #renderOverlay(): void {
     const canvas = this.#getCanvas("overlay");
     if (!canvas) return;
 
-    canvas.withGlyphSpace({ x: 0, y: 0 }, () => {
+    canvas.withSceneSpace({ x: 0, y: 0 }, () => {
       this.#overlayLayer.draw(canvas);
     });
   }

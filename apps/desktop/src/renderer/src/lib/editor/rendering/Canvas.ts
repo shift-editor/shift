@@ -95,12 +95,12 @@ export class Canvas {
   }
 
   /**
-   * Run a drawing callback in glyph-local UPM coordinates.
+   * Runs a drawing callback in root scene coordinates.
    *
-   * @param drawOffset - Glyph-local offset applied after the camera transform.
-   * @param draw - Drawing operation to run while the context is in glyph space.
+   * @param drawOffset - Scene-space offset applied after the camera transform.
+   * @param draw - Drawing operation to run while the context is in scene space.
    */
-  withGlyphSpace(drawOffset: Point2D, draw: (canvas: Canvas) => void): void {
+  withSceneSpace(drawOffset: Point2D, draw: (canvas: Canvas) => void): void {
     const camera = this.camera;
 
     this.ctx.save();

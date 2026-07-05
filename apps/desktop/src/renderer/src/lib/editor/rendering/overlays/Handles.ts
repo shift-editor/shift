@@ -1,10 +1,8 @@
-import type { Canvas } from "@/lib/editor/rendering/Canvas";
-import type { CameraTransform } from "@/lib/editor/managers/Camera";
 import type { GlyphInstance } from "@/lib/model/Glyph";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
 import type { GlyphNode } from "@/types/node";
-import { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
+import type { RenderContext } from "@/types/rendering";
 import { HandleItems } from "./handles/HandleItems";
 import { MarkerHandleRenderer } from "./handles/MarkerHandleRenderer";
 import { CanvasHandleRenderer } from "./handles/CanvasHandleRenderer";
@@ -20,16 +18,8 @@ export class Handles {
   readonly #markers = new MarkerHandleRenderer();
   readonly #canvas = new CanvasHandleRenderer();
 
-  #markerLayer: MarkerLayer | null = null;
-
-  setMarkerLayer(layer: MarkerLayer | null): void {
-    this.#markerLayer = layer;
-    this.#markers.resetUpload();
-  }
-
   draw(
-    canvas: Canvas,
-    camera: CameraTransform,
+    ctx: RenderContext,
     node: GlyphNode,
     instance: GlyphInstance,
     selection: Selection,
@@ -40,13 +30,8 @@ export class Handles {
       hover,
     });
 
-    if (this.#markers.draw(this.#markerLayer, list, camera, node.position)) return;
+    if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position)) return;
 
-    this.#canvas.draw(canvas, list.items);
-  }
-
-  clear(): void {
-    this.#markerLayer?.clear();
-    this.#markers.resetUpload();
+    this.#canvas.draw(ctx.canvas, list.items);
   }
 }

@@ -66,12 +66,17 @@ import { ShiftStore } from "@/lib/store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "@/types/target";
 import type { SelectableId, ShiftEditorRecord, ShiftId, ShiftObject } from "@/types";
-import type { GlyphNode } from "@/types/node";
+import type { GlyphNode, NodeKind } from "@/types/node";
 import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
+import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
+import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
+
+const DEFAULT_NODE_DEFINITIONS: NodeDefinitionConstructor[] = [GlyphNodeDefinition];
 
 interface EditorOptions {
   font: Font;
   clipboard: SystemClipboard;
+  nodeDefinitions?: readonly NodeDefinitionConstructor[];
 }
 
 /**
@@ -118,6 +123,7 @@ export class Editor {
   readonly hover: Hover;
   readonly font: Font;
   readonly scene: Scene;
+  readonly #nodeDefinitions: Map<NodeKind, NodeDefinition> = new Map();
   readonly #store: ShiftStore<ShiftEditorRecord>;
 
   /**
@@ -185,6 +191,14 @@ export class Editor {
     this.font = options.font;
     this.#store = new ShiftStore();
     this.scene = new Scene(this.#store);
+
+    const nodeDefs = new Map<NodeKind, NodeDefinition>();
+    for (const Def of options.nodeDefinitions ?? DEFAULT_NODE_DEFINITIONS) {
+      const def = new Def(this);
+      nodeDefs.set(def.kind, def);
+    }
+
+    this.#nodeDefinitions = nodeDefs;
 
     const initialDesignLocation = emptyAxisLocation();
 
@@ -449,7 +463,7 @@ export class Editor {
       const node = this.scene.node(id);
       if (!node) return null;
 
-      return new NodeObject(node);
+      return new NodeObject(node, this.nodeDefinition(node.kind));
     }
 
     if (isPointId(id)) {
@@ -547,6 +561,10 @@ export class Editor {
     }
 
     return null;
+  }
+
+  nodeDefinition(kind: NodeKind): NodeDefinition | null {
+    return this.#nodeDefinitions.get(kind) ?? null;
   }
 
   /**
@@ -700,52 +718,12 @@ export class Editor {
       const node = nodes[i];
       if (!node) continue;
 
-      switch (node.kind) {
-        case "glyph": {
-          const nodePoint = this.getPointInNodeSpace(point, node.position);
-          const instance = this.font.instance(node.glyphId, this.designLocationCell);
-          if (!instance) break;
+      const definition = this.nodeDefinition(node.kind);
+      if (!definition) continue;
 
-          const hit = instance.geometry.hitAt(nodePoint, this.hitRadius);
-          if (!hit) break;
-
-          if (hit.kind === "segment") {
-            const segment = instance.geometry.segment(hit.id);
-            if (!segment) break;
-
-            return {
-              ...hit,
-              nodeId: node.id,
-              glyphId: node.glyphId,
-              point: nodePoint,
-              segmentId: hit.id,
-              pointIds: segment.pointIds,
-            };
-          }
-
-          if (hit.kind === "point") {
-            return {
-              ...hit,
-              nodeId: node.id,
-              glyphId: node.glyphId,
-              point: nodePoint,
-              pointId: hit.id,
-            };
-          }
-
-          if (hit.kind === "anchor") {
-            return {
-              ...hit,
-              nodeId: node.id,
-              glyphId: node.glyphId,
-              point: nodePoint,
-              anchorId: hit.id,
-            };
-          }
-
-          break;
-        }
-      }
+      const nodePoint = this.getPointInNodeSpace(point, node.position);
+      const target = definition.hit(node, nodePoint);
+      if (target) return target;
     }
 
     return { kind: "canvas", point };

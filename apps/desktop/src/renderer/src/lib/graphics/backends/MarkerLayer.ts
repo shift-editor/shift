@@ -32,6 +32,7 @@ export class MarkerLayer {
   #drawCommand: REGL.DrawCommand | null = null;
   #available = false;
   #instanceCapacity = 0;
+  #frameDrew = false;
   #centre: [number, number] = [0, 0];
   #drawOffset: [number, number] = [0, 0];
   #drawProps: MarkerDrawProps = {
@@ -66,6 +67,18 @@ export class MarkerLayer {
   /** @knipclassignore */
   isAvailable(): boolean {
     return this.#available;
+  }
+
+  /** Starts a marker frame and forgets whether any marker content has drawn. */
+  begin(): void {
+    this.#frameDrew = false;
+  }
+
+  /** Clears the marker surface when the frame produced no marker draw. */
+  commit(): void {
+    if (this.#frameDrew) return;
+
+    this.clear();
   }
 
   clear(): void {
@@ -121,6 +134,8 @@ export class MarkerLayer {
   ): boolean {
     if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available)
       return false;
+
+    this.#frameDrew = true;
 
     if (instanceCount === 0) {
       this.clear();

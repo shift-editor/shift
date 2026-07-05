@@ -49,3 +49,6 @@ export interface GlyphNode extends Node {
 
 /** Represents every scene node kind known to this build. */
 export type ShiftNode = GlyphNode;
+
+/** Identifies a registered scene node behavior kind. */
+export type NodeKind = ShiftNode["kind"];
