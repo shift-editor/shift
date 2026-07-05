@@ -1,0 +1,4 @@
+interface:
+  display_name: "Shift Docs"
+  short_description: "Route Shift documentation and tickets correctly."
+  default_prompt: "Use the Shift docs skill to decide where architecture notes, tickets, and repo docs should live."
