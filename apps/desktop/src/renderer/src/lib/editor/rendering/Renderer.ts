@@ -146,8 +146,13 @@ export class Renderer {
     const canvas = this.#getCanvas("background");
     if (!canvas) return;
 
+    const ctx: RenderContext = {
+      canvas,
+      markers: this.#markerLayer,
+    };
+
     canvas.withSceneSpace({ x: 0, y: 0 }, () => {
-      this.#backgroundLayer.draw(canvas);
+      this.#backgroundLayer.draw(ctx);
     });
   }
 
