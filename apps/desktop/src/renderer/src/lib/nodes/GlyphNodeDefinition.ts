@@ -7,9 +7,12 @@ import {
   Anchors,
   ControlLines,
   DebugOverlays,
+  Guides,
   Handles,
   Segments,
 } from "@/lib/editor/rendering/overlays";
+import { displayAdvance } from "@/lib/utils/unicode";
+import { track } from "@/lib/signals";
 import type { GlyphInstance } from "@/lib/model/Glyph";
 import { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import type { GlyphNode } from "@/types/node";
@@ -25,6 +28,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly #anchors = new Anchors();
   readonly #segments = new Segments();
   readonly #handles = new Handles();
+  readonly #guides = new Guides();
 
   bounds(_node: GlyphNode): Rect2D | null {
     return null;
@@ -74,6 +78,10 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   draw(node: GlyphNode, ctx: RenderContext, pass: RenderPass): void {
     switch (pass) {
+      case "background":
+        this.#drawBackground(node, ctx);
+        return;
+
       case "content":
         this.#drawContent(node, ctx);
         return;
@@ -82,7 +90,6 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         this.#drawControls(node, ctx);
         return;
 
-      case "background":
       case "overlay":
         return;
     }
@@ -90,6 +97,20 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   #instance(node: GlyphNode): GlyphInstance | null {
     return this.editor.font.instance(node.glyphId, this.editor.designLocationCell);
+  }
+
+  #drawBackground(node: GlyphNode, ctx: RenderContext): void {
+    const record = this.editor.font.glyph(node.glyphId);
+    if (!record) return;
+
+    const instance = this.#instance(node);
+    if (!instance) return;
+
+    const unicode = record.unicodes[0] ?? null;
+    track(instance.xAdvanceCell);
+
+    const advance = displayAdvance(instance.xAdvanceCell.peek(), record.name, unicode);
+    this.#guides.draw(ctx.canvas, this.editor.font.metrics, advance);
   }
 
   #drawContent(node: GlyphNode, ctx: RenderContext): void {

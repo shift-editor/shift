@@ -4,10 +4,12 @@ import { computed } from "@/lib/signals";
 /**
  * Base class for canvas items with reactive drawing/query props.
  *
- * `props()` is the reactive phase: subclasses may read signals and should
- * return plain derived data for drawing, hit testing, and cursor queries.
- * Public drawing/query methods should read `propsCell.value` or
- * `propsSnapshot()` and avoid reading other signals directly.
+ * @remarks
+ * `props()` is a layer-level dependency and snapshot boundary: subclasses may
+ * read signals and return plain derived data for drawing, hit testing, and
+ * cursor queries. Renderer effects are the draw-time reactive boundary, so
+ * helpers and node definitions called during draw may intentionally read
+ * signals when the value belongs to kind-specific rendering.
  *
  * @typeParam Props - Plain derived data used by the concrete canvas item.
  */

@@ -1,18 +1,11 @@
-import { displayAdvance } from "@/lib/utils/unicode";
 import { CanvasItem } from "./CanvasItem";
 import type { Canvas } from "./Canvas";
-import { Guides } from "./overlays";
-import type { GlyphNode, ShiftNode } from "@/types/node";
+import type { ShiftNode } from "@/types/node";
 import type { RenderContext, RenderPass } from "@/types/rendering";
 import type { Editor } from "../Editor";
 
-interface BackgroundGlyphFrame {
-  readonly node: GlyphNode;
-  readonly advance: number;
-}
-
 export interface BackgroundLayerProps {
-  readonly glyphs: readonly BackgroundGlyphFrame[];
+  readonly nodes: readonly ShiftNode[];
 }
 
 export interface SceneLayerProps {
@@ -38,7 +31,6 @@ export interface OverlayLayerProps {
  */
 export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
   readonly #editor: Editor;
-  readonly #guides = new Guides();
 
   /**
    * Creates the background layer for one editor.
@@ -56,43 +48,27 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     this.#editor.activeToolStateCell.value;
     this.#editor.scene.cell.value;
 
-    const glyphs: BackgroundGlyphFrame[] = [];
-    for (const node of this.#editor.scene.nodes()) {
-      switch (node.kind) {
-        case "glyph": {
-          const record = this.#editor.font.glyph(node.glyphId);
-          if (!record) break;
-
-          const instance = this.#editor.font.instance(
-            node.glyphId,
-            this.#editor.designLocationCell,
-          );
-          if (!instance) break;
-
-          const unicode = record.unicodes[0] ?? null;
-
-          glyphs.push({
-            node,
-            advance: displayAdvance(instance.xAdvanceCell.value, record.name, unicode),
-          });
-          break;
-        }
-      }
-    }
-
-    return { glyphs };
+    return { nodes: this.#editor.scene.nodes() };
   }
 
-  draw(canvas: Canvas): void {
+  draw(ctx: RenderContext): void {
     const props = this.propsCell.value;
     if (!props) return;
 
-    for (const glyph of props.glyphs) {
-      canvas.withTranslation(glyph.node.position, () => {
-        this.#guides.draw(canvas, this.#editor.font.metrics, glyph.advance);
-        this.#editor.toolManager.drawBackground(canvas);
+    for (const node of props.nodes) {
+      ctx.canvas.withTranslation(node.position, () => {
+        this.#drawNode(ctx, node, "background");
       });
     }
+
+    this.#editor.toolManager.drawBackground(ctx.canvas);
+  }
+
+  #drawNode(ctx: RenderContext, node: ShiftNode, pass: RenderPass): void {
+    const definition = this.#editor.nodeDefinition(node.kind);
+    if (!definition) return;
+
+    definition.draw(node, ctx, pass);
   }
 }
 
