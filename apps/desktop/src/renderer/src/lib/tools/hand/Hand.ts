@@ -1,22 +1,13 @@
-import { BaseTool, type ToolName, defineStateDiagram } from "../core";
+import { BaseTool, type ToolName } from "../core";
 import type { CursorType } from "@/types/editor";
 import type { HandState } from "./types";
 import { HandReadyBehavior, HandDraggingBehavior } from "./behaviors";
+import { NodeId } from "@shift/types";
 
 export class Hand extends BaseTool<HandState> {
-  /** @knipclassignore — declarative state spec for tool docs/debugging. */
-  static stateSpec = defineStateDiagram<HandState["type"]>({
-    states: ["idle", "ready", "dragging"],
-    initial: "idle",
-    transitions: [
-      { from: "idle", to: "ready", event: "activate" },
-      { from: "ready", to: "dragging", event: "dragStart" },
-      { from: "dragging", to: "ready", event: "dragEnd" },
-      { from: "ready", to: "idle", event: "deactivate" },
-    ],
-  });
-
   readonly id: ToolName = "hand";
+
+  #stashedEditingNodes: NodeId[] = [];
 
   readonly behaviors = [HandReadyBehavior, HandDraggingBehavior];
 
@@ -30,10 +21,16 @@ export class Hand extends BaseTool<HandState> {
   }
 
   override activate(): void {
+    this.#stashedEditingNodes = [...this.editor.editing.nodeIds];
+    this.editor.editing.clear();
+
     this.state = { type: "ready" };
   }
 
   override deactivate(): void {
+    this.editor.editing.set(this.#stashedEditingNodes);
+    this.#stashedEditingNodes = [];
+
     this.state = { type: "idle" };
   }
 }

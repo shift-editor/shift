@@ -18,6 +18,7 @@ declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
+declare const RunIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 
 /**
@@ -38,7 +39,9 @@ export type ContourId = string & {
  * An anchor identifier from Rust.
  * Branded string type - can't be confused with PointId/ContourId or plain strings.
  */
-export type AnchorId = string & { readonly [AnchorIdBrand]: typeof AnchorIdBrand };
+export type AnchorId = string & {
+  readonly [AnchorIdBrand]: typeof AnchorIdBrand;
+};
 
 /**
  * An axis identifier from Rust.
@@ -50,13 +53,17 @@ export type AxisId = string & { readonly [AxisIdBrand]: typeof AxisIdBrand };
  * A component identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
  */
-export type ComponentId = string & { readonly [ComponentIdBrand]: typeof ComponentIdBrand };
+export type ComponentId = string & {
+  readonly [ComponentIdBrand]: typeof ComponentIdBrand;
+};
 
 /**
  * A guideline identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
  */
-export type GuidelineId = string & { readonly [GuidelineIdBrand]: typeof GuidelineIdBrand };
+export type GuidelineId = string & {
+  readonly [GuidelineIdBrand]: typeof GuidelineIdBrand;
+};
 
 /**
  * A glyph identifier from Rust.
@@ -80,10 +87,20 @@ export type LayerId = string & { readonly [LayerIdBrand]: typeof LayerIdBrand };
 export type NodeId = string & { readonly [NodeIdBrand]: typeof NodeIdBrand };
 
 /**
+ * A text run identifier minted by the renderer.
+ *
+ * Run ids identify document-scoped proof text content. Scene text nodes point
+ * at run ids so multiple placements can share the same text.
+ */
+export type RunId = string & { readonly [RunIdBrand]: typeof RunIdBrand };
+
+/**
  * A source identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
  */
-export type SourceId = string & { readonly [SourceIdBrand]: typeof SourceIdBrand };
+export type SourceId = string & {
+  readonly [SourceIdBrand]: typeof SourceIdBrand;
+};
 
 /**
  * Convert a string ID from Rust to a typed PointId.
@@ -158,6 +175,14 @@ export function asNodeId(id: string): NodeId {
 }
 
 /**
+ * Convert a text run ID string to a typed RunId.
+ * Use this only for persisted or test-provided text run identities.
+ */
+export function asRunId(id: string): RunId {
+  return id as RunId;
+}
+
+/**
  * Convert a string ID from Rust to a typed SourceId.
  * Use this when receiving IDs from Rust snapshots.
  */
@@ -210,6 +235,11 @@ export function isNodeId(id: unknown): id is NodeId {
   return hasIdPrefix(id, "node");
 }
 
+/** Returns whether a value is a runtime-discriminable text run id. */
+export function isRunId(id: unknown): id is RunId {
+  return hasIdPrefix(id, "run");
+}
+
 /** Returns whether a value is a runtime-discriminable source id. */
 export function isSourceId(id: unknown): id is SourceId {
   return hasIdPrefix(id, "source");
@@ -229,6 +259,7 @@ type MintedIdByPrefix = {
   glyph: GlyphId;
   layer: LayerId;
   node: NodeId;
+  run: RunId;
   source: SourceId;
 };
 
@@ -294,6 +325,11 @@ export function mintLayerId(): LayerId {
 /** Mints a new scene node id. See {@link NodeId}. */
 export function mintNodeId(): NodeId {
   return mintPrefixedId("node");
+}
+
+/** Mints a new text run id. See {@link RunId}. */
+export function mintRunId(): RunId {
+  return mintPrefixedId("run");
 }
 
 /** Mints a new source id. See {@link mintPointId}. */

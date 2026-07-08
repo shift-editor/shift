@@ -1,8 +1,8 @@
-import type { NodeId } from "@shift/types";
+import { mintNodeId, type NodeId } from "@shift/types";
 import { computed, type Signal } from "@/lib/signals";
 import type { ShiftStore } from "@/lib/store/ShiftStore";
 import type { ShiftEditorRecord, ShiftNodeRecord } from "@/types";
-import type { ShiftNode } from "@/types/node";
+import type { CreateNode, ShiftNode, UpdateNode } from "@/types/node";
 
 export interface SceneValue {
   readonly nodes: readonly ShiftNode[];
@@ -92,6 +92,29 @@ export class Scene {
     return (this.#nodesByKind.peek().get(kind) ?? []) as readonly Extract<ShiftNode, { kind: K }>[];
   }
 
+  /**
+   * Creates a placed scene node and returns the completed record.
+   *
+   * @param node - Kind-specific node fields plus placement; identity, parent,
+   * and ordering fields are optional.
+   * @returns the stored node record with scene-owned defaults filled in.
+   */
+  createNode<N extends ShiftNode>(node: CreateNode<N>): N {
+    const parentId = node.parentId ?? null;
+    const next = {
+      ...node,
+      id: node.id ?? mintNodeId(),
+      type: "node",
+      parentId,
+      index: node.index ?? this.#nextIndex(parentId),
+      position: { ...node.position },
+    } as unknown as N;
+
+    this.#store.put(copyNode(next) as ShiftNodeRecord);
+
+    return next;
+  }
+
   setNodes(nodes: readonly ShiftNode[]): void {
     this.#deleteNodes();
 
@@ -100,10 +123,16 @@ export class Scene {
     }
   }
 
-  updateNode(node: ShiftNode): void {
-    if (!this.node(node.id)) return;
+  /**
+   * Updates mutable fields on an existing scene node.
+   *
+   * @param update - mutable node fields to merge into the current record.
+   */
+  updateNode(update: UpdateNode): void {
+    const node = this.node(update.id);
+    if (!node) return;
 
-    this.#store.put(copyNode(node) as ShiftNodeRecord);
+    this.#store.put(copyNode({ ...node, ...update } as ShiftNode) as ShiftNodeRecord);
   }
 
   deleteNode(nodeId: NodeId): void {
@@ -118,6 +147,12 @@ export class Scene {
     for (const node of this.nodes()) {
       this.#store.delete(node.id);
     }
+  }
+
+  #nextIndex(parentId: NodeId | null): string {
+    const siblingCount = this.nodes().filter((node) => node.parentId === parentId).length;
+
+    return `a${siblingCount}`;
   }
 }
 

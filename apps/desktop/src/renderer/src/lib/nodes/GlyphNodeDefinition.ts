@@ -77,17 +77,19 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   draw(node: GlyphNode, ctx: RenderContext, pass: RenderPass): void {
+    const editing = this.#isEditing(node);
+
     switch (pass) {
       case "background":
-        this.#drawBackground(node, ctx);
+        if (editing) this.#drawBackground(node, ctx);
         return;
 
       case "content":
-        this.#drawContent(node, ctx);
+        this.#drawContent(node, ctx, editing);
         return;
 
       case "controls":
-        this.#drawControls(node, ctx);
+        if (editing) this.#drawControls(node, ctx);
         return;
 
       case "overlay":
@@ -97,6 +99,10 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   #instance(node: GlyphNode): GlyphInstance | null {
     return this.editor.font.instance(node.glyphId, this.editor.designLocationCell);
+  }
+
+  #isEditing(node: GlyphNode): boolean {
+    return this.editor.editing.has(node.id);
   }
 
   #drawBackground(node: GlyphNode, ctx: RenderContext): void {
@@ -113,12 +119,21 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     this.#guides.draw(ctx.canvas, this.editor.font.metrics, advance);
   }
 
-  #drawContent(node: GlyphNode, ctx: RenderContext): void {
+  #drawContent(node: GlyphNode, ctx: RenderContext, editing: boolean): void {
     const instance = this.#instance(node);
     if (!instance) return;
 
     instance.render.trackShape();
 
+    if (editing) {
+      this.#drawEditableContent(node, ctx, instance);
+      return;
+    }
+
+    this.#drawDisplayContent(ctx, instance);
+  }
+
+  #drawEditableContent(node: GlyphNode, ctx: RenderContext, instance: GlyphInstance): void {
     this.#outline.draw(ctx.canvas, instance.render.outline, {
       fill: null,
       stroke: {
@@ -126,7 +141,14 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         widthPx: ctx.canvas.theme.glyph.widthPx,
       },
     });
+
     this.#drawDebugOverlays(node, ctx, instance);
+  }
+
+  #drawDisplayContent(ctx: RenderContext, instance: GlyphInstance): void {
+    this.#outline.draw(ctx.canvas, instance.render.outline, {
+      fill: ctx.canvas.theme.glyph.fill,
+    });
   }
 
   #drawControls(node: GlyphNode, ctx: RenderContext): void {

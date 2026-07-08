@@ -149,10 +149,10 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const pointCount = await page.evaluate((data) => {
-      const shift = (window as any).__shift;
-      if (!shift) throw new Error("__shift not exposed — was the app built with __PLAYWRIGHT__?");
+      const shift = (window as any).shift;
+      if (!shift) throw new Error("shift runtime API not exposed");
 
-      const editor = shift.getEditor();
+      const editor = shift.editor;
       const result = editor.bridge.pasteContours(data, 0, 0);
 
       if (!result.success) throw new Error("pasteContours failed");
@@ -169,7 +169,7 @@ test.describe("Performance — 50K points", () => {
 
     const samples = await page.evaluate(
       ({ contours, frames }) => {
-        const editor = (window as any).__shift.getEditor();
+        const editor = (window as any).shift.editor;
         editor.bridge.pasteContours(contours, 0, 0);
 
         const pointIds = editor.editGlyphSource.allPoints.slice(0, 5).map((p: any) => p.id);
@@ -206,7 +206,7 @@ test.describe("Performance — 50K points", () => {
 
     const samples = await page.evaluate(
       ({ contours, frames }) => {
-        const editor = (window as any).__shift.getEditor();
+        const editor = (window as any).shift.editor;
         editor.bridge.pasteContours(contours, 0, 0);
 
         const allPoints = editor.editGlyphSource.allPoints;
@@ -244,7 +244,7 @@ test.describe("Performance — 50K points", () => {
 
     const samples = await page.evaluate(
       ({ contours, frames }) => {
-        const editor = (window as any).__shift.getEditor();
+        const editor = (window as any).shift.editor;
         editor.bridge.pasteContours(contours, 0, 0);
 
         editor.selectAll();
@@ -283,7 +283,7 @@ test.describe("Performance — 50K points", () => {
 
     const samples = await page.evaluate(
       ({ contours, frames }) => {
-        const editor = (window as any).__shift.getEditor();
+        const editor = (window as any).shift.editor;
         editor.bridge.pasteContours(contours, 0, 0);
         editor.selectAll();
 
@@ -313,7 +313,7 @@ test.describe("Performance — 50K points", () => {
 
     const samples = await page.evaluate(
       ({ contours, frames }) => {
-        const editor = (window as any).__shift.getEditor();
+        const editor = (window as any).shift.editor;
         editor.bridge.pasteContours(contours, 0, 0);
         editor.selectAll();
 
@@ -360,7 +360,7 @@ test.describe("Performance — 50K points", () => {
 
     const samples = await page.evaluate(
       ({ contours, clickCount }) => {
-        const editor = (window as any).__shift.getEditor();
+        const editor = (window as any).shift.editor;
         editor.bridge.pasteContours(contours, 0, 0);
         editor.setActiveTool("pen");
 
@@ -394,7 +394,7 @@ test.describe("Performance — 50K points", () => {
 
     const samples = await page.evaluate(
       ({ contours, frames }) => {
-        const editor = (window as any).__shift.getEditor();
+        const editor = (window as any).shift.editor;
         editor.bridge.pasteContours(contours, 0, 0);
         editor.selectAll();
 

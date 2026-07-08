@@ -1,5 +1,6 @@
 import { computed, type Signal } from "@/lib/signals/signal";
 import type { ShiftStore } from "@/lib/store/ShiftStore";
+import { uniqueInOrder } from "@/lib/utils/utils";
 import { currentSelectionId, type SelectableId, type ShiftEditorRecord } from "@/types";
 
 export interface SelectionState {
@@ -65,7 +66,7 @@ export class Selection {
   }
 
   select(ids: readonly SelectableId[]): void {
-    this.#write(uniqueIds(ids));
+    this.#write(uniqueInOrder(ids));
   }
 
   add(id: SelectableId): void {
@@ -114,18 +115,4 @@ export class Selection {
       ids,
     });
   }
-}
-
-function uniqueIds(ids: readonly SelectableId[]): readonly SelectableId[] {
-  const seen = new Set<SelectableId>();
-  const unique: SelectableId[] = [];
-
-  for (const id of ids) {
-    if (seen.has(id)) continue;
-
-    seen.add(id);
-    unique.push(id);
-  }
-
-  return unique;
 }

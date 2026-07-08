@@ -1,6 +1,8 @@
 import type { AnchorId, ContourId, LayerId, PointId } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
 
+export { currentEditingId } from "./editing";
+export type { EditingId } from "./editing";
 export { currentSelectionId, objectIsKindOf } from "./object";
 export type {
   SelectableId,
@@ -13,6 +15,7 @@ export type {
   ShiftObjectOf,
 } from "./object";
 export type {
+  EditingRecord,
   GlyphNodeRecord,
   SelectionRecord,
   ShiftEditorRecord,
@@ -20,6 +23,7 @@ export type {
   ShiftRecord,
   ShiftRecordId,
 } from "./records";
+export type { TextRunRecord } from "./text";
 
 export interface GlyphObjectSegment {
   readonly id: SegmentId;

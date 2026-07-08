@@ -3,6 +3,17 @@ body {
   overflow: hidden;
 }
 
+.shift-editor-shell {
+  cursor: var(--shift-cursor);
+}
+
+.shift-editor-shell[data-gesture="pressed"],
+.shift-editor-shell[data-gesture="dragging"],
+.shift-editor-shell[data-gesture="pressed"] *,
+.shift-editor-shell[data-gesture="dragging"] * {
+  cursor: var(--shift-cursor) !important;
+}
+
 @font-face {
   font-family: "Inter";
   src: url("/assets/fonts/Inter-VariableFont.ttf") format("truetype");

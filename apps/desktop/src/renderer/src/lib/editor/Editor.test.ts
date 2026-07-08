@@ -62,7 +62,7 @@ describe("Editor scene bootstrap", () => {
     if (!rightNode) throw new Error("Expected right glyph node");
 
     editor.scene.updateNode({
-      ...rightNode,
+      id: rightNode.id,
       position: { x: rightNode.position.x + 30, y: rightNode.position.y + 5 },
     });
 

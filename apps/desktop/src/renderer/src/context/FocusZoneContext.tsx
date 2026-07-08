@@ -5,6 +5,7 @@ interface FocusZoneContextValue {
   activeZone: FocusZone;
   focusLock: boolean;
   setZone: (zone: FocusZone) => void;
+  claimZone: (zone: FocusZone) => void;
   lockToZone: (zone: FocusZone) => void;
   unlock: () => void;
   isZone: (zone: FocusZone) => boolean;
@@ -31,6 +32,12 @@ export function FocusZoneProvider({ children, defaultZone = "canvas" }: FocusZon
     [focusLock],
   );
 
+  const claimZone = useCallback((zone: FocusZone) => {
+    setFocusLock(false);
+    setLockedZone(null);
+    setActiveZone(zone);
+  }, []);
+
   const lockToZone = useCallback((zone: FocusZone) => {
     setFocusLock(true);
     setLockedZone(zone);
@@ -49,11 +56,12 @@ export function FocusZoneProvider({ children, defaultZone = "canvas" }: FocusZon
       activeZone: focusLock && lockedZone ? lockedZone : activeZone,
       focusLock,
       setZone,
+      claimZone,
       lockToZone,
       unlock,
       isZone,
     }),
-    [activeZone, focusLock, lockedZone, setZone, lockToZone, unlock, isZone],
+    [activeZone, focusLock, lockedZone, setZone, claimZone, lockToZone, unlock, isZone],
   );
 
   return <FocusZoneContext.Provider value={value}>{children}</FocusZoneContext.Provider>;

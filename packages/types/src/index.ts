@@ -13,6 +13,7 @@ export type {
   GlyphId,
   LayerId,
   NodeId,
+  RunId,
   SourceId,
 } from "./ids";
 export {
@@ -25,6 +26,7 @@ export {
   asGlyphId,
   asLayerId,
   asNodeId,
+  asRunId,
   asSourceId,
   isPointId,
   isContourId,
@@ -35,6 +37,7 @@ export {
   isGlyphId,
   isLayerId,
   isNodeId,
+  isRunId,
   isSourceId,
   mintContourId,
   mintAnchorId,
@@ -43,6 +46,7 @@ export {
   mintGlyphId,
   mintLayerId,
   mintNodeId,
+  mintRunId,
   mintSourceId,
 } from "./ids";
 

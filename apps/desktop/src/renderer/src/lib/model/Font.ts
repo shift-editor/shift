@@ -43,6 +43,7 @@ import {
 } from "@/lib/variation/location";
 import type { AxisLocation } from "@/types/variation";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
+import { uniqueInOrder } from "@/lib/utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
 import { interpolate, normalize } from "@/lib/interpolation/interpolate";
 
@@ -963,7 +964,7 @@ export class Font {
    * @throws {Error} when any requested glyph ID is not in the current font or cannot be read.
    */
   async loadGlyphs(glyphIds: readonly GlyphId[]): Promise<readonly Glyph[]> {
-    const uniqueIds = uniqueGlyphIds(glyphIds);
+    const uniqueIds = uniqueInOrder(glyphIds);
     for (const glyphId of uniqueIds) {
       if (!this.#store.recordForId(glyphId)) {
         throw new Error(`glyph ${glyphId} is not in the current font`);
@@ -988,7 +989,7 @@ export class Font {
 
     await this.#editCoordinator.settled();
 
-    const queue = uniqueGlyphIds(glyphIds);
+    const queue = uniqueInOrder(glyphIds);
     const seen = new Set<GlyphId>(queue);
 
     while (queue.length > 0) {
@@ -1262,8 +1263,4 @@ function emptyGlyphGeometry(): GlyphGeometry {
 
 function isSignal<T>(value: T | Signal<T>): value is Signal<T> {
   return typeof value === "object" && value !== null && "peek" in value && "value" in value;
-}
-
-function uniqueGlyphIds(glyphIds: readonly GlyphId[]): GlyphId[] {
-  return [...new Set(glyphIds)];
 }
