@@ -207,6 +207,15 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.gesture.reset();
   }
 
+  cancelPointerGesture(): void {
+    const wasDragging = this.gesture.isDragging;
+    this.gesture.reset();
+    this.editor.gesture.reset();
+    if (wasDragging) {
+      this.activeTool?.handleEvent({ type: "dragCancel" });
+    }
+  }
+
   handleKeyDown(e: KeyboardEvent): boolean {
     const modifiers = normalizeModifiers({
       shiftKey: e.shiftKey,

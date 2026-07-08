@@ -22,18 +22,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [workspace]);
 
   useEffect(() => {
-    if (typeof __PLAYWRIGHT__ === "undefined" || !__PLAYWRIGHT__) return undefined;
-
-    const exposed: ShiftPlaywrightApi = {
-      getEditor: () => workspace.editor,
-      getWorkspace: () => workspace,
-      getFont: () => workspace.font,
-    };
-
-    window.__shift = exposed;
+    window.shift = workspace;
 
     return () => {
-      delete window.__shift;
+      delete window.shift;
     };
   }, [workspace]);
 
@@ -57,16 +49,9 @@ export function useFont(): Font {
   return useWorkspace().font;
 }
 
-declare const __PLAYWRIGHT__: boolean | undefined;
-
-interface ShiftPlaywrightApi {
-  readonly getEditor: () => Editor;
-  readonly getWorkspace: () => Workspace;
-  readonly getFont: () => Font;
-}
-
 declare global {
   interface Window {
-    __shift?: ShiftPlaywrightApi;
+    /** Active workspace session for renderer-console experiments and e2e tests. */
+    shift?: Workspace;
   }
 }

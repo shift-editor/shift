@@ -10,12 +10,21 @@ import { Canvas } from "@/components/editor/Canvas";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
+import { useSignalState } from "@/lib/signals";
 
 export const Editor = () => {
   const { glyphId } = useParams();
   const editor = useEditor();
+  const cursorStyle = useSignalState(editor.cursorCell);
+  const gesture = useSignalState(editor.gesture.cell);
 
-  const { activeZone } = useFocusZone();
+  const { activeZone, claimZone } = useFocusZone();
+
+  useEffect(() => {
+    if (!glyphId) return;
+
+    claimZone("canvas");
+  }, [glyphId, claimZone]);
 
   useEffect(() => {
     const toolManager = editor.toolManager;
@@ -43,14 +52,14 @@ export const Editor = () => {
     };
   }, [glyphId, activeZone, editor]);
 
-  useEffect(() => {
-    editor.setZone(activeZone);
-  }, [activeZone, editor]);
-
   if (!glyphId) return null;
 
   return (
-    <div className="flex h-screen w-screen min-w-[600px] flex-col bg-white">
+    <div
+      className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
+      data-gesture={gesture.phase}
+      style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
+    >
       <Toolbar />
       <ResizablePanelGroup
         direction="horizontal"

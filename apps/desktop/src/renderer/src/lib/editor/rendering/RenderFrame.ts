@@ -46,6 +46,7 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     this.#editor.camera.trackViewportTransform();
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
+    this.#editor.editing.stateCell.value;
     this.#editor.scene.cell.value;
 
     return { nodes: this.#editor.scene.nodes() };
@@ -111,6 +112,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     // TODO: should be track(thing)
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
+    this.#editor.editing.stateCell.value;
     this.#editor.selection.stateCell.value;
     this.#editor.hover.entryCell.value;
     this.#editor.scene.cell.value;

@@ -111,7 +111,6 @@ export class Pen extends BaseTool<PenState, Pen> {
   }
 
   override drawOverlay(canvas: Canvas): void {
-    if (this.editor.getFocusZone() !== "canvas") return;
     this.#penPreview.draw(canvas);
   }
 }

@@ -16,10 +16,10 @@ import { asGlyphId, mintNodeId } from "@shift/types";
 export const Canvas: FC = () => {
   const editor = useEditor();
   const debug = useDebugSafe();
+
   const { glyphId: glyphIdParam } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const cursorStyle = useSignalState(editor.cursorCell);
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
 
@@ -29,9 +29,10 @@ export const Canvas: FC = () => {
       return;
     }
 
+    const id = mintNodeId();
     editor.scene.setNodes([
       {
-        id: mintNodeId(),
+        id: id,
         type: "node",
         kind: "glyph",
         parentId: null,
@@ -41,6 +42,8 @@ export const Canvas: FC = () => {
         position: { x: 0, y: 0 },
       },
     ]);
+
+    editor.editing.enter(id);
   }, [activeSourceId, editor, glyphId]);
 
   useEffect(() => {
@@ -82,7 +85,6 @@ export const Canvas: FC = () => {
     <div
       ref={containerRef}
       className="relative z-20 h-full w-full overflow-hidden"
-      style={{ cursor: cursorStyle }}
       onMouseMove={(e) => {
         editor.updateMousePosition(e.clientX, e.clientY);
       }}

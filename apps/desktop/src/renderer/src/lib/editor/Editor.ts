@@ -29,6 +29,7 @@ import {
   computed,
   effect,
   signal,
+  track,
   type Effect,
   type Signal,
   type WritableSignal,
@@ -41,19 +42,19 @@ import {
   type SystemClipboard,
 } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
-import { EdgePanManager } from "./managers";
 import { Hover } from "./Hover";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { CameraTransform } from "./managers";
-import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@/types/uiState";
 import type { TemporaryToolOptions } from "@/types/editor";
+import { Editing } from "./Editing";
 import { Selection } from "./Selection";
 import type { Font } from "../model/Font";
 import type { GlyphLayer } from "../model/Glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
+import { Text } from "@/lib/text/Text";
 import { TextRuns } from "@/lib/text/TextRuns";
 import { TextRun } from "@/lib/text/TextRun";
 import { glyphTextItem, Positioner } from "@/lib/text/layout";
@@ -70,8 +71,12 @@ import type { GlyphNode, NodeKind } from "@/types/node";
 import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
 import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
+import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 
-const DEFAULT_NODE_DEFINITIONS: NodeDefinitionConstructor[] = [GlyphNodeDefinition];
+const DEFAULT_NODE_DEFINITIONS: NodeDefinitionConstructor[] = [
+  GlyphNodeDefinition,
+  TextRunNodeDefinition,
+];
 
 interface EditorOptions {
   font: Font;
@@ -120,9 +125,11 @@ export class Editor {
    * explicit surfaces below.
    */
   readonly selection: Selection;
+  readonly editing: Editing;
   readonly hover: Hover;
   readonly font: Font;
   readonly scene: Scene;
+  readonly text: Text;
   readonly #nodeDefinitions: Map<NodeKind, NodeDefinition> = new Map();
   readonly #store: ShiftStore<ShiftEditorRecord>;
 
@@ -134,7 +141,6 @@ export class Editor {
    * reason about if these moved behind a small `EditorRenderer` facade.
    */
   #renderer: Renderer;
-  #edgePan: EdgePanManager;
 
   #toolManager: ToolManager;
   #toolMetadata: Map<
@@ -171,8 +177,6 @@ export class Editor {
 
   #textRuns: TextRuns;
 
-  #zone: FocusZone = "canvas";
-
   readonly gesture: EditorGesture;
   readonly input: EditorInput;
   #toolState: {
@@ -192,14 +196,6 @@ export class Editor {
     this.#store = new ShiftStore();
     this.scene = new Scene(this.#store);
 
-    const nodeDefs = new Map<NodeKind, NodeDefinition>();
-    for (const Def of options.nodeDefinitions ?? DEFAULT_NODE_DEFINITIONS) {
-      const def = new Def(this);
-      nodeDefs.set(def.kind, def);
-    }
-
-    this.#nodeDefinitions = nodeDefs;
-
     const initialDesignLocation = emptyAxisLocation();
 
     this.#designLocation = signal(initialDesignLocation, {
@@ -211,6 +207,15 @@ export class Editor {
         name: "editor.source.active",
       },
     );
+    this.text = new Text(this.#store, this.font, this.#designLocation);
+
+    const nodeDefs = new Map<NodeKind, NodeDefinition>();
+    for (const Def of options.nodeDefinitions ?? DEFAULT_NODE_DEFINITIONS) {
+      const def = new Def(this);
+      nodeDefs.set(def.kind, def);
+    }
+
+    this.#nodeDefinitions = nodeDefs;
 
     this.#view = new EditorViewState();
     this.input = new EditorInput();
@@ -222,12 +227,17 @@ export class Editor {
     };
 
     this.selection = new Selection(this.#store);
+    this.editing = new Editing(this.#store);
     this.hover = new Hover();
-    this.#selectionBounds = computed(() => this.selectionBounds(), {
-      name: "editor.selection.bounds",
-    });
-
-    this.#edgePan = new EdgePanManager(this);
+    this.#selectionBounds = computed(
+      () => {
+        track(this.selection.stateCell);
+        return this.selectionBounds();
+      },
+      {
+        name: "editor.selection.bounds",
+      },
+    );
 
     this.#toolMetadata = new Map();
     this.#activeToolState = signal<ActiveToolState>(
@@ -732,24 +742,8 @@ export class Editor {
   /** Subscribe to a lifecycle event. Returns an unsubscribe function. */
   public on: EventEmitter["on"] = (...args) => this.#events.on(...args);
 
-  public updateEdgePan(screenPos: Point2D, canvasBounds: Rect2D): void {
-    this.#edgePan.update(screenPos, canvasBounds);
-  }
-
-  public stopEdgePan(): void {
-    this.#edgePan.stop();
-  }
-
-  public getFocusZone(): FocusZone {
-    return this.#zone;
-  }
-
   public get camera(): Camera {
     return this.#camera;
-  }
-
-  public setZone(zone: FocusZone): void {
-    this.#zone = zone;
   }
 
   public undo() {
