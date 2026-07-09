@@ -550,8 +550,10 @@ impl FontWorkspace {
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
         state.set_package_identity(identity);
+
         self.store.set_workspace_state(state)?;
         self.source = WorkspaceSource::Package { path };
+
         Ok(())
     }
 

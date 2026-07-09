@@ -2,7 +2,7 @@
 
 Read-only command-line tools for `.shift` source packages.
 
-The crate builds the `shift` binary. Its first command is `inspect`, which opens a source package, summarizes the font model, and can emit stable JSON for scripts and CI.
+The crate builds the `shift-cli` binary. Its first command is `inspect`, which opens a source package, summarizes the font model, and can emit stable JSON for scripts and CI.
 
 ## Usage
 
@@ -10,6 +10,7 @@ The crate builds the `shift` binary. Its first command is `inspect`, which opens
 cargo run -p shift-cli -- inspect path/to/Family.shift
 cargo run -p shift-cli -- inspect --view axes path/to/Family.shift
 cargo run -p shift-cli -- inspect --view sources path/to/Family.shift
+cargo run -p shift-cli -- inspect --view layers path/to/Family.shift
 cargo run -p shift-cli -- inspect --json path/to/Family.shift
 ```
 
@@ -21,6 +22,16 @@ Available views:
 - `axes`: variable font axes
 - `sources`: design sources and locations
 - `glyphs`: glyph names, Unicode values, and layer counts
+- `layers`: glyph layer source bindings and geometry counts
+
+## Install
+
+```sh
+cargo install --path crates/shift-cli --bin shift-cli --force
+shift-cli inspect --view layers path/to/Family.shift
+```
+
+After pulling or merging `main`, rerun the same `cargo install` command to update the installed binary.
 
 ## Development
 

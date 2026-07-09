@@ -7,6 +7,7 @@ import {
   type AnchorId,
   type PointId,
   type ContourId,
+  type Location,
   type Source,
   type SourceId,
   type GlyphName,
@@ -480,10 +481,13 @@ export class Editor {
       const layer = this.#layerForPoint(id);
       if (!layer) return null;
 
+      const contourId = this.font.contourIdForPoint(id);
+      if (!contourId) return null;
+
       const node = this.#placedGlyphNodeForLayer(layer);
       if (!node) return null;
 
-      return new PointObject(id, layer, node);
+      return new PointObject(id, contourId, layer, node);
     }
 
     if (isAnchorId(id)) {
@@ -506,7 +510,10 @@ export class Editor {
       const pointIds = this.font.pointIdsForSegment(id);
       if (!pointIds) return null;
 
-      return new SegmentObject(id, pointIds, layer, node);
+      const contourId = this.font.contourIdForSegment(id);
+      if (!contourId) return null;
+
+      return new SegmentObject(id, contourId, pointIds, layer, node);
     }
 
     if (isContourId(id)) {
@@ -655,17 +662,69 @@ export class Editor {
   }
 
   /**
-   * Select an authored glyph layer for editing and move the display location to it.
+   * Selects a font source for the current editor glyph.
    *
-   * Missing source IDs are ignored. This does not open a glyph; it moves the
-   * shared design location to the source.
+   * @remarks
+   * Source switching is the lazy glyph-layer materialization boundary. If the
+   * current glyph has no authored layer at `sourceId`, this clones its default
+   * source layer before moving the editor to the source location.
+   *
+   * @param sourceId - Existing font source to make active in the editor.
    */
   public selectSource(sourceId: SourceId): void {
     const source = this.font.source(sourceId);
     if (!source) return;
 
-    this.#activeSourceId.set(source.id);
-    this.setDesignLocation(axisLocationFromLocation(source.location));
+    this.font.editCoordinator.transaction("Select source", () => {
+      this.#ensureCurrentGlyphLayerAtSource(source.id);
+    });
+    this.#setActiveSource(source.id, source.location);
+  }
+
+  /**
+   * Creates a source from the editor and selects it for the current glyph.
+   *
+   * @remarks
+   * This composes pure font source creation with editor source selection. The
+   * global source and current glyph layer are submitted as one workspace
+   * operation so the source is immediately usable from the editor sidebar.
+   *
+   * @param name - Display name for the new source.
+   * @param location - Design-space location for the new source.
+   * @returns The source id submitted to the workspace.
+   */
+  public createSource(name: string, location: Location): SourceId {
+    return this.font.editCoordinator.transaction("Create source", () => {
+      const sourceId = this.font.createSource(name, location);
+      this.#ensureCurrentGlyphLayerAtSource(sourceId);
+      this.#setActiveSource(sourceId, location);
+      return sourceId;
+    });
+  }
+
+  #ensureCurrentGlyphLayerAtSource(sourceId: SourceId): void {
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    const liveLayer = this.font.layer(node.glyphId, sourceId);
+
+    if (!liveLayer) {
+      const defaultLayer = this.font.layer(node.glyphId, this.font.defaultSource.id);
+      if (!defaultLayer) return;
+
+      this.font.cloneGlyphLayer(node.glyphId, sourceId, defaultLayer.id);
+    }
+
+    this.scene.updateNode({ id: node.id, sourceId });
+  }
+
+  #setActiveSource(sourceId: SourceId, location: Location): void {
+    const nextLocation = axisLocationFromLocation(location);
+    this.setDesignLocation(nextLocation);
+    this.#activeSourceId.set(sourceId);
   }
 
   /**
@@ -1097,6 +1156,8 @@ export class Editor {
    * @returns `true` when portable content was written, otherwise `false`.
    */
   public async copy(): Promise<boolean> {
+    await this.font.editCoordinator.settled();
+
     const content = this.contentFrom(this.selection.ids);
     if (!content) return false;
 
@@ -1104,6 +1165,8 @@ export class Editor {
   }
 
   public async cut(): Promise<boolean> {
+    await this.font.editCoordinator.settled();
+
     const selection = this.#pointSelectionFromIds(this.selection.ids);
     if (!selection || selection.pointIds.length === 0) return false;
 

@@ -92,6 +92,17 @@ const fileCommands: Command[] = [
 ];
 const editCommands: Command[] = [];
 
+const glyphCommands: Command[] = [
+  {
+    id: "glyph.reverseSelectedContour",
+    label: "Reverse Selected Contour",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => {
+      ctx.renderer.run("glyph.reverseSelectedContour");
+    },
+  },
+];
+
 /**
  * Snapshot of commands available to the app shell.
  *
@@ -103,6 +114,7 @@ export const commands: Command[] = [
   ...viewCommands,
   ...fileCommands,
   ...editCommands,
+  ...glyphCommands,
 ];
 
 /**

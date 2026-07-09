@@ -6,8 +6,9 @@ import { Home } from "@/views/Home";
 import { Editor } from "@/views/Editor";
 import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@/lib/signals/useSignal";
-import { useEditor, useFont, useWorkspace, WorkspaceProvider } from "@/workspace/WorkspaceContext";
-import { DebugProvider } from "@/context/DebugContext";
+import { useEditor, useFont, useWorkspace } from "@/workspace/WorkspaceContext";
+import { WorkspaceProvider } from "@/workspace/WorkspaceProvider";
+import { DebugProvider } from "@/context/DebugProvider";
 
 /**
  * Routes launcher and workspace windows to their screen trees.

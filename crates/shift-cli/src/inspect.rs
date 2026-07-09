@@ -12,6 +12,7 @@ pub enum InspectView {
     Axes,
     Sources,
     Glyphs,
+    Layers,
 }
 
 #[cfg(test)]
@@ -19,7 +20,9 @@ mod tests {
     use std::path::Path;
 
     use serde_json::json;
-    use shift_font::{Axis, AxisId, Font, Glyph, GlyphLayer, LayerId, Location, Source, SourceId};
+    use shift_font::{
+        Axis, AxisId, Contour, Font, Glyph, GlyphLayer, LayerId, Location, Point, Source, SourceId,
+    };
     use shift_source::ShiftSourcePackage;
 
     use super::*;
@@ -37,6 +40,12 @@ mod tests {
         assert_eq!(report.glyph_count, 1);
         assert_eq!(report.sources[1].location[0].axis_tag, "wght");
         assert_eq!(report.sources[1].location[0].value, 700.0);
+        assert_eq!(
+            report.glyphs[0].layers[0].source_name.as_deref(),
+            Some("Bold")
+        );
+        assert_eq!(report.glyphs[0].layers[0].contour_count, 1);
+        assert_eq!(report.glyphs[0].layers[0].point_count, 2);
     }
 
     #[test]
@@ -86,6 +95,19 @@ mod tests {
         assert_eq!(json["sources"][1]["location"][0]["axisTag"], "wght");
         assert_eq!(json["sources"][1]["location"][0]["value"], json!(700.0));
         assert_eq!(json["glyphs"][0]["unicodes"][0], "U+0041");
+        assert_eq!(json["glyphs"][0]["layers"][0]["pointCount"], json!(2));
+    }
+
+    #[test]
+    fn layers_view_shows_package_layer_counts() {
+        let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
+        let output = report.render(InspectView::Layers, RenderMode::Plain);
+
+        assert!(output.contains("Layers"));
+        assert!(output.contains("glyph"));
+        assert!(output.contains("source"));
+        assert!(output.contains("Bold"));
+        assert!(output.contains("600"));
     }
 
     fn sample_font() -> Font {
@@ -123,11 +145,12 @@ mod tests {
         font.set_default_source_id(bold_id.clone());
 
         let mut glyph = Glyph::with_unicode("A", 0x41);
-        glyph.set_layer(GlyphLayer::with_width(
-            LayerId::from_raw("A_bold"),
-            bold_id,
-            600.0,
+        let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_bold"), bold_id, 600.0);
+        layer.add_contour(Contour::from_points(
+            vec![Point::on_curve(0.0, 0.0), Point::on_curve(100.0, 0.0)],
+            false,
         ));
+        glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
 
         font

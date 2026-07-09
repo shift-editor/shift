@@ -1,5 +1,5 @@
 import { Bounds, Vec2, type Rect2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
+import type { ContourId, LayerId, PointId } from "@shift/types";
 import { track } from "@/lib/signals";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { ShiftObjectOf } from "@/types";
@@ -17,6 +17,8 @@ export class PointObject implements ShiftObjectOf<"point"> {
   readonly kind = "point";
   readonly id: PointId;
   readonly layer: GlyphLayer;
+  readonly layerId: LayerId;
+  readonly contourId: ContourId;
   readonly node: GlyphNode;
   readonly #pointId: PointId;
 
@@ -24,13 +26,16 @@ export class PointObject implements ShiftObjectOf<"point"> {
    * Creates a placed point object from its canonical layer and scene node.
    *
    * @param pointId - Stable point identity owned by `layer`.
+   * @param contourId - Contour that owns the point.
    * @param layer - Authored glyph layer that owns the point.
    * @param node - Scene occurrence placing the layer on the canvas.
    */
-  constructor(pointId: PointId, layer: GlyphLayer, node: GlyphNode) {
+  constructor(pointId: PointId, contourId: ContourId, layer: GlyphLayer, node: GlyphNode) {
     this.id = pointId;
     this.#pointId = pointId;
+    this.contourId = contourId;
     this.layer = layer;
+    this.layerId = layer.id;
     this.node = node;
   }
 

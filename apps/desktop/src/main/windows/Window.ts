@@ -1,5 +1,6 @@
 import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
 import * as ipc from "../../shared/ipc/main";
+import type { RendererCommandId } from "../../shared/commands";
 
 export interface WindowOptions {
   title?: string;
@@ -117,6 +118,10 @@ export class Window {
   /** Restores UI (chrome) zoom to 100% and notifies the renderer. */
   resetZoom(): void {
     this.#setZoomPercent(100);
+  }
+
+  runRendererCommand(id: RendererCommandId): void {
+    ipc.send(this.#window.webContents, "commands.runRenderer", id);
   }
 
   #setZoomPercent(percent: number): void {

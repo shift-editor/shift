@@ -144,6 +144,13 @@ pub enum FontIntent {
         glyph_id: GlyphId,
         source_id: SourceId,
     },
+    /// Creates one editable glyph layer by copying another layer's shape with fresh internal ids.
+    CloneGlyphLayer {
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+        from_layer_id: LayerId,
+    },
 }
 
 impl FontIntent {
@@ -171,7 +178,8 @@ impl FontIntent {
             | Self::DeleteAxis { .. }
             | Self::DeleteSource { .. }
             | Self::CreateSource { .. }
-            | Self::CreateGlyphLayer { .. } => None,
+            | Self::CreateGlyphLayer { .. }
+            | Self::CloneGlyphLayer { .. } => None,
         }
     }
 
@@ -312,6 +320,18 @@ impl Font {
                 source_id.clone(),
                 changes,
             ),
+            FontIntent::CloneGlyphLayer {
+                layer_id,
+                glyph_id,
+                source_id,
+                from_layer_id,
+            } => self.apply_clone_glyph_layer(
+                layer_id.clone(),
+                glyph_id.clone(),
+                source_id.clone(),
+                from_layer_id.clone(),
+                changes,
+            ),
             _ => unreachable!("editing intents take the layer path"),
         }
     }
@@ -449,6 +469,59 @@ impl Font {
             });
         }
         let layer = GlyphLayer::with_width(layer_id.clone(), source_id, self.default_layer_width());
+
+        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id,
+            Some(glyph_name),
+            &layer,
+        ));
+
+        Ok(vec![layer_id])
+    }
+
+    fn apply_clone_glyph_layer(
+        &mut self,
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+        from_layer_id: LayerId,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<Vec<LayerId>> {
+        let glyph_name = self
+            .glyph(glyph_id.clone())
+            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?
+            .glyph_name()
+            .clone();
+
+        if self.glyph_id_by_layer(layer_id.clone()).is_some() {
+            return Err(CoreError::DuplicateLayerId(layer_id));
+        }
+        if self
+            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
+            .is_some()
+        {
+            return Err(CoreError::DuplicateGlyphLayer {
+                glyph_id,
+                source_id,
+            });
+        }
+
+        let from_glyph_id = self
+            .glyph_id_by_layer(from_layer_id.clone())
+            .ok_or_else(|| CoreError::LayerNotFound(from_layer_id.clone()))?;
+        if from_glyph_id != glyph_id {
+            return Err(CoreError::LayerGlyphMismatch {
+                layer_id: from_layer_id,
+                glyph_id,
+                actual_glyph_id: from_glyph_id,
+            });
+        }
+
+        let source_layer = self
+            .layer(from_layer_id.clone())
+            .ok_or_else(|| CoreError::LayerNotFound(from_layer_id.clone()))?;
+        let layer = source_layer.clone_with_fresh_ids(layer_id.clone(), source_id);
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
         changes.push(FontChange::glyph_layer_created(
@@ -768,7 +841,8 @@ impl Font {
             | FontIntent::DeleteAxis { .. }
             | FontIntent::DeleteSource { .. }
             | FontIntent::CreateSource { .. }
-            | FontIntent::CreateGlyphLayer { .. } => {
+            | FontIntent::CreateGlyphLayer { .. }
+            | FontIntent::CloneGlyphLayer { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }
         }

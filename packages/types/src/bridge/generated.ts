@@ -164,6 +164,14 @@ export interface BooleanOpIntent {
   operation: string
 }
 
+/** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
+export interface CloneGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+}
+
 export interface ComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
@@ -241,8 +249,8 @@ export interface FontIntent {
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Create kinds: "createGlyph" | "createAxis" | "createSource" |
-   * "createGlyphLayer". Delete kinds: "deleteAxis" | "deleteSource". Every
-   * kind shares the same apply path; one set = one undo step.
+   * "createGlyphLayer" | "cloneGlyphLayer". Delete kinds: "deleteAxis" |
+   * "deleteSource". Every kind shares the same apply path; one set = one undo step.
    */
   kind: string
   addPoints?: AddPointsIntent
@@ -265,6 +273,7 @@ export interface FontIntent {
   createSource?: CreateSourceIntent
   deleteSource?: DeleteSourceIntent
   createGlyphLayer?: CreateGlyphLayerIntent
+  cloneGlyphLayer?: CloneGlyphLayerIntent
 }
 
 export interface FontMetadata {

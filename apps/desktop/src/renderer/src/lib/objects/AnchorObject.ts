@@ -1,5 +1,5 @@
 import { Bounds, Vec2, type Rect2D } from "@shift/geo";
-import type { AnchorId } from "@shift/types";
+import type { AnchorId, LayerId } from "@shift/types";
 import { track } from "@/lib/signals";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { ShiftObjectOf } from "@/types";
@@ -16,6 +16,7 @@ export class AnchorObject implements ShiftObjectOf<"anchor"> {
   readonly kind = "anchor";
   readonly id: AnchorId;
   readonly layer: GlyphLayer;
+  readonly layerId: LayerId;
   readonly node: GlyphNode;
   readonly #anchorId: AnchorId;
 
@@ -30,6 +31,7 @@ export class AnchorObject implements ShiftObjectOf<"anchor"> {
     this.id = anchorId;
     this.#anchorId = anchorId;
     this.layer = layer;
+    this.layerId = layer.id;
     this.node = node;
   }
 

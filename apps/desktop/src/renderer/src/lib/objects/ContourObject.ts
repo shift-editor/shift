@@ -1,5 +1,5 @@
 import { Bounds, Vec2, type Rect2D } from "@shift/geo";
-import type { ContourId } from "@shift/types";
+import type { ContourId, LayerId } from "@shift/types";
 import { track } from "@/lib/signals";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { ShiftObjectOf } from "@/types";
@@ -16,6 +16,7 @@ export class ContourObject implements ShiftObjectOf<"contour"> {
   readonly kind = "contour";
   readonly id: ContourId;
   readonly layer: GlyphLayer;
+  readonly layerId: LayerId;
   readonly node: GlyphNode;
   readonly #contourId: ContourId;
 
@@ -30,6 +31,7 @@ export class ContourObject implements ShiftObjectOf<"contour"> {
     this.id = contourId;
     this.#contourId = contourId;
     this.layer = layer;
+    this.layerId = layer.id;
     this.node = node;
   }
 

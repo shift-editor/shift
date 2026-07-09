@@ -52,27 +52,27 @@ describe("KeyboardRouter", () => {
   });
 
   describe("zoom shortcuts", () => {
-    it("zooms in on command/control + equal without shift", () => {
+    it("zooms in on command/control + equal without shift", async () => {
       const zoomBefore = editor.zoom;
       const e = createKeyboardEvent({ key: "=", code: "Equal", metaKey: true });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(true);
       expect(editor.zoom).toBeGreaterThan(zoomBefore);
     });
 
-    it("zooms out on command/control + minus without shift", () => {
+    it("zooms out on command/control + minus without shift", async () => {
       const zoomBefore = editor.zoom;
       const e = createKeyboardEvent({ key: "-", code: "Minus", ctrlKey: true });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(true);
       expect(editor.zoom).toBeLessThan(zoomBefore);
     });
 
-    it("does not intercept shift+equal (leaves it for native UI zoom)", () => {
+    it("does not intercept shift+equal (leaves it for native UI zoom)", async () => {
       canvasActive = false;
       const zoomBefore = editor.zoom;
       const e = createKeyboardEvent({
@@ -82,13 +82,13 @@ describe("KeyboardRouter", () => {
         shiftKey: true,
       });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
       expect(editor.zoom).toBe(zoomBefore);
     });
 
-    it("does not intercept shift+minus (leaves it for native UI zoom)", () => {
+    it("does not intercept shift+minus (leaves it for native UI zoom)", async () => {
       canvasActive = false;
       const zoomBefore = editor.zoom;
       const e = createKeyboardEvent({
@@ -98,7 +98,7 @@ describe("KeyboardRouter", () => {
         shiftKey: true,
       });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
       expect(editor.zoom).toBe(zoomBefore);
@@ -106,30 +106,30 @@ describe("KeyboardRouter", () => {
   });
 
   describe("tool shortcuts", () => {
-    it("switches tools from canvas shortcuts for non-text tools", () => {
+    it("switches tools from canvas shortcuts for non-text tools", async () => {
       const e = createKeyboardEvent({ key: "s" });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(true);
       expect(editor.getActiveTool()).toBe("shape");
     });
 
-    it("does not run tool shortcuts outside the canvas context", () => {
+    it("does not run tool shortcuts outside the canvas context", async () => {
       canvasActive = false;
       const e = createKeyboardEvent({ key: "s" });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
       expect(editor.getActiveTool()).toBe("select");
     });
 
-    it("does not intercept plain typing while the text tool is active", () => {
+    it("does not intercept plain typing while the text tool is active", async () => {
       editor.selectTool("text");
       const e = createKeyboardEvent({ key: "s" });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
       expect(editor.getActiveTool()).toBe("text");
@@ -157,10 +157,7 @@ describe("KeyboardRouter", () => {
       canvasActive = false;
       const e = createKeyboardEvent({ key: "v", ctrlKey: true });
 
-      const handled = router.handleKeyDown(e);
-      // Clipboard paste is async; wait for the read + apply echo to settle.
-      await Promise.resolve();
-      await Promise.resolve();
+      const handled = await router.handleKeyDown(e);
       await editor.settle();
 
       expect(handled).toBe(true);
@@ -173,8 +170,7 @@ describe("KeyboardRouter", () => {
       const pointsBefore = editor.pointCount;
       const e = createKeyboardEvent({ key: "v", metaKey: true });
 
-      router.handleKeyDown(e);
-      await Promise.resolve();
+      await router.handleKeyDown(e);
       await editor.settle();
 
       expect(editor.pointCount).toBe(pointsBefore);
@@ -185,8 +181,7 @@ describe("KeyboardRouter", () => {
       const bufferBefore = editor.clipboardBuffer;
       const e = createKeyboardEvent({ key: "c", metaKey: true });
 
-      router.handleKeyDown(e);
-      await Promise.resolve();
+      await router.handleKeyDown(e);
 
       expect(editor.clipboardBuffer).toBe(bufferBefore);
     });
@@ -202,7 +197,9 @@ describe("KeyboardRouter", () => {
       editor.selectTool("select");
       editor.selectAll();
 
-      const handled = router.handleKeyDown(createKeyboardEvent({ key: "Delete", code: "Delete" }));
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "Delete", code: "Delete" }),
+      );
       await editor.settle();
 
       expect(handled).toBe(true);
@@ -212,36 +209,36 @@ describe("KeyboardRouter", () => {
   });
 
   describe("temporary hand tool (space)", () => {
-    it("activates the hand tool on space and returns to the previous tool on keyup", () => {
+    it("activates the hand tool on space and returns to the previous tool on keyup", async () => {
       const down = createKeyboardEvent({ key: " ", code: "Space" });
       const up = createKeyboardEvent({ key: " ", code: "Space" });
 
-      router.handleKeyDown(down);
+      await router.handleKeyDown(down);
       // Temporary tools are tracked as toolManager overrides; activeToolId
       // reflects the override while primaryToolId stays on the base tool.
       expect(editor.toolManager.activeToolId).toBe("hand");
       expect(editor.toolManager.primaryToolId).toBe("select");
 
-      router.handleKeyUp(up);
+      await router.handleKeyUp(up);
       expect(editor.toolManager.activeToolId).toBe("select");
     });
 
-    it("does not activate the hand tool on space while the text tool is active", () => {
+    it("does not activate the hand tool on space while the text tool is active", async () => {
       editor.selectTool("text");
       const e = createKeyboardEvent({ key: " ", code: "Space" });
 
-      router.handleKeyDown(e);
+      await router.handleKeyDown(e);
 
       expect(editor.getActiveTool()).toBe("text");
     });
   });
 
   describe("focus handling", () => {
-    it("does not intercept shortcuts while an editable input has focus", () => {
+    it("does not intercept shortcuts while an editable input has focus", async () => {
       const input = { tagName: "INPUT" } as EventTarget & { tagName: string };
       const e = createKeyboardEvent({ key: "a", metaKey: true, target: input });
 
-      const handled = router.handleKeyDown(e);
+      const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
       expect(editor.selection.hasSelection()).toBe(false);

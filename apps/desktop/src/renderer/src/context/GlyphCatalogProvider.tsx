@@ -1,41 +1,18 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import type { GlyphCategory, GlyphCategoryCatalog, GlyphCategorySummary } from "@shift/glyph-info";
-import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
+import { useMemo, useState, type ReactNode } from "react";
+import type { GlyphCategory, GlyphCategoryCatalog } from "@shift/glyph-info";
+import type { GlyphName, GlyphRecord } from "@shift/types";
 import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
-
-export type GlyphCatalogItem = {
-  readonly id: GlyphId;
-  readonly name: GlyphName;
-  readonly unicode: number | null;
-};
-
-export interface GlyphCatalogState {
-  availableGlyphs: GlyphCatalogItem[];
-  filteredGlyphs: GlyphCatalogItem[];
-  categories: GlyphCategorySummary[];
-  selectedCategory: GlyphCategory | null;
-  selectedSubCategoryKey: string | null;
-  query: string;
-  setQuery: (nextQuery: string) => void;
-  createQuickGlyph: () => GlyphName;
-  selectAll: () => void;
-  selectCategory: (category: GlyphCategory) => void;
-  selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
-}
-
-const GlyphCatalogContext = createContext<GlyphCatalogState | null>(null);
+import {
+  GlyphCatalogContext,
+  type GlyphCatalogItem,
+  type GlyphCatalogState,
+} from "./GlyphCatalogContext";
 
 export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
   const value = useGlyphCatalogState();
   return <GlyphCatalogContext.Provider value={value}>{children}</GlyphCatalogContext.Provider>;
-};
-
-export const useGlyphCatalog = (): GlyphCatalogState => {
-  const ctx = useContext(GlyphCatalogContext);
-  if (!ctx) throw new Error("useGlyphCatalog must be used within a GlyphCatalogProvider");
-  return ctx;
 };
 
 const useGlyphCatalogState = (): GlyphCatalogState => {

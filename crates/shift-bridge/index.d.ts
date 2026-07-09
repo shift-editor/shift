@@ -159,6 +159,14 @@ export interface NapiBooleanOpIntent {
   operation: string
 }
 
+/** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
+export interface NapiCloneGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+}
+
 export interface NapiComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
@@ -236,8 +244,8 @@ export interface NapiFontIntent {
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Create kinds: "createGlyph" | "createAxis" | "createSource" |
-   * "createGlyphLayer". Delete kinds: "deleteAxis" | "deleteSource". Every
-   * kind shares the same apply path; one set = one undo step.
+   * "createGlyphLayer" | "cloneGlyphLayer". Delete kinds: "deleteAxis" |
+   * "deleteSource". Every kind shares the same apply path; one set = one undo step.
    */
   kind: string
   addPoints?: NapiAddPointsIntent
@@ -260,6 +268,7 @@ export interface NapiFontIntent {
   createSource?: NapiCreateSourceIntent
   deleteSource?: NapiDeleteSourceIntent
   createGlyphLayer?: NapiCreateGlyphLayerIntent
+  cloneGlyphLayer?: NapiCloneGlyphLayerIntent
 }
 
 export interface NapiFontMetadata {

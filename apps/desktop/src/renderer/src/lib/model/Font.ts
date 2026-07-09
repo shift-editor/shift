@@ -663,6 +663,28 @@ export class Font {
   }
 
   /**
+   * Clones an authored glyph layer into another glyph/source pair.
+   *
+   * @remarks
+   * The native intent copies the source layer's editable shape and assigns
+   * fresh internal IDs for the cloned contours, points, anchors, components,
+   * and guidelines. The clone is one workspace operation and one undo step.
+   *
+   * @param glyphId - Glyph that will own the new layer.
+   * @param sourceId - Source where the new layer is authored.
+   * @param fromLayerId - Existing layer whose shape seeds the new layer.
+   * @returns The minted layer id submitted to the workspace.
+   */
+  cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId {
+    const layerId = mintLayerId();
+    this.editCoordinator.push({
+      kind: "cloneGlyphLayer",
+      cloneGlyphLayer: { layerId, glyphId, sourceId, fromLayerId },
+    });
+    return layerId;
+  }
+
+  /**
    * Finds the next unused glyph name for an auto-incrementing base name.
    *
    * @param name - Preferred base name. Blank input falls back to `newGlyph`.
@@ -1168,6 +1190,17 @@ export class Font {
     return this.#editCoordinator;
   }
 
+  /**
+   * Creates a global font source without creating glyph layers.
+   *
+   * @remarks
+   * Glyph layers at this source are materialized separately by editor
+   * workflows, usually when a glyph is first edited or selected at the source.
+   *
+   * @param name - Display name for the source.
+   * @param location - Design-space location owned by the source.
+   * @returns The minted source id submitted to the workspace.
+   */
   createSource(name: string, location: Location): SourceId {
     const sourceId = mintSourceId();
     this.editCoordinator.push({

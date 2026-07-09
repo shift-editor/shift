@@ -35,12 +35,20 @@ export const Editor = () => {
       toolManager,
     }));
 
-    const keyDownHandler = (e: KeyboardEvent) => {
-      keyboardRouter.handleKeyDown(e);
+    const keyDownHandler = async (e: KeyboardEvent) => {
+      try {
+        await keyboardRouter.handleKeyDown(e);
+      } catch (error) {
+        console.error("keyboard keydown failed", error);
+      }
     };
 
-    const keyUpHandler = (e: KeyboardEvent) => {
-      keyboardRouter.handleKeyUp(e);
+    const keyUpHandler = async (e: KeyboardEvent) => {
+      try {
+        await keyboardRouter.handleKeyUp(e);
+      } catch (error) {
+        console.error("keyboard keyup failed", error);
+      }
     };
 
     document.addEventListener("keydown", keyDownHandler);

@@ -1,23 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, ReactNode } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import { isDev } from "@/lib/utils/utils";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import type { DebugOverlays } from "@/types/uiState";
-
-const DEFAULT_OVERLAYS: DebugOverlays = {
-  tightBounds: false,
-  hitRadii: false,
-  segmentBounds: false,
-  glyphBbox: false,
-};
-
-interface DebugContextValue {
-  reactScanEnabled: boolean;
-  debugPanelOpen: boolean;
-  overlays: DebugOverlays;
-  dumpSnapshot: () => void;
-}
-
-const DebugContext = createContext<DebugContextValue | null>(null);
+import { DEFAULT_DEBUG_OVERLAYS, DebugContext } from "./DebugContext";
 
 interface DebugProviderProps {
   children: ReactNode;
@@ -26,7 +10,7 @@ interface DebugProviderProps {
 export function DebugProvider({ children }: DebugProviderProps) {
   const reactScanEnabled = false;
   const debugPanelOpen = false;
-  const overlays = DEFAULT_OVERLAYS;
+  const overlays = DEFAULT_DEBUG_OVERLAYS;
   const editor = useEditor();
 
   const dumpSnapshot = useCallback(() => {
@@ -46,8 +30,4 @@ export function DebugProvider({ children }: DebugProviderProps) {
       {children}
     </DebugContext.Provider>
   );
-}
-
-export function useDebugSafe(): DebugContextValue | null {
-  return useContext(DebugContext);
 }

@@ -38,6 +38,7 @@ export default defineConfig(async () => {
         "@shift/glyph-state": path.resolve(packagesDir, "glyph-state/src/index.ts"),
         "@shift/glyph-info": path.resolve(packagesDir, "glyph-info/src/index.ts"),
         "@shift/rules": path.resolve(packagesDir, "rules/src/index.ts"),
+        "@shift/validation": path.resolve(packagesDir, "validation/src/index.ts"),
       },
     },
     optimizeDeps: {
@@ -49,6 +50,7 @@ export default defineConfig(async () => {
         "@shift/glyph-state",
         "@shift/glyph-info",
         "@shift/rules",
+        "@shift/validation",
       ],
     },
   };

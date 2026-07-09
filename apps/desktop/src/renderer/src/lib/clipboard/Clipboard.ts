@@ -71,7 +71,7 @@ export class Clipboard {
         },
       };
 
-      this.#system.writeText(JSON.stringify(payload));
+      await this.#system.writeText(JSON.stringify(payload));
 
       return true;
     } catch {
@@ -81,7 +81,7 @@ export class Clipboard {
 
   async read(): Promise<ClipboardReadResult> {
     try {
-      const text = this.#system.readText();
+      const text = await this.#system.readText();
       const offers = this.#offersFromText(text);
 
       const native = tryDeserialize(text);

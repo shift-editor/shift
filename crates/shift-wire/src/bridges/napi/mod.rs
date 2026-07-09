@@ -549,8 +549,8 @@ pub struct NapiFontIntent {
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
     /// Create kinds: "createGlyph" | "createAxis" | "createSource" |
-    /// "createGlyphLayer". Delete kinds: "deleteAxis" | "deleteSource". Every
-    /// kind shares the same apply path; one set = one undo step.
+    /// "createGlyphLayer" | "cloneGlyphLayer". Delete kinds: "deleteAxis" |
+    /// "deleteSource". Every kind shares the same apply path; one set = one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
     pub add_contour: Option<NapiAddContourIntent>,
@@ -572,6 +572,7 @@ pub struct NapiFontIntent {
     pub create_source: Option<NapiCreateSourceIntent>,
     pub delete_source: Option<NapiDeleteSourceIntent>,
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
+    pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
 }
 
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
@@ -647,6 +648,19 @@ pub struct NapiCreateGlyphLayerIntent {
     pub glyph_id: String,
     #[napi(ts_type = "SourceId")]
     pub source_id: String,
+}
+
+/// Creates one glyph layer by copying another layer's shape with fresh internal ids.
+#[napi(object)]
+pub struct NapiCloneGlyphLayerIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    #[napi(ts_type = "LayerId")]
+    pub from_layer_id: String,
 }
 
 /// Replace-grade state for one touched layer; the renderer folds by

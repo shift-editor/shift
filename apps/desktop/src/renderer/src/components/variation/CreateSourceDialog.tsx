@@ -83,7 +83,8 @@ export const CreateSourceDialog = ({ open, onOpenChange }: CreateSourceDialogPro
         axes.map((axis) => [axis.id, Number(values.location[axis.id])]),
       ) as Record<AxisId, number>,
     };
-    editor.font.createSource(trimmedName, location);
+
+    editor.createSource(trimmedName, location);
     onOpenChange(false);
   };
 

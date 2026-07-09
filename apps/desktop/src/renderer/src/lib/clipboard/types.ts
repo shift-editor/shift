@@ -82,12 +82,12 @@ export interface ClipboardImporter {
 
 /**
  * The OS-level clipboard — the boundary between the {@link Clipboard}
- * orchestrator and Electron's `clipboard` module (via preload). Production
- * wiring uses {@link electronSystemClipboard}; tests inject an in-memory fake.
+ * orchestrator and the app shell. Production wiring uses
+ * {@link electronSystemClipboard}; tests inject an in-memory fake.
  */
 export interface SystemClipboard {
-  writeText(text: string): void;
-  readText(): string;
+  writeText(text: string): Promise<void>;
+  readText(): Promise<string>;
 }
 
 /** Options controlling where pasted content is placed relative to the original. */

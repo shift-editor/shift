@@ -1,4 +1,4 @@
-import type { CommandId } from "../commands";
+import type { CommandId, RendererCommandId } from "../commands";
 import type { WorkspaceDocumentState } from "../workspace/protocol";
 
 export type DocumentCallMap = {
@@ -17,6 +17,8 @@ export type DocumentEventMap = Record<string, never>;
  */
 export type RendererToMain = {
   "commands.run": (id: CommandId) => void;
+  "clipboard.readText": () => string;
+  "clipboard.writeText": (text: string) => void;
   /**
    * Asks main to transfer a document request lane to the renderer. The port
    * arrives separately on the `document.port` postMessage channel because ports
@@ -39,6 +41,8 @@ export type RendererToMain = {
  * merely reflects it.
  */
 export type MainToRenderer = {
+  /** Requests that the active renderer run an editor-owned command. */
+  "commands.runRenderer": (id: RendererCommandId) => void;
   /** UI (chrome) zoom changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
 };

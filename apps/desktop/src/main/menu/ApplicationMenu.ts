@@ -76,6 +76,10 @@ export class ApplicationMenu {
           { label: "Developer", submenu: [{ role: "toggleDevTools" }] },
         ],
       },
+      {
+        label: "Glyph",
+        submenu: this.#glyphItems(),
+      },
     ];
   }
 
@@ -93,6 +97,10 @@ export class ApplicationMenu {
       {
         label: "View",
         submenu: this.#viewZoomItems(),
+      },
+      {
+        label: "Glyph",
+        submenu: this.#glyphItems(),
       },
       {
         label: "Help",
@@ -131,6 +139,10 @@ export class ApplicationMenu {
       { type: "separator" },
       { role: "selectAll" },
     ];
+  }
+
+  #glyphItems(): MenuItemConstructorOptions[] {
+    return [this.#commandItem("glyph.reverseSelectedContour")];
   }
 
   /** Builds a menu item from the command registry's metadata. */

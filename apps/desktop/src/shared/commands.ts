@@ -10,9 +10,19 @@ export type CommandId =
   | "file.open"
   | "file.save"
   | "file.saveAs"
+  | "glyph.reverseSelectedContour"
   | "window.close"
   | "window.minimise"
   | "window.maximise"
   | "ui.zoomIn"
   | "ui.zoomOut"
   | "ui.zoomReset";
+
+/**
+ * Identifies a command implemented by the active renderer/editor.
+ *
+ * Renderer command IDs are sent from main to the focused workspace window.
+ * Main owns native menu routing; renderer owns selection interpretation and
+ * editor mutation.
+ */
+export type RendererCommandId = "glyph.reverseSelectedContour";

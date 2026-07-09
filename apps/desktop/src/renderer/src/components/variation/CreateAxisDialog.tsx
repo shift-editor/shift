@@ -56,6 +56,7 @@ export const CreateAxisDialog = ({ open, onOpenChange }: CreateAxisDialogProps) 
       Number(values.max),
       values.hidden,
     );
+    onOpenChange(false);
   };
 
   return (
