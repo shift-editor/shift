@@ -26,4 +26,9 @@ pub enum StoreError {
 
     #[error("store schema version {found} is newer than supported version {supported}")]
     UnsupportedSchemaVersion { found: i64, supported: i64 },
+
+    #[error(
+        "draft store schema version {found} is from an older build (current version {supported}); delete the draft store and re-import the font"
+    )]
+    OutdatedSchemaVersion { found: i64, supported: i64 },
 }

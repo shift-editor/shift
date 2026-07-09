@@ -14,4 +14,5 @@ thiserror = "2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+shift-font = { workspace = true, features = ["test-support"] }
 tempfile = "3"

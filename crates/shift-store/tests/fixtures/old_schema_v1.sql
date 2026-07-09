@@ -1,6 +1,3 @@
-use crate::StoreError;
-
-pub(crate) const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS font_info (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     family_name TEXT,
@@ -51,8 +48,6 @@ CREATE TABLE IF NOT EXISTS sources (
     family_name TEXT,
     style_name TEXT,
     filename TEXT,
-    color TEXT,
-    layer_name TEXT,
     kind TEXT NOT NULL,
     order_index INTEGER NOT NULL DEFAULT 0
 );
@@ -236,19 +231,6 @@ CREATE TABLE IF NOT EXISTS font_lib (
     value_json TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS fontinfo_remainder (
-    key TEXT PRIMARY KEY,
-    value_json TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS source_lib (
-    source_id TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value_json TEXT NOT NULL,
-    PRIMARY KEY (source_id, key),
-    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS glyph_lib (
     glyph_id TEXT NOT NULL,
     key TEXT NOT NULL,
@@ -263,13 +245,6 @@ CREATE TABLE IF NOT EXISTS glyph_layer_lib (
     value_json TEXT NOT NULL,
     PRIMARY KEY (layer_id, key),
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS font_binaries (
-    kind TEXT NOT NULL CHECK (kind IN ('data', 'image')),
-    path TEXT NOT NULL,
-    bytes BLOB NOT NULL,
-    PRIMARY KEY (kind, path)
 );
 
 CREATE TABLE IF NOT EXISTS workspace_state (
@@ -290,42 +265,3 @@ CREATE TABLE IF NOT EXISTS workspace_state (
     saved_revision INTEGER NOT NULL DEFAULT 0,
     updated_at_ms INTEGER NOT NULL
 );
-"#;
-
-/// Bump this whenever the baseline batch above changes shape (new tables,
-/// new columns, changed constraints) so stores written by older builds are
-/// refused loudly instead of failing later with "no such table".
-pub(crate) const SCHEMA_VERSION: i64 = 2;
-
-/// Creates the baseline schema and stamps `user_version`.
-///
-/// Pre-release policy: the app has not shipped, so schema changes edit the
-/// baseline batch in place instead of adding migration steps. A database
-/// from a NEWER app version is refused rather than silently mangled, and a
-/// database from an OLDER build is refused with instructions to delete the
-/// draft store and re-import — never migrated, never patched in place.
-pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreError> {
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-
-    if version > SCHEMA_VERSION {
-        return Err(StoreError::UnsupportedSchemaVersion {
-            found: version,
-            supported: SCHEMA_VERSION,
-        });
-    }
-
-    if version == 0 {
-        conn.execute_batch(SCHEMA)?;
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        return Ok(());
-    }
-
-    if version < SCHEMA_VERSION {
-        return Err(StoreError::OutdatedSchemaVersion {
-            found: version,
-            supported: SCHEMA_VERSION,
-        });
-    }
-
-    Ok(())
-}
