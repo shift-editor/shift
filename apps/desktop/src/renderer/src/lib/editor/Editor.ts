@@ -73,7 +73,6 @@ import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } f
 import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
-import type { RendererCommandId } from "@shared/commands";
 
 const DEFAULT_NODE_DEFINITIONS: NodeDefinitionConstructor[] = [
   GlyphNodeDefinition,
@@ -482,10 +481,13 @@ export class Editor {
       const layer = this.#layerForPoint(id);
       if (!layer) return null;
 
+      const contourId = this.font.contourIdForPoint(id);
+      if (!contourId) return null;
+
       const node = this.#placedGlyphNodeForLayer(layer);
       if (!node) return null;
 
-      return new PointObject(id, layer, node);
+      return new PointObject(id, contourId, layer, node);
     }
 
     if (isAnchorId(id)) {
@@ -508,7 +510,10 @@ export class Editor {
       const pointIds = this.font.pointIdsForSegment(id);
       if (!pointIds) return null;
 
-      return new SegmentObject(id, pointIds, layer, node);
+      const contourId = this.font.contourIdForSegment(id);
+      if (!contourId) return null;
+
+      return new SegmentObject(id, contourId, pointIds, layer, node);
     }
 
     if (isContourId(id)) {
@@ -818,74 +823,6 @@ export class Editor {
    */
   public transaction<TResult>(label: string, body: () => TResult): TResult {
     return this.font.editCoordinator.transaction(label, body);
-  }
-
-  /** Runs a command sent from the native shell to this renderer editor. */
-  public runRendererCommand(id: RendererCommandId): boolean {
-    switch (id) {
-      case "glyph.reverseSelectedContour":
-        return this.reverseSelectedContour();
-    }
-  }
-
-  /** Reverses the selected contour when the selection resolves to exactly one contour. */
-  public reverseSelectedContour(): boolean {
-    const selection = this.#selectedContour();
-    if (!selection) return false;
-
-    selection.layer.reverseContour(selection.contourId);
-    return true;
-  }
-
-  #selectedContour(): { readonly layer: GlyphLayer; readonly contourId: ContourId } | null {
-    let layer: GlyphLayer | null = null;
-    let contourId: ContourId | null = null;
-    let explicitContourId: ContourId | null = null;
-
-    const useContour = (nextLayer: GlyphLayer, nextContourId: ContourId | null): boolean => {
-      if (!nextContourId) return false;
-      if (layer && layer.id !== nextLayer.id) return false;
-      if (contourId && contourId !== nextContourId) return false;
-
-      layer = nextLayer;
-      contourId = nextContourId;
-      return true;
-    };
-
-    for (const id of this.selection.ids) {
-      const object = this.object(id);
-      if (!object) return null;
-
-      switch (object.kind) {
-        case "contour":
-          explicitContourId = object.contourId;
-          if (!useContour(object.layer, object.contourId)) return null;
-          break;
-
-        case "point":
-          if (!useContour(object.layer, object.layer.contourIdOfPoint(object.pointId))) {
-            return null;
-          }
-          break;
-
-        case "segment": {
-          const firstPointId = object.pointIds[0];
-          if (!firstPointId) return null;
-          if (!useContour(object.layer, object.layer.contourIdOfPoint(firstPointId))) {
-            return null;
-          }
-          break;
-        }
-
-        case "anchor":
-        case "node":
-          return null;
-      }
-    }
-
-    if (!layer || !contourId || explicitContourId !== contourId) return null;
-
-    return { layer, contourId };
   }
 
   public setCameraRect(rect: Rect2D) {

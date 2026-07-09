@@ -3,6 +3,7 @@ import type { Workspace } from "./Workspace";
 import { getWorkspace } from "./runtime";
 import { WorkspaceContext } from "./WorkspaceContext";
 import { getShiftHost } from "@/host/shiftHost";
+import { runRendererCommand } from "@/lib/commands/rendererCommands";
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const workspace = getWorkspace();
@@ -17,7 +18,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return getShiftHost().commands.onRunRendererCommand((id) => {
-      workspace.editor.runRendererCommand(id);
+      runRendererCommand(workspace.editor, id);
     });
   }, [workspace]);
 

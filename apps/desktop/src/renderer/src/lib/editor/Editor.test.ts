@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintNodeId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
+import { runRendererCommand } from "@/lib/commands/rendererCommands";
 
 describe("Editor scene bootstrap", () => {
   let editor: TestEditor;
@@ -160,11 +161,11 @@ describe("Editor renderer commands", () => {
     await editor.settle();
   });
 
-  it("reverses an explicitly selected contour", async () => {
+  it("reverses the contour implied by selected points", async () => {
     const contour = editor.requireGlyphLayer().contours[0]!;
-    editor.selection.select([contour.id, ...contour.points.map((point) => point.id)]);
+    editor.selection.select(contour.points.slice(0, 2).map((point) => point.id));
 
-    const handled = editor.runRendererCommand("glyph.reverseSelectedContour");
+    const handled = runRendererCommand(editor, "glyph.reverseSelectedContour");
     await editor.settle();
 
     expect(handled).toBe(true);

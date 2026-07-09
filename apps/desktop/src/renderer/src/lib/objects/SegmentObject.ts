@@ -1,5 +1,5 @@
 import { Bounds, Vec2, type Rect2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
+import type { ContourId, LayerId, PointId } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
 import { track } from "@/lib/signals";
 import type { GlyphLayer } from "@/lib/model/Glyph";
@@ -19,6 +19,8 @@ export class SegmentObject implements ShiftObjectOf<"segment"> {
   readonly id: SegmentId;
   readonly pointIds: readonly PointId[];
   readonly layer: GlyphLayer;
+  readonly layerId: LayerId;
+  readonly contourId: ContourId;
   readonly node: GlyphNode;
   readonly #segmentId: SegmentId;
 
@@ -26,20 +28,24 @@ export class SegmentObject implements ShiftObjectOf<"segment"> {
    * Creates a placed segment object from its canonical layer and scene node.
    *
    * @param segmentId - Derived segment identity owned by `layer`.
+   * @param contourId - Contour that owns the segment.
    * @param pointIds - Point identities associated with the segment.
    * @param layer - Authored glyph layer that owns the segment.
    * @param node - Scene occurrence placing the layer on the canvas.
    */
   constructor(
     segmentId: SegmentId,
+    contourId: ContourId,
     pointIds: readonly PointId[],
     layer: GlyphLayer,
     node: GlyphNode,
   ) {
     this.id = segmentId;
     this.#segmentId = segmentId;
+    this.contourId = contourId;
     this.pointIds = pointIds;
     this.layer = layer;
+    this.layerId = layer.id;
     this.node = node;
   }
 
