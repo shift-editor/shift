@@ -16,7 +16,7 @@ body {
 
 @font-face {
   font-family: "Inter";
-  src: url("/assets/fonts/Inter-VariableFont.ttf") format("truetype");
+  src: url("../assets/fonts/Inter-VariableFont.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
 }
@@ -24,14 +24,14 @@ body {
 /* Custom pen cursor with retina support */
 .cursor-pen {
   cursor:
-    url("/cursors/pen@32.svg") 8 8,
+    url("../../public/cursors/pen@32.svg") 8 8,
     auto;
 }
 
 @media (min-resolution: 2dppx) {
   .cursor-pen {
     cursor:
-      url("/cursors/pen@64.svg") 16 16,
+      url("../../public/cursors/pen@64.svg") 16 16,
       auto;
   }
 }

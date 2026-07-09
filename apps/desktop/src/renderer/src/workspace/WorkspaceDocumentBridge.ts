@@ -2,6 +2,7 @@ import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { DocumentCallMap, DocumentEventMap } from "@shared/ipc/contract";
 import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
+import { isCurrentWindowPortMessage } from "@/host/messagePort";
 
 interface WorkspaceDocumentBridgeOptions {
   readonly host: ShiftHost;
@@ -49,8 +50,7 @@ function nextDocumentPort(): { received: Promise<MessagePort>; cancel: () => voi
 
   const received = new Promise<MessagePort>((resolve) => {
     const listener = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if ((event.data as { type?: string } | null)?.type !== "document.port") return;
+      if (!isCurrentWindowPortMessage(event, "document.port")) return;
 
       const port = event.ports[0];
       if (!port) return;

@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - "crates/**"
+      - "apps/desktop/src/main/**"
+      - "apps/desktop/src/preload/**"
+      - "apps/desktop/src/utility/**"
+      - "apps/desktop/src/renderer/src/host/**"
+      - "apps/desktop/src/renderer/src/workspace/**"
+      - "apps/desktop/src/renderer/src/lib/workspace/**"
       - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
       - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
       - "apps/desktop/src/renderer/src/lib/editor/hit/**"
@@ -14,11 +20,20 @@ on:
       - "apps/desktop/src/renderer/src/bridge/**"
       - "apps/desktop/src/renderer/src/lib/commands/**"
       - "apps/desktop/src/renderer/src/perf/**"
+      - "apps/desktop/src/renderer/src/testing/EditorPerfHarness.ts"
+      - "apps/desktop/src/renderer/src/types/perf.ts"
       - "apps/desktop/e2e/**"
+      - "apps/desktop/vite.renderer.config.ts"
       - ".github/workflows/perf.yml"
   workflow_dispatch:
   pull_request:
     paths:
+      - "apps/desktop/src/main/**"
+      - "apps/desktop/src/preload/**"
+      - "apps/desktop/src/utility/**"
+      - "apps/desktop/src/renderer/src/host/**"
+      - "apps/desktop/src/renderer/src/workspace/**"
+      - "apps/desktop/src/renderer/src/lib/workspace/**"
       - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
       - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
       - "apps/desktop/src/renderer/src/lib/editor/hit/**"
@@ -28,6 +43,10 @@ on:
       - "apps/desktop/src/renderer/src/bridge/NativeBridge.ts"
       - "apps/desktop/src/renderer/src/lib/commands/**"
       - "apps/desktop/src/renderer/src/perf/**"
+      - "apps/desktop/src/renderer/src/testing/EditorPerfHarness.ts"
+      - "apps/desktop/src/renderer/src/types/perf.ts"
+      - "apps/desktop/e2e/**"
+      - "apps/desktop/vite.renderer.config.ts"
       - "crates/shift-edit/src/**"
       - "crates/shift-bridge/src/**"
 
@@ -151,6 +170,9 @@ jobs:
 
       - name: Build E2E app
         run: pnpm --filter @shift/desktop build:e2e
+
+      - name: Run Playwright visual smoke tests
+        run: pnpm --filter @shift/desktop exec playwright test --project=visual
 
       - name: Run Playwright perf tests
         run: pnpm --filter @shift/desktop exec playwright test --project=perf

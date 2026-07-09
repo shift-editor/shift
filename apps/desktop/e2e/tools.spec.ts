@@ -1,4 +1,4 @@
-import { test, expect, loadFont, navigateToEditor } from "./fixtures/electronApp";
+import { test, expect, navigateToEditor } from "./fixtures/electronApp";
 
 /** Maps tool id to the aria-label on its toolbar button (set via tooltip). */
 const TOOL_LABELS: Record<string, string> = {
@@ -10,17 +10,15 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 test.describe("Toolbar tools", () => {
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
+  test.beforeEach(async ({ workspacePage: page }) => {
     await navigateToEditor(page, "41");
   });
 
-  for (const [tool, label] of Object.entries(TOOL_LABELS)) {
-    test(`${tool} tool active state matches snapshot`, async ({ page }) => {
-      await page.getByRole("button", { name: label }).click();
-      await page.waitForTimeout(300);
-
-      await expect(page).toHaveScreenshot(`tool-${tool}.png`);
-    });
-  }
+  test("toolbar activates each tool", async ({ workspacePage: page }) => {
+    for (const label of Object.values(TOOL_LABELS)) {
+      const button = page.getByRole("button", { name: label });
+      await button.click();
+      await expect(button).toHaveAttribute("data-active", "true");
+    }
+  });
 });

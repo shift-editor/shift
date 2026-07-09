@@ -89,7 +89,10 @@ export class App {
     this.#lifecycle.start();
     app.setName(this.applicationName);
 
-    if (!app.isPackaged) {
+    const testUserDataPath = process.env.SHIFT_E2E_USER_DATA_PATH;
+    if (testUserDataPath) {
+      app.setPath("userData", testUserDataPath);
+    } else if (!app.isPackaged) {
       app.setPath("userData", path.join(app.getPath("appData"), this.applicationName));
     }
 
@@ -244,6 +247,28 @@ export class App {
     };
   }
 
+  /**
+   * Opens a source path from the active application window and resolves after window creation.
+   *
+   * @remarks
+   * The source receives its own workspace session and window. A launcher
+   * window is closed after the workspace window has been created. When no
+   * window is focused, an existing launcher is preferred; otherwise a launcher
+   * is created to own the transition.
+   *
+   * @param sourcePath - Font or Shift package path to open as a workspace.
+   */
+  async openPath(sourcePath: string): Promise<void> {
+    const opener =
+      this.#windows.activeWindow() ??
+      this.#windows
+        .allWindows()
+        .find((window) => this.#workspaces.getForBrowserWindow(window.window) === null) ??
+      this.#openLauncher();
+
+    await this.#openPathFromWindow(opener, sourcePath);
+  }
+
   async #createWorkspaceFromWindow(opener: Window): Promise<void> {
     const session = await this.#workspaces.createUntitled();
     this.#openWorkspaceWindow(opener, session);
@@ -253,7 +278,11 @@ export class App {
     const openPath = await showOpenFontDialog(opener);
     if (!openPath) return;
 
-    const session = await this.#workspaces.openPath(openPath);
+    await this.#openPathFromWindow(opener, openPath);
+  }
+
+  async #openPathFromWindow(opener: Window, sourcePath: string): Promise<void> {
+    const session = await this.#workspaces.openPath(sourcePath);
     this.#openWorkspaceWindow(opener, session);
   }
 

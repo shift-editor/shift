@@ -6,7 +6,7 @@ import type { Page, Locator } from "@playwright/test";
  * The editor composites three canvases stacked on top of each other:
  *   - `#background-canvas` — guides, grid, metrics (rendering Theme guide colors)
  *   - `#scene-canvas`      — glyph geometry + rendering Theme fill/stroke
- *   - `#gpu-handles-canvas` — WebGL handle rendering (8 types × 3 states)
+ *   - `#marker-canvas`     — WebGL handle rendering (8 types × 3 states)
  *
  * Screenshotting individual layers isolates regressions: a handle-color change
  * only breaks the handles snapshot, not the full-page one.
@@ -14,15 +14,18 @@ import type { Page, Locator } from "@playwright/test";
 export class CanvasUtil {
   constructor(private page: Page) {}
 
-  /** Screenshot the composited canvas container (all three layers). */
+  /** @returns A screenshot of the composited canvas container. */
   async screenshotCanvasContainer(): Promise<Buffer> {
     const container = this.canvasContainer();
     return (await container.screenshot()) as Buffer;
   }
 
-  /** Screenshot a single canvas layer by its DOM id. */
+  /**
+   * @param id - DOM identity of the canvas layer to capture.
+   * @returns A screenshot of that canvas layer.
+   */
   async screenshotCanvasLayer(
-    id: "background-canvas" | "scene-canvas" | "gpu-handles-canvas",
+    id: "background-canvas" | "scene-canvas" | "marker-canvas",
   ): Promise<Buffer> {
     const canvas = this.page.locator(`#${id}`);
     return (await canvas.screenshot()) as Buffer;

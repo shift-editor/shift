@@ -10,6 +10,7 @@ import type {
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AppliedChange, FontIntent } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
+import { isCurrentWindowPortMessage } from "@/host/messagePort";
 
 /**
  * Renderer side of the workspace sync lane.
@@ -199,8 +200,7 @@ export class WorkspaceClient {
 
     const received = new Promise<MessagePort>((resolve) => {
       const listener = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if ((event.data as { type?: string } | null)?.type !== "workspace.port") return;
+        if (!isCurrentWindowPortMessage(event, "workspace.port")) return;
 
         const port = event.ports[0];
         if (!port) return;

@@ -4,15 +4,18 @@ import { getWorkspace } from "./runtime";
 import { WorkspaceContext } from "./WorkspaceContext";
 import { getShiftHost } from "@/host/shiftHost";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
+import { EditorPerfHarness } from "@/testing/EditorPerfHarness";
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const workspace = getWorkspace();
 
   useEffect(() => {
     window.shift = workspace;
+    if (__PLAYWRIGHT__) window.shiftPerf = new EditorPerfHarness(workspace.editor);
 
     return () => {
       delete window.shift;
+      delete window.shiftPerf;
     };
   }, [workspace]);
 
