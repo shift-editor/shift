@@ -1,7 +1,11 @@
 import { BrowserWindow, type WebContents } from "electron";
+import path from "node:path";
 import { DocumentClient } from "../document/DocumentClient";
 import type { Window } from "../windows/Window";
-import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import type {
+  WorkspaceDocumentState,
+  WorkspacePackageIdentity,
+} from "../../shared/workspace/protocol";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 import { type WorkspaceId, WorkspaceSession } from "./WorkspaceSession";
 
@@ -25,6 +29,9 @@ export class WorkspaceManager {
   readonly #applicationName: () => string;
   readonly #sessionsById = new Map<WorkspaceId, WorkspaceSession>();
   readonly #sessionIdByWindowId = new Map<number, WorkspaceId>();
+  readonly #sessionIdByPackageKey = new Map<string, WorkspaceId>();
+  readonly #packageKeyBySessionId = new Map<WorkspaceId, string>();
+  readonly #unlistenPackageIndexBySessionId = new Map<WorkspaceId, () => void>();
 
   /**
    * Creates a manager for live font workspace sessions.
@@ -52,7 +59,34 @@ export class WorkspaceManager {
    * @returns a live session for the opened source; existing sessions are reused by workspace id.
    */
   async openPath(sourcePath: string): Promise<WorkspaceSession> {
-    return this.#createSession((workspaceProcess) => workspaceProcess.openWorkspace(sourcePath));
+    const workspaceProcess = new WorkspaceProcess();
+    workspaceProcess.start(this.#documentsRoot());
+
+    try {
+      await workspaceProcess.whenReady();
+
+      const identity = isShiftPackagePath(sourcePath)
+        ? await workspaceProcess.inspectPackage(sourcePath)
+        : null;
+      const existingBeforeOpen = identity ? this.#sessionForPackage(identity) : null;
+      if (existingBeforeOpen) {
+        workspaceProcess.stop();
+        return existingBeforeOpen;
+      }
+
+      const state = await workspaceProcess.openWorkspace(sourcePath);
+      const existingAfterOpen = this.#sessionForDocumentState(state);
+      if (existingAfterOpen) {
+        workspaceProcess.stop();
+        existingAfterOpen.document.acceptState(state);
+        return existingAfterOpen;
+      }
+
+      return this.#registerLoadedSession(workspaceProcess, state);
+    } catch (error) {
+      workspaceProcess.stop();
+      throw error;
+    }
   }
 
   /**
@@ -77,6 +111,12 @@ export class WorkspaceManager {
     }
 
     this.#sessionsById.set(session.workspaceId, session);
+    this.#unlistenPackageIndexBySessionId.set(
+      session.workspaceId,
+      session.workspaceProcess.onDocumentChanged((state) => {
+        this.#indexPackageSession(session.workspaceId, state);
+      }),
+    );
   }
 
   /**
@@ -91,6 +131,10 @@ export class WorkspaceManager {
     for (const window of session.windows) {
       this.#sessionIdByWindowId.delete(window.window.id);
     }
+    this.#removePackageIndex(workspaceId);
+    const unlistenPackageIndex = this.#unlistenPackageIndexBySessionId.get(workspaceId);
+    if (unlistenPackageIndex) unlistenPackageIndex();
+    this.#unlistenPackageIndexBySessionId.delete(workspaceId);
     this.#sessionsById.delete(workspaceId);
     session.dispose();
   }
@@ -180,19 +224,82 @@ export class WorkspaceManager {
         return existing;
       }
 
-      const session = new WorkspaceSession({
-        workspaceId: state.documentId,
-        workspaceProcess,
-        documentClient: new DocumentClient(),
-        applicationName: this.#applicationName,
-      });
-
-      session.document.acceptState(state);
-      this.register(session);
-      return session;
+      return this.#registerLoadedSession(workspaceProcess, state);
     } catch (error) {
       workspaceProcess.stop();
       throw error;
     }
   }
+
+  #registerLoadedSession(
+    workspaceProcess: WorkspaceProcess,
+    state: WorkspaceDocumentState,
+  ): WorkspaceSession {
+    const session = new WorkspaceSession({
+      workspaceId: state.documentId,
+      workspaceProcess,
+      documentClient: new DocumentClient(),
+      applicationName: this.#applicationName,
+    });
+
+    session.document.acceptState(state);
+    this.register(session);
+    this.#indexPackageSession(session.workspaceId, state);
+    return session;
+  }
+
+  #sessionForDocumentState(state: WorkspaceDocumentState): WorkspaceSession | null {
+    const byDocumentId = this.get(state.documentId);
+    if (byDocumentId) return byDocumentId;
+    if (!state.packageId || !state.canonicalPath) return null;
+
+    return this.#sessionForPackage({
+      packageId: state.packageId,
+      canonicalPath: state.canonicalPath,
+      fingerprint: "",
+    });
+  }
+
+  #sessionForPackage(identity: WorkspacePackageIdentity): WorkspaceSession | null {
+    const workspaceId = this.#sessionIdByPackageKey.get(packageKey(identity));
+    return workspaceId ? this.get(workspaceId) : null;
+  }
+
+  #indexPackageSession(workspaceId: WorkspaceId, state: WorkspaceDocumentState | null): void {
+    this.#removePackageIndex(workspaceId);
+    if (!state?.packageId || !state.canonicalPath) return;
+
+    const key = packageKey({
+      packageId: state.packageId,
+      canonicalPath: state.canonicalPath,
+      fingerprint: "",
+    });
+    const existing = this.#sessionIdByPackageKey.get(key);
+    if (existing && existing !== workspaceId) {
+      throw new Error(`Package session already registered: ${state.packageId}`);
+    }
+
+    this.#sessionIdByPackageKey.set(key, workspaceId);
+    this.#packageKeyBySessionId.set(workspaceId, key);
+  }
+
+  #removePackageIndex(workspaceId: WorkspaceId): void {
+    const previousKey = this.#packageKeyBySessionId.get(workspaceId);
+    if (!previousKey) return;
+
+    if (this.#sessionIdByPackageKey.get(previousKey) === workspaceId) {
+      this.#sessionIdByPackageKey.delete(previousKey);
+    }
+    this.#packageKeyBySessionId.delete(workspaceId);
+  }
+}
+
+function packageKey(
+  identity: Pick<WorkspacePackageIdentity, "packageId" | "canonicalPath">,
+): string {
+  return `${identity.packageId}\0${identity.canonicalPath}`;
+}
+
+function isShiftPackagePath(sourcePath: string): boolean {
+  return path.extname(sourcePath).toLowerCase() === ".shift";
 }

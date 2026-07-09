@@ -20,8 +20,7 @@ use shift_wire::{
   GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, Source,
 };
 use shift_workspace::{
-  FontWorkspace, NewWorkspace, RecoverySelection, WorkspaceError, WorkspaceRecoveryCandidate,
-  WorkspaceSource,
+  FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError, WorkspaceSource,
 };
 use std::{path::Path, sync::Arc};
 
@@ -54,16 +53,18 @@ pub struct NapiDocumentState {
 }
 
 #[napi(object)]
-pub struct NapiWorkspaceRecoveryCandidate {
-  pub document_id: String,
-  pub store_path: String,
+pub struct NapiPackageIdentity {
+  pub package_id: String,
+  pub canonical_path: String,
+  pub fingerprint: String,
 }
 
 #[napi(object)]
-pub struct NapiWorkspaceRecoveryMatch {
-  pub document_id: String,
-  pub store_path: String,
-  pub match_kind: String,
+pub struct NapiPackageDraft {
+  pub document_id: Option<String>,
+  pub package_id: String,
+  pub source_path: String,
+  pub base_fingerprint: String,
   pub dirty: bool,
 }
 
@@ -103,6 +104,32 @@ impl From<FontExportResult> for NapiFontExportResult {
       path: result.path.to_string_lossy().into_owned(),
       format: result.format.as_str().to_string(),
     }
+  }
+}
+
+impl TryFrom<PackageIdentity> for NapiPackageIdentity {
+  type Error = BridgeError;
+
+  fn try_from(identity: PackageIdentity) -> BridgeResult<Self> {
+    Ok(Self {
+      package_id: identity.package_id,
+      canonical_path: path_to_string(&identity.canonical_path)?,
+      fingerprint: identity.fingerprint,
+    })
+  }
+}
+
+impl TryFrom<PackageDraft> for NapiPackageDraft {
+  type Error = BridgeError;
+
+  fn try_from(draft: PackageDraft) -> BridgeResult<Self> {
+    Ok(Self {
+      document_id: draft.document_id,
+      package_id: draft.package_id,
+      source_path: path_to_string(&draft.source_path)?,
+      base_fingerprint: draft.base_fingerprint,
+      dirty: draft.dirty,
+    })
   }
 }
 
@@ -282,6 +309,22 @@ impl Bridge {
   }
 
   #[napi]
+  pub fn inspect_package(&self, path: String) -> errors::Result<NapiPackageIdentity> {
+    FontWorkspace::inspect_package(path)?.try_into()
+  }
+
+  #[napi]
+  pub fn inspect_package_draft(&self, store_path: String) -> errors::Result<NapiPackageDraft> {
+    FontWorkspace::inspect_package_draft(store_path)?.try_into()
+  }
+
+  #[napi]
+  pub fn close_workspace(&mut self) {
+    self.workspace = None;
+    self.reset_versions();
+  }
+
+  #[napi]
   pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::open(path, store_path)?);
     self.reset_versions();
@@ -303,36 +346,6 @@ impl Bridge {
   pub fn set_document_id(&mut self, document_id: String) -> errors::Result<NapiDocumentState> {
     self.workspace_mut()?.set_document_id(document_id)?;
     self.document_state_snapshot()
-  }
-
-  #[napi]
-  pub fn find_recoverable_workspace(
-    &self,
-    source_path: String,
-    candidates: Vec<NapiWorkspaceRecoveryCandidate>,
-  ) -> errors::Result<Option<NapiWorkspaceRecoveryMatch>> {
-    let candidates = candidates
-      .into_iter()
-      .map(|candidate| WorkspaceRecoveryCandidate {
-        document_id: candidate.document_id,
-        store_path: candidate.store_path.into(),
-      })
-      .collect::<Vec<_>>();
-    let recovery_match =
-      match FontWorkspace::find_recoverable_package_workspace(source_path, &candidates)? {
-        RecoverySelection::None => return Ok(None),
-        RecoverySelection::One(recovery_match) => recovery_match,
-        RecoverySelection::Ambiguous(matches) => {
-          return Err(WorkspaceError::AmbiguousRecoveryCandidates(matches.len()).into());
-        }
-      };
-
-    Ok(Some(NapiWorkspaceRecoveryMatch {
-      document_id: recovery_match.document_id,
-      store_path: path_to_string(&recovery_match.store_path)?,
-      match_kind: recovery_match.match_kind.as_str().to_string(),
-      dirty: recovery_match.dirty,
-    }))
   }
 
   #[napi]

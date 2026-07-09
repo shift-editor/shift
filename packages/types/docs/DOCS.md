@@ -21,19 +21,20 @@ packages/types/src/
     generated.ts         -- generated from shift-bridge/index.d.ts
 ```
 
-## Bridge DTOs
+## Key Types
 
 Import from `@shift/types`.
 
 - `BridgeApi` -- type-only native bridge API surface.
 - `FontMetadata` / `FontMetrics` -- font-level DTOs returned by `Bridge`.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
+- `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
-- `GlyphStructureChange` -- structural edit result: new structure, `Float64Array` values, changed IDs.
-- `GlyphValueChange` -- hot-path value edit result: `Float64Array` values, changed IDs.
+- `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
+- `LayerReplaced` -- one replaced glyph layer in an applied change.
 - `PointType` -- bridge point type union.
 
-## Generation
+## How it works
 
 `shift-bridge` owns the low-level NAPI declaration file at `crates/shift-bridge/index.d.ts`. `scripts/generate-bridge-types.mjs` reads that declaration file and emits `src/bridge/generated.ts`.
 
@@ -42,7 +43,7 @@ The generator:
 - removes the runtime `Bridge` class and emits a type-only `BridgeApi`;
 - strips `Napi` prefixes from exported DTO names;
 - preserves branded ID imports from `../ids`;
-- preserves typed arrays such as `Float64Array` and `BigUint64Array`.
+- preserves typed arrays such as `Float64Array`.
 
 Turbo owns the cache key:
 

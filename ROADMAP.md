@@ -255,6 +255,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [x] UFO format loading (via norad library)
 - [x] Binary font loading (TTF/OTF via skrifa library)
+- [x] Stable `.shift` package identity with package-instance working document bindings
 - [x] FontLoader with adaptor pattern for extensibility
 - [x] Font compilation to binary (via fontc)
 

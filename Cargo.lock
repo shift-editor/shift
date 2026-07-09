@@ -1945,6 +1945,7 @@ dependencies = [
 name = "shift-source"
 version = "0.1.0"
 dependencies = [
+ "getrandom",
  "serde",
  "serde_json",
  "shift-font",

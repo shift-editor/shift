@@ -5,6 +5,7 @@ import type {
   ShellCallMap,
   ShellEventMap,
   WorkspaceDocumentState,
+  WorkspacePackageIdentity,
 } from "../../shared/workspace/protocol";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
@@ -96,6 +97,17 @@ export class WorkspaceProcess {
   }
 
   /**
+   * Reads package identity before opening a package-backed workspace.
+   *
+   * @param path - User-selected `.shift` source path.
+   * @returns stable package identity for active-session reuse.
+   * @throws {Error} when the utility process is not running or rejects the package.
+   */
+  inspectPackage(path: string): Promise<WorkspacePackageIdentity> {
+    return this.#requireChannel().call("workspace.inspectPackage", { path });
+  }
+
+  /**
    * Opens a workspace from a source path through the shell lane.
    *
    * @param path - User-selected source path to open.
@@ -104,6 +116,16 @@ export class WorkspaceProcess {
    */
   openWorkspace(path: string): Promise<WorkspaceDocumentState> {
     return this.#requireChannel().call("workspace.open", { path });
+  }
+
+  /**
+   * Closes the utility-owned workspace and lets it prune clean/discarded state.
+   *
+   * @param discard - true only when the user chose to discard dirty changes.
+   * @throws {Error} when the utility process rejects the close transition.
+   */
+  closeWorkspace(discard: boolean): Promise<null> {
+    return this.#requireChannel().call("workspace.close", { discard });
   }
 
   /**

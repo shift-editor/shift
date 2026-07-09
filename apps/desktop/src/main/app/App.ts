@@ -56,8 +56,12 @@ export class App {
   constructor(log: ShiftLogger = createShiftLogger("app")) {
     this.#log = log;
     this.#lifecycle = new AppLifecycle({
-      documentForWindow: (window) =>
-        this.#workspaces.getForBrowserWindow(window.window)?.document ?? null,
+      documentForWindow: (window) => {
+        const session = this.#workspaces.getForBrowserWindow(window.window);
+        if (!session || session.windows.size > 1) return null;
+
+        return session.document;
+      },
       documents: () => this.#workspaces.list().map((session) => session.document),
       log: this.#log,
     });

@@ -14,8 +14,8 @@ use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, Works
 use crate::NewWorkspace;
 use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
 use crate::source_identity::{
-    RecoverySelection, WorkspaceRecoveryCandidate, select_recoverable_package_workspace,
-    source_identity_snapshot, validate_source_identity_for_save,
+    PackageDraft, PackageIdentity, package_identity, source_identity_snapshot,
+    validate_source_identity_for_save,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -46,9 +46,6 @@ pub enum WorkspaceError {
 
     #[error("source package was modified outside Shift: {0}")]
     SourceExternallyModified(PathBuf),
-
-    #[error("ambiguous recoverable workspaces for source: {0} candidates")]
-    AmbiguousRecoveryCandidates(usize),
 
     #[error("corrupt working store: {0}")]
     CorruptWorkingStore(String),
@@ -132,7 +129,7 @@ impl FontWorkspace {
     }
 
     pub fn save_as(&mut self, source_path: impl AsRef<Path>) -> Result<(), WorkspaceError> {
-        let source_package = ShiftSourcePackage::save_font(source_path, &self.font)?;
+        let source_package = ShiftSourcePackage::save_font_as(source_path, &self.font)?;
         let identity = source_identity_snapshot(source_package.path())?;
         self.source = WorkspaceSource::Package {
             path: source_package.path().to_path_buf(),
@@ -168,11 +165,42 @@ impl FontWorkspace {
         Ok(workspace)
     }
 
-    pub fn find_recoverable_package_workspace(
+    pub fn inspect_package(
         source_path: impl AsRef<Path>,
-        candidates: &[WorkspaceRecoveryCandidate],
-    ) -> Result<RecoverySelection, WorkspaceError> {
-        select_recoverable_package_workspace(source_path, candidates)
+    ) -> Result<PackageIdentity, WorkspaceError> {
+        package_identity(source_path)
+    }
+
+    pub fn inspect_package_draft(
+        store_path: impl AsRef<Path>,
+    ) -> Result<PackageDraft, WorkspaceError> {
+        let store = ShiftStore::open(store_path)?;
+        let state = store
+            .workspace_state()?
+            .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
+        if state.source_kind != WorkspaceSourceKind::Package {
+            return Err(WorkspaceError::CorruptWorkingStore(
+                "working store is not package-backed".into(),
+            ));
+        }
+
+        let package_id = state.source_package_id.ok_or_else(|| {
+            WorkspaceError::CorruptWorkingStore("package draft missing package ID".into())
+        })?;
+        let source_path = state.source_path.ok_or_else(|| {
+            WorkspaceError::CorruptWorkingStore("package draft missing source path".into())
+        })?;
+        let base_fingerprint = state.source_fingerprint.ok_or_else(|| {
+            WorkspaceError::CorruptWorkingStore("package draft missing base fingerprint".into())
+        })?;
+
+        Ok(PackageDraft {
+            document_id: state.document_id,
+            package_id,
+            source_path,
+            base_fingerprint,
+            dirty: state.dirty,
+        })
     }
 
     pub fn export(&self, request: FontExportRequest) -> Result<FontExportResult, WorkspaceError> {

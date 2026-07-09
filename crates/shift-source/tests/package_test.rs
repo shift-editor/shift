@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 
 use shift_font::{
     Axis, AxisId, Font, KerningPair, LibValue, Location, Source, SourceId, SourceRole,
@@ -6,8 +6,8 @@ use shift_font::{
 };
 use shift_source::{
     AXES_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, FONTINFO_MODULE_FILE, GLYPHS_DIR, IMAGES_DIR,
-    KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE, PackageTree, SOURCES_FILE, ShiftSourcePackage,
-    SourcePackageError, font_to_tree, tree_to_font, write_tree_atomic,
+    KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE, PackageId, PackageTree, SOURCES_FILE,
+    ShiftSourcePackage, SourcePackageError, font_to_tree, tree_to_font, write_tree_atomic,
 };
 use zip::{CompressionMethod, ZipArchive};
 
@@ -24,6 +24,10 @@ fn replace_tree_entry(tree: &mut PackageTree, path: &str, from: &str, to: &str) 
     entry.1 = json.replacen(from, to, 1).into_bytes();
 }
 
+fn test_package_id() -> PackageId {
+    PackageId::from_raw("test")
+}
+
 #[test]
 fn creates_zip_package_with_manifest_first_and_stored() {
     let temp = tempfile::tempdir().unwrap();
@@ -37,6 +41,51 @@ fn creates_zip_package_with_manifest_first_and_stored() {
     let manifest = archive.by_index(0).unwrap();
     assert_eq!(manifest.name(), MANIFEST_FILE);
     assert_eq!(manifest.compression(), CompressionMethod::Stored);
+}
+
+#[test]
+fn created_package_has_stable_identity() {
+    let temp = tempfile::tempdir().unwrap();
+    let package_path = temp.path().join("Dogfood.shift");
+
+    let created = ShiftSourcePackage::save_font(&package_path, &sample_font()).unwrap();
+    let saved = ShiftSourcePackage::save_font(&package_path, &sample_font()).unwrap();
+
+    assert!(created.package_id().as_str().starts_with("package_"));
+    assert_eq!(saved.package_id(), created.package_id());
+}
+
+#[test]
+fn package_identity_survives_move_and_filesystem_copy() {
+    let temp = tempfile::tempdir().unwrap();
+    let package_path = temp.path().join("Dogfood.shift");
+    let moved_path = temp.path().join("Moved.shift");
+    let copied_path = temp.path().join("Copied.shift");
+    let created = ShiftSourcePackage::save_font(&package_path, &sample_font()).unwrap();
+
+    fs::rename(&package_path, &moved_path).unwrap();
+    fs::copy(&moved_path, &copied_path).unwrap();
+
+    assert_eq!(
+        ShiftSourcePackage::open(&moved_path).unwrap().package_id(),
+        created.package_id()
+    );
+    assert_eq!(
+        ShiftSourcePackage::open(&copied_path).unwrap().package_id(),
+        created.package_id()
+    );
+}
+
+#[test]
+fn save_as_mints_new_package_identity() {
+    let temp = tempfile::tempdir().unwrap();
+    let first_path = temp.path().join("First.shift");
+    let second_path = temp.path().join("Second.shift");
+    let first = ShiftSourcePackage::save_font(&first_path, &sample_font()).unwrap();
+
+    let second = ShiftSourcePackage::save_font_as(&second_path, &sample_font()).unwrap();
+
+    assert_ne!(second.package_id(), first.package_id());
 }
 
 #[test]
@@ -97,7 +146,7 @@ fn shift_round_trip_preserves_exotic_lib_values_binaries_and_remainders() {
 fn source_tree_round_trip_preserves_whole_font() {
     let original = sample_font();
 
-    let loaded = tree_to_font(font_to_tree(&original).unwrap()).unwrap();
+    let loaded = tree_to_font(font_to_tree(&test_package_id(), &original).unwrap()).unwrap();
 
     assert_eq!(loaded, original);
 }
@@ -106,8 +155,8 @@ fn source_tree_round_trip_preserves_whole_font() {
 fn serializes_same_font_to_byte_identical_tree() {
     let font = sample_font();
 
-    let first = font_to_tree(&font).unwrap();
-    let second = font_to_tree(&font).unwrap();
+    let first = font_to_tree(&test_package_id(), &font).unwrap();
+    let second = font_to_tree(&test_package_id(), &font).unwrap();
 
     assert_eq!(first, second);
     assert_eq!(
@@ -142,7 +191,7 @@ fn rejects_kerning_references_to_unknown_glyph_names() {
         -80.0,
     ));
 
-    let error = font_to_tree(&font).unwrap_err();
+    let error = font_to_tree(&test_package_id(), &font).unwrap_err();
 
     assert!(matches!(
         error,
@@ -161,6 +210,7 @@ fn parses_minimal_handwritten_tree() {
             br#"{
   "format": "shift-source",
   "schemaVersion": 1,
+  "packageId": "package_minimal",
   "defaultSourceId": "source_regular"
 }
 "#
@@ -238,7 +288,7 @@ fn parses_minimal_handwritten_tree() {
 
 #[test]
 fn rejects_glyph_file_id_mismatch() {
-    let mut tree = font_to_tree(&sample_font()).unwrap();
+    let mut tree = font_to_tree(&test_package_id(), &sample_font()).unwrap();
     let glyph_entry = tree
         .iter_mut()
         .find(|(path, _)| path.starts_with(GLYPHS_DIR))
@@ -262,7 +312,7 @@ fn rejects_non_finite_metric_values_before_json_serialization() {
     let mut font = sample_font();
     font.metrics_mut().ascender = f64::NAN;
 
-    let error = font_to_tree(&font).unwrap_err();
+    let error = font_to_tree(&test_package_id(), &font).unwrap_err();
 
     assert!(matches!(
         error,
@@ -291,7 +341,7 @@ fn rejects_non_finite_source_location_values() {
         None,
     ));
 
-    let error = font_to_tree(&font).unwrap_err();
+    let error = font_to_tree(&test_package_id(), &font).unwrap_err();
 
     assert!(matches!(
         error,
@@ -302,7 +352,7 @@ fn rejects_non_finite_source_location_values() {
 
 #[test]
 fn rejects_invalid_axis_ranges_on_load() {
-    let mut tree = font_to_tree(&Font::new()).unwrap();
+    let mut tree = font_to_tree(&test_package_id(), &Font::new()).unwrap();
     let axes_entry = tree
         .iter_mut()
         .find(|(path, _)| path == AXES_FILE)
@@ -333,7 +383,7 @@ fn rejects_invalid_axis_ranges_on_load() {
 
 #[test]
 fn rejects_dangling_default_source_id() {
-    let mut tree = font_to_tree(&sample_font()).unwrap();
+    let mut tree = font_to_tree(&test_package_id(), &sample_font()).unwrap();
     replace_tree_entry(
         &mut tree,
         MANIFEST_FILE,
@@ -352,7 +402,7 @@ fn rejects_dangling_default_source_id() {
 
 #[test]
 fn rejects_glyph_layers_that_reference_missing_sources() {
-    let mut tree = font_to_tree(&sample_font()).unwrap();
+    let mut tree = font_to_tree(&test_package_id(), &sample_font()).unwrap();
     let glyph_path = format!("{GLYPHS_DIR}/glyph_A.json");
     replace_tree_entry(
         &mut tree,
@@ -395,7 +445,7 @@ fn does_not_overwrite_existing_package_when_creating_empty() {
 fn writes_handwritten_tree_as_openable_zip() {
     let temp = tempfile::tempdir().unwrap();
     let package_path = temp.path().join("Minimal.shift");
-    let tree = font_to_tree(&Font::new()).unwrap();
+    let tree = font_to_tree(&test_package_id(), &Font::new()).unwrap();
 
     write_tree_atomic(&package_path, tree).unwrap();
 

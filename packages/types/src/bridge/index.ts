@@ -40,6 +40,8 @@ export type {
   GlyphVariationData,
   LayerReplaced,
   Location,
+  PackageDraft,
+  PackageIdentity,
   PointData,
   PointSeed,
   PointType,

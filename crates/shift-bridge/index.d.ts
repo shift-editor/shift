@@ -16,10 +16,12 @@ export declare class Bridge {
   createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   documentState(): NapiDocumentState
+  inspectPackage(path: string): NapiPackageIdentity
+  inspectPackageDraft(storePath: string): NapiPackageDraft
+  closeWorkspace(): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
   setDocumentId(documentId: string): NapiDocumentState
-  findRecoverableWorkspace(sourcePath: string, candidates: Array<NapiWorkspaceRecoveryCandidate>): NapiWorkspaceRecoveryMatch | null
   saveWorkspace(): NapiDocumentState
   saveWorkspaceAs(path: string): NapiDocumentState
   getMetadata(): NapiFontMetadata
@@ -71,16 +73,18 @@ export interface NapiNewWorkspace {
   unitsPerEm?: number
 }
 
-export interface NapiWorkspaceRecoveryCandidate {
-  documentId: string
-  storePath: string
+export interface NapiPackageDraft {
+  documentId?: string
+  packageId: string
+  sourcePath: string
+  baseFingerprint: string
+  dirty: boolean
 }
 
-export interface NapiWorkspaceRecoveryMatch {
-  documentId: string
-  storePath: string
-  matchKind: string
-  dirty: boolean
+export interface NapiPackageIdentity {
+  packageId: string
+  canonicalPath: string
+  fingerprint: string
 }
 export interface NapiAddAnchorsIntent {
   layerId: LayerId

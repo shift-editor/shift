@@ -5,7 +5,5 @@ mod workspace;
 
 pub use ledger::{LayerPair, Ledger, LedgerEntry, LedgerStep};
 pub use new_workspace::NewWorkspace;
-pub use source_identity::{
-    RecoverySelection, SourceMatchKind, WorkspaceRecoveryCandidate, WorkspaceRecoveryMatch,
-};
+pub use source_identity::{PackageDraft, PackageIdentity};
 pub use workspace::{FontWorkspace, WorkspaceError, WorkspaceSource};

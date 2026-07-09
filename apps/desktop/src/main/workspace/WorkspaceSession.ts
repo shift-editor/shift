@@ -55,6 +55,9 @@ export class WorkspaceSession {
     this.documentClient = options.documentClient;
     this.document = new DocumentSession({
       document: this.documentClient,
+      closeDocument: async (discard) => {
+        await this.workspaceProcess.closeWorkspace(discard);
+      },
       dialogWindow: () => this.activeWindow(),
       windows: () => this.allWindows(),
       applicationName: options.applicationName,
