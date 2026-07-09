@@ -1,7 +1,19 @@
 //! Crash-safe filesystem writes shared by the format backends.
 
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Resolves an existing target to its real path so that writing through a
+/// symlink updates the linked file or directory instead of replacing the
+/// link itself (the rename/exchange syscalls operate on the link inode).
+/// A target that does not exist yet is returned unchanged.
+pub(crate) fn resolve_existing_target(target: &Path) -> std::io::Result<PathBuf> {
+    if target.exists() {
+        std::fs::canonicalize(target)
+    } else {
+        Ok(target.to_path_buf())
+    }
+}
 
 /// Fsyncs the parent directory so a rename into it is durable.
 #[cfg(unix)]
@@ -25,6 +37,7 @@ pub(crate) fn sync_parent(_path: &Path) -> std::io::Result<()> {
 /// over the target, and the parent directory is fsynced so the rename
 /// itself is durable. If any step fails, the existing file is untouched.
 pub(crate) fn write_file_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let path = &resolve_existing_target(path)?;
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
@@ -77,5 +90,21 @@ mod tests {
 
         result.expect_err("write into a read-only directory should fail");
         assert_eq!(std::fs::read(&target).unwrap(), b"original");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writing_through_symlink_updates_target_and_keeps_link() {
+        let temp = tempfile::tempdir().unwrap();
+        let real = temp.path().join("real.xml");
+        let link = temp.path().join("link.xml");
+        std::fs::write(&real, b"original").unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        write_file_atomic(&link, b"replacement").unwrap();
+
+        assert!(std::fs::symlink_metadata(&link).unwrap().is_symlink());
+        assert_eq!(std::fs::read(&real).unwrap(), b"replacement");
+        assert_eq!(std::fs::read(&link).unwrap(), b"replacement");
     }
 }

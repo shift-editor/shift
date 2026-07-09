@@ -179,6 +179,45 @@ impl UfoReader {
         LibData::from_map(data)
     }
 
+    fn convert_image_record(image: &norad::Image) -> LibValue {
+        let mut record = HashMap::new();
+        record.insert(
+            "fileName".to_string(),
+            LibValue::String(image.file_name().to_string_lossy().into_owned()),
+        );
+        record.insert(
+            "xScale".to_string(),
+            LibValue::Float(image.transform.x_scale),
+        );
+        record.insert(
+            "xyScale".to_string(),
+            LibValue::Float(image.transform.xy_scale),
+        );
+        record.insert(
+            "yxScale".to_string(),
+            LibValue::Float(image.transform.yx_scale),
+        );
+        record.insert(
+            "yScale".to_string(),
+            LibValue::Float(image.transform.y_scale),
+        );
+        record.insert(
+            "xOffset".to_string(),
+            LibValue::Float(image.transform.x_offset),
+        );
+        record.insert(
+            "yOffset".to_string(),
+            LibValue::Float(image.transform.y_offset),
+        );
+        if let Some(color) = &image.color {
+            record.insert(
+                "color".to_string(),
+                LibValue::String(color.to_rgba_string()),
+            );
+        }
+        LibValue::Dict(record)
+    }
+
     fn convert_glyph_layer(
         norad_glyph: &norad::Glyph,
         layer_id: LayerId,
@@ -209,6 +248,21 @@ impl UfoReader {
 
         if !norad_glyph.lib.is_empty() {
             *glyph_layer.lib_mut() = Self::convert_lib(&norad_glyph.lib);
+        }
+
+        // The glif `<image>` element and `<note>` ride along in the layer
+        // lib as opaque records; the writer pops them back out on save.
+        if let Some(image) = &norad_glyph.image {
+            glyph_layer.lib_mut().set(
+                super::PRESERVED_GLYPH_IMAGE_KEY.to_string(),
+                Self::convert_image_record(image),
+            );
+        }
+        if let Some(note) = &norad_glyph.note {
+            glyph_layer.lib_mut().set(
+                super::PRESERVED_GLYPH_NOTE_KEY.to_string(),
+                LibValue::String(note.clone()),
+            );
         }
 
         let mut glyph = Glyph::new(norad_glyph.name().to_string());
@@ -315,9 +369,11 @@ impl Default for UfoReader {
 
 impl FontReader for UfoReader {
     fn load(&self, path: &str) -> FormatBackendResult<Font> {
-        let norad_font =
-            NoradFont::load(path).map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
         let ufo_path = Path::new(path);
+        // The shadow directory (if any) must outlive the loop below that
+        // drains norad's lazy data/images stores.
+        let (norad_font, unknown_fontinfo, _shadow) =
+            super::fontinfo::load_norad_font_tolerant(ufo_path)?;
 
         let mut font = Font::new();
         let default_source_id = font
@@ -358,6 +414,13 @@ impl FontReader for UfoReader {
 
         if let Some(remainder) = Self::convert_fontinfo_remainder(&norad_font.font_info)? {
             *font.fontinfo_remainder_mut() = remainder;
+        }
+
+        // Keys norad does not model join the remainder passthrough so they
+        // survive the round-trip alongside the norad-known unmapped keys.
+        for (key, value) in &unknown_fontinfo {
+            font.fontinfo_remainder_mut()
+                .set(key.clone(), Self::convert_plist_to_lib_value(value));
         }
 
         let norad_default_layer_name = norad_font.layers.default_layer().name().clone();

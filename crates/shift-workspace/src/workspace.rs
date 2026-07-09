@@ -53,6 +53,9 @@ pub enum WorkspaceError {
     #[error("corrupt working store: {0}")]
     CorruptWorkingStore(String),
 
+    #[error("loaded font state cannot be saved back to source: {0}")]
+    UnsavableFontState(String),
+
     #[error("invalid UTF-8 in workspace path: {0}")]
     InvalidPathUtf8(PathBuf),
 
@@ -148,6 +151,7 @@ impl FontWorkspace {
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
         let font = store.load_font_state()?;
+        validate_loaded_font(&font)?;
         let source = source_from_workspace_state(&state)?;
 
         Ok(Self {
@@ -562,6 +566,7 @@ impl FontWorkspace {
         let source_package = ShiftSourcePackage::open(source_path)?;
         let mut store = ShiftStore::open(store_path)?;
         let font = ShiftSourcePackage::load_font(source_package.path())?;
+        validate_loaded_font(&font)?;
         store.set_font_info(font_info_from_font(&font))?;
         store.replace_font_state(&font)?;
         let identity = source_identity_snapshot(source_package.path())?;
@@ -890,6 +895,14 @@ fn replay_glyph_layer(
     }
 
     Ok(())
+}
+
+/// Rejects loaded font state that could never be saved back out, so a
+/// tampered `.shift` package or working store fails at open/resume with a
+/// clear error instead of at the user's next save.
+fn validate_loaded_font(font: &shift_font::Font) -> Result<(), WorkspaceError> {
+    shift_backends::ufo::validate_fontinfo_remainder(font.fontinfo_remainder())
+        .map_err(|error| WorkspaceError::UnsavableFontState(error.to_string()))
 }
 
 fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {

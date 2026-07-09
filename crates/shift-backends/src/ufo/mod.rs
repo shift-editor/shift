@@ -1,8 +1,18 @@
+mod fontinfo;
 mod reader;
 mod writer;
 
+pub use fontinfo::validate_fontinfo_remainder;
 pub use reader::UfoReader;
 pub use writer::UfoWriter;
+
+/// Layer-lib key carrying a glif `<image>` element (file name, transform,
+/// color) as an opaque record, so image placements survive a round-trip
+/// alongside the image bytes in `images/`. Shift does not model or edit it.
+pub(crate) const PRESERVED_GLYPH_IMAGE_KEY: &str = "com.shift-editor.preserved.image";
+
+/// Layer-lib key carrying a glif `<note>` as an opaque record.
+pub(crate) const PRESERVED_GLYPH_NOTE_KEY: &str = "com.shift-editor.preserved.note";
 
 use crate::traits::{FontReader, FontWriter};
 use crate::FormatBackendResult;
@@ -262,6 +272,42 @@ mod tests {
             .map(|entry| entry.unwrap().file_name())
             .collect();
         assert_eq!(entries, vec!["target.ufo"], "no staging leftovers");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_through_symlink_updates_target_and_keeps_link() {
+        let font = create_test_font();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let real_ufo = temp_dir.path().join("real.ufo");
+        let link_ufo = temp_dir.path().join("link.ufo");
+
+        UfoWriter::new()
+            .save(&font, real_ufo.to_str().unwrap())
+            .unwrap();
+        std::os::unix::fs::symlink(&real_ufo, &link_ufo).unwrap();
+
+        let mut updated = create_test_font();
+        updated.metadata_mut().family_name = Some("UpdatedFamily".to_string());
+        UfoWriter::new()
+            .save(&updated, link_ufo.to_str().unwrap())
+            .unwrap();
+
+        assert!(
+            fs::symlink_metadata(&link_ufo).unwrap().is_symlink(),
+            "saving through the symlink must not replace the link"
+        );
+        let reloaded = UfoReader::new().load(real_ufo.to_str().unwrap()).unwrap();
+        assert_eq!(
+            reloaded.metadata().family_name.as_deref(),
+            Some("UpdatedFamily")
+        );
+
+        let entries: Vec<_> = fs::read_dir(temp_dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries.len(), 2, "no staging leftovers: {entries:?}");
     }
 
     #[test]
