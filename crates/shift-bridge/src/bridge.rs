@@ -842,6 +842,17 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         source_id: parse::<SourceId>(&payload.source_id)?,
       })
     }
+    "cloneGlyphLayer" => {
+      let payload = intent
+        .clone_glyph_layer
+        .ok_or_else(|| missing("cloneGlyphLayer"))?;
+      Ok(FontIntent::CloneGlyphLayer {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
+        source_id: parse::<SourceId>(&payload.source_id)?,
+        from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
+      })
+    }
     other => Err(BridgeError::InvalidInput {
       kind: "intent",
       value: format!("unknown intent kind \"{other}\""),
@@ -894,11 +905,11 @@ fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
 mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
-    NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCreateAxisIntent,
-    NapiCreateGlyphIntent, NapiCreateGlyphLayerIntent, NapiCreateSourceIntent,
-    NapiDeleteAxisIntent, NapiDeleteSourceIntent, NapiGlyphSnapshotRequest, NapiGlyphState,
-    NapiLocation, NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
-    NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
+    NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCloneGlyphLayerIntent,
+    NapiCreateAxisIntent, NapiCreateGlyphIntent, NapiCreateGlyphLayerIntent,
+    NapiCreateSourceIntent, NapiDeleteAxisIntent, NapiDeleteSourceIntent, NapiGlyphSnapshotRequest,
+    NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed,
+    NapiPointType, NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
     NapiSetContourClosedIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
     NapiTranslatePointsIntent,
   };
@@ -929,6 +940,7 @@ mod tests {
       create_source: None,
       delete_source: None,
       create_glyph_layer: None,
+      clone_glyph_layer: None,
     }
   }
 
@@ -962,6 +974,23 @@ mod tests {
         source_id: source_id.to_string(),
       }),
       ..skeleton_intent("createGlyphLayer")
+    }
+  }
+
+  fn clone_glyph_layer_intent(
+    layer_id: &str,
+    glyph_id: &str,
+    source_id: &str,
+    from_layer_id: &str,
+  ) -> NapiFontIntent {
+    NapiFontIntent {
+      clone_glyph_layer: Some(NapiCloneGlyphLayerIntent {
+        layer_id: layer_id.to_string(),
+        glyph_id: glyph_id.to_string(),
+        source_id: source_id.to_string(),
+        from_layer_id: from_layer_id.to_string(),
+      }),
+      ..skeleton_intent("cloneGlyphLayer")
     }
   }
 
@@ -2011,6 +2040,78 @@ mod tests {
       .glyphs
       .expect("layer membership must echo glyph records");
     assert_eq!(glyphs[0].layers.len(), 2);
+  }
+
+  #[test]
+  fn apply_clone_glyph_layer_copies_shape_with_fresh_internal_ids() {
+    let mut bridge = bridge_with_workspace();
+    let (from_layer_id, contour_id) = pen_setup(&mut bridge);
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let point_a = shift_font::PointId::new().to_string();
+    let point_b = shift_font::PointId::new().to_string();
+    let anchor_top = shift_font::AnchorId::new().to_string();
+
+    bridge
+      .apply(
+        vec![
+          add_points_intent(
+            &from_layer_id,
+            &contour_id,
+            None,
+            vec![seed(&point_a, 10.0, 20.0), seed(&point_b, 30.0, 40.0)],
+          ),
+          add_anchors_intent(
+            &from_layer_id,
+            vec![anchor_seed(&anchor_top, Some("top"), 15.0, 70.0)],
+          ),
+        ],
+        None,
+      )
+      .unwrap();
+    bridge
+      .apply(vec![create_source_intent("source_bold", "Bold", &[])], None)
+      .unwrap();
+
+    let layer_id = LayerId::new().to_string();
+    let applied = bridge
+      .apply(
+        vec![clone_glyph_layer_intent(
+          &layer_id,
+          &glyph_id,
+          "source_bold",
+          &from_layer_id,
+        )],
+        None,
+      )
+      .unwrap();
+
+    let source = glyph_source_state(&bridge, &glyph_id, &default_source_id(&bridge))
+      .expect("source layer should be readable");
+    let cloned = glyph_source_state(&bridge, &glyph_id, "source_bold")
+      .expect("cloned layer should be readable");
+
+    assert_eq!(applied.layers[0].layer_id, layer_id);
+    assert_eq!(cloned.layer_id, layer_id);
+    assert_eq!(cloned.values.len(), source.values.len());
+    for index in 0..cloned.values.len() {
+      assert_eq!(cloned.values[index], source.values[index]);
+    }
+    assert_eq!(
+      cloned.structure.contours.len(),
+      source.structure.contours.len()
+    );
+    assert_eq!(
+      cloned.structure.contours[0].points.len(),
+      source.structure.contours[0].points.len()
+    );
+    assert_ne!(
+      cloned.structure.contours[0].points[0].id,
+      source.structure.contours[0].points[0].id
+    );
+    assert_ne!(
+      cloned.structure.anchors[0].id,
+      source.structure.anchors[0].id
+    );
   }
 
   #[test]

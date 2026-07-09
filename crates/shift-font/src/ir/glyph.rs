@@ -1,9 +1,12 @@
 use crate::anchor::Anchor;
 use crate::component::Component;
 use crate::contour::Contour;
-use crate::entity::{AnchorId, ComponentId, ContourId, GlyphId, LayerId, SourceId};
+use crate::entity::{
+    AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
+};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
+use crate::point::Point;
 use crate::GlyphName;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -66,6 +69,60 @@ impl GlyphLayer {
         let mut layer = self.clone();
         layer.id = id;
         layer.source_id = source_id;
+        layer
+    }
+
+    pub fn clone_with_fresh_ids(&self, id: LayerId, source_id: SourceId) -> Self {
+        let mut layer = Self::with_width(id, source_id, self.width);
+        layer.height = self.height;
+        layer.lib = self.lib.clone();
+
+        for contour in self.contours_iter() {
+            let mut cloned_contour = Contour::new();
+            if contour.is_closed() {
+                cloned_contour.close();
+            }
+
+            for point in contour.points() {
+                cloned_contour.push_point(Point::new(
+                    PointId::new(),
+                    point.x(),
+                    point.y(),
+                    point.point_type(),
+                    point.is_smooth(),
+                ));
+            }
+
+            layer.add_contour(cloned_contour);
+        }
+
+        for component in self.components_iter() {
+            layer.add_component(Component::with_transform(
+                component.base_glyph_id(),
+                component.base_glyph_name().clone(),
+                *component.transform(),
+            ));
+        }
+
+        for anchor in self.anchors_iter() {
+            layer.add_anchor(Anchor::new(
+                anchor.name().map(ToOwned::to_owned),
+                anchor.x(),
+                anchor.y(),
+            ));
+        }
+
+        for guideline in self.guidelines() {
+            layer.add_guideline(Guideline::with_id(
+                GuidelineId::new(),
+                guideline.x(),
+                guideline.y(),
+                guideline.angle(),
+                guideline.name().map(ToOwned::to_owned),
+                guideline.color().map(ToOwned::to_owned),
+            ));
+        }
+
         layer
     }
 

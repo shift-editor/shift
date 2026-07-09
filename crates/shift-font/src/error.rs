@@ -62,6 +62,13 @@ pub enum CoreError {
     #[error("layer {0} not found")]
     LayerNotFound(LayerId),
 
+    #[error("layer {layer_id} belongs to glyph {actual_glyph_id}, not glyph {glyph_id}")]
+    LayerGlyphMismatch {
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        actual_glyph_id: GlyphId,
+    },
+
     #[error("duplicate glyph id {0}")]
     DuplicateGlyphId(GlyphId),
 

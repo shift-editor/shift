@@ -5,11 +5,11 @@ import type { ShiftContent, SystemClipboard } from "./types";
 class MemoryClipboard implements SystemClipboard {
   text = "";
 
-  writeText(text: string): void {
+  async writeText(text: string): Promise<void> {
     this.text = text;
   }
 
-  readText(): string {
+  async readText(): Promise<string> {
     return this.text;
   }
 }
@@ -60,7 +60,7 @@ describe("Clipboard", () => {
   });
 
   it("returns unsupported for non-empty text that no importer accepts", async () => {
-    system.writeText("plain text");
+    await system.writeText("plain text");
 
     const result = await clipboard.read();
 

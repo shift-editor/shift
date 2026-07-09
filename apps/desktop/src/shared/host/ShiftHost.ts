@@ -1,4 +1,4 @@
-import type { CommandId } from "../commands";
+import type { CommandId, RendererCommandId } from "../commands";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -18,6 +18,13 @@ export interface ShiftHost {
      * @throws {Error} when the preload bridge is unavailable or main rejects the command.
      */
     run: (id: CommandId) => Promise<void>;
+    /**
+     * Subscribes to commands that main asks the active renderer to execute.
+     *
+     * @param callback - receives the renderer-owned command identity.
+     * @returns an unsubscribe function.
+     */
+    onRunRendererCommand: (callback: (id: RendererCommandId) => void) => () => void;
   };
   /** Connects the renderer to main-owned document requests. */
   document: {
@@ -52,9 +59,9 @@ export interface ShiftHost {
      */
     onZoomChanged: (callback: (percent: number) => void) => () => void;
   };
-  /** System clipboard access (Electron's clipboard module, no IPC). */
+  /** System clipboard access owned by the app shell. */
   clipboard: {
-    writeText: (text: string) => void;
-    readText: () => string;
+    writeText: (text: string) => Promise<void>;
+    readText: () => Promise<string>;
   };
 }

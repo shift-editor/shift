@@ -1,7 +1,7 @@
 import { FC, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 
-import { CanvasContextProvider } from "@/context/CanvasContext";
+import { CanvasContextProvider } from "@/context/CanvasContextProvider";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
@@ -32,7 +32,7 @@ export const Canvas: FC = () => {
     const id = mintNodeId();
     editor.scene.setNodes([
       {
-        id: id,
+        id,
         type: "node",
         kind: "glyph",
         parentId: null,

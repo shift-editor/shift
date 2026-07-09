@@ -13,30 +13,21 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
       match: (event) => matchChord(event, { key: "c", primaryModifier: true }),
-      run: (ctx) => {
-        ctx.editor.copy();
-        return true;
-      },
+      run: (ctx) => ctx.editor.copy(),
     },
     {
       id: "global.cut",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
       match: (event) => matchChord(event, { key: "x", primaryModifier: true }),
-      run: (ctx) => {
-        ctx.editor.cut();
-        return true;
-      },
+      run: (ctx) => ctx.editor.cut(),
     },
     {
       id: "global.paste",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
       match: (event) => matchChord(event, { key: "v", primaryModifier: true }),
-      run: (ctx) => {
-        ctx.editor.paste();
-        return true;
-      },
+      run: (ctx) => ctx.editor.paste(),
     },
     {
       id: "global.undo",

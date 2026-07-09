@@ -40,14 +40,14 @@ export class KeyboardRouter {
     this.#globalKeyUp = createGlobalKeyUpBindings(handlers);
   }
 
-  handleKeyDown(e: KeyboardEvent): boolean {
+  async handleKeyDown(e: KeyboardEvent): Promise<boolean> {
     if (isEditableTarget(e.target)) {
       return false;
     }
 
     const ctx = this.#getContext();
 
-    if (this.#runBindings(this.#globalKeyDown, ctx, e)) {
+    if (await this.#runBindings(this.#globalKeyDown, ctx, e)) {
       return true;
     }
 
@@ -55,25 +55,25 @@ export class KeyboardRouter {
       return false;
     }
 
-    if (this.#runBindings(this.#textKeyDown, ctx, e)) {
+    if (await this.#runBindings(this.#textKeyDown, ctx, e)) {
       return true;
     }
 
-    if (this.#runBindings(this.#canvasKeyDown, ctx, e)) {
+    if (await this.#runBindings(this.#canvasKeyDown, ctx, e)) {
       return true;
     }
 
     return ctx.toolManager.handleKeyDown(e);
   }
 
-  handleKeyUp(e: KeyboardEvent): boolean {
+  async handleKeyUp(e: KeyboardEvent): Promise<boolean> {
     if (isEditableTarget(e.target)) {
       return false;
     }
 
     const ctx = this.#getContext();
 
-    if (this.#runBindings(this.#globalKeyUp, ctx, e)) {
+    if (await this.#runBindings(this.#globalKeyUp, ctx, e)) {
       return true;
     }
 
@@ -84,7 +84,11 @@ export class KeyboardRouter {
     return ctx.toolManager.handleKeyUp(e);
   }
 
-  #runBindings(bindings: readonly KeyBinding[], ctx: KeyContext, e: KeyboardEvent): boolean {
+  async #runBindings(
+    bindings: readonly KeyBinding[],
+    ctx: KeyContext,
+    e: KeyboardEvent,
+  ): Promise<boolean> {
     const event = normalizeKeyboardEvent(e);
 
     for (const binding of bindings) {
@@ -95,7 +99,7 @@ export class KeyboardRouter {
         e.preventDefault();
       }
 
-      const handled = binding.run(ctx, e);
+      const handled = await binding.run(ctx, e);
       if (handled) return true;
     }
 

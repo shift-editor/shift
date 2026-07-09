@@ -7,6 +7,7 @@ import {
   type AnchorId,
   type PointId,
   type ContourId,
+  type Location,
   type Source,
   type SourceId,
   type GlyphName,
@@ -72,6 +73,7 @@ import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } f
 import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
+import type { RendererCommandId } from "@shared/commands";
 
 const DEFAULT_NODE_DEFINITIONS: NodeDefinitionConstructor[] = [
   GlyphNodeDefinition,
@@ -655,17 +657,69 @@ export class Editor {
   }
 
   /**
-   * Select an authored glyph layer for editing and move the display location to it.
+   * Selects a font source for the current editor glyph.
    *
-   * Missing source IDs are ignored. This does not open a glyph; it moves the
-   * shared design location to the source.
+   * @remarks
+   * Source switching is the lazy glyph-layer materialization boundary. If the
+   * current glyph has no authored layer at `sourceId`, this clones its default
+   * source layer before moving the editor to the source location.
+   *
+   * @param sourceId - Existing font source to make active in the editor.
    */
   public selectSource(sourceId: SourceId): void {
     const source = this.font.source(sourceId);
     if (!source) return;
 
-    this.#activeSourceId.set(source.id);
-    this.setDesignLocation(axisLocationFromLocation(source.location));
+    this.font.editCoordinator.transaction("Select source", () => {
+      this.#ensureCurrentGlyphLayerAtSource(source.id);
+    });
+    this.#setActiveSource(source.id, source.location);
+  }
+
+  /**
+   * Creates a source from the editor and selects it for the current glyph.
+   *
+   * @remarks
+   * This composes pure font source creation with editor source selection. The
+   * global source and current glyph layer are submitted as one workspace
+   * operation so the source is immediately usable from the editor sidebar.
+   *
+   * @param name - Display name for the new source.
+   * @param location - Design-space location for the new source.
+   * @returns The source id submitted to the workspace.
+   */
+  public createSource(name: string, location: Location): SourceId {
+    return this.font.editCoordinator.transaction("Create source", () => {
+      const sourceId = this.font.createSource(name, location);
+      this.#ensureCurrentGlyphLayerAtSource(sourceId);
+      this.#setActiveSource(sourceId, location);
+      return sourceId;
+    });
+  }
+
+  #ensureCurrentGlyphLayerAtSource(sourceId: SourceId): void {
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    if (glyphNodes.length !== 1) return;
+
+    const [node] = glyphNodes;
+    if (!node) return;
+
+    const liveLayer = this.font.layer(node.glyphId, sourceId);
+
+    if (!liveLayer) {
+      const defaultLayer = this.font.layer(node.glyphId, this.font.defaultSource.id);
+      if (!defaultLayer) return;
+
+      this.font.cloneGlyphLayer(node.glyphId, sourceId, defaultLayer.id);
+    }
+
+    this.scene.updateNode({ id: node.id, sourceId });
+  }
+
+  #setActiveSource(sourceId: SourceId, location: Location): void {
+    const nextLocation = axisLocationFromLocation(location);
+    this.setDesignLocation(nextLocation);
+    this.#activeSourceId.set(sourceId);
   }
 
   /**
@@ -764,6 +818,74 @@ export class Editor {
    */
   public transaction<TResult>(label: string, body: () => TResult): TResult {
     return this.font.editCoordinator.transaction(label, body);
+  }
+
+  /** Runs a command sent from the native shell to this renderer editor. */
+  public runRendererCommand(id: RendererCommandId): boolean {
+    switch (id) {
+      case "glyph.reverseSelectedContour":
+        return this.reverseSelectedContour();
+    }
+  }
+
+  /** Reverses the selected contour when the selection resolves to exactly one contour. */
+  public reverseSelectedContour(): boolean {
+    const selection = this.#selectedContour();
+    if (!selection) return false;
+
+    selection.layer.reverseContour(selection.contourId);
+    return true;
+  }
+
+  #selectedContour(): { readonly layer: GlyphLayer; readonly contourId: ContourId } | null {
+    let layer: GlyphLayer | null = null;
+    let contourId: ContourId | null = null;
+    let explicitContourId: ContourId | null = null;
+
+    const useContour = (nextLayer: GlyphLayer, nextContourId: ContourId | null): boolean => {
+      if (!nextContourId) return false;
+      if (layer && layer.id !== nextLayer.id) return false;
+      if (contourId && contourId !== nextContourId) return false;
+
+      layer = nextLayer;
+      contourId = nextContourId;
+      return true;
+    };
+
+    for (const id of this.selection.ids) {
+      const object = this.object(id);
+      if (!object) return null;
+
+      switch (object.kind) {
+        case "contour":
+          explicitContourId = object.contourId;
+          if (!useContour(object.layer, object.contourId)) return null;
+          break;
+
+        case "point":
+          if (!useContour(object.layer, object.layer.contourIdOfPoint(object.pointId))) {
+            return null;
+          }
+          break;
+
+        case "segment": {
+          const firstPointId = object.pointIds[0];
+          if (!firstPointId) return null;
+          if (!useContour(object.layer, object.layer.contourIdOfPoint(firstPointId))) {
+            return null;
+          }
+          break;
+        }
+
+        case "anchor":
+        case "node":
+          return null;
+      }
+    }
+
+    if (!layer || !contourId || explicitContourId !== contourId) return null;
+
+    return { layer, contourId };
   }
 
   public setCameraRect(rect: Rect2D) {
@@ -1097,6 +1219,8 @@ export class Editor {
    * @returns `true` when portable content was written, otherwise `false`.
    */
   public async copy(): Promise<boolean> {
+    await this.font.editCoordinator.settled();
+
     const content = this.contentFrom(this.selection.ids);
     if (!content) return false;
 
@@ -1104,6 +1228,8 @@ export class Editor {
   }
 
   public async cut(): Promise<boolean> {
+    await this.font.editCoordinator.settled();
+
     const selection = this.#pointSelectionFromIds(this.selection.ids);
     if (!selection || selection.pointIds.length === 0) return false;
 

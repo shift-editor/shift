@@ -1,4 +1,11 @@
-import { app, BrowserWindow, ipcMain, MessageChannelMain, type WebContents } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  MessageChannelMain,
+  type WebContents,
+} from "electron";
 import started from "electron-squirrel-startup";
 import path from "node:path";
 import { Window } from "../windows/Window";
@@ -165,6 +172,12 @@ export class App {
     ipc.handle(ipcMain, "commands.run", (_event, id) => {
       return this.#commands.run(id, this.#commandContext());
     });
+    ipc.handle(ipcMain, "clipboard.readText", () => {
+      return clipboard.readText();
+    });
+    ipc.handle(ipcMain, "clipboard.writeText", (_event, text) => {
+      clipboard.writeText(text);
+    });
     ipc.handle(ipcMain, "document.connect", (event) => {
       this.#log.info("document connect requested");
       const session = this.#workspaceForSender(event.sender, "document.connect");
@@ -219,6 +232,14 @@ export class App {
       },
       windows: {
         active: () => this.#windows.activeWindow(),
+      },
+      renderer: {
+        run: (id) => {
+          const session = this.#activeWorkspaceSession();
+          if (!session) return;
+
+          session.activeWindow()?.runRendererCommand(id);
+        },
       },
     };
   }

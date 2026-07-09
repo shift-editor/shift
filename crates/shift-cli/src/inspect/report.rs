@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use miette::Diagnostic;
 use serde::Serialize;
-use shift_font::{Axis, AxisId, Font, Glyph, Source, SourceId};
+use shift_font::{Axis, AxisId, Font, Glyph, GlyphLayer, Source, SourceId};
 use shift_source::{FORMAT_ID, SCHEMA_VERSION, ShiftSourcePackage, SourcePackageError};
 use thiserror::Error;
 
@@ -73,13 +73,28 @@ pub struct LocationValue {
     pub value: f64,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlyphSummary {
     pub id: String,
     pub name: String,
     pub unicodes: Vec<String>,
     pub layer_count: usize,
+    pub layers: Vec<GlyphLayerSummary>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphLayerSummary {
+    pub id: String,
+    pub source_id: String,
+    pub source_name: Option<String>,
+    pub advance: f64,
+    pub height: Option<f64>,
+    pub contour_count: usize,
+    pub point_count: usize,
+    pub anchor_count: usize,
+    pub component_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -109,7 +124,11 @@ impl InspectReport {
     pub(crate) fn from_font(path: &Path, font: &Font) -> Self {
         let axes_by_id = axes_by_id(font.axes());
         let default_source_id = font.default_source_id();
-        let glyphs = font.glyphs().map(GlyphSummary::from).collect::<Vec<_>>();
+        let source_names_by_id = source_names_by_id(font.sources());
+        let glyphs = font
+            .glyphs()
+            .map(|glyph| GlyphSummary::from_glyph(glyph, &source_names_by_id))
+            .collect::<Vec<_>>();
 
         Self {
             path: path.display().to_string(),
@@ -184,8 +203,19 @@ impl SourceSummary {
     }
 }
 
-impl From<&Glyph> for GlyphSummary {
-    fn from(glyph: &Glyph) -> Self {
+impl GlyphSummary {
+    fn from_glyph(glyph: &Glyph, source_names_by_id: &HashMap<SourceId, String>) -> Self {
+        let mut layers = glyph
+            .layers()
+            .values()
+            .map(|layer| GlyphLayerSummary::from_layer(layer.as_ref(), source_names_by_id))
+            .collect::<Vec<_>>();
+        layers.sort_by(|left, right| {
+            left.source_id
+                .cmp(&right.source_id)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
         Self {
             id: glyph.id().to_string(),
             name: glyph.name().to_string(),
@@ -194,7 +224,27 @@ impl From<&Glyph> for GlyphSummary {
                 .iter()
                 .map(|unicode| format!("U+{unicode:04X}"))
                 .collect(),
-            layer_count: glyph.layers().len(),
+            layer_count: layers.len(),
+            layers,
+        }
+    }
+}
+
+impl GlyphLayerSummary {
+    fn from_layer(layer: &GlyphLayer, source_names_by_id: &HashMap<SourceId, String>) -> Self {
+        let source_id = layer.source_id();
+        let point_count = layer.contours_iter().map(|contour| contour.len()).sum();
+
+        Self {
+            id: layer.id().to_string(),
+            source_id: source_id.to_string(),
+            source_name: source_names_by_id.get(&source_id).cloned(),
+            advance: layer.width(),
+            height: layer.height(),
+            contour_count: layer.contours().len(),
+            point_count,
+            anchor_count: layer.anchors().len(),
+            component_count: layer.components().len(),
         }
     }
 }
@@ -202,6 +252,13 @@ impl From<&Glyph> for GlyphSummary {
 fn axes_by_id(axes: &[Axis]) -> HashMap<AxisId, String> {
     axes.iter()
         .map(|axis| (axis.id(), axis.tag().to_string()))
+        .collect()
+}
+
+fn source_names_by_id(sources: &[Source]) -> HashMap<SourceId, String> {
+    sources
+        .iter()
+        .map(|source| (source.id(), source.name().to_string()))
         .collect()
 }
 

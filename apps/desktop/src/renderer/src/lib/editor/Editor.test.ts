@@ -68,4 +68,106 @@ describe("Editor scene bootstrap", () => {
 
     expect(editor.scene.node(right)?.position).toEqual({ x: 730, y: 5 });
   });
+
+  it("creates and selects a source by materializing the opened glyph", async () => {
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(0, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(100, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(100, 100);
+    await editor.settle();
+
+    const node = editor.glyphNode;
+    if (!node) throw new Error("Expected opened glyph node");
+
+    const defaultLayer = editor.font.layer(node.glyphId, editor.font.defaultSource.id);
+    if (!defaultLayer) throw new Error("Expected default glyph layer");
+
+    const defaultContour = defaultLayer.contours[0];
+    if (!defaultContour) throw new Error("Expected default contour");
+
+    const sourceId = editor.createSource("Bold", { values: {} });
+    await editor.settle();
+
+    expect(editor.activeSourceId).toBe(sourceId);
+    expect(editor.glyphNode?.sourceId).toBe(sourceId);
+
+    const createdLayer = editor.font.layer(node.glyphId, sourceId);
+    if (!createdLayer) throw new Error("Expected seeded glyph layer");
+
+    const createdContour = createdLayer.contours[0];
+    if (!createdContour) throw new Error("Expected seeded contour");
+
+    expect(createdLayer.xAdvance).toBe(defaultLayer.xAdvance);
+    expect(createdContour.closed).toBe(defaultContour.closed);
+    expect(
+      createdContour.points.map(({ x, y, pointType, smooth }) => ({ x, y, pointType, smooth })),
+    ).toEqual(
+      defaultContour.points.map(({ x, y, pointType, smooth }) => ({ x, y, pointType, smooth })),
+    );
+    expect(createdContour.points.map((point) => point.id)).not.toEqual(
+      defaultContour.points.map((point) => point.id),
+    );
+  });
+
+  it("materializes the opened glyph when selecting a sparse source", async () => {
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(0, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(100, 0);
+    await editor.settle();
+
+    const node = editor.glyphNode;
+    if (!node) throw new Error("Expected opened glyph node");
+
+    const defaultLayer = editor.font.layer(node.glyphId, editor.font.defaultSource.id);
+    if (!defaultLayer) throw new Error("Expected default glyph layer");
+
+    const sourceId = editor.font.createSource("Bold", { values: {} });
+    await editor.settle();
+
+    expect(editor.font.layer(node.glyphId, sourceId)).toBe(null);
+
+    editor.selectSource(sourceId);
+    await editor.settle();
+
+    const materializedLayer = editor.font.layer(node.glyphId, sourceId);
+    if (!materializedLayer) throw new Error("Expected materialized glyph layer");
+
+    expect(editor.activeSourceId).toBe(sourceId);
+    expect(materializedLayer.contours[0]?.points.map(({ x, y }) => ({ x, y }))).toEqual(
+      defaultLayer.contours[0]?.points.map(({ x, y }) => ({ x, y })),
+    );
+    expect(materializedLayer.contours[0]?.points.map((point) => point.id)).not.toEqual(
+      defaultLayer.contours[0]?.points.map((point) => point.id),
+    );
+  });
+});
+
+describe("Editor renderer commands", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    editor.click(0, 0);
+    await editor.settle();
+    editor.click(100, 0);
+    await editor.settle();
+    editor.click(200, 0);
+    await editor.settle();
+  });
+
+  it("reverses an explicitly selected contour", async () => {
+    const contour = editor.requireGlyphLayer().contours[0]!;
+    editor.selection.select([contour.id, ...contour.points.map((point) => point.id)]);
+
+    const handled = editor.runRendererCommand("glyph.reverseSelectedContour");
+    await editor.settle();
+
+    expect(handled).toBe(true);
+    expect(editor.requireGlyphLayer().contours[0]!.points.map(({ x }) => x)).toEqual([200, 100, 0]);
+  });
 });

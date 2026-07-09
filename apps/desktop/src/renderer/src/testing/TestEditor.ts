@@ -40,10 +40,10 @@ const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
  */
 class InMemorySystemClipboard implements SystemClipboard {
   buffer = "";
-  writeText(text: string): void {
+  async writeText(text: string): Promise<void> {
     this.buffer = text;
   }
-  readText(): string {
+  async readText(): Promise<string> {
     return this.buffer;
   }
 }

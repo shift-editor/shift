@@ -1,12 +1,13 @@
 import type { ToolName } from "@/lib/tools/core";
 import type { ToolShortcutEntry } from "@/types/tools";
 
+// TODO: probably remove this and just pass editor.
 export interface KeyboardEditorActions {
   zoomIn(): void;
   zoomOut(): void;
-  copy(): void;
-  cut(): void;
-  paste(): void;
+  copy(): Promise<boolean>;
+  cut(): Promise<boolean>;
+  paste(): Promise<boolean>;
   deleteSelection(): boolean;
   undo(): void;
   redo(): void;
@@ -45,7 +46,7 @@ export interface NormalizedKeyboardEvent {
 export interface KeyBinding {
   id: string;
   match: (event: NormalizedKeyboardEvent, ctx: KeyContext) => boolean;
-  run: (ctx: KeyContext, e: KeyboardEvent) => boolean;
+  run: (ctx: KeyContext, e: KeyboardEvent) => boolean | Promise<boolean>;
   preventDefault?: boolean;
   when?: (ctx: KeyContext) => boolean;
 }

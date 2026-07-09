@@ -18,6 +18,7 @@ impl InspectReport {
             InspectView::Axes => self.render_axes(mode),
             InspectView::Sources => self.render_sources(mode),
             InspectView::Glyphs => self.render_glyphs(mode),
+            InspectView::Layers => self.render_layers(mode),
         }
     }
 
@@ -107,6 +108,41 @@ impl InspectReport {
         align_right(&mut table, &[3]);
 
         section_with_table("Glyphs", table, mode)
+    }
+
+    fn render_layers(&self, mode: RenderMode) -> String {
+        if self.glyphs.iter().all(|glyph| glyph.layers.is_empty()) {
+            return empty_section("Layers", "No layers", mode);
+        }
+
+        let mut table = base_table();
+        table.set_header(vec![
+            header("glyph", mode),
+            header("layer", mode),
+            header("source", mode),
+            header("advance", mode),
+            header("contours", mode),
+            header("points", mode),
+            header("anchors", mode),
+            header("components", mode),
+        ]);
+        for glyph in &self.glyphs {
+            for layer in &glyph.layers {
+                table.add_row(vec![
+                    Cell::new(glyph.name.clone()),
+                    muted(compact_id(&layer.id), mode),
+                    Cell::new(source_label(layer.source_name.as_deref(), &layer.source_id)),
+                    right(format_number(layer.advance)),
+                    right(layer.contour_count),
+                    right(layer.point_count),
+                    right(layer.anchor_count),
+                    right(layer.component_count),
+                ]);
+            }
+        }
+        align_right(&mut table, &[3, 4, 5, 6, 7]);
+
+        section_with_table("Layers", table, mode)
     }
 
     fn sources_table(&self, mode: RenderMode) -> String {
@@ -253,6 +289,13 @@ fn source_name(name: &str, is_default: bool) -> String {
         format!("{name}*")
     } else {
         name.to_string()
+    }
+}
+
+fn source_label(name: Option<&str>, source_id: &str) -> String {
+    match name {
+        Some(name) => name.to_string(),
+        None => compact_id(source_id),
     }
 }
 

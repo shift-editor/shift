@@ -1,4 +1,4 @@
-import type { CommandId } from "../../shared/commands";
+import type { CommandId, RendererCommandId } from "../../shared/commands";
 import type { Window } from "../windows/Window";
 
 /**
@@ -105,6 +105,10 @@ export type CommandContext = {
      * @returns `null` when the app has not created a window or the window is gone.
      */
     active: () => Window | null;
+  };
+  renderer: {
+    /** Sends a renderer-owned command to the active workspace window. */
+    run: (id: RendererCommandId) => void;
   };
 };
 

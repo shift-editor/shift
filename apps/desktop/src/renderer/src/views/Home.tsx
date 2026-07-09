@@ -3,7 +3,7 @@ import { GlyphGrid } from "@/components/home/GlyphGrid";
 import { LeftSidebar } from "@/components/home/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
-import { GlyphCatalogProvider } from "@/context/GlyphCatalogContext";
+import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 
 export const Home = () => (
   <GlyphCatalogProvider>
