@@ -258,7 +258,18 @@ export class App {
     if (!openPath) return;
 
     const session = await this.#workspaces.openPath(openPath);
+    if (this.#focusExistingWorkspaceWindow(opener, session)) return;
+
     this.#openWorkspaceWindow(opener, session);
+  }
+
+  #focusExistingWorkspaceWindow(opener: Window, session: WorkspaceSession): boolean {
+    const existingWindow = session.activeWindow();
+    if (!existingWindow) return false;
+
+    existingWindow.focus();
+    if (this.#workspaces.getForBrowserWindow(opener.window) === null) opener.close();
+    return true;
   }
 
   #openWorkspaceWindow(opener: Window, session: WorkspaceSession): void {
