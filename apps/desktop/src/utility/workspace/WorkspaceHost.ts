@@ -1,5 +1,4 @@
 import { createBridge, type ShiftBridge } from "@shift/bridge";
-import fs from "node:fs";
 import path from "node:path";
 import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
 import type {
@@ -14,12 +13,8 @@ import type {
   WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
 import { DocumentStorage } from "./DocumentStorage";
-import type {
-  DocumentAllocation,
-  PackageAddress,
-  PackageBinding,
-  PackageOpenTransition,
-} from "./types";
+import { PackageOpener } from "./PackageOpener";
+import { PackageAddress, type DocumentAllocation } from "./types";
 
 /**
  * Construction options for {@link WorkspaceHost}.
@@ -48,6 +43,7 @@ export type WorkspaceHostOptions = {
 export class WorkspaceHost {
   readonly #bridge: ShiftBridge;
   readonly #documents: DocumentStorage;
+  readonly #packageOpener: PackageOpener;
   readonly #shellTransport: Transport;
   readonly #syncTransport: (port: unknown) => Transport;
   #shell: ChannelServer<ShellEventMap> | null = null;
@@ -59,6 +55,7 @@ export class WorkspaceHost {
   constructor(options: WorkspaceHostOptions) {
     this.#bridge = createBridge();
     this.#documents = new DocumentStorage(options.documentsRoot);
+    this.#packageOpener = new PackageOpener(this.#bridge, this.#documents);
     this.#shellTransport = options.shell;
     this.#syncTransport = options.syncTransport;
   }
@@ -165,132 +162,10 @@ export class WorkspaceHost {
 
   #openPackage(sourcePath: string): WorkspaceDocumentState {
     const identity = this.#inspectPackage(sourcePath);
-    const transition = this.#packageOpenTransition(identity);
+    const opened = this.#packageOpener.open(identity);
 
-    switch (transition.kind) {
-      case "hydrateFresh":
-        this.#hydrateFreshPackage(transition.identity);
-        break;
-      case "resumeExact":
-        this.#resumePackageBinding(transition.identity, transition.binding);
-        break;
-      case "replaceClean":
-        this.#replaceCleanPackageBinding(transition.identity, transition.binding);
-        break;
-      case "orphanDiverged":
-        this.#orphanDivergedPackageBinding(transition.identity, transition.binding);
-        break;
-      case "resumeMoved":
-        this.#resumeMovedPackageBinding(transition.identity, transition.binding);
-        break;
-      default:
-        assertNever(transition);
-    }
-
+    this.#adoptDocument(opened.document, opened.address);
     return this.#emitDocumentChanged();
-  }
-
-  #packageOpenTransition(identity: WorkspacePackageIdentity): PackageOpenTransition {
-    const address = packageAddress(identity);
-    const binding = this.#documents.packageBinding(address);
-    if (!binding) {
-      const moved = this.#movedPackageBinding(identity);
-      return moved
-        ? { kind: "resumeMoved", identity, binding: moved }
-        : { kind: "hydrateFresh", identity };
-    }
-
-    const draft = this.#bridge.inspectPackageDraft(binding.storePath);
-    if (draft.packageId !== identity.packageId) {
-      throw new Error(
-        `package binding ${binding.documentId} points at ${draft.packageId}, expected ${identity.packageId}`,
-      );
-    }
-
-    if (!draft.dirty) return { kind: "replaceClean", identity, binding };
-    if (draft.baseFingerprint === identity.fingerprint) {
-      return { kind: "resumeExact", identity, binding };
-    }
-
-    return { kind: "orphanDiverged", identity, binding };
-  }
-
-  #movedPackageBinding(identity: WorkspacePackageIdentity): PackageBinding | null {
-    const candidates: PackageBinding[] = [];
-
-    for (const binding of this.#documents.listPackageBindings(identity.packageId)) {
-      if (binding.canonicalPath === identity.canonicalPath) continue;
-      if (pathExists(binding.canonicalPath)) continue;
-
-      const draft = this.#inspectPackageDraftOrNull(binding);
-      if (!draft?.dirty) continue;
-      if (draft.packageId !== identity.packageId) continue;
-      if (draft.baseFingerprint !== identity.fingerprint) continue;
-
-      candidates.push(binding);
-    }
-
-    return candidates.length === 1 ? candidates[0] : null;
-  }
-
-  #inspectPackageDraftOrNull(
-    binding: PackageBinding,
-  ): ReturnType<ShiftBridge["inspectPackageDraft"]> | null {
-    try {
-      return this.#bridge.inspectPackageDraft(binding.storePath);
-    } catch {
-      return null;
-    }
-  }
-
-  #hydrateFreshPackage(identity: WorkspacePackageIdentity): void {
-    const document = this.#createPackageDocument(identity);
-    this.#adoptDocument(document, packageAddress(identity));
-  }
-
-  #replaceCleanPackageBinding(identity: WorkspacePackageIdentity, binding: PackageBinding): void {
-    const document = this.#createPackageDocument(identity);
-    this.#documents.writePackageBinding(packageAddress(identity), document.documentId);
-    this.#documents.deleteDocument(binding.documentId);
-    this.#adoptDocument(document, packageAddress(identity));
-  }
-
-  #orphanDivergedPackageBinding(identity: WorkspacePackageIdentity, binding: PackageBinding): void {
-    const document = this.#createPackageDocument(identity);
-    this.#documents.writePackageBinding(packageAddress(identity), document.documentId);
-    this.#documents.orphanDocument(binding, "source-diverged");
-    this.#adoptDocument(document, packageAddress(identity));
-  }
-
-  #resumePackageBinding(identity: WorkspacePackageIdentity, binding: PackageBinding): void {
-    this.#bridge.resumeWorkspaceForSource(binding.storePath, identity.canonicalPath);
-    this.#bridge.setDocumentId(binding.documentId);
-    this.#adoptDocument(binding, packageAddress(identity));
-  }
-
-  #resumeMovedPackageBinding(identity: WorkspacePackageIdentity, binding: PackageBinding): void {
-    this.#bridge.resumeWorkspaceForSource(binding.storePath, identity.canonicalPath);
-    this.#bridge.setDocumentId(binding.documentId);
-    this.#documents.writePackageBinding(packageAddress(identity), binding.documentId);
-    this.#documents.removePackageBinding({
-      packageId: binding.packageId,
-      canonicalPath: binding.canonicalPath,
-    });
-    this.#adoptDocument(binding, packageAddress(identity));
-  }
-
-  #createPackageDocument(identity: WorkspacePackageIdentity): DocumentAllocation {
-    const document = this.#documents.createDocument();
-
-    try {
-      this.#bridge.openWorkspace(identity.canonicalPath, document.storePath);
-      this.#bridge.setDocumentId(document.documentId);
-      this.#documents.writePackageBinding(packageAddress(identity), document.documentId);
-      return document;
-    } catch (error) {
-      this.#documents.deleteDocument(document.documentId);
-      throw error;
-    }
   }
 
   #adoptDocument(document: DocumentAllocation, address: PackageAddress | null): void {
@@ -308,11 +183,11 @@ export class WorkspaceHost {
 
     this.#bridge.saveWorkspaceAs(savePath);
     const identity = this.#inspectPackage(savePath);
-    const newAddress = packageAddress(identity);
+    const newAddress = PackageAddress.fromIdentity(identity);
     const documentId = this.#requireDocumentId();
 
     this.#documents.writePackageBinding(newAddress, documentId);
-    if (oldAddress && !samePackageAddress(oldAddress, newAddress)) {
+    if (oldAddress && !PackageAddress.equals(oldAddress, newAddress)) {
       this.#documents.removePackageBinding(oldAddress);
     }
     this.#packageAddress = newAddress;
@@ -397,23 +272,4 @@ function parseDocumentSourceKind(sourceKind: string): WorkspaceDocumentSourceKin
 
 function isShiftPackagePath(sourcePath: string): boolean {
   return path.extname(sourcePath).toLowerCase() === ".shift";
-}
-
-function packageAddress(identity: WorkspacePackageIdentity): PackageAddress {
-  return {
-    packageId: identity.packageId,
-    canonicalPath: identity.canonicalPath,
-  };
-}
-
-function samePackageAddress(left: PackageAddress, right: PackageAddress): boolean {
-  return left.packageId === right.packageId && left.canonicalPath === right.canonicalPath;
-}
-
-function pathExists(sourcePath: string): boolean {
-  return fs.existsSync(sourcePath);
-}
-
-function assertNever(value: never): never {
-  throw new Error(`unknown package open transition: ${JSON.stringify(value)}`);
 }

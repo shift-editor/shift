@@ -1,7 +1,18 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import type { DocumentAllocation, OrphanedDocument, PackageAddress, PackageBinding } from "./types";
+
+const packageBindingSchema = z
+  .object({
+    packageId: z.string(),
+    canonicalPath: z.string(),
+    documentId: z.string(),
+    storePath: z.string(),
+    updatedAt: z.string(),
+  })
+  .strict();
 
 /**
  * Owns utility-process document allocations and package bindings.
@@ -153,20 +164,19 @@ function readPackageBinding(bindingPath: string): PackageBinding {
 }
 
 function parsePackageBinding(value: unknown, bindingPath: string): PackageBinding {
-  if (!isRecord(value)) throw new Error(`invalid package binding: ${bindingPath}`);
+  const result = packageBindingSchema.safeParse(value);
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => {
+        const path = issue.path.join(".");
+        return path ? `${path}: ${issue.message}` : issue.message;
+      })
+      .join("; ");
 
-  const { packageId, canonicalPath, documentId, storePath, updatedAt } = value;
-  if (
-    typeof packageId !== "string" ||
-    typeof canonicalPath !== "string" ||
-    typeof documentId !== "string" ||
-    typeof storePath !== "string" ||
-    typeof updatedAt !== "string"
-  ) {
-    throw new Error(`invalid package binding: ${bindingPath}`);
+    throw new Error(`invalid package binding: ${bindingPath}: ${details}`);
   }
 
-  return { packageId, canonicalPath, documentId, storePath, updatedAt };
+  return result.data;
 }
 
 function writeJsonAtomic(targetPath: string, value: unknown): void {
@@ -186,8 +196,4 @@ function assertSafeSegment(label: string, value: string): void {
   if (/^[A-Za-z0-9._-]+$/.test(value) && value !== "." && value !== "..") return;
 
   throw new Error(`invalid ${label}: ${value}`);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

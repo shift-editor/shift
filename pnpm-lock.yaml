@@ -114,6 +114,9 @@ importers:
       throttle-debounce:
         specifier: ^5.0.2
         version: 5.0.2
+      zod:
+        specifier: ^4.1.12
+        version: 4.3.6
       zustand:
         specifier: ^5.0.6
         version: 5.0.6(@types/react@19.1.8)(react@19.1.0)(use-sync-external-store@1.6.0(react@19.1.0))

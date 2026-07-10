@@ -75,6 +75,7 @@
     "shift-bridge": "workspace:*",
     "tailwind-merge": "^3.3.1",
     "throttle-debounce": "^5.0.2",
-    "zustand": "^5.0.6"
+    "zustand": "^5.0.6",
+    "zod": "^4.1.12"
   }
 }
