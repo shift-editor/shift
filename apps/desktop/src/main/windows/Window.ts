@@ -84,6 +84,15 @@ export class Window {
     this.#window.close();
   }
 
+  focus(): void {
+    if (this.#window.isMinimized()) {
+      this.#window.restore();
+    }
+
+    this.#window.show();
+    this.#window.focus();
+  }
+
   /** Updates the native window title shown by the operating system. */
   setTitle(title: string): void {
     this.#window.setTitle(title);

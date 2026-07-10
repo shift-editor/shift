@@ -21,10 +21,12 @@ export interface BridgeApi {
   createUntitledWorkspace(storePath: string, options?: NewWorkspace | undefined | null): void
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
   documentState(): DocumentState
+  inspectPackage(path: string): PackageIdentity
+  inspectPackageDraft(storePath: string): PackageDraft
+  closeWorkspace(): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
   setDocumentId(documentId: string): DocumentState
-  findRecoverableWorkspace(sourcePath: string, candidates: Array<WorkspaceRecoveryCandidate>): WorkspaceRecoveryMatch | null
   saveWorkspace(): DocumentState
   saveWorkspaceAs(path: string): DocumentState
   getMetadata(): FontMetadata
@@ -76,16 +78,18 @@ export interface NewWorkspace {
   unitsPerEm?: number
 }
 
-export interface WorkspaceRecoveryCandidate {
-  documentId: string
-  storePath: string
+export interface PackageDraft {
+  documentId?: string
+  packageId: string
+  sourcePath: string
+  baseFingerprint: string
+  dirty: boolean
 }
 
-export interface WorkspaceRecoveryMatch {
-  documentId: string
-  storePath: string
-  matchKind: string
-  dirty: boolean
+export interface PackageIdentity {
+  packageId: string
+  canonicalPath: string
+  fingerprint: string
 }
 export interface AddAnchorsIntent {
   layerId: LayerId

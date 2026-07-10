@@ -1,9 +1,14 @@
 import { BrowserWindow, type WebContents } from "electron";
+import path from "node:path";
 import { DocumentClient } from "../document/DocumentClient";
 import type { Window } from "../windows/Window";
-import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import type {
+  WorkspaceDocumentState,
+  WorkspacePackageIdentity,
+} from "../../shared/workspace/protocol";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 import { type WorkspaceId, WorkspaceSession } from "./WorkspaceSession";
+import { PackageSessionIndex } from "./PackageSessionIndex";
 
 /** Provides app-owned values required when a workspace session is created. */
 export interface WorkspaceManagerOptions {
@@ -25,6 +30,7 @@ export class WorkspaceManager {
   readonly #applicationName: () => string;
   readonly #sessionsById = new Map<WorkspaceId, WorkspaceSession>();
   readonly #sessionIdByWindowId = new Map<number, WorkspaceId>();
+  readonly #packageSessions = new PackageSessionIndex();
 
   /**
    * Creates a manager for live font workspace sessions.
@@ -52,7 +58,34 @@ export class WorkspaceManager {
    * @returns a live session for the opened source; existing sessions are reused by workspace id.
    */
   async openPath(sourcePath: string): Promise<WorkspaceSession> {
-    return this.#createSession((workspaceProcess) => workspaceProcess.openWorkspace(sourcePath));
+    const workspaceProcess = new WorkspaceProcess();
+    workspaceProcess.start(this.#documentsRoot());
+
+    try {
+      await workspaceProcess.whenReady();
+
+      const identity = isShiftPackagePath(sourcePath)
+        ? await workspaceProcess.inspectPackage(sourcePath)
+        : null;
+      const existingBeforeOpen = identity ? this.#sessionForPackage(identity) : null;
+      if (existingBeforeOpen) {
+        workspaceProcess.stop();
+        return existingBeforeOpen;
+      }
+
+      const state = await workspaceProcess.openWorkspace(sourcePath);
+      const existingAfterOpen = this.#sessionForDocumentState(state);
+      if (existingAfterOpen) {
+        workspaceProcess.stop();
+        existingAfterOpen.document.acceptState(state);
+        return existingAfterOpen;
+      }
+
+      return this.#registerLoadedSession(workspaceProcess, state);
+    } catch (error) {
+      workspaceProcess.stop();
+      throw error;
+    }
   }
 
   /**
@@ -76,6 +109,7 @@ export class WorkspaceManager {
       throw new Error(`Workspace session already registered: ${session.workspaceId}`);
     }
 
+    this.#packageSessions.track(session);
     this.#sessionsById.set(session.workspaceId, session);
   }
 
@@ -91,6 +125,7 @@ export class WorkspaceManager {
     for (const window of session.windows) {
       this.#sessionIdByWindowId.delete(window.window.id);
     }
+    this.#packageSessions.untrack(workspaceId);
     this.#sessionsById.delete(workspaceId);
     session.dispose();
   }
@@ -180,19 +215,50 @@ export class WorkspaceManager {
         return existing;
       }
 
-      const session = new WorkspaceSession({
-        workspaceId: state.documentId,
-        workspaceProcess,
-        documentClient: new DocumentClient(),
-        applicationName: this.#applicationName,
-      });
-
-      session.document.acceptState(state);
-      this.register(session);
-      return session;
+      return this.#registerLoadedSession(workspaceProcess, state);
     } catch (error) {
       workspaceProcess.stop();
       throw error;
     }
   }
+
+  #registerLoadedSession(
+    workspaceProcess: WorkspaceProcess,
+    state: WorkspaceDocumentState,
+  ): WorkspaceSession {
+    const session = new WorkspaceSession({
+      workspaceId: state.documentId,
+      workspaceProcess,
+      documentClient: new DocumentClient(),
+      applicationName: this.#applicationName,
+    });
+
+    session.document.acceptState(state);
+    this.register(session);
+    try {
+      this.#packageSessions.update(session.workspaceId, state);
+    } catch (error) {
+      this.unregister(session.workspaceId);
+      throw error;
+    }
+
+    return session;
+  }
+
+  #sessionForDocumentState(state: WorkspaceDocumentState): WorkspaceSession | null {
+    const byDocumentId = this.get(state.documentId);
+    if (byDocumentId) return byDocumentId;
+
+    const workspaceId = this.#packageSessions.workspaceIdForState(state);
+    return workspaceId ? this.get(workspaceId) : null;
+  }
+
+  #sessionForPackage(identity: WorkspacePackageIdentity): WorkspaceSession | null {
+    const workspaceId = this.#packageSessions.workspaceIdForPackage(identity);
+    return workspaceId ? this.get(workspaceId) : null;
+  }
+}
+
+function isShiftPackagePath(sourcePath: string): boolean {
+  return path.extname(sourcePath).toLowerCase() === ".shift";
 }

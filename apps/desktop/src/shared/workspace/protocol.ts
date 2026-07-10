@@ -42,6 +42,13 @@ export type WorkspaceGlyphSnapshot = {
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
 
+/** Identifies one concrete `.shift` package instance on disk. */
+export type WorkspacePackageIdentity = {
+  packageId: string;
+  canonicalPath: string;
+  fingerprint: string;
+};
+
 /**
  * Main-visible document lifecycle state owned by the utility workspace.
  *
@@ -55,6 +62,8 @@ export type WorkspaceDocumentState = {
   documentId: string;
   sourceKind: WorkspaceDocumentSourceKind;
   saveTarget: string | null;
+  packageId: string | null;
+  canonicalPath: string | null;
   dirty: boolean;
   needsSaveAs: boolean;
 };
@@ -72,7 +81,9 @@ export type WorkspaceDocumentState = {
  */
 export type ShellCallMap = {
   "workspace.create": { request: void; response: WorkspaceDocumentState };
+  "workspace.inspectPackage": { request: { path: string }; response: WorkspacePackageIdentity };
   "workspace.open": { request: { path: string }; response: WorkspaceDocumentState };
+  "workspace.close": { request: { discard: boolean }; response: null };
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
 };

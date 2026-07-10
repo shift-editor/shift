@@ -30,6 +30,8 @@ pub const FONTINFO_MODULE_FILE: &str = "modules/shift.fontInfo.json";
 
 pub const FORMAT_ID: &str = "shift-source";
 pub const SCHEMA_VERSION: u32 = 1;
+const PACKAGE_ID_PREFIX: &str = "package_";
+const PACKAGE_ID_BYTES: usize = 16;
 const KERNING_SCHEMA_VERSION: u32 = 1;
 const LIB_MODULE_OWNER: &str = "shift";
 const LIB_MODULE_NAME: &str = "libData";
@@ -38,6 +40,60 @@ const FONTINFO_MODULE_NAME: &str = "fontInfo";
 const FONTINFO_MODULE_SCHEMA_VERSION: u32 = 1;
 
 pub type PackageTree = Vec<(String, Vec<u8>)>;
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PackageId(String);
+
+impl PackageId {
+    pub fn new() -> Self {
+        let mut bytes = [0; PACKAGE_ID_BYTES];
+        getrandom::fill(&mut bytes).expect("secure random package ID generation failed");
+        let suffix = bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+
+        Self(format!("{PACKAGE_ID_PREFIX}{suffix}"))
+    }
+
+    pub fn from_raw(raw: impl std::fmt::Display) -> Self {
+        let raw = raw.to_string();
+        if raw.starts_with(PACKAGE_ID_PREFIX) {
+            Self(raw)
+        } else {
+            Self(format!("{PACKAGE_ID_PREFIX}{raw}"))
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for PackageId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for PackageId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for PackageId {
+    type Err = SourcePackageError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let suffix = value.strip_prefix(PACKAGE_ID_PREFIX).unwrap_or_default();
+        if suffix.is_empty() {
+            return Err(SourcePackageError::InvalidPackageId(value.to_string()));
+        }
+
+        Ok(Self(value.to_string()))
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum SourcePackageError {
@@ -67,6 +123,9 @@ pub enum SourcePackageError {
 
     #[error("unsupported source package schema version: {0}")]
     UnsupportedSchemaVersion(u32),
+
+    #[error("invalid source package ID: {0}")]
+    InvalidPackageId(String),
 
     #[error("glyph file path {path} does not match glyph id {id}")]
     MismatchedGlyphFileId { path: String, id: String },
@@ -136,6 +195,7 @@ pub enum SourcePackageError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ShiftSourcePackage {
     path: PathBuf,
+    package_id: PackageId,
 }
 
 impl ShiftSourcePackage {
@@ -154,24 +214,47 @@ impl ShiftSourcePackage {
             return Err(SourcePackageError::AlreadyExists(path.to_path_buf()));
         }
 
-        Self::save_font(path, &Font::new())
+        Self::save_font_as(path, &Font::new())
     }
 
     pub fn save_font(path: impl AsRef<Path>, font: &Font) -> Result<Self, SourcePackageError> {
         let path = path.as_ref();
         validate_shift_extension(path)?;
-        write_tree_atomic(path, font_to_tree(font)?)?;
+        let package_id = if path.exists() {
+            Self::open(path)?.package_id
+        } else {
+            PackageId::new()
+        };
+
+        Self::write(path, package_id, font)
+    }
+
+    pub fn save_font_as(path: impl AsRef<Path>, font: &Font) -> Result<Self, SourcePackageError> {
+        let path = path.as_ref();
+        validate_shift_extension(path)?;
+
+        Self::write(path, PackageId::new(), font)
+    }
+
+    pub fn save(&self, font: &Font) -> Result<Self, SourcePackageError> {
+        Self::write(&self.path, self.package_id.clone(), font)
+    }
+
+    fn write(path: &Path, package_id: PackageId, font: &Font) -> Result<Self, SourcePackageError> {
+        write_tree_atomic(path, font_to_tree(&package_id, font)?)?;
         Ok(Self {
             path: path.to_path_buf(),
+            package_id,
         })
     }
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SourcePackageError> {
         let path = path.as_ref();
         validate_shift_extension(path)?;
-        validate_package(path)?;
+        let package_id = validate_package(path)?;
         Ok(Self {
             path: path.to_path_buf(),
+            package_id,
         })
     }
 
@@ -184,6 +267,10 @@ impl ShiftSourcePackage {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    pub fn package_id(&self) -> &PackageId {
+        &self.package_id
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -191,6 +278,7 @@ impl ShiftSourcePackage {
 struct ManifestDoc {
     format: String,
     schema_version: u32,
+    package_id: String,
     default_source_id: Option<String>,
 }
 
@@ -465,10 +553,14 @@ enum LibValueDoc {
     Uid(u64),
 }
 
-pub fn font_to_tree(font: &Font) -> Result<PackageTree, SourcePackageError> {
+pub fn font_to_tree(
+    package_id: &PackageId,
+    font: &Font,
+) -> Result<PackageTree, SourcePackageError> {
     let manifest = ManifestDoc {
         format: FORMAT_ID.to_string(),
         schema_version: SCHEMA_VERSION,
+        package_id: package_id.to_string(),
         default_source_id: font.default_source_id().map(|id| id.to_string()),
     };
 
@@ -655,10 +747,9 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     Ok(font)
 }
 
-fn validate_package(path: &Path) -> Result<(), SourcePackageError> {
+fn validate_package(path: &Path) -> Result<PackageId, SourcePackageError> {
     let mut archive = open_archive(path)?;
-    validate_archive_manifest(&mut archive)?;
-    Ok(())
+    validate_archive_manifest(&mut archive)
 }
 
 pub fn read_tree(path: impl AsRef<Path>) -> Result<PackageTree, SourcePackageError> {
@@ -730,7 +821,7 @@ fn open_archive(path: &Path) -> Result<ZipArchive<File>, SourcePackageError> {
 
 fn validate_archive_manifest<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
-) -> Result<(), SourcePackageError> {
+) -> Result<PackageId, SourcePackageError> {
     if archive.is_empty() {
         return Err(SourcePackageError::MissingEntry(MANIFEST_FILE.to_string()));
     }
@@ -750,7 +841,7 @@ fn validate_archive_manifest<R: Read + Seek>(
     validate_manifest(&manifest)
 }
 
-fn validate_manifest(manifest: &ManifestDoc) -> Result<(), SourcePackageError> {
+fn validate_manifest(manifest: &ManifestDoc) -> Result<PackageId, SourcePackageError> {
     if manifest.format != FORMAT_ID {
         return Err(SourcePackageError::UnsupportedFormat(
             manifest.format.clone(),
@@ -763,7 +854,7 @@ fn validate_manifest(manifest: &ManifestDoc) -> Result<(), SourcePackageError> {
         ));
     }
 
-    Ok(())
+    manifest.package_id.parse()
 }
 
 /// Extracts the path relative to `dir` for binary package entries, rejecting

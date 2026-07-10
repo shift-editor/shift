@@ -9,9 +9,12 @@ import type {
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
   WorkspaceGlyphSnapshot,
+  WorkspacePackageIdentity,
   WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
 import { DocumentStorage } from "./DocumentStorage";
+import { PackageOpener } from "./PackageOpener";
+import { PackageAddress, type DocumentAllocation } from "./types";
 
 /**
  * Construction options for {@link WorkspaceHost}.
@@ -40,16 +43,19 @@ export type WorkspaceHostOptions = {
 export class WorkspaceHost {
   readonly #bridge: ShiftBridge;
   readonly #documents: DocumentStorage;
+  readonly #packageOpener: PackageOpener;
   readonly #shellTransport: Transport;
   readonly #syncTransport: (port: unknown) => Transport;
   #shell: ChannelServer<ShellEventMap> | null = null;
   #sync: ChannelServer<SyncEventMap> | null = null;
   #documentId: string | null = null;
+  #packageAddress: PackageAddress | null = null;
   #operations: Promise<void> = Promise.resolve();
 
   constructor(options: WorkspaceHostOptions) {
     this.#bridge = createBridge();
     this.#documents = new DocumentStorage(options.documentsRoot);
+    this.#packageOpener = new PackageOpener(this.#bridge, this.#documents);
     this.#shellTransport = options.shell;
     this.#syncTransport = options.syncTransport;
   }
@@ -58,7 +64,9 @@ export class WorkspaceHost {
   start(): void {
     this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
       "workspace.create": () => this.#serialize(() => this.#create()),
+      "workspace.inspectPackage": ({ path }) => this.#serialize(() => this.#inspectPackage(path)),
       "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
+      "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);
       },
@@ -108,13 +116,23 @@ export class WorkspaceHost {
   }
 
   #create(): WorkspaceDocumentState {
-    const draft = this.#documents.createDraft();
+    const document = this.#documents.createDocument();
 
-    this.#bridge.createUntitledWorkspace(draft.storePath);
-    this.#bridge.setDocumentId(draft.documentId);
-    this.#documentId = draft.documentId;
+    this.#bridge.createUntitledWorkspace(document.storePath);
+    this.#bridge.setDocumentId(document.documentId);
+    this.#documentId = document.documentId;
+    this.#packageAddress = null;
 
     return this.#emitDocumentChanged();
+  }
+
+  #inspectPackage(path: string): WorkspacePackageIdentity {
+    const identity = this.#bridge.inspectPackage(path);
+    return {
+      packageId: identity.packageId,
+      canonicalPath: identity.canonicalPath,
+      fingerprint: identity.fingerprint,
+    };
   }
 
   #snapshot(documentId: string): WorkspaceSnapshot {
@@ -128,22 +146,31 @@ export class WorkspaceHost {
     };
   }
 
-  #open(path: string): WorkspaceDocumentState {
-    const recovery = isShiftPackagePath(path)
-      ? this.#bridge.findRecoverableWorkspace(path, this.#documents.listDrafts())
-      : null;
-    const document = recovery ?? this.#documents.createDraft();
-
-    if (recovery) {
-      this.#bridge.resumeWorkspaceForSource(recovery.storePath, path);
-    } else {
-      this.#bridge.openWorkspace(path, document.storePath);
+  #open(sourcePath: string): WorkspaceDocumentState {
+    if (isShiftPackagePath(sourcePath)) {
+      return this.#openPackage(sourcePath);
     }
 
+    const document = this.#documents.createDocument();
+    this.#bridge.openWorkspace(sourcePath, document.storePath);
     this.#bridge.setDocumentId(document.documentId);
     this.#documentId = document.documentId;
+    this.#packageAddress = null;
 
     return this.#emitDocumentChanged();
+  }
+
+  #openPackage(sourcePath: string): WorkspaceDocumentState {
+    const identity = this.#inspectPackage(sourcePath);
+    const opened = this.#packageOpener.open(identity);
+
+    this.#adoptDocument(opened.document, opened.address);
+    return this.#emitDocumentChanged();
+  }
+
+  #adoptDocument(document: DocumentAllocation, address: PackageAddress | null): void {
+    this.#documentId = document.documentId;
+    this.#packageAddress = address;
   }
 
   #save(): WorkspaceDocumentState {
@@ -151,19 +178,56 @@ export class WorkspaceHost {
     return this.#emitDocumentChanged();
   }
 
-  #saveAs(path: string): WorkspaceDocumentState {
-    this.#bridge.saveWorkspaceAs(path);
+  #saveAs(savePath: string): WorkspaceDocumentState {
+    const oldAddress = this.#packageAddress;
+
+    this.#bridge.saveWorkspaceAs(savePath);
+    const identity = this.#inspectPackage(savePath);
+    const newAddress = PackageAddress.fromIdentity(identity);
+    const documentId = this.#requireDocumentId();
+
+    this.#documents.writePackageBinding(newAddress, documentId);
+    if (oldAddress && !PackageAddress.equals(oldAddress, newAddress)) {
+      this.#documents.removePackageBinding(oldAddress);
+    }
+    this.#packageAddress = newAddress;
+
     return this.#emitDocumentChanged();
+  }
+
+  #close(discard: boolean): null {
+    const state = this.#documentState();
+    if (!state) return null;
+    if (state.dirty && !discard) {
+      throw new Error("cannot close a dirty workspace without discard");
+    }
+
+    const documentId = state.documentId;
+    const address = this.#packageAddress;
+
+    this.#bridge.closeWorkspace();
+    this.#documentId = null;
+    this.#packageAddress = null;
+
+    if (address) this.#documents.removePackageBinding(address);
+    this.#documents.deleteDocument(documentId);
+    this.#shell?.emit("document.changed", null);
+    this.#sync?.emit("document.changed", null);
+
+    return null;
   }
 
   #documentState(): WorkspaceDocumentState | null {
     if (this.#documentId === null) return null;
     const state = this.#bridge.documentState();
+    const address = this.#packageAddress;
 
     return {
       documentId: this.#documentId,
       sourceKind: parseDocumentSourceKind(state.sourceKind),
       saveTarget: state.saveTarget ?? null,
+      packageId: address?.packageId ?? null,
+      canonicalPath: address?.canonicalPath ?? null,
       dirty: state.dirty,
       needsSaveAs: state.needsSaveAs,
     };
@@ -187,6 +251,14 @@ export class WorkspaceHost {
       () => undefined,
     );
     return run;
+  }
+
+  #requireDocumentId(): string {
+    if (this.#documentId === null) {
+      throw new Error("no workspace is open");
+    }
+
+    return this.#documentId;
   }
 }
 

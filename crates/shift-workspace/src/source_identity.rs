@@ -5,67 +5,25 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use shift_store::{
-    Evidence, FileIdentity, ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind,
-};
+use shift_source::ShiftSourcePackage;
+use shift_store::{FileIdentity, SourceIdentitySnapshot};
 
 use crate::WorkspaceError;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub enum SourceMatchKind {
-    PossiblePackageMove,
-    SamePath,
-    SamePathAndFingerprint,
-    SameFileMoved,
-    SamePathAndFile,
-}
-
-impl SourceMatchKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::SamePathAndFile => "samePathAndFile",
-            Self::SamePathAndFingerprint => "samePathAndFingerprint",
-            Self::SameFileMoved => "sameFileMoved",
-            Self::SamePath => "samePath",
-            Self::PossiblePackageMove => "possiblePackageMove",
-        }
-    }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackageIdentity {
+    pub package_id: String,
+    pub canonical_path: PathBuf,
+    pub fingerprint: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WorkspaceRecoveryCandidate {
-    pub document_id: String,
-    pub store_path: PathBuf,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WorkspaceRecoveryMatch {
-    pub document_id: String,
-    pub store_path: PathBuf,
-    pub match_kind: SourceMatchKind,
+pub struct PackageDraft {
+    pub document_id: Option<String>,
+    pub package_id: String,
+    pub source_path: PathBuf,
+    pub base_fingerprint: String,
     pub dirty: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum RecoverySelection {
-    None,
-    One(WorkspaceRecoveryMatch),
-    Ambiguous(Vec<WorkspaceRecoveryMatch>),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-struct RecoveryRank {
-    dirty: bool,
-    match_kind: SourceMatchKind,
-}
-
-impl RecoveryRank {
-    fn new(recovery_match: &WorkspaceRecoveryMatch) -> Self {
-        Self {
-            dirty: recovery_match.dirty,
-            match_kind: recovery_match.match_kind,
-        }
-    }
 }
 
 pub(crate) fn source_identity_snapshot(
@@ -84,15 +42,35 @@ pub(crate) fn source_identity_snapshot(
     let source_size = Some(metadata.len());
     let source_mtime_ms = metadata.modified().ok().map(system_time_ms);
     let source_fingerprint = Some(file_fingerprint(path)?);
+    let source_package_id = Some(ShiftSourcePackage::open(path)?.package_id().to_string());
 
     Ok(SourceIdentitySnapshot {
         source_path: Some(path.to_path_buf()),
         canonical_source_path,
-        source_package_id: None,
+        source_package_id,
         source_file_identity,
         source_size,
         source_mtime_ms,
         source_fingerprint,
+    })
+}
+
+pub(crate) fn package_identity(path: impl AsRef<Path>) -> Result<PackageIdentity, WorkspaceError> {
+    let snapshot = source_identity_snapshot(path)?;
+    let package_id = snapshot.source_package_id.ok_or_else(|| {
+        WorkspaceError::CorruptWorkingStore("package identity missing package ID".into())
+    })?;
+    let canonical_path = snapshot.canonical_source_path.ok_or_else(|| {
+        WorkspaceError::CorruptWorkingStore("package identity missing canonical path".into())
+    })?;
+    let fingerprint = snapshot.source_fingerprint.ok_or_else(|| {
+        WorkspaceError::CorruptWorkingStore("package identity missing fingerprint".into())
+    })?;
+
+    Ok(PackageIdentity {
+        package_id,
+        canonical_path,
+        fingerprint,
     })
 }
 
@@ -112,99 +90,6 @@ pub(crate) fn validate_source_identity_for_save(
     }
 
     Ok(())
-}
-
-pub(crate) fn select_recoverable_package_workspace(
-    source_path: impl AsRef<Path>,
-    candidates: &[WorkspaceRecoveryCandidate],
-) -> Result<RecoverySelection, WorkspaceError> {
-    let requested = source_identity_snapshot(source_path)?;
-    let mut best_rank: Option<RecoveryRank> = None;
-    let mut best_matches: Vec<WorkspaceRecoveryMatch> = Vec::new();
-
-    for candidate in candidates {
-        let Ok(store) = ShiftStore::open(&candidate.store_path) else {
-            // Retained draft directories are a recovery cache. A corrupt or
-            // temporarily locked DB must not block opening the requested source.
-            continue;
-        };
-        let Ok(Some(state)) = store.workspace_state() else {
-            // Older or broken draft DBs may not carry workspace metadata yet.
-            // Ignore them here; explicit recovery UI can surface them later.
-            continue;
-        };
-        if state.source_kind != WorkspaceSourceKind::Package {
-            // Untitled/imported drafts are recoverable, but not by opening a
-            // package source path. Keep this selector package-only.
-            continue;
-        }
-        if !state.dirty && state.source_identity().fingerprint_changed_from(&requested) {
-            // A clean DB is just a cache of the source package. If the package
-            // changed on disk, hydrate fresh from the package instead.
-            continue;
-        }
-        let Some(match_kind) = classify_source_match(&state.source_identity(), &requested) else {
-            continue;
-        };
-
-        let candidate_match = WorkspaceRecoveryMatch {
-            document_id: candidate.document_id.clone(),
-            store_path: candidate.store_path.clone(),
-            match_kind,
-            dirty: state.dirty,
-        };
-        keep_best_recovery_match(candidate_match, &mut best_rank, &mut best_matches);
-    }
-
-    Ok(match best_matches.len() {
-        0 => RecoverySelection::None,
-        1 => RecoverySelection::One(best_matches.remove(0)),
-        _ => RecoverySelection::Ambiguous(best_matches),
-    })
-}
-
-fn keep_best_recovery_match(
-    candidate: WorkspaceRecoveryMatch,
-    best_rank: &mut Option<RecoveryRank>,
-    best_matches: &mut Vec<WorkspaceRecoveryMatch>,
-) {
-    let candidate_rank = RecoveryRank::new(&candidate);
-    match best_rank {
-        None => {
-            *best_rank = Some(candidate_rank);
-            best_matches.push(candidate);
-        }
-        Some(current_rank) if candidate_rank > *current_rank => {
-            *best_rank = Some(candidate_rank);
-            best_matches.clear();
-            best_matches.push(candidate);
-        }
-        Some(current_rank) if candidate_rank == *current_rank => {
-            best_matches.push(candidate);
-        }
-        Some(_) => {}
-    }
-}
-
-fn classify_source_match(
-    stored: &SourceIdentitySnapshot,
-    requested: &SourceIdentitySnapshot,
-) -> Option<SourceMatchKind> {
-    let same_path = stored.same_path_as(requested);
-    let file_identity = stored.file_identity_match(requested);
-    let fingerprint = stored.fingerprint_match(requested);
-    let package_id = stored.package_id_match(requested);
-
-    match (same_path, file_identity, fingerprint, package_id) {
-        (true, Evidence::Same, _, _) => Some(SourceMatchKind::SamePathAndFile),
-        (_, Evidence::Same, _, _) => Some(SourceMatchKind::SameFileMoved),
-        (true, _, Evidence::Same, _) => Some(SourceMatchKind::SamePathAndFingerprint),
-        (true, Evidence::Unknown, Evidence::Unknown, _) => Some(SourceMatchKind::SamePath),
-        (_, _, Evidence::Same, _) | (_, _, _, Evidence::Same) if stored.source_path_missing() => {
-            Some(SourceMatchKind::PossiblePackageMove)
-        }
-        _ => None,
-    }
 }
 
 fn file_fingerprint(path: &Path) -> Result<String, WorkspaceError> {

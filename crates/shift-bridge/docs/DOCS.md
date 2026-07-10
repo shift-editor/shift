@@ -14,6 +14,8 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Export uses a clone/COW `FontSaveSnapshot` of the current workspace font. **WHY:** Async export can run from a stable view without coupling output generation to renderer focus state.
 
+**Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
+
 ## Codemap
 
 ```
@@ -31,10 +33,11 @@ crates/shift-bridge/
 - `Bridge` -- the exported `#[napi]` class holding the current `FontWorkspace` and document versions.
 - `LayerId` -- mutation-side identity for the glyph layer being edited.
 - `FontSaveSnapshot` -- clone/COW export view of the current workspace font.
+- `NapiPackageIdentity` / `NapiPackageDraft` -- package source and working-store inspection DTOs for utility-process lifecycle decisions.
 - `ExportFontTask` -- NAPI `Task` implementation for async font export.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
-- `GlyphStructureChange` / `GlyphValueChange` -- canonical wire DTOs returned by mutations.
-- `NapiGlyphStructureChange` / `NapiGlyphValueChange` -- NAPI adapters for those DTOs.
+- `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
+- `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
 
 ## How it works
 
@@ -43,7 +46,9 @@ crates/shift-bridge/
 3. `Bridge` parses boundary strings and asks `FontWorkspace` to run the edit against that layer.
 4. The bridge returns a `shift-wire` change DTO and bumps the live version.
 5. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
-6. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
+6. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
+7. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
+8. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
 
 ## Type Boundary
 
