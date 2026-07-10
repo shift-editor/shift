@@ -8,6 +8,7 @@ import type {
 } from "../../shared/workspace/protocol";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 import { type WorkspaceId, WorkspaceSession } from "./WorkspaceSession";
+import { PackageSessionIndex } from "./PackageSessionIndex";
 
 /** Provides app-owned values required when a workspace session is created. */
 export interface WorkspaceManagerOptions {
@@ -29,9 +30,7 @@ export class WorkspaceManager {
   readonly #applicationName: () => string;
   readonly #sessionsById = new Map<WorkspaceId, WorkspaceSession>();
   readonly #sessionIdByWindowId = new Map<number, WorkspaceId>();
-  readonly #sessionIdByPackageKey = new Map<string, WorkspaceId>();
-  readonly #packageKeyBySessionId = new Map<WorkspaceId, string>();
-  readonly #unlistenPackageIndexBySessionId = new Map<WorkspaceId, () => void>();
+  readonly #packageSessions = new PackageSessionIndex();
 
   /**
    * Creates a manager for live font workspace sessions.
@@ -111,12 +110,7 @@ export class WorkspaceManager {
     }
 
     this.#sessionsById.set(session.workspaceId, session);
-    this.#unlistenPackageIndexBySessionId.set(
-      session.workspaceId,
-      session.workspaceProcess.onDocumentChanged((state) => {
-        this.#indexPackageSession(session.workspaceId, state);
-      }),
-    );
+    this.#packageSessions.track(session);
   }
 
   /**
@@ -131,10 +125,7 @@ export class WorkspaceManager {
     for (const window of session.windows) {
       this.#sessionIdByWindowId.delete(window.window.id);
     }
-    this.#removePackageIndex(workspaceId);
-    const unlistenPackageIndex = this.#unlistenPackageIndexBySessionId.get(workspaceId);
-    if (unlistenPackageIndex) unlistenPackageIndex();
-    this.#unlistenPackageIndexBySessionId.delete(workspaceId);
+    this.#packageSessions.untrack(workspaceId);
     this.#sessionsById.delete(workspaceId);
     session.dispose();
   }
@@ -244,60 +235,22 @@ export class WorkspaceManager {
 
     session.document.acceptState(state);
     this.register(session);
-    this.#indexPackageSession(session.workspaceId, state);
+    this.#packageSessions.update(session.workspaceId, state);
     return session;
   }
 
   #sessionForDocumentState(state: WorkspaceDocumentState): WorkspaceSession | null {
     const byDocumentId = this.get(state.documentId);
     if (byDocumentId) return byDocumentId;
-    if (!state.packageId || !state.canonicalPath) return null;
 
-    return this.#sessionForPackage({
-      packageId: state.packageId,
-      canonicalPath: state.canonicalPath,
-      fingerprint: "",
-    });
-  }
-
-  #sessionForPackage(identity: WorkspacePackageIdentity): WorkspaceSession | null {
-    const workspaceId = this.#sessionIdByPackageKey.get(packageKey(identity));
+    const workspaceId = this.#packageSessions.workspaceIdForState(state);
     return workspaceId ? this.get(workspaceId) : null;
   }
 
-  #indexPackageSession(workspaceId: WorkspaceId, state: WorkspaceDocumentState | null): void {
-    this.#removePackageIndex(workspaceId);
-    if (!state?.packageId || !state.canonicalPath) return;
-
-    const key = packageKey({
-      packageId: state.packageId,
-      canonicalPath: state.canonicalPath,
-      fingerprint: "",
-    });
-    const existing = this.#sessionIdByPackageKey.get(key);
-    if (existing && existing !== workspaceId) {
-      throw new Error(`Package session already registered: ${state.packageId}`);
-    }
-
-    this.#sessionIdByPackageKey.set(key, workspaceId);
-    this.#packageKeyBySessionId.set(workspaceId, key);
+  #sessionForPackage(identity: WorkspacePackageIdentity): WorkspaceSession | null {
+    const workspaceId = this.#packageSessions.workspaceIdForPackage(identity);
+    return workspaceId ? this.get(workspaceId) : null;
   }
-
-  #removePackageIndex(workspaceId: WorkspaceId): void {
-    const previousKey = this.#packageKeyBySessionId.get(workspaceId);
-    if (!previousKey) return;
-
-    if (this.#sessionIdByPackageKey.get(previousKey) === workspaceId) {
-      this.#sessionIdByPackageKey.delete(previousKey);
-    }
-    this.#packageKeyBySessionId.delete(workspaceId);
-  }
-}
-
-function packageKey(
-  identity: Pick<WorkspacePackageIdentity, "packageId" | "canonicalPath">,
-): string {
-  return `${identity.packageId}\0${identity.canonicalPath}`;
 }
 
 function isShiftPackagePath(sourcePath: string): boolean {
