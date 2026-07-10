@@ -43,6 +43,7 @@ export class WorkspaceSession {
   readonly windows = new Set<Window>();
 
   readonly #unlistenDocumentChanged: () => void;
+  readonly #unlistenWorkspaceExit: () => void;
 
   /**
    * Creates a session around the services for one loaded font workspace.
@@ -64,6 +65,9 @@ export class WorkspaceSession {
     });
     this.#unlistenDocumentChanged = this.workspaceProcess.onDocumentChanged((state) => {
       this.document.acceptState(state);
+    });
+    this.#unlistenWorkspaceExit = this.workspaceProcess.onExit(() => {
+      this.documentClient.dispose();
     });
   }
 
@@ -113,6 +117,7 @@ export class WorkspaceSession {
   /** Disposes process and renderer-facing document resources for this workspace. */
   dispose(): void {
     this.#unlistenDocumentChanged();
+    this.#unlistenWorkspaceExit();
     this.documentClient.dispose();
     this.workspaceProcess.stop();
     this.windows.clear();

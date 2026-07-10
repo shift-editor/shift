@@ -70,6 +70,8 @@ Save and Save As start in `DocumentSession`, but the actual save request goes th
 
 Close and quit call `DocumentSession.confirmClose`. If the document is clean, or the user saves successfully, or the user chooses discard, `DocumentSession` calls `workspace.close` in the utility process. The utility drops the Rust workspace handle, removes package bindings, and deletes the clean/discarded SQLite document. Dirty divergent documents created by package-source conflicts are orphaned by the utility process, not by main.
 
+Message lanes reject in-flight calls when their remote port closes. An unexpected utility-process exit also disconnects the renderer document lane, so close and quit guards fail instead of remaining pending indefinitely.
+
 ### IPC
 
 Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, document-lane port transfer, and workspace sync-lane port transfer. Font data stays on the workspace sync lane between renderer and utility.

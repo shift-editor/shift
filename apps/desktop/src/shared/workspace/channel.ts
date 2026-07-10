@@ -15,6 +15,7 @@ export type TransportMessage = { data: unknown; ports: readonly unknown[] };
 export type Transport = {
   post(message: unknown, transfer?: unknown[]): void;
   onMessage(listener: (message: TransportMessage) => void): void;
+  onClose(listener: () => void): void;
   close(): void;
 };
 
@@ -54,6 +55,8 @@ type ResponseEnvelope =
 
 type EventEnvelope = { kind: "event"; type: string; payload: unknown };
 
+type CloseEnvelope = { kind: "close" };
+
 type PendingCall = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -64,7 +67,8 @@ type PendingCall = {
  *
  * @remarks
  * One `Channel` owns one transport. Disposing the channel rejects every
- * in-flight call and closes the transport; the instance is not reusable.
+ * in-flight call and closes the transport. Remote closure also rejects every
+ * in-flight call; the instance is not reusable after either transition.
  */
 export class Channel<Calls extends CallMap, Events extends EventMap> {
   readonly #transport: Transport;
@@ -72,10 +76,17 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
   readonly #listeners = new Map<string, Set<(payload: unknown) => void>>();
   #nextRequestId = 0;
   #disposed = false;
+  #closedError: Error | null = null;
 
   constructor(transport: Transport) {
     this.#transport = transport;
     transport.onMessage((message) => this.#handleMessage(message.data));
+    transport.onClose(() => this.#disconnect(new Error("channel closed"), false));
+  }
+
+  /** Returns whether this lane can no longer accept calls or events. */
+  get closed(): boolean {
+    return this.#disposed;
   }
 
   /**
@@ -84,8 +95,8 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
    * @param payload - Pass `undefined` for void requests; there are no overloads.
    * @param transfer - Ports to transfer alongside the request; they arrive in
    *   the server handler's {@link HandlerContext}.
-   * @throws {Error} when the remote handler throws or the channel is disposed
-   *   before the response arrives.
+   * @throws {Error} when the remote handler throws, or when either side closes
+   *   the channel before the response arrives.
    */
   call<T extends keyof Calls & string>(
     type: T,
@@ -93,7 +104,7 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
     transfer?: unknown[],
   ): Promise<Calls[T]["response"]> {
     if (this.#disposed) {
-      return Promise.reject(new Error("channel disposed"));
+      return Promise.reject(this.#closedError ?? new Error("channel disposed"));
     }
 
     this.#nextRequestId += 1;
@@ -129,16 +140,21 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
 
   /** Rejects all pending calls, drops listeners, and closes the transport. */
   dispose(): void {
-    this.#disposed = true;
+    this.#disconnect(new Error("channel disposed"), true);
+  }
 
-    const error = new Error("channel disposed");
+  #disconnect(error: Error, closeTransport: boolean): void {
+    if (this.#disposed) return;
+
+    this.#disposed = true;
+    this.#closedError = error;
     for (const pending of this.#pending.values()) {
       pending.reject(error);
     }
 
     this.#pending.clear();
     this.#listeners.clear();
-    this.#transport.close();
+    if (closeTransport) this.#transport.close();
   }
 
   #handleMessage(data: unknown): void {
@@ -149,6 +165,11 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
 
     if (isEventEnvelope(data)) {
       this.#dispatchEvent(data);
+      return;
+    }
+
+    if (isCloseEnvelope(data)) {
+      this.#disconnect(new Error("channel closed"), true);
     }
   }
 
@@ -187,7 +208,10 @@ export function serveChannel<Calls extends CallMap, Events extends EventMap>(
   transport: Transport,
   handlers: ChannelHandlers<Calls>,
 ): ChannelServer<Events> {
-  const respond = (response: ResponseEnvelope) => transport.post(response);
+  let closed = false;
+  const respond = (response: ResponseEnvelope) => {
+    if (!closed) transport.post(response);
+  };
 
   const dispatch = async (request: RequestEnvelope, ports: readonly unknown[]): Promise<void> => {
     const handler = handlers[request.type as keyof Calls] as
@@ -218,14 +242,29 @@ export function serveChannel<Calls extends CallMap, Events extends EventMap>(
   };
 
   transport.onMessage((message) => {
+    if (closed) return;
     if (!isRequestEnvelope(message.data)) return;
 
     void dispatch(message.data, message.ports);
   });
+  transport.onClose(() => {
+    closed = true;
+  });
 
   return {
-    emit: (type, payload) => transport.post({ kind: "event", type, payload }),
-    dispose: () => transport.close(),
+    emit: (type, payload) => {
+      if (!closed) transport.post({ kind: "event", type, payload });
+    },
+    dispose: () => {
+      if (closed) return;
+
+      closed = true;
+      try {
+        transport.post({ kind: "close" } satisfies CloseEnvelope);
+      } finally {
+        transport.close();
+      }
+    },
   };
 }
 
@@ -263,6 +302,12 @@ function isEventEnvelope(data: unknown): data is EventEnvelope {
   );
 }
 
+function isCloseEnvelope(data: unknown): data is CloseEnvelope {
+  const candidate = data as CloseEnvelope | null;
+
+  return typeof candidate === "object" && candidate !== null && candidate.kind === "close";
+}
+
 /** Wraps a DOM `MessagePort` (renderer side of the sync lane). */
 export function domPortTransport(port: MessagePort): Transport {
   return {
@@ -270,6 +315,9 @@ export function domPortTransport(port: MessagePort): Transport {
     onMessage: (listener) => {
       port.onmessage = (event) => listener({ data: event.data, ports: event.ports });
     },
+    // DOM MessagePort has no remote-close event. Ordered shutdown is delivered
+    // through the channel close envelope instead.
+    onClose: () => {},
     close: () => port.close(),
   };
 }
@@ -282,6 +330,7 @@ export function electronPortTransport(port: MessagePortMain): Transport {
       port.on("message", (event) => listener({ data: event.data, ports: event.ports }));
       port.start();
     },
+    onClose: (listener) => port.on("close", listener),
     close: () => port.close(),
   };
 }
@@ -307,6 +356,7 @@ export function parentPortTransport(): Transport {
     },
     onMessage: (listener) =>
       port.on("message", (event) => listener({ data: event.data, ports: event.ports })),
+    onClose: () => {},
     close: () => {},
   };
 }
@@ -316,6 +366,7 @@ export function utilityProcessTransport(child: UtilityProcess): Transport {
   return {
     post: (message, transfer) => child.postMessage(message, (transfer ?? []) as MessagePortMain[]),
     onMessage: (listener) => child.on("message", (data) => listener({ data, ports: [] })),
+    onClose: (listener) => child.on("exit", listener),
     close: () => {
       child.kill();
     },
@@ -331,5 +382,8 @@ export function utilityProcessTransport(child: UtilityProcess): Transport {
  * of surfacing them in `MessageEvent.ports`.
  */
 export function nodePortTransport(port: NodeMessagePort): Transport {
-  return domPortTransport(port as unknown as MessagePort);
+  return {
+    ...domPortTransport(port as unknown as MessagePort),
+    onClose: (listener) => port.on("close", listener),
+  };
 }

@@ -27,7 +27,7 @@ export class DocumentClient implements Document {
   }
 
   get connected(): boolean {
-    return this.#channel !== null;
+    return this.#channel !== null && !this.#channel.closed;
   }
 
   /** Replaces the active renderer document lane. */
