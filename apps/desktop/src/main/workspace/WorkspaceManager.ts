@@ -109,8 +109,8 @@ export class WorkspaceManager {
       throw new Error(`Workspace session already registered: ${session.workspaceId}`);
     }
 
-    this.#sessionsById.set(session.workspaceId, session);
     this.#packageSessions.track(session);
+    this.#sessionsById.set(session.workspaceId, session);
   }
 
   /**
@@ -235,7 +235,13 @@ export class WorkspaceManager {
 
     session.document.acceptState(state);
     this.register(session);
-    this.#packageSessions.update(session.workspaceId, state);
+    try {
+      this.#packageSessions.update(session.workspaceId, state);
+    } catch (error) {
+      this.unregister(session.workspaceId);
+      throw error;
+    }
+
     return session;
   }
 
