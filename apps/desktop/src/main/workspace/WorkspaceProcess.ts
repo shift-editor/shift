@@ -24,6 +24,7 @@ export class WorkspaceProcess {
   #ready: Promise<void> | null = null;
   #unlistenDocumentChanged: (() => void) | null = null;
   #documentListeners = new Set<(state: WorkspaceDocumentState | null) => void>();
+  #exitListeners = new Set<() => void>();
 
   constructor(log: ShiftLogger = createShiftLogger("workspace.process")) {
     this.#log = log;
@@ -143,6 +144,20 @@ export class WorkspaceProcess {
   }
 
   /**
+   * Subscribes to unexpected utility-process termination.
+   *
+   * @param listener - Disconnects services whose requests depend on this process.
+   * @returns a function that removes this listener.
+   */
+  onExit(listener: () => void): () => void {
+    this.#exitListeners.add(listener);
+
+    return () => {
+      this.#exitListeners.delete(listener);
+    };
+  }
+
+  /**
    * Reads the current utility-owned document lifecycle state.
    *
    * @remarks
@@ -189,6 +204,8 @@ export class WorkspaceProcess {
         this.#channel = null;
         this.#ready = null;
         this.#unlistenDocumentChanged = null;
+
+        for (const listener of this.#exitListeners) listener();
       }
     });
 

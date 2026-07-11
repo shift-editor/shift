@@ -1,6 +1,12 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { MessageChannel } from "node:worker_threads";
-import { Channel, nodePortTransport, serveChannel, type ChannelServer } from "./channel";
+import {
+  Channel,
+  domPortTransport,
+  nodePortTransport,
+  serveChannel,
+  type ChannelServer,
+} from "./channel";
 
 type TestCalls = {
   "math.add": { request: { a: number; b: number }; response: number };
@@ -125,6 +131,33 @@ describe("channel dispose", () => {
     client.dispose();
 
     await expect(client.call("math.add", { a: 1, b: 2 })).rejects.toThrow("channel disposed");
+  });
+
+  it("rejects a DOM-port call when the server closes the lane", async () => {
+    const { port1, port2 } = new MessageChannel();
+    const client = new Channel<Pick<TestCalls, "task.slow">, TestEvents>(
+      domPortTransport(port1 as unknown as MessagePort),
+    );
+    const server = serveChannel<Pick<TestCalls, "task.slow">, TestEvents>(
+      nodePortTransport(port2),
+      { "task.slow": () => new Promise<string>(() => {}) },
+    );
+    const pending = client.call("task.slow", undefined);
+
+    server.dispose();
+
+    await expect(pending).rejects.toThrow("channel closed");
+    expect(client.closed).toBe(true);
+  });
+
+  it("rejects a call when the remote port disconnects", async () => {
+    const { port1, port2 } = new MessageChannel();
+    const client = new Channel<Pick<TestCalls, "task.slow">, TestEvents>(nodePortTransport(port1));
+    const pending = client.call("task.slow", undefined);
+
+    port2.close();
+
+    await expect(pending).rejects.toThrow("channel closed");
   });
 });
 
