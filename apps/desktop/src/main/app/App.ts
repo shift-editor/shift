@@ -93,6 +93,10 @@ export class App {
     this.#lifecycle.start();
     app.setName(this.applicationName);
 
+    app.on("window-all-closed", () => {
+      if (process.platform !== "darwin") app.quit();
+    });
+
     if (!app.isPackaged) {
       app.setPath("userData", path.join(app.getPath("appData"), this.applicationName));
     }
@@ -106,6 +110,9 @@ export class App {
       this.#applicationMenu.install();
 
       this.#openLauncher();
+      app.on("activate", () => {
+        if (this.#windows.allWindows().length === 0) this.#openLauncher();
+      });
 
       this.#log.info("finished when ready callback");
     });
