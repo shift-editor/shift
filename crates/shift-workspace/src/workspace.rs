@@ -221,6 +221,7 @@ impl FontWorkspace {
         let mut pre_layers: Vec<PreLayer> = Vec::new();
         let mut pre_sources: Vec<Source> = Vec::new();
         let mut pre_axes: Vec<Axis> = Vec::new();
+        let mut pre_axis_mappings: Option<Vec<shift_font::AxisMapping>> = None;
         let mut pre_axis_locations: Vec<(AxisId, SourceId, f64)> = Vec::new();
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
@@ -230,6 +231,7 @@ impl FontWorkspace {
                     &mut pre_layers,
                     &mut pre_sources,
                     &mut pre_axes,
+                    &mut pre_axis_mappings,
                     &mut pre_axis_locations,
                 );
                 continue;
@@ -257,6 +259,7 @@ impl FontWorkspace {
             &pre_layers,
             &pre_sources,
             &pre_axes,
+            pre_axis_mappings.as_deref(),
             &pre_axis_locations,
             &outcome,
         );
@@ -271,6 +274,7 @@ impl FontWorkspace {
         pre_layers: &[PreLayer],
         pre_sources: &[Source],
         pre_axes: &[Axis],
+        pre_axis_mappings: Option<&[shift_font::AxisMapping]>,
         pre_axis_locations: &[(AxisId, SourceId, f64)],
         outcome: &AppliedIntents,
     ) -> Vec<LedgerStep> {
@@ -310,8 +314,16 @@ impl FontWorkspace {
                         .font
                         .axes()
                         .iter()
-                        .find(|axis| axis.id() == change.axis_id)
+                        .find(|axis| axis.id() == change.axis.id())
                         .cloned(),
+                    pre_locations: Vec::new(),
+                }),
+                FontChange::AxisUpdated(change) => steps.push(LedgerStep::Axis {
+                    pre: pre_axes
+                        .iter()
+                        .find(|axis| axis.id() == change.axis.id())
+                        .cloned(),
+                    post: Some(change.axis.clone()),
                     pre_locations: Vec::new(),
                 }),
                 FontChange::AxisDeleted(change) => steps.push(LedgerStep::Axis {
@@ -326,6 +338,12 @@ impl FontWorkspace {
                         .map(|(_, source_id, value)| (source_id.clone(), *value))
                         .collect(),
                 }),
+                FontChange::AxisMappingsUpdated(change) => {
+                    steps.push(LedgerStep::AxisMappings {
+                        pre: pre_axis_mappings.unwrap_or_default().to_vec(),
+                        post: change.mappings.clone(),
+                    });
+                }
                 FontChange::GlyphIdentityChanged(change) => {
                     steps.push(LedgerStep::GlyphIdentity {
                         glyph_id: change.glyph_id.clone(),
@@ -475,6 +493,10 @@ impl FontWorkspace {
                     } => {
                         let (from, to) = side.orient(pre, post);
                         replay_axis(font, from, to, &pre_locations, &mut changes)?;
+                    }
+                    LedgerStep::AxisMappings { pre, post } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_axis_mappings(font, from, to, &mut changes)?;
                     }
                     LedgerStep::Source { pre, post } => {
                         let (from, to) = side.orient(pre, post);
@@ -684,6 +706,7 @@ fn capture_font_level_pre_state(
     pre_layers: &mut Vec<PreLayer>,
     pre_sources: &mut Vec<Source>,
     pre_axes: &mut Vec<Axis>,
+    pre_axis_mappings: &mut Option<Vec<shift_font::AxisMapping>>,
     pre_axis_locations: &mut Vec<(AxisId, SourceId, f64)>,
 ) {
     match intent {
@@ -710,7 +733,20 @@ fn capture_font_level_pre_state(
                 });
             }
         }
+        FontIntent::UpdateAxis { axis } => {
+            let axis_id = axis.id();
+            if pre_axes.iter().any(|axis| axis.id() == axis_id) {
+                return;
+            }
+            let Some(axis) = font.axes().iter().find(|axis| axis.id() == axis_id) else {
+                return;
+            };
+            pre_axes.push(axis.clone());
+        }
         FontIntent::DeleteAxis { axis_id } => {
+            if pre_axis_mappings.is_none() {
+                *pre_axis_mappings = Some(font.axis_mappings().to_vec());
+            }
             if pre_axes.iter().any(|axis| axis.id() == *axis_id) {
                 return;
             }
@@ -723,6 +759,11 @@ fn capture_font_level_pre_state(
                 if let Some(value) = source.location().get(axis_id) {
                     pre_axis_locations.push((axis_id.clone(), source.id(), value));
                 }
+            }
+        }
+        FontIntent::SetAxisMappings { .. } => {
+            if pre_axis_mappings.is_none() {
+                *pre_axis_mappings = Some(font.axis_mappings().to_vec());
             }
         }
         _ => {}
@@ -819,6 +860,14 @@ fn replay_axis(
     pre_locations: &[(SourceId, f64)],
     changes: &mut FontChangeSet,
 ) -> Result<(), WorkspaceError> {
+    if let (Some(from), Some(to)) = (from.as_ref(), to.as_ref())
+        && from.id() == to.id()
+    {
+        font.replace_axis(to.clone())?;
+        changes.push(FontChange::axis_updated(to));
+        return Ok(());
+    }
+
     if let Some(axis) = from {
         font.remove_axis(axis.id())
             .ok_or_else(|| CoreError::AxisNotFound(axis.id()))?;
@@ -847,6 +896,17 @@ fn replay_axis(
         }
     }
 
+    Ok(())
+}
+
+fn replay_axis_mappings(
+    font: &mut shift_font::Font,
+    _from: Vec<shift_font::AxisMapping>,
+    to: Vec<shift_font::AxisMapping>,
+    changes: &mut FontChangeSet,
+) -> Result<(), WorkspaceError> {
+    font.set_axis_mappings(to.clone())?;
+    changes.push(FontChange::axis_mappings_updated(&to));
     Ok(())
 }
 

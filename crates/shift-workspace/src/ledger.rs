@@ -7,7 +7,7 @@
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
-use shift_font::{Axis, Glyph, GlyphId, GlyphLayer, GlyphName, Source, SourceId};
+use shift_font::{Axis, AxisMapping, Glyph, GlyphId, GlyphLayer, GlyphName, Source, SourceId};
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
 /// oldest entries fall off first.
@@ -30,6 +30,10 @@ pub enum LedgerStep {
         /// axis strips them from every source, so restoring the axis
         /// restores them too.
         pre_locations: Vec<(SourceId, f64)>,
+    },
+    AxisMappings {
+        pre: Vec<AxisMapping>,
+        post: Vec<AxisMapping>,
     },
     /// Source existence. Sparse glyph-layer existence is represented by
     /// separate [`LedgerStep::GlyphLayer`] entries.

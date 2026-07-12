@@ -18,12 +18,15 @@ export type NormalizedLocation = Record<string, number>;
 
 /** Asymmetric normalize — mirrors `Axis::normalize` in `shift-font`. */
 export function normalizeAxis(value: number, axis: Axis): number {
+  const minimum = axis.minimum ?? Math.min(...(axis.values ?? [axis.default]));
+  const maximum = axis.maximum ?? Math.max(...(axis.values ?? [axis.default]));
+
   if (value < axis.default) {
-    const range = axis.default - axis.minimum;
+    const range = axis.default - minimum;
     return range === 0 ? 0 : (value - axis.default) / range;
   }
   if (value > axis.default) {
-    const range = axis.maximum - axis.default;
+    const range = maximum - axis.default;
     return range === 0 ? 0 : (value - axis.default) / range;
   }
   return 0;

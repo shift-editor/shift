@@ -9,6 +9,7 @@ The crate builds the `shift-cli` binary. Its first command is `inspect`, which o
 ```sh
 cargo run -p shift-cli -- inspect path/to/Family.shift
 cargo run -p shift-cli -- inspect --view axes path/to/Family.shift
+cargo run -p shift-cli -- inspect --view mappings path/to/Family.shift
 cargo run -p shift-cli -- inspect --view sources path/to/Family.shift
 cargo run -p shift-cli -- inspect --view layers path/to/Family.shift
 cargo run -p shift-cli -- inspect --json path/to/Family.shift
@@ -20,6 +21,7 @@ Available views:
 
 - `summary`: package metadata, counts, and sources
 - `axes`: variable font axes
+- `mappings`: independent and cross-axis mappings
 - `sources`: design sources and locations
 - `glyphs`: glyph names, Unicode values, and layer counts
 - `layers`: glyph layer source bindings and geometry counts

@@ -1,13 +1,14 @@
 use std::fs::{self, File};
 
 use shift_font::{
-    Axis, AxisId, Font, KerningPair, LibValue, Location, Source, SourceId, SourceRole,
-    test_support::sample_font,
+    Axis, AxisId, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, AxisRole, Font,
+    KerningPair, LibValue, Location, Source, SourceId, SourceRole, test_support::sample_font,
 };
 use shift_source::{
-    AXES_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, FONTINFO_MODULE_FILE, GLYPHS_DIR, IMAGES_DIR,
-    KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE, PackageId, PackageTree, SOURCES_FILE,
-    ShiftSourcePackage, SourcePackageError, font_to_tree, tree_to_font, write_tree_atomic,
+    AXES_FILE, AXIS_MAPPINGS_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, FONTINFO_MODULE_FILE,
+    GLYPHS_DIR, IMAGES_DIR, KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE, PackageId, PackageTree,
+    SOURCES_FILE, ShiftSourcePackage, SourcePackageError, font_to_tree, tree_to_font,
+    write_tree_atomic,
 };
 use zip::{CompressionMethod, ZipArchive};
 
@@ -152,6 +153,54 @@ fn source_tree_round_trip_preserves_whole_font() {
 }
 
 #[test]
+fn source_tree_round_trip_preserves_axis_authoring_data() {
+    let mut font = Font::new();
+    let mut axis = Axis::weight();
+    axis.set_labels(vec![AxisLabel {
+        name: "Regular".to_string(),
+        value: 400.0,
+        range: Some(AxisLabelRange {
+            minimum: 350.0,
+            maximum: 450.0,
+        }),
+        linked_value: None,
+        elidable: true,
+    }]);
+    let axis_id = axis.id();
+    font.add_axis(axis);
+    let mut optical = Axis::new(
+        "opsz".to_string(),
+        "Optical size".to_string(),
+        8.0,
+        12.0,
+        72.0,
+    );
+    optical.set_role(AxisRole::Internal);
+    font.add_axis(optical);
+
+    let mut input = Location::new();
+    input.set(axis_id.clone(), 900.0);
+    let mut output = Location::new();
+    output.set(axis_id.clone(), 800.0);
+    font.set_axis_mappings(vec![AxisMapping::new(
+        "Weight curve".to_string(),
+        vec![axis_id.clone()],
+        vec![axis_id],
+        vec![AxisMappingPoint {
+            description: Some("Bold compression".to_string()),
+            input,
+            output,
+        }],
+    )])
+    .unwrap();
+
+    let loaded = tree_to_font(font_to_tree(&test_package_id(), &font).unwrap()).unwrap();
+
+    assert_eq!(loaded.axes(), font.axes());
+    assert_eq!(loaded.axis_mappings(), font.axis_mappings());
+}
+
+#[test]
 fn serializes_same_font_to_byte_identical_tree() {
     let font = sample_font();
 
@@ -168,6 +217,7 @@ fn serializes_same_font_to_byte_identical_tree() {
             MANIFEST_FILE,
             FONT_FILE,
             AXES_FILE,
+            AXIS_MAPPINGS_FILE,
             SOURCES_FILE,
             FEATURES_FILE,
             KERNING_FILE,
@@ -254,6 +304,14 @@ fn parses_minimal_handwritten_tree() {
             AXES_FILE.to_string(),
             br#"{
   "axes": []
+}
+"#
+            .to_vec(),
+        ),
+        (
+            AXIS_MAPPINGS_FILE.to_string(),
+            br#"{
+  "mappings": []
 }
 "#
             .to_vec(),
@@ -363,9 +421,14 @@ fn rejects_invalid_axis_ranges_on_load() {
       "id": "axis_weight",
       "tag": "wght",
       "name": "Weight",
-      "minimum": 900.0,
-      "default": 400.0,
-      "maximum": 100.0,
+      "role": "external",
+      "kind": {
+        "type": "continuous",
+        "minimum": 900.0,
+        "default": 400.0,
+        "maximum": 100.0
+      },
+      "labels": [],
       "hidden": false
     }
   ]
@@ -377,7 +440,8 @@ fn rejects_invalid_axis_ranges_on_load() {
 
     assert!(matches!(
         error,
-        SourcePackageError::InvalidAxisRange { tag, .. } if tag == "wght"
+        SourcePackageError::Font(shift_font::CoreError::InvalidAxis { axis_id, .. })
+            if axis_id == AxisId::from_raw("weight")
     ));
 }
 

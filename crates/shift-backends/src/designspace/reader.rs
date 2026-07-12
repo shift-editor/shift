@@ -1,3 +1,4 @@
+use super::axis_labels;
 use super::error::{DesignspaceError, DesignspaceResult};
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::FontReader;
@@ -5,8 +6,11 @@ use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
-use shift_font::{Axis, Component, Font, GlyphLayer, LayerId, Location, Source, SourceId};
-use std::collections::HashMap;
+use shift_font::{
+    Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, Component, Font, GlyphLayer,
+    LayerId, Location, Source, SourceId,
+};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -39,6 +43,11 @@ impl DesignspaceReader {
             .ok_or_else(|| DesignspaceError::MissingParent {
                 path: ds_path.to_path_buf(),
             })?;
+        let xml = fs::read_to_string(ds_path).map_err(|source| DesignspaceError::ReadFile {
+            path: ds_path.to_path_buf(),
+            source,
+        })?;
+        let mut axis_labels = axis_labels::parse(&xml)?;
 
         let doc = match DesignSpaceDocument::load(ds_path) {
             Ok(doc) => doc,
@@ -88,17 +97,37 @@ impl DesignspaceReader {
 
         // Add axes.
         for ds_axis in &doc.axes {
-            let (minimum, maximum) = derive_axis_range(ds_axis);
-            let mut axis = Axis::new(
-                ds_axis.tag.clone(),
-                ds_axis.name.clone(),
-                minimum,
-                ds_axis.default as f64,
-                maximum,
-            );
+            let mut axis = if let Some(values) = &ds_axis.values {
+                let mut values = values.iter().map(|value| *value as f64).collect::<Vec<_>>();
+                values.sort_by(f64::total_cmp);
+                values.dedup();
+                Axis::discrete_with_id(
+                    AxisId::new(),
+                    ds_axis.tag.clone(),
+                    ds_axis.name.clone(),
+                    values,
+                    ds_axis.default as f64,
+                )
+            } else {
+                let (minimum, maximum) = derive_axis_range(ds_axis);
+                Axis::new(
+                    ds_axis.tag.clone(),
+                    ds_axis.name.clone(),
+                    minimum,
+                    ds_axis.default as f64,
+                    maximum,
+                )
+            };
             axis.set_hidden(ds_axis.hidden);
+            axis.set_labels(
+                axis_labels
+                    .remove(ds_axis.name.as_str())
+                    .unwrap_or_default(),
+            );
+            axis.validate()?;
             font.add_axis(axis);
         }
+        font.set_axis_mappings(axis_mappings_from_designspace(&doc, font.axes())?)?;
 
         // Register the default source.
         let default_location =
@@ -184,6 +213,107 @@ impl DesignspaceReader {
         remove_glyph_layers_without_source(&mut font)?;
         Ok(font)
     }
+}
+
+fn axis_mappings_from_designspace(
+    doc: &DesignSpaceDocument,
+    axes: &[Axis],
+) -> DesignspaceResult<Vec<AxisMapping>> {
+    let axes_by_name = axes
+        .iter()
+        .map(|axis| (axis.name(), axis.id()))
+        .collect::<HashMap<_, _>>();
+    let mut mappings = Vec::new();
+
+    for ds_axis in &doc.axes {
+        let Some(ds_points) = &ds_axis.map else {
+            continue;
+        };
+        let Some(axis_id) = axes_by_name.get(ds_axis.name.as_str()).cloned() else {
+            continue;
+        };
+        let points = ds_points
+            .iter()
+            .map(|point| AxisMappingPoint {
+                description: None,
+                input: singleton_location(axis_id.clone(), point.input as f64),
+                output: singleton_location(axis_id.clone(), point.output as f64),
+            })
+            .collect();
+        mappings.push(AxisMapping::with_id(
+            AxisMappingId::new(),
+            format!("{} mapping", ds_axis.name),
+            vec![axis_id.clone()],
+            vec![axis_id],
+            points,
+        ));
+    }
+
+    if let Some(group) = &doc.axis_mappings {
+        let mut inputs = Vec::new();
+        let mut outputs = Vec::new();
+        let mut points = Vec::new();
+        for entry in &group.mappings {
+            let input = mapping_location_from_dimensions(&entry.input, &axes_by_name)?;
+            let output = mapping_location_from_dimensions(&entry.output, &axes_by_name)?;
+            extend_axis_ids(&mut inputs, &input);
+            extend_axis_ids(&mut outputs, &output);
+            points.push(AxisMappingPoint {
+                description: entry.description.clone(),
+                input,
+                output,
+            });
+        }
+
+        if !points.is_empty() {
+            let name = group
+                .description
+                .clone()
+                .unwrap_or_else(|| "Cross-axis mapping".to_string());
+            let mut mapping =
+                AxisMapping::with_id(AxisMappingId::new(), name, inputs, outputs, points);
+            mapping.set_description(group.description.clone());
+            mappings.push(mapping);
+        }
+    }
+
+    Ok(mappings)
+}
+
+fn mapping_location_from_dimensions(
+    dimensions: &[norad::designspace::Dimension],
+    axes_by_name: &HashMap<&str, AxisId>,
+) -> DesignspaceResult<Location> {
+    let mut location = Location::new();
+    for dimension in dimensions {
+        let Some(axis_id) = axes_by_name.get(dimension.name.as_str()) else {
+            return Err(DesignspaceError::LoadDesignspace {
+                path: std::path::PathBuf::new(),
+                details: format!("mapping references unknown axis {:?}", dimension.name),
+            });
+        };
+        let Some(value) = dimension.xvalue.or(dimension.uservalue) else {
+            continue;
+        };
+        location.set(axis_id.clone(), value as f64);
+    }
+    Ok(location)
+}
+
+fn singleton_location(axis_id: AxisId, value: f64) -> Location {
+    let mut location = Location::new();
+    location.set(axis_id, value);
+    location
+}
+
+fn extend_axis_ids(target: &mut Vec<AxisId>, location: &Location) {
+    let existing = target.iter().cloned().collect::<HashSet<_>>();
+    target.extend(
+        location
+            .iter()
+            .map(|(axis_id, _)| axis_id.clone())
+            .filter(|axis_id| !existing.contains(axis_id)),
+    );
 }
 
 #[derive(Clone, Debug)]

@@ -48,14 +48,17 @@ export const CreateAxisDialog = ({ open, onOpenChange }: CreateAxisDialogProps) 
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    font.createAxis(
-      values.name,
-      values.tag,
-      Number(values.min),
-      Number(values.default),
-      Number(values.max),
-      values.hidden,
-    );
+    font.createAxis({
+      name: values.name,
+      tag: values.tag,
+      role: "external",
+      axisType: "continuous",
+      minimum: Number(values.min),
+      default: Number(values.default),
+      maximum: Number(values.max),
+      labels: [],
+      hidden: values.hidden,
+    });
     onOpenChange(false);
   };
 

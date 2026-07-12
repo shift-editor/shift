@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mintAxisId,
+  mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
   mintSourceId,
@@ -37,6 +38,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
     },
   ],
   axes: [],
+  axisMappings: [],
 };
 
 describe("Font projects the workspace snapshot", () => {
@@ -121,13 +123,7 @@ describe("font-level intents make the font variable", () => {
       {
         kind: "createAxis",
         createAxis: {
-          axisId: weightAxisId,
-          tag: "wght",
-          name: "Weight",
-          min: 100,
-          default: 400,
-          max: 900,
-          hidden: false,
+          axis: continuousAxis(weightAxisId),
         },
       },
     ]);
@@ -174,6 +170,57 @@ describe("font-level intents make the font variable", () => {
 
     expect(applied.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
     expect(stack.font.glyph(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
+  });
+
+  it("projects mapping edits and evaluates them in Rust", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const axisId = stack.font.createAxis({
+      tag: "wght",
+      name: "Weight",
+      role: "external",
+      axisType: "continuous",
+      minimum: 100,
+      default: 400,
+      maximum: 900,
+      labels: [],
+      hidden: false,
+    });
+    await stack.editCoordinator.settled();
+
+    const mappingId = mintAxisMappingId();
+    stack.font.setAxisMappings([
+      {
+        id: mappingId,
+        name: "Weight curve",
+        inputs: [axisId],
+        outputs: [axisId],
+        points: [
+          mappingPoint(axisId, 100, 100),
+          mappingPoint(axisId, 400, 400),
+          mappingPoint(axisId, 900, 800),
+        ],
+      },
+    ]);
+    await stack.editCoordinator.settled();
+
+    expect(stack.font.getAxisMappings().map((mapping) => mapping.id)).toEqual([mappingId]);
+    const mapped = await stack.font.mapLocation({
+      values: { [axisId]: 900 } as Record<AxisId, number>,
+    });
+    expect(mapped.values[axisId]).toBeCloseTo(800);
+
+    stack.font.deleteAxis(axisId);
+    await stack.editCoordinator.settled();
+    expect(stack.font.getAxes()).toEqual([]);
+    expect(stack.font.getAxisMappings()).toEqual([]);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.getAxes().map((axis) => axis.id)).toEqual([axisId]);
+    expect(stack.font.getAxisMappings().map((mapping) => mapping.id)).toEqual([mappingId]);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.getAxisMappings()).toEqual([]);
   });
 
   it("createGlyph authors a default layer for fresh glyphs", async () => {
@@ -246,13 +293,7 @@ describe("font-level intents make the font variable", () => {
       {
         kind: "createAxis",
         createAxis: {
-          axisId,
-          tag: "wght",
-          name: "Weight",
-          min: 100,
-          default: 400,
-          max: 900,
-          hidden: false,
+          axis: continuousAxis(axisId),
         },
       },
     ]);
@@ -304,13 +345,7 @@ describe("font-level intents make the font variable", () => {
       {
         kind: "createAxis",
         createAxis: {
-          axisId,
-          tag: "wght",
-          name: "Weight",
-          min: 100,
-          default: 400,
-          max: 900,
-          hidden: false,
+          axis: continuousAxis(axisId),
         },
       },
     ]);
@@ -360,3 +395,25 @@ describe("font-level intents make the font variable", () => {
     expect(glyphs.map((glyph) => glyph.id)).toEqual([b.id, a.id, b.id]);
   });
 });
+
+function continuousAxis(axisId: AxisId) {
+  return {
+    id: axisId,
+    tag: "wght",
+    name: "Weight",
+    role: "external",
+    axisType: "continuous",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
+  };
+}
+
+function mappingPoint(axisId: AxisId, input: number, output: number) {
+  return {
+    input: { values: { [axisId]: input } as Record<AxisId, number> },
+    output: { values: { [axisId]: output } as Record<AxisId, number> },
+  };
+}

@@ -112,6 +112,8 @@ export class WorkspaceHost {
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.glyphSnapshots": ({ requests }) =>
         this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[]),
+      "workspace.mapLocation": (location) =>
+        this.#serialize(() => this.#bridge.mapLocation(location)),
     });
   }
 
@@ -143,6 +145,7 @@ export class WorkspaceHost {
       glyphs: this.#bridge.getGlyphs(),
       sources: this.#bridge.getSources(),
       axes: this.#bridge.getAxes(),
+      axisMappings: this.#bridge.getAxisMappings(),
     };
   }
 

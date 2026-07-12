@@ -40,7 +40,7 @@ src/
 - `FontBackend` -- auto-implemented marker trait for types implementing both `FontReader` + `FontWriter`
 - `UfoReader` -- loads `.ufo` bundles via `norad`
 - `UfoWriter` -- writes `.ufo` bundles via `norad`; rounds coordinates to integers
-- `DesignspaceWriter` -- writes a `.designspace` file plus a companion `.ufo`; additional Shift sources are represented as layers in that companion UFO and referenced by source layer names
+- `DesignspaceReader` / `DesignspaceWriter` -- read and atomically write `.designspace` projects plus companion UFOs, including continuous/discrete axes, axis value labels, per-axis maps, and cross-axis mappings
 - `UfoBackend` -- unit struct implementing `FontBackend` by delegating to `UfoReader`/`UfoWriter`
 - `GlyphsReader` -- loads `.glyphs` and `.glyphspackage` files via `glyphs-reader`; read-only (no writer)
 
@@ -53,6 +53,8 @@ src/
 **Multi-layer support:** `UfoReader` iterates all norad layers. The `public.default` layer maps to the IR's default layer; other layers are added via `Font::add_layer`. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
 
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
+
+**Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation.
 
 **Saving:** Only UFO write is supported. `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, then converts each glyph per layer. `features.fea` is written as a standalone file before calling `norad::Font::save`.
 

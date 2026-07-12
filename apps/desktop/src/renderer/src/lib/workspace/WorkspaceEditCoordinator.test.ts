@@ -129,13 +129,18 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     editCoordinator.push({
       kind: "createAxis",
       createAxis: {
-        axisId,
-        tag: "wght",
-        name: "Weight",
-        min: 100,
-        default: 400,
-        max: 900,
-        hidden: false,
+        axis: {
+          id: axisId,
+          tag: "wght",
+          name: "Weight",
+          role: "external",
+          axisType: "continuous",
+          minimum: 100,
+          default: 400,
+          maximum: 900,
+          labels: [],
+          hidden: false,
+        },
       },
     });
 

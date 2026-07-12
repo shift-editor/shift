@@ -38,12 +38,21 @@ CREATE TABLE IF NOT EXISTS axes (
     min_value REAL NOT NULL,
     default_value REAL NOT NULL,
     max_value REAL NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('external', 'internal')),
+    discrete_values_json TEXT,
+    labels_json TEXT NOT NULL DEFAULT '[]',
     hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
     order_index INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS axes_tag_unique
 ON axes(tag);
+
+CREATE TABLE IF NOT EXISTS axis_mappings (
+    id TEXT PRIMARY KEY,
+    mapping_json TEXT NOT NULL,
+    order_index INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS sources (
     id TEXT PRIMARY KEY,

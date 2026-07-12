@@ -1,6 +1,7 @@
 import type {
   AppliedChange,
   Axis,
+  AxisMapping,
   FontIntent,
   FontMetadata,
   FontMetrics,
@@ -8,6 +9,7 @@ import type {
   GlyphRecord,
   GlyphState,
   GlyphVariationData,
+  Location,
   Source,
   SourceId,
 } from "@shift/types";
@@ -22,6 +24,7 @@ export type WorkspaceSnapshot = {
   glyphs: GlyphRecord[];
   sources: Source[];
   axes: Axis[];
+  axisMappings: AxisMapping[];
 };
 
 export type WorkspaceGlyphLayerSnapshot = {
@@ -134,6 +137,8 @@ export type SyncCallMap = {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };
     response: WorkspaceGlyphSnapshot[];
   };
+  /** Evaluates font-owned independent and cross-axis mappings in Rust. */
+  "workspace.mapLocation": { request: Location; response: Location };
 };
 
 export type SyncEventMap = {

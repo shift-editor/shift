@@ -582,6 +582,8 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [x] Load `.designspace` files
 - [x] Parse axis definitions (wght, wdth, ital, custom)
+- [x] Persist continuous/discrete axes and axis value labels
+- [x] Round-trip independent and cross-axis mappings
 - [ ] Named instances
 
 **Masters Editing**

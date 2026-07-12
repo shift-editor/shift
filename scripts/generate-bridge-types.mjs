@@ -22,6 +22,7 @@ const idTypeNames = new Set([
   "ContourId",
   "AnchorId",
   "AxisId",
+  "AxisMappingId",
   "ComponentId",
   "GuidelineId",
   "SourceId",

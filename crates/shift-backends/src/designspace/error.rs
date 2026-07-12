@@ -58,6 +58,9 @@ pub enum DesignspaceError {
     #[error("failed to parse axisless designspace XML: {details}")]
     ParseAxislessXml { details: String },
 
+    #[error("failed to parse designspace XML: {details}")]
+    ParseDesignspaceXml { details: String },
+
     #[error(transparent)]
     Font(#[from] shift_font::CoreError),
 }

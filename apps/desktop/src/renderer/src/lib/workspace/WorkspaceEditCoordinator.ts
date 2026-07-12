@@ -1,4 +1,4 @@
-import type { AppliedChange, FontIntent } from "@shift/types";
+import type { AppliedChange, FontIntent, Location } from "@shift/types";
 import type {
   WorkspaceDocumentState,
   WorkspaceGlyphSnapshot,
@@ -151,6 +151,16 @@ export class WorkspaceEditCoordinator {
   ): Promise<WorkspaceGlyphSnapshot[]> {
     if (requests.length === 0) return [];
     return this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
+  }
+
+  /**
+   * Evaluates a location behind all pending axis and mapping edits.
+   *
+   * @param location - External location keyed by stable axis id.
+   * @returns The mapped location after queued edits have settled.
+   */
+  mapLocation(location: Location): Promise<Location> {
+    return this.#withFlush(() => this.#workspace.mapLocation(location));
   }
 
   /** Replays the latest redo entry after pending pushes flush. */

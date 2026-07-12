@@ -3,6 +3,7 @@ import type {
   PointId,
   AnchorId,
   AxisId,
+  AxisMappingId,
   ComponentId,
   GuidelineId,
   GlyphId,

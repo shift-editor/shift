@@ -2,6 +2,7 @@ import type {
   FontMetrics,
   FontMetadata,
   Axis,
+  AxisMapping,
   Source,
   GlyphId,
   GlyphRecord,
@@ -330,6 +331,7 @@ export class Font {
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<Source[]>;
   readonly #axesCell: Signal<Axis[]>;
+  readonly #axisMappingsCell: Signal<AxisMapping[]>;
   readonly #unicodesCell: Signal<Unicode[]>;
   readonly #glyphRecordsCell: Signal<readonly GlyphRecord[]>;
 
@@ -352,6 +354,7 @@ export class Font {
     this.#metadataCell = computed(() => workspaceCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => workspaceCell.value?.sources ?? []);
     this.#axesCell = computed(() => workspaceCell.value?.axes ?? []);
+    this.#axisMappingsCell = computed(() => workspaceCell.value?.axisMappings ?? []);
     this.#directoryCell = computed(() =>
       GlyphDirectory.fromRecords(workspaceCell.value?.glyphs ?? []),
     );
@@ -396,6 +399,11 @@ export class Font {
   /** Reactive committed variation axes for sidebar controls. */
   get axesCell(): Signal<Axis[]> {
     return this.#axesCell;
+  }
+
+  /** Reactive font-owned independent and cross-axis mappings. */
+  get axisMappingsCell(): Signal<AxisMapping[]> {
+    return this.#axisMappingsCell;
   }
 
   /** Reactive committed variation sources for sidebar controls. */
@@ -1211,22 +1219,44 @@ export class Font {
     return sourceId;
   }
 
-  /** @knipclassignore — used by VariationPanel component */
-  createAxis(
-    name: string,
-    tag: string,
-    min: number,
-    def: number,
-    max: number,
-    hidden: boolean = false,
-  ): AxisId {
+  /**
+   * Creates one variation axis with renderer-minted stable identity.
+   *
+   * @param axis - Complete axis definition apart from the id assigned here.
+   * @returns The id submitted to the workspace.
+   */
+  createAxis(axis: Omit<Axis, "id">): AxisId {
     const axisId = mintAxisId();
     this.editCoordinator.push({
       kind: "createAxis",
-      createAxis: { axisId, name, tag, min, default: def, max, hidden },
+      createAxis: { axis: { id: axisId, ...axis } },
     });
 
     return axisId;
+  }
+
+  /**
+   * Replaces an existing axis definition while preserving its stable id.
+   *
+   * @param axis - Complete replacement axis returned from the current font model.
+   */
+  updateAxis(axis: Axis): void {
+    this.editCoordinator.push({
+      kind: "updateAxis",
+      updateAxis: { axis },
+    });
+  }
+
+  /**
+   * Replaces the font-owned mapping collection as one undoable edit.
+   *
+   * @param mappings - Complete ordered mapping collection; Rust validates all axis references.
+   */
+  setAxisMappings(mappings: readonly AxisMapping[]): void {
+    this.editCoordinator.push({
+      kind: "setAxisMappings",
+      setAxisMappings: { mappings: [...mappings] },
+    });
   }
 
   /** @knipclassignore — used by VariationPanel component */
@@ -1247,6 +1277,21 @@ export class Font {
   /** @knipclassignore — used by VariationPanel component */
   getAxes(): Axis[] {
     return this.#axesCell.peek();
+  }
+
+  /** Returns the current font-owned mapping collection. */
+  getAxisMappings(): AxisMapping[] {
+    return this.#axisMappingsCell.peek();
+  }
+
+  /**
+   * Evaluates independent mappings followed by cross-axis mappings in Rust.
+   *
+   * @param location - External location keyed by stable axis id; omitted axes use defaults.
+   * @returns The mapped location after pending workspace edits have settled.
+   */
+  mapLocation(location: Location): Promise<Location> {
+    return this.editCoordinator.mapLocation(location);
   }
 
   /** @knipclassignore — used by VariationPanel component */

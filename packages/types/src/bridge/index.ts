@@ -18,7 +18,12 @@ export type {
   SetXAdvanceIntent,
   TranslatePointsIntent,
   Axis,
+  AxisLabel,
+  AxisMapping,
+  AxisMappingPoint,
+  AxisRole,
   AxisTent,
+  AxisType,
   BridgeApi,
   ComponentData,
   ContourData,
@@ -45,8 +50,10 @@ export type {
   PointData,
   PointSeed,
   PointType,
+  SetAxisMappingsIntent,
   Source,
   Unicode,
+  UpdateAxisIntent,
 } from "./generated";
 
 /**

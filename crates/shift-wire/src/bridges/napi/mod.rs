@@ -5,10 +5,10 @@ use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
-    AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphLayerRecord, GlyphLayerSnapshot, GlyphMaster, GlyphRecord,
-    GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, GlyphVariationData, Location,
-    PointData, PointType, Source,
+    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, AxisTent, ComponentData,
+    ContourData, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
+    GlyphLayerSnapshot, GlyphMaster, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState,
+    GlyphStructure, GlyphVariationData, Location, PointData, PointType, Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -117,10 +117,36 @@ pub struct NapiAxis {
     pub id: String,
     pub tag: String,
     pub name: String,
-    pub minimum: f64,
+    pub role: NapiAxisRole,
+    pub axis_type: NapiAxisType,
+    pub minimum: Option<f64>,
     pub default: f64,
-    pub maximum: f64,
+    pub maximum: Option<f64>,
+    pub values: Option<Vec<f64>>,
+    pub labels: Vec<NapiAxisLabel>,
     pub hidden: bool,
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiAxisRole {
+    External,
+    Internal,
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiAxisType {
+    Continuous,
+    Discrete,
+}
+
+#[napi(object)]
+pub struct NapiAxisLabel {
+    pub name: String,
+    pub value: f64,
+    pub minimum: Option<f64>,
+    pub maximum: Option<f64>,
+    pub linked_value: Option<f64>,
+    pub elidable: bool,
 }
 
 impl From<Axis> for NapiAxis {
@@ -129,10 +155,84 @@ impl From<Axis> for NapiAxis {
             id: axis.id.to_string(),
             tag: axis.tag,
             name: axis.name,
+            role: match axis.role.as_str() {
+                "internal" => NapiAxisRole::Internal,
+                _ => NapiAxisRole::External,
+            },
+            axis_type: match axis.axis_type.as_str() {
+                "discrete" => NapiAxisType::Discrete,
+                _ => NapiAxisType::Continuous,
+            },
             minimum: axis.minimum,
             default: axis.default,
             maximum: axis.maximum,
+            values: axis.values,
+            labels: axis.labels.into_iter().map(Into::into).collect(),
             hidden: axis.hidden,
+        }
+    }
+}
+
+impl From<AxisLabel> for NapiAxisLabel {
+    fn from(label: AxisLabel) -> Self {
+        Self {
+            name: label.name,
+            value: label.value,
+            minimum: label.minimum,
+            maximum: label.maximum,
+            linked_value: label.linked_value,
+            elidable: label.elidable,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiAxisMappingPoint {
+    pub description: Option<String>,
+    pub input: NapiLocation,
+    pub output: NapiLocation,
+}
+
+#[napi(object)]
+pub struct NapiAxisMapping {
+    #[napi(ts_type = "AxisMappingId")]
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    #[napi(ts_type = "Array<AxisId>")]
+    pub inputs: Vec<String>,
+    #[napi(ts_type = "Array<AxisId>")]
+    pub outputs: Vec<String>,
+    pub points: Vec<NapiAxisMappingPoint>,
+}
+
+impl From<AxisMappingPoint> for NapiAxisMappingPoint {
+    fn from(point: AxisMappingPoint) -> Self {
+        Self {
+            description: point.description,
+            input: point.input.into(),
+            output: point.output.into(),
+        }
+    }
+}
+
+impl From<AxisMapping> for NapiAxisMapping {
+    fn from(mapping: AxisMapping) -> Self {
+        Self {
+            id: mapping.id.to_string(),
+            name: mapping.name,
+            description: mapping.description,
+            inputs: mapping
+                .inputs
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
+            outputs: mapping
+                .outputs
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
+            points: mapping.points.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -568,7 +668,9 @@ pub struct NapiFontIntent {
     pub create_glyph: Option<NapiCreateGlyphIntent>,
     pub update_glyph: Option<NapiUpdateGlyphIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
+    pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
+    pub set_axis_mappings: Option<NapiSetAxisMappingsIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
     pub delete_source: Option<NapiDeleteSourceIntent>,
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
@@ -600,18 +702,21 @@ pub struct NapiUpdateGlyphIntent {
     pub new_unicodes: Vec<u32>,
 }
 
+#[napi(object)]
+pub struct NapiUpdateAxisIntent {
+    pub axis: NapiAxis,
+}
+
+#[napi(object)]
+pub struct NapiSetAxisMappingsIntent {
+    pub mappings: Vec<NapiAxisMapping>,
+}
+
 /// Font-level axis creation. The axis id is client-minted; the tag is an
 /// OpenType label and must be unique within the font.
 #[napi(object)]
 pub struct NapiCreateAxisIntent {
-    #[napi(ts_type = "AxisId")]
-    pub axis_id: String,
-    pub tag: String,
-    pub name: String,
-    pub min: f64,
-    pub default: f64,
-    pub max: f64,
-    pub hidden: bool,
+    pub axis: NapiAxis,
 }
 
 /// Font-level axis deletion. Removing an axis also reshapes source locations.
@@ -683,6 +788,8 @@ pub struct NapiAppliedChange {
     pub glyphs: Option<Vec<NapiGlyphRecord>>,
     /// Full axes list when font-level axis structure changed; absent otherwise.
     pub axes: Option<Vec<NapiAxis>>,
+    /// Full mapping list when font-level axis mappings changed; absent otherwise.
+    pub axis_mappings: Option<Vec<NapiAxisMapping>>,
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,

@@ -12,7 +12,7 @@ crate-type = ["rlib"]
 shift-font = { workspace = true }
 shift-source = { workspace = true }
 
-norad = "0.16.0"
+norad = "0.18.4"
 skrifa = "0.32.0"
 fontc = "0.2.0"
 glyphs-reader = "0.2.0"

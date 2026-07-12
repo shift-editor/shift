@@ -1,4 +1,6 @@
-use crate::{AnchorId, AxisId, ContourId, GlyphId, GlyphName, LayerId, PointId, SourceId};
+use crate::{
+    AnchorId, AxisId, AxisMappingId, ContourId, GlyphId, GlyphName, LayerId, PointId, SourceId,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -98,6 +100,21 @@ pub enum CoreError {
 
     #[error("axis {0} not found")]
     AxisNotFound(AxisId),
+
+    #[error("invalid axis {axis_id}: {message}")]
+    InvalidAxis { axis_id: AxisId, message: String },
+
+    #[error("axis mapping {0} already exists")]
+    DuplicateAxisMappingId(AxisMappingId),
+
+    #[error("axis mapping name {0:?} already exists")]
+    DuplicateAxisMappingName(String),
+
+    #[error("invalid axis mapping {mapping_id}: {message}")]
+    InvalidAxisMapping {
+        mapping_id: AxisMappingId,
+        message: String,
+    },
 
     #[error("invalid source name {0:?}")]
     InvalidSourceName(String),

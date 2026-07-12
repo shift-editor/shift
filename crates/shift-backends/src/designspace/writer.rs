@@ -1,15 +1,19 @@
+use super::axis_labels;
 use super::error::{DesignspaceError, DesignspaceResult};
 use crate::atomic::write_file_atomic;
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::{FontView, FontWriter};
 use crate::ufo::UfoWriter;
-use norad::designspace::{Axis as DsAxis, DesignSpaceDocument, Dimension, Source as DsSource};
+use norad::designspace::{
+    Axis as DsAxis, AxisMapping as DsAxisMapping, AxisMappingEntry as DsAxisMappingEntry,
+    AxisMappings as DsAxisMappings, DesignSpaceDocument, Dimension, Source as DsSource,
+};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
 use serde::Serialize;
 use shift_font::{
-    Axis, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph, Guideline, KerningData,
-    LibData, Location, Source, SourceId,
+    Axis, AxisKind, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph,
+    Guideline, KerningData, LibData, Location, Source, SourceId,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -233,16 +237,84 @@ impl DesignspaceWriter {
         }
     }
 
-    fn axis(axis: &Axis) -> DsAxis {
+    fn axis(axis: &Axis, mappings: &[AxisMapping]) -> DsAxis {
+        let map = mappings
+            .iter()
+            .find(|mapping| {
+                mapping.is_independent() && mapping.inputs().first() == Some(&axis.id())
+            })
+            .map(|mapping| {
+                mapping
+                    .points()
+                    .iter()
+                    .filter_map(|point| {
+                        Some(DsAxisMapping {
+                            input: point.input.get(&axis.id())? as f32,
+                            output: point.output.get(&axis.id())? as f32,
+                        })
+                    })
+                    .collect()
+            });
+
+        let (minimum, maximum, values) = match axis.kind() {
+            AxisKind::Continuous {
+                minimum, maximum, ..
+            } => (Some(*minimum as f32), Some(*maximum as f32), None),
+            AxisKind::Discrete { values, .. } => (
+                None,
+                None,
+                Some(values.iter().map(|value| *value as f32).collect()),
+            ),
+        };
+
         DsAxis {
             name: axis.name().to_string(),
             tag: axis.tag().to_string(),
-            minimum: Some(axis.minimum() as f32),
+            minimum,
             default: axis.default() as f32,
-            maximum: Some(axis.maximum() as f32),
+            maximum,
+            values,
+            map,
             hidden: axis.is_hidden(),
             ..Default::default()
         }
+    }
+
+    fn mapping_location(location: &Location, axes: &[Axis]) -> Vec<Dimension> {
+        location
+            .iter()
+            .filter_map(|(axis_id, value)| {
+                let axis = axes.iter().find(|axis| axis.id() == *axis_id)?;
+                Some(Dimension {
+                    name: axis.name().to_string(),
+                    xvalue: Some(*value as f32),
+                    ..Default::default()
+                })
+            })
+            .collect()
+    }
+
+    fn cross_axis_mappings(mappings: &[AxisMapping], axes: &[Axis]) -> Option<DsAxisMappings> {
+        let mapping = mappings.iter().find(|mapping| !mapping.is_independent())?;
+        let mappings = mapping
+            .points()
+            .iter()
+            .map(|point| DsAxisMappingEntry {
+                description: point.description.clone(),
+                input: Self::mapping_location(&point.input, axes),
+                output: Self::mapping_location(&point.output, axes),
+            })
+            .collect::<Vec<_>>();
+
+        Some(DsAxisMappings {
+            description: Some(
+                mapping
+                    .description()
+                    .unwrap_or_else(|| mapping.name())
+                    .to_string(),
+            ),
+            mappings,
+        })
     }
 
     fn location(location: &Location, axes: &[Axis]) -> Vec<Dimension> {
@@ -365,7 +437,11 @@ impl DesignspaceWriter {
     /// Serializes exactly like norad's `DesignSpaceDocument::save`, but
     /// routed through a temp-file + fsync + rename so a failed save never
     /// truncates the existing designspace.
-    fn save_document_atomic(document: &DesignSpaceDocument, path: &Path) -> DesignspaceResult<()> {
+    fn save_document_atomic(
+        document: &DesignSpaceDocument,
+        axes: &[Axis],
+        path: &Path,
+    ) -> DesignspaceResult<()> {
         let mut xml = String::from("<?xml version='1.0' encoding='UTF-8'?>\n");
         let mut serializer = quick_xml::se::Serializer::new(&mut xml);
         serializer.indent(' ', 2);
@@ -376,8 +452,9 @@ impl DesignspaceWriter {
                 details: error.to_string(),
             })?;
         xml.push('\n');
+        let xml = axis_labels::insert(&xml, axes)?;
 
-        write_file_atomic(path, xml.as_bytes()).map_err(|source| DesignspaceError::WriteFile {
+        write_file_atomic(path, &xml).map_err(|source| DesignspaceError::WriteFile {
             path: path.to_path_buf(),
             source,
         })
@@ -451,14 +528,20 @@ impl DesignspaceWriter {
             });
         }
 
+        let axis_mappings = Self::cross_axis_mappings(font.axis_mappings(), axes);
+        let format = if axis_mappings.is_some() { 5.2 } else { 5.0 };
         let document = DesignSpaceDocument {
-            format: 5.0,
-            axes: axes.iter().map(Self::axis).collect(),
+            format,
+            axes: axes
+                .iter()
+                .map(|axis| Self::axis(axis, font.axis_mappings()))
+                .collect(),
+            axis_mappings,
             sources,
             ..Default::default()
         };
 
-        Self::save_document_atomic(&document, path)
+        Self::save_document_atomic(&document, axes, path)
     }
 }
 
