@@ -22,6 +22,7 @@ use super::metadata::{
 const MIN_UNITS_PER_EM: f64 = 16.0;
 const MAX_UNITS_PER_EM: f64 = 16_384.0;
 
+/// Describes a Shift font that cannot become an in-memory fontir source.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ShiftIrSourceError {
     #[error(
@@ -39,11 +40,17 @@ pub(crate) enum ShiftIrSourceError {
     InvalidUnitsPerEm { value: f64 },
 }
 
+/// Provides fontir work backed by an immutable, shared Shift snapshot.
+///
+/// Clones share the snapshot through [`Arc`] and never read the originating
+/// [`FontView`] again. The source is constructed from memory; fontir's
+/// path-based [`Source::new`] constructor is intentionally unsupported.
 #[derive(Clone, Debug)]
 pub(crate) struct ShiftIrSource {
     snapshot: Arc<ShiftSnapshot>,
 }
 
+/// Owns the Shift values shared by all work items in one compilation.
 #[derive(Debug)]
 pub(super) struct ShiftSnapshot {
     pub metadata: FontMetadata,
@@ -58,6 +65,13 @@ pub(super) struct ShiftSnapshot {
 }
 
 impl ShiftIrSource {
+    /// Freezes a font view into the representation consumed by fontir work.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShiftIrSourceError`] when the font lacks a default source, has
+    /// an invalid units-per-em value or variation model, or contains a
+    /// cross-axis mapping unsupported by the compiler.
     pub(crate) fn from_font_view(font: &impl FontView) -> Result<Self, ShiftIrSourceError> {
         let cross_axis_mapping_count = font
             .axis_mappings()

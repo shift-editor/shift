@@ -1,15 +1,23 @@
+//! Compiles Shift font views into distributable font binaries.
+//!
+//! Compilation consumes an owned snapshot of the supplied [`FontView`]. The
+//! completed binary is staged beside its destination and replaces that path
+//! only after compilation succeeds, so a partial font is never exposed.
+
 use std::path::{Path, PathBuf};
 
 use crate::atomic::write_file_atomic;
 use crate::shift2fontir::{ShiftIrSource, ShiftIrSourceError};
 use crate::traits::FontView;
 
+/// Identifies a binary font format supported by [`FontExporter`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExportFormat {
     Ttf,
 }
 
 impl ExportFormat {
+    /// Returns the lowercase format token used by file extensions and commands.
     pub fn as_str(self) -> &'static str {
         match self {
             ExportFormat::Ttf => "ttf",
@@ -30,18 +38,22 @@ impl TryFrom<&str> for ExportFormat {
     }
 }
 
+/// Describes one on-disk font export.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontExportRequest {
+    /// Destination replaced after compilation succeeds.
     pub path: PathBuf,
     pub format: ExportFormat,
 }
 
+/// Confirms the destination and format of a completed export.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontExportResult {
     pub path: PathBuf,
     pub format: ExportFormat,
 }
 
+/// Describes a failure to represent, compile, or write an exported font.
 #[derive(Debug, thiserror::Error)]
 pub enum ExportError {
     #[error("unsupported export format: {format}")]
@@ -73,6 +85,7 @@ pub enum ExportError {
     },
 }
 
+/// Compiles [`FontView`] snapshots without an intermediate authoring format.
 pub struct FontExporter;
 
 impl FontExporter {
@@ -80,6 +93,18 @@ impl FontExporter {
         Self
     }
 
+    /// Compiles the current font view and atomically replaces the destination.
+    ///
+    /// The font is cloned into an owned compiler snapshot before fontc work
+    /// begins. Later changes to the originating font therefore cannot alter
+    /// the in-flight build. The requested path must have an extension that
+    /// matches the format.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExportError`] when the source cannot be represented in the
+    /// supported compiler model, compilation fails, or the completed binary
+    /// cannot be staged and made durable at the destination.
     pub fn export(
         &self,
         font: &impl FontView,

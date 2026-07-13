@@ -14,6 +14,10 @@ use super::source::ShiftSnapshot;
 const SIDE1_PREFIX: &str = "public.kern1.";
 const SIDE2_PREFIX: &str = "public.kern2.";
 
+/// Emits kerning groups at the default location for glyphs in the compiled order.
+///
+/// Missing glyph members are omitted, and groups left empty after filtering are
+/// not emitted.
 #[derive(Debug)]
 pub(super) struct KerningGroupWork {
     snapshot: Arc<ShiftSnapshot>,
@@ -80,6 +84,10 @@ impl Work<Context, WorkId, Error> for KerningGroupWork {
     }
 }
 
+/// Emits Shift's static kerning pairs at the normalized default location.
+///
+/// A request for any non-default location is rejected because Shift does not
+/// yet model per-source kerning.
 #[derive(Debug)]
 pub(super) struct KerningInstanceWork {
     snapshot: Arc<ShiftSnapshot>,

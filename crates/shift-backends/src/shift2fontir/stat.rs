@@ -2,6 +2,14 @@ use std::fmt::Write;
 
 use shift_font::{Axis, AxisLabel};
 
+/// Generates feature syntax for Shift axis labels used to build `STAT`.
+///
+/// Returns `None` when no axis defines labels. Label ranges, linked values, and
+/// elidable names are preserved in the generated axis-value statements.
+///
+/// # Errors
+///
+/// Returns an error when an axis or label name contains control characters.
 pub(super) fn generated_stat_fea(axes: &[Axis]) -> Result<Option<String>, String> {
     if !axes.iter().any(|axis| !axis.labels().is_empty()) {
         return Ok(None);

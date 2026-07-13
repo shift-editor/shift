@@ -7,6 +7,16 @@ use fontdrasil::types::{Axes, Axis as IrAxis, Tag};
 use fontir::error::Error;
 use shift_font::{Axis, AxisMapping, Source};
 
+/// Converts Shift axes and independent mappings into fontir axis definitions.
+///
+/// Mapping inputs are user coordinates and outputs are design coordinates.
+/// Each mapped axis must define strictly increasing values at its user-space
+/// minimum, default, and maximum.
+///
+/// # Errors
+///
+/// Returns an error when an axis, OpenType tag, or independent mapping cannot
+/// define a valid fontir coordinate converter.
 pub(super) fn to_ir_axes(axes: &[Axis], mappings: &[AxisMapping]) -> Result<Vec<IrAxis>, String> {
     axes.iter()
         .map(|axis| to_ir_axis(axis, independent_mapping(axis, mappings)))
@@ -106,6 +116,20 @@ fn mapped_converter(
     Ok(CoordConverter::new(values, default_idx))
 }
 
+/// Converts one Shift master location from design space to normalized space.
+///
+/// An omitted axis coordinate resolves to that axis's mapped design-space
+/// default. Coordinates explicitly stored on the source are interpreted as
+/// design coordinates, not external user coordinates.
+///
+/// # Errors
+///
+/// Returns an error when the source references an axis outside `shift_axes`.
+///
+/// # Panics
+///
+/// Panics when `shift_axes` was not validated or `ir_axes` was not derived from
+/// the same Shift axes.
 pub(super) fn normalized_source_location(
     source: &Source,
     shift_axes: &[Axis],

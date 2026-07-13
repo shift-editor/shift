@@ -12,6 +12,11 @@ use shift_font::{Contour, CurveSegment, Glyph, GlyphLayer};
 use super::axes::normalized_source_location;
 use super::source::ShiftSnapshot;
 
+/// Emits the authored master instances and anchors for one Shift glyph.
+///
+/// The default-source layer is required. Missing layers for other master
+/// sources are treated as sparse masters, while layers belonging to non-master
+/// sources do not participate in compilation.
 #[derive(Debug)]
 pub(super) struct GlyphWork {
     snapshot: Arc<ShiftSnapshot>,

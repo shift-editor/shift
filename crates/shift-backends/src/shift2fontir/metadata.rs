@@ -16,6 +16,11 @@ use super::axes::normalized_source_location;
 use super::source::ShiftSnapshot;
 use super::stat::generated_stat_fea;
 
+/// Establishes axes, global master locations, names, and preliminary glyph order.
+///
+/// Shift source names are not promoted to named variable-font instances. The
+/// default source must be a master at the normalized default location, and
+/// master sources must occupy distinct normalized locations.
 #[derive(Debug)]
 pub(super) struct StaticMetadataWork {
     snapshot: Arc<ShiftSnapshot>,
@@ -139,6 +144,10 @@ impl StaticMetadataWork {
     }
 }
 
+/// Emits Shift's font-wide metrics at the default location.
+///
+/// Shift does not yet model per-source metrics, so the resulting metrics remain
+/// static even when glyph outlines vary.
 #[derive(Debug)]
 pub(super) struct GlobalMetricsWork {
     snapshot: Arc<ShiftSnapshot>,
@@ -199,6 +208,7 @@ impl Work<Context, WorkId, Error> for GlobalMetricsWork {
     }
 }
 
+/// Combines authored feature text with `STAT` syntax generated from axis labels.
 #[derive(Debug)]
 pub(super) struct FeatureWork {
     snapshot: Arc<ShiftSnapshot>,
