@@ -1,8 +1,12 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
 use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
-use shift_font::{Font, Glyph, GlyphLayer};
+use shift_font::test_support::sample_variable_font;
+use shift_font::Font;
+use skrifa::raw::TableProvider;
+use skrifa::FontRef;
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -24,19 +28,57 @@ fn load_font(path: &Path) -> Font {
         .unwrap_or_else(|error| panic!("failed to load {}: {error}", path.display()))
 }
 
-fn main_layer(glyph: &Glyph) -> &GlyphLayer {
-    glyph
-        .layers()
-        .values()
-        .max_by_key(|layer| layer.contours().len())
-        .expect("glyph should have at least one layer")
+#[derive(Debug, PartialEq)]
+struct StaticCompilation {
+    units_per_em: f64,
+    glyphs: BTreeMap<u32, CompiledGlyph>,
+}
+
+#[derive(Debug, PartialEq)]
+struct CompiledGlyph {
+    advance: f64,
+    has_geometry: bool,
+}
+
+impl From<&Font> for StaticCompilation {
+    fn from(font: &Font) -> Self {
+        let mut glyphs = BTreeMap::new();
+        let default_source_id = font
+            .default_source_id()
+            .expect("compiled fixture should have a default source");
+        for glyph in font.glyphs() {
+            let layer = glyph
+                .layer_for_source(default_source_id.clone())
+                .expect("encoded glyph should have a default layer");
+            for unicode in glyph.unicodes() {
+                glyphs.insert(
+                    *unicode,
+                    CompiledGlyph {
+                        advance: layer.width(),
+                        has_geometry: !layer.contours().is_empty()
+                            || !layer.components().is_empty(),
+                    },
+                );
+            }
+        }
+
+        Self {
+            units_per_em: font.metrics().units_per_em,
+            glyphs,
+        }
+    }
 }
 
 #[test]
-fn exports_mutatorsans_ufo_to_readable_ttf() {
-    let source = load_font(&mutatorsans_ufo_path());
+fn compiles_mutatorsans_fixture_to_ttf_tables() {
     let temp_dir = tempfile::tempdir().expect("tempdir should be created");
+    let shift_path = temp_dir.path().join("MutatorSansLightCondensed.shift");
     let output_path = temp_dir.path().join("MutatorSansLightCondensed.ttf");
+    let imported_fixture = load_font(&mutatorsans_ufo_path());
+    FontLoader::new()
+        .write_font(&imported_fixture, shift_path.to_str().unwrap())
+        .expect("MutatorSans fixture should save as canonical Shift source");
+    let source = load_font(&shift_path);
 
     FontExporter::new()
         .export(
@@ -46,15 +88,17 @@ fn exports_mutatorsans_ufo_to_readable_ttf() {
                 format: ExportFormat::Ttf,
             },
         )
-        .expect("MutatorSans UFO should export as TTF");
+        .expect("MutatorSans Shift source should compile as TTF");
 
+    let bytes = std::fs::read(&output_path).expect("compiled TTF should be readable");
+    let compiled = FontRef::new(&bytes).expect("fontc should emit a valid TTF");
     let exported = load_font(&output_path);
 
     let exported_family = exported
         .metadata()
         .family_name
         .as_deref()
-        .expect("exported TTF should include a family name");
+        .expect("compiled font should contain a family name");
     let source_family = source
         .metadata()
         .family_name
@@ -68,7 +112,7 @@ fn exports_mutatorsans_ufo_to_readable_ttf() {
 
     assert!(
         exported_family.contains(source_family),
-        "exported family name should include source family: {exported_family}"
+        "compiled family name should include source family: {exported_family}"
     );
     // A source-declared style map wins the exported subfamily name, so the
     // style name is either the source style or its declared style-map style.
@@ -87,46 +131,48 @@ fn exports_mutatorsans_ufo_to_readable_ttf() {
                 .is_some_and(|(exported_style, style_map)| {
                     exported_style.eq_ignore_ascii_case(style_map)
                 }),
-        "exported name data should include source style: family={exported_family}, style={:?}",
-        exported.metadata().style_name
+        "compiled name data should include source style"
     );
     assert_eq!(
-        exported.metrics().units_per_em,
-        source.metrics().units_per_em
+        StaticCompilation::from(&exported),
+        StaticCompilation::from(&source)
     );
+    assert!(compiled.glyf().is_ok(), "compiled font should contain glyf");
+    assert!(compiled.hmtx().is_ok(), "compiled font should contain hmtx");
+    assert!(
+        compiled.gpos().is_ok(),
+        "compiled kerning should produce GPOS"
+    );
+}
 
-    for codepoint in [0x0041, 0x004F, 0x0053] {
-        let glyph = exported
-            .glyphs_by_unicode(codepoint)
-            .next()
-            .unwrap_or_else(|| panic!("exported TTF should contain U+{codepoint:04X}"));
-        let layer = main_layer(glyph);
+#[test]
+fn compiles_variable_shift_source_to_variation_tables() {
+    let temp_dir = tempfile::tempdir().expect("tempdir should be created");
+    let shift_path = temp_dir.path().join("Variable.shift");
+    let output_path = temp_dir.path().join("Variable.ttf");
+    FontLoader::new()
+        .write_font(&sample_variable_font(), shift_path.to_str().unwrap())
+        .expect("variable fixture should save as canonical Shift source");
+    let source = load_font(&shift_path);
 
-        assert!(
-            !layer.contours().is_empty(),
-            "U+{codepoint:04X} should retain exported outlines"
-        );
-        assert!(
-            layer.width() > 0.0,
-            "U+{codepoint:04X} should retain exported advance width"
-        );
-    }
+    FontExporter::new()
+        .export(
+            &source,
+            FontExportRequest {
+                path: output_path.clone(),
+                format: ExportFormat::Ttf,
+            },
+        )
+        .expect("variable Shift source should compile as TTF");
 
-    for codepoint in [0x0041, 0x004F] {
-        let source_glyph = source
-            .glyphs_by_unicode(codepoint)
-            .next()
-            .unwrap_or_else(|| panic!("source UFO should contain U+{codepoint:04X}"));
-        let exported_glyph = exported
-            .glyphs_by_unicode(codepoint)
-            .next()
-            .unwrap_or_else(|| panic!("exported TTF should contain U+{codepoint:04X}"));
-        let source_layer = main_layer(source_glyph);
-        let exported_layer = main_layer(exported_glyph);
-
-        assert!(
-            (exported_layer.width() - source_layer.width()).abs() < 0.001,
-            "U+{codepoint:04X} should retain source advance width"
-        );
-    }
+    let bytes = std::fs::read(&output_path).expect("compiled TTF should be readable");
+    let compiled = FontRef::new(&bytes).expect("fontc should emit a valid variable TTF");
+    let fvar = compiled.fvar().expect("variable font should contain fvar");
+    assert_eq!(fvar.axis_count(), 1);
+    assert_eq!(fvar.instance_count(), 0, "source names are not instances");
+    compiled.avar().expect("mapped axis should contain avar");
+    compiled.stat().expect("axis labels should produce STAT");
+    compiled
+        .gvar()
+        .expect("variable outlines should produce gvar");
 }

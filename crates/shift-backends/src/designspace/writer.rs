@@ -76,6 +76,10 @@ impl FontView for UfoFileView<'_> {
         self.font.axes()
     }
 
+    fn axis_mappings(&self) -> &[AxisMapping] {
+        self.font.axis_mappings()
+    }
+
     fn sources(&self) -> &[Source] {
         self.sources
     }

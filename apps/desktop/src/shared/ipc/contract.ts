@@ -1,9 +1,16 @@
 import type { CommandId, RendererCommandId } from "../commands";
-import type { WorkspaceDocumentState } from "../workspace/protocol";
+import type { WorkspaceDocumentState, WorkspaceExportResult } from "../workspace/protocol";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
-  "document.save": { request: { path: string | null }; response: WorkspaceDocumentState };
+  "document.save": {
+    request: { path: string | null };
+    response: WorkspaceDocumentState;
+  };
+  "document.export": {
+    request: { path: string };
+    response: WorkspaceExportResult;
+  };
 };
 
 export type DocumentEventMap = Record<string, never>;

@@ -71,6 +71,12 @@ export type WorkspaceDocumentState = {
   needsSaveAs: boolean;
 };
 
+/** Identifies the compiled font written by a workspace export. */
+export type WorkspaceExportResult = {
+  path: string;
+  format: "ttf";
+};
+
 /**
  * Shell lane: main ↔ utility. Plumbing only; never font data.
  *
@@ -84,8 +90,14 @@ export type WorkspaceDocumentState = {
  */
 export type ShellCallMap = {
   "workspace.create": { request: void; response: WorkspaceDocumentState };
-  "workspace.inspectPackage": { request: { path: string }; response: WorkspacePackageIdentity };
-  "workspace.open": { request: { path: string }; response: WorkspaceDocumentState };
+  "workspace.inspectPackage": {
+    request: { path: string };
+    response: WorkspacePackageIdentity;
+  };
+  "workspace.open": {
+    request: { path: string };
+    response: WorkspaceDocumentState;
+  };
   "workspace.close": { request: { discard: boolean }; response: null };
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -119,11 +131,17 @@ export type SyncCallMap = {
   /** Replays the most recent ledger entry; null when the stack is empty. */
   "workspace.undo": {
     request: void;
-    response: { applied: AppliedChange | null; documentState: WorkspaceDocumentState | null };
+    response: {
+      applied: AppliedChange | null;
+      documentState: WorkspaceDocumentState | null;
+    };
   };
   "workspace.redo": {
     request: void;
-    response: { applied: AppliedChange | null; documentState: WorkspaceDocumentState | null };
+    response: {
+      applied: AppliedChange | null;
+      documentState: WorkspaceDocumentState | null;
+    };
   };
   /**
    * Saves to the current package target, or rejects when the document still
@@ -132,7 +150,15 @@ export type SyncCallMap = {
    */
   "workspace.save": { request: void; response: WorkspaceDocumentState };
   /** Saves to `path` (main's Save As dialog choice) and adopts it as target. */
-  "workspace.saveAs": { request: { path: string }; response: WorkspaceDocumentState };
+  "workspace.saveAs": {
+    request: { path: string };
+    response: WorkspaceDocumentState;
+  };
+  /** Captures the committed workspace and compiles it without changing document state. */
+  "workspace.export": {
+    request: { path: string };
+    response: WorkspaceExportResult;
+  };
   "workspace.glyphSnapshots": {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };
     response: WorkspaceGlyphSnapshot[];

@@ -2,22 +2,86 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
+import { createBridge } from "@shift/bridge";
 import {
   mintAxisId,
+  mintContourId,
   mintGlyphId,
   mintLayerId,
+  mintPointId,
   type FontIntent,
   type GlyphName,
   type Unicode,
 } from "@shift/types";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
-const createGlyph = (name: string, unicode: number): FontIntent => ({
+const createGlyph = (
+  name: string,
+  unicode: number,
+  glyphId: ReturnType<typeof mintGlyphId> = mintGlyphId(),
+): FontIntent => ({
   kind: "createGlyph",
-  createGlyph: { glyphId: mintGlyphId(), name: name as GlyphName, unicodes: [unicode as Unicode] },
+  createGlyph: {
+    glyphId,
+    name: name as GlyphName,
+    unicodes: [unicode as Unicode],
+  },
 });
 
 const savePath = (): string => join(mkdtempSync(join(tmpdir(), "shift-save-")), "Saved.shift");
+
+function queueOutlinedGlyph(stack: WorkspaceStack, name: string, unicode: number): void {
+  const glyphId = mintGlyphId();
+  const layerId = mintLayerId();
+  const contourId = mintContourId();
+  const intents: FontIntent[] = [
+    createGlyph(name, unicode, glyphId),
+    {
+      kind: "createGlyphLayer",
+      createGlyphLayer: {
+        glyphId,
+        layerId,
+        sourceId: stack.font.defaultSource.id,
+      },
+    },
+    { kind: "setXAdvance", setXAdvance: { layerId, width: 600 } },
+    { kind: "addContour", addContour: { layerId, contourId, closed: true } },
+    {
+      kind: "addPoints",
+      addPoints: {
+        layerId,
+        contourId,
+        points: [
+          {
+            id: mintPointId(),
+            x: 100,
+            y: 0,
+            pointType: "onCurve",
+            smooth: false,
+          },
+          {
+            id: mintPointId(),
+            x: 300,
+            y: 700,
+            pointType: "onCurve",
+            smooth: false,
+          },
+          {
+            id: mintPointId(),
+            x: 500,
+            y: 0,
+            pointType: "onCurve",
+            smooth: false,
+          },
+        ],
+      },
+    },
+  ];
+
+  stack.editCoordinator.transaction(`Create ${name}`, () => {
+    for (const intent of intents) stack.editCoordinator.push(intent);
+  });
+}
 
 describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => {
   let stack: WorkspaceStack;
@@ -35,6 +99,22 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
 
     expect(store.workspaceCell.peek()?.glyphs).toHaveLength(1); // the apply was folded
     expect(saved).toMatchObject({ dirty: false, needsSaveAs: false });
+  });
+
+  it("exports queued edits from one immutable snapshot while later edits continue", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-export-"));
+    const outputPath = join(outputRoot, "Queued.ttf");
+    queueOutlinedGlyph(stack, "A", 65);
+
+    const exporting = stack.editCoordinator.export(outputPath);
+    queueOutlinedGlyph(stack, "B", 66);
+    await exporting;
+    await stack.editCoordinator.settled();
+
+    const compiled = createBridge();
+    compiled.openWorkspace(outputPath, join(outputRoot, "compiled.sqlite3"));
+    const unicodes = compiled.getGlyphs().flatMap((glyph) => glyph.unicodes);
+    expect(unicodes).toEqual([65]);
   });
 
   it("a current-target save serializes behind a later edit", async () => {
@@ -116,7 +196,11 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     await editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "D" as GlyphName, unicodes: [68 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "D" as GlyphName,
+          unicodes: [68 as Unicode],
+        },
       },
       {
         kind: "createGlyphLayer",

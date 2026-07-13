@@ -3,6 +3,7 @@ import type {
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentState,
+  WorkspaceExportResult,
   WorkspaceGlyphSnapshot,
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSnapshot,
@@ -120,13 +121,30 @@ export class WorkspaceClient {
     return this.#setDocumentState(await this.#require().call("workspace.saveAs", { path }));
   }
 
+  /**
+   * Starts compilation after the export request enters the workspace FIFO.
+   *
+   * @param path - destination selected by the user; must end in `.ttf`.
+   * @returns a completion handle so the edit lane can resume after export starts.
+   * @throws {Error} when the workspace is disconnected or compilation fails.
+   */
+  async startExport(path: string): Promise<{ completion: Promise<WorkspaceExportResult> }> {
+    await this.connect();
+
+    return {
+      completion: this.#require().call("workspace.export", { path }),
+    };
+  }
+
   /** Pulls replace-grade glyph snapshots by stable glyph id and exact sources. */
   async glyphSnapshots(
     requests: readonly WorkspaceGlyphSnapshotRequest[],
   ): Promise<WorkspaceGlyphSnapshot[]> {
     await this.connect();
 
-    return this.#require().call("workspace.glyphSnapshots", { requests: [...requests] });
+    return this.#require().call("workspace.glyphSnapshots", {
+      requests: [...requests],
+    });
   }
 
   /**

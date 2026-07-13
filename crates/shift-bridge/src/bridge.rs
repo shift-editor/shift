@@ -171,6 +171,10 @@ impl FontView for FontSaveSnapshot {
     self.font.axes()
   }
 
+  fn axis_mappings(&self) -> &[shift_font::AxisMapping] {
+    self.font.axis_mappings()
+  }
+
   fn sources(&self) -> &[shift_font::Source] {
     self.font.sources()
   }

@@ -8,6 +8,7 @@ import type {
   SyncEventMap,
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
+  WorkspaceExportResult,
   WorkspaceGlyphSnapshot,
   WorkspacePackageIdentity,
   WorkspaceSnapshot,
@@ -110,6 +111,7 @@ export class WorkspaceHost {
       // every committed apply/undo/redo, so it never writes stale state.
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
+      "workspace.export": ({ path }) => this.#export(path),
       "workspace.glyphSnapshots": ({ requests }) =>
         this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[]),
       "workspace.mapLocation": (location) =>
@@ -196,6 +198,19 @@ export class WorkspaceHost {
     this.#packageAddress = newAddress;
 
     return this.#emitDocumentChanged();
+  }
+
+  async #export(outputPath: string): Promise<WorkspaceExportResult> {
+    const { completion } = await this.#serialize(() => ({
+      // exportWorkspace captures its immutable native snapshot synchronously.
+      // Wrapping the completion releases the workspace queue while fontc runs.
+      completion: this.#bridge.exportWorkspace({
+        path: outputPath,
+        format: "ttf",
+      }),
+    }));
+    const result = await completion;
+    return { path: result.path, format: "ttf" };
   }
 
   #close(discard: boolean): null {

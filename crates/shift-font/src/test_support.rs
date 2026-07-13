@@ -1,9 +1,10 @@
 //! Shared test corpora for round-trip and persistence tests.
 
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, Component, ComponentId, Contour, ContourId,
-    DecomposedTransform, Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair,
-    KerningSide, LayerId, LibValue, Location, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint,
+    AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform, Font, Glyph,
+    GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair, KerningSide, LayerId, LibValue,
+    Location, Point, PointId, PointType, Source, SourceId,
 };
 use std::collections::HashMap;
 
@@ -124,17 +125,45 @@ pub fn sample_font() -> Font {
         900.0,
     );
     weight.set_hidden(true);
-    font.add_axis(weight);
+    weight.set_labels(vec![AxisLabel {
+        name: "Regular".to_string(),
+        value: 400.0,
+        range: Some(AxisLabelRange {
+            minimum: 350.0,
+            maximum: 450.0,
+        }),
+        linked_value: Some(700.0),
+        elidable: true,
+    }]);
+    font.add_axis(weight.clone());
 
     let width_id = AxisId::from_raw("width");
-    font.add_axis(Axis::with_id(
+    let mut width = Axis::with_id(
         width_id.clone(),
         "wdth".to_string(),
         "Width".to_string(),
         75.0,
         100.0,
         125.0,
-    ));
+    );
+    width.set_role(AxisRole::Internal);
+    font.add_axis(width);
+
+    let mut bold_mapping_point = mapping_point(&weight, 900.0, 800.0);
+    bold_mapping_point.description = Some("Bold compression".to_string());
+    let mut weight_mapping = AxisMapping::new(
+        "Weight curve".to_string(),
+        vec![weight_id.clone()],
+        vec![weight_id.clone()],
+        vec![
+            mapping_point(&weight, 100.0, 100.0),
+            mapping_point(&weight, 400.0, 400.0),
+            bold_mapping_point,
+        ],
+    );
+    weight_mapping.set_description(Some("External to design weight".to_string()));
+    font.set_axis_mappings(vec![weight_mapping])
+        .expect("sample axis mapping should be valid");
 
     let regular_id = SourceId::from_raw("regular");
     let bold_id = SourceId::from_raw("bold");
@@ -142,7 +171,7 @@ pub fn sample_font() -> Font {
     regular_location.set(weight_id.clone(), 400.0);
     regular_location.set(width_id.clone(), 100.0);
     let mut bold_location = Location::new();
-    bold_location.set(weight_id, 900.0);
+    bold_location.set(weight_id, 800.0);
     bold_location.set(width_id, 112.5);
     font.add_source(Source::with_id(
         regular_id.clone(),
@@ -264,4 +293,103 @@ pub fn sample_font() -> Font {
 
     font.insert_glyph(glyph).unwrap();
     font
+}
+
+/// Builds a small variable font whose authored values are easy to distinguish
+/// in compiler integration tests.
+pub fn sample_variable_font() -> Font {
+    let mut font = Font::new();
+    font.metrics_mut().cap_height = Some(700.0);
+    font.metrics_mut().x_height = Some(500.0);
+    font.metrics_mut().line_gap = Some(20.0);
+    font.metrics_mut().underline_position = Some(-100.0);
+    font.metrics_mut().underline_thickness = Some(50.0);
+
+    let mut weight = Axis::weight();
+    weight.set_labels(vec![
+        AxisLabel {
+            name: "Regular".to_string(),
+            value: 400.0,
+            range: Some(AxisLabelRange {
+                minimum: 350.0,
+                maximum: 450.0,
+            }),
+            linked_value: Some(700.0),
+            elidable: true,
+        },
+        AxisLabel {
+            name: "Bold".to_string(),
+            value: 900.0,
+            range: None,
+            linked_value: None,
+            elidable: false,
+        },
+    ]);
+    let weight_id = weight.id();
+    font.add_axis(weight.clone());
+    font.set_axis_mappings(vec![AxisMapping::new(
+        "Weight curve".to_string(),
+        vec![weight_id.clone()],
+        vec![weight_id.clone()],
+        vec![
+            mapping_point(&weight, 100.0, 100.0),
+            mapping_point(&weight, 400.0, 400.0),
+            mapping_point(&weight, 700.0, 600.0),
+            mapping_point(&weight, 900.0, 800.0),
+        ],
+    )])
+    .expect("sample axis mapping should be valid");
+
+    let default_source_id = font.default_source_id().unwrap();
+    let mut default_location = Location::new();
+    default_location.set(weight_id.clone(), 400.0);
+    font.source_mut(default_source_id.clone())
+        .unwrap()
+        .set_location(default_location);
+
+    let mut medium_location = Location::new();
+    medium_location.set(weight_id.clone(), 600.0);
+    font.add_source(Source::new("Medium".to_string(), medium_location));
+    let mut bold_location = Location::new();
+    bold_location.set(weight_id, 800.0);
+    let bold_source_id = font.add_source(Source::new("Bold".to_string(), bold_location));
+
+    font.kerning_mut()
+        .set_group1("public.kern1.A".to_string(), vec!["A".into()]);
+    font.kerning_mut()
+        .set_group2("public.kern2.A".to_string(), vec!["A".into()]);
+    font.kerning_mut().add_pair(KerningPair::new(
+        KerningSide::Group("public.kern1.A".to_string()),
+        KerningSide::Group("public.kern2.A".to_string()),
+        -50.0,
+    ));
+
+    let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
+    glyph.set_layer(triangle_layer(default_source_id, 600.0, 300.0));
+    glyph.set_layer(triangle_layer(bold_source_id, 800.0, 380.0));
+    font.insert_glyph(glyph).unwrap();
+    font
+}
+
+fn mapping_point(axis: &Axis, user: f64, design: f64) -> AxisMappingPoint {
+    let mut input = Location::new();
+    input.set(axis.id(), user);
+    let mut output = Location::new();
+    output.set(axis.id(), design);
+    AxisMappingPoint {
+        description: None,
+        input,
+        output,
+    }
+}
+
+fn triangle_layer(source_id: SourceId, width: f64, apex_x: f64) -> GlyphLayer {
+    let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, width);
+    let mut contour = Contour::new();
+    contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+    contour.add_point(apex_x, 700.0, PointType::OnCurve, false);
+    contour.add_point(500.0, 0.0, PointType::OnCurve, false);
+    contour.close();
+    layer.add_contour(contour);
+    layer
 }

@@ -153,6 +153,39 @@ export class DocumentSession {
   }
 
   /**
+   * Shows a native destination dialog and exports the latest committed document as TTF.
+   *
+   * @remarks
+   * The request travels through the renderer document lane so pending edits settle before
+   * the utility process captures an immutable native export snapshot. Export never changes
+   * the document's save target or dirty state.
+   *
+   * @throws {Error} when document state cannot be read.
+   */
+  async exportTtf(): Promise<void> {
+    this.#log.info("TTF export requested");
+    const state = await this.#requestState();
+    if (!state) {
+      this.#log.info("TTF export skipped: no document state");
+      return;
+    }
+
+    const outputPath = await this.#showExportDialog(state);
+    if (!outputPath) {
+      this.#log.info("TTF export canceled");
+      return;
+    }
+
+    try {
+      await this.#document.export(outputPath);
+      this.#log.info("TTF export completed", { path: outputPath });
+    } catch (error) {
+      this.#log.warn("TTF export failed", error);
+      await this.#showExportFailedDialog(error);
+    }
+  }
+
+  /**
    * Applies a utility-owned document state snapshot to main-owned UI.
    *
    * @param state - latest utility state, or null when no document is open.
@@ -233,6 +266,25 @@ export class DocumentSession {
     return result.canceled ? null : (result.filePath ?? null);
   }
 
+  async #showExportDialog(state: WorkspaceDocumentState): Promise<string | null> {
+    const defaultPath = state.saveTarget
+      ? path.join(path.dirname(state.saveTarget), `${path.parse(state.saveTarget).name}.ttf`)
+      : "Untitled.ttf";
+    const options: SaveDialogOptions = {
+      title: "Export TrueType Font",
+      defaultPath,
+      filters: [{ name: "TrueType Font", extensions: ["ttf"] }],
+      properties: ["createDirectory", "showOverwriteConfirmation"],
+    };
+
+    const window = this.#dialogWindow();
+    const result = window
+      ? await dialog.showSaveDialog(window.window, options)
+      : await dialog.showSaveDialog(options);
+
+    return result.canceled ? null : (result.filePath ?? null);
+  }
+
   async #showDirtyDocumentDialog(
     state: WorkspaceDocumentState,
     reason: CloseReason,
@@ -266,6 +318,25 @@ export class DocumentSession {
       defaultId: 0,
       title: this.#applicationName(),
       message: "The document could not be saved.",
+      detail: errorToMessage(error),
+    };
+
+    const window = this.#dialogWindow();
+    if (window) {
+      await dialog.showMessageBox(window.window, options);
+      return;
+    }
+
+    await dialog.showMessageBox(options);
+  }
+
+  async #showExportFailedDialog(error: unknown): Promise<void> {
+    const options: MessageBoxOptions = {
+      type: "error",
+      buttons: ["OK"],
+      defaultId: 0,
+      title: this.#applicationName(),
+      message: "The TrueType font could not be exported.",
       detail: errorToMessage(error),
     };
 

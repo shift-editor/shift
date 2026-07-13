@@ -1,8 +1,8 @@
 use std::fs::{self, File};
 
 use shift_font::{
-    Axis, AxisId, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, AxisRole, Font,
-    KerningPair, LibValue, Location, Source, SourceId, SourceRole, test_support::sample_font,
+    Axis, AxisId, Font, KerningPair, LibValue, Location, Source, SourceId, SourceRole,
+    test_support::sample_font,
 };
 use shift_source::{
     AXES_FILE, AXIS_MAPPINGS_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, FONTINFO_MODULE_FILE,
@@ -150,54 +150,6 @@ fn source_tree_round_trip_preserves_whole_font() {
     let loaded = tree_to_font(font_to_tree(&test_package_id(), &original).unwrap()).unwrap();
 
     assert_eq!(loaded, original);
-}
-
-#[test]
-fn source_tree_round_trip_preserves_axis_authoring_data() {
-    let mut font = Font::new();
-    let mut axis = Axis::weight();
-    axis.set_labels(vec![AxisLabel {
-        name: "Regular".to_string(),
-        value: 400.0,
-        range: Some(AxisLabelRange {
-            minimum: 350.0,
-            maximum: 450.0,
-        }),
-        linked_value: None,
-        elidable: true,
-    }]);
-    let axis_id = axis.id();
-    font.add_axis(axis);
-    let mut optical = Axis::new(
-        "opsz".to_string(),
-        "Optical size".to_string(),
-        8.0,
-        12.0,
-        72.0,
-    );
-    optical.set_role(AxisRole::Internal);
-    font.add_axis(optical);
-
-    let mut input = Location::new();
-    input.set(axis_id.clone(), 900.0);
-    let mut output = Location::new();
-    output.set(axis_id.clone(), 800.0);
-    font.set_axis_mappings(vec![AxisMapping::new(
-        "Weight curve".to_string(),
-        vec![axis_id.clone()],
-        vec![axis_id],
-        vec![AxisMappingPoint {
-            description: Some("Bold compression".to_string()),
-            input,
-            output,
-        }],
-    )])
-    .unwrap();
-
-    let loaded = tree_to_font(font_to_tree(&test_package_id(), &font).unwrap()).unwrap();
-
-    assert_eq!(loaded.axes(), font.axes());
-    assert_eq!(loaded.axis_mappings(), font.axis_mappings());
 }
 
 #[test]

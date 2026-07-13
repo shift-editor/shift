@@ -10,6 +10,7 @@ export type CommandId =
   | "file.open"
   | "file.save"
   | "file.saveAs"
+  | "file.exportTtf"
   | "glyph.reverseSelectedContour"
   | "window.close"
   | "window.minimise"
