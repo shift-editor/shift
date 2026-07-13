@@ -5,10 +5,14 @@ use fontdrasil::coords::NormalizedLocation;
 use fontir::error::Error;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
-use shift_font::{FeatureData, FontMetadata, FontMetrics, Glyph, KerningData, SourceId};
+use shift_font::{
+    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, KerningData, Source as ShiftSource,
+    SourceId,
+};
 
 use crate::traits::FontView;
 
+use super::axes::to_ir_axes;
 use super::glyph::GlyphWork;
 use super::kerning::{KerningGroupWork, KerningInstanceWork};
 use super::metadata::{
@@ -20,8 +24,13 @@ const MAX_UNITS_PER_EM: f64 = 16_384.0;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ShiftIrSourceError {
-    #[error("variable Shift fonts are not supported by direct TTF export yet ({axis_count} axes)")]
-    UnsupportedVariations { axis_count: usize },
+    #[error(
+        "cross-axis mappings require OpenType avar version 2, which this compiler does not support yet ({mapping_count} mappings)"
+    )]
+    UnsupportedCrossAxisMappings { mapping_count: usize },
+
+    #[error("invalid Shift variation model: {message}")]
+    InvalidVariations { message: String },
 
     #[error("the Shift font has no default source")]
     MissingDefaultSource,
@@ -39,6 +48,9 @@ pub(crate) struct ShiftIrSource {
 pub(super) struct ShiftSnapshot {
     pub metadata: FontMetadata,
     pub metrics: FontMetrics,
+    pub axes: Vec<Axis>,
+    pub ir_axes: Vec<fontdrasil::types::Axis>,
+    pub sources: Vec<ShiftSource>,
     pub default_source_id: SourceId,
     pub glyphs: Vec<Glyph>,
     pub kerning: KerningData,
@@ -47,9 +59,14 @@ pub(super) struct ShiftSnapshot {
 
 impl ShiftIrSource {
     pub(crate) fn from_font_view(font: &impl FontView) -> Result<Self, ShiftIrSourceError> {
-        if !font.axes().is_empty() {
-            return Err(ShiftIrSourceError::UnsupportedVariations {
-                axis_count: font.axes().len(),
+        let cross_axis_mapping_count = font
+            .axis_mappings()
+            .iter()
+            .filter(|mapping| !mapping.is_independent())
+            .count();
+        if cross_axis_mapping_count > 0 {
+            return Err(ShiftIrSourceError::UnsupportedCrossAxisMappings {
+                mapping_count: cross_axis_mapping_count,
             });
         }
 
@@ -65,10 +82,16 @@ impl ShiftIrSource {
             });
         }
 
+        let ir_axes = to_ir_axes(font.axes(), font.axis_mappings())
+            .map_err(|message| ShiftIrSourceError::InvalidVariations { message })?;
+
         Ok(Self {
             snapshot: Arc::new(ShiftSnapshot {
                 metadata: font.metadata().clone(),
                 metrics: *font.metrics(),
+                axes: font.axes().to_vec(),
+                ir_axes,
+                sources: font.sources().to_vec(),
                 default_source_id,
                 glyphs: font.glyphs().into_iter().cloned().collect(),
                 kerning: font.kerning().clone(),

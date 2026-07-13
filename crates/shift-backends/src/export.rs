@@ -56,8 +56,8 @@ pub enum ExportError {
         source: std::io::Error,
     },
 
-    #[error("variable TTF export is not supported yet ({axis_count} axes)")]
-    UnsupportedVariations { axis_count: usize },
+    #[error("cross-axis mappings are not supported by TTF export yet ({mapping_count} mappings)")]
+    UnsupportedCrossAxisMappings { mapping_count: usize },
 
     #[error("cannot compile this Shift font: {message}")]
     InvalidSource { message: String },
@@ -134,8 +134,8 @@ fn compile_ttf(source: ShiftIrSource, build_dir: &Path) -> Result<Vec<u8>, Expor
 
 fn map_source_error(error: ShiftIrSourceError) -> ExportError {
     match error {
-        ShiftIrSourceError::UnsupportedVariations { axis_count } => {
-            ExportError::UnsupportedVariations { axis_count }
+        ShiftIrSourceError::UnsupportedCrossAxisMappings { mapping_count } => {
+            ExportError::UnsupportedCrossAxisMappings { mapping_count }
         }
         error => ExportError::InvalidSource {
             message: error.to_string(),
@@ -155,7 +155,10 @@ fn ensure_ttf_output_path(path: &Path) -> Result<(), ExportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Axis, Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
+    use shift_font::{
+        Axis, AxisMapping, AxisMappingPoint, AxisRole, Contour, Font, Glyph, GlyphLayer, LayerId,
+        Location, PointType,
+    };
     use skrifa::{FontRef, MetadataProvider};
 
     fn simple_font() -> Font {
@@ -226,11 +229,36 @@ mod tests {
     }
 
     #[test]
-    fn rejects_variable_ttf_export_before_writing_output() {
+    fn rejects_cross_axis_mapping_before_writing_output() {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("Dogfood.ttf");
         let mut font = simple_font();
-        font.add_axis(Axis::weight());
+        let weight = Axis::weight();
+        let mut optical = Axis::new(
+            "opsz".to_string(),
+            "Optical size".to_string(),
+            8.0,
+            12.0,
+            72.0,
+        );
+        optical.set_role(AxisRole::Internal);
+        let mut input = Location::new();
+        input.set(weight.id(), 400.0);
+        let mut output = Location::new();
+        output.set(optical.id(), 12.0);
+        let mapping = AxisMapping::new(
+            "Optical compensation".to_string(),
+            vec![weight.id()],
+            vec![optical.id()],
+            vec![AxisMappingPoint {
+                description: None,
+                input,
+                output,
+            }],
+        );
+        font.add_axis(weight);
+        font.add_axis(optical);
+        font.set_axis_mappings(vec![mapping]).unwrap();
 
         let error = FontExporter::new()
             .export(
@@ -244,7 +272,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ExportError::UnsupportedVariations { axis_count: 1 }
+            ExportError::UnsupportedCrossAxisMappings { mapping_count: 1 }
         ));
         assert!(!output_path.exists());
     }

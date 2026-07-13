@@ -604,7 +604,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [ ] Instance preview panel
 - [ ] Batch instance export
-- [ ] STAT table generation
+- [x] STAT table generation
 
 ---
 

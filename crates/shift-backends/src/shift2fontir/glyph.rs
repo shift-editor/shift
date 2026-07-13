@@ -7,8 +7,9 @@ use fontir::error::Error;
 use fontir::ir::{AnchorBuilder, Component, GlyphBuilder, GlyphInstance};
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
-use shift_font::{Contour, CurveSegment, Glyph};
+use shift_font::{Contour, CurveSegment, Glyph, GlyphLayer};
 
+use super::axes::normalized_source_location;
 use super::source::ShiftSnapshot;
 
 #[derive(Debug)]
@@ -50,8 +51,7 @@ impl Work<Context, WorkId, Error> for GlyphWork {
     }
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
-        let layer = self
-            .glyph
+        self.glyph
             .layer_for_source(self.snapshot.default_source_id.clone())
             .ok_or_else(|| {
                 Error::InvalidEntry(
@@ -62,54 +62,82 @@ impl Work<Context, WorkId, Error> for GlyphWork {
                     ),
                 )
             })?;
-        let location = NormalizedLocation::default();
+
+        let metadata = context.static_metadata.get();
         let mut builder = GlyphBuilder::new(self.glyph_name.clone());
         builder
             .codepoints
             .extend(self.glyph.unicodes().iter().copied());
-        builder.try_add_source(
-            &location,
-            GlyphInstance {
-                width: layer.width(),
-                height: layer.height(),
-                vertical_origin: None,
-                contours: layer.contours_iter().map(to_bez_path).collect(),
-                components: layer
-                    .components_iter()
-                    .map(|component| {
-                        let transform = component.matrix();
-                        Component {
-                            base: component.base_glyph_name().as_str().into(),
-                            transform: Affine::new([
-                                transform.xx,
-                                transform.xy,
-                                transform.yx,
-                                transform.yy,
-                                transform.dx,
-                                transform.dy,
-                            ]),
-                        }
-                    })
-                    .collect(),
-            },
-        )?;
-
         let mut anchors = AnchorBuilder::new(self.glyph_name.clone());
-        for anchor in layer.anchors_iter() {
-            let Some(name) = anchor.name() else {
+
+        for source in self
+            .snapshot
+            .sources
+            .iter()
+            .filter(|source| source.is_master())
+        {
+            let Some(layer) = self.glyph.layer_for_source(source.id()) else {
                 continue;
             };
-            anchors.add(
-                name.into(),
-                location.clone(),
-                (anchor.x(), anchor.y()).into(),
-            )?;
+            if metadata.axes.is_empty() && source.id() != self.snapshot.default_source_id {
+                continue;
+            }
+
+            let location =
+                normalized_source_location(source, &self.snapshot.axes, &metadata.all_source_axes)?;
+            builder.try_add_source(&location, to_glyph_instance(layer))?;
+            add_anchors(&mut anchors, layer, &location)?;
         }
 
         context.anchors.set(anchors.build()?);
         context.glyphs.set(builder.build()?);
         Ok(())
     }
+}
+
+fn to_glyph_instance(layer: &GlyphLayer) -> GlyphInstance {
+    GlyphInstance {
+        width: layer.width(),
+        height: layer.height(),
+        vertical_origin: None,
+        contours: layer.contours_iter().map(to_bez_path).collect(),
+        components: layer
+            .components_iter()
+            .map(|component| {
+                let transform = component.matrix();
+                Component {
+                    base: component.base_glyph_name().as_str().into(),
+                    transform: Affine::new([
+                        transform.xx,
+                        transform.xy,
+                        transform.yx,
+                        transform.yy,
+                        transform.dx,
+                        transform.dy,
+                    ]),
+                }
+            })
+            .collect(),
+    }
+}
+
+fn add_anchors(
+    anchors: &mut AnchorBuilder,
+    layer: &GlyphLayer,
+    location: &NormalizedLocation,
+) -> Result<(), Error> {
+    for anchor in layer.anchors_iter() {
+        let Some(name) = anchor.name() else {
+            continue;
+        };
+        anchors.add(
+            name.into(),
+            location.clone(),
+            (anchor.x(), anchor.y()).into(),
+        )?;
+    }
+
+    Ok(())
 }
 
 fn to_bez_path(contour: &Contour) -> BezPath {

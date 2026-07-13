@@ -1,8 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fontdrasil::coords::NormalizedLocation;
 use fontdrasil::orchestration::{Access, Work};
+use fontdrasil::types::Axes;
 use fontir::error::Error;
 use fontir::ir::{
     FeaturesSource, GdefCategories, GlobalMetric, GlobalMetricsBuilder, GlyphOrder, NameBuilder,
@@ -11,7 +12,9 @@ use fontir::ir::{
 use fontir::orchestration::{Context, WorkId};
 use write_fonts::types::NameId;
 
+use super::axes::normalized_source_location;
 use super::source::ShiftSnapshot;
+use super::stat::generated_stat_fea;
 
 #[derive(Debug)]
 pub(super) struct StaticMetadataWork {
@@ -57,12 +60,12 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
         names.add_if_present(NameId::TYPOGRAPHIC_SUBFAMILY_NAME, &metadata.style_name);
         names.apply_default_fallbacks(DEFAULT_VENDOR_ID);
 
-        let default_location = NormalizedLocation::default();
-        let global_locations = HashSet::from([default_location]);
+        let ir_axes = Axes::from(self.snapshot.ir_axes.clone());
+        let global_locations = self.global_locations(&ir_axes)?;
         let mut static_metadata = StaticMetadata::new(
             self.snapshot.metrics.units_per_em as u16,
             names.into_inner(),
-            Vec::new(),
+            self.snapshot.ir_axes.clone(),
             Vec::new(),
             global_locations,
             None,
@@ -82,6 +85,57 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
         context.preliminary_glyph_order.set(glyph_order);
         context.static_metadata.set(static_metadata);
         Ok(())
+    }
+}
+
+impl StaticMetadataWork {
+    fn global_locations(&self, axes: &Axes) -> Result<HashSet<NormalizedLocation>, Error> {
+        if axes.is_empty() {
+            return Ok(HashSet::from([NormalizedLocation::default()]));
+        }
+
+        let mut locations = HashMap::new();
+        let mut found_default_source = false;
+        for source in self
+            .snapshot
+            .sources
+            .iter()
+            .filter(|source| source.is_master())
+        {
+            let location = normalized_source_location(source, &self.snapshot.axes, axes)?;
+            if source.id() == self.snapshot.default_source_id {
+                found_default_source = true;
+                if !location.is_default() {
+                    return Err(Error::InvalidEntry(
+                        "Shift default source",
+                        format!(
+                            "'{}' must be at the default location, got {location:?}",
+                            source.name()
+                        ),
+                    ));
+                }
+            }
+
+            if let Some(existing) = locations.insert(location, source.name()) {
+                return Err(Error::InvalidEntry(
+                    "Shift source location",
+                    format!(
+                        "master sources '{}' and '{}' have the same normalized location",
+                        existing,
+                        source.name()
+                    ),
+                ));
+            }
+        }
+
+        if !found_default_source {
+            return Err(Error::InvalidEntry(
+                "Shift default source",
+                "the default source is not a master source".to_string(),
+            ));
+        }
+
+        Ok(locations.into_keys().collect())
     }
 }
 
@@ -108,7 +162,7 @@ impl Work<Context, WorkId, Error> for GlobalMetricsWork {
     fn exec(&self, context: &Context) -> Result<(), Error> {
         let metadata = context.static_metadata.get();
         let source = &self.snapshot.metrics;
-        let location = NormalizedLocation::default();
+        let location = metadata.default_location().clone();
         let mut metrics = GlobalMetricsBuilder::new();
 
         metrics.set(GlobalMetric::Ascender, location.clone(), source.ascender);
@@ -162,9 +216,15 @@ impl Work<Context, WorkId, Error> for FeatureWork {
     }
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
-        let features = match self.snapshot.features.fea_source() {
-            Some(source) => FeaturesSource::from_string(source.to_string()),
-            None => FeaturesSource::empty(),
+        let authored = self.snapshot.features.fea_source().unwrap_or_default();
+        let generated_stat = generated_stat_fea(&self.snapshot.axes)
+            .map_err(|message| Error::InvalidEntry("Shift axis labels", message))?;
+
+        let features = match generated_stat {
+            Some(stat) if authored.trim().is_empty() => FeaturesSource::from_string(stat),
+            Some(stat) => FeaturesSource::from_string(format!("{authored}\n\n{stat}")),
+            None if authored.trim().is_empty() => FeaturesSource::empty(),
+            None => FeaturesSource::from_string(authored.to_string()),
         };
         context.features.set(features);
         Ok(())

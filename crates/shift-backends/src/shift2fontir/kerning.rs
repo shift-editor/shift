@@ -31,7 +31,10 @@ impl Work<Context, WorkId, Error> for KerningGroupWork {
     }
 
     fn read_access(&self) -> Access<WorkId> {
-        Access::Variant(WorkId::GlyphOrder)
+        AccessBuilder::new()
+            .variant(WorkId::GlyphOrder)
+            .variant(WorkId::StaticMetadata)
+            .build()
     }
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
@@ -67,9 +70,10 @@ impl Work<Context, WorkId, Error> for KerningGroupWork {
             .cloned()
             .map(|group| (group.clone(), group))
             .collect();
+        let location = context.static_metadata.get().default_location().clone();
         context.kerning_groups.set(KerningGroups {
             groups,
-            locations: BTreeSet::from([NormalizedLocation::default()]),
+            locations: BTreeSet::from([location]),
             old_to_new_group_names,
         });
         Ok(())
@@ -101,10 +105,10 @@ impl Work<Context, WorkId, Error> for KerningInstanceWork {
     }
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
-        if self.location != NormalizedLocation::default() {
+        if !self.location.is_default() {
             return Err(Error::InvalidEntry(
                 "Shift kerning location",
-                format!("expected the static default, got {:?}", self.location),
+                format!("expected the default location, got {:?}", self.location),
             ));
         }
 

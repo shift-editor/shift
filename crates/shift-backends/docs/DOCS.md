@@ -35,8 +35,10 @@ src/
     reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_font::Font (read-only)
   shift2fontir/
     source.rs      -- owned Shift FontView snapshot and fontir Source implementation
+    axes.rs         -- Shift axis/mapping conversion and source normalization
     metadata.rs    -- static metadata, metrics, features, and empty color work
-    glyph.rs       -- default-source glyph, component, contour, and anchor work
+    stat.rs         -- axis-label conversion to STAT feature syntax
+    glyph.rs       -- static/variable glyph, component, contour, and anchor work
     kerning.rs     -- static kerning group and pair work
   export.rs        -- direct fontc TTF compilation and atomic output write
 ```
@@ -67,7 +69,9 @@ src/
 
 **Saving authoring sources:** `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `.shift` packages are written by `ShiftSourcePackage` through `FontLoader`.
 
-**Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and static kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. The current adapter deliberately rejects fonts with axes; variable-font compilation must be implemented from Shift's axes, mappings, and sources rather than flattened through a static source.
+**Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and static kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. Variable compilation converts Shift axes and independent mappings to fontdrasil coordinate converters, normalizes master source locations, and emits each authored glyph master. Missing non-default glyph layers are sparse masters; every glyph must have a default-source layer. Shift's font-wide metrics and kerning remain constant across the variable font.
+
+**Variable metadata:** Independent axis mappings compile to OpenType `avar` version 1. Axis labels compile to `STAT` axis values, including ranges, linked values, and elidable flags. Source names are not inferred as `fvar` named instances because Shift does not yet have a first-class named-instance model. Cross-axis mappings are rejected explicitly because they require `avar` version 2 support from the compiler stack.
 
 ## Workflow recipes
 
@@ -94,7 +98,8 @@ src/
 - **Cross-platform UFO replacement:** macOS and Linux use an atomic directory exchange when supported. The fallback moves the old tree aside first and restores it if installing the staged tree fails.
 - **OnCurve ambiguity on write:** The IR's `OnCurve` type is context-dependent when writing. The first point of an open contour becomes `Move`, a point after `OffCurve` becomes `Curve`, everything else becomes `Line`. If contour structure is malformed, this heuristic may produce wrong results.
 - **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
-- **Static TTF export only:** Direct TTF compilation currently rejects any font with axes. This is an explicit error and never falls back to temporary UFO compilation.
+- **Cross-axis mappings:** Direct TTF compilation rejects cross-axis mappings until the compiler stack supports `avar` version 2. It never flattens the mapping or falls back to temporary UFO compilation.
+- **Authored STAT tables:** When Shift axis labels exist, export appends a generated `STAT` feature block. If authored feature text also declares `STAT`, the feature compiler reports the conflict.
 
 ## Verification
 
