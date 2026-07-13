@@ -1,6 +1,6 @@
 import { app, Menu, type MenuItemConstructorOptions } from "electron";
 import type { CommandId } from "../../shared/commands";
-import { commands } from "../commands/Commands";
+import { commandMenuItem, fileMenuItems } from "./menuItems";
 
 const isMac = process.platform === "darwin";
 
@@ -118,15 +118,7 @@ export class ApplicationMenu {
   }
 
   #fileItems(): MenuItemConstructorOptions[] {
-    return [
-      this.#commandItem("file.new"),
-      this.#commandItem("file.open"),
-      { type: "separator" },
-      this.#commandItem("file.save"),
-      this.#commandItem("file.saveAs"),
-      { type: "separator" },
-      this.#commandItem("file.exportTtf"),
-    ];
+    return fileMenuItems(this.#runCommand);
   }
 
   #editItems(): MenuItemConstructorOptions[] {
@@ -149,13 +141,6 @@ export class ApplicationMenu {
 
   /** Builds a menu item from the command registry's metadata. */
   #commandItem(id: CommandId): MenuItemConstructorOptions {
-    const command = commands.find((candidate) => candidate.id === id);
-    if (!command) throw new Error(`Unknown menu command: ${id}`);
-
-    return {
-      label: command.label,
-      accelerator: command.accelerator,
-      click: () => this.#runCommand(id),
-    };
+    return commandMenuItem(id, this.#runCommand);
   }
 }

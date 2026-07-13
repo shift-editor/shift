@@ -91,7 +91,7 @@ const fileCommands: Command[] = [
   },
   {
     id: "file.exportTtf",
-    label: "Export TrueType…",
+    label: "TrueType (.ttf)…",
     enabled: (ctx) => ctx.document.hasWorkspace(),
     run: (ctx) => ctx.document.exportTtf(),
   },
