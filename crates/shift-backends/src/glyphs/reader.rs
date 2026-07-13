@@ -101,7 +101,7 @@ impl GlyphsReader {
             {
                 KerningSide::Group(format!("{UFO_SIDE1_PREFIX}{group}"))
             } else {
-                KerningSide::Glyph(first.clone().into())
+                KerningSide::Glyph(first.to_string().into())
             };
 
             let second_side = if let Some(group) = second
@@ -110,7 +110,7 @@ impl GlyphsReader {
             {
                 KerningSide::Group(format!("{UFO_SIDE2_PREFIX}{group}"))
             } else {
-                KerningSide::Glyph(second.clone().into())
+                KerningSide::Glyph(second.to_string().into())
             };
 
             kerning.add_pair(KerningPair::new(
@@ -167,8 +167,8 @@ impl FontReader for GlyphsReader {
         let mut font = Font::empty();
 
         // Metadata and metrics from default master.
-        if let Some(family_name) = glyphs_font.names.get("familyNames") {
-            font.metadata_mut().family_name = Some(family_name.clone());
+        if let Some(family_name) = glyphs_font.get_default_name("familyNames") {
+            font.metadata_mut().family_name = Some(family_name.to_string());
         }
         if let Some(default_master) = glyphs_font.masters.get(glyphs_font.default_master_idx) {
             font.metadata_mut().style_name = Some(default_master.name.clone());

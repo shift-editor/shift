@@ -14,10 +14,10 @@ shift-source = { workspace = true }
 
 norad = "0.18.4"
 skrifa = "0.32.0"
-fontc = "0.2.0"
-glyphs-reader = "0.2.0"
+fontc = "0.6"
+glyphs-reader = "0.5"
 plist = "1"
-quick-xml = "0.37.5"
+quick-xml = { version = "0.37.5", features = ["serialize"] }
 serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"
