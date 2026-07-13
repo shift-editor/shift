@@ -54,6 +54,8 @@ export {
   mintSourceId,
 } from "./ids";
 
+export type { AxisDefinition } from "./domain";
+
 export type {
   AddAnchorsIntent,
   AddContourIntent,

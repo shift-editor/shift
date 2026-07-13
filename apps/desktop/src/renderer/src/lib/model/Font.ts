@@ -2,6 +2,7 @@ import type {
   FontMetrics,
   FontMetadata,
   Axis,
+  AxisDefinition,
   AxisMapping,
   Source,
   GlyphId,
@@ -1225,7 +1226,7 @@ export class Font {
    * @param axis - Complete axis definition apart from the id assigned here.
    * @returns The id submitted to the workspace.
    */
-  createAxis(axis: Omit<Axis, "id">): AxisId {
+  createAxis(axis: AxisDefinition): AxisId {
     const axisId = mintAxisId();
     this.editCoordinator.push({
       kind: "createAxis",

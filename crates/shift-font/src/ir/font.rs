@@ -740,45 +740,45 @@ impl Font {
 }
 
 fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult<()> {
+    let mut mapping_ids = HashSet::new();
+    let mut mapping_names = HashSet::new();
+    let mut independent_outputs = HashMap::new();
     let mut cross_axis_mapping = None;
+
     for mapping in mappings {
         mapping.validate(axes)?;
-        if !mapping.is_independent() {
-            if cross_axis_mapping.is_some() {
-                return Err(CoreError::InvalidAxisMapping {
-                    mapping_id: mapping.id(),
-                    message: "only one cross-axis mapping group is supported".to_string(),
-                });
-            }
-            cross_axis_mapping = Some(mapping.id());
-        }
-    }
 
-    for (index, mapping) in mappings.iter().enumerate() {
-        if mappings[index + 1..]
-            .iter()
-            .any(|other| other.id() == mapping.id())
-        {
+        if !mapping_ids.insert(mapping.id()) {
             return Err(CoreError::DuplicateAxisMappingId(mapping.id()));
         }
-        if mappings[index + 1..]
-            .iter()
-            .any(|other| other.name() == mapping.name())
-        {
+        if !mapping_names.insert(mapping.name()) {
             return Err(CoreError::DuplicateAxisMappingName(
                 mapping.name().to_string(),
             ));
         }
-        for output in mapping.outputs() {
-            if mappings[index + 1..].iter().any(|other| {
-                other.is_independent() == mapping.is_independent()
-                    && other.outputs().contains(output)
-            }) {
-                return Err(CoreError::InvalidAxisMapping {
-                    mapping_id: mapping.id(),
-                    message: format!("output axis {output} is controlled by more than one mapping"),
-                });
+
+        if mapping.is_independent() {
+            for output in mapping.outputs() {
+                if let Some(owner) = independent_outputs.insert(output.clone(), mapping.id()) {
+                    return Err(CoreError::InvalidAxisMapping {
+                        mapping_id: mapping.id(),
+                        message: format!(
+                            "output axis {output} is already controlled by mapping {owner}"
+                        ),
+                    });
+                }
             }
+
+            continue;
+        }
+
+        if let Some(owner) = cross_axis_mapping.replace(mapping.id()) {
+            return Err(CoreError::InvalidAxisMapping {
+                mapping_id: mapping.id(),
+                message: format!(
+                    "only one cross-axis mapping group is supported; mapping {owner} already defines it"
+                ),
+            });
         }
     }
 
@@ -851,12 +851,121 @@ mod tests {
         );
     }
 
+    fn independent_axis_mapping(name: &str, axis: &Axis) -> AxisMapping {
+        let mut input = Location::new();
+        input.set(axis.id(), axis.default());
+        let output = input.clone();
+
+        AxisMapping::new(
+            name.to_string(),
+            vec![axis.id()],
+            vec![axis.id()],
+            vec![AxisMappingPoint {
+                description: None,
+                input,
+                output,
+            }],
+        )
+    }
+
+    fn cross_axis_mapping(name: &str, axes: &[Axis]) -> AxisMapping {
+        let mut input = Location::new();
+        for axis in axes {
+            input.set(axis.id(), axis.default());
+        }
+        let output = input.clone();
+        let axis_ids = axes.iter().map(Axis::id).collect::<Vec<_>>();
+
+        AxisMapping::new(
+            name.to_string(),
+            axis_ids.clone(),
+            axis_ids,
+            vec![AxisMappingPoint {
+                description: None,
+                input,
+                output,
+            }],
+        )
+    }
+
     #[test]
     fn font_creation() {
         let font = Font::new();
         assert_eq!(font.glyph_count(), 0);
         assert_eq!(font.sources().len(), 1);
         assert_eq!(font.default_source().map(Source::name), Some("Regular"));
+    }
+
+    #[test]
+    fn duplicate_axis_mapping_ids_are_rejected() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let mapping = independent_axis_mapping("Weight curve", &axis);
+        font.add_axis(axis);
+
+        let result = font.set_axis_mappings(vec![mapping.clone(), mapping]);
+
+        assert!(matches!(result, Err(CoreError::DuplicateAxisMappingId(_))));
+    }
+
+    #[test]
+    fn duplicate_axis_mapping_names_are_rejected() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let first = independent_axis_mapping("Weight curve", &axis);
+        let second = independent_axis_mapping("Weight curve", &axis);
+        font.add_axis(axis);
+
+        let result = font.set_axis_mappings(vec![first, second]);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::DuplicateAxisMappingName(name)) if name == "Weight curve"
+        ));
+    }
+
+    #[test]
+    fn independent_axis_mappings_cannot_share_an_output() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let first = independent_axis_mapping("Weight curve", &axis);
+        let second = independent_axis_mapping("Weight correction", &axis);
+        let first_id = first.id();
+        let second_id = second.id();
+        font.add_axis(axis);
+
+        let result = font.set_axis_mappings(vec![first, second]);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidAxisMapping {
+                mapping_id,
+                message,
+            }) if mapping_id == second_id && message.contains(&first_id.to_string())
+        ));
+    }
+
+    #[test]
+    fn only_one_cross_axis_mapping_group_is_allowed() {
+        let mut font = Font::new();
+        let axes = [Axis::weight(), Axis::width()];
+        let first = cross_axis_mapping("Weight-width correction", &axes);
+        let second = cross_axis_mapping("Optical correction", &axes);
+        let first_id = first.id();
+        let second_id = second.id();
+        for axis in axes {
+            font.add_axis(axis);
+        }
+
+        let result = font.set_axis_mappings(vec![first, second]);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidAxisMapping {
+                mapping_id,
+                message,
+            }) if mapping_id == second_id && message.contains(&first_id.to_string())
+        ));
     }
 
     #[test]
