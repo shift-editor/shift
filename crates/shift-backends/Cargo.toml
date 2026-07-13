@@ -15,12 +15,17 @@ shift-source = { workspace = true }
 norad = "0.18.4"
 skrifa = "0.32.0"
 fontc = "0.6"
+fontdrasil = "0.4"
+fontir = "0.5"
 glyphs-reader = "0.5"
+kurbo = "0.12"
+ordered-float = "5"
 plist = "1"
 quick-xml = { version = "0.37.5", features = ["serialize"] }
 serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"
+write-fonts = "0.44"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

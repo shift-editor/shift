@@ -1,6 +1,7 @@
 import type { AppliedChange, FontIntent, Location } from "@shift/types";
 import type {
   WorkspaceDocumentState,
+  WorkspaceExportResult,
   WorkspaceGlyphSnapshot,
   WorkspaceGlyphSnapshotRequest,
 } from "@shared/workspace/protocol";
@@ -34,7 +35,10 @@ export class WorkspaceEditCoordinator {
 
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
-  #transaction: { readonly label: string; readonly intents: FontIntent[] } | null = null;
+  #transaction: {
+    readonly label: string;
+    readonly intents: FontIntent[];
+  } | null = null;
 
   constructor(workspace: WorkspaceClient, store: FontStore) {
     this.#workspace = workspace;
@@ -186,6 +190,18 @@ export class WorkspaceEditCoordinator {
     return this.#withFlush(() =>
       path === null ? this.#workspace.save() : this.#workspace.saveAs(path),
     );
+  }
+
+  /**
+   * Captures an export after pending edits, then releases the edit lane while compilation runs.
+   *
+   * @param path - destination selected by the user; must end in `.ttf`.
+   * @returns the compiled output identity after its atomic write completes.
+   * @throws {Error} when a transaction is open or compilation fails.
+   */
+  async export(path: string): Promise<WorkspaceExportResult> {
+    const { completion } = await this.#withFlush(() => this.#workspace.startExport(path));
+    return completion;
   }
 
   #withFlush<T>(job: () => Promise<T>): Promise<T> {

@@ -1818,9 +1818,13 @@ name = "shift-backends"
 version = "0.1.0"
 dependencies = [
  "fontc",
+ "fontdrasil",
+ "fontir",
  "glyphs-reader",
+ "kurbo 0.12.0",
  "libc",
  "norad 0.18.4",
+ "ordered-float",
  "plist",
  "quick-xml 0.37.5",
  "serde",
@@ -1829,6 +1833,7 @@ dependencies = [
  "skrifa",
  "tempfile",
  "thiserror",
+ "write-fonts",
 ]
 
 [[package]]
@@ -1857,6 +1862,7 @@ dependencies = [
  "miette",
  "serde",
  "serde_json",
+ "shift-backends",
  "shift-font",
  "shift-source",
  "tempfile",

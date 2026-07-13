@@ -10,13 +10,15 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Backends are stateless unit structs (no fields). WHY: They are pure converters with no caching or mutable state, making them trivially thread-safe and cheap to construct.
 
-**CRITICAL:** `UfoWriter::save` calls `remove_dir_all` on the target path before writing. This is a destructive overwrite -- if the save fails partway through, the previous file is already gone. Callers must handle save errors with this in mind (e.g. write to a temp path first, then rename).
+**Architecture Invariant:** `UfoWriter` stages a complete UFO beside the destination and swaps it into place only after the staged tree is durable. WHY: a failed save must preserve the previous source rather than leave a partial directory.
 
-**Architecture Invariant:** The `UfoWriter` rounds all coordinates and widths to integers via the `UfoRound` trait (calls `f64::round()`). WHY: UFO files conventionally store integer coordinates; sub-unit precision is discarded on save. Empty contours are also skipped on write.
+**Architecture Invariant:** `UfoWriter` preserves fractional coordinates and widths. Empty contours are skipped because they have no serializable UFO geometry.
 
 **Architecture Invariant:** `GlyphsReader` converts Glyphs-format kerning group prefixes (`@MMK_L_`, `@MMK_R_`) to UFO-convention prefixes (`public.kern1.`, `public.kern2.`) at load time. WHY: The IR stores kerning in UFO conventions; all backends must normalize to this format.
 
 **Architecture Invariant:** `GlyphsReader` only loads kerning from the default master. WHY: The IR currently stores a single static kerning table, not per-master kerning.
+
+**Architecture Invariant:** TrueType export compiles an owned snapshot of the Shift `Font` IR directly through fontir/fontc. It must not serialize a temporary UFO or fall back to another authoring format. WHY: `.shift` is the canonical authoring source, and an intermediate format would discard or reinterpret Shift concepts before compilation.
 
 ## Codemap
 
@@ -27,10 +29,16 @@ src/
   ufo/
     mod.rs         -- UfoBackend convenience struct combining reader+writer; round-trip tests
     reader.rs      -- UfoReader: norad::Font -> shift_font::Font
-    writer.rs      -- UfoWriter: shift_font::Font -> norad::Font (with coordinate rounding)
+    writer.rs      -- UfoWriter: shift_font::Font -> atomically written norad::Font
   glyphs/
     mod.rs         -- GlyphsReader re-export; fixture-based integration tests
     reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_font::Font (read-only)
+  shift2fontir/
+    source.rs      -- owned Shift FontView snapshot and fontir Source implementation
+    metadata.rs    -- static metadata, metrics, features, and empty color work
+    glyph.rs       -- default-source glyph, component, contour, and anchor work
+    kerning.rs     -- static kerning group and pair work
+  export.rs        -- direct fontc TTF compilation and atomic output write
 ```
 
 ## Key Types
@@ -39,10 +47,11 @@ src/
 - `FontWriter` -- trait with `save(&self, font, path) -> Result<(), String>`
 - `FontBackend` -- auto-implemented marker trait for types implementing both `FontReader` + `FontWriter`
 - `UfoReader` -- loads `.ufo` bundles via `norad`
-- `UfoWriter` -- writes `.ufo` bundles via `norad`; rounds coordinates to integers
+- `UfoWriter` -- atomically writes `.ufo` bundles via `norad`
 - `DesignspaceReader` / `DesignspaceWriter` -- read and atomically write `.designspace` projects plus companion UFOs, including continuous/discrete axes, axis value labels, per-axis maps, and cross-axis mappings
 - `UfoBackend` -- unit struct implementing `FontBackend` by delegating to `UfoReader`/`UfoWriter`
 - `GlyphsReader` -- loads `.glyphs` and `.glyphspackage` files via `glyphs-reader`; read-only (no writer)
+- `FontExporter` -- compiles a `FontView` directly to TTF via `ShiftIrSource` and fontc
 
 ## How it works
 
@@ -56,7 +65,9 @@ src/
 
 **Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation.
 
-**Saving:** Only UFO write is supported. `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, then converts each glyph per layer. `features.fea` is written as a standalone file before calling `norad::Font::save`.
+**Saving authoring sources:** `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `.shift` packages are written by `ShiftSourcePackage` through `FontLoader`.
+
+**Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and static kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. The current adapter deliberately rejects fonts with axes; variable-font compilation must be implemented from Shift's axes, mappings, and sources rather than flattened through a static source.
 
 ## Workflow recipes
 
@@ -76,27 +87,27 @@ src/
 1. Read conversion: `UfoReader::convert_point_type` (norad -> IR)
 2. Write conversion: `UfoWriter::convert_point_type` (IR -> norad), which uses positional context
 3. Run the `round_trip_ufo` test to verify fidelity
-4. Run `writer_rounds_coordinates_and_skips_empty_contours` to check formatting
+4. Run `writer_preserves_fractional_coordinates_and_skips_empty_contours` to check serialization
 
 ## Gotchas
 
-- **Destructive save:** `UfoWriter::save` deletes the entire target directory before writing. A crash mid-save means data loss. No atomic-rename strategy is in place yet.
-- **Coordinate rounding:** All coordinates are rounded to nearest integer on UFO write. If you need sub-unit precision preserved, this will silently discard it.
+- **Cross-platform UFO replacement:** macOS and Linux use an atomic directory exchange when supported. The fallback moves the old tree aside first and restores it if installing the staged tree fails.
 - **OnCurve ambiguity on write:** The IR's `OnCurve` type is context-dependent when writing. The first point of an open contour becomes `Move`, a point after `OffCurve` becomes `Curve`, everything else becomes `Line`. If contour structure is malformed, this heuristic may produce wrong results.
 - **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
-- **features.fea written before norad save:** The writer creates the output directory and writes `features.fea` before calling `norad_font.save()`. If the path already existed, it was already deleted by `remove_dir_all`, so the directory is recreated for the .fea file.
+- **Static TTF export only:** Direct TTF compilation currently rejects any font with axes. This is an explicit error and never falls back to temporary UFO compilation.
 
 ## Verification
 
 ```bash
-# Run all backend tests (UFO round-trip, coordinate rounding, Glyphs loading)
+# Run all backend tests (UFO round-trip, atomic writes, Glyphs loading, TTF export)
 cargo test -p shift-backends
 
 # Specific tests
 cargo test -p shift-backends round_trip_ufo
-cargo test -p shift-backends writer_rounds_coordinates_and_skips_empty_contours
+cargo test -p shift-backends writer_preserves_fractional_coordinates_and_skips_empty_contours
 cargo test -p shift-backends loads_homenaje_glyphs_file
 cargo test -p shift-backends loads_glyphs_package
+cargo test -p shift-backends --test export
 ```
 
 ## Related

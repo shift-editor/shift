@@ -4,14 +4,33 @@ mod inspect;
 use std::io::{self, IsTerminal, Write};
 
 use clap::Parser;
-use cli::{Cli, Command};
+use cli::{Cli, Command, CompileArgs};
 use inspect::{InspectReport, RenderMode};
 use miette::IntoDiagnostic;
+use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
+use shift_source::ShiftSourcePackage;
 
 fn main() -> miette::Result<()> {
     match Cli::parse().command {
         Command::Inspect(args) => inspect(args),
+        Command::Compile(args) => {
+            let result = compile(args)?;
+            write_stdout(&result.path.display().to_string())
+        }
     }
+}
+
+fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
+    let font = ShiftSourcePackage::load_font(&args.path).into_diagnostic()?;
+    FontExporter::new()
+        .export(
+            &font,
+            FontExportRequest {
+                path: args.output,
+                format: ExportFormat::Ttf,
+            },
+        )
+        .into_diagnostic()
 }
 
 fn inspect(args: cli::InspectArgs) -> miette::Result<()> {
@@ -39,5 +58,46 @@ fn write_stdout(output: &str) -> miette::Result<()> {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(error) => Err(error).into_diagnostic(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
+
+    use super::*;
+
+    #[test]
+    fn compile_command_writes_ttf_from_shift_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("Dogfood.shift");
+        let output_path = temp.path().join("Dogfood.ttf");
+        ShiftSourcePackage::save_font(&source_path, &simple_font()).unwrap();
+
+        let result = compile(CompileArgs {
+            path: source_path,
+            output: output_path.clone(),
+        })
+        .unwrap();
+
+        assert_eq!(result.path, output_path);
+        let bytes = std::fs::read(result.path).unwrap();
+        assert_eq!(&bytes[..4], &[0x00, 0x01, 0x00, 0x00]);
+    }
+
+    fn simple_font() -> Font {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let mut glyph = Glyph::with_unicode("A", 0x0041);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 600.0);
+        let mut contour = Contour::new();
+        contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+        contour.add_point(300.0, 700.0, PointType::OnCurve, false);
+        contour.add_point(500.0, 0.0, PointType::OnCurve, false);
+        contour.close();
+        layer.add_contour(contour);
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+        font
     }
 }

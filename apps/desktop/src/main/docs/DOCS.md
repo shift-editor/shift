@@ -6,7 +6,8 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 
 - **Architecture Invariant:** `WorkspaceManager` owns live workspace sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender.
 - **Architecture Invariant:** Each workspace session owns one `WorkspaceProcess`, one `DocumentClient`, and one `DocumentSession`. Main never reads or mutates font data directly.
-- **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads and saves go through the renderer document lane so pending edits flush first.
+- **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
+- **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
 - **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean documents and explicitly discarded dirty documents are closed through the utility process so package bindings and SQLite documents are pruned.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
@@ -26,7 +27,7 @@ src/main/
     Commands.ts                   -- built-in shell commands
   document/
     DocumentClient.ts             -- main client for the renderer document lane
-    DocumentSession.ts            -- native save/save-as/close workflow
+    DocumentSession.ts            -- native save/save-as/export/close workflow
     openFontDialog.ts             -- native open dialog
   menu/
     ApplicationMenu.ts            -- Electron application menu
@@ -45,7 +46,7 @@ src/main/
 - `WorkspaceSession` -- owns the utility process, renderer document lane, document workflow, and attached windows for one workspace.
 - `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect package, open, close, and document state.
 - `DocumentClient` -- request client for renderer-served document state/save calls.
-- `DocumentSession` -- native document workflow for Save, Save As, and close confirmation.
+- `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
 - `AppLifecycle` -- coordinates Electron window close and app quit around document vetoes.
 - `WorkspaceDocumentState` -- utility-owned lifecycle state mirrored into main and renderer.
 
@@ -67,9 +68,11 @@ For `.shift` paths, `WorkspaceManager` starts a provisional utility process and 
 
 `App` creates a BrowserWindow, attaches it to the returned `WorkspaceSession`, and loads the workspace route. Multiple windows may attach to the same session. Closing one of several windows does not close the document; closing the last window does.
 
-### Save And Close
+### Save, Export, And Close
 
 Save and Save As start in `DocumentSession`, but the actual save request goes through `DocumentClient` to the renderer document lane. The renderer flushes queued edits through the workspace sync lane before calling `workspace.save` or `workspace.saveAs`.
+
+Export TrueType follows the same document and sync lanes. The utility process captures an immutable native snapshot after prior edits, then awaits direct Shift IR-to-fontc compilation outside the workspace queue. Edits submitted after snapshot capture can proceed and are not included in that export. Export does not change the package binding or dirty state.
 
 Close and quit call `DocumentSession.confirmClose`. If the document is clean, or the user saves successfully, or the user chooses discard, `DocumentSession` calls `workspace.close` in the utility process. The utility drops the Rust workspace handle, removes package bindings, and deletes the clean/discarded SQLite document. Dirty divergent documents created by package-source conflicts are orphaned by the utility process, not by main.
 
@@ -97,6 +100,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 ## Verification
 
 - `pnpm --filter @shift/desktop test src/utility/workspace/WorkspaceHost.test.ts`
+- `pnpm --filter @shift/desktop test src/renderer/src/lib/workspace/WorkspaceEditCoordinator.test.ts`
 - `pnpm typecheck`
 - Manual: open the same `.shift` package twice and verify the existing workspace session is reused.
 - Manual: edit a package, close the last window, and verify the save/discard prompt appears.

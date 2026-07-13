@@ -32,6 +32,20 @@ pub struct Cli {
 pub enum Command {
     /// Inspect a .shift source package without modifying it.
     Inspect(InspectArgs),
+
+    /// Compile a .shift source package to a TrueType font.
+    Compile(CompileArgs),
+}
+
+#[derive(Debug, Parser)]
+pub struct CompileArgs {
+    /// Path to the canonical .shift source package.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Path for the compiled .ttf output.
+    #[arg(short, long, value_hint = ValueHint::FilePath)]
+    pub output: PathBuf,
 }
 
 #[derive(Debug, Parser)]

@@ -240,6 +240,9 @@ export class App {
         saveAs: async () => {
           await this.#requireActiveWorkspaceSession("file.saveAs").document.saveAs();
         },
+        exportTtf: async () => {
+          await this.#requireActiveWorkspaceSession("file.exportTtf").document.exportTtf();
+        },
       },
       windows: {
         active: () => this.#windows.activeWindow(),

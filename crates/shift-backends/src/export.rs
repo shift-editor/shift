@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
+use crate::atomic::write_file_atomic;
+use crate::shift2fontir::{ShiftIrSource, ShiftIrSourceError};
 use crate::traits::FontView;
-use crate::ufo::UfoWriter;
-use fontc::JobTimer;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExportFormat {
@@ -50,20 +50,27 @@ pub enum ExportError {
     #[error("export path must end in .ttf for TrueType export: {path}")]
     OutputExtensionMismatch { path: PathBuf },
 
-    #[error("invalid UTF-8 in {label} path: {path}")]
-    InvalidPathUtf8 { label: &'static str, path: PathBuf },
-
     #[error("failed to create temporary export directory")]
     TempDir {
         #[source]
         source: std::io::Error,
     },
 
-    #[error("failed to prepare temporary UFO for export: {message}")]
-    PrepareUfo { message: String },
+    #[error("variable TTF export is not supported yet ({axis_count} axes)")]
+    UnsupportedVariations { axis_count: usize },
+
+    #[error("cannot compile this Shift font: {message}")]
+    InvalidSource { message: String },
 
     #[error("failed to compile TrueType font: {message}")]
     CompileTtf { message: String },
+
+    #[error("failed to write TrueType font to {path}")]
+    WriteOutput {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 pub struct FontExporter;
@@ -96,17 +103,13 @@ impl FontExporter {
             .tempdir()
             .map_err(|source| ExportError::TempDir { source })?;
 
-        let ufo_path = temp_dir.path().join("source.ufo");
         let build_dir = temp_dir.path().join("build");
-        let ufo_path_str = path_to_str(&ufo_path, "temporary UFO")?;
-
-        UfoWriter::new()
-            .save_view(font, ufo_path_str)
-            .map_err(|error| ExportError::PrepareUfo {
-                message: error.to_string(),
-            })?;
-
-        compile_ttf(ufo_path_str, &build_dir, output_path)
+        let source = ShiftIrSource::from_font_view(font).map_err(map_source_error)?;
+        let bytes = compile_ttf(source, &build_dir)?;
+        write_file_atomic(output_path, &bytes).map_err(|source| ExportError::WriteOutput {
+            path: output_path.to_path_buf(),
+            source,
+        })
     }
 }
 
@@ -116,14 +119,28 @@ impl Default for FontExporter {
     }
 }
 
-fn compile_ttf(input_path: &str, build_dir: &Path, output_path: &Path) -> Result<(), ExportError> {
-    let mut args = fontc::Args::new(build_dir, input_path.into());
-    args.output_file = Some(output_path.to_path_buf());
-
-    let timer = JobTimer::new();
-    fontc::run(args, timer).map_err(|source| ExportError::CompileTtf {
+fn compile_ttf(source: ShiftIrSource, build_dir: &Path) -> Result<Vec<u8>, ExportError> {
+    fontc::generate_font(
+        Box::new(source),
+        build_dir,
+        None,
+        fontc::Flags::default(),
+        false,
+    )
+    .map_err(|source| ExportError::CompileTtf {
         message: source.to_string(),
     })
+}
+
+fn map_source_error(error: ShiftIrSourceError) -> ExportError {
+    match error {
+        ShiftIrSourceError::UnsupportedVariations { axis_count } => {
+            ExportError::UnsupportedVariations { axis_count }
+        }
+        error => ExportError::InvalidSource {
+            message: error.to_string(),
+        },
+    }
 }
 
 fn ensure_ttf_output_path(path: &Path) -> Result<(), ExportError> {
@@ -135,17 +152,10 @@ fn ensure_ttf_output_path(path: &Path) -> Result<(), ExportError> {
     }
 }
 
-fn path_to_str<'a>(path: &'a Path, label: &'static str) -> Result<&'a str, ExportError> {
-    path.to_str().ok_or_else(|| ExportError::InvalidPathUtf8 {
-        label,
-        path: path.to_path_buf(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
+    use shift_font::{Axis, Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
     use skrifa::{FontRef, MetadataProvider};
 
     fn simple_font() -> Font {
@@ -165,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn exports_ttf_that_can_be_read_back() {
+    fn compiles_ttf_with_authored_cmap() {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("Dogfood.ttf");
         let font = simple_font();
@@ -213,5 +223,29 @@ mod tests {
             error,
             ExportError::OutputExtensionMismatch { path } if path == output_path
         ));
+    }
+
+    #[test]
+    fn rejects_variable_ttf_export_before_writing_output() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_path = temp_dir.path().join("Dogfood.ttf");
+        let mut font = simple_font();
+        font.add_axis(Axis::weight());
+
+        let error = FontExporter::new()
+            .export(
+                &font,
+                FontExportRequest {
+                    path: output_path.clone(),
+                    format: ExportFormat::Ttf,
+                },
+            )
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ExportError::UnsupportedVariations { axis_count: 1 }
+        ));
+        assert!(!output_path.exists());
     }
 }

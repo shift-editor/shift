@@ -124,6 +124,8 @@ export class ApplicationMenu {
       { type: "separator" },
       this.#commandItem("file.save"),
       this.#commandItem("file.saveAs"),
+      { type: "separator" },
+      this.#commandItem("file.exportTtf"),
     ];
   }
 

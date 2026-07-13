@@ -34,6 +34,7 @@ export class WorkspaceDocumentBridge {
       {
         "document.state": () => this.#edits.state(),
         "document.save": ({ path }) => this.#edits.save(path),
+        "document.export": ({ path }) => this.#edits.export(path),
       },
     );
   }
@@ -44,7 +45,10 @@ export class WorkspaceDocumentBridge {
   }
 }
 
-function nextDocumentPort(): { received: Promise<MessagePort>; cancel: () => void } {
+function nextDocumentPort(): {
+  received: Promise<MessagePort>;
+  cancel: () => void;
+} {
   let cancel = () => {};
 
   const received = new Promise<MessagePort>((resolve) => {
