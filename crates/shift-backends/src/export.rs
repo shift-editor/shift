@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use crate::traits::FontView;
 use crate::ufo::UfoWriter;
@@ -121,7 +120,7 @@ fn compile_ttf(input_path: &str, build_dir: &Path, output_path: &Path) -> Result
     let mut args = fontc::Args::new(build_dir, input_path.into());
     args.output_file = Some(output_path.to_path_buf());
 
-    let timer = JobTimer::new(Instant::now());
+    let timer = JobTimer::new();
     fontc::run(args, timer).map_err(|source| ExportError::CompileTtf {
         message: source.to_string(),
     })
