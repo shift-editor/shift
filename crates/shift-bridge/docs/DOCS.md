@@ -38,6 +38,7 @@ crates/shift-bridge/
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
 - `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
 - `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
+- `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 
 ## How it works
 

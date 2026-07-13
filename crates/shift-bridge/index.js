@@ -577,4 +577,6 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.Bridge = nativeBinding.Bridge
+module.exports.NapiAxisRole = nativeBinding.NapiAxisRole
+module.exports.NapiAxisType = nativeBinding.NapiAxisType
 module.exports.NapiPointType = nativeBinding.NapiPointType

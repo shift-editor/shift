@@ -27,6 +27,7 @@ impl ShiftStore {
         for axis in load_axes(&self.conn)? {
             font.add_axis(axis);
         }
+        font.set_axis_mappings(load_axis_mappings(&self.conn)?)?;
 
         for source in load_sources(&self.conn)? {
             font.add_source(source);
@@ -115,27 +116,53 @@ fn load_feature_data(conn: &rusqlite::Connection) -> Result<font::FeatureData, S
 fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError> {
     let mut stmt = conn.prepare(
         "
-        SELECT id, tag, name, min_value, default_value, max_value, hidden
+        SELECT id, tag, name, min_value, default_value, max_value, role,
+               discrete_values_json, labels_json, hidden
         FROM axes
         ORDER BY order_index, id
         ",
     )?;
 
     let rows = stmt.query_map([], |row| {
-        let mut axis = font::Axis::with_id(
-            font::AxisId::from_raw(row.get::<_, String>(0)?),
-            row.get(1)?,
-            row.get(2)?,
-            row.get(3)?,
-            row.get(4)?,
-            row.get(5)?,
-        );
-        axis.set_hidden(row.get(6)?);
+        let axis_id = font::AxisId::from_raw(row.get::<_, String>(0)?);
+        let tag = row.get(1)?;
+        let name = row.get(2)?;
+        let default = row.get(4)?;
+        let values_json = row.get::<_, Option<String>>(7)?;
+        let mut axis = if let Some(values_json) = values_json {
+            let values = serde_json::from_str(&values_json).map_err(json_column_error)?;
+            font::Axis::discrete_with_id(axis_id, tag, name, values, default)
+        } else {
+            font::Axis::continuous_with_id(axis_id, tag, name, row.get(3)?, default, row.get(5)?)
+        };
+        axis.set_role(match row.get::<_, String>(6)?.as_str() {
+            "external" => font::AxisRole::External,
+            "internal" => font::AxisRole::Internal,
+            value => return Err(rusqlite::Error::InvalidParameterName(value.to_string())),
+        });
+        let labels_json = row.get::<_, String>(8)?;
+        axis.set_labels(serde_json::from_str(&labels_json).map_err(json_column_error)?);
+        axis.set_hidden(row.get(9)?);
         Ok(axis)
     })?;
 
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(StoreError::from)
+}
+
+fn load_axis_mappings(conn: &rusqlite::Connection) -> Result<Vec<font::AxisMapping>, StoreError> {
+    let mut stmt =
+        conn.prepare("SELECT mapping_json FROM axis_mappings ORDER BY order_index, id")?;
+    let rows = stmt.query_map([], |row| {
+        let json = row.get::<_, String>(0)?;
+        serde_json::from_str(&json).map_err(json_column_error)
+    })?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)
+}
+
+fn json_column_error(error: serde_json::Error) -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 }
 
 fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreError> {

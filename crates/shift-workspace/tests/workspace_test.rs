@@ -1186,7 +1186,7 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     let undone = workspace.undo().unwrap().expect("deleteAxis should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::AxisCreated(change) if change.axis_id == axis_id
+        FontChange::AxisCreated(change) if change.axis.id() == axis_id
     )));
     assert_eq!(workspace.font().axes(), std::slice::from_ref(&axis));
 

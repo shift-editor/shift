@@ -13,6 +13,7 @@ declare const PointIdBrand: unique symbol;
 declare const ContourIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
 declare const AxisIdBrand: unique symbol;
+declare const AxisMappingIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
@@ -48,6 +49,11 @@ export type AnchorId = string & {
  * Branded string type - can't be confused with OpenType axis tags.
  */
 export type AxisId = string & { readonly [AxisIdBrand]: typeof AxisIdBrand };
+
+/** A stable identifier for one font-owned axis mapping. */
+export type AxisMappingId = string & {
+  readonly [AxisMappingIdBrand]: typeof AxisMappingIdBrand;
+};
 
 /**
  * A component identifier from Rust.
@@ -134,6 +140,11 @@ export function asAxisId(id: string): AxisId {
   return id as AxisId;
 }
 
+/** Convert a Rust mapping identifier into a typed AxisMappingId. */
+export function asAxisMappingId(id: string): AxisMappingId {
+  return id as AxisMappingId;
+}
+
 /**
  * Convert a string ID from Rust to a typed ComponentId.
  * Use this when receiving IDs from Rust snapshots.
@@ -210,6 +221,11 @@ export function isAxisId(id: unknown): id is AxisId {
   return hasIdPrefix(id, "axis");
 }
 
+/** Returns whether a value is a runtime-discriminable axis mapping id. */
+export function isAxisMappingId(id: unknown): id is AxisMappingId {
+  return hasIdPrefix(id, "axisMapping");
+}
+
 /** Returns whether a value is a runtime-discriminable component id. */
 export function isComponentId(id: unknown): id is ComponentId {
   return hasIdPrefix(id, "component");
@@ -254,6 +270,7 @@ type MintedIdByPrefix = {
   contour: ContourId;
   anchor: AnchorId;
   axis: AxisId;
+  axisMapping: AxisMappingId;
   component: ComponentId;
   guideline: GuidelineId;
   glyph: GlyphId;
@@ -310,6 +327,11 @@ export function mintAnchorId(): AnchorId {
 /** Mints a new axis id. See {@link mintPointId}. */
 export function mintAxisId(): AxisId {
   return mintPrefixedId("axis");
+}
+
+/** Mints a new axis mapping id. See {@link mintAxisId}. */
+export function mintAxisMappingId(): AxisMappingId {
+  return mintPrefixedId("axisMapping");
 }
 
 /** Mints a new glyph id. See {@link mintPointId}. */

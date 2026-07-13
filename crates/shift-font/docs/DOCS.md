@@ -4,7 +4,9 @@ First-class Rust font object model for Shift.
 
 ## Object Model
 
-- `Font` owns glyphs, sources, axes, metadata, and font-level data.
+- `Font` owns glyphs, sources, axes, axis mappings, metadata, and font-level data.
+- `Axis` has stable identity, an external/internal role, a continuous or discrete kind, and optional user-space value labels.
+- `AxisMapping` owns an ordered set of mapping points. Independent mappings transform one external axis; the optional cross-axis group maps one design-space location to another.
 - `Source` is an editable designspace position with a name and location.
 - `Glyph` is a glyph concept identified by `GlyphId`.
 - `GlyphLayer` is authored editable data for one glyph at one source.
@@ -17,12 +19,13 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - `GlyphId` identifies a glyph.
 - `SourceId` identifies a source.
 - `LayerId` identifies a glyph layer: the authored data for one glyph at one source.
+- `AxisMappingId` identifies a font-owned mapping independently of its editable name.
 
 ## Responsibilities
 
 - Own font authoring data structures such as `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Source`, and `Axis`.
 - Keep object-level mutation behavior near the objects it mutates.
-- Provide model-native helpers for layer editing, component resolution, variation behavior, and geometry-derived behavior.
+- Provide model-native helpers for layer editing, component resolution, variation behavior, axis mapping evaluation, and geometry-derived behavior.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 
 ## Boundaries

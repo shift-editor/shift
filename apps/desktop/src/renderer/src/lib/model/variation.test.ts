@@ -87,13 +87,7 @@ async function variableFont(): Promise<{
     {
       kind: "createAxis",
       createAxis: {
-        axisId: weightAxisId,
-        tag: "wght",
-        name: "Weight",
-        min: 100,
-        default: 400,
-        max: 900,
-        hidden: false,
+        axis: continuousAxis(weightAxisId),
       },
     },
   ]);
@@ -132,6 +126,21 @@ async function variableFont(): Promise<{
   ]);
 
   return { stack, glyphId, regularLayerId, boldLayerId, bold };
+}
+
+function continuousAxis(axisId: AxisId) {
+  return {
+    id: axisId,
+    tag: "wght",
+    name: "Weight",
+    role: "external",
+    axisType: "continuous",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
+  };
 }
 
 async function loadGlyph(stack: WorkspaceStack, glyphId: GlyphId) {

@@ -1,6 +1,79 @@
-use crate::entity::AxisId;
+use crate::entity::{AxisId, AxisMappingId};
+use crate::error::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AxisRole {
+    #[default]
+    External,
+    Internal,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum AxisKind {
+    Continuous {
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    },
+    Discrete {
+        values: Vec<f64>,
+        default: f64,
+    },
+}
+
+impl AxisKind {
+    pub fn minimum(&self) -> f64 {
+        match self {
+            Self::Continuous { minimum, .. } => *minimum,
+            Self::Discrete { values, default } => {
+                values.iter().copied().reduce(f64::min).unwrap_or(*default)
+            }
+        }
+    }
+
+    pub fn default(&self) -> f64 {
+        match self {
+            Self::Continuous { default, .. } | Self::Discrete { default, .. } => *default,
+        }
+    }
+
+    pub fn maximum(&self) -> f64 {
+        match self {
+            Self::Continuous { maximum, .. } => *maximum,
+            Self::Discrete { values, default } => {
+                values.iter().copied().reduce(f64::max).unwrap_or(*default)
+            }
+        }
+    }
+
+    pub fn values(&self) -> Option<&[f64]> {
+        match self {
+            Self::Continuous { .. } => None,
+            Self::Discrete { values, .. } => Some(values),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisLabelRange {
+    pub minimum: f64,
+    pub maximum: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisLabel {
+    pub name: String,
+    pub value: f64,
+    pub range: Option<AxisLabelRange>,
+    pub linked_value: Option<f64>,
+    pub elidable: bool,
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -8,9 +81,9 @@ pub struct Axis {
     id: AxisId,
     tag: String,
     name: String,
-    minimum: f64,
-    default: f64,
-    maximum: f64,
+    role: AxisRole,
+    kind: AxisKind,
+    labels: Vec<AxisLabel>,
     hidden: bool,
 }
 
@@ -27,13 +100,46 @@ impl Axis {
         default: f64,
         maximum: f64,
     ) -> Self {
+        Self::continuous_with_id(id, tag, name, minimum, default, maximum)
+    }
+
+    pub fn continuous_with_id(
+        id: AxisId,
+        tag: String,
+        name: String,
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    ) -> Self {
         Self {
             id,
             tag,
             name,
-            minimum,
-            default,
-            maximum,
+            role: AxisRole::External,
+            kind: AxisKind::Continuous {
+                minimum,
+                default,
+                maximum,
+            },
+            labels: Vec::new(),
+            hidden: false,
+        }
+    }
+
+    pub fn discrete_with_id(
+        id: AxisId,
+        tag: String,
+        name: String,
+        values: Vec<f64>,
+        default: f64,
+    ) -> Self {
+        Self {
+            id,
+            tag,
+            name,
+            role: AxisRole::External,
+            kind: AxisKind::Discrete { values, default },
+            labels: Vec::new(),
             hidden: false,
         }
     }
@@ -64,38 +170,136 @@ impl Axis {
         &self.name
     }
 
+    pub fn role(&self) -> AxisRole {
+        self.role
+    }
+
+    pub fn kind(&self) -> &AxisKind {
+        &self.kind
+    }
+
     pub fn minimum(&self) -> f64 {
-        self.minimum
+        self.kind.minimum()
     }
 
     pub fn default(&self) -> f64 {
-        self.default
+        self.kind.default()
     }
 
     pub fn maximum(&self) -> f64 {
-        self.maximum
+        self.kind.maximum()
+    }
+
+    pub fn discrete_values(&self) -> Option<&[f64]> {
+        self.kind.values()
+    }
+
+    pub fn labels(&self) -> &[AxisLabel] {
+        &self.labels
     }
 
     pub fn is_hidden(&self) -> bool {
         self.hidden
     }
 
+    pub fn set_role(&mut self, role: AxisRole) {
+        self.role = role;
+    }
+
+    pub fn set_kind(&mut self, kind: AxisKind) {
+        self.kind = kind;
+    }
+
+    pub fn set_labels(&mut self, labels: Vec<AxisLabel>) {
+        self.labels = labels;
+    }
+
     pub fn set_hidden(&mut self, hidden: bool) {
         self.hidden = hidden;
     }
 
-    pub fn normalize(&self, value: f64) -> f64 {
-        if value < self.default {
-            if (self.default - self.minimum).abs() < f64::EPSILON {
-                0.0
-            } else {
-                (value - self.default) / (self.default - self.minimum)
+    pub fn validate(&self) -> CoreResult<()> {
+        if self.name.trim().is_empty() {
+            return Err(self.invalid("name must not be blank"));
+        }
+        if self.tag.len() != 4 || !self.tag.is_ascii() {
+            return Err(self.invalid("tag must contain exactly four ASCII characters"));
+        }
+
+        match &self.kind {
+            AxisKind::Continuous {
+                minimum,
+                default,
+                maximum,
+            } => {
+                if !minimum.is_finite() || !default.is_finite() || !maximum.is_finite() {
+                    return Err(self.invalid("continuous range values must be finite"));
+                }
+                if minimum > default || default > maximum {
+                    return Err(self.invalid("expected minimum <= default <= maximum"));
+                }
             }
-        } else if value > self.default {
-            if (self.maximum - self.default).abs() < f64::EPSILON {
+            AxisKind::Discrete { values, default } => {
+                if values.is_empty() {
+                    return Err(self.invalid("discrete axes require at least one value"));
+                }
+                if !default.is_finite() || values.iter().any(|value| !value.is_finite()) {
+                    return Err(self.invalid("discrete values must be finite"));
+                }
+                if values.windows(2).any(|pair| pair[0] >= pair[1]) {
+                    return Err(self.invalid("discrete values must be strictly increasing"));
+                }
+                if !values.contains(default) {
+                    return Err(self.invalid("default must be one of the discrete values"));
+                }
+            }
+        }
+
+        for label in &self.labels {
+            if label.name.trim().is_empty() {
+                return Err(self.invalid("axis label names must not be blank"));
+            }
+            if !label.value.is_finite()
+                || label.linked_value.is_some_and(|value| !value.is_finite())
+            {
+                return Err(self.invalid("axis label values must be finite"));
+            }
+            if let Some(range) = &label.range {
+                if !range.minimum.is_finite() || !range.maximum.is_finite() {
+                    return Err(self.invalid("axis label ranges must be finite"));
+                }
+                if range.minimum > label.value || label.value > range.maximum {
+                    return Err(self.invalid("axis label ranges must contain their nominal value"));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn invalid(&self, message: impl Into<String>) -> CoreError {
+        CoreError::InvalidAxis {
+            axis_id: self.id(),
+            message: message.into(),
+        }
+    }
+
+    pub fn normalize(&self, value: f64) -> f64 {
+        let minimum = self.minimum();
+        let default = self.default();
+        let maximum = self.maximum();
+
+        if value < default {
+            if (default - minimum).abs() < f64::EPSILON {
                 0.0
             } else {
-                (value - self.default) / (self.maximum - self.default)
+                (value - default) / (default - minimum)
+            }
+        } else if value > default {
+            if (maximum - default).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (value - default) / (maximum - default)
             }
         } else {
             0.0
@@ -103,14 +307,179 @@ impl Axis {
     }
 
     pub fn denormalize(&self, value: f64) -> f64 {
+        let minimum = self.minimum();
+        let default = self.default();
+        let maximum = self.maximum();
+
         if value < 0.0 {
-            self.default + value * (self.default - self.minimum)
+            default + value * (default - minimum)
         } else if value > 0.0 {
-            self.default + value * (self.maximum - self.default)
+            default + value * (maximum - default)
         } else {
-            self.default
+            default
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisMappingPoint {
+    pub description: Option<String>,
+    pub input: Location,
+    pub output: Location,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisMapping {
+    id: AxisMappingId,
+    name: String,
+    description: Option<String>,
+    inputs: Vec<AxisId>,
+    outputs: Vec<AxisId>,
+    points: Vec<AxisMappingPoint>,
+}
+
+impl AxisMapping {
+    pub fn new(
+        name: String,
+        inputs: Vec<AxisId>,
+        outputs: Vec<AxisId>,
+        points: Vec<AxisMappingPoint>,
+    ) -> Self {
+        Self::with_id(AxisMappingId::new(), name, inputs, outputs, points)
+    }
+
+    pub fn with_id(
+        id: AxisMappingId,
+        name: String,
+        inputs: Vec<AxisId>,
+        outputs: Vec<AxisId>,
+        points: Vec<AxisMappingPoint>,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            description: None,
+            inputs,
+            outputs,
+            points,
+        }
+    }
+
+    pub fn id(&self) -> AxisMappingId {
+        self.id.clone()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    pub fn inputs(&self) -> &[AxisId] {
+        &self.inputs
+    }
+
+    pub fn outputs(&self) -> &[AxisId] {
+        &self.outputs
+    }
+
+    pub fn points(&self) -> &[AxisMappingPoint] {
+        &self.points
+    }
+
+    pub fn is_independent(&self) -> bool {
+        self.inputs.len() == 1 && self.outputs == self.inputs
+    }
+
+    pub fn set_description(&mut self, description: Option<String>) {
+        self.description = description;
+    }
+
+    pub fn validate(&self, axes: &[Axis]) -> CoreResult<()> {
+        if self.name.trim().is_empty() {
+            return Err(self.invalid("name must not be blank"));
+        }
+        if self.inputs.is_empty() {
+            return Err(self.invalid("at least one input axis is required"));
+        }
+        if self.outputs.is_empty() {
+            return Err(self.invalid("at least one output axis is required"));
+        }
+        if self.points.is_empty() {
+            return Err(self.invalid("at least one mapping point is required"));
+        }
+        if has_duplicates(&self.inputs) || has_duplicates(&self.outputs) {
+            return Err(self.invalid("input and output axes must be unique"));
+        }
+
+        for axis_id in self.inputs.iter().chain(&self.outputs) {
+            if !axes.iter().any(|axis| axis.id() == *axis_id) {
+                return Err(self.invalid(format!("references unknown axis {axis_id}")));
+            }
+        }
+        for input_id in &self.inputs {
+            let axis = axes
+                .iter()
+                .find(|axis| axis.id() == *input_id)
+                .expect("mapping axes were checked above");
+            if self.is_independent() && axis.role() != AxisRole::External {
+                return Err(self.invalid(format!("input axis {input_id} is not external")));
+            }
+        }
+
+        for point in &self.points {
+            if point.input.iter().next().is_none() || point.output.iter().next().is_none() {
+                return Err(self.invalid("mapping points require input and output locations"));
+            }
+            if self.is_independent()
+                && (point.input.get(&self.inputs[0]).is_none()
+                    || point.output.get(&self.outputs[0]).is_none())
+            {
+                return Err(self.invalid(
+                    "independent mapping points require explicit input and output values",
+                ));
+            }
+            for (axis_id, value) in point.input.iter() {
+                if !self.inputs.contains(axis_id) {
+                    return Err(
+                        self.invalid(format!("point input references undeclared axis {axis_id}"))
+                    );
+                }
+                if !value.is_finite() {
+                    return Err(self.invalid("point input values must be finite"));
+                }
+            }
+            for (axis_id, value) in point.output.iter() {
+                if !self.outputs.contains(axis_id) {
+                    return Err(
+                        self.invalid(format!("point output references undeclared axis {axis_id}"))
+                    );
+                }
+                if !value.is_finite() {
+                    return Err(self.invalid("point output values must be finite"));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn invalid(&self, message: impl Into<String>) -> CoreError {
+        CoreError::InvalidAxisMapping {
+            mapping_id: self.id(),
+            message: message.into(),
+        }
+    }
+}
+
+fn has_duplicates(ids: &[AxisId]) -> bool {
+    ids.iter()
+        .enumerate()
+        .any(|(index, id)| ids[index + 1..].contains(id))
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -186,6 +555,21 @@ mod tests {
         assert_eq!(axis.denormalize(0.0), 400.0);
         assert_eq!(axis.denormalize(-1.0), 100.0);
         assert_eq!(axis.denormalize(1.0), 900.0);
+    }
+
+    #[test]
+    fn discrete_axis_uses_authored_values_for_range() {
+        let axis = Axis::discrete_with_id(
+            AxisId::from_raw("italic"),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0, 1.0],
+            0.0,
+        );
+
+        assert_eq!(axis.minimum(), 0.0);
+        assert_eq!(axis.maximum(), 1.0);
+        assert_eq!(axis.discrete_values(), Some([0.0, 1.0].as_slice()));
     }
 
     #[test]

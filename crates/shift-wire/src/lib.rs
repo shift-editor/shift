@@ -7,8 +7,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use shift_font::{
-    Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, Component as IrComponent, ComponentId,
-    Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
+    Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind,
+    AxisMapping as IrAxisMapping, AxisMappingId, AxisRole as IrAxisRole, Component as IrComponent,
+    ComponentId, Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
     GlyphLayer, GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
     PointType as IrPointType, Source as IrSource, SourceId,
@@ -110,10 +111,25 @@ pub struct Axis {
     pub id: AxisId,
     pub tag: String,
     pub name: String,
-    pub minimum: f64,
+    pub role: String,
+    pub axis_type: String,
+    pub minimum: Option<f64>,
     pub default: f64,
-    pub maximum: f64,
+    pub maximum: Option<f64>,
+    pub values: Option<Vec<f64>>,
+    pub labels: Vec<AxisLabel>,
     pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisLabel {
+    pub name: String,
+    pub value: f64,
+    pub minimum: Option<f64>,
+    pub maximum: Option<f64>,
+    pub linked_value: Option<f64>,
+    pub elidable: bool,
 }
 
 impl From<&IrAxis> for Axis {
@@ -122,10 +138,73 @@ impl From<&IrAxis> for Axis {
             id: axis.id(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
-            minimum: axis.minimum(),
+            role: match axis.role() {
+                IrAxisRole::External => "external",
+                IrAxisRole::Internal => "internal",
+            }
+            .to_string(),
+            axis_type: match axis.kind() {
+                IrAxisKind::Continuous { .. } => "continuous",
+                IrAxisKind::Discrete { .. } => "discrete",
+            }
+            .to_string(),
+            minimum: matches!(axis.kind(), IrAxisKind::Continuous { .. }).then(|| axis.minimum()),
             default: axis.default(),
-            maximum: axis.maximum(),
+            maximum: matches!(axis.kind(), IrAxisKind::Continuous { .. }).then(|| axis.maximum()),
+            values: axis.discrete_values().map(<[f64]>::to_vec),
+            labels: axis
+                .labels()
+                .iter()
+                .map(|label| AxisLabel {
+                    name: label.name.clone(),
+                    value: label.value,
+                    minimum: label.range.as_ref().map(|range| range.minimum),
+                    maximum: label.range.as_ref().map(|range| range.maximum),
+                    linked_value: label.linked_value,
+                    elidable: label.elidable,
+                })
+                .collect(),
             hidden: axis.is_hidden(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisMappingPoint {
+    pub description: Option<String>,
+    pub input: Location,
+    pub output: Location,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisMapping {
+    pub id: AxisMappingId,
+    pub name: String,
+    pub description: Option<String>,
+    pub inputs: Vec<AxisId>,
+    pub outputs: Vec<AxisId>,
+    pub points: Vec<AxisMappingPoint>,
+}
+
+impl From<&IrAxisMapping> for AxisMapping {
+    fn from(mapping: &IrAxisMapping) -> Self {
+        Self {
+            id: mapping.id(),
+            name: mapping.name().to_string(),
+            description: mapping.description().map(str::to_string),
+            inputs: mapping.inputs().to_vec(),
+            outputs: mapping.outputs().to_vec(),
+            points: mapping
+                .points()
+                .iter()
+                .map(|point| AxisMappingPoint {
+                    description: point.description.clone(),
+                    input: (&point.input).into(),
+                    output: (&point.output).into(),
+                })
+                .collect(),
         }
     }
 }

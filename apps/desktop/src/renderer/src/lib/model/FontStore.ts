@@ -122,11 +122,12 @@ export class FontStore {
 
     batch(() => {
       const nextWorkspace =
-        applied.glyphs || applied.axes || applied.sources
+        applied.glyphs || applied.axes || applied.axisMappings || applied.sources
           ? {
               ...current,
               glyphs: applied.glyphs ?? current.glyphs,
               axes: applied.axes ?? current.axes,
+              axisMappings: applied.axisMappings ?? current.axisMappings,
               sources: applied.sources ?? current.sources,
             }
           : current;

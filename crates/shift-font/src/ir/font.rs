@@ -1,4 +1,4 @@
-use crate::axis::{Axis, Location};
+use crate::axis::{Axis, AxisMapping, Location};
 use crate::binary_data::BinaryData;
 use crate::entity::{AxisId, GlyphId, LayerId, SourceId};
 use crate::error::{CoreError, CoreResult};
@@ -94,6 +94,8 @@ struct FontData {
     metadata: FontMetadata,
     metrics: FontMetrics,
     axes: Vec<Axis>,
+    #[serde(default)]
+    axis_mappings: Vec<AxisMapping>,
     sources: Vec<Source>,
     #[serde(default)]
     default_source_id: Option<SourceId>,
@@ -293,6 +295,7 @@ impl Default for Font {
                     metadata: FontMetadata::default(),
                     metrics: FontMetrics::default(),
                     axes: Vec::new(),
+                    axis_mappings: Vec::new(),
                     sources: vec![default_source],
                     default_source_id: Some(default_source_id),
                     glyphs: IndexMap::new(),
@@ -322,6 +325,7 @@ impl Font {
                     metadata: FontMetadata::default(),
                     metrics: FontMetrics::default(),
                     axes: Vec::new(),
+                    axis_mappings: Vec::new(),
                     sources: Vec::new(),
                     default_source_id: None,
                     glyphs: IndexMap::new(),
@@ -378,10 +382,42 @@ impl Font {
         self.data_mut().axes.push(axis);
     }
 
+    pub fn replace_axis(&mut self, axis: Axis) -> CoreResult<Axis> {
+        axis.validate()?;
+        let index = self
+            .axes()
+            .iter()
+            .position(|existing| existing.id() == axis.id())
+            .ok_or_else(|| CoreError::AxisNotFound(axis.id()))?;
+        let mut axes = self.axes().to_vec();
+        axes[index] = axis.clone();
+        validate_axis_mappings(&axes, self.axis_mappings())?;
+
+        let data = self.data_mut();
+        Ok(std::mem::replace(&mut data.axes[index], axis))
+    }
+
+    pub fn axis_mappings(&self) -> &[AxisMapping] {
+        &self.data().axis_mappings
+    }
+
+    pub fn set_axis_mappings(&mut self, mappings: Vec<AxisMapping>) -> CoreResult<()> {
+        validate_axis_mappings(self.axes(), &mappings)?;
+        self.data_mut().axis_mappings = mappings;
+        Ok(())
+    }
+
+    pub fn mapped_location(&self, external: &Location) -> CoreResult<Location> {
+        crate::variation::map_location(external, self.axes(), self.axis_mappings())
+    }
+
     pub fn remove_axis(&mut self, axis_id: AxisId) -> Option<Axis> {
         let data = self.data_mut();
         let index = data.axes.iter().position(|axis| axis.id() == axis_id)?;
         let axis = data.axes.remove(index);
+        data.axis_mappings.retain(|mapping| {
+            !mapping.inputs().contains(&axis_id) && !mapping.outputs().contains(&axis_id)
+        });
         for source in &mut data.sources {
             source.remove_axis_location(&axis_id);
         }
@@ -703,11 +739,58 @@ impl Font {
     }
 }
 
+fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult<()> {
+    let mut mapping_ids = HashSet::new();
+    let mut mapping_names = HashSet::new();
+    let mut independent_outputs = HashMap::new();
+    let mut cross_axis_mapping = None;
+
+    for mapping in mappings {
+        mapping.validate(axes)?;
+
+        if !mapping_ids.insert(mapping.id()) {
+            return Err(CoreError::DuplicateAxisMappingId(mapping.id()));
+        }
+        if !mapping_names.insert(mapping.name()) {
+            return Err(CoreError::DuplicateAxisMappingName(
+                mapping.name().to_string(),
+            ));
+        }
+
+        if mapping.is_independent() {
+            for output in mapping.outputs() {
+                if let Some(owner) = independent_outputs.insert(output.clone(), mapping.id()) {
+                    return Err(CoreError::InvalidAxisMapping {
+                        mapping_id: mapping.id(),
+                        message: format!(
+                            "output axis {output} is already controlled by mapping {owner}"
+                        ),
+                    });
+                }
+            }
+
+            continue;
+        }
+
+        if let Some(owner) = cross_axis_mapping.replace(mapping.id()) {
+            return Err(CoreError::InvalidAxisMapping {
+                mapping_id: mapping.id(),
+                message: format!(
+                    "only one cross-axis mapping group is supported; mapping {owner} already defines it"
+                ),
+            });
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        test_support::sample_font, Contour, ContourId, GlyphLayer, LayerId, PointId, PointType,
+        test_support::sample_font, AxisMappingPoint, AxisRole, Contour, ContourId, GlyphLayer,
+        LayerId, PointId, PointType,
     };
     use std::sync::Arc;
     use std::time::{Duration, Instant};
@@ -768,12 +851,151 @@ mod tests {
         );
     }
 
+    fn independent_axis_mapping(name: &str, axis: &Axis) -> AxisMapping {
+        let mut input = Location::new();
+        input.set(axis.id(), axis.default());
+        let output = input.clone();
+
+        AxisMapping::new(
+            name.to_string(),
+            vec![axis.id()],
+            vec![axis.id()],
+            vec![AxisMappingPoint {
+                description: None,
+                input,
+                output,
+            }],
+        )
+    }
+
+    fn cross_axis_mapping(name: &str, axes: &[Axis]) -> AxisMapping {
+        let mut input = Location::new();
+        for axis in axes {
+            input.set(axis.id(), axis.default());
+        }
+        let output = input.clone();
+        let axis_ids = axes.iter().map(Axis::id).collect::<Vec<_>>();
+
+        AxisMapping::new(
+            name.to_string(),
+            axis_ids.clone(),
+            axis_ids,
+            vec![AxisMappingPoint {
+                description: None,
+                input,
+                output,
+            }],
+        )
+    }
+
     #[test]
     fn font_creation() {
         let font = Font::new();
         assert_eq!(font.glyph_count(), 0);
         assert_eq!(font.sources().len(), 1);
         assert_eq!(font.default_source().map(Source::name), Some("Regular"));
+    }
+
+    #[test]
+    fn duplicate_axis_mapping_ids_are_rejected() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let mapping = independent_axis_mapping("Weight curve", &axis);
+        font.add_axis(axis);
+
+        let result = font.set_axis_mappings(vec![mapping.clone(), mapping]);
+
+        assert!(matches!(result, Err(CoreError::DuplicateAxisMappingId(_))));
+    }
+
+    #[test]
+    fn duplicate_axis_mapping_names_are_rejected() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let first = independent_axis_mapping("Weight curve", &axis);
+        let second = independent_axis_mapping("Weight curve", &axis);
+        font.add_axis(axis);
+
+        let result = font.set_axis_mappings(vec![first, second]);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::DuplicateAxisMappingName(name)) if name == "Weight curve"
+        ));
+    }
+
+    #[test]
+    fn independent_axis_mappings_cannot_share_an_output() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let first = independent_axis_mapping("Weight curve", &axis);
+        let second = independent_axis_mapping("Weight correction", &axis);
+        let first_id = first.id();
+        let second_id = second.id();
+        font.add_axis(axis);
+
+        let result = font.set_axis_mappings(vec![first, second]);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidAxisMapping {
+                mapping_id,
+                message,
+            }) if mapping_id == second_id && message.contains(&first_id.to_string())
+        ));
+    }
+
+    #[test]
+    fn only_one_cross_axis_mapping_group_is_allowed() {
+        let mut font = Font::new();
+        let axes = [Axis::weight(), Axis::width()];
+        let first = cross_axis_mapping("Weight-width correction", &axes);
+        let second = cross_axis_mapping("Optical correction", &axes);
+        let first_id = first.id();
+        let second_id = second.id();
+        for axis in axes {
+            font.add_axis(axis);
+        }
+
+        let result = font.set_axis_mappings(vec![first, second]);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidAxisMapping {
+                mapping_id,
+                message,
+            }) if mapping_id == second_id && message.contains(&first_id.to_string())
+        ));
+    }
+
+    #[test]
+    fn replacing_axis_cannot_invalidate_existing_mapping() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let axis_id = axis.id();
+        font.add_axis(axis.clone());
+        let mut input = Location::new();
+        input.set(axis_id.clone(), 900.0);
+        let mut output = Location::new();
+        output.set(axis_id.clone(), 800.0);
+        font.set_axis_mappings(vec![AxisMapping::new(
+            "Weight curve".to_string(),
+            vec![axis_id.clone()],
+            vec![axis_id.clone()],
+            vec![AxisMappingPoint {
+                description: None,
+                input,
+                output,
+            }],
+        )])
+        .unwrap();
+
+        let mut replacement = axis;
+        replacement.set_role(AxisRole::Internal);
+        let result = font.replace_axis(replacement);
+
+        assert!(matches!(result, Err(CoreError::InvalidAxisMapping { .. })));
+        assert_eq!(font.axis(axis_id).unwrap().role(), AxisRole::External);
     }
 
     #[test]

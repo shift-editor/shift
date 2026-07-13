@@ -8,6 +8,7 @@ export type {
   ContourId,
   AnchorId,
   AxisId,
+  AxisMappingId,
   ComponentId,
   GuidelineId,
   GlyphId,
@@ -21,6 +22,7 @@ export {
   asContourId,
   asAnchorId,
   asAxisId,
+  asAxisMappingId,
   asComponentId,
   asGuidelineId,
   asGlyphId,
@@ -32,6 +34,7 @@ export {
   isContourId,
   isAnchorId,
   isAxisId,
+  isAxisMappingId,
   isComponentId,
   isGuidelineId,
   isGlyphId,
@@ -42,6 +45,7 @@ export {
   mintContourId,
   mintAnchorId,
   mintAxisId,
+  mintAxisMappingId,
   mintPointId,
   mintGlyphId,
   mintLayerId,
@@ -49,6 +53,8 @@ export {
   mintRunId,
   mintSourceId,
 } from "./ids";
+
+export type { AxisDefinition } from "./domain";
 
 export type {
   AddAnchorsIntent,
@@ -68,7 +74,12 @@ export type {
   SetXAdvanceIntent,
   TranslatePointsIntent,
   Axis,
+  AxisLabel,
+  AxisMapping,
+  AxisMappingPoint,
+  AxisRole,
   AxisTent,
+  AxisType,
   BridgeApi,
   ComponentData,
   ContourData,
@@ -96,6 +107,8 @@ export type {
   PointData,
   PointSeed,
   PointType,
+  SetAxisMappingsIntent,
   Source,
   Unicode,
+  UpdateAxisIntent,
 } from "./bridge";

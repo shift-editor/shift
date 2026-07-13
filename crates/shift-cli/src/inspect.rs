@@ -10,6 +10,7 @@ pub use report::InspectReport;
 pub enum InspectView {
     Summary,
     Axes,
+    Mappings,
     Sources,
     Glyphs,
     Layers,
@@ -21,7 +22,8 @@ mod tests {
 
     use serde_json::json;
     use shift_font::{
-        Axis, AxisId, Contour, Font, Glyph, GlyphLayer, LayerId, Location, Point, Source, SourceId,
+        Axis, AxisId, AxisMapping, AxisMappingPoint, Contour, Font, Glyph, GlyphLayer, LayerId,
+        Location, Point, Source, SourceId,
     };
     use shift_source::ShiftSourcePackage;
 
@@ -86,12 +88,45 @@ mod tests {
     }
 
     #[test]
+    fn mappings_view_reports_mapping_axes_and_points() {
+        let mut font = sample_font();
+        let axis_id = font.axes()[0].id();
+        let mut input = Location::new();
+        input.set(axis_id.clone(), 900.0);
+        let mut output = Location::new();
+        output.set(axis_id.clone(), 800.0);
+        font.set_axis_mappings(vec![AxisMapping::new(
+            "Weight curve".to_string(),
+            vec![axis_id.clone()],
+            vec![axis_id],
+            vec![AxisMappingPoint {
+                description: None,
+                input,
+                output,
+            }],
+        )])
+        .unwrap();
+        let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &font);
+
+        assert_eq!(report.axis_mappings.len(), 1);
+        assert_eq!(report.axis_mappings[0].kind, "independent");
+        assert_eq!(report.axis_mappings[0].inputs[0].tag, "wght");
+        assert_eq!(report.axis_mappings[0].points[0].output[0].value, 800.0);
+        assert!(
+            report
+                .render(InspectView::Mappings, RenderMode::Plain)
+                .contains("Weight curve")
+        );
+    }
+
+    #[test]
     fn json_output_includes_stable_sections() {
         let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
         let json = serde_json::to_value(report).unwrap();
 
         assert_eq!(json["manifest"]["format"], "shift-source");
         assert_eq!(json["axes"][0]["tag"], "wght");
+        assert_eq!(json["axisMappings"], json!([]));
         assert_eq!(json["sources"][1]["location"][0]["axisTag"], "wght");
         assert_eq!(json["sources"][1]["location"][0]["value"], json!(700.0));
         assert_eq!(json["glyphs"][0]["unicodes"][0], "U+0041");

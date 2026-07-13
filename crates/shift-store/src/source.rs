@@ -99,9 +99,11 @@ impl ShiftStore {
                 min_value,
                 default_value,
                 max_value,
+                role,
+                labels_json,
                 hidden
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'external', '[]', ?7)
             ",
             rusqlite::params![
                 axis.id.as_str(),

@@ -3,6 +3,7 @@ import type {
   PointId,
   AnchorId,
   AxisId,
+  AxisMappingId,
   ComponentId,
   GuidelineId,
   GlyphId,
@@ -53,6 +54,8 @@ export interface BridgeApi {
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   isVariable(): boolean
   getAxes(): Array<Axis>
+  getAxisMappings(): Array<AxisMapping>
+  mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
 
@@ -134,6 +137,8 @@ export interface AppliedChange {
   glyphs?: Array<GlyphRecord>
   /** Full axes list when font-level axis structure changed; absent otherwise. */
   axes?: Array<Axis>
+  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
+  axisMappings?: Array<AxisMapping>
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -147,11 +152,41 @@ export interface Axis {
   id: AxisId
   tag: string
   name: string
-  minimum: number
+  role: AxisRole
+  axisType: AxisType
+  minimum?: number
   default: number
-  maximum: number
+  maximum?: number
+  values?: Array<number>
+  labels: Array<AxisLabel>
   hidden: boolean
 }
+
+export interface AxisLabel {
+  name: string
+  value: number
+  minimum?: number
+  maximum?: number
+  linkedValue?: number
+  elidable: boolean
+}
+
+export interface AxisMapping {
+  id: AxisMappingId
+  name: string
+  description?: string
+  inputs: Array<AxisId>
+  outputs: Array<AxisId>
+  points: Array<AxisMappingPoint>
+}
+
+export interface AxisMappingPoint {
+  description?: string
+  input: Location
+  output: Location
+}
+
+export type AxisRole = "external" | "internal";
 
 export interface AxisTent {
   axisTag: string
@@ -159,6 +194,8 @@ export interface AxisTent {
   peak: number
   upper: number
 }
+
+export type AxisType = "continuous" | "discrete";
 
 export interface BooleanOpIntent {
   layerId: LayerId
@@ -193,13 +230,7 @@ export interface ContourData {
  * OpenType label and must be unique within the font.
  */
 export interface CreateAxisIntent {
-  axisId: AxisId
-  tag: string
-  name: string
-  min: number
-  default: number
-  max: number
-  hidden: boolean
+  axis: Axis
 }
 
 /**
@@ -273,7 +304,9 @@ export interface FontIntent {
   createGlyph?: CreateGlyphIntent
   updateGlyph?: UpdateGlyphIntent
   createAxis?: CreateAxisIntent
+  updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
+  setAxisMappings?: SetAxisMappingsIntent
   createSource?: CreateSourceIntent
   deleteSource?: DeleteSourceIntent
   createGlyphLayer?: CreateGlyphLayerIntent
@@ -440,6 +473,10 @@ export interface ReverseContourIntent {
   contourId: ContourId
 }
 
+export interface SetAxisMappingsIntent {
+  mappings: Array<AxisMapping>
+}
+
 export interface SetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
@@ -470,6 +507,10 @@ export interface TranslatePointsIntent {
   pointIds: Array<PointId>
   dx: number
   dy: number
+}
+
+export interface UpdateAxisIntent {
+  axis: Axis
 }
 
 /**

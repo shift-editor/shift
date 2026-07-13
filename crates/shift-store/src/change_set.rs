@@ -42,6 +42,7 @@ impl ShiftStore {
         tx.execute("DELETE FROM source_locations", [])?;
         tx.execute("DELETE FROM source_lib", [])?;
         tx.execute("DELETE FROM sources", [])?;
+        tx.execute("DELETE FROM axis_mappings", [])?;
         tx.execute("DELETE FROM axes", [])?;
 
         upsert_font_info(&tx, font)?;
@@ -60,8 +61,9 @@ impl ShiftStore {
         replace_kerning(&tx, font.kerning())?;
 
         for (order_index, axis) in font.axes().iter().enumerate() {
-            insert_axis_with_order(&tx, &font::AxisCreated::from(axis), order_index as i64)?;
+            insert_axis(&tx, axis, order_index as i64, false)?;
         }
+        replace_axis_mappings(&tx, font.axis_mappings())?;
 
         for (order_index, source) in font.sources().iter().enumerate() {
             upsert_source(
@@ -124,7 +126,8 @@ impl ShiftStore {
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
-        font::FontChange::AxisCreated(change) => insert_axis_with_order(tx, change, 0),
+        font::FontChange::AxisCreated(change) => insert_axis(tx, &change.axis, 0, false),
+        font::FontChange::AxisUpdated(change) => upsert_axis_with_order(tx, &change.axis, 0),
         font::FontChange::AxisDeleted(change) => {
             // source_locations cascade from the axis row.
             let rows_changed = tx.execute(
@@ -133,6 +136,9 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             )?;
             require_changed(rows_changed, "axis", change.axis_id.to_string())?;
             Ok(())
+        }
+        font::FontChange::AxisMappingsUpdated(change) => {
+            replace_axis_mappings(tx, &change.mappings)
         }
         font::FontChange::SourceCreated(change) => {
             upsert_source(
@@ -288,27 +294,71 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
     }
 }
 
-fn insert_axis_with_order(
+fn upsert_axis_with_order(
     tx: &Transaction<'_>,
-    axis: &font::AxisCreated,
+    axis: &font::Axis,
     order_index: i64,
 ) -> Result<(), StoreError> {
+    insert_axis(tx, axis, order_index, true)
+}
+
+fn insert_axis(
+    tx: &Transaction<'_>,
+    axis: &font::Axis,
+    order_index: i64,
+    upsert: bool,
+) -> Result<(), StoreError> {
+    let role = match axis.role() {
+        font::AxisRole::External => "external",
+        font::AxisRole::Internal => "internal",
+    };
+    let discrete_values_json = axis
+        .discrete_values()
+        .map(serde_json::to_string)
+        .transpose()?;
+    let labels_json = serde_json::to_string(axis.labels())?;
+    let conflict = if upsert {
+        "ON CONFLICT(id) DO UPDATE SET tag = excluded.tag, name = excluded.name, min_value = excluded.min_value, default_value = excluded.default_value, max_value = excluded.max_value, role = excluded.role, discrete_values_json = excluded.discrete_values_json, labels_json = excluded.labels_json, hidden = excluded.hidden"
+    } else {
+        ""
+    };
+    let statement = format!(
+        "INSERT INTO axes (id, tag, name, min_value, default_value, max_value, role, discrete_values_json, labels_json, hidden, order_index) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) {conflict}"
+    );
     tx.execute(
-        "
-        INSERT INTO axes (id, tag, name, min_value, default_value, max_value, hidden, order_index)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-        ",
+        &statement,
         params![
-            axis.axis_id.to_string(),
-            axis.tag,
-            axis.name,
-            axis.minimum,
-            axis.default,
-            axis.maximum,
-            axis.hidden,
+            axis.id().to_string(),
+            axis.tag(),
+            axis.name(),
+            axis.minimum(),
+            axis.default(),
+            axis.maximum(),
+            role,
+            discrete_values_json,
+            labels_json,
+            axis.is_hidden(),
             order_index,
         ],
     )?;
+    Ok(())
+}
+
+fn replace_axis_mappings(
+    tx: &Transaction<'_>,
+    mappings: &[font::AxisMapping],
+) -> Result<(), StoreError> {
+    tx.execute("DELETE FROM axis_mappings", [])?;
+    for (order_index, mapping) in mappings.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO axis_mappings (id, mapping_json, order_index) VALUES (?1, ?2, ?3)",
+            params![
+                mapping.id().to_string(),
+                serde_json::to_string(mapping)?,
+                order_index as i64,
+            ],
+        )?;
+    }
     Ok(())
 }
 

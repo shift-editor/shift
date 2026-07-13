@@ -5,19 +5,20 @@ use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
 use shift_font::{
-  AnchorId, AnchorSeed, Axis as FontAxis, AxisId, BooleanOp, ContourId, Font, FontChange,
-  FontIntent, FontIntentSet, Glyph, GlyphId, LayerId, Location as FontLocation, PointId, PointSeed,
-  SourceId,
+  AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelRange,
+  AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
+  AxisRole, BooleanOp, ContourId, Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId,
+  LayerId, Location as FontLocation, PointId, PointSeed, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
-    NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
-    NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
-    NapiPointSeed, NapiSource,
+    NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
+    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiGlyphRecord, NapiGlyphSnapshot,
+    NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation, NapiPointSeed, NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
-  Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot, GlyphRecord,
-  GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, Source,
+  Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
+  GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, Source,
 };
 use shift_workspace::{
   FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError, WorkspaceSource,
@@ -399,6 +400,7 @@ impl Bridge {
         layers: Vec::new(),
         glyphs: None,
         axes: None,
+        axis_mappings: None,
         sources: None,
         dependents: Vec::new(),
       });
@@ -422,6 +424,7 @@ impl Bridge {
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
     let mut glyphs_changed = false;
     let mut axes_changed = false;
+    let mut axis_mappings_changed = false;
     let mut sources_changed = false;
     for change in &outcome.changes.changes {
       match change {
@@ -431,10 +434,11 @@ impl Bridge {
         | FontChange::GlyphLayerCreated(_)
         | FontChange::GlyphLayerDeleted(_) => glyphs_changed = true,
         // Axis structure reshapes every source location's design space.
-        FontChange::AxisCreated(_) | FontChange::AxisDeleted(_) => {
+        FontChange::AxisCreated(_) | FontChange::AxisUpdated(_) | FontChange::AxisDeleted(_) => {
           axes_changed = true;
           sources_changed = true;
         }
+        FontChange::AxisMappingsUpdated(_) => axis_mappings_changed = true,
         FontChange::SourceCreated(_) | FontChange::SourceDeleted(_) => sources_changed = true,
         _ => {}
       }
@@ -469,6 +473,9 @@ impl Bridge {
       layers,
       glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
       axes: axes_changed.then(|| self.get_axes()).transpose()?,
+      axis_mappings: axis_mappings_changed
+        .then(|| self.get_axis_mappings())
+        .transpose()?,
       sources: sources_changed.then(|| self.get_sources()).transpose()?,
       dependents,
     })
@@ -555,6 +562,26 @@ impl Bridge {
         .map(Into::into)
         .collect(),
     )
+  }
+
+  #[napi]
+  pub fn get_axis_mappings(&self) -> errors::Result<Vec<NapiAxisMapping>> {
+    Ok(
+      self
+        .font()?
+        .axis_mappings()
+        .iter()
+        .map(AxisMapping::from)
+        .map(Into::into)
+        .collect(),
+    )
+  }
+
+  #[napi]
+  pub fn map_location(&self, location: NapiLocation) -> errors::Result<NapiLocation> {
+    let external = map_location(location)?;
+    let mapped = self.font()?.mapped_location(&external)?;
+    Ok(shift_wire::Location::from(&mapped).into())
   }
 
   #[napi]
@@ -810,21 +837,32 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
     }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
-      let mut axis = FontAxis::with_id(
-        parse::<AxisId>(&payload.axis_id)?,
-        payload.tag,
-        payload.name,
-        payload.min,
-        payload.default,
-        payload.max,
-      );
-      axis.set_hidden(payload.hidden);
-      Ok(FontIntent::CreateAxis { axis })
+      Ok(FontIntent::CreateAxis {
+        axis: map_axis(payload.axis)?,
+      })
+    }
+    "updateAxis" => {
+      let payload = intent.update_axis.ok_or_else(|| missing("updateAxis"))?;
+      Ok(FontIntent::UpdateAxis {
+        axis: map_axis(payload.axis)?,
+      })
     }
     "deleteAxis" => {
       let payload = intent.delete_axis.ok_or_else(|| missing("deleteAxis"))?;
       Ok(FontIntent::DeleteAxis {
         axis_id: parse::<AxisId>(&payload.axis_id)?,
+      })
+    }
+    "setAxisMappings" => {
+      let payload = intent
+        .set_axis_mappings
+        .ok_or_else(|| missing("setAxisMappings"))?;
+      Ok(FontIntent::SetAxisMappings {
+        mappings: payload
+          .mappings
+          .into_iter()
+          .map(map_axis_mapping)
+          .collect::<errors::Result<Vec<_>>>()?,
       })
     }
     "deleteSource" => {
@@ -914,15 +952,104 @@ fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
   Ok(FontLocation::from_map(values))
 }
 
+fn map_axis(axis: NapiAxis) -> errors::Result<FontAxis> {
+  let axis_id = parse::<AxisId>(&axis.id)?;
+  let mut mapped = match axis.axis_type {
+    NapiAxisType::Continuous => FontAxis::continuous_with_id(
+      axis_id,
+      axis.tag,
+      axis.name,
+      axis.minimum.ok_or_else(|| BridgeError::InvalidInput {
+        kind: "continuous axis minimum",
+        value: "missing".to_string(),
+      })?,
+      axis.default,
+      axis.maximum.ok_or_else(|| BridgeError::InvalidInput {
+        kind: "continuous axis maximum",
+        value: "missing".to_string(),
+      })?,
+    ),
+    NapiAxisType::Discrete => FontAxis::discrete_with_id(
+      axis_id,
+      axis.tag,
+      axis.name,
+      axis.values.ok_or_else(|| BridgeError::InvalidInput {
+        kind: "discrete axis values",
+        value: "missing".to_string(),
+      })?,
+      axis.default,
+    ),
+  };
+  mapped.set_role(match axis.role {
+    NapiAxisRole::External => AxisRole::External,
+    NapiAxisRole::Internal => AxisRole::Internal,
+  });
+  let mut labels = Vec::new();
+  for label in axis.labels {
+    let range = match (label.minimum, label.maximum) {
+      (None, None) => None,
+      (Some(minimum), Some(maximum)) => Some(AxisLabelRange { minimum, maximum }),
+      _ => {
+        return Err(BridgeError::InvalidInput {
+          kind: "axis label range",
+          value: "minimum and maximum must be provided together".to_string(),
+        })
+      }
+    };
+    labels.push(AxisLabel {
+      name: label.name,
+      value: label.value,
+      range,
+      linked_value: label.linked_value,
+      elidable: label.elidable,
+    });
+  }
+  mapped.set_labels(labels);
+  mapped.set_hidden(axis.hidden);
+  mapped.validate()?;
+  Ok(mapped)
+}
+
+fn map_axis_mapping(mapping: NapiAxisMapping) -> errors::Result<FontAxisMapping> {
+  let mut mapped = FontAxisMapping::with_id(
+    parse::<AxisMappingId>(&mapping.id)?,
+    mapping.name,
+    mapping
+      .inputs
+      .iter()
+      .map(|id| parse::<AxisId>(id))
+      .collect::<errors::Result<Vec<_>>>()?,
+    mapping
+      .outputs
+      .iter()
+      .map(|id| parse::<AxisId>(id))
+      .collect::<errors::Result<Vec<_>>>()?,
+    mapping
+      .points
+      .into_iter()
+      .map(|point| {
+        Ok(FontAxisMappingPoint {
+          description: point.description,
+          input: map_location(point.input)?,
+          output: map_location(point.output)?,
+        })
+      })
+      .collect::<errors::Result<Vec<_>>>()?,
+  );
+  mapped.set_description(mapping.description);
+  Ok(mapped)
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
   use shift_wire::bridges::napi::{
-    NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiCloneGlyphLayerIntent,
-    NapiCreateAxisIntent, NapiCreateGlyphIntent, NapiCreateGlyphLayerIntent,
-    NapiCreateSourceIntent, NapiDeleteAxisIntent, NapiDeleteSourceIntent, NapiGlyphSnapshotRequest,
-    NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed,
-    NapiPointType, NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
+    NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiAxis, NapiAxisRole,
+    NapiAxisType, NapiCloneGlyphLayerIntent, NapiCreateAxisIntent, NapiCreateGlyphIntent,
+    NapiCreateGlyphLayerIntent, NapiCreateSourceIntent, NapiDeleteAxisIntent,
+    NapiDeleteSourceIntent, NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation,
+    NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
+    NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
     NapiSetContourClosedIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
     NapiTranslatePointsIntent,
   };
@@ -949,7 +1076,9 @@ mod tests {
       create_glyph: None,
       update_glyph: None,
       create_axis: None,
+      update_axis: None,
       delete_axis: None,
+      set_axis_mappings: None,
       create_source: None,
       delete_source: None,
       create_glyph_layer: None,
@@ -1875,13 +2004,19 @@ mod tests {
   ) -> NapiFontIntent {
     NapiFontIntent {
       create_axis: Some(NapiCreateAxisIntent {
-        axis_id: axis_id.to_string(),
-        tag: tag.to_string(),
-        name: name.to_string(),
-        min,
-        default,
-        max,
-        hidden: false,
+        axis: NapiAxis {
+          id: axis_id.to_string(),
+          tag: tag.to_string(),
+          name: name.to_string(),
+          role: NapiAxisRole::External,
+          axis_type: NapiAxisType::Continuous,
+          minimum: Some(min),
+          default,
+          maximum: Some(max),
+          values: None,
+          labels: Vec::new(),
+          hidden: false,
+        },
       }),
       ..skeleton_intent("createAxis")
     }
@@ -1935,9 +2070,9 @@ mod tests {
     assert_eq!(axes.len(), 1);
     assert_eq!(axes[0].tag, "wght");
     assert_eq!(axes[0].name, "Weight");
-    assert_eq!(axes[0].minimum, 100.0);
+    assert_eq!(axes[0].minimum, Some(100.0));
     assert_eq!(axes[0].default, 400.0);
-    assert_eq!(axes[0].maximum, 900.0);
+    assert_eq!(axes[0].maximum, Some(900.0));
     // locations may change shape, so sources ride along
     assert!(applied.sources.is_some());
     assert!(applied.glyphs.is_none());

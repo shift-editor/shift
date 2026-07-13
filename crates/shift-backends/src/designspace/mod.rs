@@ -1,3 +1,4 @@
+mod axis_labels;
 mod error;
 mod reader;
 mod writer;
@@ -10,7 +11,10 @@ pub use writer::DesignspaceWriter;
 mod tests {
     use super::*;
     use crate::traits::{FontReader, FontWriter};
-    use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
+    use shift_font::{
+        Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, Contour, Font,
+        Glyph, GlyphLayer, LayerId, Location, PointType,
+    };
     use std::fs;
 
     fn test_font() -> Font {
@@ -68,5 +72,118 @@ mod tests {
         assert!(loaded.glyph_by_name("o").is_some());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn round_trips_axis_kinds_labels_and_mappings() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let designspace_path = temp_dir.path().join("Mapped.designspace");
+        let mut font = test_font();
+
+        let mut weight = Axis::weight();
+        weight.set_labels(vec![AxisLabel {
+            name: "Regular".to_string(),
+            value: 400.0,
+            range: Some(AxisLabelRange {
+                minimum: 350.0,
+                maximum: 450.0,
+            }),
+            linked_value: None,
+            elidable: true,
+        }]);
+        let weight_id = weight.id();
+        font.add_axis(weight);
+
+        let italic = Axis::discrete_with_id(
+            shift_font::AxisId::new(),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0, 1.0],
+            0.0,
+        );
+        let italic_id = italic.id();
+        font.add_axis(italic);
+
+        let independent = AxisMapping::new(
+            "Weight curve".to_string(),
+            vec![weight_id.clone()],
+            vec![weight_id.clone()],
+            vec![
+                mapping_point(&[(weight_id.clone(), 100.0)], &[(weight_id.clone(), 80.0)]),
+                mapping_point(&[(weight_id.clone(), 400.0)], &[(weight_id.clone(), 400.0)]),
+                mapping_point(&[(weight_id.clone(), 900.0)], &[(weight_id.clone(), 850.0)]),
+            ],
+        );
+        let mut cross = AxisMapping::new(
+            "Weight by italic".to_string(),
+            vec![weight_id.clone(), italic_id.clone()],
+            vec![weight_id.clone()],
+            vec![mapping_point(
+                &[(weight_id.clone(), 850.0), (italic_id.clone(), 1.0)],
+                &[(weight_id.clone(), 800.0)],
+            )],
+        );
+        cross.set_description(Some("Italic masters become lighter".to_string()));
+        font.set_axis_mappings(vec![independent, cross]).unwrap();
+
+        DesignspaceWriter::new()
+            .save(&font, designspace_path.to_str().unwrap())
+            .unwrap();
+
+        let xml = fs::read_to_string(&designspace_path).unwrap();
+        assert!(xml.contains("format=\"5.2\""));
+        assert!(xml.contains("values=\"0 1\""));
+        assert!(xml.contains("<map input=\"100\" output=\"80\""));
+        assert!(xml.contains("<label name=\"Regular\" uservalue=\"400\""));
+        assert!(xml.contains("<mappings"));
+        assert!(xml.contains("Italic masters become lighter"));
+
+        let loaded = DesignspaceReader::new()
+            .load(designspace_path.to_str().unwrap())
+            .unwrap();
+        let loaded_weight = loaded
+            .axes()
+            .iter()
+            .find(|axis| axis.tag() == "wght")
+            .unwrap();
+        assert_eq!(loaded_weight.labels().len(), 1);
+        assert_eq!(loaded_weight.labels()[0].name, "Regular");
+        assert!(loaded_weight.labels()[0].elidable);
+
+        let loaded_italic = loaded
+            .axes()
+            .iter()
+            .find(|axis| axis.tag() == "ital")
+            .unwrap();
+        assert_eq!(
+            loaded_italic.kind(),
+            &AxisKind::Discrete {
+                values: vec![0.0, 1.0],
+                default: 0.0,
+            }
+        );
+        assert_eq!(loaded.axis_mappings().len(), 2);
+        assert!(loaded.axis_mappings()[0].is_independent());
+        assert!(!loaded.axis_mappings()[1].is_independent());
+        assert_eq!(loaded.axis_mappings()[1].points().len(), 1);
+    }
+
+    fn mapping_point(
+        input: &[(shift_font::AxisId, f64)],
+        output: &[(shift_font::AxisId, f64)],
+    ) -> AxisMappingPoint {
+        AxisMappingPoint {
+            description: None,
+            input: location(input),
+            output: location(output),
+        }
+    }
+
+    fn location(values: &[(shift_font::AxisId, f64)]) -> Location {
+        let mut location = Location::new();
+        for (axis_id, value) in values {
+            location.set(axis_id.clone(), *value);
+        }
+        location
     }
 }

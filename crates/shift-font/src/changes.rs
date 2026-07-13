@@ -1,6 +1,6 @@
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, Contour, ContourId, Glyph, GlyphId, GlyphLayer, GlyphName,
-    LayerId, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, Glyph, GlyphId, GlyphLayer,
+    GlyphName, LayerId, Point, PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -31,7 +31,9 @@ impl From<FontChange> for FontChangeSet {
 #[derive(Clone, Debug)]
 pub enum FontChange {
     AxisCreated(AxisCreated),
+    AxisUpdated(AxisUpdated),
     AxisDeleted(AxisDeleted),
+    AxisMappingsUpdated(AxisMappingsUpdated),
     SourceCreated(SourceCreated),
     SourceDeleted(SourceDeleted),
     GlyphCreated(GlyphCreated),
@@ -57,6 +59,16 @@ impl FontChange {
 
     pub fn axis_deleted(axis_id: AxisId) -> Self {
         Self::AxisDeleted(AxisDeleted { axis_id })
+    }
+
+    pub fn axis_updated(axis: &Axis) -> Self {
+        Self::AxisUpdated(AxisUpdated { axis: axis.clone() })
+    }
+
+    pub fn axis_mappings_updated(mappings: &[AxisMapping]) -> Self {
+        Self::AxisMappingsUpdated(AxisMappingsUpdated {
+            mappings: mappings.to_vec(),
+        })
     }
 
     pub fn source_created(source: &Source) -> Self {
@@ -164,27 +176,23 @@ impl FontChange {
 
 #[derive(Clone, Debug)]
 pub struct AxisCreated {
-    pub axis_id: AxisId,
-    pub tag: String,
-    pub name: String,
-    pub minimum: f64,
-    pub default: f64,
-    pub maximum: f64,
-    pub hidden: bool,
+    pub axis: Axis,
 }
 
 impl From<&Axis> for AxisCreated {
     fn from(axis: &Axis) -> Self {
-        Self {
-            axis_id: axis.id(),
-            tag: axis.tag().to_string(),
-            name: axis.name().to_string(),
-            minimum: axis.minimum(),
-            default: axis.default(),
-            maximum: axis.maximum(),
-            hidden: axis.is_hidden(),
-        }
+        Self { axis: axis.clone() }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct AxisUpdated {
+    pub axis: Axis,
+}
+
+#[derive(Clone, Debug)]
+pub struct AxisMappingsUpdated {
+    pub mappings: Vec<AxisMapping>,
 }
 
 #[derive(Clone, Debug)]

@@ -3,6 +3,7 @@ import type {
   PointId,
   AnchorId,
   AxisId,
+  AxisMappingId,
   ComponentId,
   GuidelineId,
   GlyphId,
@@ -48,6 +49,8 @@ export declare class Bridge {
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
+  getAxisMappings(): Array<NapiAxisMapping>
+  mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
 
@@ -129,6 +132,8 @@ export interface NapiAppliedChange {
   glyphs?: Array<NapiGlyphRecord>
   /** Full axes list when font-level axis structure changed; absent otherwise. */
   axes?: Array<NapiAxis>
+  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
+  axisMappings?: Array<NapiAxisMapping>
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -142,10 +147,43 @@ export interface NapiAxis {
   id: AxisId
   tag: string
   name: string
-  minimum: number
+  role: NapiAxisRole
+  axisType: NapiAxisType
+  minimum?: number
   default: number
-  maximum: number
+  maximum?: number
+  values?: Array<number>
+  labels: Array<NapiAxisLabel>
   hidden: boolean
+}
+
+export interface NapiAxisLabel {
+  name: string
+  value: number
+  minimum?: number
+  maximum?: number
+  linkedValue?: number
+  elidable: boolean
+}
+
+export interface NapiAxisMapping {
+  id: AxisMappingId
+  name: string
+  description?: string
+  inputs: Array<AxisId>
+  outputs: Array<AxisId>
+  points: Array<NapiAxisMappingPoint>
+}
+
+export interface NapiAxisMappingPoint {
+  description?: string
+  input: NapiLocation
+  output: NapiLocation
+}
+
+export declare const enum NapiAxisRole {
+  External = 'external',
+  Internal = 'internal'
 }
 
 export interface NapiAxisTent {
@@ -153,6 +191,11 @@ export interface NapiAxisTent {
   lower: number
   peak: number
   upper: number
+}
+
+export declare const enum NapiAxisType {
+  Continuous = 'continuous',
+  Discrete = 'discrete'
 }
 
 export interface NapiBooleanOpIntent {
@@ -188,13 +231,7 @@ export interface NapiContourData {
  * OpenType label and must be unique within the font.
  */
 export interface NapiCreateAxisIntent {
-  axisId: AxisId
-  tag: string
-  name: string
-  min: number
-  default: number
-  max: number
-  hidden: boolean
+  axis: NapiAxis
 }
 
 /**
@@ -268,7 +305,9 @@ export interface NapiFontIntent {
   createGlyph?: NapiCreateGlyphIntent
   updateGlyph?: NapiUpdateGlyphIntent
   createAxis?: NapiCreateAxisIntent
+  updateAxis?: NapiUpdateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
+  setAxisMappings?: NapiSetAxisMappingsIntent
   createSource?: NapiCreateSourceIntent
   deleteSource?: NapiDeleteSourceIntent
   createGlyphLayer?: NapiCreateGlyphLayerIntent
@@ -438,6 +477,10 @@ export interface NapiReverseContourIntent {
   contourId: ContourId
 }
 
+export interface NapiSetAxisMappingsIntent {
+  mappings: Array<NapiAxisMapping>
+}
+
 export interface NapiSetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
@@ -468,6 +511,10 @@ export interface NapiTranslatePointsIntent {
   pointIds: Array<PointId>
   dx: number
   dy: number
+}
+
+export interface NapiUpdateAxisIntent {
+  axis: NapiAxis
 }
 
 /**

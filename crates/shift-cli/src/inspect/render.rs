@@ -3,7 +3,7 @@ use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
 
 use super::InspectView;
-use super::report::{InspectReport, LocationValue};
+use super::report::{AxisReference, InspectReport, LocationValue};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RenderMode {
@@ -16,6 +16,7 @@ impl InspectReport {
         match view {
             InspectView::Summary => self.render_summary(mode),
             InspectView::Axes => self.render_axes(mode),
+            InspectView::Mappings => self.render_mappings(mode),
             InspectView::Sources => self.render_sources(mode),
             InspectView::Glyphs => self.render_glyphs(mode),
             InspectView::Layers => self.render_layers(mode),
@@ -29,6 +30,7 @@ impl InspectReport {
             format_kv("schema", &self.manifest.schema_version.to_string(), mode),
             String::new(),
             format_count("axes", self.axes.len(), mode),
+            format_count("mappings", self.axis_mappings.len(), mode),
             format_count("sources", self.sources.len(), mode),
             format_count("glyphs", self.glyph_count, mode),
         ];
@@ -52,9 +54,13 @@ impl InspectReport {
             header("tag", mode),
             header("name", mode),
             header("id", mode),
+            header("role", mode),
+            header("kind", mode),
             header("min", mode),
             header("default", mode),
             header("max", mode),
+            header("values", mode),
+            header("labels", mode),
             header("hidden", mode),
         ]);
         for axis in &self.axes {
@@ -62,15 +68,48 @@ impl InspectReport {
                 accent(&axis.tag, mode),
                 Cell::new(axis.name.clone()),
                 muted(compact_id(&axis.id), mode),
+                Cell::new(axis.role.clone()),
+                Cell::new(axis.kind.clone()),
                 number(axis.minimum),
                 number(axis.default),
                 number(axis.maximum),
+                right(axis.values.as_ref().map_or(0, Vec::len)),
+                right(axis.labels.len()),
                 right(axis.hidden),
             ]);
         }
-        align_right(&mut table, &[3, 4, 5, 6]);
+        align_right(&mut table, &[5, 6, 7, 8, 9, 10]);
 
         section_with_table("Axes", table, mode)
+    }
+
+    fn render_mappings(&self, mode: RenderMode) -> String {
+        if self.axis_mappings.is_empty() {
+            return empty_section("Mappings", "No axis mappings", mode);
+        }
+
+        let mut table = base_table();
+        table.set_header(vec![
+            header("name", mode),
+            header("kind", mode),
+            header("inputs", mode),
+            header("outputs", mode),
+            header("points", mode),
+            header("id", mode),
+        ]);
+        for mapping in &self.axis_mappings {
+            table.add_row(vec![
+                Cell::new(mapping.name.clone()),
+                Cell::new(mapping.kind.clone()),
+                Cell::new(format_axis_references(&mapping.inputs)),
+                Cell::new(format_axis_references(&mapping.outputs)),
+                right(mapping.points.len()),
+                muted(compact_id(&mapping.id), mode),
+            ]);
+        }
+        align_right(&mut table, &[4]);
+
+        section_with_table("Mappings", table, mode)
     }
 
     fn render_sources(&self, mode: RenderMode) -> String {
@@ -317,6 +356,17 @@ fn format_location(location: &[LocationValue]) -> String {
             .collect::<Vec<_>>()
             .join(" ")
     }
+}
+
+fn format_axis_references(axes: &[AxisReference]) -> String {
+    if axes.is_empty() {
+        return "-".to_string();
+    }
+
+    axes.iter()
+        .map(|axis| axis.tag.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn format_number(value: f64) -> String {

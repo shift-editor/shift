@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 use miette::Diagnostic;
 use serde::Serialize;
-use shift_font::{Axis, AxisId, Font, Glyph, GlyphLayer, Source, SourceId};
+use shift_font::{
+    Axis, AxisId, AxisKind, AxisLabel, AxisMapping, AxisMappingPoint, AxisRole, Font, Glyph,
+    GlyphLayer, Location, Source, SourceId,
+};
 use shift_source::{FORMAT_ID, SCHEMA_VERSION, ShiftSourcePackage, SourcePackageError};
 use thiserror::Error;
 
@@ -49,10 +52,52 @@ pub struct AxisSummary {
     pub id: String,
     pub tag: String,
     pub name: String,
+    pub role: String,
+    pub kind: String,
     pub minimum: f64,
     pub default: f64,
     pub maximum: f64,
+    pub values: Option<Vec<f64>>,
+    pub labels: Vec<AxisLabelSummary>,
     pub hidden: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisLabelSummary {
+    pub name: String,
+    pub value: f64,
+    pub minimum: Option<f64>,
+    pub maximum: Option<f64>,
+    pub linked_value: Option<f64>,
+    pub elidable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisMappingSummary {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub kind: String,
+    pub inputs: Vec<AxisReference>,
+    pub outputs: Vec<AxisReference>,
+    pub points: Vec<AxisMappingPointSummary>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisMappingPointSummary {
+    pub description: Option<String>,
+    pub input: Vec<LocationValue>,
+    pub output: Vec<LocationValue>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisReference {
+    pub id: String,
+    pub tag: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -105,6 +150,7 @@ pub struct InspectReport {
     pub manifest: ManifestSummary,
     pub metadata: MetadataSummary,
     pub axes: Vec<AxisSummary>,
+    pub axis_mappings: Vec<AxisMappingSummary>,
     pub sources: Vec<SourceSummary>,
     pub glyph_count: usize,
     pub glyphs: Vec<GlyphSummary>,
@@ -143,6 +189,11 @@ impl InspectReport {
                 display_name: font.metadata().display_name(),
             },
             axes: font.axes().iter().map(AxisSummary::from).collect(),
+            axis_mappings: font
+                .axis_mappings()
+                .iter()
+                .map(|mapping| AxisMappingSummary::from_mapping(mapping, &axes_by_id))
+                .collect(),
             sources: font
                 .sources()
                 .iter()
@@ -160,10 +211,68 @@ impl From<&Axis> for AxisSummary {
             id: axis.id().to_string(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
+            role: match axis.role() {
+                AxisRole::External => "external",
+                AxisRole::Internal => "internal",
+            }
+            .to_string(),
+            kind: match axis.kind() {
+                AxisKind::Continuous { .. } => "continuous",
+                AxisKind::Discrete { .. } => "discrete",
+            }
+            .to_string(),
             minimum: axis.minimum(),
             default: axis.default(),
             maximum: axis.maximum(),
+            values: axis.discrete_values().map(<[f64]>::to_vec),
+            labels: axis.labels().iter().map(AxisLabelSummary::from).collect(),
             hidden: axis.is_hidden(),
+        }
+    }
+}
+
+impl From<&AxisLabel> for AxisLabelSummary {
+    fn from(label: &AxisLabel) -> Self {
+        Self {
+            name: label.name.clone(),
+            value: label.value,
+            minimum: label.range.as_ref().map(|range| range.minimum),
+            maximum: label.range.as_ref().map(|range| range.maximum),
+            linked_value: label.linked_value,
+            elidable: label.elidable,
+        }
+    }
+}
+
+impl AxisMappingSummary {
+    fn from_mapping(mapping: &AxisMapping, axes_by_id: &HashMap<AxisId, String>) -> Self {
+        Self {
+            id: mapping.id().to_string(),
+            name: mapping.name().to_string(),
+            description: mapping.description().map(str::to_string),
+            kind: if mapping.is_independent() {
+                "independent"
+            } else {
+                "cross-axis"
+            }
+            .to_string(),
+            inputs: axis_references(mapping.inputs(), axes_by_id),
+            outputs: axis_references(mapping.outputs(), axes_by_id),
+            points: mapping
+                .points()
+                .iter()
+                .map(|point| AxisMappingPointSummary::from_point(point, axes_by_id))
+                .collect(),
+        }
+    }
+}
+
+impl AxisMappingPointSummary {
+    fn from_point(point: &AxisMappingPoint, axes_by_id: &HashMap<AxisId, String>) -> Self {
+        Self {
+            description: point.description.clone(),
+            input: location_values(&point.input, axes_by_id),
+            output: location_values(&point.output, axes_by_id),
         }
     }
 }
@@ -174,33 +283,38 @@ impl SourceSummary {
         axes_by_id: &HashMap<AxisId, String>,
         default_source_id: &Option<SourceId>,
     ) -> Self {
-        let mut location = source
-            .location()
-            .iter()
-            .map(|(axis_id, value)| {
-                let axis_tag = axes_by_id
-                    .get(axis_id)
-                    .cloned()
-                    .unwrap_or_else(|| axis_id.to_string());
-                LocationValue {
-                    axis_id: axis_id.to_string(),
-                    axis_tag,
-                    value: *value,
-                }
-            })
-            .collect::<Vec<_>>();
-        location.sort_by(|left, right| left.axis_tag.cmp(&right.axis_tag));
-
         Self {
             id: source.id().to_string(),
             name: source.name().to_string(),
-            location,
+            location: location_values(source.location(), axes_by_id),
             filename: source.filename().map(ToOwned::to_owned),
             is_default: default_source_id
                 .as_ref()
                 .is_some_and(|source_id| *source_id == source.id()),
         }
     }
+}
+
+fn location_values(
+    location: &Location,
+    axes_by_id: &HashMap<AxisId, String>,
+) -> Vec<LocationValue> {
+    let mut values = location
+        .iter()
+        .map(|(axis_id, value)| {
+            let axis_tag = axes_by_id
+                .get(axis_id)
+                .cloned()
+                .unwrap_or_else(|| axis_id.to_string());
+            LocationValue {
+                axis_id: axis_id.to_string(),
+                axis_tag,
+                value: *value,
+            }
+        })
+        .collect::<Vec<_>>();
+    values.sort_by(|left, right| left.axis_tag.cmp(&right.axis_tag));
+    values
 }
 
 impl GlyphSummary {
@@ -252,6 +366,22 @@ impl GlyphLayerSummary {
 fn axes_by_id(axes: &[Axis]) -> HashMap<AxisId, String> {
     axes.iter()
         .map(|axis| (axis.id(), axis.tag().to_string()))
+        .collect()
+}
+
+fn axis_references(
+    axis_ids: &[AxisId],
+    axes_by_id: &HashMap<AxisId, String>,
+) -> Vec<AxisReference> {
+    axis_ids
+        .iter()
+        .map(|axis_id| AxisReference {
+            id: axis_id.to_string(),
+            tag: axes_by_id
+                .get(axis_id)
+                .cloned()
+                .unwrap_or_else(|| axis_id.to_string()),
+        })
         .collect()
 }
 

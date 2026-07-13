@@ -9,8 +9,8 @@
 use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
-    Anchor, AnchorId, Axis, AxisId, BooleanOp, Contour, ContourId, Font, Glyph, GlyphId,
-    GlyphLayer, GlyphName, LayerId, Location, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, Font, Glyph,
+    GlyphId, GlyphLayer, GlyphName, LayerId, Location, PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 
@@ -125,8 +125,14 @@ pub enum FontIntent {
     CreateAxis {
         axis: Axis,
     },
+    UpdateAxis {
+        axis: Axis,
+    },
     DeleteAxis {
         axis_id: AxisId,
+    },
+    SetAxisMappings {
+        mappings: Vec<AxisMapping>,
     },
     DeleteSource {
         source_id: SourceId,
@@ -175,7 +181,9 @@ impl FontIntent {
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
             | Self::CreateAxis { .. }
+            | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
+            | Self::SetAxisMappings { .. }
             | Self::DeleteSource { .. }
             | Self::CreateSource { .. }
             | Self::CreateGlyphLayer { .. }
@@ -297,8 +305,17 @@ impl Font {
                 self.apply_create_axis(axis, changes)?;
                 Ok(Vec::new())
             }
+            FontIntent::UpdateAxis { axis } => {
+                self.apply_update_axis(axis, changes)?;
+                Ok(Vec::new())
+            }
             FontIntent::DeleteAxis { axis_id } => {
                 self.apply_delete_axis(axis_id, changes)?;
+                Ok(Vec::new())
+            }
+            FontIntent::SetAxisMappings { mappings } => {
+                self.set_axis_mappings(mappings.clone())?;
+                changes.push(FontChange::axis_mappings_updated(mappings));
                 Ok(Vec::new())
             }
             FontIntent::DeleteSource { source_id } => {
@@ -360,6 +377,7 @@ impl Font {
     }
 
     fn apply_create_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
+        axis.validate()?;
         if self
             .axes()
             .iter()
@@ -373,13 +391,31 @@ impl Font {
         Ok(())
     }
 
+    fn apply_update_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
+        if self
+            .axes()
+            .iter()
+            .any(|existing| existing.id() != axis.id() && existing.tag() == axis.tag())
+        {
+            return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
+        }
+
+        self.replace_axis(axis.clone())?;
+        changes.push(FontChange::axis_updated(axis));
+        Ok(())
+    }
+
     fn apply_delete_axis(
         &mut self,
         axis_id: &AxisId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<()> {
+        let previous_mappings = self.axis_mappings().to_vec();
         self.remove_axis(axis_id.clone())
             .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+        if self.axis_mappings() != previous_mappings {
+            changes.push(FontChange::axis_mappings_updated(self.axis_mappings()));
+        }
         changes.push(FontChange::axis_deleted(axis_id.clone()));
         Ok(())
     }
@@ -838,7 +874,9 @@ impl Font {
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }
             | FontIntent::CreateAxis { .. }
+            | FontIntent::UpdateAxis { .. }
             | FontIntent::DeleteAxis { .. }
+            | FontIntent::SetAxisMappings { .. }
             | FontIntent::DeleteSource { .. }
             | FontIntent::CreateSource { .. }
             | FontIntent::CreateGlyphLayer { .. }

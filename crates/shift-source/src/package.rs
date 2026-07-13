@@ -9,15 +9,18 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use shift_font::{
-    Anchor, Axis, AxisId, Component, ComponentId, Contour, DecomposedTransform, FeatureData, Font,
-    FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, Guideline, KerningData, KerningPair,
-    KerningSide, LibData, LibValue, Location, Point, PointType, Source, SourceId, SourceRole,
+    Anchor, Axis, AxisId, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingId,
+    AxisMappingPoint, AxisRole, Component, ComponentId, Contour, DecomposedTransform, FeatureData,
+    Font, FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, Guideline, KerningData,
+    KerningPair, KerningSide, LibData, LibValue, Location, Point, PointType, Source, SourceId,
+    SourceRole,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, result::ZipError, write::SimpleFileOptions};
 
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const FONT_FILE: &str = "font.json";
 pub const AXES_FILE: &str = "axes.json";
+pub const AXIS_MAPPINGS_FILE: &str = "axis-mappings.json";
 pub const SOURCES_FILE: &str = "sources.json";
 pub const FEATURES_FILE: &str = "features.fea";
 pub const KERNING_FILE: &str = "kerning.json";
@@ -151,16 +154,6 @@ pub enum SourcePackageError {
 
     #[error("non-finite number in {field}")]
     NonFiniteNumber { field: String },
-
-    #[error(
-        "invalid axis range for {tag}: expected minimum <= default <= maximum, got {minimum} <= {default} <= {maximum}"
-    )]
-    InvalidAxisRange {
-        tag: String,
-        minimum: f64,
-        default: f64,
-        maximum: f64,
-    },
 
     #[error("unexpected source package entry: {0}")]
     UnexpectedEntry(String),
@@ -336,10 +329,74 @@ struct AxisDoc {
     id: String,
     tag: String,
     name: String,
-    minimum: f64,
-    default: f64,
-    maximum: f64,
+    role: AxisRoleDoc,
+    kind: AxisKindDoc,
+    labels: Vec<AxisLabelDoc>,
     hidden: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum AxisRoleDoc {
+    #[default]
+    External,
+    Internal,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum AxisKindDoc {
+    Continuous {
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    },
+    Discrete {
+        values: Vec<f64>,
+        default: f64,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AxisLabelDoc {
+    name: String,
+    value: f64,
+    range: Option<AxisLabelRangeDoc>,
+    linked_value: Option<f64>,
+    elidable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AxisLabelRangeDoc {
+    minimum: f64,
+    maximum: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AxisMappingsDoc {
+    mappings: Vec<AxisMappingDoc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AxisMappingDoc {
+    id: String,
+    name: String,
+    description: Option<String>,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+    points: Vec<AxisMappingPointDoc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AxisMappingPointDoc {
+    description: Option<String>,
+    input: BTreeMap<String, f64>,
+    output: BTreeMap<String, f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -590,10 +647,19 @@ pub fn font_to_tree(
             .collect::<Result<Vec<_>, _>>()?,
     };
 
+    let axis_mappings_doc = AxisMappingsDoc {
+        mappings: font
+            .axis_mappings()
+            .iter()
+            .map(AxisMappingDoc::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+
     let mut tree = vec![
         json_entry(MANIFEST_FILE, &manifest)?,
         json_entry(FONT_FILE, &font_doc)?,
         json_entry(AXES_FILE, &axes_doc)?,
+        json_entry(AXIS_MAPPINGS_FILE, &axis_mappings_doc)?,
         json_entry(SOURCES_FILE, &sources_doc)?,
     ];
 
@@ -643,6 +709,7 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
 
     let font_doc: FontDoc = take_json(&mut entries, FONT_FILE)?;
     let axes_doc: AxesDoc = take_json(&mut entries, AXES_FILE)?;
+    let axis_mappings_doc: AxisMappingsDoc = take_json(&mut entries, AXIS_MAPPINGS_FILE)?;
     let sources_doc: SourcesDoc = take_json(&mut entries, SOURCES_FILE)?;
     let features = take_optional_text(&mut entries, FEATURES_FILE)?;
     let kerning_doc: Option<KerningDoc> = take_optional_json(&mut entries, KERNING_FILE)?;
@@ -680,6 +747,13 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
         font.add_axis(Axis::try_from(axis_doc)?);
     }
     let axis_ids = font.axes().iter().map(Axis::id).collect::<HashSet<_>>();
+    font.set_axis_mappings(
+        axis_mappings_doc
+            .mappings
+            .into_iter()
+            .map(AxisMapping::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
+    )?;
 
     for source_doc in sources_doc.sources {
         validate_source_axis_references(&source_doc, &axis_ids)?;
@@ -980,19 +1054,6 @@ fn ensure_optional_finite(
     value: Option<f64>,
 ) -> Result<Option<f64>, SourcePackageError> {
     value.map(|value| ensure_finite(field, value)).transpose()
-}
-
-fn ensure_axis_range(doc: &AxisDoc) -> Result<(), SourcePackageError> {
-    if doc.minimum <= doc.default && doc.default <= doc.maximum {
-        Ok(())
-    } else {
-        Err(SourcePackageError::InvalidAxisRange {
-            tag: doc.tag.clone(),
-            minimum: doc.minimum,
-            default: doc.default,
-            maximum: doc.maximum,
-        })
-    }
 }
 
 fn tmp_path_for(path: &Path) -> PathBuf {
@@ -1755,12 +1816,15 @@ impl TryFrom<&Axis> for AxisDoc {
             id: axis.id().to_string(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
-            minimum: ensure_finite("axes[].minimum", axis.minimum())?,
-            default: ensure_finite("axes[].default", axis.default())?,
-            maximum: ensure_finite("axes[].maximum", axis.maximum())?,
+            role: axis.role().into(),
+            kind: AxisKindDoc::try_from(axis.kind())?,
+            labels: axis
+                .labels()
+                .iter()
+                .map(AxisLabelDoc::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
             hidden: axis.is_hidden(),
         };
-        ensure_axis_range(&doc)?;
         Ok(doc)
     }
 }
@@ -1769,21 +1833,206 @@ impl TryFrom<AxisDoc> for Axis {
     type Error = SourcePackageError;
 
     fn try_from(doc: AxisDoc) -> Result<Self, Self::Error> {
-        ensure_finite("axes[].minimum", doc.minimum)?;
-        ensure_finite("axes[].default", doc.default)?;
-        ensure_finite("axes[].maximum", doc.maximum)?;
-        ensure_axis_range(&doc)?;
-        let mut axis = Axis::with_id(
-            parse_id("axis", &doc.id)?,
-            doc.tag,
-            doc.name,
-            doc.minimum,
-            doc.default,
-            doc.maximum,
-        );
+        let axis_id = parse_id("axis", &doc.id)?;
+        let mut axis = match doc.kind {
+            AxisKindDoc::Continuous {
+                minimum,
+                default,
+                maximum,
+            } => Axis::continuous_with_id(axis_id, doc.tag, doc.name, minimum, default, maximum),
+            AxisKindDoc::Discrete { values, default } => {
+                Axis::discrete_with_id(axis_id, doc.tag, doc.name, values, default)
+            }
+        };
+        axis.set_role(doc.role.into());
+        axis.set_labels(doc.labels.into_iter().map(AxisLabel::from).collect());
         axis.set_hidden(doc.hidden);
+        axis.validate()?;
         Ok(axis)
     }
+}
+
+impl From<AxisRole> for AxisRoleDoc {
+    fn from(role: AxisRole) -> Self {
+        match role {
+            AxisRole::External => Self::External,
+            AxisRole::Internal => Self::Internal,
+        }
+    }
+}
+
+impl From<AxisRoleDoc> for AxisRole {
+    fn from(role: AxisRoleDoc) -> Self {
+        match role {
+            AxisRoleDoc::External => Self::External,
+            AxisRoleDoc::Internal => Self::Internal,
+        }
+    }
+}
+
+impl TryFrom<&AxisKind> for AxisKindDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(kind: &AxisKind) -> Result<Self, Self::Error> {
+        Ok(match kind {
+            AxisKind::Continuous {
+                minimum,
+                default,
+                maximum,
+            } => Self::Continuous {
+                minimum: ensure_finite("axes[].kind.minimum", *minimum)?,
+                default: ensure_finite("axes[].kind.default", *default)?,
+                maximum: ensure_finite("axes[].kind.maximum", *maximum)?,
+            },
+            AxisKind::Discrete { values, default } => Self::Discrete {
+                values: values
+                    .iter()
+                    .map(|value| ensure_finite("axes[].kind.values[]", *value))
+                    .collect::<Result<Vec<_>, _>>()?,
+                default: ensure_finite("axes[].kind.default", *default)?,
+            },
+        })
+    }
+}
+
+impl TryFrom<&AxisLabel> for AxisLabelDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(label: &AxisLabel) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: label.name.clone(),
+            value: ensure_finite("axes[].labels[].value", label.value)?,
+            range: label
+                .range
+                .as_ref()
+                .map(|range| {
+                    Ok::<_, SourcePackageError>(AxisLabelRangeDoc {
+                        minimum: ensure_finite("axes[].labels[].range.minimum", range.minimum)?,
+                        maximum: ensure_finite("axes[].labels[].range.maximum", range.maximum)?,
+                    })
+                })
+                .transpose()?,
+            linked_value: ensure_optional_finite(
+                "axes[].labels[].linkedValue",
+                label.linked_value,
+            )?,
+            elidable: label.elidable,
+        })
+    }
+}
+
+impl From<AxisLabelDoc> for AxisLabel {
+    fn from(label: AxisLabelDoc) -> Self {
+        Self {
+            name: label.name,
+            value: label.value,
+            range: label.range.map(|range| AxisLabelRange {
+                minimum: range.minimum,
+                maximum: range.maximum,
+            }),
+            linked_value: label.linked_value,
+            elidable: label.elidable,
+        }
+    }
+}
+
+impl TryFrom<&AxisMapping> for AxisMappingDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(mapping: &AxisMapping) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: mapping.id().to_string(),
+            name: mapping.name().to_string(),
+            description: mapping.description().map(str::to_string),
+            inputs: mapping.inputs().iter().map(ToString::to_string).collect(),
+            outputs: mapping.outputs().iter().map(ToString::to_string).collect(),
+            points: mapping
+                .points()
+                .iter()
+                .map(AxisMappingPointDoc::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+impl TryFrom<AxisMappingDoc> for AxisMapping {
+    type Error = SourcePackageError;
+
+    fn try_from(doc: AxisMappingDoc) -> Result<Self, Self::Error> {
+        let mut mapping = AxisMapping::with_id(
+            parse_id::<AxisMappingId>("axis mapping", &doc.id)?,
+            doc.name,
+            doc.inputs
+                .iter()
+                .map(|id| parse_id("axis", id))
+                .collect::<Result<Vec<_>, _>>()?,
+            doc.outputs
+                .iter()
+                .map(|id| parse_id("axis", id))
+                .collect::<Result<Vec<_>, _>>()?,
+            doc.points
+                .into_iter()
+                .map(AxisMappingPoint::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+        mapping.set_description(doc.description);
+        Ok(mapping)
+    }
+}
+
+impl TryFrom<&AxisMappingPoint> for AxisMappingPointDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(point: &AxisMappingPoint) -> Result<Self, Self::Error> {
+        Ok(Self {
+            description: point.description.clone(),
+            input: location_to_doc("axisMappings[].points[].input", &point.input)?,
+            output: location_to_doc("axisMappings[].points[].output", &point.output)?,
+        })
+    }
+}
+
+impl TryFrom<AxisMappingPointDoc> for AxisMappingPoint {
+    type Error = SourcePackageError;
+
+    fn try_from(point: AxisMappingPointDoc) -> Result<Self, Self::Error> {
+        Ok(Self {
+            description: point.description,
+            input: location_from_doc("axisMappings[].points[].input", point.input)?,
+            output: location_from_doc("axisMappings[].points[].output", point.output)?,
+        })
+    }
+}
+
+fn location_to_doc(
+    field: &str,
+    location: &Location,
+) -> Result<BTreeMap<String, f64>, SourcePackageError> {
+    location
+        .iter()
+        .map(|(axis_id, value)| {
+            Ok::<_, SourcePackageError>((
+                axis_id.to_string(),
+                ensure_finite(format!("{field}[{axis_id}]"), *value)?,
+            ))
+        })
+        .collect()
+}
+
+fn location_from_doc(
+    field: &str,
+    location: BTreeMap<String, f64>,
+) -> Result<Location, SourcePackageError> {
+    let values = location
+        .into_iter()
+        .map(|(axis_id, value)| {
+            Ok::<_, SourcePackageError>((
+                parse_id("axis", &axis_id)?,
+                ensure_finite(format!("{field}[{axis_id}]"), value)?,
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
+    Ok(Location::from_map(values))
 }
 
 impl TryFrom<&Source> for SourceDoc {

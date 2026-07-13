@@ -8,7 +8,7 @@ import type {
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { AppliedChange, FontIntent } from "@shift/types";
+import type { AppliedChange, FontIntent, Location } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
 /**
@@ -129,15 +129,28 @@ export class WorkspaceClient {
     return this.#require().call("workspace.glyphSnapshots", { requests: [...requests] });
   }
 
+  /**
+   * Evaluates the current font's axis mappings in the utility process.
+   *
+   * @param location - External location keyed by stable axis id.
+   * @returns The mapped location, with omitted axes filled from their defaults.
+   */
+  async mapLocation(location: Location): Promise<Location> {
+    await this.connect();
+
+    return this.#require().call("workspace.mapLocation", location);
+  }
+
   #fold(applied: AppliedChange): AppliedChange {
     const current = this.workspaceCell.peek();
     if (!current) return applied;
 
-    if (applied.glyphs || applied.axes || applied.sources) {
+    if (applied.glyphs || applied.axes || applied.axisMappings || applied.sources) {
       this.workspaceCell.set({
         ...current,
         glyphs: applied.glyphs ?? current.glyphs,
         axes: applied.axes ?? current.axes,
+        axisMappings: applied.axisMappings ?? current.axisMappings,
         sources: applied.sources ?? current.sources,
       });
     }
