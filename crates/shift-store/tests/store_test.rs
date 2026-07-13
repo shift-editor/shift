@@ -1055,47 +1055,6 @@ fn replace_and_load_font_state_preserves_whole_font() {
 }
 
 #[test]
-fn replace_and_load_font_state_preserves_axis_labels_and_mappings() {
-    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
-    let mut font = shift_font::Font::new();
-    let mut weight = shift_font::Axis::weight();
-    weight.set_labels(vec![shift_font::AxisLabel {
-        name: "Regular".to_string(),
-        value: 400.0,
-        range: Some(shift_font::AxisLabelRange {
-            minimum: 350.0,
-            maximum: 450.0,
-        }),
-        linked_value: None,
-        elidable: true,
-    }]);
-    let axis_id = weight.id();
-    font.add_axis(weight);
-
-    let mut input = shift_font::Location::new();
-    input.set(axis_id.clone(), 900.0);
-    let mut output = shift_font::Location::new();
-    output.set(axis_id.clone(), 800.0);
-    font.set_axis_mappings(vec![shift_font::AxisMapping::new(
-        "Weight curve".to_string(),
-        vec![axis_id.clone()],
-        vec![axis_id],
-        vec![shift_font::AxisMappingPoint {
-            description: None,
-            input,
-            output,
-        }],
-    )])
-    .unwrap();
-
-    store.replace_font_state(&font).expect("replace font state");
-    let loaded = store.load_font_state().expect("load font state");
-
-    assert_eq!(loaded.axes(), font.axes());
-    assert_eq!(loaded.axis_mappings(), font.axis_mappings());
-}
-
-#[test]
 fn refuses_stores_from_newer_schema_versions() {
     let path = temp_store_path("future");
 

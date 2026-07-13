@@ -30,13 +30,13 @@ impl TryFrom<&str> for ExportFormat {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontExportRequest {
     pub path: PathBuf,
     pub format: ExportFormat,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontExportResult {
     pub path: PathBuf,
     pub format: ExportFormat,
@@ -155,33 +155,15 @@ fn ensure_ttf_output_path(path: &Path) -> Result<(), ExportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{
-        Axis, AxisMapping, AxisMappingPoint, AxisRole, Contour, Font, Glyph, GlyphLayer, LayerId,
-        Location, PointType,
-    };
+    use shift_font::test_support::sample_variable_font;
+    use shift_font::{Axis, AxisMapping, AxisMappingPoint, AxisRole, Font, Location};
     use skrifa::{FontRef, MetadataProvider};
-
-    fn simple_font() -> Font {
-        let mut font = Font::new();
-        let default_source_id = font.default_source_id().unwrap();
-        let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 600.0);
-        let mut contour = Contour::new();
-        contour.add_point(100.0, 0.0, PointType::OnCurve, false);
-        contour.add_point(300.0, 700.0, PointType::OnCurve, false);
-        contour.add_point(500.0, 0.0, PointType::OnCurve, false);
-        contour.close();
-        layer.add_contour(contour);
-        glyph.set_layer(layer);
-        font.insert_glyph(glyph).unwrap();
-        font
-    }
 
     #[test]
     fn compiles_ttf_with_authored_cmap() {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("Dogfood.ttf");
-        let font = simple_font();
+        let font = sample_variable_font();
 
         let result = FontExporter::new()
             .export(
@@ -193,8 +175,13 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(result.path, output_path);
-        assert_eq!(result.format, ExportFormat::Ttf);
+        assert_eq!(
+            result,
+            FontExportResult {
+                path: output_path.clone(),
+                format: ExportFormat::Ttf,
+            }
+        );
 
         let bytes = std::fs::read(&output_path).unwrap();
         assert!(!bytes.is_empty());
@@ -210,7 +197,7 @@ mod tests {
     fn rejects_ttf_export_without_ttf_extension() {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("Dogfood.otf");
-        let font = simple_font();
+        let font = Font::new();
 
         let error = FontExporter::new()
             .export(
@@ -232,7 +219,7 @@ mod tests {
     fn rejects_cross_axis_mapping_before_writing_output() {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("Dogfood.ttf");
-        let mut font = simple_font();
+        let mut font = Font::new();
         let weight = Axis::weight();
         let mut optical = Axis::new(
             "opsz".to_string(),

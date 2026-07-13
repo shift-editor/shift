@@ -114,8 +114,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     const compiled = createBridge();
     compiled.openWorkspace(outputPath, join(outputRoot, "compiled.sqlite3"));
     const unicodes = compiled.getGlyphs().flatMap((glyph) => glyph.unicodes);
-    expect(unicodes).toContain(65);
-    expect(unicodes).not.toContain(66);
+    expect(unicodes).toEqual([65]);
   });
 
   it("a current-target save serializes behind a later edit", async () => {

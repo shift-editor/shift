@@ -18,4 +18,5 @@ shift-source = { workspace = true }
 thiserror = "2"
 
 [dev-dependencies]
+shift-font = { workspace = true, features = ["test-support"] }
 tempfile = "3"

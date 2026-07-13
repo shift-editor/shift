@@ -27,5 +27,8 @@ tempfile = "3"
 thiserror = "2.0.18"
 write-fonts = "0.44"
 
+[dev-dependencies]
+shift-font = { workspace = true, features = ["test-support"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

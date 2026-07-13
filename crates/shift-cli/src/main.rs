@@ -63,7 +63,7 @@ fn write_stdout(output: &str) -> miette::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
+    use shift_font::test_support::sample_variable_font;
 
     use super::*;
 
@@ -72,7 +72,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let source_path = temp.path().join("Dogfood.shift");
         let output_path = temp.path().join("Dogfood.ttf");
-        ShiftSourcePackage::save_font(&source_path, &simple_font()).unwrap();
+        ShiftSourcePackage::save_font(&source_path, &sample_variable_font()).unwrap();
 
         let result = compile(CompileArgs {
             path: source_path,
@@ -80,24 +80,14 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(result.path, output_path);
+        assert_eq!(
+            result,
+            FontExportResult {
+                path: output_path,
+                format: ExportFormat::Ttf,
+            }
+        );
         let bytes = std::fs::read(result.path).unwrap();
         assert_eq!(&bytes[..4], &[0x00, 0x01, 0x00, 0x00]);
-    }
-
-    fn simple_font() -> Font {
-        let mut font = Font::new();
-        let source_id = font.default_source_id().unwrap();
-        let mut glyph = Glyph::with_unicode("A", 0x0041);
-        let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 600.0);
-        let mut contour = Contour::new();
-        contour.add_point(100.0, 0.0, PointType::OnCurve, false);
-        contour.add_point(300.0, 700.0, PointType::OnCurve, false);
-        contour.add_point(500.0, 0.0, PointType::OnCurve, false);
-        contour.close();
-        layer.add_contour(contour);
-        glyph.set_layer(layer);
-        font.insert_glyph(glyph).unwrap();
-        font
     }
 }
