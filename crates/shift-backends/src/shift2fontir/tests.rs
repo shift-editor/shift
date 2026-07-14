@@ -2,13 +2,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use fontdrasil::coords::{
-    CoordConverter, DesignCoord, NormalizedCoord, NormalizedLocation, UserCoord,
+    CoordConverter, DesignCoord, NormalizedCoord, NormalizedLocation, UserCoord, UserLocation,
 };
 use fontdrasil::types::{Axis, GlyphName, Tag};
 use fontir::glyph::create_glyph_order_work;
 use fontir::ir::{
     FeaturesSource, GlobalMetric, Glyph, GlyphInstance, KernGroup, KernSide, KerningGroups,
-    KerningInstance,
+    KerningInstance, NamedInstance,
 };
 use fontir::orchestration::{Context, Flags, IrWork, WorkId};
 use fontir::paths::Paths;
@@ -23,7 +23,7 @@ use super::source::ShiftIrSource;
 struct Compilation {
     units_per_em: u16,
     axes: Vec<Axis>,
-    named_instance_count: usize,
+    named_instances: Vec<NamedInstance>,
     features: FeaturesSource,
     glyph: Glyph,
     metrics: Metrics,
@@ -73,7 +73,7 @@ fn compile_ir(source: ShiftIrSource) -> Compilation {
     Compilation {
         units_per_em: metadata.units_per_em,
         axes: metadata.all_source_axes.iter().cloned().collect(),
-        named_instance_count: metadata.named_instances.len(),
+        named_instances: metadata.named_instances.clone(),
         features: context.features.get().as_ref().clone(),
         glyph: context.get_glyph("A").as_ref().clone(),
         metrics: Metrics {
@@ -130,7 +130,11 @@ fn expected_ir() -> Compilation {
             ),
             localized_names: HashMap::new(),
         }],
-        named_instance_count: 0,
+        named_instances: vec![NamedInstance {
+            name: "Bold".to_string(),
+            postscript_name: Some("UntitledFont-Bold".to_string()),
+            location: UserLocation::from_iter([(tag, UserCoord::new(900.0))]),
+        }],
         features: FeaturesSource::from_string(EXPECTED_STAT.to_string()),
         glyph: Glyph::new(
             GlyphName::new("A"),
@@ -198,11 +202,6 @@ const EXPECTED_STAT: &str = r#"table STAT {
   };
   DesignAxis wght 0 {
     name "Weight";
-  };
-  AxisValue {
-    location wght 400 350 450;
-    name "Regular";
-    flag ElidableAxisValueName;
   };
   AxisValue {
     location wght 400 700;

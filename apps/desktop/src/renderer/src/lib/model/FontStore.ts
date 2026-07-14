@@ -121,16 +121,17 @@ export class FontStore {
     if (!current) return;
 
     batch(() => {
-      const nextWorkspace =
-        applied.glyphs || applied.axes || applied.axisMappings || applied.sources
-          ? {
-              ...current,
-              glyphs: applied.glyphs ?? current.glyphs,
-              axes: applied.axes ?? current.axes,
-              axisMappings: applied.axisMappings ?? current.axisMappings,
-              sources: applied.sources ?? current.sources,
-            }
-          : current;
+      const next = applied.next;
+      const nextWorkspace = next
+        ? {
+            ...current,
+            glyphs: next.glyphs ?? current.glyphs,
+            axes: next.axes ?? current.axes,
+            axisMappings: next.axisMappings ?? current.axisMappings,
+            namedInstances: next.namedInstances ?? current.namedInstances,
+            sources: next.sources ?? current.sources,
+          }
+        : current;
 
       if (nextWorkspace !== current) {
         this.#workspace.set(nextWorkspace);

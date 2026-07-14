@@ -17,6 +17,7 @@ impl InspectReport {
             InspectView::Summary => self.render_summary(mode),
             InspectView::Axes => self.render_axes(mode),
             InspectView::Mappings => self.render_mappings(mode),
+            InspectView::Instances => self.render_instances(mode),
             InspectView::Sources => self.render_sources(mode),
             InspectView::Glyphs => self.render_glyphs(mode),
             InspectView::Layers => self.render_layers(mode),
@@ -31,6 +32,7 @@ impl InspectReport {
             String::new(),
             format_count("axes", self.axes.len(), mode),
             format_count("mappings", self.axis_mappings.len(), mode),
+            format_count("instances", self.named_instances.len(), mode),
             format_count("sources", self.sources.len(), mode),
             format_count("glyphs", self.glyph_count, mode),
         ];
@@ -80,7 +82,42 @@ impl InspectReport {
         }
         align_right(&mut table, &[5, 6, 7, 8, 9, 10]);
 
-        section_with_table("Axes", table, mode)
+        let axes = section_with_table("Axes", table, mode);
+        if self.axes.iter().all(|axis| axis.labels.is_empty()) {
+            return axes;
+        }
+
+        let mut values = base_table();
+        values.set_header(vec![
+            header("axis", mode),
+            header("name", mode),
+            header("id", mode),
+            header("value", mode),
+            header("min", mode),
+            header("max", mode),
+            header("linked", mode),
+            header("elidable", mode),
+        ]);
+        for axis in &self.axes {
+            for label in &axis.labels {
+                values.add_row(vec![
+                    accent(&axis.tag, mode),
+                    Cell::new(label.name.clone()),
+                    muted(compact_id(&label.id), mode),
+                    number(label.value),
+                    optional_number(label.minimum),
+                    optional_number(label.maximum),
+                    optional_number(label.linked_value),
+                    right(label.elidable),
+                ]);
+            }
+        }
+        align_right(&mut values, &[3, 4, 5, 6, 7]);
+
+        format!(
+            "{axes}\n\n{}",
+            section_with_table("Axis Values", values, mode)
+        )
     }
 
     fn render_mappings(&self, mode: RenderMode) -> String {
@@ -122,6 +159,30 @@ impl InspectReport {
             styled_section("Sources", mode),
             self.sources_table(mode)
         )
+    }
+
+    fn render_instances(&self, mode: RenderMode) -> String {
+        if self.named_instances.is_empty() {
+            return empty_section("Instances", "No named instances", mode);
+        }
+
+        let mut table = base_table();
+        table.set_header(vec![
+            header("name", mode),
+            header("id", mode),
+            header("external location", mode),
+            header("PostScript name", mode),
+        ]);
+        for instance in &self.named_instances {
+            table.add_row(vec![
+                Cell::new(instance.name.clone()),
+                muted(compact_id(&instance.id), mode),
+                Cell::new(format_location(&instance.location)),
+                Cell::new(instance.postscript_name.as_deref().unwrap_or("-")),
+            ]);
+        }
+
+        section_with_table("Instances", table, mode)
     }
 
     fn render_glyphs(&self, mode: RenderMode) -> String {
@@ -260,6 +321,13 @@ fn muted_text(value: &str, mode: RenderMode) -> String {
 
 fn number(value: f64) -> Cell {
     Cell::new(format_number(value)).set_alignment(CellAlignment::Right)
+}
+
+fn optional_number(value: Option<f64>) -> Cell {
+    match value {
+        Some(value) => number(value),
+        None => right("-"),
+    }
 }
 
 fn right(value: impl ToString) -> Cell {

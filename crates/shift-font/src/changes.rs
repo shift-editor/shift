@@ -1,6 +1,6 @@
 use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, Point, PointId, PointType, Source, SourceId,
+    GlyphName, LayerId, NamedInstance, Point, PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -34,6 +34,7 @@ pub enum FontChange {
     AxisUpdated(AxisUpdated),
     AxisDeleted(AxisDeleted),
     AxisMappingsUpdated(AxisMappingsUpdated),
+    NamedInstancesUpdated(NamedInstancesUpdated),
     SourceCreated(SourceCreated),
     SourceDeleted(SourceDeleted),
     GlyphCreated(GlyphCreated),
@@ -68,6 +69,12 @@ impl FontChange {
     pub fn axis_mappings_updated(mappings: &[AxisMapping]) -> Self {
         Self::AxisMappingsUpdated(AxisMappingsUpdated {
             mappings: mappings.to_vec(),
+        })
+    }
+
+    pub fn named_instances_updated(instances: &[NamedInstance]) -> Self {
+        Self::NamedInstancesUpdated(NamedInstancesUpdated {
+            instances: instances.to_vec(),
         })
     }
 
@@ -193,6 +200,11 @@ pub struct AxisUpdated {
 #[derive(Clone, Debug)]
 pub struct AxisMappingsUpdated {
     pub mappings: Vec<AxisMapping>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NamedInstancesUpdated {
+    pub instances: Vec<NamedInstance>,
 }
 
 #[derive(Clone, Debug)]

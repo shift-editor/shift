@@ -9,11 +9,11 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use shift_font::{
-    Anchor, Axis, AxisId, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingId,
-    AxisMappingPoint, AxisRole, Component, ComponentId, Contour, DecomposedTransform, FeatureData,
-    Font, FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, Guideline, KerningData,
-    KerningPair, KerningSide, LibData, LibValue, Location, Point, PointType, Source, SourceId,
-    SourceRole,
+    Anchor, Axis, AxisId, AxisKind, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
+    AxisMappingId, AxisMappingPoint, AxisRole, Component, ComponentId, Contour,
+    DecomposedTransform, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphLayer,
+    GlyphName, Guideline, KerningData, KerningPair, KerningSide, LibData, LibValue, Location,
+    NamedInstance, NamedInstanceId, Point, PointType, Source, SourceId, SourceRole,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, result::ZipError, write::SimpleFileOptions};
 
@@ -21,6 +21,7 @@ pub const MANIFEST_FILE: &str = "manifest.json";
 pub const FONT_FILE: &str = "font.json";
 pub const AXES_FILE: &str = "axes.json";
 pub const AXIS_MAPPINGS_FILE: &str = "axis-mappings.json";
+pub const INSTANCES_FILE: &str = "instances.json";
 pub const SOURCES_FILE: &str = "sources.json";
 pub const FEATURES_FILE: &str = "features.fea";
 pub const KERNING_FILE: &str = "kerning.json";
@@ -360,11 +361,27 @@ enum AxisKindDoc {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AxisLabelDoc {
+    id: String,
     name: String,
     value: f64,
     range: Option<AxisLabelRangeDoc>,
     linked_value: Option<f64>,
     elidable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstancesDoc {
+    named_instances: Vec<NamedInstanceDoc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NamedInstanceDoc {
+    id: String,
+    name: String,
+    location: BTreeMap<String, f64>,
+    postscript_name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -655,11 +672,20 @@ pub fn font_to_tree(
             .collect::<Result<Vec<_>, _>>()?,
     };
 
+    let instances_doc = InstancesDoc {
+        named_instances: font
+            .named_instances()
+            .iter()
+            .map(NamedInstanceDoc::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+
     let mut tree = vec![
         json_entry(MANIFEST_FILE, &manifest)?,
         json_entry(FONT_FILE, &font_doc)?,
         json_entry(AXES_FILE, &axes_doc)?,
         json_entry(AXIS_MAPPINGS_FILE, &axis_mappings_doc)?,
+        json_entry(INSTANCES_FILE, &instances_doc)?,
         json_entry(SOURCES_FILE, &sources_doc)?,
     ];
 
@@ -710,6 +736,7 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     let font_doc: FontDoc = take_json(&mut entries, FONT_FILE)?;
     let axes_doc: AxesDoc = take_json(&mut entries, AXES_FILE)?;
     let axis_mappings_doc: AxisMappingsDoc = take_json(&mut entries, AXIS_MAPPINGS_FILE)?;
+    let instances_doc: InstancesDoc = take_json(&mut entries, INSTANCES_FILE)?;
     let sources_doc: SourcesDoc = take_json(&mut entries, SOURCES_FILE)?;
     let features = take_optional_text(&mut entries, FEATURES_FILE)?;
     let kerning_doc: Option<KerningDoc> = take_optional_json(&mut entries, KERNING_FILE)?;
@@ -744,7 +771,7 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
     }
 
     for axis_doc in axes_doc.axes {
-        font.add_axis(Axis::try_from(axis_doc)?);
+        font.add_axis(Axis::try_from(axis_doc)?)?;
     }
     let axis_ids = font.axes().iter().map(Axis::id).collect::<HashSet<_>>();
     font.set_axis_mappings(
@@ -752,6 +779,13 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
             .mappings
             .into_iter()
             .map(AxisMapping::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
+    )?;
+    font.set_named_instances(
+        instances_doc
+            .named_instances
+            .into_iter()
+            .map(NamedInstance::try_from)
             .collect::<Result<Vec<_>, _>>()?,
     )?;
 
@@ -1845,7 +1879,12 @@ impl TryFrom<AxisDoc> for Axis {
             }
         };
         axis.set_role(doc.role.into());
-        axis.set_labels(doc.labels.into_iter().map(AxisLabel::from).collect());
+        axis.set_labels(
+            doc.labels
+                .into_iter()
+                .map(AxisLabel::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        );
         axis.set_hidden(doc.hidden);
         axis.validate()?;
         Ok(axis)
@@ -1900,6 +1939,7 @@ impl TryFrom<&AxisLabel> for AxisLabelDoc {
 
     fn try_from(label: &AxisLabel) -> Result<Self, Self::Error> {
         Ok(Self {
+            id: label.id().to_string(),
             name: label.name.clone(),
             value: ensure_finite("axes[].labels[].value", label.value)?,
             range: label
@@ -1921,18 +1961,47 @@ impl TryFrom<&AxisLabel> for AxisLabelDoc {
     }
 }
 
-impl From<AxisLabelDoc> for AxisLabel {
-    fn from(label: AxisLabelDoc) -> Self {
-        Self {
-            name: label.name,
-            value: label.value,
-            range: label.range.map(|range| AxisLabelRange {
+impl TryFrom<AxisLabelDoc> for AxisLabel {
+    type Error = SourcePackageError;
+
+    fn try_from(label: AxisLabelDoc) -> Result<Self, Self::Error> {
+        Ok(Self::with_id(
+            parse_id::<AxisLabelId>("axis label", &label.id)?,
+            label.name,
+            label.value,
+            label.range.map(|range| AxisLabelRange {
                 minimum: range.minimum,
                 maximum: range.maximum,
             }),
-            linked_value: label.linked_value,
-            elidable: label.elidable,
-        }
+            label.linked_value,
+            label.elidable,
+        ))
+    }
+}
+
+impl TryFrom<&NamedInstance> for NamedInstanceDoc {
+    type Error = SourcePackageError;
+
+    fn try_from(instance: &NamedInstance) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: instance.id().to_string(),
+            name: instance.name().to_string(),
+            location: location_to_doc("namedInstances[].location", instance.location())?,
+            postscript_name: instance.postscript_name().map(str::to_string),
+        })
+    }
+}
+
+impl TryFrom<NamedInstanceDoc> for NamedInstance {
+    type Error = SourcePackageError;
+
+    fn try_from(instance: NamedInstanceDoc) -> Result<Self, Self::Error> {
+        Ok(Self::with_id(
+            parse_id::<NamedInstanceId>("named instance", &instance.id)?,
+            instance.name,
+            location_from_doc("namedInstances[].location", instance.location)?,
+            instance.postscript_name,
+        ))
     }
 }
 

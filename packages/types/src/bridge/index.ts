@@ -29,7 +29,9 @@ export type {
   ContourData,
   CreateAxisIntent,
   CreateGlyphLayerIntent,
+  CreateNamedInstanceIntent,
   DeleteAxisIntent,
+  DeleteNamedInstanceIntent,
   DeleteSourceIntent,
   CreateSourceIntent,
   FontIntent,
@@ -45,6 +47,7 @@ export type {
   GlyphVariationData,
   LayerReplaced,
   Location,
+  NamedInstance,
   PackageDraft,
   PackageIdentity,
   PointData,
@@ -54,6 +57,7 @@ export type {
   Source,
   Unicode,
   UpdateAxisIntent,
+  UpdateNamedInstanceIntent,
 } from "./generated";
 
 /**

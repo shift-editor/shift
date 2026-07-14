@@ -33,6 +33,7 @@ Family.shift
   font.json
   axes.json
   axis-mappings.json
+  instances.json
   sources.json
   features.fea                    # optional verbatim OpenType feature text
   kerning.json                    # optional, glyph references use stable glyph ids
@@ -49,13 +50,16 @@ Family.shift
 This crate implements the compact v1 source package contract used by the app
 and `FontLoader`:
 
-- `axis_*`, `axisMapping_*`, `source_*`, `glyph_*`, and layer/component IDs are stable identity.
+- `axis_*`, `axisLabel_*`, `axisMapping_*`, `namedInstance_*`, `source_*`, `glyph_*`, and layer/component IDs are stable identity.
 - Axis tags and glyph names are labels. They are written for humans and
   external format interop, but they are not reference keys.
 - `axes.json` stores each axis `id` plus its OpenType `tag`, name, role,
-  continuous/discrete kind, axis value labels, and hidden flag.
+  continuous/discrete kind, stable-ID external axis value labels, and hidden flag.
 - `axis-mappings.json` stores the ordered font-owned independent mappings and
   optional cross-axis mapping group using stable axis IDs.
+- `instances.json` stores explicit named product presets. Every location is a
+  complete `axisId -> external value` map; instances do not reference sources
+  and do not store Designspace or compiler fields.
 - `sources.json` stores source locations as `axisId -> design-space value`.
 - Each glyph file is `glyphs/<glyphId>.json`; glyph layers are keyed by
   `sourceId`.

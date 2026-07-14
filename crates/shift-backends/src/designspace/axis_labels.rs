@@ -123,13 +123,7 @@ fn push_label(
     labels
         .entry(axis_name.to_string())
         .or_default()
-        .push(AxisLabel {
-            name,
-            value,
-            range,
-            linked_value,
-            elidable,
-        });
+        .push(AxisLabel::new(name, value, range, linked_value, elidable));
     Ok(())
 }
 

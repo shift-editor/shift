@@ -163,15 +163,17 @@ export class WorkspaceClient {
     const current = this.workspaceCell.peek();
     if (!current) return applied;
 
-    if (applied.glyphs || applied.axes || applied.axisMappings || applied.sources) {
-      this.workspaceCell.set({
-        ...current,
-        glyphs: applied.glyphs ?? current.glyphs,
-        axes: applied.axes ?? current.axes,
-        axisMappings: applied.axisMappings ?? current.axisMappings,
-        sources: applied.sources ?? current.sources,
-      });
-    }
+    const next = applied.next;
+    if (!next) return applied;
+
+    this.workspaceCell.set({
+      ...current,
+      glyphs: next.glyphs ?? current.glyphs,
+      axes: next.axes ?? current.axes,
+      axisMappings: next.axisMappings ?? current.axisMappings,
+      namedInstances: next.namedInstances ?? current.namedInstances,
+      sources: next.sources ?? current.sources,
+    });
 
     return applied;
   }

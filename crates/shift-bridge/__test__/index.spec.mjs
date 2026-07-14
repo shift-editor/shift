@@ -50,7 +50,7 @@ describe("Bridge", () => {
         createGlyphLayer: { layerId, glyphId, sourceId: defaultSourceId() },
       },
     ]);
-    const record = applied.glyphs.find((glyph) => glyph.id === glyphId);
+    const record = applied.next.glyphs.find((glyph) => glyph.id === glyphId);
     expect(record.layers).toContainEqual({ id: layerId, sourceId: defaultSourceId() });
     return layerId;
   }

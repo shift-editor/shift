@@ -6,9 +6,9 @@ use shift_font::{
 };
 use shift_source::{
     AXES_FILE, AXIS_MAPPINGS_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, FONTINFO_MODULE_FILE,
-    GLYPHS_DIR, IMAGES_DIR, KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE, PackageId, PackageTree,
-    SOURCES_FILE, ShiftSourcePackage, SourcePackageError, font_to_tree, tree_to_font,
-    write_tree_atomic,
+    GLYPHS_DIR, IMAGES_DIR, INSTANCES_FILE, KERNING_FILE, LIB_MODULE_FILE, MANIFEST_FILE,
+    PackageId, PackageTree, SOURCES_FILE, ShiftSourcePackage, SourcePackageError, font_to_tree,
+    tree_to_font, write_tree_atomic,
 };
 use zip::{CompressionMethod, ZipArchive};
 
@@ -170,6 +170,7 @@ fn serializes_same_font_to_byte_identical_tree() {
             FONT_FILE,
             AXES_FILE,
             AXIS_MAPPINGS_FILE,
+            INSTANCES_FILE,
             SOURCES_FILE,
             FEATURES_FILE,
             KERNING_FILE,
@@ -269,6 +270,14 @@ fn parses_minimal_handwritten_tree() {
             .to_vec(),
         ),
         (
+            INSTANCES_FILE.to_string(),
+            br#"{
+  "namedInstances": []
+}
+"#
+            .to_vec(),
+        ),
+        (
             SOURCES_FILE.to_string(),
             br#"{
   "sources": [
@@ -341,7 +350,8 @@ fn rejects_non_finite_source_location_values() {
         100.0,
         400.0,
         900.0,
-    ));
+    ))
+    .unwrap();
     let mut location = Location::new();
     location.set(axis_id, f64::INFINITY);
     font.add_source(Source::with_id(

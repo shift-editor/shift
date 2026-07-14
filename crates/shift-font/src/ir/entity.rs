@@ -128,7 +128,9 @@ typed_id!(LayerId, "layer");
 typed_id!(GlyphId, "glyph");
 typed_id!(SourceId, "source");
 typed_id!(AxisId, "axis");
+typed_id!(AxisLabelId, "axisLabel");
 typed_id!(AxisMappingId, "axisMapping");
+typed_id!(NamedInstanceId, "namedInstance");
 
 #[cfg(test)]
 mod tests {

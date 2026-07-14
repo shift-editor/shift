@@ -8,6 +8,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** The `.shift` source package path and SQLite working store path are separate inputs.
 - **Architecture Invariant:** Package recovery policy is not ranked in Rust. `FontWorkspace` exposes package and working-store inspection primitives; the utility process owns binding and lifecycle decisions.
 - **Architecture Invariant:** The workspace is the domain object future bridge or utility-process transports should wrap.
+- **Architecture Invariant:** Ledger replay restores complete named-instance collections after axis topology so undo/redo never observes an instance against the wrong external-axis shape.
 
 ## Codemap
 

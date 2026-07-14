@@ -7,11 +7,12 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use shift_font::{
-    Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind,
+    Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
     AxisMapping as IrAxisMapping, AxisMappingId, AxisRole as IrAxisRole, Component as IrComponent,
     ComponentId, Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
-    GlyphLayer, GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
+    GlyphLayer, GlyphName, GuidelineId, LayerId, Location as IrLocation,
+    NamedInstance as IrNamedInstance, NamedInstanceId, Point as IrPoint, PointId,
     PointType as IrPointType, Source as IrSource, SourceId,
 };
 
@@ -123,7 +124,9 @@ pub struct Axis {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Wire projection of a stable external-axis label.
 pub struct AxisLabel {
+    pub id: AxisLabelId,
     pub name: String,
     pub value: f64,
     pub minimum: Option<f64>,
@@ -156,6 +159,7 @@ impl From<&IrAxis> for Axis {
                 .labels()
                 .iter()
                 .map(|label| AxisLabel {
+                    id: label.id(),
                     name: label.name.clone(),
                     value: label.value,
                     minimum: label.range.as_ref().map(|range| range.minimum),
@@ -165,6 +169,30 @@ impl From<&IrAxis> for Axis {
                 })
                 .collect(),
             hidden: axis.is_hidden(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+/// Wire projection of an explicit named product preset.
+///
+/// `location` is complete external authoring state, not a normalized or
+/// compiler-owned coordinate record.
+pub struct NamedInstance {
+    pub id: NamedInstanceId,
+    pub name: String,
+    pub location: Location,
+    pub postscript_name: Option<String>,
+}
+
+impl From<&IrNamedInstance> for NamedInstance {
+    fn from(instance: &IrNamedInstance) -> Self {
+        Self {
+            id: instance.id(),
+            name: instance.name().to_string(),
+            location: instance.location().into(),
+            postscript_name: instance.postscript_name().map(str::to_string),
         }
     }
 }

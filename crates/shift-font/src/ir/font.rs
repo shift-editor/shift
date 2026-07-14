@@ -8,8 +8,9 @@ use crate::guideline::Guideline;
 use crate::kerning::KerningData;
 use crate::lib_data::LibData;
 use crate::metrics::FontMetrics;
+use crate::named_instance::{validate_named_instances, NamedInstance};
 use crate::source::Source;
-use crate::GlyphName;
+use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -96,6 +97,8 @@ struct FontData {
     axes: Vec<Axis>,
     #[serde(default)]
     axis_mappings: Vec<AxisMapping>,
+    #[serde(default)]
+    named_instances: Vec<NamedInstance>,
     sources: Vec<Source>,
     #[serde(default)]
     default_source_id: Option<SourceId>,
@@ -296,6 +299,7 @@ impl Default for Font {
                     metrics: FontMetrics::default(),
                     axes: Vec::new(),
                     axis_mappings: Vec::new(),
+                    named_instances: Vec::new(),
                     sources: vec![default_source],
                     default_source_id: Some(default_source_id),
                     glyphs: IndexMap::new(),
@@ -326,6 +330,7 @@ impl Font {
                     metrics: FontMetrics::default(),
                     axes: Vec::new(),
                     axis_mappings: Vec::new(),
+                    named_instances: Vec::new(),
                     sources: Vec::new(),
                     default_source_id: None,
                     glyphs: IndexMap::new(),
@@ -378,10 +383,57 @@ impl Font {
         &self.data().axes
     }
 
-    pub fn add_axis(&mut self, axis: Axis) {
-        self.data_mut().axes.push(axis);
+    /// Adds an axis and extends every existing product with its external default.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation error for invalid axis data, duplicate tags or
+    /// label identities, or a product collection invalid under the new axis.
+    pub fn add_axis(&mut self, axis: Axis) -> CoreResult<()> {
+        axis.validate()?;
+        if self
+            .axes()
+            .iter()
+            .any(|existing| existing.tag() == axis.tag())
+        {
+            return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
+        }
+
+        let mut axes = self.axes().to_vec();
+        axes.push(axis.clone());
+        validate_axis_label_ids(&axes)?;
+
+        let mut instances = self.named_instances().to_vec();
+        if axis.role() == crate::AxisRole::External {
+            for instance in &mut instances {
+                let mut location = instance.location().clone();
+                location.set(axis.id(), axis.default());
+                *instance = NamedInstance::with_id(
+                    instance.id(),
+                    instance.name().to_string(),
+                    location,
+                    instance.postscript_name().map(str::to_string),
+                );
+            }
+        }
+        validate_named_instances(&instances, &axes)?;
+
+        let data = self.data_mut();
+        data.axes = axes;
+        data.named_instances = instances;
+        Ok(())
     }
 
+    /// Replaces an axis definition and reshapes products only when its role changes.
+    ///
+    /// External value/range edits never rewrite existing product coordinates.
+    /// Changing an external axis to internal removes that coordinate; the
+    /// reverse inserts the new external default.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation error when the axis is unknown or the replacement
+    /// invalidates labels, mappings, or named products.
     pub fn replace_axis(&mut self, axis: Axis) -> CoreResult<Axis> {
         axis.validate()?;
         let index = self
@@ -390,10 +442,43 @@ impl Font {
             .position(|existing| existing.id() == axis.id())
             .ok_or_else(|| CoreError::AxisNotFound(axis.id()))?;
         let mut axes = self.axes().to_vec();
+        let previous = axes[index].clone();
         axes[index] = axis.clone();
+        validate_axis_label_ids(&axes)?;
         validate_axis_mappings(&axes, self.axis_mappings())?;
 
+        let mut instances = self.named_instances().to_vec();
+        match (previous.role(), axis.role()) {
+            (crate::AxisRole::External, crate::AxisRole::Internal) => {
+                for instance in &mut instances {
+                    let mut location = instance.location().clone();
+                    location.remove(&axis.id());
+                    *instance = NamedInstance::with_id(
+                        instance.id(),
+                        instance.name().to_string(),
+                        location,
+                        instance.postscript_name().map(str::to_string),
+                    );
+                }
+            }
+            (crate::AxisRole::Internal, crate::AxisRole::External) => {
+                for instance in &mut instances {
+                    let mut location = instance.location().clone();
+                    location.set(axis.id(), axis.default());
+                    *instance = NamedInstance::with_id(
+                        instance.id(),
+                        instance.name().to_string(),
+                        location,
+                        instance.postscript_name().map(str::to_string),
+                    );
+                }
+            }
+            _ => {}
+        }
+        validate_named_instances(&instances, &axes)?;
+
         let data = self.data_mut();
+        data.named_instances = instances;
         Ok(std::mem::replace(&mut data.axes[index], axis))
     }
 
@@ -411,17 +496,119 @@ impl Font {
         crate::variation::map_location(external, self.axes(), self.axis_mappings())
     }
 
-    pub fn remove_axis(&mut self, axis_id: AxisId) -> Option<Axis> {
-        let data = self.data_mut();
-        let index = data.axes.iter().position(|axis| axis.id() == axis_id)?;
-        let axis = data.axes.remove(index);
-        data.axis_mappings.retain(|mapping| {
+    /// Removes an axis and its dependent coordinates without leaving invalid products.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] for an unknown identity. Returns a
+    /// named-instance validation error when removing the coordinate would make
+    /// two explicit products indistinguishable.
+    pub fn remove_axis(&mut self, axis_id: AxisId) -> CoreResult<Axis> {
+        let index = self
+            .axes()
+            .iter()
+            .position(|axis| axis.id() == axis_id)
+            .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+        let mut axes = self.axes().to_vec();
+        let axis = axes.remove(index);
+        let mut mappings = self.axis_mappings().to_vec();
+        mappings.retain(|mapping| {
             !mapping.inputs().contains(&axis_id) && !mapping.outputs().contains(&axis_id)
         });
-        for source in &mut data.sources {
+        let mut sources = self.sources().to_vec();
+        for source in &mut sources {
             source.remove_axis_location(&axis_id);
         }
-        Some(axis)
+        let mut instances = self.named_instances().to_vec();
+        for instance in &mut instances {
+            let mut location = instance.location().clone();
+            location.remove(&axis_id);
+            *instance = NamedInstance::with_id(
+                instance.id(),
+                instance.name().to_string(),
+                location,
+                instance.postscript_name().map(str::to_string),
+            );
+        }
+        validate_named_instances(&instances, &axes)?;
+
+        let data = self.data_mut();
+        data.axes = axes;
+        data.axis_mappings = mappings;
+        data.sources = sources;
+        data.named_instances = instances;
+        Ok(axis)
+    }
+
+    /// Returns authored product presets in stable author order.
+    pub fn named_instances(&self) -> &[NamedInstance] {
+        &self.data().named_instances
+    }
+
+    /// Replaces authored product presets after validating external locations.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`CoreError`] for invalid or duplicate instance identity,
+    /// naming, or locations under the current axes.
+    pub fn set_named_instances(&mut self, instances: Vec<NamedInstance>) -> CoreResult<()> {
+        validate_named_instances(&instances, self.axes())?;
+        self.data_mut().named_instances = instances;
+        Ok(())
+    }
+
+    /// Appends a validated explicit product preset.
+    ///
+    /// # Errors
+    ///
+    /// Returns a duplicate or named-instance validation error.
+    pub fn add_named_instance(&mut self, instance: NamedInstance) -> CoreResult<()> {
+        if self
+            .named_instances()
+            .iter()
+            .any(|existing| existing.id() == instance.id())
+        {
+            return Err(CoreError::DuplicateNamedInstanceId(instance.id()));
+        }
+
+        let mut instances = self.named_instances().to_vec();
+        instances.push(instance);
+        self.set_named_instances(instances)
+    }
+
+    /// Replaces a product preset and returns its previous authored value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NamedInstanceNotFound`] for an unknown identity, or
+    /// a named-instance validation error for the replacement collection.
+    pub fn replace_named_instance(&mut self, instance: NamedInstance) -> CoreResult<NamedInstance> {
+        let index = self
+            .named_instances()
+            .iter()
+            .position(|existing| existing.id() == instance.id())
+            .ok_or_else(|| CoreError::NamedInstanceNotFound(instance.id()))?;
+        let mut instances = self.named_instances().to_vec();
+        let previous = std::mem::replace(&mut instances[index], instance);
+        self.set_named_instances(instances)?;
+        Ok(previous)
+    }
+
+    /// Removes a product preset and returns the removed authored value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::NamedInstanceNotFound`] for an unknown identity.
+    pub fn remove_named_instance(
+        &mut self,
+        instance_id: NamedInstanceId,
+    ) -> CoreResult<NamedInstance> {
+        let index = self
+            .named_instances()
+            .iter()
+            .position(|instance| instance.id() == instance_id)
+            .ok_or_else(|| CoreError::NamedInstanceNotFound(instance_id.clone()))?;
+        Ok(self.data_mut().named_instances.remove(index))
     }
 
     pub fn axis(&self, axis_id: AxisId) -> Option<&Axis> {
@@ -739,6 +926,17 @@ impl Font {
     }
 }
 
+fn validate_axis_label_ids(axes: &[Axis]) -> CoreResult<()> {
+    let mut ids = HashSet::<AxisLabelId>::new();
+    for label in axes.iter().flat_map(Axis::labels) {
+        if !ids.insert(label.id()) {
+            return Err(CoreError::DuplicateAxisLabelId(label.id()));
+        }
+    }
+
+    Ok(())
+}
+
 fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult<()> {
     let mut mapping_ids = HashSet::new();
     let mut mapping_names = HashSet::new();
@@ -901,7 +1099,7 @@ mod tests {
         let mut font = Font::new();
         let axis = Axis::weight();
         let mapping = independent_axis_mapping("Weight curve", &axis);
-        font.add_axis(axis);
+        font.add_axis(axis).expect("test axis should be valid");
 
         let result = font.set_axis_mappings(vec![mapping.clone(), mapping]);
 
@@ -914,7 +1112,7 @@ mod tests {
         let axis = Axis::weight();
         let first = independent_axis_mapping("Weight curve", &axis);
         let second = independent_axis_mapping("Weight curve", &axis);
-        font.add_axis(axis);
+        font.add_axis(axis).expect("test axis should be valid");
 
         let result = font.set_axis_mappings(vec![first, second]);
 
@@ -932,7 +1130,7 @@ mod tests {
         let second = independent_axis_mapping("Weight correction", &axis);
         let first_id = first.id();
         let second_id = second.id();
-        font.add_axis(axis);
+        font.add_axis(axis).expect("test axis should be valid");
 
         let result = font.set_axis_mappings(vec![first, second]);
 
@@ -954,7 +1152,7 @@ mod tests {
         let first_id = first.id();
         let second_id = second.id();
         for axis in axes {
-            font.add_axis(axis);
+            font.add_axis(axis).expect("test axis should be valid");
         }
 
         let result = font.set_axis_mappings(vec![first, second]);
@@ -973,7 +1171,8 @@ mod tests {
         let mut font = Font::new();
         let axis = Axis::weight();
         let axis_id = axis.id();
-        font.add_axis(axis.clone());
+        font.add_axis(axis.clone())
+            .expect("test axis should be valid");
         let mut input = Location::new();
         input.set(axis_id.clone(), 900.0);
         let mut output = Location::new();
@@ -996,6 +1195,36 @@ mod tests {
 
         assert!(matches!(result, Err(CoreError::InvalidAxisMapping { .. })));
         assert_eq!(font.axis(axis_id).unwrap().role(), AxisRole::External);
+    }
+
+    #[test]
+    fn removing_axis_rejects_collapsed_named_instance_locations() {
+        let mut font = Font::new();
+        let weight = Axis::weight();
+        let width = Axis::width();
+        let weight_id = weight.id();
+        let width_id = width.id();
+        font.add_axis(weight).expect("weight axis should be valid");
+        font.add_axis(width).expect("width axis should be valid");
+
+        let mut narrow = Location::new();
+        narrow.set(weight_id.clone(), 400.0);
+        narrow.set(width_id.clone(), 75.0);
+        let mut wide = Location::new();
+        wide.set(weight_id, 400.0);
+        wide.set(width_id.clone(), 125.0);
+        font.set_named_instances(vec![
+            NamedInstance::new("Narrow".to_string(), narrow, None),
+            NamedInstance::new("Wide".to_string(), wide, None),
+        ])
+        .unwrap();
+
+        assert!(matches!(
+            font.remove_axis(width_id),
+            Err(CoreError::DuplicateNamedInstanceLocation { .. })
+        ));
+        assert_eq!(font.axes().len(), 2);
+        assert_eq!(font.named_instances().len(), 2);
     }
 
     #[test]

@@ -104,7 +104,7 @@ export class TestEditor extends Editor {
       },
     ]);
 
-    const record = applied.glyphs?.find((glyph) => glyph.name === name);
+    const record = applied.next?.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
     return this.font.loadGlyph(record.id);

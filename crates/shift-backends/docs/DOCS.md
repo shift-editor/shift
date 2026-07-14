@@ -65,13 +65,13 @@ src/
 
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
 
-**Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation.
+**Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation; imported labels receive newly minted Shift identity because Designspace has no equivalent stable label ID.
 
 **Saving authoring sources:** `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `.shift` packages are written by `ShiftSourcePackage` through `FontLoader`.
 
 **Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and static kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. Variable compilation converts Shift axes and independent mappings to fontdrasil coordinate converters, normalizes master source locations, and emits each authored glyph master. Missing non-default glyph layers are sparse masters; every glyph must have a default-source layer. Shift's font-wide metrics and kerning remain constant across the variable font.
 
-**Variable metadata:** Independent axis mappings compile to OpenType `avar` version 1. Axis labels compile to `STAT` axis values, including ranges, linked values, and elidable flags. Source names are not inferred as `fvar` named instances because Shift does not yet have a first-class named-instance model. Cross-axis mappings are rejected explicitly because they require `avar` version 2 support from the compiler stack.
+**Variable metadata:** Independent axis mappings compile to OpenType `avar` version 1. Axis labels compile to `STAT` axis values, including ranges, linked values, and elidable flags. Only explicit Shift `NamedInstance` values compile to `fvar`; source names are never inferred as products. The adapter maps complete external instance locations to fontir and lets compiler-only defaults and name IDs remain compiler concerns. Cross-axis mappings remain authored in Shift but direct TTF export rejects them until the compiler stack supports `avar` version 2.
 
 ## Workflow recipes
 

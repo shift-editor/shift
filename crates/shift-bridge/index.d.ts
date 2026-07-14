@@ -3,12 +3,14 @@ import type {
   PointId,
   AnchorId,
   AxisId,
+  AxisLabelId,
   AxisMappingId,
   ComponentId,
   GuidelineId,
   GlyphId,
   GlyphName,
   LayerId,
+  NamedInstanceId,
   SourceId,
   Unicode,
 } from "@shift/types";
@@ -50,6 +52,7 @@ export declare class Bridge {
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
+  getNamedInstances(): Array<NapiNamedInstance>
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -128,17 +131,8 @@ export interface NapiAnchorSeed {
 /** Pure-state response to `apply`: no change records cross to the renderer. */
 export interface NapiAppliedChange {
   layers: Array<NapiLayerReplaced>
-  /** Full records list when glyph identity changed; absent when untouched. */
-  glyphs?: Array<NapiGlyphRecord>
-  /** Full axes list when font-level axis structure changed; absent otherwise. */
-  axes?: Array<NapiAxis>
-  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
-  axisMappings?: Array<NapiAxisMapping>
-  /**
-   * Full sources list when font-level source structure changed (createAxis
-   * reshapes locations, createSource adds one); absent otherwise.
-   */
-  sources?: Array<NapiSource>
+  /** Present when the apply produced any font-level replacement collections. */
+  next?: NapiFontReplacement
   /** Stable ids: references survive renames without re-indexing. */
   dependents: Array<GlyphId>
 }
@@ -158,6 +152,7 @@ export interface NapiAxis {
 }
 
 export interface NapiAxisLabel {
+  id: AxisLabelId
   name: string
   value: number
   minimum?: number
@@ -252,6 +247,11 @@ export interface NapiCreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an authored named instance with client-minted stable identity. */
+export interface NapiCreateNamedInstanceIntent {
+  instance: NapiNamedInstance
+}
+
 /**
  * Font-level source creation. The source id is client-minted so verbs can
  * return identity synchronously; Rust honors it and rejects duplicates.
@@ -266,6 +266,11 @@ export interface NapiCreateSourceIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface NapiDeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes an authored named instance without changing sources or geometry. */
+export interface NapiDeleteNamedInstanceIntent {
+  instanceId: NamedInstanceId
 }
 
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
@@ -284,9 +289,10 @@ export interface NapiFontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Create kinds: "createGlyph" | "createAxis" | "createSource" |
-   * "createGlyphLayer" | "cloneGlyphLayer". Delete kinds: "deleteAxis" |
-   * "deleteSource". Every kind shares the same apply path; one set = one undo step.
+   * Font-level kinds additionally include "createAxis", "updateAxis",
+   * "deleteAxis", "setAxisMappings", named-instance create/update/delete,
+   * source create/delete, and glyph or layer creation. Every kind shares the
+   * same apply path; one set is one undo step.
    */
   kind: string
   addPoints?: NapiAddPointsIntent
@@ -308,6 +314,9 @@ export interface NapiFontIntent {
   updateAxis?: NapiUpdateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
   setAxisMappings?: NapiSetAxisMappingsIntent
+  createNamedInstance?: NapiCreateNamedInstanceIntent
+  updateNamedInstance?: NapiUpdateNamedInstanceIntent
+  deleteNamedInstance?: NapiDeleteNamedInstanceIntent
   createSource?: NapiCreateSourceIntent
   deleteSource?: NapiDeleteSourceIntent
   createGlyphLayer?: NapiCreateGlyphLayerIntent
@@ -341,6 +350,28 @@ export interface NapiFontMetrics {
   italicAngle?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+/**
+ * Selective replacement-grade font collections produced by one apply.
+ *
+ * Every present collection is complete. An absent collection was untouched;
+ * it must be retained from the renderer's current workspace snapshot.
+ */
+export interface NapiFontReplacement {
+  /** Full records list when glyph identity changed; absent when untouched. */
+  glyphs?: Array<NapiGlyphRecord>
+  /** Full axes list when font-level axis structure changed; absent otherwise. */
+  axes?: Array<NapiAxis>
+  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
+  axisMappings?: Array<NapiAxisMapping>
+  /** Full authored product-preset list when named instances changed. */
+  namedInstances?: Array<NapiNamedInstance>
+  /**
+   * Full sources list when font-level source structure changed (createAxis
+   * reshapes locations, createSource adds one); absent otherwise.
+   */
+  sources?: Array<NapiSource>
 }
 
 export interface NapiGlyphChangedEntities {
@@ -439,6 +470,14 @@ export interface NapiMovePointsIntent {
   coords: Array<number>
 }
 
+/** NAPI projection of one explicit named product preset. */
+export interface NapiNamedInstance {
+  id: NamedInstanceId
+  name: string
+  location: NapiLocation
+  postscriptName?: string
+}
+
 export interface NapiPointData {
   id: PointId
   pointType: NapiPointType
@@ -525,4 +564,9 @@ export interface NapiUpdateGlyphIntent {
   glyphId: GlyphId
   newName: GlyphName
   newUnicodes: Array<Unicode>
+}
+
+/** Replaces an authored named instance while retaining its identity. */
+export interface NapiUpdateNamedInstanceIntent {
+  instance: NapiNamedInstance
 }

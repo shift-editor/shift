@@ -11,6 +11,7 @@ pub enum InspectView {
     Summary,
     Axes,
     Mappings,
+    Instances,
     Sources,
     Glyphs,
     Layers,
@@ -22,8 +23,8 @@ mod tests {
 
     use serde_json::json;
     use shift_font::{
-        Axis, AxisId, AxisMapping, AxisMappingPoint, Contour, Font, Glyph, GlyphLayer, LayerId,
-        Location, Point, Source, SourceId,
+        Axis, AxisId, AxisLabel, AxisLabelId, AxisMapping, AxisMappingPoint, Contour, Font, Glyph,
+        GlyphLayer, LayerId, Location, NamedInstance, NamedInstanceId, Point, Source, SourceId,
     };
     use shift_source::ShiftSourcePackage;
 
@@ -39,6 +40,7 @@ mod tests {
         assert_eq!(report.metadata.display_name, "Dogfood Sans Regular");
         assert_eq!(report.axes.len(), 1);
         assert_eq!(report.sources.len(), 2);
+        assert_eq!(report.named_instances.len(), 1);
         assert_eq!(report.glyph_count, 1);
         assert_eq!(report.sources[1].location[0].axis_tag, "wght");
         assert_eq!(report.sources[1].location[0].value, 700.0);
@@ -88,6 +90,16 @@ mod tests {
     }
 
     #[test]
+    fn axes_view_reports_stable_axis_value_identity() {
+        let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
+        let output = report.render(InspectView::Axes, RenderMode::Plain);
+
+        assert!(output.contains("Axis Values"));
+        assert!(output.contains("axisLabel_regular"));
+        assert!(output.contains("Regular"));
+    }
+
+    #[test]
     fn mappings_view_reports_mapping_axes_and_points() {
         let mut font = sample_font();
         let axis_id = font.axes()[0].id();
@@ -120,13 +132,25 @@ mod tests {
     }
 
     #[test]
+    fn instances_view_reports_authored_external_location() {
+        let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
+        let output = report.render(InspectView::Instances, RenderMode::Plain);
+
+        assert!(output.contains("Bold"));
+        assert!(output.contains("wght=700"));
+        assert!(output.contains("DogfoodSans-Bold"));
+    }
+
+    #[test]
     fn json_output_includes_stable_sections() {
         let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
         let json = serde_json::to_value(report).unwrap();
 
         assert_eq!(json["manifest"]["format"], "shift-source");
         assert_eq!(json["axes"][0]["tag"], "wght");
+        assert_eq!(json["axes"][0]["labels"][0]["id"], "axisLabel_regular");
         assert_eq!(json["axisMappings"], json!([]));
+        assert_eq!(json["namedInstances"][0]["name"], "Bold");
         assert_eq!(json["sources"][1]["location"][0]["axisTag"], "wght");
         assert_eq!(json["sources"][1]["location"][0]["value"], json!(700.0));
         assert_eq!(json["glyphs"][0]["unicodes"][0], "U+0041");
@@ -151,14 +175,33 @@ mod tests {
         font.metadata_mut().style_name = Some("Regular".to_string());
 
         let axis_id = AxisId::from_raw("weight");
-        font.add_axis(Axis::with_id(
+        let mut axis = Axis::with_id(
             axis_id.clone(),
             "wght".to_string(),
             "Weight".to_string(),
             100.0,
             400.0,
             900.0,
-        ));
+        );
+        axis.set_labels(vec![AxisLabel::with_id(
+            AxisLabelId::from_raw("regular"),
+            "Regular".to_string(),
+            400.0,
+            None,
+            None,
+            true,
+        )]);
+        font.add_axis(axis).expect("test axis should be valid");
+
+        let mut instance_location = Location::new();
+        instance_location.set(axis_id.clone(), 700.0);
+        font.add_named_instance(NamedInstance::with_id(
+            NamedInstanceId::from_raw("bold"),
+            "Bold".to_string(),
+            instance_location,
+            Some("DogfoodSans-Bold".to_string()),
+        ))
+        .unwrap();
 
         let regular_id = SourceId::from_raw("regular");
         font.add_source(Source::with_id(

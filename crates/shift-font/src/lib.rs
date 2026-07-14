@@ -45,5 +45,5 @@ pub use intents::*;
 pub use ir::*;
 pub use ir::{
     anchor, axis, boolean, component, contour, entity, features, font, glyph, glyph_name,
-    guideline, kerning, lib_data, metrics, point, segment, source, variation,
+    guideline, kerning, lib_data, metrics, named_instance, point, segment, source, variation,
 };

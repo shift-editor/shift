@@ -1,4 +1,4 @@
-use crate::entity::{AxisId, AxisMappingId};
+use crate::entity::{AxisId, AxisLabelId, AxisMappingId};
 use crate::error::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -67,12 +67,68 @@ pub struct AxisLabelRange {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One authored external-axis name and its stable identity.
+///
+/// Labels describe values for authoring UI and STAT output. They do not create
+/// products or reference sources.
 pub struct AxisLabel {
+    id: AxisLabelId,
     pub name: String,
     pub value: f64,
     pub range: Option<AxisLabelRange>,
     pub linked_value: Option<f64>,
     pub elidable: bool,
+}
+
+impl AxisLabel {
+    /// Creates a user-space axis label with newly minted stable identity.
+    pub fn new(
+        name: String,
+        value: f64,
+        range: Option<AxisLabelRange>,
+        linked_value: Option<f64>,
+        elidable: bool,
+    ) -> Self {
+        Self::with_id(
+            AxisLabelId::new(),
+            name,
+            value,
+            range,
+            linked_value,
+            elidable,
+        )
+    }
+
+    /// Rebuilds an axis label while preserving source-format identity.
+    pub fn with_id(
+        id: AxisLabelId,
+        name: String,
+        value: f64,
+        range: Option<AxisLabelRange>,
+        linked_value: Option<f64>,
+        elidable: bool,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            value,
+            range,
+            linked_value,
+            elidable,
+        }
+    }
+
+    /// Returns the identity retained across label renames and reordering.
+    pub fn id(&self) -> AxisLabelId {
+        self.id.clone()
+    }
+
+    fn invalid(&self, message: impl Into<String>) -> CoreError {
+        CoreError::InvalidAxisLabel {
+            label_id: self.id(),
+            message: message.into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -255,22 +311,59 @@ impl Axis {
             }
         }
 
-        for label in &self.labels {
+        if self.role == AxisRole::Internal && !self.labels.is_empty() {
+            return Err(self.invalid("internal axes cannot own user-space labels"));
+        }
+
+        let mut label_ids = std::collections::HashSet::new();
+        for (index, label) in self.labels.iter().enumerate() {
+            if !label_ids.insert(label.id()) {
+                return Err(CoreError::DuplicateAxisLabelId(label.id()));
+            }
             if label.name.trim().is_empty() {
-                return Err(self.invalid("axis label names must not be blank"));
+                return Err(label.invalid("names must not be blank"));
             }
             if !label.value.is_finite()
                 || label.linked_value.is_some_and(|value| !value.is_finite())
             {
-                return Err(self.invalid("axis label values must be finite"));
+                return Err(label.invalid("values must be finite"));
             }
             if let Some(range) = &label.range {
                 if !range.minimum.is_finite() || !range.maximum.is_finite() {
-                    return Err(self.invalid("axis label ranges must be finite"));
+                    return Err(label.invalid("ranges must be finite"));
                 }
                 if range.minimum > label.value || label.value > range.maximum {
-                    return Err(self.invalid("axis label ranges must contain their nominal value"));
+                    return Err(label.invalid("ranges must contain their nominal value"));
                 }
+            }
+            if label.range.is_some() && label.linked_value.is_some() {
+                return Err(label.invalid("ranges and linked values are mutually exclusive"));
+            }
+
+            let mut values = vec![label.value];
+            if let Some(linked_value) = label.linked_value {
+                values.push(linked_value);
+            }
+            if let Some(range) = &label.range {
+                values.extend([range.minimum, range.maximum]);
+            }
+            for value in values {
+                if value < self.minimum() || value > self.maximum() {
+                    return Err(label.invalid("values must be inside the axis range"));
+                }
+                if let AxisKind::Discrete { values, .. } = &self.kind {
+                    if !values.contains(&value) {
+                        return Err(
+                            label.invalid("discrete-axis values must be authored discrete values")
+                        );
+                    }
+                }
+            }
+            if self.labels[..index]
+                .iter()
+                .any(|existing| existing.value == label.value)
+            {
+                return Err(label.invalid("nominal values must be distinct"));
             }
         }
 
@@ -570,6 +663,96 @@ mod tests {
         assert_eq!(axis.minimum(), 0.0);
         assert_eq!(axis.maximum(), 1.0);
         assert_eq!(axis.discrete_values(), Some([0.0, 1.0].as_slice()));
+    }
+
+    #[test]
+    fn axis_label_identity_is_stable_and_unique() {
+        let label_id = AxisLabelId::from_raw("regular");
+        let label = AxisLabel::with_id(
+            label_id.clone(),
+            "Regular".to_string(),
+            400.0,
+            None,
+            None,
+            true,
+        );
+        let mut axis = Axis::weight();
+        axis.set_labels(vec![label.clone()]);
+
+        assert_eq!(axis.labels()[0].id(), label_id);
+        assert!(axis.validate().is_ok());
+
+        axis.set_labels(vec![label.clone(), label]);
+        assert!(matches!(
+            axis.validate(),
+            Err(CoreError::DuplicateAxisLabelId(id)) if id == label_id
+        ));
+    }
+
+    #[test]
+    fn axis_label_range_and_linked_value_error_identifies_the_label() {
+        let label_id = AxisLabelId::from_raw("regular");
+        let mut axis = Axis::weight();
+        axis.set_labels(vec![AxisLabel::with_id(
+            label_id.clone(),
+            "Regular".to_string(),
+            400.0,
+            Some(AxisLabelRange {
+                minimum: 350.0,
+                maximum: 450.0,
+            }),
+            Some(700.0),
+            true,
+        )]);
+
+        assert!(matches!(
+            axis.validate(),
+            Err(CoreError::InvalidAxisLabel {
+                label_id: invalid_id,
+                message,
+            }) if invalid_id == label_id && message.contains("mutually exclusive")
+        ));
+    }
+
+    #[test]
+    fn out_of_range_axis_label_error_identifies_the_label() {
+        let label_id = AxisLabelId::from_raw("black");
+        let mut axis = Axis::weight();
+        axis.set_labels(vec![AxisLabel::with_id(
+            label_id.clone(),
+            "Black".to_string(),
+            950.0,
+            None,
+            None,
+            false,
+        )]);
+
+        assert!(matches!(
+            axis.validate(),
+            Err(CoreError::InvalidAxisLabel {
+                label_id: invalid_id,
+                message,
+            }) if invalid_id == label_id && message.contains("inside the axis range")
+        ));
+    }
+
+    #[test]
+    fn internal_axis_cannot_own_external_labels() {
+        let mut axis = Axis::weight();
+        axis.set_role(AxisRole::Internal);
+        axis.set_labels(vec![AxisLabel::new(
+            "Regular".to_string(),
+            400.0,
+            None,
+            None,
+            true,
+        )]);
+
+        assert!(matches!(
+            axis.validate(),
+            Err(CoreError::InvalidAxis { message, .. })
+                if message.contains("internal axes cannot own user-space labels")
+        ));
     }
 
     #[test]

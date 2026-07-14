@@ -54,7 +54,7 @@ describe("FontStore glyph snapshot application", () => {
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
     store.applyWorkspaceChange({
-      glyphs: snapshot("document-a", LAYER_B_ID).glyphs,
+      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
       layers: [],
       dependents: [],
     });
@@ -132,7 +132,7 @@ describe("FontStore glyph object ownership", () => {
     });
 
     store.applyWorkspaceChange({
-      glyphs: snapshot("document-a", LAYER_B_ID).glyphs,
+      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
       layers: [
         {
           layerId: LAYER_B_ID,
@@ -199,6 +199,7 @@ function snapshot(documentId: string, layerId: LayerId): WorkspaceSnapshot {
     ],
     axes: [],
     axisMappings: [],
+    namedInstances: [],
   };
 }
 

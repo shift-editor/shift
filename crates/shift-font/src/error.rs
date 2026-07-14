@@ -1,5 +1,6 @@
 use crate::{
-    AnchorId, AxisId, AxisMappingId, ContourId, GlyphId, GlyphName, LayerId, PointId, SourceId,
+    AnchorId, AxisId, AxisLabelId, AxisMappingId, ContourId, GlyphId, GlyphName, LayerId,
+    NamedInstanceId, PointId, SourceId,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -104,6 +105,15 @@ pub enum CoreError {
     #[error("invalid axis {axis_id}: {message}")]
     InvalidAxis { axis_id: AxisId, message: String },
 
+    #[error("invalid axis label {label_id}: {message}")]
+    InvalidAxisLabel {
+        label_id: AxisLabelId,
+        message: String,
+    },
+
+    #[error("axis label {0} already exists")]
+    DuplicateAxisLabelId(AxisLabelId),
+
     #[error("axis mapping {0} already exists")]
     DuplicateAxisMappingId(AxisMappingId),
 
@@ -113,6 +123,30 @@ pub enum CoreError {
     #[error("invalid axis mapping {mapping_id}: {message}")]
     InvalidAxisMapping {
         mapping_id: AxisMappingId,
+        message: String,
+    },
+
+    #[error("named instance {0} already exists")]
+    DuplicateNamedInstanceId(NamedInstanceId),
+
+    #[error("named instance name {0:?} already exists")]
+    DuplicateNamedInstanceName(String),
+
+    #[error("named instance PostScript name {0:?} already exists")]
+    DuplicateNamedInstancePostscriptName(String),
+
+    #[error("named instances {first} and {second} have the same external location")]
+    DuplicateNamedInstanceLocation {
+        first: NamedInstanceId,
+        second: NamedInstanceId,
+    },
+
+    #[error("named instance {0} not found")]
+    NamedInstanceNotFound(NamedInstanceId),
+
+    #[error("invalid named instance {instance_id}: {message}")]
+    InvalidNamedInstance {
+        instance_id: NamedInstanceId,
         message: String,
     },
 

@@ -13,11 +13,13 @@ declare const PointIdBrand: unique symbol;
 declare const ContourIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
 declare const AxisIdBrand: unique symbol;
+declare const AxisLabelIdBrand: unique symbol;
 declare const AxisMappingIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
+declare const NamedInstanceIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
 declare const RunIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
@@ -49,6 +51,11 @@ export type AnchorId = string & {
  * Branded string type - can't be confused with OpenType axis tags.
  */
 export type AxisId = string & { readonly [AxisIdBrand]: typeof AxisIdBrand };
+
+/** A stable identifier for one user-space axis label. */
+export type AxisLabelId = string & {
+  readonly [AxisLabelIdBrand]: typeof AxisLabelIdBrand;
+};
 
 /** A stable identifier for one font-owned axis mapping. */
 export type AxisMappingId = string & {
@@ -82,6 +89,11 @@ export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
  * Branded string type - can't be confused with other IDs or plain strings.
  */
 export type LayerId = string & { readonly [LayerIdBrand]: typeof LayerIdBrand };
+
+/** A stable identifier for one authored product preset. */
+export type NamedInstanceId = string & {
+  readonly [NamedInstanceIdBrand]: typeof NamedInstanceIdBrand;
+};
 
 /**
  * A scene node identifier minted by the renderer.
@@ -140,6 +152,11 @@ export function asAxisId(id: string): AxisId {
   return id as AxisId;
 }
 
+/** Convert a Rust axis-label identifier into a typed AxisLabelId. */
+export function asAxisLabelId(id: string): AxisLabelId {
+  return id as AxisLabelId;
+}
+
 /** Convert a Rust mapping identifier into a typed AxisMappingId. */
 export function asAxisMappingId(id: string): AxisMappingId {
   return id as AxisMappingId;
@@ -175,6 +192,11 @@ export function asGlyphId(id: string): GlyphId {
  */
 export function asLayerId(id: string): LayerId {
   return id as LayerId;
+}
+
+/** Convert a Rust named-instance identifier into a typed NamedInstanceId. */
+export function asNamedInstanceId(id: string): NamedInstanceId {
+  return id as NamedInstanceId;
 }
 
 /**
@@ -221,6 +243,11 @@ export function isAxisId(id: unknown): id is AxisId {
   return hasIdPrefix(id, "axis");
 }
 
+/** Returns whether a value is a runtime-discriminable axis-label id. */
+export function isAxisLabelId(id: unknown): id is AxisLabelId {
+  return hasIdPrefix(id, "axisLabel");
+}
+
 /** Returns whether a value is a runtime-discriminable axis mapping id. */
 export function isAxisMappingId(id: unknown): id is AxisMappingId {
   return hasIdPrefix(id, "axisMapping");
@@ -244,6 +271,11 @@ export function isGlyphId(id: unknown): id is GlyphId {
 /** Returns whether a value is a runtime-discriminable layer id. */
 export function isLayerId(id: unknown): id is LayerId {
   return hasIdPrefix(id, "layer");
+}
+
+/** Returns whether a value is a runtime-discriminable named-instance id. */
+export function isNamedInstanceId(id: unknown): id is NamedInstanceId {
+  return hasIdPrefix(id, "namedInstance");
 }
 
 /** Returns whether a value is a runtime-discriminable scene node id. */
@@ -270,11 +302,13 @@ type MintedIdByPrefix = {
   contour: ContourId;
   anchor: AnchorId;
   axis: AxisId;
+  axisLabel: AxisLabelId;
   axisMapping: AxisMappingId;
   component: ComponentId;
   guideline: GuidelineId;
   glyph: GlyphId;
   layer: LayerId;
+  namedInstance: NamedInstanceId;
   node: NodeId;
   run: RunId;
   source: SourceId;
@@ -329,6 +363,11 @@ export function mintAxisId(): AxisId {
   return mintPrefixedId("axis");
 }
 
+/** Mints a stable axis-label id. See {@link mintAxisId}. */
+export function mintAxisLabelId(): AxisLabelId {
+  return mintPrefixedId("axisLabel");
+}
+
 /** Mints a new axis mapping id. See {@link mintAxisId}. */
 export function mintAxisMappingId(): AxisMappingId {
   return mintPrefixedId("axisMapping");
@@ -342,6 +381,11 @@ export function mintGlyphId(): GlyphId {
 /** Mints a new layer id. See {@link mintPointId}. */
 export function mintLayerId(): LayerId {
   return mintPrefixedId("layer");
+}
+
+/** Mints a stable named-instance id. See {@link mintAxisId}. */
+export function mintNamedInstanceId(): NamedInstanceId {
+  return mintPrefixedId("namedInstance");
 }
 
 /** Mints a new scene node id. See {@link NodeId}. */

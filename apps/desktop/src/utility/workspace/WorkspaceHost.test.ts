@@ -543,8 +543,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph",
     });
 
-    expect(applied.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(applied.glyphs?.[0]?.layers).toEqual([]);
+    expect(applied.next?.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(applied.next?.glyphs?.[0]?.layers).toEqual([]);
     expect(applied.layers).toEqual([]);
 
     const snapshot = await sync.call("workspace.snapshot", undefined);
@@ -562,7 +562,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph Layer",
     });
 
-    expect(applied.glyphs?.[0]?.layers).toEqual([
+    expect(applied.next?.glyphs?.[0]?.layers).toEqual([
       { id: layerId, sourceId: snapshot.sources[0].id },
     ]);
     expect(applied.layers).toHaveLength(1);
@@ -656,19 +656,19 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       intents: [createGlyphA()],
       label: "Add Glyph",
     });
-    const glyphId = created.glyphs?.[0].id;
+    const glyphId = created.next?.glyphs?.[0].id;
     if (!glyphId) throw new Error("createGlyph must echo the record id");
 
     const undone = await undoWorkspace(sync);
-    expect(undone?.glyphs?.map((glyph) => glyph.name)).toEqual([]);
+    expect(undone?.next?.glyphs?.map((glyph) => glyph.name)).toEqual([]);
     expect(undone?.layers).toEqual([]);
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toMatchObject({
       glyphs: [],
     });
 
     const redone = await redoWorkspace(sync);
-    expect(redone?.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(redone?.glyphs?.[0]?.layers).toEqual([]);
+    expect(redone?.next?.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(redone?.next?.glyphs?.[0]?.layers).toEqual([]);
     expect(redone?.layers).toEqual([]);
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toMatchObject({
       glyphs: [{ id: glyphId, name: "A", layers: [] }],
@@ -688,7 +688,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       intents: [{ kind: "setXAdvance", setXAdvance: { layerId, width: 642 } }],
     });
 
-    expect(applied.glyphs).toBeUndefined();
+    expect(applied.next).toBeUndefined();
     expect(applied.layers[0].layerId).toBe(layerId);
     expect(applied.layers[0].structure).toBeUndefined();
     expect(applied.layers[0].values[0]).toBe(642);
@@ -740,7 +740,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(structure?.contours[0].id).toBe(contourId);
     expect(structure?.contours[0].closed).toBe(true);
     expect(structure?.contours[0].points.map((point) => point.id)).toEqual([p1, p2]);
-    expect(applied.glyphs).toBeUndefined();
+    expect(applied.next).toBeUndefined();
     expect(applied.dependents).toEqual([]);
   });
 
@@ -792,11 +792,11 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const created = await applyWorkspace(sync, {
       intents,
     });
-    expect(created.glyphs?.[0]?.layers).toEqual([
+    expect(created.next?.glyphs?.[0]?.layers).toEqual([
       { id: layerId, sourceId: snapshot.sources[0].id },
     ]);
 
-    const glyphId = created.glyphs?.[0]?.id;
+    const glyphId = created.next?.glyphs?.[0]?.id;
     if (!glyphId) throw new Error("createGlyph did not echo glyph id");
 
     const snapshots = await sync.call("workspace.glyphSnapshots", {

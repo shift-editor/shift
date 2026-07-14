@@ -7,7 +7,9 @@
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
-use shift_font::{Axis, AxisMapping, Glyph, GlyphId, GlyphLayer, GlyphName, Source, SourceId};
+use shift_font::{
+    Axis, AxisMapping, Glyph, GlyphId, GlyphLayer, GlyphName, NamedInstance, Source, SourceId,
+};
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
 /// oldest entries fall off first.
@@ -34,6 +36,12 @@ pub enum LedgerStep {
     AxisMappings {
         pre: Vec<AxisMapping>,
         post: Vec<AxisMapping>,
+    },
+    /// The complete authored product-preset collection. Replay applies this
+    /// after axis topology so external locations validate on both sides.
+    NamedInstances {
+        pre: Vec<NamedInstance>,
+        post: Vec<NamedInstance>,
     },
     /// Source existence. Sparse glyph-layer existence is represented by
     /// separate [`LedgerStep::GlyphLayer`] entries.

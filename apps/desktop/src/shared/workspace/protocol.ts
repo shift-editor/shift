@@ -10,6 +10,7 @@ import type {
   GlyphState,
   GlyphVariationData,
   Location,
+  NamedInstance,
   Source,
   SourceId,
 } from "@shift/types";
@@ -25,6 +26,7 @@ export type WorkspaceSnapshot = {
   sources: Source[];
   axes: Axis[];
   axisMappings: AxisMapping[];
+  namedInstances: NamedInstance[];
 };
 
 export type WorkspaceGlyphLayerSnapshot = {

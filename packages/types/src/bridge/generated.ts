@@ -3,11 +3,13 @@ import type {
   PointId,
   AnchorId,
   AxisId,
+  AxisLabelId,
   AxisMappingId,
   ComponentId,
   GuidelineId,
   GlyphId,
   LayerId,
+  NamedInstanceId,
   SourceId,
 } from "../ids";
 
@@ -55,6 +57,7 @@ export interface BridgeApi {
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
+  getNamedInstances(): Array<NamedInstance>
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -133,17 +136,8 @@ export interface AnchorSeed {
 /** Pure-state response to `apply`: no change records cross to the renderer. */
 export interface AppliedChange {
   layers: Array<LayerReplaced>
-  /** Full records list when glyph identity changed; absent when untouched. */
-  glyphs?: Array<GlyphRecord>
-  /** Full axes list when font-level axis structure changed; absent otherwise. */
-  axes?: Array<Axis>
-  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
-  axisMappings?: Array<AxisMapping>
-  /**
-   * Full sources list when font-level source structure changed (createAxis
-   * reshapes locations, createSource adds one); absent otherwise.
-   */
-  sources?: Array<Source>
+  /** Present when the apply produced any font-level replacement collections. */
+  next?: FontReplacement
   /** Stable ids: references survive renames without re-indexing. */
   dependents: Array<GlyphId>
 }
@@ -163,6 +157,7 @@ export interface Axis {
 }
 
 export interface AxisLabel {
+  id: AxisLabelId
   name: string
   value: number
   minimum?: number
@@ -251,6 +246,11 @@ export interface CreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an authored named instance with client-minted stable identity. */
+export interface CreateNamedInstanceIntent {
+  instance: NamedInstance
+}
+
 /**
  * Font-level source creation. The source id is client-minted so verbs can
  * return identity synchronously; Rust honors it and rejects duplicates.
@@ -265,6 +265,11 @@ export interface CreateSourceIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface DeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes an authored named instance without changing sources or geometry. */
+export interface DeleteNamedInstanceIntent {
+  instanceId: NamedInstanceId
 }
 
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
@@ -283,9 +288,10 @@ export interface FontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Create kinds: "createGlyph" | "createAxis" | "createSource" |
-   * "createGlyphLayer" | "cloneGlyphLayer". Delete kinds: "deleteAxis" |
-   * "deleteSource". Every kind shares the same apply path; one set = one undo step.
+   * Font-level kinds additionally include "createAxis", "updateAxis",
+   * "deleteAxis", "setAxisMappings", named-instance create/update/delete,
+   * source create/delete, and glyph or layer creation. Every kind shares the
+   * same apply path; one set is one undo step.
    */
   kind: string
   addPoints?: AddPointsIntent
@@ -307,6 +313,9 @@ export interface FontIntent {
   updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
   setAxisMappings?: SetAxisMappingsIntent
+  createNamedInstance?: CreateNamedInstanceIntent
+  updateNamedInstance?: UpdateNamedInstanceIntent
+  deleteNamedInstance?: DeleteNamedInstanceIntent
   createSource?: CreateSourceIntent
   deleteSource?: DeleteSourceIntent
   createGlyphLayer?: CreateGlyphLayerIntent
@@ -340,6 +349,28 @@ export interface FontMetrics {
   italicAngle?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+/**
+ * Selective replacement-grade font collections produced by one apply.
+ *
+ * Every present collection is complete. An absent collection was untouched;
+ * it must be retained from the renderer's current workspace snapshot.
+ */
+export interface FontReplacement {
+  /** Full records list when glyph identity changed; absent when untouched. */
+  glyphs?: Array<GlyphRecord>
+  /** Full axes list when font-level axis structure changed; absent otherwise. */
+  axes?: Array<Axis>
+  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
+  axisMappings?: Array<AxisMapping>
+  /** Full authored product-preset list when named instances changed. */
+  namedInstances?: Array<NamedInstance>
+  /**
+   * Full sources list when font-level source structure changed (createAxis
+   * reshapes locations, createSource adds one); absent otherwise.
+   */
+  sources?: Array<Source>
 }
 
 export interface GlyphChangedEntities {
@@ -438,6 +469,14 @@ export interface MovePointsIntent {
   coords: Array<number>
 }
 
+/** NAPI projection of one explicit named product preset. */
+export interface NamedInstance {
+  id: NamedInstanceId
+  name: string
+  location: Location
+  postscriptName?: string
+}
+
 export interface PointData {
   id: PointId
   pointType: PointType
@@ -521,4 +560,9 @@ export interface UpdateGlyphIntent {
   glyphId: GlyphId
   newName: GlyphName
   newUnicodes: Array<Unicode>
+}
+
+/** Replaces an authored named instance while retaining its identity. */
+export interface UpdateNamedInstanceIntent {
+  instance: NamedInstance
 }
