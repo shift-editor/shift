@@ -117,10 +117,18 @@ async function variableFont(): Promise<{
     (definition) => definition.kind === "ascender",
   );
   if (!ascender) throw new Error("Expected the default ascender definition");
+  const xHeight = stack.font.metricDefinitions.find((definition) => definition.kind === "xHeight");
+  if (!xHeight) throw new Error("Expected the default x-height definition");
+  const variedMetricPositions = new Map([
+    [ascender.id, 900],
+    [xHeight.id, 600],
+  ]);
   await stack.font.updateSource({
     ...bold,
     metricValues: bold.metricValues.map((value) =>
-      value.metricId === ascender.id ? { ...value, position: 900 } : value,
+      variedMetricPositions.has(value.metricId)
+        ? { ...value, position: variedMetricPositions.get(value.metricId)! }
+        : value,
     ),
   });
   const updatedBold = stack.font.source(boldSourceId);
@@ -224,6 +232,7 @@ describe("variable editing across sources", () => {
     expect(stack.font.editableLayerAt(glyph.id, mid)).toBeNull();
     expect(view.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
     expect(stack.font.metricsAtLocation(mid).ascender).toBeCloseTo(850);
+    expect(stack.font.metricsAtLocation(mid).xHeight).toBeCloseTo(550);
 
     const xs = view.geometry.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);

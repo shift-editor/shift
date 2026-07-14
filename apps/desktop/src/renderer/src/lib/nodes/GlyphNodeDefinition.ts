@@ -116,6 +116,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(view.xAdvanceCell);
 
     const advance = displayAdvance(view.xAdvanceCell.peek(), record.name, unicode);
+    track(this.editor.designLocationCell);
+    track(this.editor.font.sourceMetricsInterpolationCell);
     const metrics = this.editor.font.metricsAtLocation(this.editor.designLocation);
     this.#guides.draw(ctx.canvas, metrics, advance);
   }
