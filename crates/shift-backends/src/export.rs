@@ -268,8 +268,9 @@ mod tests {
                 output,
             }],
         );
-        font.add_axis(weight).unwrap();
-        font.add_axis(optical).unwrap();
+        font.add_axis(weight).expect("weight axis should be valid");
+        font.add_axis(optical)
+            .expect("optical axis should be valid");
         font.set_axis_mappings(vec![mapping]).unwrap();
 
         let error = FontExporter::new()

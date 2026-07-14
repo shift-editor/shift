@@ -41,7 +41,7 @@ export async function layoutTestFont(): Promise<Font> {
         },
       },
     ]);
-    const record = applied.glyphs?.find((glyph) => glyph.name === name);
+    const record = applied.next?.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error(`createGlyph did not echo ${name}`);
 
     await stack.editCoordinator.apply([

@@ -1099,7 +1099,7 @@ mod tests {
         let mut font = Font::new();
         let axis = Axis::weight();
         let mapping = independent_axis_mapping("Weight curve", &axis);
-        font.add_axis(axis).unwrap();
+        font.add_axis(axis).expect("test axis should be valid");
 
         let result = font.set_axis_mappings(vec![mapping.clone(), mapping]);
 
@@ -1112,7 +1112,7 @@ mod tests {
         let axis = Axis::weight();
         let first = independent_axis_mapping("Weight curve", &axis);
         let second = independent_axis_mapping("Weight curve", &axis);
-        font.add_axis(axis).unwrap();
+        font.add_axis(axis).expect("test axis should be valid");
 
         let result = font.set_axis_mappings(vec![first, second]);
 
@@ -1130,7 +1130,7 @@ mod tests {
         let second = independent_axis_mapping("Weight correction", &axis);
         let first_id = first.id();
         let second_id = second.id();
-        font.add_axis(axis).unwrap();
+        font.add_axis(axis).expect("test axis should be valid");
 
         let result = font.set_axis_mappings(vec![first, second]);
 
@@ -1152,7 +1152,7 @@ mod tests {
         let first_id = first.id();
         let second_id = second.id();
         for axis in axes {
-            font.add_axis(axis).unwrap();
+            font.add_axis(axis).expect("test axis should be valid");
         }
 
         let result = font.set_axis_mappings(vec![first, second]);
@@ -1171,7 +1171,8 @@ mod tests {
         let mut font = Font::new();
         let axis = Axis::weight();
         let axis_id = axis.id();
-        font.add_axis(axis.clone()).unwrap();
+        font.add_axis(axis.clone())
+            .expect("test axis should be valid");
         let mut input = Location::new();
         input.set(axis_id.clone(), 900.0);
         let mut output = Location::new();
@@ -1203,8 +1204,8 @@ mod tests {
         let width = Axis::width();
         let weight_id = weight.id();
         let width_id = width.id();
-        font.add_axis(weight).unwrap();
-        font.add_axis(width).unwrap();
+        font.add_axis(weight).expect("weight axis should be valid");
+        font.add_axis(width).expect("width axis should be valid");
 
         let mut narrow = Location::new();
         narrow.set(weight_id.clone(), 400.0);

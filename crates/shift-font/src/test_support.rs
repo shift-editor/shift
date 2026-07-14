@@ -137,7 +137,8 @@ pub fn sample_font() -> Font {
         None,
         true,
     )]);
-    font.add_axis(weight.clone()).unwrap();
+    font.add_axis(weight.clone())
+        .expect("sample weight axis should be valid");
 
     let width_id = AxisId::from_raw("width");
     let mut width = Axis::with_id(
@@ -149,7 +150,8 @@ pub fn sample_font() -> Font {
         125.0,
     );
     width.set_role(AxisRole::Internal);
-    font.add_axis(width).unwrap();
+    font.add_axis(width)
+        .expect("sample width axis should be valid");
 
     let mut regular_location = Location::new();
     regular_location.set(weight_id.clone(), 400.0);
@@ -337,7 +339,8 @@ pub fn sample_variable_font() -> Font {
         ),
     ]);
     let weight_id = weight.id();
-    font.add_axis(weight.clone()).unwrap();
+    font.add_axis(weight.clone())
+        .expect("sample weight axis should be valid");
     font.set_axis_mappings(vec![AxisMapping::new(
         "Weight curve".to_string(),
         vec![weight_id.clone()],

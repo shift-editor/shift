@@ -92,7 +92,7 @@ mod tests {
             true,
         )]);
         let weight_id = weight.id();
-        font.add_axis(weight).unwrap();
+        font.add_axis(weight).expect("weight axis should be valid");
 
         let italic = Axis::discrete_with_id(
             shift_font::AxisId::new(),
@@ -102,7 +102,7 @@ mod tests {
             0.0,
         );
         let italic_id = italic.id();
-        font.add_axis(italic).unwrap();
+        font.add_axis(italic).expect("italic axis should be valid");
 
         let independent = AxisMapping::new(
             "Weight curve".to_string(),

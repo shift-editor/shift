@@ -827,10 +827,13 @@ pub struct NapiLayerReplaced {
     pub changed: NapiGlyphChangedEntities,
 }
 
-/// Pure-state response to `apply`: no change records cross to the renderer.
+/// Selective replacement-grade font collections produced by one apply.
+///
+/// Every present collection is complete. An absent collection was untouched;
+/// it must be retained from the renderer's current workspace snapshot.
+#[derive(Default)]
 #[napi(object)]
-pub struct NapiAppliedChange {
-    pub layers: Vec<NapiLayerReplaced>,
+pub struct NapiFontReplacement {
     /// Full records list when glyph identity changed; absent when untouched.
     pub glyphs: Option<Vec<NapiGlyphRecord>>,
     /// Full axes list when font-level axis structure changed; absent otherwise.
@@ -842,6 +845,14 @@ pub struct NapiAppliedChange {
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,
+}
+
+/// Pure-state response to `apply`: no change records cross to the renderer.
+#[napi(object)]
+pub struct NapiAppliedChange {
+    pub layers: Vec<NapiLayerReplaced>,
+    /// Present when the apply produced any font-level replacement collections.
+    pub next: Option<NapiFontReplacement>,
     /// Stable ids: references survive renames without re-indexing.
     #[napi(ts_type = "Array<GlyphId>")]
     pub dependents: Vec<String>,

@@ -77,7 +77,7 @@ async function variableFont(): Promise<{
       },
     },
   ]);
-  expect(created.glyphs![0]!.layers).toContainEqual({
+  expect(created.next?.glyphs?.[0]?.layers).toContainEqual({
     id: regularLayerId,
     sourceId: stack.font.defaultSource.id,
   });
@@ -102,7 +102,8 @@ async function variableFont(): Promise<{
       },
     },
   ]);
-  const bold = sourced.sources!.find((source) => source.name === "Bold")!;
+  const bold = sourced.next?.sources?.find((source) => source.name === "Bold");
+  if (!bold) throw new Error("createSource did not echo the source");
   expect(bold.id).toBe(boldSourceId);
   expect(sourced.layers).toEqual([]);
 

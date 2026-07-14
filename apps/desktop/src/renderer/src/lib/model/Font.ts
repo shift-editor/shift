@@ -20,6 +20,7 @@ import type {
   PointId,
   GlyphStructure,
   NamedInstance,
+  NamedInstanceDefinition,
   NamedInstanceId,
 } from "@shift/types";
 import {
@@ -1286,7 +1287,7 @@ export class Font {
    * @param instance - Authored name, optional PostScript name, and complete external location.
    * @returns The stable instance id submitted to the workspace.
    */
-  createNamedInstance(instance: Omit<NamedInstance, "id">): NamedInstanceId {
+  createNamedInstance(instance: NamedInstanceDefinition): NamedInstanceId {
     const instanceId = mintNamedInstanceId();
     this.editCoordinator.push({
       kind: "createNamedInstance",

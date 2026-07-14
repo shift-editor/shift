@@ -136,19 +136,8 @@ export interface AnchorSeed {
 /** Pure-state response to `apply`: no change records cross to the renderer. */
 export interface AppliedChange {
   layers: Array<LayerReplaced>
-  /** Full records list when glyph identity changed; absent when untouched. */
-  glyphs?: Array<GlyphRecord>
-  /** Full axes list when font-level axis structure changed; absent otherwise. */
-  axes?: Array<Axis>
-  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
-  axisMappings?: Array<AxisMapping>
-  /** Full authored product-preset list when named instances changed. */
-  namedInstances?: Array<NamedInstance>
-  /**
-   * Full sources list when font-level source structure changed (createAxis
-   * reshapes locations, createSource adds one); absent otherwise.
-   */
-  sources?: Array<Source>
+  /** Present when the apply produced any font-level replacement collections. */
+  next?: FontReplacement
   /** Stable ids: references survive renames without re-indexing. */
   dependents: Array<GlyphId>
 }
@@ -360,6 +349,28 @@ export interface FontMetrics {
   italicAngle?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+/**
+ * Selective replacement-grade font collections produced by one apply.
+ *
+ * Every present collection is complete. An absent collection was untouched;
+ * it must be retained from the renderer's current workspace snapshot.
+ */
+export interface FontReplacement {
+  /** Full records list when glyph identity changed; absent when untouched. */
+  glyphs?: Array<GlyphRecord>
+  /** Full axes list when font-level axis structure changed; absent otherwise. */
+  axes?: Array<Axis>
+  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
+  axisMappings?: Array<AxisMapping>
+  /** Full authored product-preset list when named instances changed. */
+  namedInstances?: Array<NamedInstance>
+  /**
+   * Full sources list when font-level source structure changed (createAxis
+   * reshapes locations, createSource adds one); absent otherwise.
+   */
+  sources?: Array<Source>
 }
 
 export interface GlyphChangedEntities {

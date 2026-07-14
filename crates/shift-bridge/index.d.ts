@@ -131,19 +131,8 @@ export interface NapiAnchorSeed {
 /** Pure-state response to `apply`: no change records cross to the renderer. */
 export interface NapiAppliedChange {
   layers: Array<NapiLayerReplaced>
-  /** Full records list when glyph identity changed; absent when untouched. */
-  glyphs?: Array<NapiGlyphRecord>
-  /** Full axes list when font-level axis structure changed; absent otherwise. */
-  axes?: Array<NapiAxis>
-  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
-  axisMappings?: Array<NapiAxisMapping>
-  /** Full authored product-preset list when named instances changed. */
-  namedInstances?: Array<NapiNamedInstance>
-  /**
-   * Full sources list when font-level source structure changed (createAxis
-   * reshapes locations, createSource adds one); absent otherwise.
-   */
-  sources?: Array<NapiSource>
+  /** Present when the apply produced any font-level replacement collections. */
+  next?: NapiFontReplacement
   /** Stable ids: references survive renames without re-indexing. */
   dependents: Array<GlyphId>
 }
@@ -361,6 +350,28 @@ export interface NapiFontMetrics {
   italicAngle?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+/**
+ * Selective replacement-grade font collections produced by one apply.
+ *
+ * Every present collection is complete. An absent collection was untouched;
+ * it must be retained from the renderer's current workspace snapshot.
+ */
+export interface NapiFontReplacement {
+  /** Full records list when glyph identity changed; absent when untouched. */
+  glyphs?: Array<NapiGlyphRecord>
+  /** Full axes list when font-level axis structure changed; absent otherwise. */
+  axes?: Array<NapiAxis>
+  /** Full mapping list when font-level axis mappings changed; absent otherwise. */
+  axisMappings?: Array<NapiAxisMapping>
+  /** Full authored product-preset list when named instances changed. */
+  namedInstances?: Array<NapiNamedInstance>
+  /**
+   * Full sources list when font-level source structure changed (createAxis
+   * reshapes locations, createSource adds one); absent otherwise.
+   */
+  sources?: Array<NapiSource>
 }
 
 export interface NapiGlyphChangedEntities {

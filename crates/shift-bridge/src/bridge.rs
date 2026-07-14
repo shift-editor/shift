@@ -14,9 +14,9 @@ use shift_font::{
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
-    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiGlyphRecord, NapiGlyphSnapshot,
-    NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation, NapiNamedInstance, NapiPointSeed,
-    NapiSource,
+    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphRecord,
+    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
+    NapiNamedInstance, NapiPointSeed, NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
@@ -409,11 +409,7 @@ impl Bridge {
     if intents.is_empty() {
       return Ok(NapiAppliedChange {
         layers: Vec::new(),
-        glyphs: None,
-        axes: None,
-        axis_mappings: None,
-        named_instances: None,
-        sources: None,
+        next: None,
         dependents: Vec::new(),
       });
     }
@@ -483,17 +479,30 @@ impl Bridge {
       })
       .collect();
 
+    let font_changed = glyphs_changed
+      || axes_changed
+      || axis_mappings_changed
+      || named_instances_changed
+      || sources_changed;
+    let next = font_changed
+      .then(|| -> errors::Result<NapiFontReplacement> {
+        Ok(NapiFontReplacement {
+          glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
+          axes: axes_changed.then(|| self.get_axes()).transpose()?,
+          axis_mappings: axis_mappings_changed
+            .then(|| self.get_axis_mappings())
+            .transpose()?,
+          named_instances: named_instances_changed
+            .then(|| self.get_named_instances())
+            .transpose()?,
+          sources: sources_changed.then(|| self.get_sources()).transpose()?,
+        })
+      })
+      .transpose()?;
+
     Ok(NapiAppliedChange {
       layers,
-      glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
-      axes: axes_changed.then(|| self.get_axes()).transpose()?,
-      axis_mappings: axis_mappings_changed
-        .then(|| self.get_axis_mappings())
-        .transpose()?,
-      named_instances: named_instances_changed
-        .then(|| self.get_named_instances())
-        .transpose()?,
-      sources: sources_changed.then(|| self.get_sources()).transpose()?,
+      next,
       dependents,
     })
   }
@@ -1215,7 +1224,11 @@ mod tests {
       )
       .unwrap();
 
-    let glyphs = applied.glyphs.expect("createGlyph must echo records");
+    let glyphs = applied
+      .next
+      .expect("createGlyph must echo font replacements")
+      .glyphs
+      .expect("createGlyph must echo records");
     assert_eq!(glyphs.len(), 1);
     assert_eq!(glyphs[0].name, "A");
     assert!(glyphs[0].layers.is_empty());
@@ -1239,7 +1252,11 @@ mod tests {
       )
       .unwrap();
 
-    let glyphs = applied.glyphs.expect("createGlyphLayer must echo records");
+    let glyphs = applied
+      .next
+      .expect("createGlyphLayer must echo font replacements")
+      .glyphs
+      .expect("createGlyphLayer must echo records");
     assert_eq!(glyphs[0].layers.len(), 1);
     assert_eq!(glyphs[0].layers[0].id, layer_id);
     assert_eq!(glyphs[0].layers[0].source_id, source_id);
@@ -1266,7 +1283,7 @@ mod tests {
       )
       .unwrap();
 
-    assert!(applied.glyphs.is_none());
+    assert!(applied.next.is_none());
     assert_eq!(applied.layers[0].layer_id, layer_id);
     assert!(applied.layers[0].structure.is_none());
     // canonical values layout: x advance is slot 0
@@ -2145,7 +2162,10 @@ mod tests {
 
     let applied = bridge.apply(vec![weight_axis_intent()], None).unwrap();
 
-    let axes = applied.axes.expect("createAxis must echo axes");
+    let next = applied
+      .next
+      .expect("createAxis must echo font replacements");
+    let axes = next.axes.expect("createAxis must echo axes");
     assert_eq!(axes.len(), 1);
     assert_eq!(axes[0].tag, "wght");
     assert_eq!(axes[0].name, "Weight");
@@ -2153,8 +2173,8 @@ mod tests {
     assert_eq!(axes[0].default, 400.0);
     assert_eq!(axes[0].maximum, Some(900.0));
     // locations may change shape, so sources ride along
-    assert!(applied.sources.is_some());
-    assert!(applied.glyphs.is_none());
+    assert!(next.sources.is_some());
+    assert!(next.glyphs.is_none());
     assert!(applied.layers.is_empty());
     assert!(bridge.is_variable().unwrap());
   }
@@ -2197,6 +2217,8 @@ mod tests {
       )
       .unwrap();
     let instances = created
+      .next
+      .expect("instance creation must echo font replacements")
       .named_instances
       .expect("instance creation must echo the collection");
     assert_eq!(instances.len(), 1);
@@ -2217,7 +2239,15 @@ mod tests {
         None,
       )
       .unwrap();
-    assert_eq!(updated.named_instances.unwrap()[0].name, "DisplayBold");
+    assert_eq!(
+      updated
+        .next
+        .expect("instance update must echo font replacements")
+        .named_instances
+        .expect("instance update must echo the collection")[0]
+        .name,
+      "DisplayBold"
+    );
     assert_eq!(bridge.get_named_instances().unwrap()[0].name, "DisplayBold");
 
     let deleted = bridge
@@ -2231,7 +2261,12 @@ mod tests {
         None,
       )
       .unwrap();
-    assert!(deleted.named_instances.unwrap().is_empty());
+    assert!(deleted
+      .next
+      .expect("instance deletion must echo font replacements")
+      .named_instances
+      .expect("instance deletion must echo the collection")
+      .is_empty());
   }
 
   #[test]
@@ -2243,9 +2278,12 @@ mod tests {
       .apply(vec![delete_axis_intent("axis_weight")], None)
       .unwrap();
 
-    let axes = applied.axes.expect("deleteAxis must echo axes");
+    let next = applied
+      .next
+      .expect("deleteAxis must echo font replacements");
+    let axes = next.axes.expect("deleteAxis must echo axes");
     assert!(axes.is_empty());
-    let sources = applied.sources.expect("deleteAxis must echo sources");
+    let sources = next.sources.expect("deleteAxis must echo sources");
     assert!(sources
       .iter()
       .all(|source| source.location.values.is_empty()));
@@ -2269,7 +2307,10 @@ mod tests {
       )
       .unwrap();
 
-    let sources = applied.sources.expect("createSource must echo sources");
+    let next = applied
+      .next
+      .expect("createSource must echo font replacements");
+    let sources = next.sources.expect("createSource must echo sources");
     assert_eq!(sources.len(), 2);
     let bold = sources
       .iter()
@@ -2278,7 +2319,7 @@ mod tests {
     assert_eq!(bold.id, "source_bold");
     assert_eq!(bold.location.values.get("axis_weight"), Some(&700.0));
     assert!(applied.layers.is_empty());
-    assert!(applied.glyphs.is_none());
+    assert!(next.glyphs.is_none());
     assert_eq!(bridge.get_glyphs().unwrap()[0].layers.len(), 1);
   }
 
@@ -2318,6 +2359,8 @@ mod tests {
     assert_eq!(state.layer_id, layer_id);
     assert_eq!(applied.layers[0].layer_id, layer_id);
     let glyphs = applied
+      .next
+      .expect("layer membership must echo font replacements")
       .glyphs
       .expect("layer membership must echo glyph records");
     assert_eq!(glyphs[0].layers.len(), 2);
@@ -2493,10 +2536,13 @@ mod tests {
       .apply(vec![delete_source_intent("source_bold")], None)
       .unwrap();
 
-    let sources = applied.sources.expect("deleteSource must echo sources");
+    let next = applied
+      .next
+      .expect("deleteSource must echo font replacements");
+    let sources = next.sources.expect("deleteSource must echo sources");
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].name, "Regular");
-    let glyphs = applied
+    let glyphs = next
       .glyphs
       .expect("deleteSource layer removal must echo glyph records");
     assert_eq!(glyphs[0].layers.len(), 1);
@@ -2538,7 +2584,11 @@ mod tests {
       .unwrap();
 
     assert!(applied.layers.is_empty());
-    let glyphs = applied.glyphs.expect("createGlyph must echo records");
+    let glyphs = applied
+      .next
+      .expect("createGlyph must echo font replacements")
+      .glyphs
+      .expect("createGlyph must echo records");
     assert!(glyphs[0].layers.is_empty());
   }
 
@@ -2563,7 +2613,15 @@ mod tests {
       )
       .unwrap();
 
-    assert_eq!(applied.axes.expect("createAxis must echo axes").len(), 1);
+    assert_eq!(
+      applied
+        .next
+        .expect("createAxis must echo font replacements")
+        .axes
+        .expect("createAxis must echo axes")
+        .len(),
+      1
+    );
     assert!(applied
       .layers
       .iter()
@@ -2571,7 +2629,15 @@ mod tests {
 
     let undone = bridge.undo().unwrap().expect("mixed set should undo");
     assert!(bridge.get_axes().unwrap().is_empty());
-    assert_eq!(undone.axes.expect("undo must echo axes").len(), 0);
+    assert_eq!(
+      undone
+        .next
+        .expect("undo must echo font replacements")
+        .axes
+        .expect("undo must echo axes")
+        .len(),
+      0
+    );
   }
 
   #[test]

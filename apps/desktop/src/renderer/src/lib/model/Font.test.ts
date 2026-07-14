@@ -145,7 +145,7 @@ describe("font-level intents make the font variable", () => {
     ]);
     const bold = stack.font.sources.find((source) => source.name === "Bold");
     expect(bold?.id).toBe(boldSourceId);
-    expect(applied.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
+    expect(applied.next?.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
     expect(applied.layers).toEqual([]);
     expect(stack.font.layer(glyphId, boldSourceId)).toBeNull();
   });
@@ -170,7 +170,7 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    expect(applied.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(applied.next?.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
     expect(stack.font.glyph(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
   });
 

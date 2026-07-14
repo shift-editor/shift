@@ -191,7 +191,7 @@ mod tests {
             None,
             true,
         )]);
-        font.add_axis(axis).unwrap();
+        font.add_axis(axis).expect("test axis should be valid");
 
         let mut instance_location = Location::new();
         instance_location.set(axis_id.clone(), 700.0);

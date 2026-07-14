@@ -105,6 +105,12 @@ pub enum CoreError {
     #[error("invalid axis {axis_id}: {message}")]
     InvalidAxis { axis_id: AxisId, message: String },
 
+    #[error("invalid axis label {label_id}: {message}")]
+    InvalidAxisLabel {
+        label_id: AxisLabelId,
+        message: String,
+    },
+
     #[error("axis label {0} already exists")]
     DuplicateAxisLabelId(AxisLabelId),
 
