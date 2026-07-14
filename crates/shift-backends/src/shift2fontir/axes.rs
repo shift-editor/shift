@@ -1,11 +1,48 @@
 use std::str::FromStr;
 
 use fontdrasil::coords::{
-    CoordConverter, DesignCoord, DesignLocation, NormalizedLocation, UserCoord,
+    CoordConverter, DesignCoord, DesignLocation, NormalizedLocation, UserCoord, UserLocation,
 };
 use fontdrasil::types::{Axes, Axis as IrAxis, Tag};
 use fontir::error::Error;
-use shift_font::{Axis, AxisMapping, Source};
+use shift_font::{Axis, AxisMapping, NamedInstance, Source};
+
+/// Lowers authored product presets without exposing fontir types to Shift's IR.
+///
+/// Instance locations are already in external/user coordinates. Internal axes
+/// remain absent so fontir fills them from the axis defaults when constructing
+/// `fvar` records.
+pub(super) fn to_ir_named_instances(
+    instances: &[NamedInstance],
+    axes: &[Axis],
+) -> Result<Vec<fontir::ir::NamedInstance>, String> {
+    instances
+        .iter()
+        .map(|instance| {
+            instance.validate(axes).map_err(|error| error.to_string())?;
+            let location = instance
+                .location()
+                .iter()
+                .map(|(axis_id, value)| {
+                    let axis = axes
+                        .iter()
+                        .find(|axis| axis.id() == *axis_id)
+                        .expect("named instances were validated against these axes");
+                    let tag = Tag::from_str(axis.tag()).map_err(|error| {
+                        format!("axis '{}' has an invalid tag: {error}", axis.name())
+                    })?;
+                    Ok((tag, UserCoord::new(*value)))
+                })
+                .collect::<Result<UserLocation, String>>()?;
+
+            Ok(fontir::ir::NamedInstance {
+                name: instance.name().to_string(),
+                postscript_name: instance.postscript_name().map(str::to_string),
+                location,
+            })
+        })
+        .collect()
+}
 
 /// Converts Shift axes and independent mappings into fontir axis definitions.
 ///

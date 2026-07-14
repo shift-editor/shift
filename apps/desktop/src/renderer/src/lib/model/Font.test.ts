@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mintAxisId,
+  mintAxisLabelId,
   mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
@@ -39,6 +40,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
   ],
   axes: [],
   axisMappings: [],
+  namedInstances: [],
 };
 
 describe("Font projects the workspace snapshot", () => {
@@ -221,6 +223,72 @@ describe("font-level intents make the font variable", () => {
 
     await stack.editCoordinator.undo();
     expect(stack.font.getAxisMappings()).toEqual([]);
+  });
+
+  it("projects stable axis labels and explicit named instances", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const labelId = mintAxisLabelId();
+    const axisId = stack.font.createAxis({
+      tag: "wght",
+      name: "Weight",
+      role: "external",
+      axisType: "continuous",
+      minimum: 100,
+      default: 400,
+      maximum: 900,
+      labels: [
+        {
+          id: labelId,
+          name: "Bold",
+          value: 700,
+          elidable: false,
+        },
+      ],
+      hidden: false,
+    });
+    await stack.editCoordinator.settled();
+
+    const instanceId = stack.font.createNamedInstance({
+      name: "Bold",
+      location: { values: { [axisId]: 700 } as Record<AxisId, number> },
+      postscriptName: "UntitledFont-Bold",
+    });
+    await stack.editCoordinator.settled();
+
+    expect(stack.font.getAxes()[0]?.labels[0]?.id).toBe(labelId);
+    expect(stack.font.namedInstances).toEqual([
+      {
+        id: instanceId,
+        name: "Bold",
+        location: { values: { [axisId]: 700 } },
+        postscriptName: "UntitledFont-Bold",
+      },
+    ]);
+
+    stack.font.setAxisMappings([
+      {
+        id: mintAxisMappingId(),
+        name: "Weight curve",
+        inputs: [axisId],
+        outputs: [axisId],
+        points: [
+          mappingPoint(axisId, 100, 100),
+          mappingPoint(axisId, 400, 400),
+          mappingPoint(axisId, 900, 800),
+        ],
+      },
+    ]);
+    await stack.editCoordinator.settled();
+
+    expect(stack.font.namedInstances[0]?.location.values[axisId]).toBe(700);
+
+    stack.font.deleteNamedInstance(instanceId);
+    await stack.editCoordinator.settled();
+    expect(stack.font.namedInstances).toEqual([]);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.namedInstances[0]?.id).toBe(instanceId);
   });
 
   it("createGlyph authors a default layer for fresh glyphs", async () => {

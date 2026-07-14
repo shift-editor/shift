@@ -1018,7 +1018,8 @@ fn replace_font_state_persists_axes_and_source_locations() {
         100.0,
         400.0,
         900.0,
-    ));
+    ))
+    .unwrap();
     let mut location = shift_font::Location::new();
     location.set(font_axis_id, 700.0);
     let source = shift_font::Source::new("Bold".to_string(), location);

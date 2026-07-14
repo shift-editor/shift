@@ -268,8 +268,8 @@ mod tests {
                 output,
             }],
         );
-        font.add_axis(weight);
-        font.add_axis(optical);
+        font.add_axis(weight).unwrap();
+        font.add_axis(optical).unwrap();
         font.set_axis_mappings(vec![mapping]).unwrap();
 
         let error = FontExporter::new()

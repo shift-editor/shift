@@ -22,10 +22,12 @@ const idTypeNames = new Set([
   "ContourId",
   "AnchorId",
   "AxisId",
+  "AxisLabelId",
   "AxisMappingId",
   "ComponentId",
   "GuidelineId",
   "SourceId",
+  "NamedInstanceId",
 ]);
 const scalarTypeNames = new Set(["GlyphName", "Unicode"]);
 

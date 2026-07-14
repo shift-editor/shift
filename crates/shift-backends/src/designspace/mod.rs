@@ -81,18 +81,18 @@ mod tests {
         let mut font = test_font();
 
         let mut weight = Axis::weight();
-        weight.set_labels(vec![AxisLabel {
-            name: "Regular".to_string(),
-            value: 400.0,
-            range: Some(AxisLabelRange {
+        weight.set_labels(vec![AxisLabel::new(
+            "Regular".to_string(),
+            400.0,
+            Some(AxisLabelRange {
                 minimum: 350.0,
                 maximum: 450.0,
             }),
-            linked_value: None,
-            elidable: true,
-        }]);
+            None,
+            true,
+        )]);
         let weight_id = weight.id();
-        font.add_axis(weight);
+        font.add_axis(weight).unwrap();
 
         let italic = Axis::discrete_with_id(
             shift_font::AxisId::new(),
@@ -102,7 +102,7 @@ mod tests {
             0.0,
         );
         let italic_id = italic.id();
-        font.add_axis(italic);
+        font.add_axis(italic).unwrap();
 
         let independent = AxisMapping::new(
             "Weight curve".to_string(),

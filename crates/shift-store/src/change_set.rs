@@ -43,6 +43,7 @@ impl ShiftStore {
         tx.execute("DELETE FROM source_lib", [])?;
         tx.execute("DELETE FROM sources", [])?;
         tx.execute("DELETE FROM axis_mappings", [])?;
+        tx.execute("DELETE FROM named_instances", [])?;
         tx.execute("DELETE FROM axes", [])?;
 
         upsert_font_info(&tx, font)?;
@@ -64,6 +65,7 @@ impl ShiftStore {
             insert_axis(&tx, axis, order_index as i64, false)?;
         }
         replace_axis_mappings(&tx, font.axis_mappings())?;
+        replace_named_instances(&tx, font.named_instances())?;
 
         for (order_index, source) in font.sources().iter().enumerate() {
             upsert_source(
@@ -139,6 +141,9 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         }
         font::FontChange::AxisMappingsUpdated(change) => {
             replace_axis_mappings(tx, &change.mappings)
+        }
+        font::FontChange::NamedInstancesUpdated(change) => {
+            replace_named_instances(tx, &change.instances)
         }
         font::FontChange::SourceCreated(change) => {
             upsert_source(
@@ -355,6 +360,24 @@ fn replace_axis_mappings(
             params![
                 mapping.id().to_string(),
                 serde_json::to_string(mapping)?,
+                order_index as i64,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn replace_named_instances(
+    tx: &Transaction<'_>,
+    instances: &[font::NamedInstance],
+) -> Result<(), StoreError> {
+    tx.execute("DELETE FROM named_instances", [])?;
+    for (order_index, instance) in instances.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO named_instances (id, instance_json, order_index) VALUES (?1, ?2, ?3)",
+            params![
+                instance.id().to_string(),
+                serde_json::to_string(instance)?,
                 order_index as i64,
             ],
         )?;

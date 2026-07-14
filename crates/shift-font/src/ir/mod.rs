@@ -13,6 +13,7 @@ pub mod guideline;
 pub mod kerning;
 pub mod lib_data;
 pub mod metrics;
+pub mod named_instance;
 pub mod point;
 pub mod segment;
 pub mod source;
@@ -27,8 +28,8 @@ pub use boolean::{boolean, BooleanOp};
 pub use component::{Component, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{
-    AnchorId, AxisId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphId, GuidelineId,
-    LayerId, PointId, SourceId,
+    AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphId,
+    GuidelineId, LayerId, NamedInstanceId, PointId, SourceId,
 };
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata};
@@ -38,6 +39,7 @@ pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{KerningData, KerningPair, KerningSide};
 pub use lib_data::{LibData, LibValue};
 pub use metrics::FontMetrics;
+pub use named_instance::NamedInstance;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};
 pub use source::{Source, SourceRole};

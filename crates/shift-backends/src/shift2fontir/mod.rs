@@ -6,8 +6,9 @@
 //! rejected because the compiler stack cannot emit `avar` version 2.
 //!
 //! Every glyph requires a default-source layer. Missing non-default layers are
-//! sparse masters rather than errors. Font-wide metrics and kerning are static,
-//! and source names do not create named instances.
+//! sparse masters rather than errors. Font-wide metrics and kerning are static.
+//! Authored named instances remain external product presets; source names do
+//! not create products implicitly.
 
 mod axes;
 mod glyph;

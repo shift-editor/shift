@@ -12,15 +12,15 @@ use fontir::ir::{
 use fontir::orchestration::{Context, WorkId};
 use write_fonts::types::NameId;
 
-use super::axes::normalized_source_location;
+use super::axes::{normalized_source_location, to_ir_named_instances};
 use super::source::ShiftSnapshot;
 use super::stat::generated_stat_fea;
 
 /// Establishes axes, global master locations, names, and preliminary glyph order.
 ///
-/// Shift source names are not promoted to named variable-font instances. The
-/// default source must be a master at the normalized default location, and
-/// master sources must occupy distinct normalized locations.
+/// Authored named instances lower from external locations; source names never
+/// become products implicitly. The default source must be a master at the
+/// normalized default location, and masters must occupy distinct locations.
 #[derive(Debug)]
 pub(super) struct StaticMetadataWork {
     snapshot: Arc<ShiftSnapshot>,
@@ -67,11 +67,14 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
 
         let ir_axes = Axes::from(self.snapshot.ir_axes.clone());
         let global_locations = self.global_locations(&ir_axes)?;
+        let named_instances =
+            to_ir_named_instances(&self.snapshot.named_instances, &self.snapshot.axes)
+                .map_err(|message| Error::InvalidEntry("Shift named instance", message))?;
         let mut static_metadata = StaticMetadata::new(
             self.snapshot.metrics.units_per_em as u16,
             names.into_inner(),
             self.snapshot.ir_axes.clone(),
-            Vec::new(),
+            named_instances,
             global_locations,
             None,
             self.snapshot.metrics.italic_angle.unwrap_or_default(),

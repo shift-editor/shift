@@ -7,7 +7,7 @@ Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge 
 - **Architecture Invariant: CRITICAL:** `src/bridge/generated.ts` is generated from `crates/shift-bridge/index.d.ts` by `scripts/generate-bridge-types.mjs`. Never edit it manually.
 - **Architecture Invariant: CRITICAL:** `@shift/types` is the canonical TypeScript DTO facade for the native bridge. It strips `Napi*` prefixes and exports type-only DTOs.
 - **Architecture Invariant:** Editor/domain snapshot types do not live here.
-- **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, `AxisMappingId`, and point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types.
+- **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, `AxisLabelId`, `AxisMappingId`, `NamedInstanceId`, and point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types.
 - **Architecture Invariant:** This package ships raw `.ts` source. `package.json` points `main` and `types` directly at `src/index.ts`.
 
 ## Codemap
@@ -31,7 +31,7 @@ Import from `@shift/types`.
 - `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
 - `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
-- `Axis` / `AxisMapping` -- generated variation authoring DTOs, keyed by branded axis and mapping IDs.
+- `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
 - `PointType` -- bridge point type union.
 

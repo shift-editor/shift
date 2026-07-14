@@ -6,7 +6,7 @@ use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
 use shift_font::test_support::sample_variable_font;
 use shift_font::Font;
 use skrifa::raw::TableProvider;
-use skrifa::FontRef;
+use skrifa::{FontRef, MetadataProvider};
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -169,7 +169,32 @@ fn compiles_variable_shift_source_to_variation_tables() {
     let compiled = FontRef::new(&bytes).expect("fontc should emit a valid variable TTF");
     let fvar = compiled.fvar().expect("variable font should contain fvar");
     assert_eq!(fvar.axis_count(), 1);
-    assert_eq!(fvar.instance_count(), 0, "source names are not instances");
+    assert_eq!(
+        fvar.instance_count(),
+        1,
+        "only explicit instances are emitted"
+    );
+    let instance = compiled
+        .named_instances()
+        .get(0)
+        .expect("authored Bold instance should compile");
+    assert_eq!(instance.user_coords().collect::<Vec<_>>(), vec![900.0]);
+    assert_eq!(
+        compiled
+            .localized_strings(instance.subfamily_name_id())
+            .english_or_first()
+            .unwrap()
+            .to_string(),
+        "Bold"
+    );
+    assert_eq!(
+        compiled
+            .localized_strings(instance.postscript_name_id().unwrap())
+            .english_or_first()
+            .unwrap()
+            .to_string(),
+        "UntitledFont-Bold"
+    );
     compiled.avar().expect("mapped axis should contain avar");
     compiled.stat().expect("axis labels should produce STAT");
     compiled

@@ -6,7 +6,7 @@ use miette::Diagnostic;
 use serde::Serialize;
 use shift_font::{
     Axis, AxisId, AxisKind, AxisLabel, AxisMapping, AxisMappingPoint, AxisRole, Font, Glyph,
-    GlyphLayer, Location, Source, SourceId,
+    GlyphLayer, Location, NamedInstance, Source, SourceId,
 };
 use shift_source::{FORMAT_ID, SCHEMA_VERSION, ShiftSourcePackage, SourcePackageError};
 use thiserror::Error;
@@ -65,12 +65,22 @@ pub struct AxisSummary {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AxisLabelSummary {
+    pub id: String,
     pub name: String,
     pub value: f64,
     pub minimum: Option<f64>,
     pub maximum: Option<f64>,
     pub linked_value: Option<f64>,
     pub elidable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamedInstanceSummary {
+    pub id: String,
+    pub name: String,
+    pub location: Vec<LocationValue>,
+    pub postscript_name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -151,6 +161,7 @@ pub struct InspectReport {
     pub metadata: MetadataSummary,
     pub axes: Vec<AxisSummary>,
     pub axis_mappings: Vec<AxisMappingSummary>,
+    pub named_instances: Vec<NamedInstanceSummary>,
     pub sources: Vec<SourceSummary>,
     pub glyph_count: usize,
     pub glyphs: Vec<GlyphSummary>,
@@ -194,6 +205,11 @@ impl InspectReport {
                 .iter()
                 .map(|mapping| AxisMappingSummary::from_mapping(mapping, &axes_by_id))
                 .collect(),
+            named_instances: font
+                .named_instances()
+                .iter()
+                .map(|instance| NamedInstanceSummary::from_instance(instance, &axes_by_id))
+                .collect(),
             sources: font
                 .sources()
                 .iter()
@@ -234,12 +250,24 @@ impl From<&Axis> for AxisSummary {
 impl From<&AxisLabel> for AxisLabelSummary {
     fn from(label: &AxisLabel) -> Self {
         Self {
+            id: label.id().to_string(),
             name: label.name.clone(),
             value: label.value,
             minimum: label.range.as_ref().map(|range| range.minimum),
             maximum: label.range.as_ref().map(|range| range.maximum),
             linked_value: label.linked_value,
             elidable: label.elidable,
+        }
+    }
+}
+
+impl NamedInstanceSummary {
+    fn from_instance(instance: &NamedInstance, axes_by_id: &HashMap<AxisId, String>) -> Self {
+        Self {
+            id: instance.id().to_string(),
+            name: instance.name().to_string(),
+            location: location_values(instance.location(), axes_by_id),
+            postscript_name: instance.postscript_name().map(str::to_string),
         }
     }
 }

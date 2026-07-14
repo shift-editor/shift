@@ -2,8 +2,8 @@ use std::{fs, path::PathBuf};
 
 use shift_font::{
     AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, FontChange, FontIntent,
-    FontIntentSet, GlyphId, GlyphName, LayerId, Location, PointId, PointSeed, PointType, SourceId,
-    error::CoreError,
+    FontIntentSet, GlyphId, GlyphName, LayerId, Location, NamedInstance, NamedInstanceId, PointId,
+    PointSeed, PointType, SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
@@ -1140,6 +1140,134 @@ fn create_axis_undo_redo_removes_and_restores_axis() {
 
     workspace.redo().unwrap().expect("createAxis should redo");
     assert_eq!(workspace.font().axes(), &[created]);
+}
+
+#[test]
+fn named_instance_crud_is_undoable_and_keeps_external_location() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let axis_id = AxisId::from_raw("axis_weight");
+    let instance_id = NamedInstanceId::from_raw("instance_bold");
+    let mut location = Location::new();
+    location.set(axis_id.clone(), 700.0);
+    let bold = NamedInstance::with_id(
+        instance_id.clone(),
+        "Bold".to_string(),
+        location,
+        Some("TestFont-Bold".to_string()),
+    );
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![
+                    FontIntent::CreateAxis {
+                        axis: weight_axis(axis_id.clone()),
+                    },
+                    FontIntent::CreateNamedInstance {
+                        instance: bold.clone(),
+                    },
+                ],
+            },
+            Some("Create Bold Instance".to_string()),
+        )
+        .unwrap();
+    assert_eq!(
+        workspace.font().named_instances(),
+        std::slice::from_ref(&bold)
+    );
+
+    let mut updated_location = Location::new();
+    updated_location.set(axis_id.clone(), 750.0);
+    let updated = NamedInstance::with_id(
+        instance_id.clone(),
+        "Display Bold".to_string(),
+        updated_location,
+        Some("TestFont-DisplayBold".to_string()),
+    );
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::UpdateNamedInstance {
+                    instance: updated.clone(),
+                }],
+            },
+            Some("Update Bold Instance".to_string()),
+        )
+        .unwrap();
+    assert_eq!(
+        workspace.font().named_instances(),
+        std::slice::from_ref(&updated)
+    );
+
+    workspace
+        .undo()
+        .unwrap()
+        .expect("instance update should undo");
+    assert_eq!(
+        workspace.font().named_instances(),
+        std::slice::from_ref(&bold)
+    );
+    workspace
+        .redo()
+        .unwrap()
+        .expect("instance update should redo");
+    assert_eq!(
+        workspace.font().named_instances(),
+        std::slice::from_ref(&updated)
+    );
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::DeleteNamedInstance {
+                    instance_id: instance_id.clone(),
+                }],
+            },
+            Some("Delete Bold Instance".to_string()),
+        )
+        .unwrap();
+    assert!(workspace.font().named_instances().is_empty());
+
+    let undone = workspace
+        .undo()
+        .unwrap()
+        .expect("instance delete should undo");
+    assert!(undone.changes.changes.iter().any(|change| matches!(
+        change,
+        FontChange::NamedInstancesUpdated(change) if change.instances == [updated.clone()]
+    )));
+    assert_eq!(
+        workspace.font().named_instances(),
+        std::slice::from_ref(&updated)
+    );
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::DeleteAxis {
+                    axis_id: axis_id.clone(),
+                }],
+            },
+            Some("Delete Weight Axis".to_string()),
+        )
+        .unwrap();
+    assert!(
+        workspace.font().named_instances()[0]
+            .location()
+            .iter()
+            .next()
+            .is_none()
+    );
+
+    workspace.undo().unwrap().expect("axis delete should undo");
+    assert_eq!(
+        workspace.font().named_instances()[0]
+            .location()
+            .get(&axis_id),
+        Some(750.0)
+    );
 }
 
 #[test]

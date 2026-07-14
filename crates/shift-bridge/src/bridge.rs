@@ -5,20 +5,23 @@ use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
 use shift_font::{
-  AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelRange,
+  AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
   AxisRole, BooleanOp, ContourId, Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId,
-  LayerId, Location as FontLocation, PointId, PointSeed, SourceId,
+  LayerId, Location as FontLocation, NamedInstance as FontNamedInstance, NamedInstanceId, PointId,
+  PointSeed, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
     NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiGlyphRecord, NapiGlyphSnapshot,
-    NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation, NapiPointSeed, NapiSource,
+    NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation, NapiNamedInstance, NapiPointSeed,
+    NapiSource,
   },
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
-  GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, Source,
+  GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, NamedInstance,
+  Source,
 };
 use shift_workspace::{
   FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError, WorkspaceSource,
@@ -173,6 +176,10 @@ impl FontView for FontSaveSnapshot {
 
   fn axis_mappings(&self) -> &[shift_font::AxisMapping] {
     self.font.axis_mappings()
+  }
+
+  fn named_instances(&self) -> &[shift_font::NamedInstance] {
+    self.font.named_instances()
   }
 
   fn sources(&self) -> &[shift_font::Source] {
@@ -405,6 +412,7 @@ impl Bridge {
         glyphs: None,
         axes: None,
         axis_mappings: None,
+        named_instances: None,
         sources: None,
         dependents: Vec::new(),
       });
@@ -429,6 +437,7 @@ impl Bridge {
     let mut glyphs_changed = false;
     let mut axes_changed = false;
     let mut axis_mappings_changed = false;
+    let mut named_instances_changed = false;
     let mut sources_changed = false;
     for change in &outcome.changes.changes {
       match change {
@@ -443,6 +452,7 @@ impl Bridge {
           sources_changed = true;
         }
         FontChange::AxisMappingsUpdated(_) => axis_mappings_changed = true,
+        FontChange::NamedInstancesUpdated(_) => named_instances_changed = true,
         FontChange::SourceCreated(_) | FontChange::SourceDeleted(_) => sources_changed = true,
         _ => {}
       }
@@ -479,6 +489,9 @@ impl Bridge {
       axes: axes_changed.then(|| self.get_axes()).transpose()?,
       axis_mappings: axis_mappings_changed
         .then(|| self.get_axis_mappings())
+        .transpose()?,
+      named_instances: named_instances_changed
+        .then(|| self.get_named_instances())
         .transpose()?,
       sources: sources_changed.then(|| self.get_sources()).transpose()?,
       dependents,
@@ -576,6 +589,19 @@ impl Bridge {
         .axis_mappings()
         .iter()
         .map(AxisMapping::from)
+        .map(Into::into)
+        .collect(),
+    )
+  }
+
+  #[napi]
+  pub fn get_named_instances(&self) -> errors::Result<Vec<NapiNamedInstance>> {
+    Ok(
+      self
+        .font()?
+        .named_instances()
+        .iter()
+        .map(NamedInstance::from)
         .map(Into::into)
         .collect(),
     )
@@ -869,6 +895,30 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           .collect::<errors::Result<Vec<_>>>()?,
       })
     }
+    "createNamedInstance" => {
+      let payload = intent
+        .create_named_instance
+        .ok_or_else(|| missing("createNamedInstance"))?;
+      Ok(FontIntent::CreateNamedInstance {
+        instance: map_named_instance(payload.instance)?,
+      })
+    }
+    "updateNamedInstance" => {
+      let payload = intent
+        .update_named_instance
+        .ok_or_else(|| missing("updateNamedInstance"))?;
+      Ok(FontIntent::UpdateNamedInstance {
+        instance: map_named_instance(payload.instance)?,
+      })
+    }
+    "deleteNamedInstance" => {
+      let payload = intent
+        .delete_named_instance
+        .ok_or_else(|| missing("deleteNamedInstance"))?;
+      Ok(FontIntent::DeleteNamedInstance {
+        instance_id: parse::<NamedInstanceId>(&payload.instance_id)?,
+      })
+    }
     "deleteSource" => {
       let payload = intent
         .delete_source
@@ -1000,18 +1050,28 @@ fn map_axis(axis: NapiAxis) -> errors::Result<FontAxis> {
         })
       }
     };
-    labels.push(AxisLabel {
-      name: label.name,
-      value: label.value,
+    labels.push(AxisLabel::with_id(
+      parse::<AxisLabelId>(&label.id)?,
+      label.name,
+      label.value,
       range,
-      linked_value: label.linked_value,
-      elidable: label.elidable,
-    });
+      label.linked_value,
+      label.elidable,
+    ));
   }
   mapped.set_labels(labels);
   mapped.set_hidden(axis.hidden);
   mapped.validate()?;
   Ok(mapped)
+}
+
+fn map_named_instance(instance: NapiNamedInstance) -> errors::Result<FontNamedInstance> {
+  Ok(FontNamedInstance::with_id(
+    parse::<NamedInstanceId>(&instance.id)?,
+    instance.name,
+    map_location(instance.location)?,
+    instance.postscript_name,
+  ))
 }
 
 fn map_axis_mapping(mapping: NapiAxisMapping) -> errors::Result<FontAxisMapping> {
@@ -1050,12 +1110,13 @@ mod tests {
   use shift_wire::bridges::napi::{
     NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiAxis, NapiAxisRole,
     NapiAxisType, NapiCloneGlyphLayerIntent, NapiCreateAxisIntent, NapiCreateGlyphIntent,
-    NapiCreateGlyphLayerIntent, NapiCreateSourceIntent, NapiDeleteAxisIntent,
-    NapiDeleteSourceIntent, NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation,
-    NapiMoveAnchorsIntent, NapiMovePointsIntent, NapiPointSeed, NapiPointType,
-    NapiRemoveAnchorsIntent, NapiRemovePointsIntent, NapiReverseContourIntent,
-    NapiSetContourClosedIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
-    NapiTranslatePointsIntent,
+    NapiCreateGlyphLayerIntent, NapiCreateNamedInstanceIntent, NapiCreateSourceIntent,
+    NapiDeleteAxisIntent, NapiDeleteNamedInstanceIntent, NapiDeleteSourceIntent,
+    NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent,
+    NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
+    NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
+    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
+    NapiUpdateNamedInstanceIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1083,6 +1144,9 @@ mod tests {
       update_axis: None,
       delete_axis: None,
       set_axis_mappings: None,
+      create_named_instance: None,
+      update_named_instance: None,
+      delete_named_instance: None,
       create_source: None,
       delete_source: None,
       create_glyph_layer: None,
@@ -2064,6 +2128,17 @@ mod tests {
     create_axis_intent("axis_weight", "wght", "Weight", 100.0, 400.0, 900.0)
   }
 
+  fn named_instance(id: &str, name: &str, value: f64) -> NapiNamedInstance {
+    NapiNamedInstance {
+      id: id.to_string(),
+      name: name.to_string(),
+      location: NapiLocation {
+        values: [("axis_weight".to_string(), value)].into_iter().collect(),
+      },
+      postscript_name: Some(format!("TestFont-{name}")),
+    }
+  }
+
   #[test]
   fn apply_create_axis_echoes_axes_and_sources() {
     let mut bridge = bridge_with_workspace();
@@ -2103,6 +2178,60 @@ mod tests {
 
     assert!(result.is_err());
     assert_eq!(bridge.get_axes().unwrap().len(), 1);
+  }
+
+  #[test]
+  fn named_instance_crud_echoes_replace_grade_authoring_state() {
+    let mut bridge = bridge_with_workspace();
+    bridge.apply(vec![weight_axis_intent()], None).unwrap();
+
+    let created = bridge
+      .apply(
+        vec![NapiFontIntent {
+          create_named_instance: Some(NapiCreateNamedInstanceIntent {
+            instance: named_instance("namedInstance_bold", "Bold", 700.0),
+          }),
+          ..skeleton_intent("createNamedInstance")
+        }],
+        None,
+      )
+      .unwrap();
+    let instances = created
+      .named_instances
+      .expect("instance creation must echo the collection");
+    assert_eq!(instances.len(), 1);
+    assert_eq!(instances[0].name, "Bold");
+    assert_eq!(
+      instances[0].location.values.get("axis_weight"),
+      Some(&700.0)
+    );
+
+    let updated = bridge
+      .apply(
+        vec![NapiFontIntent {
+          update_named_instance: Some(NapiUpdateNamedInstanceIntent {
+            instance: named_instance("namedInstance_bold", "DisplayBold", 750.0),
+          }),
+          ..skeleton_intent("updateNamedInstance")
+        }],
+        None,
+      )
+      .unwrap();
+    assert_eq!(updated.named_instances.unwrap()[0].name, "DisplayBold");
+    assert_eq!(bridge.get_named_instances().unwrap()[0].name, "DisplayBold");
+
+    let deleted = bridge
+      .apply(
+        vec![NapiFontIntent {
+          delete_named_instance: Some(NapiDeleteNamedInstanceIntent {
+            instance_id: "namedInstance_bold".to_string(),
+          }),
+          ..skeleton_intent("deleteNamedInstance")
+        }],
+        None,
+      )
+      .unwrap();
+    assert!(deleted.named_instances.unwrap().is_empty());
   }
 
   #[test]

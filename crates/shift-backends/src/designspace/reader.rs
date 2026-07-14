@@ -125,7 +125,7 @@ impl DesignspaceReader {
                     .unwrap_or_default(),
             );
             axis.validate()?;
-            font.add_axis(axis);
+            font.add_axis(axis)?;
         }
         font.set_axis_mappings(axis_mappings_from_designspace(&doc, font.axes())?)?;
 

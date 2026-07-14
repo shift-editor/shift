@@ -339,7 +339,8 @@ fn plain_ufo_layers_stay_layers_when_axes_exist() {
         300.0,
         400.0,
         700.0,
-    ));
+    ))
+    .unwrap();
 
     let out_dir = tempfile::tempdir().unwrap();
     let out_path = out_dir.path().join("Layered.designspace");

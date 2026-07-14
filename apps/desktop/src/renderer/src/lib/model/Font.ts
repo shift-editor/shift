@@ -19,8 +19,16 @@ import type {
   Location,
   PointId,
   GlyphStructure,
+  NamedInstance,
+  NamedInstanceId,
 } from "@shift/types";
-import { mintAxisId, mintGlyphId, mintLayerId, mintSourceId } from "@shift/types";
+import {
+  mintAxisId,
+  mintGlyphId,
+  mintLayerId,
+  mintNamedInstanceId,
+  mintSourceId,
+} from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
 import { computed, signal, track, type Signal } from "@/lib/signals/signal";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
@@ -333,6 +341,7 @@ export class Font {
   readonly #sourcesCell: Signal<Source[]>;
   readonly #axesCell: Signal<Axis[]>;
   readonly #axisMappingsCell: Signal<AxisMapping[]>;
+  readonly #namedInstancesCell: Signal<NamedInstance[]>;
   readonly #unicodesCell: Signal<Unicode[]>;
   readonly #glyphRecordsCell: Signal<readonly GlyphRecord[]>;
 
@@ -356,6 +365,7 @@ export class Font {
     this.#sourcesCell = computed(() => workspaceCell.value?.sources ?? []);
     this.#axesCell = computed(() => workspaceCell.value?.axes ?? []);
     this.#axisMappingsCell = computed(() => workspaceCell.value?.axisMappings ?? []);
+    this.#namedInstancesCell = computed(() => workspaceCell.value?.namedInstances ?? []);
     this.#directoryCell = computed(() =>
       GlyphDirectory.fromRecords(workspaceCell.value?.glyphs ?? []),
     );
@@ -405,6 +415,11 @@ export class Font {
   /** Reactive font-owned independent and cross-axis mappings. */
   get axisMappingsCell(): Signal<AxisMapping[]> {
     return this.#axisMappingsCell;
+  }
+
+  /** Reactive authored product presets in external axis coordinates. */
+  get namedInstancesCell(): Signal<NamedInstance[]> {
+    return this.#namedInstancesCell;
   }
 
   /** Reactive committed variation sources for sidebar controls. */
@@ -1260,6 +1275,43 @@ export class Font {
     });
   }
 
+  /**
+   * Creates an explicit named product preset at a complete external location.
+   *
+   * @remarks
+   * Named instances do not own glyph geometry. Their locations continue to
+   * express author intent when axis mappings change; compiler-facing locations
+   * are derived only during export.
+   *
+   * @param instance - Authored name, optional PostScript name, and complete external location.
+   * @returns The stable instance id submitted to the workspace.
+   */
+  createNamedInstance(instance: Omit<NamedInstance, "id">): NamedInstanceId {
+    const instanceId = mintNamedInstanceId();
+    this.editCoordinator.push({
+      kind: "createNamedInstance",
+      createNamedInstance: { instance: { id: instanceId, ...instance } },
+    });
+
+    return instanceId;
+  }
+
+  /** Replaces an authored product preset while preserving stable identity. */
+  updateNamedInstance(instance: NamedInstance): void {
+    this.editCoordinator.push({
+      kind: "updateNamedInstance",
+      updateNamedInstance: { instance },
+    });
+  }
+
+  /** Removes an authored product preset without touching sources or glyph geometry. */
+  deleteNamedInstance(instanceId: NamedInstanceId): void {
+    this.editCoordinator.push({
+      kind: "deleteNamedInstance",
+      deleteNamedInstance: { instanceId },
+    });
+  }
+
   /** @knipclassignore — used by VariationPanel component */
   deleteAxis(axisId: AxisId): void {
     this.editCoordinator.push({
@@ -1283,6 +1335,11 @@ export class Font {
   /** Returns the current font-owned mapping collection. */
   getAxisMappings(): AxisMapping[] {
     return this.#axisMappingsCell.peek();
+  }
+
+  /** Returns the current explicit named product presets. */
+  get namedInstances(): NamedInstance[] {
+    return this.#namedInstancesCell.peek();
   }
 
   /**

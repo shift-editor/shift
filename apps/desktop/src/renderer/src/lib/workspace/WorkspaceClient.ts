@@ -163,12 +163,19 @@ export class WorkspaceClient {
     const current = this.workspaceCell.peek();
     if (!current) return applied;
 
-    if (applied.glyphs || applied.axes || applied.axisMappings || applied.sources) {
+    if (
+      applied.glyphs ||
+      applied.axes ||
+      applied.axisMappings ||
+      applied.namedInstances ||
+      applied.sources
+    ) {
       this.workspaceCell.set({
         ...current,
         glyphs: applied.glyphs ?? current.glyphs,
         axes: applied.axes ?? current.axes,
         axisMappings: applied.axisMappings ?? current.axisMappings,
+        namedInstances: applied.namedInstances ?? current.namedInstances,
         sources: applied.sources ?? current.sources,
       });
     }

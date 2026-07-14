@@ -1,10 +1,11 @@
 //! Shared test corpora for round-trip and persistence tests.
 
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint,
-    AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform, Font, Glyph,
-    GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair, KerningSide, LayerId, LibValue,
-    Location, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
+    AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform,
+    Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair, KerningSide, LayerId,
+    LibValue, Location, NamedInstance, NamedInstanceId, Point, PointId, PointType, Source,
+    SourceId,
 };
 use std::collections::HashMap;
 
@@ -125,17 +126,18 @@ pub fn sample_font() -> Font {
         900.0,
     );
     weight.set_hidden(true);
-    weight.set_labels(vec![AxisLabel {
-        name: "Regular".to_string(),
-        value: 400.0,
-        range: Some(AxisLabelRange {
+    weight.set_labels(vec![AxisLabel::with_id(
+        AxisLabelId::from_raw("weight-regular"),
+        "Regular".to_string(),
+        400.0,
+        Some(AxisLabelRange {
             minimum: 350.0,
             maximum: 450.0,
         }),
-        linked_value: Some(700.0),
-        elidable: true,
-    }]);
-    font.add_axis(weight.clone());
+        None,
+        true,
+    )]);
+    font.add_axis(weight.clone()).unwrap();
 
     let width_id = AxisId::from_raw("width");
     let mut width = Axis::with_id(
@@ -147,7 +149,17 @@ pub fn sample_font() -> Font {
         125.0,
     );
     width.set_role(AxisRole::Internal);
-    font.add_axis(width);
+    font.add_axis(width).unwrap();
+
+    let mut regular_location = Location::new();
+    regular_location.set(weight_id.clone(), 400.0);
+    font.set_named_instances(vec![NamedInstance::with_id(
+        NamedInstanceId::from_raw("regular"),
+        "Regular".to_string(),
+        regular_location,
+        Some("DogfoodSans-Regular".to_string()),
+    )])
+    .unwrap();
 
     let mut bold_mapping_point = mapping_point(&weight, 900.0, 800.0);
     bold_mapping_point.description = Some("Bold compression".to_string());
@@ -307,26 +319,25 @@ pub fn sample_variable_font() -> Font {
 
     let mut weight = Axis::weight();
     weight.set_labels(vec![
-        AxisLabel {
-            name: "Regular".to_string(),
-            value: 400.0,
-            range: Some(AxisLabelRange {
-                minimum: 350.0,
-                maximum: 450.0,
-            }),
-            linked_value: Some(700.0),
-            elidable: true,
-        },
-        AxisLabel {
-            name: "Bold".to_string(),
-            value: 900.0,
-            range: None,
-            linked_value: None,
-            elidable: false,
-        },
+        AxisLabel::with_id(
+            AxisLabelId::from_raw("regular"),
+            "Regular".to_string(),
+            400.0,
+            None,
+            Some(700.0),
+            true,
+        ),
+        AxisLabel::with_id(
+            AxisLabelId::from_raw("bold"),
+            "Bold".to_string(),
+            900.0,
+            None,
+            None,
+            false,
+        ),
     ]);
     let weight_id = weight.id();
-    font.add_axis(weight.clone());
+    font.add_axis(weight.clone()).unwrap();
     font.set_axis_mappings(vec![AxisMapping::new(
         "Weight curve".to_string(),
         vec![weight_id.clone()],
@@ -339,6 +350,16 @@ pub fn sample_variable_font() -> Font {
         ],
     )])
     .expect("sample axis mapping should be valid");
+
+    let mut bold_instance_location = Location::new();
+    bold_instance_location.set(weight_id.clone(), 900.0);
+    font.set_named_instances(vec![NamedInstance::with_id(
+        NamedInstanceId::from_raw("bold"),
+        "Bold".to_string(),
+        bold_instance_location,
+        Some("UntitledFont-Bold".to_string()),
+    )])
+    .expect("sample named instance should be valid");
 
     let default_source_id = font.default_source_id().unwrap();
     let mut default_location = Location::new();

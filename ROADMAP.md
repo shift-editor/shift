@@ -602,6 +602,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Instance Generation**
 
+- [x] Explicit named-instance IR, persistence, and `fvar` compilation
 - [ ] Instance preview panel
 - [ ] Batch instance export
 - [x] STAT table generation

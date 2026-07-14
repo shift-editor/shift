@@ -215,7 +215,7 @@ impl FontReader for GlyphsReader {
             );
             axis.set_hidden(glyphs_axis.hidden.unwrap_or(false));
             axis_ids_by_index.push(axis.id());
-            font.add_axis(axis);
+            font.add_axis(axis)?;
         }
 
         let mut source_by_master_id = HashMap::new();

@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS axis_mappings (
     order_index INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS named_instances (
+    id TEXT PRIMARY KEY,
+    instance_json TEXT NOT NULL,
+    order_index INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sources (
     id TEXT PRIMARY KEY,
     name TEXT,

@@ -8,7 +8,7 @@ use crate::{
     AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, AxisTent, ComponentData,
     ContourData, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
     GlyphLayerSnapshot, GlyphMaster, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState,
-    GlyphStructure, GlyphVariationData, Location, PointData, PointType, Source,
+    GlyphStructure, GlyphVariationData, Location, NamedInstance, PointData, PointType, Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -141,6 +141,8 @@ pub enum NapiAxisType {
 
 #[napi(object)]
 pub struct NapiAxisLabel {
+    #[napi(ts_type = "AxisLabelId")]
+    pub id: String,
     pub name: String,
     pub value: f64,
     pub minimum: Option<f64>,
@@ -176,12 +178,34 @@ impl From<Axis> for NapiAxis {
 impl From<AxisLabel> for NapiAxisLabel {
     fn from(label: AxisLabel) -> Self {
         Self {
+            id: label.id.to_string(),
             name: label.name,
             value: label.value,
             minimum: label.minimum,
             maximum: label.maximum,
             linked_value: label.linked_value,
             elidable: label.elidable,
+        }
+    }
+}
+
+#[napi(object)]
+/// NAPI projection of one explicit named product preset.
+pub struct NapiNamedInstance {
+    #[napi(ts_type = "NamedInstanceId")]
+    pub id: String,
+    pub name: String,
+    pub location: NapiLocation,
+    pub postscript_name: Option<String>,
+}
+
+impl From<NamedInstance> for NapiNamedInstance {
+    fn from(instance: NamedInstance) -> Self {
+        Self {
+            id: instance.id.to_string(),
+            name: instance.name,
+            location: instance.location.into(),
+            postscript_name: instance.postscript_name,
         }
     }
 }
@@ -648,9 +672,10 @@ pub struct NapiFontIntent {
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Create kinds: "createGlyph" | "createAxis" | "createSource" |
-    /// "createGlyphLayer" | "cloneGlyphLayer". Delete kinds: "deleteAxis" |
-    /// "deleteSource". Every kind shares the same apply path; one set = one undo step.
+    /// Font-level kinds additionally include "createAxis", "updateAxis",
+    /// "deleteAxis", "setAxisMappings", named-instance create/update/delete,
+    /// source create/delete, and glyph or layer creation. Every kind shares the
+    /// same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
     pub add_contour: Option<NapiAddContourIntent>,
@@ -671,6 +696,9 @@ pub struct NapiFontIntent {
     pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
     pub set_axis_mappings: Option<NapiSetAxisMappingsIntent>,
+    pub create_named_instance: Option<NapiCreateNamedInstanceIntent>,
+    pub update_named_instance: Option<NapiUpdateNamedInstanceIntent>,
+    pub delete_named_instance: Option<NapiDeleteNamedInstanceIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
     pub delete_source: Option<NapiDeleteSourceIntent>,
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
@@ -710,6 +738,25 @@ pub struct NapiUpdateAxisIntent {
 #[napi(object)]
 pub struct NapiSetAxisMappingsIntent {
     pub mappings: Vec<NapiAxisMapping>,
+}
+
+#[napi(object)]
+/// Creates an authored named instance with client-minted stable identity.
+pub struct NapiCreateNamedInstanceIntent {
+    pub instance: NapiNamedInstance,
+}
+
+#[napi(object)]
+/// Replaces an authored named instance while retaining its identity.
+pub struct NapiUpdateNamedInstanceIntent {
+    pub instance: NapiNamedInstance,
+}
+
+#[napi(object)]
+/// Deletes an authored named instance without changing sources or geometry.
+pub struct NapiDeleteNamedInstanceIntent {
+    #[napi(ts_type = "NamedInstanceId")]
+    pub instance_id: String,
 }
 
 /// Font-level axis creation. The axis id is client-minted; the tag is an
@@ -790,6 +837,8 @@ pub struct NapiAppliedChange {
     pub axes: Option<Vec<NapiAxis>>,
     /// Full mapping list when font-level axis mappings changed; absent otherwise.
     pub axis_mappings: Option<Vec<NapiAxisMapping>>,
+    /// Full authored product-preset list when named instances changed.
+    pub named_instances: Option<Vec<NapiNamedInstance>>,
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,

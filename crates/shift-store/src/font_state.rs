@@ -25,9 +25,10 @@ impl ShiftStore {
         }
 
         for axis in load_axes(&self.conn)? {
-            font.add_axis(axis);
+            font.add_axis(axis)?;
         }
         font.set_axis_mappings(load_axis_mappings(&self.conn)?)?;
+        font.set_named_instances(load_named_instances(&self.conn)?)?;
 
         for source in load_sources(&self.conn)? {
             font.add_source(source);
@@ -153,6 +154,19 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
 fn load_axis_mappings(conn: &rusqlite::Connection) -> Result<Vec<font::AxisMapping>, StoreError> {
     let mut stmt =
         conn.prepare("SELECT mapping_json FROM axis_mappings ORDER BY order_index, id")?;
+    let rows = stmt.query_map([], |row| {
+        let json = row.get::<_, String>(0)?;
+        serde_json::from_str(&json).map_err(json_column_error)
+    })?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)
+}
+
+fn load_named_instances(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<font::NamedInstance>, StoreError> {
+    let mut stmt =
+        conn.prepare("SELECT instance_json FROM named_instances ORDER BY order_index, id")?;
     let rows = stmt.query_map([], |row| {
         let json = row.get::<_, String>(0)?;
         serde_json::from_str(&json).map_err(json_column_error)

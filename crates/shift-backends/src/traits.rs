@@ -1,7 +1,7 @@
 use crate::errors::FormatBackendResult;
 use shift_font::{
     Axis, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphName,
-    Guideline, KerningData, LibData, Source, SourceId,
+    Guideline, KerningData, LibData, NamedInstance, Source, SourceId,
 };
 
 pub trait FontView {
@@ -9,6 +9,7 @@ pub trait FontView {
     fn metrics(&self) -> &FontMetrics;
     fn axes(&self) -> &[Axis];
     fn axis_mappings(&self) -> &[AxisMapping];
+    fn named_instances(&self) -> &[NamedInstance];
     fn sources(&self) -> &[Source];
     fn default_source_id(&self) -> Option<SourceId>;
     fn glyphs(&self) -> Vec<&Glyph>;
@@ -37,6 +38,10 @@ impl FontView for Font {
 
     fn axis_mappings(&self) -> &[AxisMapping] {
         self.axis_mappings()
+    }
+
+    fn named_instances(&self) -> &[NamedInstance] {
+        self.named_instances()
     }
 
     fn sources(&self) -> &[Source] {
