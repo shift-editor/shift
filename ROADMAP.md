@@ -226,7 +226,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Data Model**
 
-- [x] Font container with metadata (family, style, version) and metrics (UPM, ascender, descender, cap height, x-height)
+- [x] Font container with metadata, global UPM, stable metric definitions, and per-source metric values
 - [x] Glyph structure with unicode indexing, contours, and x-advance
 - [x] Contour with open/closed state and point list
 - [x] Point with on-curve/off-curve type, smooth flag, and position
@@ -584,7 +584,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] Parse axis definitions (wght, wdth, ital, custom)
 - [x] Persist continuous/discrete axes and axis value labels
 - [x] Round-trip independent and cross-axis mappings
-- [ ] Named instances
+- [x] Named instances
 
 **Masters Editing**
 
@@ -597,6 +597,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [x] Compatibility checker (point/contour count)
 - [x] Interpolation preview slider
+- [x] Per-source standard metric interpolation and MVAR compilation
 - [ ] Intermediate master insertion
 - [ ] Extrapolation warning
 

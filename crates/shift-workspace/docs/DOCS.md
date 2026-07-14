@@ -10,6 +10,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** The workspace is the domain object future bridge or utility-process transports should wrap.
 - **Architecture Invariant:** Ledger replay restores complete named-instance collections after axis topology so undo/redo never observes an instance against the wrong external-axis shape.
 - **Architecture Invariant:** Metadata ledger entries store complete pre/post snapshots and replay them independently of font metrics.
+- **Architecture Invariant:** Metric-definition ledger state replays before complete source snapshots so source metric IDs are always valid during undo and redo.
 
 ## Codemap
 

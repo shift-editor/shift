@@ -267,8 +267,11 @@ export class Editor {
 
     this.#cameraMetricsEffect = effect(
       () => {
-        this.font.loadedCell.value;
-        this.updateMetricsFromFont();
+        track(this.font.metricsCell);
+        track(this.font.metricDefinitionsCell);
+        track(this.font.sourcesCell);
+        track(this.font.sourceMetricsInterpolationCell);
+        this.updateMetricsFromFont(this.#designLocation.value);
       },
       { name: "editor.cameraMetrics" },
     );
@@ -900,8 +903,8 @@ export class Editor {
     this.font.layer(node.glyphId, sourceId)?.setRightSidebearing(value);
   }
 
-  public updateMetricsFromFont(): void {
-    const metrics = this.font.metrics;
+  public updateMetricsFromFont(location: AxisLocation = this.designLocation): void {
+    const metrics = this.font.metricsAtLocation(location);
     this.#camera.upm = metrics.unitsPerEm;
     this.#camera.descender = metrics.descender;
   }

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use shift_font::{
   AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, GlyphId, GuidelineId,
-  LayerId, NamedInstanceId, PointId, SourceId,
+  LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
 
 use crate::errors::{BridgeError, BridgeResult};
@@ -52,6 +52,10 @@ impl BridgeParse for AxisLabelId {
 
 impl BridgeParse for NamedInstanceId {
   const KIND: &'static str = "named instance ID";
+}
+
+impl BridgeParse for MetricId {
+  const KIND: &'static str = "metric ID";
 }
 
 impl BridgeParse for ComponentId {

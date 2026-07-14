@@ -75,7 +75,7 @@ export function resolveGlyphOffset(
   const layer = record ? font.layer(record.id, source.id) : null;
   if (!layer) return { x: 0, y: 0 };
 
-  const metrics = font.metrics;
+  const metrics = font.defaultSourceMetrics;
   const targetX = 300;
   const targetYForAnchorName = (anchorName: string): number => {
     switch (anchorName) {

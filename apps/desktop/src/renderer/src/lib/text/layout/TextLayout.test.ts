@@ -43,7 +43,7 @@ describe("TextLayout", () => {
   // Second-line baseline math: y = origin.y - lineHeight.
   it("second-line baseline is one lineHeight below first", () => {
     const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], font);
-    const metrics = font.metrics;
+    const metrics = font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
     expect(layout.lines[0].y).toBe(0);

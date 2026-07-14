@@ -90,13 +90,23 @@ describe("Bridge", () => {
       versionMinor: 0,
     });
 
-    expect(bridge.getMetrics()).toMatchObject({
-      unitsPerEm: 1000,
-      ascender: 800,
-      descender: -200,
-      capHeight: 700,
-      xHeight: 500,
-    });
+    expect(bridge.getMetrics()).toEqual({ unitsPerEm: 1000 });
+    const definitions = bridge.getMetricDefinitions();
+    expect(definitions).toEqual([
+      expect.objectContaining({ kind: "ascender", name: "Ascender" }),
+      expect.objectContaining({ kind: "capHeight", name: "Cap Height" }),
+      expect.objectContaining({ kind: "xHeight", name: "x-Height" }),
+      expect.objectContaining({ kind: "baseline", name: "Baseline" }),
+      expect.objectContaining({ kind: "descender", name: "Descender" }),
+    ]);
+
+    const [defaultSource] = bridge.getSources();
+    expect(defaultSource.metricValues).toHaveLength(5);
+    expect(
+      definitions.map(
+        ({ id }) => defaultSource.metricValues.find(({ metricId }) => metricId === id).position,
+      ),
+    ).toEqual([800, 700, 500, 0, -200]);
 
     expect(bridge.getGlyphs()).toEqual([]);
   });

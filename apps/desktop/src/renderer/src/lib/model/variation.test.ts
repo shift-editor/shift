@@ -46,7 +46,10 @@ async function drawSquare(stack: WorkspaceStack, layerId: LayerId, width: number
         })),
       },
     },
-    { kind: "setContourClosed", setContourClosed: { layerId, contourId, closed: true } },
+    {
+      kind: "setContourClosed",
+      setContourClosed: { layerId, contourId, closed: true },
+    },
   ]);
 }
 
@@ -65,7 +68,11 @@ async function variableFont(): Promise<{
   const created = await stack.editCoordinator.apply([
     {
       kind: "createGlyph",
-      createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      createGlyph: {
+        glyphId,
+        name: "A" as GlyphName,
+        unicodes: [65 as Unicode],
+      },
     },
     {
       kind: "createGlyphLayer",
@@ -106,11 +113,28 @@ async function variableFont(): Promise<{
   expect(bold.id).toBe(boldSourceId);
   expect(sourced.layers).toEqual([]);
 
+  const ascender = stack.font.metricDefinitions.find(
+    (definition) => definition.kind === "ascender",
+  );
+  if (!ascender) throw new Error("Expected the default ascender definition");
+  await stack.font.updateSource({
+    ...bold,
+    metricValues: bold.metricValues.map((value) =>
+      value.metricId === ascender.id ? { ...value, position: 900 } : value,
+    ),
+  });
+  const updatedBold = stack.font.source(boldSourceId);
+  if (!updatedBold) throw new Error("Expected the updated Bold source");
+
   const boldLayerId = mintLayerId();
   await stack.editCoordinator.apply([
     {
       kind: "createGlyphLayer",
-      createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldSourceId },
+      createGlyphLayer: {
+        layerId: boldLayerId,
+        glyphId,
+        sourceId: boldSourceId,
+      },
     },
   ]);
 
@@ -119,13 +143,16 @@ async function variableFont(): Promise<{
   await drawSquare(stack, regularLayerId, 100);
   await drawSquare(stack, boldLayerId, 200);
   await stack.editCoordinator.apply([
-    { kind: "setXAdvance", setXAdvance: { layerId: regularLayerId, width: 300 } },
+    {
+      kind: "setXAdvance",
+      setXAdvance: { layerId: regularLayerId, width: 300 },
+    },
   ]);
   await stack.editCoordinator.apply([
     { kind: "setXAdvance", setXAdvance: { layerId: boldLayerId, width: 500 } },
   ]);
 
-  return { stack, glyphId, regularLayerId, boldLayerId, bold };
+  return { stack, glyphId, regularLayerId, boldLayerId, bold: updatedBold };
 }
 
 function continuousAxis(axisId: AxisId) {
@@ -185,7 +212,7 @@ describe("variable editing across sources", () => {
     expect(boldSource.point(point.id)).toMatchObject({ x: 200, y: 0 });
   });
 
-  it("interpolates geometry and metrics between masters", async () => {
+  it("interpolates geometry, advances, and source metrics between masters", async () => {
     const glyph = await loadGlyph(stack, glyphId);
     const axis = stack.font.getAxes()[0]!;
 
@@ -196,6 +223,7 @@ describe("variable editing across sources", () => {
 
     expect(stack.font.editableLayerAt(glyph.id, mid)).toBeNull();
     expect(view.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
+    expect(stack.font.metricsAtLocation(mid).ascender).toBeCloseTo(850);
 
     const xs = view.geometry.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);

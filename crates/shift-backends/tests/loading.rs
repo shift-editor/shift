@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
+use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -77,10 +77,31 @@ fn loads_ufo_metadata_metrics_and_geometry() {
     assert_eq!(metadata.family_name.as_deref(), Some("MutatorMathTest"));
     assert_eq!(metadata.style_name.as_deref(), Some("LightCondensed"));
     assert_eq!(metrics.units_per_em, 1000.0);
-    assert_eq!(metrics.ascender, 700.0);
-    assert_eq!(metrics.descender, -200.0);
-    assert_eq!(metrics.cap_height, Some(700.0));
-    assert_eq!(metrics.x_height, Some(500.0));
+    let source_id = font.default_source_id().unwrap();
+    assert_eq!(
+        font.metric_value(source_id.clone(), MetricKind::Ascender)
+            .unwrap()
+            .position,
+        700.0
+    );
+    assert_eq!(
+        font.metric_value(source_id.clone(), MetricKind::Descender)
+            .unwrap()
+            .position,
+        -200.0
+    );
+    assert_eq!(
+        font.metric_value(source_id.clone(), MetricKind::CapHeight)
+            .unwrap()
+            .position,
+        700.0
+    );
+    assert_eq!(
+        font.metric_value(source_id, MetricKind::XHeight)
+            .unwrap()
+            .position,
+        500.0
+    );
 
     let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     assert!(!main_layer(glyph_a).contours().is_empty());
@@ -262,8 +283,19 @@ fn loads_glyphs_file_features_kerning_components_and_anchors() {
 
     assert_eq!(font.metadata().family_name.as_deref(), Some("Homenaje"));
     assert_eq!(font.metrics().units_per_em, 1000.0);
-    assert_eq!(font.metrics().ascender, 700.0);
-    assert_eq!(font.metrics().descender, -160.0);
+    let source_id = font.default_source_id().unwrap();
+    assert_eq!(
+        font.metric_value(source_id.clone(), MetricKind::Ascender)
+            .unwrap()
+            .position,
+        700.0
+    );
+    assert_eq!(
+        font.metric_value(source_id, MetricKind::Descender)
+            .unwrap()
+            .position,
+        -160.0
+    );
     assert!(font.glyph_count() >= 300);
 
     let fea = font

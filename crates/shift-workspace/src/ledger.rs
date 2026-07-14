@@ -8,8 +8,8 @@
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
 use shift_font::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, NamedInstance, Source,
-    SourceId,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, MetricDefinition,
+    NamedInstance, Source, SourceId,
 };
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
@@ -42,6 +42,12 @@ pub enum LedgerStep {
     AxisMappings {
         pre: Vec<AxisMapping>,
         post: Vec<AxisMapping>,
+    },
+    /// Font-owned metric identities. Replay installs these before source
+    /// snapshots so source values always validate against the intended side.
+    MetricDefinitions {
+        pre: Vec<MetricDefinition>,
+        post: Vec<MetricDefinition>,
     },
     /// The complete authored product-preset collection. Replay applies this
     /// after axis topology so external locations validate on both sides.

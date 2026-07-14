@@ -72,7 +72,6 @@ fn metadata_change_set_preserves_metrics_and_store_only_font_info() {
     assert_eq!(loaded.sample_text, original.sample_text);
     assert_eq!(loaded.vendor_id, original.vendor_id);
     assert_eq!(loaded.units_per_em, original.units_per_em);
-    assert_eq!(loaded.ascender, original.ascender);
     assert_eq!(loaded.default_source_id, original.default_source_id);
 }
 
@@ -741,14 +740,6 @@ fn open_sans_font_info() -> FontInfo {
         version_major: Some(3),
         version_minor: Some(3),
         units_per_em: 2048.0,
-        ascender: 1500.0,
-        descender: -500.0,
-        cap_height: Some(1456.0),
-        x_height: Some(1012.0),
-        line_gap: Some(42.0),
-        italic_angle: Some(-9.5),
-        underline_position: Some(-175.0),
-        underline_thickness: Some(96.0),
         default_source_id: Some("source_regular".to_string()),
     }
 }
@@ -773,14 +764,6 @@ fn empty_font_info() -> FontInfo {
         version_major: None,
         version_minor: None,
         units_per_em: metrics.units_per_em,
-        ascender: metrics.ascender,
-        descender: metrics.descender,
-        cap_height: metrics.cap_height,
-        x_height: metrics.x_height,
-        line_gap: metrics.line_gap,
-        italic_angle: metrics.italic_angle,
-        underline_position: metrics.underline_position,
-        underline_thickness: metrics.underline_thickness,
         default_source_id: None,
     }
 }

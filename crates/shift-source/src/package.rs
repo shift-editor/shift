@@ -13,7 +13,8 @@ use shift_font::{
     AxisMappingId, AxisMappingPoint, AxisRole, Component, ComponentId, Contour,
     DecomposedTransform, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphLayer,
     GlyphName, Guideline, KerningData, KerningPair, KerningSide, LibData, LibValue, Location,
-    NamedInstance, NamedInstanceId, Point, PointType, Source, SourceId, SourceRole,
+    MetricDefinition, MetricId, MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point,
+    PointType, Source, SourceId, SourceRole,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, result::ZipError, write::SimpleFileOptions};
 
@@ -304,18 +305,30 @@ struct MetadataDoc {
     note: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MetricsDoc {
     units_per_em: f64,
-    ascender: f64,
-    descender: f64,
-    cap_height: Option<f64>,
-    x_height: Option<f64>,
-    line_gap: Option<f64>,
-    italic_angle: Option<f64>,
-    underline_position: Option<f64>,
-    underline_thickness: Option<f64>,
+    definitions: Vec<MetricDefinitionDoc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MetricDefinitionDoc {
+    id: String,
+    kind: MetricKindDoc,
+    name: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum MetricKindDoc {
+    Ascender,
+    CapHeight,
+    XHeight,
+    Baseline,
+    Descender,
+    Custom,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -428,6 +441,11 @@ struct SourceDoc {
     id: String,
     name: String,
     location: BTreeMap<String, f64>,
+    metric_values: BTreeMap<String, MetricValueDoc>,
+    italic_angle: Option<f64>,
+    line_gap: Option<f64>,
+    underline_position: Option<f64>,
+    underline_thickness: Option<f64>,
     filename: Option<String>,
     #[serde(default)]
     color: Option<String>,
@@ -435,6 +453,13 @@ struct SourceDoc {
     role: SourceRole,
     #[serde(default)]
     layer_name: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MetricValueDoc {
+    position: f64,
+    overshoot: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -640,7 +665,7 @@ pub fn font_to_tree(
 
     let font_doc = FontDoc {
         metadata: MetadataDoc::from(font.metadata()),
-        metrics: MetricsDoc::try_from(*font.metrics())?,
+        metrics: MetricsDoc::try_from(font)?,
         guidelines: font
             .guidelines()
             .iter()
@@ -753,7 +778,15 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
 
     let mut font = Font::empty();
     *font.metadata_mut() = FontMetadata::from(font_doc.metadata);
-    *font.metrics_mut() = FontMetrics::try_from(font_doc.metrics)?;
+    *font.metrics_mut() = FontMetrics::try_from(&font_doc.metrics)?;
+    font.set_metric_definitions(
+        font_doc
+            .metrics
+            .definitions
+            .into_iter()
+            .map(MetricDefinition::try_from)
+            .collect::<Result<Vec<_>, _>>()?,
+    )?;
     let mut feature_data = FeatureData::new();
     feature_data.set_fea_source(features);
     *font.features_mut() = feature_data;
@@ -774,6 +807,11 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
         font.add_axis(Axis::try_from(axis_doc)?)?;
     }
     let axis_ids = font.axes().iter().map(Axis::id).collect::<HashSet<_>>();
+    let metric_ids = font
+        .metric_definitions()
+        .iter()
+        .map(MetricDefinition::id)
+        .collect::<HashSet<_>>();
     font.set_axis_mappings(
         axis_mappings_doc
             .mappings
@@ -791,6 +829,7 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
 
     for source_doc in sources_doc.sources {
         validate_source_axis_references(&source_doc, &axis_ids)?;
+        validate_source_metric_references(&source_doc, &metric_ids)?;
         font.add_source(Source::try_from(source_doc)?);
     }
 
@@ -1039,6 +1078,22 @@ fn validate_source_axis_references(
         }
     }
 
+    Ok(())
+}
+
+fn validate_source_metric_references(
+    source_doc: &SourceDoc,
+    metric_ids: &HashSet<MetricId>,
+) -> Result<(), SourcePackageError> {
+    for metric_id in source_doc.metric_values.keys() {
+        let parsed_metric_id = parse_id("metric", metric_id)?;
+        if !metric_ids.contains(&parsed_metric_id) {
+            return Err(SourcePackageError::DanglingReference {
+                field: "sources.metricValues.metricId",
+                id: metric_id.clone(),
+            });
+        }
+    }
     Ok(())
 }
 
@@ -1794,51 +1849,76 @@ impl From<MetadataDoc> for FontMetadata {
     }
 }
 
-impl TryFrom<FontMetrics> for MetricsDoc {
+impl TryFrom<&Font> for MetricsDoc {
     type Error = SourcePackageError;
 
-    fn try_from(metrics: FontMetrics) -> Result<Self, Self::Error> {
+    fn try_from(font: &Font) -> Result<Self, Self::Error> {
         Ok(Self {
-            units_per_em: ensure_finite("font.metrics.unitsPerEm", metrics.units_per_em)?,
-            ascender: ensure_finite("font.metrics.ascender", metrics.ascender)?,
-            descender: ensure_finite("font.metrics.descender", metrics.descender)?,
-            cap_height: ensure_optional_finite("font.metrics.capHeight", metrics.cap_height)?,
-            x_height: ensure_optional_finite("font.metrics.xHeight", metrics.x_height)?,
-            line_gap: ensure_optional_finite("font.metrics.lineGap", metrics.line_gap)?,
-            italic_angle: ensure_optional_finite("font.metrics.italicAngle", metrics.italic_angle)?,
-            underline_position: ensure_optional_finite(
-                "font.metrics.underlinePosition",
-                metrics.underline_position,
-            )?,
-            underline_thickness: ensure_optional_finite(
-                "font.metrics.underlineThickness",
-                metrics.underline_thickness,
-            )?,
+            units_per_em: ensure_finite("font.metrics.unitsPerEm", font.metrics().units_per_em)?,
+            definitions: font
+                .metric_definitions()
+                .iter()
+                .map(MetricDefinitionDoc::from)
+                .collect(),
         })
     }
 }
 
-impl TryFrom<MetricsDoc> for FontMetrics {
+impl TryFrom<&MetricsDoc> for FontMetrics {
     type Error = SourcePackageError;
 
-    fn try_from(doc: MetricsDoc) -> Result<Self, Self::Error> {
+    fn try_from(doc: &MetricsDoc) -> Result<Self, Self::Error> {
         Ok(Self {
             units_per_em: ensure_finite("font.metrics.unitsPerEm", doc.units_per_em)?,
-            ascender: ensure_finite("font.metrics.ascender", doc.ascender)?,
-            descender: ensure_finite("font.metrics.descender", doc.descender)?,
-            cap_height: ensure_optional_finite("font.metrics.capHeight", doc.cap_height)?,
-            x_height: ensure_optional_finite("font.metrics.xHeight", doc.x_height)?,
-            line_gap: ensure_optional_finite("font.metrics.lineGap", doc.line_gap)?,
-            italic_angle: ensure_optional_finite("font.metrics.italicAngle", doc.italic_angle)?,
-            underline_position: ensure_optional_finite(
-                "font.metrics.underlinePosition",
-                doc.underline_position,
-            )?,
-            underline_thickness: ensure_optional_finite(
-                "font.metrics.underlineThickness",
-                doc.underline_thickness,
-            )?,
         })
+    }
+}
+
+impl From<&MetricDefinition> for MetricDefinitionDoc {
+    fn from(definition: &MetricDefinition) -> Self {
+        Self {
+            id: definition.id().to_string(),
+            kind: definition.kind().into(),
+            name: definition.name().to_string(),
+        }
+    }
+}
+
+impl TryFrom<MetricDefinitionDoc> for MetricDefinition {
+    type Error = SourcePackageError;
+
+    fn try_from(doc: MetricDefinitionDoc) -> Result<Self, Self::Error> {
+        Ok(Self::with_id(
+            parse_id("metric", &doc.id)?,
+            doc.kind.into(),
+            doc.name,
+        ))
+    }
+}
+
+impl From<MetricKind> for MetricKindDoc {
+    fn from(kind: MetricKind) -> Self {
+        match kind {
+            MetricKind::Ascender => Self::Ascender,
+            MetricKind::CapHeight => Self::CapHeight,
+            MetricKind::XHeight => Self::XHeight,
+            MetricKind::Baseline => Self::Baseline,
+            MetricKind::Descender => Self::Descender,
+            MetricKind::Custom => Self::Custom,
+        }
+    }
+}
+
+impl From<MetricKindDoc> for MetricKind {
+    fn from(kind: MetricKindDoc) -> Self {
+        match kind {
+            MetricKindDoc::Ascender => Self::Ascender,
+            MetricKindDoc::CapHeight => Self::CapHeight,
+            MetricKindDoc::XHeight => Self::XHeight,
+            MetricKindDoc::Baseline => Self::Baseline,
+            MetricKindDoc::Descender => Self::Descender,
+            MetricKindDoc::Custom => Self::Custom,
+        }
     }
 }
 
@@ -2116,11 +2196,44 @@ impl TryFrom<&Source> for SourceDoc {
                 ensure_finite(format!("sources[{id}].location[{axis_id}]"), *value)?,
             );
         }
+        let metric_values = source
+            .metric_values()
+            .iter()
+            .map(|(metric_id, value)| {
+                Ok((
+                    metric_id.to_string(),
+                    MetricValueDoc {
+                        position: ensure_finite(
+                            format!("sources[{id}].metricValues[{metric_id}].position"),
+                            value.position,
+                        )?,
+                        overshoot: ensure_finite(
+                            format!("sources[{id}].metricValues[{metric_id}].overshoot"),
+                            value.overshoot,
+                        )?,
+                    },
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, SourcePackageError>>()?;
 
         Ok(Self {
             id: source.id().to_string(),
             name: source.name().to_string(),
             location,
+            metric_values,
+            italic_angle: ensure_optional_finite(
+                format!("sources[{id}].italicAngle"),
+                source.italic_angle(),
+            )?,
+            line_gap: ensure_optional_finite(format!("sources[{id}].lineGap"), source.line_gap())?,
+            underline_position: ensure_optional_finite(
+                format!("sources[{id}].underlinePosition"),
+                source.underline_position(),
+            )?,
+            underline_thickness: ensure_optional_finite(
+                format!("sources[{id}].underlineThickness"),
+                source.underline_thickness(),
+            )?,
             filename: source.filename().map(str::to_string),
             color: source.color().map(str::to_string),
             role: source.role(),
@@ -2142,12 +2255,49 @@ impl TryFrom<SourceDoc> for Source {
             );
         }
 
+        let source_id = parse_id("source", &doc.id)?;
+        let metric_values = doc
+            .metric_values
+            .into_iter()
+            .map(|(metric_id, value)| {
+                Ok((
+                    parse_id("metric", &metric_id)?,
+                    MetricValue::new(
+                        ensure_finite(
+                            format!("sources[{}].metricValues[{metric_id}].position", doc.id),
+                            value.position,
+                        )?,
+                        ensure_finite(
+                            format!("sources[{}].metricValues[{metric_id}].overshoot", doc.id),
+                            value.overshoot,
+                        )?,
+                    ),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, SourcePackageError>>()?;
         let mut source = Self::with_id(
-            parse_id("source", &doc.id)?,
+            source_id,
             doc.name,
             Location::from_map(location),
             doc.filename,
         );
+        source.set_metric_values(metric_values);
+        source.set_italic_angle(ensure_optional_finite(
+            format!("sources[{}].italicAngle", doc.id),
+            doc.italic_angle,
+        )?);
+        source.set_line_gap(ensure_optional_finite(
+            format!("sources[{}].lineGap", doc.id),
+            doc.line_gap,
+        )?);
+        source.set_underline_position(ensure_optional_finite(
+            format!("sources[{}].underlinePosition", doc.id),
+            doc.underline_position,
+        )?);
+        source.set_underline_thickness(ensure_optional_finite(
+            format!("sources[{}].underlineThickness", doc.id),
+            doc.underline_thickness,
+        )?);
         source.set_color(doc.color);
         source.set_role(doc.role);
         source.set_layer_name(doc.layer_name);

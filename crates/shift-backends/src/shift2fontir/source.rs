@@ -6,8 +6,8 @@ use fontir::error::Error;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, KerningData, NamedInstance,
-    Source as ShiftSource, SourceId,
+    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, KerningData, MetricDefinition,
+    NamedInstance, Source as ShiftSource, SourceId,
 };
 
 use crate::traits::FontView;
@@ -55,6 +55,7 @@ pub(crate) struct ShiftIrSource {
 pub(super) struct ShiftSnapshot {
     pub metadata: FontMetadata,
     pub metrics: FontMetrics,
+    pub metric_definitions: Vec<MetricDefinition>,
     pub axes: Vec<Axis>,
     pub ir_axes: Vec<fontdrasil::types::Axis>,
     pub named_instances: Vec<NamedInstance>,
@@ -104,6 +105,7 @@ impl ShiftIrSource {
             snapshot: Arc::new(ShiftSnapshot {
                 metadata: font.metadata().clone(),
                 metrics: *font.metrics(),
+                metric_definitions: font.metric_definitions().to_vec(),
                 axes: font.axes().to_vec(),
                 ir_axes,
                 named_instances: font.named_instances().to_vec(),

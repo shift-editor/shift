@@ -9,8 +9,12 @@ use fontdrasil::variations::VariationModel;
 
 use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location, SourceId};
 
+mod metrics;
 mod values;
 
+pub use metrics::{
+    ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
+};
 pub use values::GlyphInterpolationValues;
 
 /// Normalized support for one authoring axis within an interpolation region.
@@ -304,7 +308,6 @@ fn interpolation_basis(
             return None;
         }
     }
-
     let model = VariationModel::new(
         points
             .keys()

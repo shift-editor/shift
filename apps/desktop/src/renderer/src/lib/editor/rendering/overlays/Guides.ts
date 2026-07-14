@@ -1,8 +1,8 @@
-import type { FontMetrics } from "@shift/types";
+import type { SourceMetrics } from "@shift/types";
 import type { Canvas } from "../Canvas";
 
 export class Guides {
-  draw(canvas: Canvas, metrics: FontMetrics, advance: number): void {
+  draw(canvas: Canvas, metrics: SourceMetrics, advance: number): void {
     const { color, widthPx } = canvas.theme.guides;
     const lw = canvas.pxToUpm(widthPx);
 

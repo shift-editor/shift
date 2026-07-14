@@ -10,10 +10,11 @@ use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, Font, FontMetadata,
-    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Location, NamedInstance, NamedInstanceId,
-    PointId, PointType, Source, SourceId,
+    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Location, MetricDefinition, MetricId,
+    MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
+use std::collections::BTreeMap;
 
 /// A point to create, with its caller-minted id.
 #[derive(Clone, Debug)]
@@ -139,6 +140,9 @@ pub enum FontIntent {
     SetAxisMappings {
         mappings: Vec<AxisMapping>,
     },
+    SetMetricDefinitions {
+        definitions: Vec<MetricDefinition>,
+    },
     CreateNamedInstance {
         instance: NamedInstance,
     },
@@ -157,6 +161,17 @@ pub enum FontIntent {
         source_id: SourceId,
         name: String,
         location: Location,
+    },
+    /// Replaces the editable authoring values of an existing master source.
+    UpdateSource {
+        source_id: SourceId,
+        name: String,
+        location: Location,
+        metric_values: BTreeMap<MetricId, MetricValue>,
+        italic_angle: Option<f64>,
+        line_gap: Option<f64>,
+        underline_position: Option<f64>,
+        underline_thickness: Option<f64>,
     },
     /// Creates one sparse editable glyph layer at one source.
     CreateGlyphLayer {
@@ -199,11 +214,13 @@ impl FontIntent {
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
             | Self::SetAxisMappings { .. }
+            | Self::SetMetricDefinitions { .. }
             | Self::CreateNamedInstance { .. }
             | Self::UpdateNamedInstance { .. }
             | Self::DeleteNamedInstance { .. }
             | Self::DeleteSource { .. }
             | Self::CreateSource { .. }
+            | Self::UpdateSource { .. }
             | Self::CreateGlyphLayer { .. }
             | Self::CloneGlyphLayer { .. } => None,
         }
@@ -341,6 +358,14 @@ impl Font {
                 changes.push(FontChange::axis_mappings_updated(mappings));
                 Ok(Vec::new())
             }
+            FontIntent::SetMetricDefinitions { definitions } => {
+                self.set_metric_definitions(definitions.clone())?;
+                changes.push(FontChange::metric_definitions_updated(definitions));
+                for source in self.sources() {
+                    changes.push(FontChange::source_updated(source));
+                }
+                Ok(Vec::new())
+            }
             FontIntent::CreateNamedInstance { instance } => {
                 self.add_named_instance(instance.clone())?;
                 changes.push(FontChange::named_instances_updated(self.named_instances()));
@@ -365,6 +390,29 @@ impl Font {
                 name,
                 location,
             } => self.apply_create_source(source_id.clone(), name, location, changes),
+            FontIntent::UpdateSource {
+                source_id,
+                name,
+                location,
+                metric_values,
+                italic_angle,
+                line_gap,
+                underline_position,
+                underline_thickness,
+            } => {
+                self.apply_update_source(
+                    source_id,
+                    name,
+                    location,
+                    metric_values,
+                    *italic_angle,
+                    *line_gap,
+                    *underline_position,
+                    *underline_thickness,
+                    changes,
+                )?;
+                Ok(Vec::new())
+            }
             FontIntent::CreateGlyphLayer {
                 layer_id,
                 glyph_id,
@@ -513,11 +561,51 @@ impl Font {
             }
         }
 
-        let source = Source::with_id(source_id.clone(), name.to_string(), location.clone(), None);
+        let mut source =
+            Source::with_id(source_id.clone(), name.to_string(), location.clone(), None);
+        if let Some(default_source) = self.default_source() {
+            source.set_metric_values(default_source.metric_values().clone());
+            source.set_italic_angle(default_source.italic_angle());
+            source.set_line_gap(default_source.line_gap());
+            source.set_underline_position(default_source.underline_position());
+            source.set_underline_thickness(default_source.underline_thickness());
+        }
+        source.fill_metric_values(self.metric_definitions(), self.metrics().units_per_em);
         changes.push(FontChange::source_created(&source));
         self.add_source(source);
 
         Ok(Vec::new())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_update_source(
+        &mut self,
+        source_id: &SourceId,
+        name: &str,
+        location: &Location,
+        metric_values: &BTreeMap<MetricId, MetricValue>,
+        italic_angle: Option<f64>,
+        line_gap: Option<f64>,
+        underline_position: Option<f64>,
+        underline_thickness: Option<f64>,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<()> {
+        let mut source = self
+            .sources()
+            .iter()
+            .find(|source| source.id() == *source_id)
+            .cloned()
+            .ok_or_else(|| CoreError::SourceNotFound(source_id.clone()))?;
+        source.set_name(name.trim().to_string());
+        source.set_location(location.clone());
+        source.set_metric_values(metric_values.clone());
+        source.set_italic_angle(italic_angle);
+        source.set_line_gap(line_gap);
+        source.set_underline_position(underline_position);
+        source.set_underline_thickness(underline_thickness);
+        self.replace_source(source.clone())?;
+        changes.push(FontChange::source_updated(&source));
+        Ok(())
     }
 
     fn apply_create_glyph_layer(
@@ -918,11 +1006,13 @@ impl Font {
             | FontIntent::UpdateAxis { .. }
             | FontIntent::DeleteAxis { .. }
             | FontIntent::SetAxisMappings { .. }
+            | FontIntent::SetMetricDefinitions { .. }
             | FontIntent::CreateNamedInstance { .. }
             | FontIntent::UpdateNamedInstance { .. }
             | FontIntent::DeleteNamedInstance { .. }
             | FontIntent::DeleteSource { .. }
             | FontIntent::CreateSource { .. }
+            | FontIntent::UpdateSource { .. }
             | FontIntent::CreateGlyphLayer { .. }
             | FontIntent::CloneGlyphLayer { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")

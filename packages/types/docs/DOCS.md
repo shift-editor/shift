@@ -34,6 +34,7 @@ Import from `@shift/types`.
 - `GlyphProjection` -- location-independent renderer backing with fallback shape, compatible source values, exact-source shapes, and component identities.
 - `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo; its optional `next.metadata` is a complete replacement.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
+- `SourceMetricsInterpolationSnapshot` -- derived metric schema, reusable interpolation basis, and ordered source values; it is workspace transport state, not an authored source or named instance.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
 - `PointType` -- bridge point type union.
 

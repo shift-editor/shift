@@ -10,6 +10,7 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  MetricId,
   NamedInstanceId,
   SourceId,
   Unicode,

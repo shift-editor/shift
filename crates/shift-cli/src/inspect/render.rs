@@ -33,6 +33,7 @@ impl InspectReport {
             format_count("axes", self.axes.len(), mode),
             format_count("mappings", self.axis_mappings.len(), mode),
             format_count("instances", self.named_instances.len(), mode),
+            format_count("metric definitions", self.metric_definitions.len(), mode),
             format_count("sources", self.sources.len(), mode),
             format_count("glyphs", self.glyph_count, mode),
         ];
@@ -251,6 +252,7 @@ impl InspectReport {
             header("name", mode),
             header("id", mode),
             header("location", mode),
+            header("metrics", mode),
             header("file", mode),
         ]);
         for source in &self.sources {
@@ -258,6 +260,21 @@ impl InspectReport {
                 Cell::new(source_name(source.name.as_str(), source.is_default)),
                 muted(compact_id(&source.id), mode),
                 Cell::new(format_location(&source.location)),
+                Cell::new(
+                    source
+                        .metric_values
+                        .iter()
+                        .map(|value| {
+                            format!(
+                                "{} {}/{}",
+                                value.name,
+                                format_number(value.position),
+                                format_number(value.overshoot)
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                ),
                 Cell::new(source.filename.as_deref().unwrap_or("-")),
             ]);
         }

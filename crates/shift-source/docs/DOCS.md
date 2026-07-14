@@ -60,7 +60,8 @@ and `FontLoader`:
 - `instances.json` stores explicit named product presets. Every location is a
   complete `axisId -> external value` map; instances do not reference sources
   and do not store Designspace or compiler fields.
-- `sources.json` stores source locations as `axisId -> design-space value`.
+- `font.json` stores global UPM and ordered, stable-ID metric definitions.
+- `sources.json` stores source locations as `axisId -> design-space value`, plus values and overshoots keyed by `metricId` and optional source technical metrics.
 - Each glyph file is `glyphs/<glyphId>.json`; glyph layers are keyed by
   `sourceId`.
 - Components store `baseGlyphId` as the canonical reference and

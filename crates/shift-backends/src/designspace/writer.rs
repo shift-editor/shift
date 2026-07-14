@@ -13,7 +13,7 @@ use quick_xml::Writer;
 use serde::Serialize;
 use shift_font::{
     Axis, AxisKind, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph,
-    Guideline, KerningData, LibData, Location, NamedInstance, Source, SourceId,
+    Guideline, KerningData, LibData, Location, MetricDefinition, NamedInstance, Source, SourceId,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -70,6 +70,10 @@ impl FontView for UfoFileView<'_> {
 
     fn metrics(&self) -> &FontMetrics {
         self.font.metrics()
+    }
+
+    fn metric_definitions(&self) -> &[MetricDefinition] {
+        self.font.metric_definitions()
     }
 
     fn axes(&self) -> &[Axis] {

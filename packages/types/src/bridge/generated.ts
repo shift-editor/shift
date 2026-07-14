@@ -9,6 +9,7 @@ import type {
   GuidelineId,
   GlyphId,
   LayerId,
+  MetricId,
   NamedInstanceId,
   SourceId,
 } from "../ids";
@@ -65,7 +66,10 @@ export interface BridgeApi {
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
+  getMetricDefinitions(): Array<MetricDefinition>
   getNamedInstances(): Array<NamedInstance>
+  /** Returns the precomputed source-metric interpolation model for this font. */
+  getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -315,10 +319,12 @@ export interface FontIntent {
   updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
   setAxisMappings?: SetAxisMappingsIntent
+  setMetricDefinitions?: SetMetricDefinitionsIntent
   createNamedInstance?: CreateNamedInstanceIntent
   updateNamedInstance?: UpdateNamedInstanceIntent
   deleteNamedInstance?: DeleteNamedInstanceIntent
   createSource?: CreateSourceIntent
+  updateSource?: UpdateSourceIntent
   deleteSource?: DeleteSourceIntent
   createGlyphLayer?: CreateGlyphLayerIntent
   cloneGlyphLayer?: CloneGlyphLayerIntent
@@ -343,14 +349,6 @@ export interface FontMetadata {
 
 export interface FontMetrics {
   unitsPerEm: number
-  ascender: number
-  descender: number
-  capHeight?: number
-  xHeight?: number
-  lineGap?: number
-  italicAngle?: number
-  underlinePosition?: number
-  underlineThickness?: number
 }
 
 /**
@@ -368,6 +366,10 @@ export interface FontReplacement {
   axes?: Array<Axis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
   axisMappings?: Array<AxisMapping>
+  /** Full font-owned metric definitions when their identity or order changed. */
+  metricDefinitions?: Array<MetricDefinition>
+  /** Refreshed source-metric interpolation model when any of its inputs changed. */
+  sourceMetricsInterpolation?: SourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
   namedInstances?: Array<NamedInstance>
   /**
@@ -484,6 +486,14 @@ export interface Location {
   values: Record<AxisId, number>
 }
 
+export interface MetricDefinition {
+  id: MetricId
+  kind: MetricKind
+  name: string
+}
+
+export type MetricKind = "ascender" | "capHeight" | "xHeight" | "baseline" | "descender" | "custom";
+
 export interface MoveAnchorsIntent {
   layerId: LayerId
   anchorIds: Array<AnchorId>
@@ -551,6 +561,10 @@ export interface SetContourClosedIntent {
   closed: boolean
 }
 
+export interface SetMetricDefinitionsIntent {
+  definitions: Array<MetricDefinition>
+}
+
 export interface SetPointSmoothIntent {
   layerId: LayerId
   pointId: PointId
@@ -567,6 +581,39 @@ export interface Source {
   name: string
   location: Location
   filename?: string
+  metricValues: Array<SourceMetricValue>
+  italicAngle?: number
+  lineGap?: number
+  underlinePosition?: number
+  underlineThickness?: number
+}
+
+export type SourceMetricField = "italicAngle" | "lineGap" | "underlinePosition" | "underlineThickness";
+
+/**
+ * Replacement wrapper whose presence distinguishes "unchanged" from a
+ * changed font that no longer has a valid source-metric variation model.
+ */
+export interface SourceMetricsInterpolationReplacement {
+  snapshot?: SourceMetricsInterpolationSnapshot
+}
+
+export interface SourceMetricsInterpolationSnapshot {
+  metricIds: Array<MetricId>
+  technicalFields: Array<SourceMetricField>
+  basis: InterpolationBasis
+  sources: Array<SourceMetricValues>
+}
+
+export interface SourceMetricValue {
+  metricId: MetricId
+  position: number
+  overshoot: number
+}
+
+export interface SourceMetricValues {
+  sourceId: SourceId
+  values: Float64Array
 }
 
 /** Affine move: O(selection-ids) wire instead of O(N) coords. */
@@ -600,4 +647,15 @@ export interface UpdateGlyphIntent {
 /** Replaces an authored named instance while retaining its identity. */
 export interface UpdateNamedInstanceIntent {
   instance: NamedInstance
+}
+
+export interface UpdateSourceIntent {
+  sourceId: SourceId
+  name: string
+  location: Location
+  metricValues: Array<SourceMetricValue>
+  italicAngle?: number
+  lineGap?: number
+  underlinePosition?: number
+  underlineThickness?: number
 }

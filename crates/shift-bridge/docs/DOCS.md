@@ -14,6 +14,8 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Export uses a clone/COW `FontSaveSnapshot` of the current workspace font. **WHY:** Async export can run from a stable view without coupling output generation to renderer focus state.
 
+**Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
+
 **Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
 
 ## Codemap
@@ -43,6 +45,7 @@ crates/shift-bridge/
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
 - `NapiGlyphProjection` -- compact location-independent glyph backing with a reusable interpolation basis and exact-source shapes.
+- `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
 
 ## How it works
 

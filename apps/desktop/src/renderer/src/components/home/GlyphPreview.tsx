@@ -1,4 +1,4 @@
-import type { FontMetrics } from "@shift/types";
+import type { SourceMetrics } from "@shift/types";
 import { useSignalState } from "@/lib/signals";
 import type { GlyphView } from "@/lib/model/Glyph";
 
@@ -8,7 +8,7 @@ export const MARGIN_TOP_RATIO = 0.2;
 export const MARGIN_BOTTOM_RATIO = 0.05;
 export const MARGIN_SIDE_RATIO = 0;
 
-export function glyphPreviewViewBox(metrics: FontMetrics, advance: number | null): string {
+export function glyphPreviewViewBox(metrics: SourceMetrics, advance: number | null): string {
   const upm = metrics.unitsPerEm;
   const marginTop = upm * MARGIN_TOP_RATIO;
   const marginBottom = upm * MARGIN_BOTTOM_RATIO;
@@ -20,7 +20,7 @@ export function glyphPreviewViewBox(metrics: FontMetrics, advance: number | null
   return `${x} ${y} ${w} ${h}`;
 }
 
-export function computeViewBoxHeight(metrics: FontMetrics): number {
+export function computeViewBoxHeight(metrics: SourceMetrics): number {
   const upm = metrics.unitsPerEm;
   const marginTop = upm * MARGIN_TOP_RATIO;
   const marginBottom = upm * MARGIN_BOTTOM_RATIO;
@@ -28,7 +28,7 @@ export function computeViewBoxHeight(metrics: FontMetrics): number {
 }
 
 export function computeCellWidth(
-  metrics: FontMetrics,
+  metrics: SourceMetrics,
   advance: number | null,
   cellHeight: number,
 ): number {
@@ -43,7 +43,7 @@ export function computeCellWidth(
 
 interface GlyphPreviewProps {
   view: GlyphView | null;
-  metrics: FontMetrics;
+  metrics: SourceMetrics;
   height?: number;
 }
 
@@ -62,7 +62,7 @@ function GlyphCell({
   height,
   view,
 }: {
-  metrics: FontMetrics;
+  metrics: SourceMetrics;
   height: number;
   view: GlyphView;
 }) {

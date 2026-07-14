@@ -1,6 +1,7 @@
 use super::axis_labels;
 use super::error::{DesignspaceError, DesignspaceResult};
 use crate::errors::{FormatBackendError, FormatBackendResult};
+use crate::metrics::copy_source_metrics;
 use crate::traits::FontReader;
 use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
@@ -89,6 +90,10 @@ impl DesignspaceReader {
         let default_ufo_source_id = font
             .default_source_id()
             .ok_or(DesignspaceError::NoSources)?;
+        let default_ufo_source = font
+            .default_source()
+            .cloned()
+            .ok_or(DesignspaceError::NoSources)?;
         font.clear_sources();
 
         if let Some(ref family) = default_ds_source.familyname {
@@ -133,11 +138,19 @@ impl DesignspaceReader {
         let default_location =
             location_from_dimensions(&default_ds_source.location, &doc, font.axes());
         let default_name = source_name(default_ds_source, default_idx);
-        let default_source_id = font.add_source(Source::with_filename(
+        let mut default_source = Source::with_filename(
             default_name,
             default_location,
             default_ds_source.filename.clone(),
-        ));
+        );
+        let metric_definitions = font.metric_definitions().to_vec();
+        copy_source_metrics(
+            &metric_definitions,
+            &default_ufo_source,
+            &metric_definitions,
+            &mut default_source,
+        );
+        let default_source_id = font.add_source(default_source);
         font.set_default_source_id(default_source_id.clone());
         move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
 
@@ -189,6 +202,17 @@ impl DesignspaceReader {
             let location = location_from_dimensions(&ds_source.location, &doc, font.axes());
             let mut source = Source::with_filename(name, location, ds_source.filename.clone());
             source.set_layer_name(ds_source.layer.clone());
+            let imported_source = source_font
+                .sources()
+                .iter()
+                .find(|source| source.id() == source_source_id)
+                .ok_or(DesignspaceError::NoSources)?;
+            copy_source_metrics(
+                source_font.metric_definitions(),
+                imported_source,
+                font.metric_definitions(),
+                &mut source,
+            );
             let source_id = font.add_source(source);
 
             // Copy glyphs from the resolved layer into the new layer.
@@ -366,17 +390,29 @@ fn load_axisless_designspace(
     let default_ufo_source_id = font
         .default_source_id()
         .ok_or(DesignspaceError::NoSources)?;
+    let default_ufo_source = font
+        .default_source()
+        .cloned()
+        .ok_or(DesignspaceError::NoSources)?;
     font.clear_sources();
 
     if let Some(family) = &default_source.familyname {
         font.metadata_mut().family_name = Some(family.clone());
     }
 
-    let default_source_id = font.add_source(Source::with_filename(
+    let mut new_default_source = Source::with_filename(
         axisless_source_name(default_source, 0),
         Location::new(),
         default_source.filename.clone(),
-    ));
+    );
+    let metric_definitions = font.metric_definitions().to_vec();
+    copy_source_metrics(
+        &metric_definitions,
+        &default_ufo_source,
+        &metric_definitions,
+        &mut new_default_source,
+    );
+    let default_source_id = font.add_source(new_default_source);
     font.set_default_source_id(default_source_id.clone());
     move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
 
@@ -419,6 +455,17 @@ fn load_axisless_designspace(
         let name = axisless_source_name(ds_source, idx);
         let mut source = Source::with_filename(name, Location::new(), ds_source.filename.clone());
         source.set_layer_name(ds_source.layer.clone());
+        let imported_source = source_font
+            .sources()
+            .iter()
+            .find(|source| source.id() == source_source_id)
+            .ok_or(DesignspaceError::NoSources)?;
+        copy_source_metrics(
+            source_font.metric_definitions(),
+            imported_source,
+            font.metric_definitions(),
+            &mut source,
+        );
         let source_id = font.add_source(source);
 
         for source_glyph in source_font.glyphs() {

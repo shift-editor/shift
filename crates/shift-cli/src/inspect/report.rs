@@ -6,7 +6,7 @@ use miette::Diagnostic;
 use serde::Serialize;
 use shift_font::{
     Axis, AxisId, AxisKind, AxisLabel, AxisMapping, AxisMappingPoint, AxisRole, Font, Glyph,
-    GlyphLayer, Location, NamedInstance, Source, SourceId,
+    GlyphLayer, Location, MetricDefinition, MetricKind, NamedInstance, Source, SourceId,
 };
 use shift_source::{FORMAT_ID, SCHEMA_VERSION, ShiftSourcePackage, SourcePackageError};
 use thiserror::Error;
@@ -118,6 +118,29 @@ pub struct SourceSummary {
     pub location: Vec<LocationValue>,
     pub filename: Option<String>,
     pub is_default: bool,
+    pub metric_values: Vec<MetricValueSummary>,
+    pub italic_angle: Option<f64>,
+    pub line_gap: Option<f64>,
+    pub underline_position: Option<f64>,
+    pub underline_thickness: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricDefinitionSummary {
+    pub id: String,
+    pub kind: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricValueSummary {
+    pub metric_id: String,
+    pub name: String,
+    pub kind: String,
+    pub position: f64,
+    pub overshoot: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -162,6 +185,7 @@ pub struct InspectReport {
     pub axes: Vec<AxisSummary>,
     pub axis_mappings: Vec<AxisMappingSummary>,
     pub named_instances: Vec<NamedInstanceSummary>,
+    pub metric_definitions: Vec<MetricDefinitionSummary>,
     pub sources: Vec<SourceSummary>,
     pub glyph_count: usize,
     pub glyphs: Vec<GlyphSummary>,
@@ -210,10 +234,22 @@ impl InspectReport {
                 .iter()
                 .map(|instance| NamedInstanceSummary::from_instance(instance, &axes_by_id))
                 .collect(),
+            metric_definitions: font
+                .metric_definitions()
+                .iter()
+                .map(MetricDefinitionSummary::from)
+                .collect(),
             sources: font
                 .sources()
                 .iter()
-                .map(|source| SourceSummary::from_source(source, &axes_by_id, &default_source_id))
+                .map(|source| {
+                    SourceSummary::from_source(
+                        source,
+                        font.metric_definitions(),
+                        &axes_by_id,
+                        &default_source_id,
+                    )
+                })
                 .collect(),
             glyph_count: glyphs.len(),
             glyphs,
@@ -308,6 +344,7 @@ impl AxisMappingPointSummary {
 impl SourceSummary {
     fn from_source(
         source: &Source,
+        definitions: &[MetricDefinition],
         axes_by_id: &HashMap<AxisId, String>,
         default_source_id: &Option<SourceId>,
     ) -> Self {
@@ -319,7 +356,46 @@ impl SourceSummary {
             is_default: default_source_id
                 .as_ref()
                 .is_some_and(|source_id| *source_id == source.id()),
+            metric_values: definitions
+                .iter()
+                .filter_map(|definition| {
+                    source
+                        .metric_value(&definition.id())
+                        .map(|value| MetricValueSummary {
+                            metric_id: definition.id().to_string(),
+                            name: definition.name().to_string(),
+                            kind: metric_kind_name(definition.kind()).to_string(),
+                            position: value.position,
+                            overshoot: value.overshoot,
+                        })
+                })
+                .collect(),
+            italic_angle: source.italic_angle(),
+            line_gap: source.line_gap(),
+            underline_position: source.underline_position(),
+            underline_thickness: source.underline_thickness(),
         }
+    }
+}
+
+impl From<&MetricDefinition> for MetricDefinitionSummary {
+    fn from(definition: &MetricDefinition) -> Self {
+        Self {
+            id: definition.id().to_string(),
+            kind: metric_kind_name(definition.kind()).to_string(),
+            name: definition.name().to_string(),
+        }
+    }
+}
+
+fn metric_kind_name(kind: MetricKind) -> &'static str {
+    match kind {
+        MetricKind::Ascender => "ascender",
+        MetricKind::CapHeight => "capHeight",
+        MetricKind::XHeight => "xHeight",
+        MetricKind::Baseline => "baseline",
+        MetricKind::Descender => "descender",
+        MetricKind::Custom => "custom",
     }
 }
 

@@ -29,7 +29,7 @@ pub use component::{Component, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphId,
-    GuidelineId, LayerId, NamedInstanceId, PointId, SourceId,
+    GuidelineId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata};
@@ -38,7 +38,7 @@ pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{KerningData, KerningPair, KerningSide};
 pub use lib_data::{LibData, LibValue};
-pub use metrics::FontMetrics;
+pub use metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 pub use named_instance::NamedInstance;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};

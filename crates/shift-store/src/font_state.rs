@@ -14,6 +14,11 @@ impl ShiftStore {
             apply_font_info(&mut font, info);
         }
 
+        let metric_definitions = load_metric_definitions(&self.conn)?;
+        if !metric_definitions.is_empty() {
+            font.set_metric_definitions(metric_definitions)?;
+        }
+
         *font.features_mut() = load_feature_data(&self.conn)?;
         *font.lib_mut() = load_lib_data(&self.conn, "font_lib", None)?;
         *font.fontinfo_remainder_mut() = load_lib_data(&self.conn, "fontinfo_remainder", None)?;
@@ -65,14 +70,32 @@ fn apply_font_info(font: &mut font::Font, info: FontInfo) {
     font.metadata_mut().version_minor = info.version_minor.map(|value| value as i32);
 
     font.metrics_mut().units_per_em = info.units_per_em;
-    font.metrics_mut().ascender = info.ascender;
-    font.metrics_mut().descender = info.descender;
-    font.metrics_mut().cap_height = info.cap_height;
-    font.metrics_mut().x_height = info.x_height;
-    font.metrics_mut().line_gap = info.line_gap;
-    font.metrics_mut().italic_angle = info.italic_angle;
-    font.metrics_mut().underline_position = info.underline_position;
-    font.metrics_mut().underline_thickness = info.underline_thickness;
+}
+
+fn load_metric_definitions(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<font::MetricDefinition>, StoreError> {
+    let mut stmt =
+        conn.prepare("SELECT id, kind, name FROM metric_definitions ORDER BY order_index, id")?;
+    let rows = stmt.query_map([], |row| {
+        let kind = match row.get::<_, String>(1)?.as_str() {
+            "ascender" => font::MetricKind::Ascender,
+            "cap_height" => font::MetricKind::CapHeight,
+            "x_height" => font::MetricKind::XHeight,
+            "baseline" => font::MetricKind::Baseline,
+            "descender" => font::MetricKind::Descender,
+            "custom" => font::MetricKind::Custom,
+            value => return Err(rusqlite::Error::InvalidParameterName(value.to_string())),
+        };
+        Ok(font::MetricDefinition::with_id(
+            font::MetricId::from_raw(row.get::<_, String>(0)?),
+            kind,
+            row.get(2)?,
+        ))
+    })?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)
 }
 
 fn load_default_source_id(
@@ -182,7 +205,8 @@ fn json_column_error(error: serde_json::Error) -> rusqlite::Error {
 fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreError> {
     let mut stmt = conn.prepare(
         "
-        SELECT id, name, filename, color, kind, layer_name
+        SELECT id, name, filename, color, kind, layer_name,
+               italic_angle, line_gap, underline_position, underline_thickness
         FROM sources
         ORDER BY order_index, id
         ",
@@ -204,6 +228,11 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
         })?;
         source.set_role(kind.into());
         source.set_layer_name(row.get(5)?);
+        source.set_italic_angle(row.get(6)?);
+        source.set_line_gap(row.get(7)?);
+        source.set_underline_position(row.get(8)?);
+        source.set_underline_thickness(row.get(9)?);
+        source.set_metric_values(load_source_metric_values(conn, &source.id())?);
         Ok(source)
     })?;
 
@@ -220,6 +249,28 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
     }
 
     Ok(sources)
+}
+
+fn load_source_metric_values(
+    conn: &rusqlite::Connection,
+    source_id: &font::SourceId,
+) -> rusqlite::Result<std::collections::BTreeMap<font::MetricId, font::MetricValue>> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT metric_id, position, overshoot
+        FROM source_metric_values
+        WHERE source_id = ?1
+        ORDER BY metric_id
+        ",
+    )?;
+    let rows = stmt.query_map([source_id.to_string()], |row| {
+        Ok((
+            font::MetricId::from_raw(row.get::<_, String>(0)?),
+            font::MetricValue::new(row.get(1)?, row.get(2)?),
+        ))
+    })?;
+
+    rows.collect()
 }
 
 fn load_source_location(

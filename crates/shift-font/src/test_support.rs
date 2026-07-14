@@ -4,8 +4,8 @@ use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
     AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform,
     Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair, KerningSide, LayerId,
-    LibValue, Location, NamedInstance, NamedInstanceId, Point, PointId, PointType, Source,
-    SourceId,
+    LibValue, Location, MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point, PointId,
+    PointType, Source, SourceId,
 };
 use std::collections::HashMap;
 
@@ -31,14 +31,6 @@ pub fn sample_font() -> Font {
     font.metadata_mut().note = Some("Every persisted field should be represented.".to_string());
 
     font.metrics_mut().units_per_em = 2048.0;
-    font.metrics_mut().ascender = 1500.0;
-    font.metrics_mut().descender = -500.0;
-    font.metrics_mut().cap_height = Some(1456.0);
-    font.metrics_mut().x_height = Some(1012.0);
-    font.metrics_mut().line_gap = Some(42.0);
-    font.metrics_mut().italic_angle = Some(-9.5);
-    font.metrics_mut().underline_position = Some(-175.0);
-    font.metrics_mut().underline_thickness = Some(96.0);
 
     font.features_mut()
         .set_fea_source(Some("feature kern { pos A A -80; } kern;\n".to_string()));
@@ -206,6 +198,19 @@ pub fn sample_font() -> Font {
     );
     font.add_source(bold_source);
     font.set_default_source_id(regular_id.clone());
+    set_source_metrics(
+        &mut font,
+        regular_id.clone(),
+        1500.0,
+        -500.0,
+        1456.0,
+        1012.0,
+    );
+    let regular = font.source_mut(regular_id.clone()).unwrap();
+    regular.set_line_gap(Some(42.0));
+    regular.set_italic_angle(Some(-9.5));
+    regular.set_underline_position(Some(-175.0));
+    regular.set_underline_thickness(Some(96.0));
 
     let acute_id = GlyphId::from_raw("acute");
     let mut acute = Glyph::with_id(acute_id.clone(), "acute");
@@ -313,11 +318,6 @@ pub fn sample_font() -> Font {
 /// in compiler integration tests.
 pub fn sample_variable_font() -> Font {
     let mut font = Font::new();
-    font.metrics_mut().cap_height = Some(700.0);
-    font.metrics_mut().x_height = Some(500.0);
-    font.metrics_mut().line_gap = Some(20.0);
-    font.metrics_mut().underline_position = Some(-100.0);
-    font.metrics_mut().underline_thickness = Some(50.0);
 
     let mut weight = Axis::weight();
     weight.set_labels(vec![
@@ -365,6 +365,18 @@ pub fn sample_variable_font() -> Font {
     .expect("sample named instance should be valid");
 
     let default_source_id = font.default_source_id().unwrap();
+    set_source_metrics(
+        &mut font,
+        default_source_id.clone(),
+        800.0,
+        -200.0,
+        700.0,
+        500.0,
+    );
+    let default_source = font.source_mut(default_source_id.clone()).unwrap();
+    default_source.set_line_gap(Some(20.0));
+    default_source.set_underline_position(Some(-100.0));
+    default_source.set_underline_thickness(Some(50.0));
     let mut default_location = Location::new();
     default_location.set(weight_id.clone(), 400.0);
     font.source_mut(default_source_id.clone())
@@ -377,6 +389,14 @@ pub fn sample_variable_font() -> Font {
     let mut bold_location = Location::new();
     bold_location.set(weight_id, 800.0);
     let bold_source_id = font.add_source(Source::new("Bold".to_string(), bold_location));
+    set_source_metrics(
+        &mut font,
+        bold_source_id.clone(),
+        820.0,
+        -220.0,
+        720.0,
+        510.0,
+    );
 
     font.kerning_mut()
         .set_group1("public.kern1.A".to_string(), vec!["A".into()]);
@@ -393,6 +413,39 @@ pub fn sample_variable_font() -> Font {
     glyph.set_layer(triangle_layer(bold_source_id, 800.0, 380.0));
     font.insert_glyph(glyph).unwrap();
     font
+}
+
+fn set_source_metrics(
+    font: &mut Font,
+    source_id: SourceId,
+    ascender: f64,
+    descender: f64,
+    cap_height: f64,
+    x_height: f64,
+) {
+    let values = [
+        (MetricKind::Ascender, ascender),
+        (MetricKind::Descender, descender),
+        (MetricKind::CapHeight, cap_height),
+        (MetricKind::XHeight, x_height),
+    ]
+    .into_iter()
+    .map(|(kind, position)| {
+        let definition = font.metric_definition_for_kind(kind).unwrap();
+        let overshoot = font
+            .sources()
+            .iter()
+            .find(|source| source.id() == source_id)
+            .and_then(|source| source.metric_value(&definition.id()))
+            .map(|value| value.overshoot)
+            .unwrap_or_default();
+        (definition.id(), MetricValue::new(position, overshoot))
+    })
+    .collect::<Vec<_>>();
+    let source = font.source_mut(source_id).unwrap();
+    for (metric_id, value) in values {
+        source.set_metric_value(metric_id, value);
+    }
 }
 
 fn mapping_point(axis: &Axis, user: f64, design: f64) -> AxisMappingPoint {

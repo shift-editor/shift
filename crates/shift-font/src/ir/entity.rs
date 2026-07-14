@@ -131,6 +131,7 @@ typed_id!(AxisId, "axis");
 typed_id!(AxisLabelId, "axisLabel");
 typed_id!(AxisMappingId, "axisMapping");
 typed_id!(NamedInstanceId, "namedInstance");
+typed_id!(MetricId, "metric");
 
 #[cfg(test)]
 mod tests {

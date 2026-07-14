@@ -240,14 +240,13 @@ fn parses_minimal_handwritten_tree() {
   },
   "metrics": {
     "unitsPerEm": 1000.0,
-    "ascender": 800.0,
-    "descender": -200.0,
-    "capHeight": 700.0,
-    "xHeight": 500.0,
-    "lineGap": null,
-    "italicAngle": null,
-    "underlinePosition": null,
-    "underlineThickness": null
+    "definitions": [
+      { "id": "metric_ascender", "kind": "ascender", "name": "Ascender" },
+      { "id": "metric_capHeight", "kind": "capHeight", "name": "Cap Height" },
+      { "id": "metric_xHeight", "kind": "xHeight", "name": "x-Height" },
+      { "id": "metric_baseline", "kind": "baseline", "name": "Baseline" },
+      { "id": "metric_descender", "kind": "descender", "name": "Descender" }
+    ]
   }
 }
 "#
@@ -285,6 +284,17 @@ fn parses_minimal_handwritten_tree() {
       "id": "source_regular",
       "name": "Regular",
       "location": {},
+      "metricValues": {
+        "metric_ascender": { "position": 800.0, "overshoot": 16.0 },
+        "metric_capHeight": { "position": 700.0, "overshoot": 16.0 },
+        "metric_xHeight": { "position": 500.0, "overshoot": 16.0 },
+        "metric_baseline": { "position": 0.0, "overshoot": -16.0 },
+        "metric_descender": { "position": -200.0, "overshoot": -16.0 }
+      },
+      "italicAngle": null,
+      "lineGap": null,
+      "underlinePosition": null,
+      "underlineThickness": null,
       "filename": null
     }
   ]
@@ -329,13 +339,21 @@ fn rejects_glyph_file_id_mismatch() {
 #[test]
 fn rejects_non_finite_metric_values_before_json_serialization() {
     let mut font = sample_font();
-    font.metrics_mut().ascender = f64::NAN;
+    let source_id = font.default_source_id().unwrap();
+    let metric_id = font
+        .metric_definition_for_kind(shift_font::MetricKind::Ascender)
+        .unwrap()
+        .id();
+    let source = font.source_mut(source_id).unwrap();
+    let mut value = source.metric_value(&metric_id).unwrap();
+    value.position = f64::NAN;
+    source.set_metric_value(metric_id, value);
 
     let error = font_to_tree(&test_package_id(), &font).unwrap_err();
 
     assert!(matches!(
         error,
-        SourcePackageError::NonFiniteNumber { field } if field == "font.metrics.ascender"
+        SourcePackageError::NonFiniteNumber { field } if field.contains("metricValues")
     ));
 }
 

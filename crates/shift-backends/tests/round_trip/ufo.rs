@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Anchor, Font, Glyph, GlyphLayer, LibValue};
+use shift_font::{Anchor, Font, Glyph, GlyphLayer, LibValue, MetricKind};
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -418,10 +418,22 @@ fn preserves_metadata_metrics_and_glyph_count() {
         reloaded.metrics().units_per_em,
         original.metrics().units_per_em
     );
-    assert_eq!(reloaded.metrics().ascender, original.metrics().ascender);
-    assert_eq!(reloaded.metrics().descender, original.metrics().descender);
-    assert_eq!(reloaded.metrics().cap_height, original.metrics().cap_height);
-    assert_eq!(reloaded.metrics().x_height, original.metrics().x_height);
+    for kind in [
+        MetricKind::Ascender,
+        MetricKind::CapHeight,
+        MetricKind::XHeight,
+        MetricKind::Baseline,
+        MetricKind::Descender,
+    ] {
+        assert_eq!(
+            reloaded
+                .metric_value(reloaded.default_source_id().unwrap(), kind)
+                .map(|value| value.position),
+            original
+                .metric_value(original.default_source_id().unwrap(), kind)
+                .map(|value| value.position)
+        );
+    }
 }
 
 #[test]

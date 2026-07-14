@@ -221,7 +221,7 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.settled();
 
     const mappingId = mintAxisMappingId();
-    stack.font.setAxisMappings([
+    await stack.font.setAxisMappings([
       {
         id: mappingId,
         name: "Weight curve",
@@ -234,8 +234,6 @@ describe("font-level intents make the font variable", () => {
         ],
       },
     ]);
-    await stack.editCoordinator.settled();
-
     expect(stack.font.getAxisMappings().map((mapping) => mapping.id)).toEqual([mappingId]);
     const mapped = await stack.font.mapLocation({
       values: { [axisId]: 900 } as Record<AxisId, number>,
@@ -296,7 +294,7 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    stack.font.setAxisMappings([
+    await stack.font.setAxisMappings([
       {
         id: mintAxisMappingId(),
         name: "Weight curve",
@@ -309,8 +307,6 @@ describe("font-level intents make the font variable", () => {
         ],
       },
     ]);
-    await stack.editCoordinator.settled();
-
     expect(stack.font.namedInstances[0]?.location.values[axisId]).toBe(700);
 
     stack.font.deleteNamedInstance(instanceId);

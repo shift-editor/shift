@@ -20,6 +20,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
 
+**Architecture Invariant:** Camera and text-layout metrics resolve from the active design location through `Font.metricsAtLocation()`. Exact master locations use authored source values; intermediate locations evaluate the Rust-built source-metric interpolation model.
+
 **Architecture Invariant:** `Selection` uses discriminated `Selectable` unions (`{ kind: "point" | "anchor" | "segment", id }`). Mutations go through `select()`, `add()`, `remove()`, `toggle()`. Derived contour and bounds queries are computed from `stateCell` and the current glyph geometry.
 
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.

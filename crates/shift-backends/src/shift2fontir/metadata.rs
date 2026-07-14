@@ -10,6 +10,7 @@ use fontir::ir::{
     StaticMetadata, DEFAULT_VENDOR_ID,
 };
 use fontir::orchestration::{Context, WorkId};
+use shift_font::{MetricKind, Source};
 use write_fonts::types::NameId;
 
 use super::axes::{normalized_source_location, to_ir_named_instances};
@@ -77,7 +78,7 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
             named_instances,
             global_locations,
             None,
-            self.snapshot.metrics.italic_angle.unwrap_or_default(),
+            self.default_source()?.italic_angle().unwrap_or_default(),
             GdefCategories::default(),
             None,
             false,
@@ -97,6 +98,19 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
 }
 
 impl StaticMetadataWork {
+    fn default_source(&self) -> Result<&Source, Error> {
+        self.snapshot
+            .sources
+            .iter()
+            .find(|source| source.id() == self.snapshot.default_source_id)
+            .ok_or_else(|| {
+                Error::InvalidEntry(
+                    "Shift default source",
+                    "the default source does not exist".to_string(),
+                )
+            })
+    }
+
     fn global_locations(&self, axes: &Axes) -> Result<HashSet<NormalizedLocation>, Error> {
         if axes.is_empty() {
             return Ok(HashSet::from([NormalizedLocation::default()]));
@@ -147,10 +161,10 @@ impl StaticMetadataWork {
     }
 }
 
-/// Emits Shift's font-wide metrics at the default location.
+/// Emits each master's standard source-local metrics at its normalized location.
 ///
-/// Shift does not yet model per-source metrics, so the resulting metrics remain
-/// static even when glyph outlines vary.
+/// Custom metric rows and overshoots remain Shift authoring data because OpenType
+/// global metrics do not define a general-purpose representation for them.
 #[derive(Debug)]
 pub(super) struct GlobalMetricsWork {
     snapshot: Arc<ShiftSnapshot>,
@@ -173,41 +187,70 @@ impl Work<Context, WorkId, Error> for GlobalMetricsWork {
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
         let metadata = context.static_metadata.get();
-        let source = &self.snapshot.metrics;
-        let location = metadata.default_location().clone();
+        let axes = Axes::from(self.snapshot.ir_axes.clone());
         let mut metrics = GlobalMetricsBuilder::new();
 
-        metrics.set(GlobalMetric::Ascender, location.clone(), source.ascender);
-        metrics.set(GlobalMetric::Descender, location.clone(), source.descender);
-        metrics.set_if_some(GlobalMetric::CapHeight, location.clone(), source.cap_height);
-        metrics.set_if_some(GlobalMetric::XHeight, location.clone(), source.x_height);
-        metrics.set_if_some(GlobalMetric::HheaLineGap, location.clone(), source.line_gap);
-        metrics.set_if_some(
-            GlobalMetric::Os2TypoLineGap,
-            location.clone(),
-            source.line_gap,
-        );
-        metrics.set_if_some(
-            GlobalMetric::UnderlinePosition,
-            location.clone(),
-            source.underline_position,
-        );
-        metrics.set_if_some(
-            GlobalMetric::UnderlineThickness,
-            location.clone(),
-            source.underline_thickness,
-        );
-        metrics.populate_defaults(
-            &location,
-            metadata.units_per_em,
-            source.x_height,
-            Some(source.ascender),
-            Some(source.descender),
-            source.italic_angle,
-        );
+        for source in self
+            .snapshot
+            .sources
+            .iter()
+            .filter(|source| source.is_master())
+        {
+            let location = normalized_source_location(source, &self.snapshot.axes, &axes)?;
+            let ascender = self.metric_position(source, MetricKind::Ascender);
+            let descender = self.metric_position(source, MetricKind::Descender);
+            let cap_height = self.metric_position(source, MetricKind::CapHeight);
+            let x_height = self.metric_position(source, MetricKind::XHeight);
+
+            metrics.set_if_some(GlobalMetric::Ascender, location.clone(), ascender);
+            metrics.set_if_some(GlobalMetric::Descender, location.clone(), descender);
+            metrics.set_if_some(GlobalMetric::CapHeight, location.clone(), cap_height);
+            metrics.set_if_some(GlobalMetric::XHeight, location.clone(), x_height);
+            metrics.set_if_some(
+                GlobalMetric::HheaLineGap,
+                location.clone(),
+                source.line_gap(),
+            );
+            metrics.set_if_some(
+                GlobalMetric::Os2TypoLineGap,
+                location.clone(),
+                source.line_gap(),
+            );
+            metrics.set_if_some(
+                GlobalMetric::UnderlinePosition,
+                location.clone(),
+                source.underline_position(),
+            );
+            metrics.set_if_some(
+                GlobalMetric::UnderlineThickness,
+                location.clone(),
+                source.underline_thickness(),
+            );
+            metrics.populate_defaults(
+                &location,
+                metadata.units_per_em,
+                x_height,
+                ascender,
+                descender,
+                source.italic_angle(),
+            );
+        }
 
         context.global_metrics.set(metrics.build(&metadata.axes)?);
         Ok(())
+    }
+}
+
+impl GlobalMetricsWork {
+    fn metric_position(&self, source: &Source, kind: MetricKind) -> Option<f64> {
+        let definition = self
+            .snapshot
+            .metric_definitions
+            .iter()
+            .find(|definition| definition.kind() == kind)?;
+        source
+            .metric_value(&definition.id())
+            .map(|value| value.position)
     }
 }
 

@@ -13,8 +13,11 @@ use shift_font::{
     FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GuidelineId, InterpolationBasis as IrInterpolationBasis,
-    LayerId, Location as IrLocation, NamedInstance as IrNamedInstance, NamedInstanceId,
+    LayerId, Location as IrLocation, MetricDefinition as IrMetricDefinition, MetricId,
+    MetricKind as IrMetricKind, NamedInstance as IrNamedInstance, NamedInstanceId,
     Point as IrPoint, PointId, PointType as IrPointType, Source as IrSource, SourceId,
+    SourceMetricField as IrSourceMetricField,
+    SourceMetricInterpolation as IrSourceMetricInterpolation,
 };
 
 pub mod bridges;
@@ -80,30 +83,59 @@ impl From<&IrFontMetadata> for FontMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct FontMetrics {
     pub units_per_em: f64,
-    pub ascender: f64,
-    pub descender: f64,
-    pub cap_height: Option<f64>,
-    pub x_height: Option<f64>,
-    pub line_gap: Option<f64>,
-    pub italic_angle: Option<f64>,
-    pub underline_position: Option<f64>,
-    pub underline_thickness: Option<f64>,
 }
 
 impl From<&IrFontMetrics> for FontMetrics {
     fn from(metrics: &IrFontMetrics) -> Self {
         Self {
             units_per_em: metrics.units_per_em,
-            ascender: metrics.ascender,
-            descender: metrics.descender,
-            cap_height: metrics.cap_height,
-            x_height: metrics.x_height,
-            line_gap: metrics.line_gap,
-            italic_angle: metrics.italic_angle,
-            underline_position: metrics.underline_position,
-            underline_thickness: metrics.underline_thickness,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricDefinition {
+    pub id: MetricId,
+    pub kind: MetricKind,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MetricKind {
+    Ascender,
+    CapHeight,
+    XHeight,
+    Baseline,
+    Descender,
+    Custom,
+}
+
+impl From<&IrMetricDefinition> for MetricDefinition {
+    fn from(definition: &IrMetricDefinition) -> Self {
+        let kind = match definition.kind() {
+            IrMetricKind::Ascender => MetricKind::Ascender,
+            IrMetricKind::CapHeight => MetricKind::CapHeight,
+            IrMetricKind::XHeight => MetricKind::XHeight,
+            IrMetricKind::Baseline => MetricKind::Baseline,
+            IrMetricKind::Descender => MetricKind::Descender,
+            IrMetricKind::Custom => MetricKind::Custom,
+        };
+        Self {
+            id: definition.id(),
+            kind,
+            name: definition.name().to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceMetricValue {
+    pub metric_id: MetricId,
+    pub position: f64,
+    pub overshoot: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,6 +276,11 @@ pub struct Source {
     pub name: String,
     pub location: Location,
     pub filename: Option<String>,
+    pub metric_values: Vec<SourceMetricValue>,
+    pub italic_angle: Option<f64>,
+    pub line_gap: Option<f64>,
+    pub underline_position: Option<f64>,
+    pub underline_thickness: Option<f64>,
 }
 
 impl From<&IrSource> for Source {
@@ -253,6 +290,19 @@ impl From<&IrSource> for Source {
             name: source.name().to_string(),
             location: source.location().into(),
             filename: source.filename().map(str::to_string),
+            metric_values: source
+                .metric_values()
+                .iter()
+                .map(|(metric_id, value)| SourceMetricValue {
+                    metric_id: metric_id.clone(),
+                    position: value.position,
+                    overshoot: value.overshoot,
+                })
+                .collect(),
+            italic_angle: source.italic_angle(),
+            line_gap: source.line_gap(),
+            underline_position: source.underline_position(),
+            underline_thickness: source.underline_thickness(),
         }
     }
 }
@@ -674,6 +724,73 @@ impl From<&IrLocation> for Location {
                 .iter()
                 .map(|(axis_id, value)| (axis_id.clone(), *value))
                 .collect(),
+        }
+    }
+}
+
+/// Optional source-level numeric fields appended after authored metric rows.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceMetricField {
+    ItalicAngle,
+    LineGap,
+    UnderlinePosition,
+    UnderlineThickness,
+}
+
+/// Initial metric values for one authored source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceMetricValues {
+    pub source_id: SourceId,
+    pub values: Vec<f64>,
+}
+
+/// Location-independent interpolation model for source-owned font metrics.
+///
+/// Each source vector stores `position, overshoot` for every `metric_ids`
+/// entry, followed by one value for every `technical_fields` entry. A
+/// technical field is included only when every master source authors it, so
+/// interpolation never invents values for a sparse optional field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceMetricsInterpolationSnapshot {
+    pub metric_ids: Vec<MetricId>,
+    pub technical_fields: Vec<SourceMetricField>,
+    pub basis: InterpolationBasis,
+    pub sources: Vec<SourceMetricValues>,
+}
+
+impl From<&IrSourceMetricInterpolation> for SourceMetricsInterpolationSnapshot {
+    fn from(interpolation: &IrSourceMetricInterpolation) -> Self {
+        Self {
+            metric_ids: interpolation.metric_ids().to_vec(),
+            technical_fields: interpolation
+                .technical_fields()
+                .iter()
+                .copied()
+                .map(SourceMetricField::from)
+                .collect(),
+            basis: interpolation.basis().into(),
+            sources: interpolation
+                .sources()
+                .iter()
+                .map(|source| SourceMetricValues {
+                    source_id: source.source_id(),
+                    values: source.as_slice().to_vec(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<IrSourceMetricField> for SourceMetricField {
+    fn from(field: IrSourceMetricField) -> Self {
+        match field {
+            IrSourceMetricField::ItalicAngle => Self::ItalicAngle,
+            IrSourceMetricField::LineGap => Self::LineGap,
+            IrSourceMetricField::UnderlinePosition => Self::UnderlinePosition,
+            IrSourceMetricField::UnderlineThickness => Self::UnderlineThickness,
         }
     }
 }
