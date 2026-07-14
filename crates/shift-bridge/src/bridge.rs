@@ -7,9 +7,9 @@ use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExpo
 use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
-  AxisRole, BooleanOp, ContourId, Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId,
-  LayerId, Location as FontLocation, NamedInstance as FontNamedInstance, NamedInstanceId, PointId,
-  PointSeed, SourceId,
+  AxisRole, BooleanOp, ContourId, Font, FontChange, FontIntent, FontIntentSet,
+  FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
+  NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
@@ -433,6 +433,7 @@ impl Bridge {
   /// records grain (glyphs/axes/sources lists) rides along whenever the
   /// change set touched that structure.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
+    let mut metadata_changed = false;
     let mut glyphs_changed = false;
     let mut axes_changed = false;
     let mut axis_mappings_changed = false;
@@ -440,6 +441,7 @@ impl Bridge {
     let mut sources_changed = false;
     for change in &outcome.changes.changes {
       match change {
+        FontChange::FontMetadataUpdated(_) => metadata_changed = true,
         FontChange::GlyphCreated(_)
         | FontChange::GlyphDeleted(_)
         | FontChange::GlyphIdentityChanged(_)
@@ -482,7 +484,8 @@ impl Bridge {
       })
       .collect();
 
-    let font_changed = glyphs_changed
+    let font_changed = metadata_changed
+      || glyphs_changed
       || axes_changed
       || axis_mappings_changed
       || named_instances_changed
@@ -490,6 +493,7 @@ impl Bridge {
     let next = font_changed
       .then(|| -> errors::Result<NapiFontReplacement> {
         Ok(NapiFontReplacement {
+          metadata: metadata_changed.then(|| self.get_metadata()).transpose()?,
           glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
           axes: axes_changed.then(|| self.get_axes()).transpose()?,
           axis_mappings: axis_mappings_changed
@@ -898,6 +902,14 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         new_unicodes: payload.new_unicodes,
       })
     }
+    "updateFontMetadata" => {
+      let payload = intent
+        .update_font_metadata
+        .ok_or_else(|| missing("updateFontMetadata"))?;
+      Ok(FontIntent::UpdateFontMetadata {
+        metadata: map_font_metadata(payload.metadata),
+      })
+    }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
       Ok(FontIntent::CreateAxis {
@@ -1039,6 +1051,25 @@ fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
   Ok(FontLocation::from_map(values))
 }
 
+fn map_font_metadata(metadata: NapiFontMetadata) -> FontMetadataModel {
+  FontMetadataModel {
+    family_name: metadata.family_name,
+    style_name: metadata.style_name,
+    version_major: metadata.version_major,
+    version_minor: metadata.version_minor,
+    copyright: metadata.copyright,
+    trademark: metadata.trademark,
+    designer: metadata.designer,
+    designer_url: metadata.designer_url,
+    manufacturer: metadata.manufacturer,
+    manufacturer_url: metadata.manufacturer_url,
+    license: metadata.license,
+    license_url: metadata.license_url,
+    description: metadata.description,
+    note: metadata.note,
+  }
+}
+
 fn map_axis(axis: NapiAxis) -> errors::Result<FontAxis> {
   let axis_id = parse::<AxisId>(&axis.id)?;
   let mut mapped = match axis.axis_type {
@@ -1173,6 +1204,7 @@ mod tests {
       apply_boolean_op: None,
       create_glyph: None,
       update_glyph: None,
+      update_font_metadata: None,
       create_axis: None,
       update_axis: None,
       delete_axis: None,

@@ -5,8 +5,9 @@ use std::{
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
-    AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet, Glyph,
-    GlyphId, GlyphLayer, NamedInstance, Source, SourceId, TouchedLayer, error::CoreError,
+    AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
+    FontMetadata, Glyph, GlyphId, GlyphLayer, NamedInstance, Source, SourceId, TouchedLayer,
+    error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
@@ -320,7 +321,7 @@ impl FontWorkspace {
                         post: change.mappings.clone(),
                     });
                 }
-                FontChange::NamedInstancesUpdated(_) => {}
+                FontChange::FontMetadataUpdated(_) | FontChange::NamedInstancesUpdated(_) => {}
                 FontChange::GlyphIdentityChanged(change) => {
                     steps.push(LedgerStep::GlyphIdentity {
                         glyph_id: change.glyph_id.clone(),
@@ -407,6 +408,15 @@ impl FontWorkspace {
             });
         }
 
+        if let Some(metadata) = pre.metadata.as_ref()
+            && metadata != self.font.metadata()
+        {
+            steps.push(LedgerStep::FontMetadata {
+                pre: metadata.clone(),
+                post: self.font.metadata().clone(),
+            });
+        }
+
         steps
     }
 
@@ -484,6 +494,10 @@ impl FontWorkspace {
                     LedgerStep::Glyph { pre, post } => {
                         let (from, to) = side.orient(pre, post);
                         replay_glyph(font, from, to, &mut changes, &mut touched)?;
+                    }
+                    LedgerStep::FontMetadata { pre, post } => {
+                        let (_from, to) = side.orient(pre, post);
+                        replay_font_metadata(font, to, &mut changes);
                     }
                     LedgerStep::Axis {
                         pre,
@@ -710,6 +724,7 @@ struct PreLayer {
 #[derive(Default)]
 struct FontLevelPreState {
     layers: Vec<PreLayer>,
+    metadata: Option<FontMetadata>,
     sources: Vec<Source>,
     axes: Vec<Axis>,
     axis_mappings: Option<Vec<shift_font::AxisMapping>>,
@@ -722,6 +737,10 @@ fn capture_font_level_pre_state(
     intent: &FontIntent,
     pre: &mut FontLevelPreState,
 ) {
+    if matches!(intent, FontIntent::UpdateFontMetadata { .. }) && pre.metadata.is_none() {
+        pre.metadata = Some(font.metadata().clone());
+    }
+
     if matches!(
         intent,
         FontIntent::CreateAxis { .. }
@@ -878,6 +897,15 @@ fn replay_glyph(
     }
 
     Ok(())
+}
+
+fn replay_font_metadata(
+    font: &mut shift_font::Font,
+    metadata: FontMetadata,
+    changes: &mut FontChangeSet,
+) {
+    font.replace_metadata(metadata.clone());
+    changes.push(FontChange::font_metadata_updated(&metadata));
 }
 
 fn replay_axis(

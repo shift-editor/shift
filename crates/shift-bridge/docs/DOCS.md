@@ -37,6 +37,8 @@ crates/shift-bridge/
 - `ExportFontTask` -- NAPI `Task` implementation for async font export.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
 - `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
+- `NapiFontReplacement` -- selective complete font projections; metadata is present only when an edit replaced it.
+- `NapiUpdateFontMetadataIntent` -- complete authored metadata replacement payload that leaves metrics unchanged.
 - `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.

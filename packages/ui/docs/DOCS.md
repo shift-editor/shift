@@ -20,19 +20,27 @@ packages/ui/
       utils.ts             -- cn utility (clsx + tailwind-merge)
     components/
       button/Button.tsx    -- Button with variant/size/isActive/icon props
+      checkbox/            -- Checkbox and indicator
       collapsible/         -- Collapsible, CollapsibleTrigger, CollapsiblePanel
       dialog/              -- Dialog, DialogBackdrop, DialogPortal, DialogPopup, DialogTitle, DialogClose
+      field/               -- Field root, label, control, description, and error
       input/Input.tsx      -- Input with label/icon positioning
+      number-field/        -- Numeric root, input, step controls, and scrub area
+      select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
+      tabs/                -- Tabs root, list, tab, indicator, and panel
+      textarea/            -- Multiline Field control
       toast/               -- ToastProvider, ToastViewport, ToastRoot, ToastTitle, ToastDescription, ToastClose, useToastManager
       tooltip/             -- Tooltip, TooltipTrigger, TooltipContent, TooltipProvider
-  vitest.config.ts         -- jsdom test config (no tests yet)
+  vitest.config.ts         -- jsdom test configuration
 ```
 
 ## Key Types
 
 - **`ButtonProps`** -- extends Base UI `ButtonProps` with `variant` (`"default" | "ghost" | "primary"`), `size` (`"sm" | "md" | "lg" | "icon" | "icon-sm"`), `isActive`, and `icon`.
 - **`InputProps`** -- extends Base UI `Input` props with `label`, `labelPosition`, `icon`, and `iconPosition`.
+- **Form control props** -- `CheckboxProps`, `FieldProps`, `NumberFieldProps`, `SelectProps`, and `TextareaProps` preserve their Base UI or native control contracts while adding Shift styling.
+- **`TabsProps`** and tab-part props -- expose the Base UI Tabs composition so consumers can choose their own panel layout while retaining shared interaction and focus behavior.
 - **`SeparatorProps`** -- adds `orientation` (`"horizontal" | "vertical"`) to the Base UI separator.
 - **`DialogProps`** / **`DialogBackdropProps`** / **`DialogPopupProps`** / **`DialogTitleProps`** -- thin wrappers over Base UI Dialog sub-component props.
 - **`CollapsibleProps`** / **`CollapsibleTriggerProps`** / **`CollapsiblePanelProps`** -- thin wrappers over Base UI Collapsible sub-component props.
@@ -46,6 +54,8 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 **Button** is the most opinionated component, defining three visual variants (`default`, `ghost`, `primary`) and five size presets. It also supports an `isActive` data attribute for toggled toolbar buttons and an `icon` slot.
 
 **Input** adds label and icon positioning logic (left/right for each) on top of the Base UI input, adjusting padding classes dynamically.
+
+**Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract.
 
 **Toast** is the most complex component family. `ToastProvider` wraps Base UI's provider with a default 2-second timeout. `ToastViewport` renders through a portal, centered at the top of the viewport. Individual toasts use enter/exit opacity transitions. Consumers call `useToastManager` (re-exported directly from Base UI) to imperatively add toasts.
 
@@ -73,7 +83,7 @@ Pass a `className` prop -- `cn` (tailwind-merge) will resolve conflicts with the
 ## Gotchas
 
 - **No build step**: The package ships raw TypeScript/TSX. If a consumer's bundler does not handle `.tsx` imports from `node_modules`/workspaces, it will fail. The desktop app's Vite config handles this.
-- **No tests yet**: `vitest.config.ts` is configured with `passWithNoTests: true`. The test infrastructure (jsdom, testing-library) is wired up but no test files exist.
+- **Thin wrapper tests are selective**: interaction behavior belongs to Base UI. Add package tests only for Shift-specific behavior; type-check every wrapper and test consuming forms through observable application state.
 - **Toast timeout**: `ToastProvider` defaults to 2000ms. Consumers that need longer-lived toasts must pass an explicit `timeout` prop to `ToastProvider`, not to individual toasts.
 - **Tooltip delay inheritance**: `Tooltip` with `delayDuration` creates its own `TooltipProvider`, overriding any ancestor. Without it, delay comes from the nearest `TooltipProvider` (default 0ms). Mixing both patterns in the same tree can produce surprising delay behavior.
 - **Icon re-exports**: Shared icons from `lucide-react` are re-exported from the package barrel. This is a convenience coupling -- if more icons are needed, they should be added here rather than importing `lucide-react` directly in the app.

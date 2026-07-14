@@ -132,9 +132,17 @@ export class WorkspaceEditCoordinator {
     }
   }
 
-  apply(intents: FontIntent[]): Promise<AppliedChange> {
+  /**
+   * Flushes queued edits, then commits an awaited intent set as one operation.
+   *
+   * @param intents - Complete set of edits to commit together.
+   * @param label - Optional human-readable name for the undo operation.
+   * @returns The committed replacement state echoed by the workspace.
+   * @throws {Error} when the workspace rejects or cannot persist this edit.
+   */
+  apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
     return this.#withFlush(async () => {
-      const applied = await this.#workspace.apply(intents);
+      const applied = await this.#workspace.apply(intents, label);
       await this.#applyChange(applied);
       return applied;
     });

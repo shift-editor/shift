@@ -63,11 +63,19 @@ export class WorkspaceClient {
 
   /**
    * Applies an intent set; the response is pure replace-grade state.
+   *
+   * @param intents - Complete set of edits to commit as one undo operation.
+   * @param label - Optional human-readable name for the undo operation.
+   * @returns The committed replacement state echoed by the workspace.
+   * @throws {Error} when the workspace rejects or cannot persist the edit.
    */
-  async apply(intents: FontIntent[]): Promise<AppliedChange> {
+  async apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
     await this.connect();
 
-    const { applied, documentState } = await this.#require().call("workspace.apply", { intents });
+    const { applied, documentState } = await this.#require().call("workspace.apply", {
+      intents,
+      label,
+    });
     this.#setDocumentState(documentState);
     return this.#fold(applied);
   }
@@ -182,6 +190,7 @@ export class WorkspaceClient {
 
     this.workspaceCell.set({
       ...current,
+      metadata: next.metadata ?? current.metadata,
       glyphs: next.glyphs ?? current.glyphs,
       axes: next.axes ?? current.axes,
       axisMappings: next.axisMappings ?? current.axisMappings,

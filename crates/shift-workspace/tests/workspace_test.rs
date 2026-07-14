@@ -1143,6 +1143,67 @@ fn create_axis_undo_redo_removes_and_restores_axis() {
 }
 
 #[test]
+fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let original_metadata = workspace.font().metadata().clone();
+    let original_metrics = *workspace.font().metrics();
+    let mut updated = original_metadata.clone();
+    updated.family_name = Some("Shift Dogfood Sans".to_string());
+    updated.style_name = Some("Text".to_string());
+    updated.version_major = Some(2);
+    updated.version_minor = Some(5);
+    updated.designer = Some("Shift Type".to_string());
+    updated.license = Some("SIL Open Font License 1.1".to_string());
+
+    let applied = workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::UpdateFontMetadata {
+                    metadata: updated.clone(),
+                }],
+            },
+            Some("Update Font Metadata".to_string()),
+        )
+        .unwrap();
+
+    assert_eq!(workspace.font().metadata(), &updated);
+    assert_eq!(workspace.font().metrics(), &original_metrics);
+    assert!(applied.changes.changes.iter().any(|change| matches!(
+        change,
+        FontChange::FontMetadataUpdated(change) if change.metadata == updated
+    )));
+    let stored = workspace
+        .font_info()
+        .unwrap()
+        .expect("font info should exist");
+    assert_eq!(stored.family_name, updated.family_name);
+    assert_eq!(stored.style_name, updated.style_name);
+    assert_eq!(stored.designer, updated.designer);
+    assert_eq!(stored.license_description, updated.license);
+    assert_eq!(stored.units_per_em, original_metrics.units_per_em);
+
+    let undone = workspace
+        .undo()
+        .unwrap()
+        .expect("metadata update should undo");
+    assert!(undone.changes.changes.iter().any(|change| matches!(
+        change,
+        FontChange::FontMetadataUpdated(change) if change.metadata == original_metadata
+    )));
+    assert_eq!(workspace.font().metadata(), &original_metadata);
+    assert_eq!(workspace.font().metrics(), &original_metrics);
+
+    workspace
+        .redo()
+        .unwrap()
+        .expect("metadata update should redo");
+    assert_eq!(workspace.font().metadata(), &updated);
+    assert_eq!(workspace.font().metrics(), &original_metrics);
+}
+
+#[test]
 fn named_instance_crud_is_undoable_and_keeps_external_location() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

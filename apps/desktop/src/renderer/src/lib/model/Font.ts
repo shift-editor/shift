@@ -415,6 +415,11 @@ export class Font {
     return this.#metricsCell;
   }
 
+  /** Reactive committed authored font metadata. */
+  get metadataCell(): Signal<FontMetadata> {
+    return this.#metadataCell;
+  }
+
   /** Reactive committed Unicode assignments. */
   get unicodesCell(): Signal<Unicode[]> {
     return this.#unicodesCell;
@@ -521,6 +526,24 @@ export class Font {
   /** @knipclassignore */
   get metadata(): FontMetadata {
     return this.#metadataCell.peek();
+  }
+
+  /**
+   * Replaces authored font metadata as one persisted, undoable edit.
+   *
+   * @param metadata - Complete replacement snapshot; omitted optional fields are cleared.
+   * @throws {Error} when the workspace rejects or cannot persist the replacement.
+   */
+  async updateMetadata(metadata: FontMetadata): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "updateFontMetadata",
+          updateFontMetadata: { metadata },
+        },
+      ],
+      "Update Font Metadata",
+    );
   }
 
   /**

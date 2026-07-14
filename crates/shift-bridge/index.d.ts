@@ -290,10 +290,10 @@ export interface NapiFontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include "createAxis", "updateAxis",
-   * "deleteAxis", "setAxisMappings", named-instance create/update/delete,
-   * source create/delete, and glyph or layer creation. Every kind shares the
-   * same apply path; one set is one undo step.
+   * Font-level kinds additionally include metadata replacement, axis
+   * create/update/delete, mapping replacement, named-instance
+   * create/update/delete, source create/delete, and glyph or layer creation.
+   * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
   addPoints?: NapiAddPointsIntent
@@ -311,6 +311,7 @@ export interface NapiFontIntent {
   applyBooleanOp?: NapiBooleanOpIntent
   createGlyph?: NapiCreateGlyphIntent
   updateGlyph?: NapiUpdateGlyphIntent
+  updateFontMetadata?: NapiUpdateFontMetadataIntent
   createAxis?: NapiCreateAxisIntent
   updateAxis?: NapiUpdateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
@@ -360,6 +361,8 @@ export interface NapiFontMetrics {
  * it must be retained from the renderer's current workspace snapshot.
  */
 export interface NapiFontReplacement {
+  /** Complete authored metadata when font metadata changed; absent otherwise. */
+  metadata?: NapiFontMetadata
   /** Full records list when glyph identity changed; absent when untouched. */
   glyphs?: Array<NapiGlyphRecord>
   /** Full axes list when font-level axis structure changed; absent otherwise. */
@@ -580,6 +583,12 @@ export interface NapiTranslatePointsIntent {
 
 export interface NapiUpdateAxisIntent {
   axis: NapiAxis
+}
+
+/** Replaces the complete authored metadata snapshot without changing metrics. */
+export interface NapiUpdateFontMetadataIntent {
+  /** Complete replacement snapshot; omitted optional fields are cleared. */
+  metadata: NapiFontMetadata
 }
 
 /**

@@ -1,6 +1,72 @@
 export { Button, type ButtonProps } from "./components/button";
 export { Separator, type SeparatorProps } from "./components/separator";
 export { Input, type InputProps } from "./components/input";
+export { Textarea, type TextareaProps } from "./components/textarea";
+export {
+  Field,
+  FieldLabel,
+  FieldControl,
+  FieldDescription,
+  FieldError,
+  type FieldProps,
+  type FieldLabelProps,
+  type FieldControlProps,
+  type FieldDescriptionProps,
+  type FieldErrorProps,
+} from "./components/field";
+export {
+  Tabs,
+  TabsList,
+  TabsTab,
+  TabsIndicator,
+  TabsPanel,
+  type TabsProps,
+  type TabsListProps,
+  type TabsTabProps,
+  type TabsIndicatorProps,
+  type TabsPanelProps,
+} from "./components/tabs";
+export {
+  Checkbox,
+  CheckboxIndicator,
+  type CheckboxProps,
+  type CheckboxIndicatorProps,
+} from "./components/checkbox";
+export {
+  NumberField,
+  NumberFieldGroup,
+  NumberFieldInput,
+  NumberFieldIncrement,
+  NumberFieldDecrement,
+  NumberFieldScrubArea,
+  NumberFieldScrubAreaCursor,
+  type NumberFieldProps,
+  type NumberFieldGroupProps,
+  type NumberFieldInputProps,
+  type NumberFieldIncrementProps,
+  type NumberFieldDecrementProps,
+  type NumberFieldScrubAreaProps,
+} from "./components/number-field";
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectIcon,
+  SelectPortal,
+  SelectPositioner,
+  SelectPopup,
+  SelectList,
+  SelectItem,
+  SelectItemIndicator,
+  SelectItemText,
+  type SelectProps,
+  type SelectTriggerProps,
+  type SelectIconProps,
+  type SelectPositionerProps,
+  type SelectPopupProps,
+  type SelectItemProps,
+  type SelectItemIndicatorProps,
+} from "./components/select";
 export { Slider, type SliderProps } from "./components/slider";
 export {
   Menu,

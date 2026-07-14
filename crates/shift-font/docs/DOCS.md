@@ -8,6 +8,7 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Stable IDs are identity. Names, tags, Unicode assignments, and coordinates remain editable authoring values.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
+- **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
 
 ## Codemap
 
@@ -26,6 +27,7 @@ crates/shift-font/src/
 ## Key Types
 
 - `Font` owns glyphs, sources, axes, axis mappings, named instances, metadata, and font-level data.
+- `FontMetadata` is the complete authored naming and attribution snapshot replaced by `UpdateFontMetadata`.
 - `Axis` has stable identity, an external/internal role, a continuous or discrete kind, and optional external/user-space value labels.
 - `AxisLabel` has font-wide stable identity so UI rows and later instance recipes survive renames and reordering.
 - `AxisMapping` owns an ordered set of mapping points. Independent mappings transform one external axis; the optional cross-axis group maps one design-space location to another.

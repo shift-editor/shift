@@ -749,10 +749,10 @@ pub struct NapiFontIntent {
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Font-level kinds additionally include "createAxis", "updateAxis",
-    /// "deleteAxis", "setAxisMappings", named-instance create/update/delete,
-    /// source create/delete, and glyph or layer creation. Every kind shares the
-    /// same apply path; one set is one undo step.
+    /// Font-level kinds additionally include metadata replacement, axis
+    /// create/update/delete, mapping replacement, named-instance
+    /// create/update/delete, source create/delete, and glyph or layer creation.
+    /// Every kind shares the same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
     pub add_contour: Option<NapiAddContourIntent>,
@@ -769,6 +769,7 @@ pub struct NapiFontIntent {
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
     pub create_glyph: Option<NapiCreateGlyphIntent>,
     pub update_glyph: Option<NapiUpdateGlyphIntent>,
+    pub update_font_metadata: Option<NapiUpdateFontMetadataIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
@@ -780,6 +781,13 @@ pub struct NapiFontIntent {
     pub delete_source: Option<NapiDeleteSourceIntent>,
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
     pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
+}
+
+/// Replaces the complete authored metadata snapshot without changing metrics.
+#[napi(object)]
+pub struct NapiUpdateFontMetadataIntent {
+    /// Complete replacement snapshot; omitted optional fields are cleared.
+    pub metadata: NapiFontMetadata,
 }
 
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
@@ -911,6 +919,8 @@ pub struct NapiLayerReplaced {
 #[derive(Default)]
 #[napi(object)]
 pub struct NapiFontReplacement {
+    /// Complete authored metadata when font metadata changed; absent otherwise.
+    pub metadata: Option<NapiFontMetadata>,
     /// Full records list when glyph identity changed; absent when untouched.
     pub glyphs: Option<Vec<NapiGlyphRecord>>,
     /// Full axes list when font-level axis structure changed; absent otherwise.

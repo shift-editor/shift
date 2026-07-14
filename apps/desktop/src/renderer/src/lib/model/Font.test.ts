@@ -108,6 +108,36 @@ describe("Font projects the workspace snapshot", () => {
 });
 
 describe("font-level intents make the font variable", () => {
+  it("persists metadata replacement through the reactive font and undo ledger", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const original = stack.font.metadata;
+    const originalMetrics = stack.font.metrics;
+    const updated = {
+      ...original,
+      familyName: "Shift Dogfood Sans",
+      styleName: "Text",
+      versionMajor: 2,
+      versionMinor: 5,
+      designer: "Shift Type",
+      license: "SIL Open Font License 1.1",
+    };
+
+    await stack.font.updateMetadata(updated);
+
+    expect(stack.font.metadata).toEqual(updated);
+    expect(stack.font.metadataCell.value).toEqual(updated);
+    expect(stack.font.metrics).toEqual(originalMetrics);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.metadata).toEqual(original);
+    expect(stack.font.metrics).toEqual(originalMetrics);
+
+    await stack.editCoordinator.redo();
+    expect(stack.font.metadata).toEqual(updated);
+    expect(stack.font.metrics).toEqual(originalMetrics);
+  });
+
   it("createAxis and createSource project axes and sources without creating glyph layers", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();

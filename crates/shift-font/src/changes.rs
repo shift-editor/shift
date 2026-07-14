@@ -1,6 +1,6 @@
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, NamedInstance, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph, GlyphId,
+    GlyphLayer, GlyphName, LayerId, NamedInstance, Point, PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -30,6 +30,8 @@ impl From<FontChange> for FontChangeSet {
 
 #[derive(Clone, Debug)]
 pub enum FontChange {
+    /// Authored font metadata was replaced without changing metrics.
+    FontMetadataUpdated(FontMetadataUpdated),
     AxisCreated(AxisCreated),
     AxisUpdated(AxisUpdated),
     AxisDeleted(AxisDeleted),
@@ -54,6 +56,13 @@ pub enum FontChange {
 }
 
 impl FontChange {
+    /// Builds a replacement-grade metadata change from the committed snapshot.
+    pub fn font_metadata_updated(metadata: &FontMetadata) -> Self {
+        Self::FontMetadataUpdated(FontMetadataUpdated {
+            metadata: metadata.clone(),
+        })
+    }
+
     pub fn axis_created(axis: &Axis) -> Self {
         Self::AxisCreated(AxisCreated::from(axis))
     }
@@ -179,6 +188,13 @@ impl FontChange {
             layer: GlyphLayerValue::from(layer),
         })
     }
+}
+
+/// Complete authored metadata snapshot after one replacement.
+#[derive(Clone, Debug)]
+pub struct FontMetadataUpdated {
+    /// Complete authored metadata after the edit.
+    pub metadata: FontMetadata,
 }
 
 #[derive(Clone, Debug)]

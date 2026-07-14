@@ -9,9 +9,9 @@
 use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, Font, Glyph,
-    GlyphId, GlyphLayer, GlyphName, LayerId, Location, NamedInstance, NamedInstanceId, PointId,
-    PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, Font, FontMetadata,
+    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Location, NamedInstance, NamedInstanceId,
+    PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 
@@ -123,6 +123,10 @@ pub enum FontIntent {
         new_name: GlyphName,
         new_unicodes: Vec<u32>,
     },
+    /// Replaces authored font metadata without changing font metrics.
+    UpdateFontMetadata {
+        metadata: FontMetadata,
+    },
     CreateAxis {
         axis: Axis,
     },
@@ -190,6 +194,7 @@ impl FontIntent {
 
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
+            | Self::UpdateFontMetadata { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -312,6 +317,11 @@ impl Font {
                     new_name.clone(),
                     new_unicodes.clone(),
                 )?);
+                Ok(Vec::new())
+            }
+            FontIntent::UpdateFontMetadata { metadata } => {
+                self.replace_metadata(metadata.clone());
+                changes.push(FontChange::font_metadata_updated(metadata));
                 Ok(Vec::new())
             }
             FontIntent::CreateAxis { axis } => {
@@ -903,6 +913,7 @@ impl Font {
             }
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }
+            | FontIntent::UpdateFontMetadata { .. }
             | FontIntent::CreateAxis { .. }
             | FontIntent::UpdateAxis { .. }
             | FontIntent::DeleteAxis { .. }

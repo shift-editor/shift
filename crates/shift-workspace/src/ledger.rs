@@ -8,7 +8,8 @@
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
 use shift_font::{
-    Axis, AxisMapping, Glyph, GlyphId, GlyphLayer, GlyphName, NamedInstance, Source, SourceId,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, NamedInstance, Source,
+    SourceId,
 };
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
@@ -24,6 +25,11 @@ pub enum LedgerStep {
     Glyph {
         pre: Option<Glyph>,
         post: Option<Glyph>,
+    },
+    /// Complete authored metadata snapshots; font metrics are independent.
+    FontMetadata {
+        pre: FontMetadata,
+        post: FontMetadata,
     },
     Axis {
         pre: Option<Axis>,

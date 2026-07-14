@@ -371,6 +371,13 @@ impl Font {
         &mut self.data_mut().metadata
     }
 
+    /// Replaces the authored font metadata and returns the previous snapshot.
+    ///
+    /// Metrics and every other font-owned collection remain unchanged.
+    pub fn replace_metadata(&mut self, metadata: FontMetadata) -> FontMetadata {
+        std::mem::replace(&mut self.data_mut().metadata, metadata)
+    }
+
     pub fn metrics(&self) -> &FontMetrics {
         &self.data().metrics
     }

@@ -126,5 +126,6 @@ export type {
   Source,
   Unicode,
   UpdateAxisIntent,
+  UpdateFontMetadataIntent,
   UpdateNamedInstanceIntent,
 } from "./bridge";

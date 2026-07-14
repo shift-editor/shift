@@ -128,6 +128,7 @@ impl ShiftStore {
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
+        font::FontChange::FontMetadataUpdated(change) => update_font_metadata(tx, &change.metadata),
         font::FontChange::AxisCreated(change) => insert_axis(tx, &change.axis, 0, false),
         font::FontChange::AxisUpdated(change) => upsert_axis_with_order(tx, &change.axis, 0),
         font::FontChange::AxisDeleted(change) => {
@@ -583,6 +584,50 @@ fn replace_full_layer_state(
     )?;
 
     Ok(())
+}
+
+/// Updates only authored metadata columns, preserving metrics and store-only fields.
+fn update_font_metadata(
+    tx: &Transaction<'_>,
+    metadata: &font::FontMetadata,
+) -> Result<(), StoreError> {
+    let rows_changed = tx.execute(
+        "
+        UPDATE font_info
+        SET family_name = ?1,
+            style_name = ?2,
+            copyright = ?3,
+            trademark = ?4,
+            description = ?5,
+            note = ?6,
+            designer = ?7,
+            designer_url = ?8,
+            manufacturer = ?9,
+            manufacturer_url = ?10,
+            license_description = ?11,
+            license_info_url = ?12,
+            version_major = ?13,
+            version_minor = ?14
+        WHERE id = 1
+        ",
+        params![
+            metadata.family_name.as_deref(),
+            metadata.style_name.as_deref(),
+            metadata.copyright.as_deref(),
+            metadata.trademark.as_deref(),
+            metadata.description.as_deref(),
+            metadata.note.as_deref(),
+            metadata.designer.as_deref(),
+            metadata.designer_url.as_deref(),
+            metadata.manufacturer.as_deref(),
+            metadata.manufacturer_url.as_deref(),
+            metadata.license.as_deref(),
+            metadata.license_url.as_deref(),
+            metadata.version_major.map(i64::from),
+            metadata.version_minor.map(i64::from),
+        ],
+    )?;
+    require_changed(rows_changed, "font info", "1".to_string())
 }
 
 fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), StoreError> {

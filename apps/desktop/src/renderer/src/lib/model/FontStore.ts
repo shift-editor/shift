@@ -192,6 +192,7 @@ export class FontStore {
       const nextWorkspace = next
         ? {
             ...current,
+            metadata: next.metadata ?? current.metadata,
             glyphs: next.glyphs ?? current.glyphs,
             axes: next.axes ?? current.axes,
             axisMappings: next.axisMappings ?? current.axisMappings,

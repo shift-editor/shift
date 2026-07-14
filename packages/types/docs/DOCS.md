@@ -26,13 +26,13 @@ packages/types/src/
 Import from `@shift/types`.
 
 - `BridgeApi` -- type-only native bridge API surface.
-- `FontMetadata` / `FontMetrics` -- font-level DTOs returned by `Bridge`.
+- `FontMetadata` / `FontMetrics` -- independent font-level DTOs; metadata mutation replaces the complete `FontMetadata` snapshot without changing metrics.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
 - `InterpolationBasis` -- ordered source identities, normalized support regions, and source coefficient rows; contains no glyph-specific values.
 - `GlyphProjection` -- location-independent renderer backing with fallback shape, compatible source values, exact-source shapes, and component identities.
-- `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
+- `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo; its optional `next.metadata` is a complete replacement.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
 - `PointType` -- bridge point type union.
