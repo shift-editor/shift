@@ -175,6 +175,9 @@ pub enum CoreError {
     #[error("source name {0} already exists")]
     DuplicateSourceName(String),
 
+    #[error("sources {first} and {second} have the same design-space location")]
+    DuplicateSourceLocation { first: SourceId, second: SourceId },
+
     #[error("cannot delete the last source")]
     CannotDeleteLastSource,
 }

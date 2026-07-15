@@ -481,6 +481,29 @@ mod tests {
     }
 
     #[test]
+    fn applying_non_finite_values_does_not_partially_mutate_a_layer() {
+        let font = sample_variable_font();
+        let layer = font
+            .glyph_by_name("A")
+            .unwrap()
+            .layer_for_source(font.default_source_id().unwrap())
+            .unwrap();
+        let mut restored = layer.clone();
+        let mut values = GlyphInterpolationValues::from_layer(layer).into_vec();
+        values[0] = f64::NAN;
+
+        let error = restored
+            .apply_interpolation_values(&GlyphInterpolationValues::new(values))
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::CoreError::InvalidPositionUpdateInput { .. }
+        ));
+        assert_eq!(restored, *layer);
+    }
+
+    #[test]
     fn smooth_metadata_does_not_make_layers_incompatible() {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();

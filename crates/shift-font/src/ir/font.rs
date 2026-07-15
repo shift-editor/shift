@@ -9,6 +9,7 @@ use crate::kerning::KerningData;
 use crate::lib_data::LibData;
 use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 use crate::named_instance::{validate_named_instances, NamedInstance};
+use crate::source::source_locations_equal;
 use crate::source::Source;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use indexmap::IndexMap;
@@ -1073,6 +1074,17 @@ fn validate_source(
         .any(|current| current.id() != source.id() && current.name() == name)
     {
         return Err(CoreError::DuplicateSourceName(name.to_string()));
+    }
+    if let Some(existing) = sources.iter().find(|current| {
+        current.id() != source.id()
+            && current.is_master()
+            && source.is_master()
+            && source_locations_equal(current.location(), source.location(), axes)
+    }) {
+        return Err(CoreError::DuplicateSourceLocation {
+            first: existing.id(),
+            second: source.id(),
+        });
     }
     for (axis_id, value) in source.location().iter() {
         if !axes.iter().any(|axis| axis.id() == *axis_id) {

@@ -328,6 +328,7 @@ export interface FontIntent {
   deleteSource?: DeleteSourceIntent
   createGlyphLayer?: CreateGlyphLayerIntent
   cloneGlyphLayer?: CloneGlyphLayerIntent
+  materializeGlyphLayer?: MaterializeGlyphLayerIntent
 }
 
 export interface FontMetadata {
@@ -484,6 +485,16 @@ export interface LayerReplaced {
 
 export interface Location {
   values: Record<AxisId, number>
+}
+
+/** Creates one sparse layer from resolved values at a design-space location. */
+export interface MaterializeGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+  /** Numeric state ordered like `GlyphState.values`. */
+  values: Float64Array
 }
 
 export interface MetricDefinition {

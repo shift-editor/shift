@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   Dialog,
   DialogBackdrop,
@@ -9,7 +9,6 @@ import {
   X,
   cn,
 } from "@shift/ui";
-import { CreateSourceDialog } from "@/components/variation/CreateSourceDialog";
 import type { SettingsCategory, SettingsTarget } from "@/types/settings";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { AxesSettingsPanel } from "./AxesSettingsPanel";
@@ -26,63 +25,55 @@ interface SettingsDialogProps {
 
 export const SettingsDialog = ({ target, onTargetChange, onOpenChange }: SettingsDialogProps) => {
   const font = useFont();
-  const [createSourceOpen, setCreateSourceOpen] = useState(false);
   const activeTarget: SettingsTarget = target ?? { category: "font" };
 
   if (!font.loaded) return null;
 
   return (
-    <>
-      <Dialog open={target !== null} onOpenChange={onOpenChange}>
-        <DialogPortal>
-          <DialogBackdrop />
-          <DialogPopup
-            className={cn(
-              "fixed left-1/2 top-1/2 h-[500px]",
-              "w-[800px] max-w-none -translate-x-1/2 -translate-y-1/2",
-              "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden rounded-lg",
-              "border border-line-subtle bg-canvas shadow-lg",
-            )}
-          >
-            <DialogTitle className="sr-only">Settings</DialogTitle>
-            <SettingsSidebar
-              category={activeTarget.category}
-              onCategoryChange={(category) => {
-                onTargetChange(targetForCategory(category));
-              }}
-            />
+    <Dialog open={target !== null} onOpenChange={onOpenChange}>
+      <DialogPortal>
+        <DialogBackdrop />
+        <DialogPopup
+          className={cn(
+            "fixed left-1/2 top-1/2 h-[500px]",
+            "w-[800px] max-w-none -translate-x-1/2 -translate-y-1/2",
+            "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden rounded-lg",
+            "border border-line-subtle bg-canvas shadow-lg",
+          )}
+        >
+          <DialogTitle className="sr-only">Settings</DialogTitle>
+          <SettingsSidebar
+            category={activeTarget.category}
+            onCategoryChange={(category) => {
+              onTargetChange(targetForCategory(category));
+            }}
+          />
 
-            <main className="relative min-h-0 min-w-0 overflow-hidden bg-canvas">
-              <DialogClose
-                className={cn(
-                  "absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer",
-                  "items-center justify-center rounded text-primary/70 transition-colors",
-                  "hover:bg-hover hover:text-primary",
-                )}
-                aria-label="Close settings"
-              >
-                <X className="h-4 w-4" />
-              </DialogClose>
+          <main className="relative min-h-0 min-w-0 overflow-hidden bg-canvas">
+            <DialogClose
+              className={cn(
+                "absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer",
+                "items-center justify-center rounded text-primary/70 transition-colors",
+                "hover:bg-hover hover:text-primary",
+              )}
+              aria-label="Close settings"
+            >
+              <X className="h-4 w-4" />
+            </DialogClose>
 
-              <SettingsCategoryPanel
-                target={activeTarget}
-                onCreateSource={() => setCreateSourceOpen(true)}
-              />
-            </main>
-          </DialogPopup>
-        </DialogPortal>
-      </Dialog>
-      <CreateSourceDialog open={createSourceOpen} onOpenChange={setCreateSourceOpen} />
-    </>
+            <SettingsCategoryPanel target={activeTarget} />
+          </main>
+        </DialogPopup>
+      </DialogPortal>
+    </Dialog>
   );
 };
 
 interface SettingsCategoryPanelProps {
   target: SettingsTarget;
-  onCreateSource: () => void;
 }
 
-const SettingsCategoryPanel = ({ target, onCreateSource }: SettingsCategoryPanelProps) => {
+const SettingsCategoryPanel = ({ target }: SettingsCategoryPanelProps) => {
   switch (target.category) {
     case "font":
       return (
@@ -95,7 +86,6 @@ const SettingsCategoryPanel = ({ target, onCreateSource }: SettingsCategoryPanel
         <SourcesSettingsPanel
           key={target.sourceId ?? "sources"}
           initialSourceId={target.sourceId}
-          onCreateSource={onCreateSource}
         />
       );
     case "axes":

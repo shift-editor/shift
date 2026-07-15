@@ -45,8 +45,20 @@ export const SidebarActionRow = ({
   </div>
 );
 
-export const SidebarActionSlot = ({ children }: { children?: ReactNode }) => (
-  <div className="flex h-full w-6 shrink-0 items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+export const SidebarActionSlot = ({
+  children,
+  isVisible,
+}: {
+  children?: ReactNode;
+  isVisible?: boolean;
+}) => (
+  <div
+    className={cn(
+      "flex h-full w-6 shrink-0 items-center justify-center opacity-0 transition-opacity",
+      "group-hover:opacity-100 [&:has(:focus-visible)]:opacity-100",
+      isVisible && "opacity-100",
+    )}
+  >
     {children}
   </div>
 );

@@ -901,6 +901,7 @@ pub struct NapiFontIntent {
     pub delete_source: Option<NapiDeleteSourceIntent>,
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
     pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
+    pub materialize_glyph_layer: Option<NapiMaterializeGlyphLayerIntent>,
 }
 
 /// Replaces the complete authored metadata snapshot without changing metrics.
@@ -1036,6 +1037,21 @@ pub struct NapiCloneGlyphLayerIntent {
     pub source_id: String,
     #[napi(ts_type = "LayerId")]
     pub from_layer_id: String,
+}
+
+/// Creates one sparse layer from resolved values at a design-space location.
+#[napi(object)]
+pub struct NapiMaterializeGlyphLayerIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    #[napi(ts_type = "LayerId")]
+    pub from_layer_id: String,
+    /// Numeric state ordered like `GlyphState.values`.
+    pub values: Float64Array,
 }
 
 /// Replace-grade state for one touched layer; the renderer folds by

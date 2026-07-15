@@ -786,6 +786,41 @@ export class Font {
   }
 
   /**
+   * Creates an authored layer from resolved geometry at a design-space location.
+   *
+   * @remarks
+   * The existing layer supplies compatible structure and non-varying authored
+   * data. Rust assigns fresh internal identities and applies the resolved
+   * advance, coordinates, and component transforms as one workspace intent.
+   *
+   * @param glyphId - Glyph that will own the sparse authored layer.
+   * @param sourceId - Source where the layer becomes editable.
+   * @param fromLayerId - Compatible authored layer whose structure is retained.
+   * @param location - Internal design-space location to materialize.
+   * @returns The minted layer id submitted to the workspace.
+   */
+  materializeGlyphLayer(
+    glyphId: GlyphId,
+    sourceId: SourceId,
+    fromLayerId: LayerId,
+    location: AxisLocation,
+  ): LayerId {
+    const layerId = mintLayerId();
+    const geometry = this.#glyphGeometry(glyphId, location, axisLocationSignal(location));
+    this.editCoordinator.push({
+      kind: "materializeGlyphLayer",
+      materializeGlyphLayer: {
+        layerId,
+        glyphId,
+        sourceId,
+        fromLayerId,
+        values: geometry.values,
+      },
+    });
+    return layerId;
+  }
+
+  /**
    * Finds the next unused glyph name for an auto-incrementing base name.
    *
    * @param name - Preferred base name. Blank input falls back to `newGlyph`.
@@ -1455,10 +1490,26 @@ export class Font {
    */
   createSource(name: string, location: Location): SourceId {
     const sourceId = mintSourceId();
+    const metrics = this.metricsAtLocation(axisLocationFromLocation(location));
     this.editCoordinator.push({
       kind: "createSource",
       createSource: { sourceId, name, location },
     });
+    if (metrics.metricValues.length === this.#metricDefinitionsCell.peek().length) {
+      this.editCoordinator.push({
+        kind: "updateSource",
+        updateSource: {
+          sourceId,
+          name,
+          location,
+          metricValues: [...metrics.metricValues],
+          italicAngle: metrics.italicAngle,
+          lineGap: metrics.lineGap,
+          underlinePosition: metrics.underlinePosition,
+          underlineThickness: metrics.underlineThickness,
+        },
+      });
+    }
 
     return sourceId;
   }
@@ -1682,6 +1733,7 @@ export class Font {
 
     return {
       unitsPerEm,
+      metricValues: source?.metricValues ?? [],
       ascender: position("ascender") ?? unitsPerEm * 0.8,
       descender: position("descender") ?? unitsPerEm * -0.2,
       baseline: position("baseline") ?? 0,

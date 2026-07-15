@@ -669,8 +669,9 @@ export class Editor {
    *
    * @remarks
    * Source switching is the lazy glyph-layer materialization boundary. If the
-   * current glyph has no authored layer at `sourceId`, this clones its default
-   * source layer before moving the editor to the source location.
+   * current glyph has no authored layer at `sourceId`, this captures its
+   * resolved interpolated instance before moving the editor to the source
+   * location. Unopened glyphs remain sparse.
    *
    * @param sourceId - Existing font source to make active in the editor.
    */
@@ -679,7 +680,7 @@ export class Editor {
     if (!source) return;
 
     this.font.editCoordinator.transaction("Select source", () => {
-      this.#ensureCurrentGlyphLayerAtSource(source.id);
+      this.#ensureCurrentGlyphLayerAtSource(source.id, source.location);
     });
     this.#setActiveSource(source.id, source.location);
   }
@@ -689,8 +690,9 @@ export class Editor {
    *
    * @remarks
    * This composes pure font source creation with editor source selection. The
-   * global source and current glyph layer are submitted as one workspace
-   * operation so the source is immediately usable from the editor sidebar.
+   * global source, interpolated source metrics, and current glyph layer are
+   * submitted as one workspace operation so the source is immediately usable
+   * from the editor sidebar.
    *
    * @param name - Display name for the new source.
    * @param location - Design-space location for the new source.
@@ -699,13 +701,13 @@ export class Editor {
   public createSource(name: string, location: Location): SourceId {
     return this.font.editCoordinator.transaction("Create source", () => {
       const sourceId = this.font.createSource(name, location);
-      this.#ensureCurrentGlyphLayerAtSource(sourceId);
+      this.#ensureCurrentGlyphLayerAtSource(sourceId, location);
       this.#setActiveSource(sourceId, location);
       return sourceId;
     });
   }
 
-  #ensureCurrentGlyphLayerAtSource(sourceId: SourceId): void {
+  #ensureCurrentGlyphLayerAtSource(sourceId: SourceId, location: Location): void {
     const glyphNodes = this.scene.nodesOfKind("glyph");
     if (glyphNodes.length !== 1) return;
 
@@ -718,7 +720,12 @@ export class Editor {
       const defaultLayer = this.font.layer(node.glyphId, this.font.defaultSource.id);
       if (!defaultLayer) return;
 
-      this.font.cloneGlyphLayer(node.glyphId, sourceId, defaultLayer.id);
+      this.font.materializeGlyphLayer(
+        node.glyphId,
+        sourceId,
+        defaultLayer.id,
+        axisLocationFromLocation(location),
+      );
     }
 
     this.scene.updateNode({ id: node.id, sourceId });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { mintNodeId } from "@shift/types";
+import { mintNodeId, type AxisId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 
@@ -88,7 +88,11 @@ describe("Editor scene bootstrap", () => {
     const defaultContour = defaultLayer.contours[0];
     if (!defaultContour) throw new Error("Expected default contour");
 
-    const sourceId = editor.createSource("Bold", { values: {} });
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    const sourceId = editor.createSource("Bold", {
+      values: { [axisId]: 700 } as Record<AxisId, number>,
+    });
     await editor.settle();
 
     expect(editor.activeSourceId).toBe(sourceId);
@@ -103,9 +107,19 @@ describe("Editor scene bootstrap", () => {
     expect(createdLayer.xAdvance).toBe(defaultLayer.xAdvance);
     expect(createdContour.closed).toBe(defaultContour.closed);
     expect(
-      createdContour.points.map(({ x, y, pointType, smooth }) => ({ x, y, pointType, smooth })),
+      createdContour.points.map(({ x, y, pointType, smooth }) => ({
+        x,
+        y,
+        pointType,
+        smooth,
+      })),
     ).toEqual(
-      defaultContour.points.map(({ x, y, pointType, smooth }) => ({ x, y, pointType, smooth })),
+      defaultContour.points.map(({ x, y, pointType, smooth }) => ({
+        x,
+        y,
+        pointType,
+        smooth,
+      })),
     );
     expect(createdContour.points.map((point) => point.id)).not.toEqual(
       defaultContour.points.map((point) => point.id),
@@ -125,7 +139,11 @@ describe("Editor scene bootstrap", () => {
     const defaultLayer = editor.font.layer(node.glyphId, editor.font.defaultSource.id);
     if (!defaultLayer) throw new Error("Expected default glyph layer");
 
-    const sourceId = editor.font.createSource("Bold", { values: {} });
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    const sourceId = editor.font.createSource("Bold", {
+      values: { [axisId]: 700 } as Record<AxisId, number>,
+    });
     await editor.settle();
 
     expect(editor.font.layer(node.glyphId, sourceId)).toBe(null);
@@ -145,6 +163,20 @@ describe("Editor scene bootstrap", () => {
     );
   });
 });
+
+function weightAxis() {
+  return {
+    tag: "wght",
+    name: "Weight",
+    role: "external" as const,
+    axisType: "continuous" as const,
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
+  };
+}
 
 describe("Editor renderer commands", () => {
   let editor: TestEditor;

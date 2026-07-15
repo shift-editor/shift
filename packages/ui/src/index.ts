@@ -83,6 +83,21 @@ export {
   type MenuItemProps,
   type MenuSeparatorProps,
 } from "./components/menu";
+export {
+  Popover,
+  PopoverTrigger,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverPopup,
+  PopoverTitle,
+  PopoverClose,
+  type PopoverProps,
+  type PopoverTriggerProps,
+  type PopoverPositionerProps,
+  type PopoverPopupProps,
+  type PopoverTitleProps,
+  type PopoverCloseProps,
+} from "./components/popover";
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./components/tooltip";
 export {
   ToastProvider,

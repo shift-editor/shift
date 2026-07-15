@@ -1092,6 +1092,18 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
       })
     }
+    "materializeGlyphLayer" => {
+      let payload = intent
+        .materialize_glyph_layer
+        .ok_or_else(|| missing("materializeGlyphLayer"))?;
+      Ok(FontIntent::MaterializeGlyphLayer {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
+        source_id: parse::<SourceId>(&payload.source_id)?,
+        from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
+        values: shift_font::GlyphInterpolationValues::new(payload.values.to_vec()),
+      })
+    }
     other => Err(BridgeError::InvalidInput {
       kind: "intent",
       value: format!("unknown intent kind \"{other}\""),
@@ -1323,6 +1335,7 @@ mod tests {
       delete_source: None,
       create_glyph_layer: None,
       clone_glyph_layer: None,
+      materialize_glyph_layer: None,
     }
   }
 
@@ -2555,8 +2568,16 @@ mod tests {
         None,
       )
       .unwrap();
+    bridge.apply(vec![weight_axis_intent()], None).unwrap();
     bridge
-      .apply(vec![create_source_intent("source_bold", "Bold", &[])], None)
+      .apply(
+        vec![create_source_intent(
+          "source_bold",
+          "Bold",
+          &[("axis_weight", 700.0)],
+        )],
+        None,
+      )
       .unwrap();
 
     let layer_id = LayerId::new().to_string();

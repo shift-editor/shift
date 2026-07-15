@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Axis, AxisId } from "@shift/types";
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab, cn } from "@shift/ui";
-import MinusIcon from "@/assets/minus.svg";
+import MinusIcon from "@/assets/general/minus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
 import { CreateAxisMenu } from "@/components/variation/CreateAxisMenu";
 import { useAxes } from "@/hooks/useAxes";

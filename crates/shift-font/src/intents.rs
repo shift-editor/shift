@@ -8,12 +8,14 @@
 
 use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
+use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, Font, FontMetadata,
     Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Location, MetricDefinition, MetricId,
     MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
+use crate::source::source_locations_equal;
 use std::collections::BTreeMap;
 
 /// A point to create, with its caller-minted id.
@@ -186,6 +188,18 @@ pub enum FontIntent {
         source_id: SourceId,
         from_layer_id: LayerId,
     },
+    /// Creates one editable layer from compatible resolved numeric values.
+    ///
+    /// The source layer supplies authored structure and non-varying data. The
+    /// resolved values replace its advance, coordinates, and component
+    /// transforms after fresh internal identities are minted.
+    MaterializeGlyphLayer {
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+        from_layer_id: LayerId,
+        values: GlyphInterpolationValues,
+    },
 }
 
 impl FontIntent {
@@ -222,7 +236,8 @@ impl FontIntent {
             | Self::CreateSource { .. }
             | Self::UpdateSource { .. }
             | Self::CreateGlyphLayer { .. }
-            | Self::CloneGlyphLayer { .. } => None,
+            | Self::CloneGlyphLayer { .. }
+            | Self::MaterializeGlyphLayer { .. } => None,
         }
     }
 
@@ -435,6 +450,20 @@ impl Font {
                 from_layer_id.clone(),
                 changes,
             ),
+            FontIntent::MaterializeGlyphLayer {
+                layer_id,
+                glyph_id,
+                source_id,
+                from_layer_id,
+                values,
+            } => self.apply_materialize_glyph_layer(
+                layer_id.clone(),
+                glyph_id.clone(),
+                source_id.clone(),
+                from_layer_id.clone(),
+                values,
+                changes,
+            ),
             _ => unreachable!("editing intents take the layer path"),
         }
     }
@@ -554,6 +583,14 @@ impl Font {
         if self.sources().iter().any(|source| source.id() == source_id) {
             return Err(CoreError::DuplicateSourceId(source_id));
         }
+        if let Some(existing) = self.sources().iter().find(|source| {
+            source.is_master() && source_locations_equal(source.location(), location, self.axes())
+        }) {
+            return Err(CoreError::DuplicateSourceLocation {
+                first: existing.id(),
+                second: source_id,
+            });
+        }
 
         for (axis_id, _) in location.iter() {
             if !self.axes().iter().any(|axis| axis.id() == *axis_id) {
@@ -652,6 +689,49 @@ impl Font {
         from_layer_id: LayerId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
+        let (glyph_name, layer) =
+            self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
+
+        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id,
+            Some(glyph_name),
+            &layer,
+        ));
+
+        Ok(vec![layer_id])
+    }
+
+    fn apply_materialize_glyph_layer(
+        &mut self,
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+        from_layer_id: LayerId,
+        values: &GlyphInterpolationValues,
+        changes: &mut FontChangeSet,
+    ) -> CoreResult<Vec<LayerId>> {
+        let (glyph_name, mut layer) =
+            self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
+        layer.apply_interpolation_values(values)?;
+
+        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id,
+            Some(glyph_name),
+            &layer,
+        ));
+
+        Ok(vec![layer_id])
+    }
+
+    fn cloned_glyph_layer(
+        &self,
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+        from_layer_id: LayerId,
+    ) -> CoreResult<(GlyphName, GlyphLayer)> {
         let glyph_name = self
             .glyph(glyph_id.clone())
             .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?
@@ -684,17 +764,10 @@ impl Font {
 
         let source_layer = self
             .layer(from_layer_id.clone())
-            .ok_or_else(|| CoreError::LayerNotFound(from_layer_id.clone()))?;
-        let layer = source_layer.clone_with_fresh_ids(layer_id.clone(), source_id);
+            .ok_or(CoreError::LayerNotFound(from_layer_id))?;
+        let layer = source_layer.clone_with_fresh_ids(layer_id, source_id);
 
-        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id,
-            Some(glyph_name),
-            &layer,
-        ));
-
-        Ok(vec![layer_id])
+        Ok((glyph_name, layer))
     }
 
     fn apply_update_glyph(
@@ -1014,7 +1087,8 @@ impl Font {
             | FontIntent::CreateSource { .. }
             | FontIntent::UpdateSource { .. }
             | FontIntent::CreateGlyphLayer { .. }
-            | FontIntent::CloneGlyphLayer { .. } => {
+            | FontIntent::CloneGlyphLayer { .. }
+            | FontIntent::MaterializeGlyphLayer { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }
         }
@@ -1057,5 +1131,95 @@ impl Font {
     fn layer_mut_or_err(&mut self, layer_id: &LayerId) -> CoreResult<&mut GlyphLayer> {
         self.layer_mut(layer_id.clone())
             .ok_or(CoreError::LayerNotFound(layer_id.clone()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_master_locations_include_omitted_axis_defaults() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let axis_id = axis.id();
+        font.add_axis(axis).expect("weight axis should be valid");
+        let source_id = SourceId::new();
+        let mut location = Location::new();
+        location.set(axis_id, 400.0);
+
+        let result = font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::CreateSource {
+                source_id,
+                name: "Book".to_string(),
+                location,
+            }],
+        });
+
+        assert!(matches!(
+            result,
+            Err(CoreError::DuplicateSourceLocation { .. })
+        ));
+    }
+
+    #[test]
+    fn materialize_glyph_layer_applies_values_with_fresh_structure_ids() {
+        let mut font = Font::new();
+        let default_source_id = font
+            .default_source_id()
+            .expect("new font should have a default source");
+        let axis = Axis::weight();
+        let axis_id = axis.id();
+        font.add_axis(axis).expect("weight axis should be valid");
+
+        let glyph_id = GlyphId::new();
+        let from_layer_id = LayerId::new();
+        let mut source_layer =
+            GlyphLayer::with_width(from_layer_id.clone(), default_source_id, 500.0);
+        let mut contour = Contour::new();
+        let source_point_id = contour.add_point(10.0, 20.0, PointType::OnCurve, false);
+        source_layer.add_contour(contour);
+        let mut glyph = Glyph::with_id(glyph_id.clone(), "A");
+        glyph.set_layer(source_layer);
+        font.insert_glyph(glyph)
+            .expect("test glyph should be valid");
+
+        let source_id = SourceId::new();
+        let mut location = Location::new();
+        location.set(axis_id, 700.0);
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::CreateSource {
+                source_id: source_id.clone(),
+                name: "Bold".to_string(),
+                location,
+            }],
+        })
+        .expect("new source should apply");
+
+        let layer_id = LayerId::new();
+        let values = GlyphInterpolationValues::new(vec![600.0, 30.0, 40.0]);
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::MaterializeGlyphLayer {
+                layer_id: layer_id.clone(),
+                glyph_id: glyph_id.clone(),
+                source_id,
+                from_layer_id,
+                values: values.clone(),
+            }],
+        })
+        .expect("materialized layer should apply");
+
+        let layer = font
+            .layer(layer_id)
+            .expect("materialized layer should be present");
+        assert_eq!(layer.interpolation_values(), values);
+        assert_ne!(
+            layer
+                .contours_iter()
+                .next()
+                .and_then(|contour| contour.points().first())
+                .map(|point| point.id()),
+            Some(source_point_id)
+        );
     }
 }

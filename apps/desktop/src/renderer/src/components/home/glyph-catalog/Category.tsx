@@ -1,7 +1,7 @@
 import type { GlyphCategory } from "@shift/glyph-info";
 import { Button } from "@shift/ui";
 import { CategoryIcon } from "./CategoryIcon";
-import ChevronRightIcon from "@/assets/chevron-right.svg";
+import ChevronRightIcon from "@/assets/general/chevron-right.svg";
 
 export interface CategoryProps {
   category: GlyphCategory;

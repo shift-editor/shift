@@ -145,7 +145,11 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
     ]);
     expect(stack.font.isVariable()).toBe(false);
@@ -169,7 +173,9 @@ describe("font-level intents make the font variable", () => {
         createSource: {
           sourceId: boldSourceId,
           name: "Bold",
-          location: { values: { [weightAxisId]: 700 } as Record<AxisId, number> },
+          location: {
+            values: { [weightAxisId]: 700 } as Record<AxisId, number>,
+          },
         },
       },
     ]);
@@ -187,7 +193,11 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
     ]);
 
@@ -369,7 +379,11 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
       {
         kind: "createGlyphLayer",
@@ -379,7 +393,10 @@ describe("font-level intents make the font variable", () => {
           sourceId: stack.font.defaultSource.id,
         },
       },
-      { kind: "setXAdvance", setXAdvance: { layerId: defaultLayerId, width: 640 } },
+      {
+        kind: "setXAdvance",
+        setXAdvance: { layerId: defaultLayerId, width: 640 },
+      },
     ]);
 
     const axisId = mintAxisId();
@@ -426,11 +443,19 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId: defaultLayerId, glyphId, sourceId: defaultSourceId },
+        createGlyphLayer: {
+          layerId: defaultLayerId,
+          glyphId,
+          sourceId: defaultSourceId,
+        },
       },
     ]);
 
@@ -456,7 +481,11 @@ describe("font-level intents make the font variable", () => {
       },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldSourceId },
+        createGlyphLayer: {
+          layerId: boldLayerId,
+          glyphId,
+          sourceId: boldSourceId,
+        },
       },
     ]);
 

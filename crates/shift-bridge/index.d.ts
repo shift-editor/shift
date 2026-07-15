@@ -329,6 +329,7 @@ export interface NapiFontIntent {
   deleteSource?: NapiDeleteSourceIntent
   createGlyphLayer?: NapiCreateGlyphLayerIntent
   cloneGlyphLayer?: NapiCloneGlyphLayerIntent
+  materializeGlyphLayer?: NapiMaterializeGlyphLayerIntent
 }
 
 export interface NapiFontMetadata {
@@ -485,6 +486,16 @@ export interface NapiLayerReplaced {
 
 export interface NapiLocation {
   values: Record<AxisId, number>
+}
+
+/** Creates one sparse layer from resolved values at a design-space location. */
+export interface NapiMaterializeGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+  /** Numeric state ordered like `GlyphState.values`. */
+  values: Float64Array
 }
 
 export interface NapiMetricDefinition {

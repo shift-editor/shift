@@ -8,7 +8,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@shift/ui";
-import PlusIcon from "@/assets/plus.svg";
+import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useAxes } from "@/hooks/useAxes";
 import { REGISTERED_AXIS_PRESETS, nextCustomAxisDefinition } from "@/lib/variation/axisPresets";
@@ -16,9 +16,10 @@ import { useFont } from "@/workspace/WorkspaceContext";
 
 interface CreateAxisMenuProps {
   onAxisCreated?: (axisId: AxisId) => void;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export const CreateAxisMenu = ({ onAxisCreated }: CreateAxisMenuProps) => {
+export const CreateAxisMenu = ({ onAxisCreated, onOpenChange }: CreateAxisMenuProps) => {
   const font = useFont();
   const axes = useAxes();
   const existingTags = new Set(axes.map((axis) => axis.tag));
@@ -31,8 +32,19 @@ export const CreateAxisMenu = ({ onAxisCreated }: CreateAxisMenuProps) => {
     if (onAxisCreated) onAxisCreated(axisId);
   };
 
+  if (availablePresets.length === 0) {
+    return (
+      <SidebarActionButton
+        label="Create custom axis"
+        onClick={() => createAxis(nextCustomAxisDefinition(axes))}
+      >
+        <PlusIcon className="h-3 w-3" />
+      </SidebarActionButton>
+    );
+  }
+
   return (
-    <Menu modal={false}>
+    <Menu modal={false} onOpenChange={onOpenChange}>
       <MenuTrigger
         render={
           <SidebarActionButton label="Create axis">
@@ -42,7 +54,7 @@ export const CreateAxisMenu = ({ onAxisCreated }: CreateAxisMenuProps) => {
       />
       <MenuPortal>
         <MenuPositioner sideOffset={4} align="start">
-          <MenuPopup className="w-64 p-2">
+          <MenuPopup className="w-50 p-2">
             {availablePresets.map((preset) => (
               <MenuItem
                 key={preset.tag}
@@ -53,7 +65,7 @@ export const CreateAxisMenu = ({ onAxisCreated }: CreateAxisMenuProps) => {
                 <span className="font-mono text-secondary">{preset.tag}</span>
               </MenuItem>
             ))}
-            {availablePresets.length > 0 && <MenuSeparator className="-mx-2 my-2" />}
+            <MenuSeparator className="-mx-2 my-2" />
             <MenuItem
               className="h-8 justify-center gap-2 border border-line-subtle bg-canvas hover:bg-hover data-[highlighted]:bg-hover"
               onClick={() => createAxis(nextCustomAxisDefinition(axes))}

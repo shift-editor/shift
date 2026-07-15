@@ -539,6 +539,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     let glyph_a = create_glyph(&mut workspace, "A", vec![65]);
     let glyph_b = create_glyph(&mut workspace, "B", vec![66]);
     let source_id = SourceId::from_raw("source_alt");
+    let axis_id = create_weight_axis(&mut workspace);
 
     workspace
         .apply(
@@ -546,7 +547,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
                 intents: vec![FontIntent::CreateSource {
                     source_id: source_id.clone(),
                     name: "Alt".to_string(),
-                    location: Location::new(),
+                    location: weight_location(axis_id, 700.0),
                 }],
             },
             Some("Create Source".to_string()),
@@ -1116,6 +1117,27 @@ fn weight_axis(axis_id: AxisId) -> Axis {
     )
 }
 
+fn create_weight_axis(workspace: &mut FontWorkspace) -> AxisId {
+    let axis_id = AxisId::from_raw("axis_weight");
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateAxis {
+                    axis: weight_axis(axis_id.clone()),
+                }],
+            },
+            Some("Create Axis".to_string()),
+        )
+        .unwrap();
+    axis_id
+}
+
+fn weight_location(axis_id: AxisId, value: f64) -> Location {
+    let mut location = Location::new();
+    location.set(axis_id, value);
+    location
+}
+
 #[test]
 fn create_axis_undo_redo_removes_and_restores_axis() {
     let temp = tempfile::tempdir().unwrap();
@@ -1418,6 +1440,7 @@ fn create_source_undo_redo_removes_and_restores_source() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = SourceId::from_raw("bold");
     let base_sources = workspace.font().sources().len();
+    let axis_id = create_weight_axis(&mut workspace);
 
     workspace
         .apply(
@@ -1425,7 +1448,7 @@ fn create_source_undo_redo_removes_and_restores_source() {
                 intents: vec![FontIntent::CreateSource {
                     source_id: source_id.clone(),
                     name: "Bold".to_string(),
-                    location: Location::new(),
+                    location: weight_location(axis_id, 700.0),
                 }],
             },
             Some("Create Source".to_string()),
@@ -1498,6 +1521,7 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
     let store_path = temp.path().join("working.sqlite");
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = SourceId::from_raw("bold");
+    let axis_id = create_weight_axis(&mut workspace);
 
     workspace
         .apply(
@@ -1505,7 +1529,7 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
                 intents: vec![FontIntent::CreateSource {
                     source_id: source_id.clone(),
                     name: "Bold".to_string(),
-                    location: Location::new(),
+                    location: weight_location(axis_id, 700.0),
                 }],
             },
             None,

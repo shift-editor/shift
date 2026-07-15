@@ -33,7 +33,8 @@ export const FieldControl = React.forwardRef<
     ref={ref}
     className={cn(
       "h-7 w-full rounded bg-input px-2 text-sm text-primary outline-none",
-      "focus:ring-1 focus:ring-accent data-[invalid]:ring-1 data-[invalid]:ring-red-500",
+      "focus:ring-1 focus:ring-inset focus:ring-accent",
+      "data-[invalid]:ring-1 data-[invalid]:ring-inset data-[invalid]:ring-red-500",
       "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
       className,
     )}

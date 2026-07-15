@@ -192,11 +192,12 @@ async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: S
 describe("variable editing across sources", () => {
   let stack: WorkspaceStack;
   let glyphId: GlyphId;
+  let regularLayerId: LayerId;
   let boldLayerId: LayerId;
   let bold: Source;
 
   beforeEach(async () => {
-    ({ stack, glyphId, boldLayerId, bold } = await variableFont());
+    ({ stack, glyphId, regularLayerId, boldLayerId, bold } = await variableFont());
   });
 
   it("opens an authored glyph layer at a non-default master", async () => {
@@ -236,6 +237,33 @@ describe("variable editing across sources", () => {
 
     const xs = view.geometry.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);
+  });
+
+  it("materializes interpolated geometry and metrics at a new source", async () => {
+    const glyph = await loadGlyph(stack, glyphId);
+    const axis = stack.font.getAxes()[0]!;
+    const location = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    const sourceId = stack.editCoordinator.transaction("Create source", () => {
+      const id = stack.font.createSource("Medium", {
+        values: { [axis.id]: 550 } as Record<AxisId, number>,
+      });
+      stack.font.materializeGlyphLayer(glyph.id, id, regularLayerId, location);
+      return id;
+    });
+    await stack.editCoordinator.settled();
+
+    const layer = stack.font.layer(glyph.id, sourceId);
+    if (!layer) throw new Error("Expected materialized source layer");
+
+    expect(layer.xAdvance).toBeCloseTo(400);
+    expect(Math.max(...layer.geometry.allPoints.map((point) => point.x))).toBeCloseTo(150);
+    expect(layer.contours[0]?.points.map((point) => point.id)).not.toEqual(
+      stack.font
+        .layer(glyph.id, stack.font.defaultSource.id)
+        ?.contours[0]?.points.map((point) => point.id),
+    );
+    expect(stack.font.metricsForSource(sourceId).ascender).toBeCloseTo(850);
+    expect(stack.font.metricsForSource(sourceId).xHeight).toBeCloseTo(550);
   });
 
   it("resolves live layer geometry at exact master locations", async () => {

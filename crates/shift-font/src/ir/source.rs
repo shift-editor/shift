@@ -1,4 +1,4 @@
-use crate::axis::Location;
+use crate::axis::{Axis, Location};
 use crate::entity::{MetricId, SourceId};
 use crate::lib_data::LibData;
 use crate::metrics::{MetricDefinition, MetricValue};
@@ -259,6 +259,18 @@ impl Source {
     pub fn remove_axis_location(&mut self, axis_id: &crate::AxisId) -> Option<f64> {
         self.location.remove(axis_id)
     }
+}
+
+/// Compares master locations after completing omitted axes with their defaults.
+///
+/// A small tolerance absorbs serialization noise while preserving the domain
+/// invariant that two master sources cannot occupy the same design location.
+pub(crate) fn source_locations_equal(left: &Location, right: &Location, axes: &[Axis]) -> bool {
+    axes.iter().all(|axis| {
+        let left = left.get(&axis.id()).unwrap_or(axis.default());
+        let right = right.get(&axis.id()).unwrap_or(axis.default());
+        (left - right).abs() <= 1e-6
+    })
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ import { useDesignLocation } from "@/hooks/useDesignLocation";
 import { axisValue, withAxisValue } from "@/lib/variation/location";
 import { useFont } from "@/workspace/WorkspaceContext";
 
-import VerticalElipsis from "@/assets/vertical-ellipsis.svg";
+import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 export const AxesPanel = () => {
   const font = useFont();

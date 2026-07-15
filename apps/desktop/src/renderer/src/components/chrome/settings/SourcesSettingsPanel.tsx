@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, MetricDefinition, Source, SourceId, SourceMetricValue } from "@shift/types";
-import { Button, Input, cn } from "@shift/ui";
-import MinusIcon from "@/assets/minus.svg";
-import PlusIcon from "@/assets/plus.svg";
+import { Input, cn } from "@shift/ui";
+import MinusIcon from "@/assets/general/minus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
+import { CreateSourceMenu } from "@/components/variation/CreateSourceMenu";
 import { useAxes } from "@/hooks/useAxes";
 import { useSignalState } from "@/lib/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
@@ -11,14 +11,10 @@ import { SettingsNumberField } from "./SettingsNumberField";
 import { useSettingsForm } from "./useSettingsForm";
 
 interface SourcesSettingsPanelProps {
-  onCreateSource: () => void;
   initialSourceId?: SourceId;
 }
 
-export const SourcesSettingsPanel = ({
-  onCreateSource,
-  initialSourceId,
-}: SourcesSettingsPanelProps) => {
+export const SourcesSettingsPanel = ({ initialSourceId }: SourcesSettingsPanelProps) => {
   const font = useFont();
   const axes = useAxes();
   const sources = useSignalState(font.sourcesCell);
@@ -26,12 +22,20 @@ export const SourcesSettingsPanel = ({
   const [selectedSourceId, setSelectedSourceId] = useState(
     initialSourceId ?? sources[0]?.id ?? null,
   );
+  const [pendingSourceId, setPendingSourceId] = useState<SourceId | null>(null);
 
   useEffect(() => {
+    if (pendingSourceId) {
+      if (!sources.some((source) => source.id === pendingSourceId)) return;
+
+      setSelectedSourceId(pendingSourceId);
+      setPendingSourceId(null);
+      return;
+    }
     if (selectedSourceId && sources.some((source) => source.id === selectedSourceId)) return;
 
     setSelectedSourceId(sources[0]?.id ?? null);
-  }, [selectedSourceId, sources]);
+  }, [pendingSourceId, selectedSourceId, sources]);
 
   const selectedSource =
     sources.find((source) => source.id === selectedSourceId) ?? sources[0] ?? null;
@@ -41,15 +45,7 @@ export const SourcesSettingsPanel = ({
       <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Sources</h2>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Add source"
-            onClick={onCreateSource}
-          >
-            <PlusIcon className="h-3 w-3" />
-          </Button>
+          <CreateSourceMenu onSourceCreated={setPendingSourceId} />
         </div>
 
         <div className="scrollbar-hidden min-h-0 overflow-y-auto px-2 pb-2">
@@ -222,7 +218,7 @@ const SourceEditor = ({ source, axes, definitions }: SourceEditorProps) => {
 
 const SettingsSection = ({ title, children }: { title: string; children: ReactNode }) => (
   <div className="mb-5 flex flex-col gap-2">
-    <h3 className="text-sm font-medium text-primary">{title}</h3>
+    <h3 className="text-ui font-medium text-primary">{title}</h3>
     {children}
   </div>
 );

@@ -111,9 +111,15 @@ export class SourceMetricsInterpolation {
       const index = this.#technicalIndexByField.get(field);
       return index === undefined ? undefined : values[index];
     };
+    const metricValues = this.#snapshot.metricIds.map((metricId, metricIndex) => ({
+      metricId,
+      position: values[metricIndex * 2] ?? 0,
+      overshoot: values[metricIndex * 2 + 1] ?? 0,
+    }));
 
     return {
       unitsPerEm: this.#unitsPerEm,
+      metricValues,
       ascender: position("ascender") ?? this.#unitsPerEm * 0.8,
       descender: position("descender") ?? this.#unitsPerEm * -0.2,
       baseline: position("baseline") ?? 0,

@@ -589,8 +589,8 @@ These are allowed to jump around when energy is high, but they should not silent
 **Masters Editing**
 
 - [x] Master list panel
-- [ ] Switch between masters
-- [ ] Add/remove masters
+- [x] Switch between masters
+- [x] Add/remove masters
 - [ ] Copy glyph between masters
 
 **Interpolation**
@@ -598,7 +598,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] Compatibility checker (point/contour count)
 - [x] Interpolation preview slider
 - [x] Per-source standard metric interpolation and MVAR compilation
-- [ ] Intermediate master insertion
+- [x] Intermediate master insertion
 - [ ] Extrapolation warning
 
 **Instance Generation**

@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import type { Axis, AxisLabel, AxisLabelId } from "@shift/types";
 import { mintAxisLabelId } from "@shift/types";
 import { Button, Checkbox, Input } from "@shift/ui";
-import MinusIcon from "@/assets/minus.svg";
-import PlusIcon from "@/assets/plus.svg";
+import MinusIcon from "@/assets/general/minus.svg";
+import PlusIcon from "@/assets/general/plus.svg";
 import { SettingsNumberField } from "./SettingsNumberField";
 import type { AxisDraft } from "./types";
 

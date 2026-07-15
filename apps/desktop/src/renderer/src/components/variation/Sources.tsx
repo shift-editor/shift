@@ -15,7 +15,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarActionRow } from "@/components/sidebar";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 
-import VerticalElipsis from "@/assets/vertical-ellipsis.svg";
+import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 export const Sources = () => {
   const sources = useSources();
