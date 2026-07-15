@@ -1,61 +1,76 @@
 import { useEffect, useState } from "react";
 import type { Axis, AxisId } from "@shift/types";
-import { Button, Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab, cn } from "@shift/ui";
-import PlusIcon from "@/assets/plus.svg";
+import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab, cn } from "@shift/ui";
+import MinusIcon from "@/assets/minus.svg";
+import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
+import { CreateAxisMenu } from "@/components/variation/CreateAxisMenu";
 import { useAxes } from "@/hooks/useAxes";
+import type { AxisSettingsSection } from "@/types/settings";
+import { useFont } from "@/workspace/WorkspaceContext";
 import { AxisDefinitionPanel } from "./AxisDefinitionPanel";
 import { AxisMappingPanel } from "./AxisMappingPanel";
 import { AxisStylesPanel } from "./AxisStylesPanel";
-import type { AxisSettingsSection } from "./types";
 import { useAxisDraft } from "./useAxisDraft";
 
 interface AxesSettingsPanelProps {
-  onCreateAxis: () => void;
+  initialAxisId?: AxisId;
 }
 
-export const AxesSettingsPanel = ({ onCreateAxis }: AxesSettingsPanelProps) => {
+export const AxesSettingsPanel = ({ initialAxisId }: AxesSettingsPanelProps) => {
+  const font = useFont();
   const axes = useAxes();
-  const [selectedAxisId, setSelectedAxisId] = useState<AxisId | null>(axes[0]?.id ?? null);
+  const [selectedAxisId, setSelectedAxisId] = useState<AxisId | null>(
+    initialAxisId ?? axes[0]?.id ?? null,
+  );
+  const [createdAxisId, setCreatedAxisId] = useState<AxisId | null>(null);
 
   useEffect(() => {
+    if (createdAxisId && axes.some((axis) => axis.id === createdAxisId)) {
+      setSelectedAxisId(createdAxisId);
+      setCreatedAxisId(null);
+      return;
+    }
+
     if (selectedAxisId && axes.some((axis) => axis.id === selectedAxisId)) return;
     setSelectedAxisId(axes[0]?.id ?? null);
-  }, [axes, selectedAxisId]);
+  }, [axes, createdAxisId, selectedAxisId]);
 
   const selectedAxis = axes.find((axis) => axis.id === selectedAxisId) ?? null;
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[9.5rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-r border-line-subtle bg-panel">
-        <div className="flex h-11 items-center justify-between border-b border-line-subtle px-2.5">
-          <h2 className="text-xs font-medium text-primary">Axes</h2>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Create axis"
-            onClick={onCreateAxis}
-          >
-            <PlusIcon className="h-3 w-3" />
-          </Button>
+    <div className="grid h-full flex-1 grid-cols-[10rem_minmax(0,1fr)]">
+      <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
+        <div className="flex h-11 shrink-0 items-center justify-between px-2">
+          <h2 className="pl-1 text-sm font-medium text-primary">Axes</h2>
+          <CreateAxisMenu onAxisCreated={setCreatedAxisId} />
         </div>
 
-        <nav className="flex min-h-0 flex-col gap-0.5 overflow-y-auto p-2">
+        <nav className="scrollbar-hidden flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
           {axes.map((axis) => (
-            <Button
+            <SidebarActionRow
               key={axis.id}
-              type="button"
-              variant="ghost"
-              size="sm"
               isActive={axis.id === selectedAxisId}
               className={cn(
-                "h-7 w-full justify-start rounded-sm px-2 text-xs font-normal",
-                axis.id === selectedAxisId && "bg-hover/70",
+                "h-8",
+                axis.id === selectedAxisId && "bg-hover hover:bg-hover data-[active]:bg-hover",
               )}
               onClick={() => setSelectedAxisId(axis.id)}
+              contentClassName="h-8 text-sm font-normal"
+              actions={
+                <SidebarActionButton
+                  label={`Delete ${axis.name}`}
+                  className="h-8 hover:bg-icon-button-hover"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    font.deleteAxis(axis.id);
+                  }}
+                >
+                  <MinusIcon className="h-3 w-3" />
+                </SidebarActionButton>
+              }
             >
-              {axis.name}
-            </Button>
+              <span className="truncate">{axis.name}</span>
+            </SidebarActionRow>
           ))}
           {axes.length === 0 && (
             <p className="px-2 py-3 text-xs text-secondary">No axes defined.</p>
@@ -84,25 +99,25 @@ const AxisEditor = ({ axis }: { axis: Axis }) => {
       onValueChange={(value) => setSection(value as AxisSettingsSection)}
       className="flex min-h-0 min-w-0 flex-col"
     >
-      <header className="flex h-11 shrink-0 items-end border-b border-line-subtle px-3">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h2 className="truncate pb-1 text-xs font-medium text-primary">{draft.axis.name}</h2>
-          <TabsList className="h-6 self-start border-0">
-            <TabsTab value="definition" className="h-6 px-0 pr-5 text-xs">
-              Definition
-            </TabsTab>
-            <TabsTab value="mapping" className="h-6 px-0 pr-5 text-xs">
-              Mapping
-            </TabsTab>
-            <TabsTab value="styles" className="h-6 px-0 text-xs">
-              Styles
-            </TabsTab>
-            <TabsIndicator />
-          </TabsList>
+      <header className="shrink-0">
+        <div className="flex h-11 items-center px-5 pr-8">
+          <h2 className="truncate text-sm font-medium text-primary">{draft.axis.name}</h2>
         </div>
+        <TabsList className="h-8 w-full gap-2 border-toolbar px-5 pr-8">
+          <TabsTab value="definition" className="h-8 px-2.5 text-sm">
+            Definition
+          </TabsTab>
+          <TabsTab value="mapping" className="h-8 px-2.5 text-sm">
+            Mapping
+          </TabsTab>
+          <TabsTab value="styles" className="h-8 px-2.5 text-sm">
+            Styles
+          </TabsTab>
+          <TabsIndicator />
+        </TabsList>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="scrollbar-hidden min-h-0 flex-1 overflow-auto">
         <TabsPanel value="definition">
           <AxisDefinitionPanel draft={draft} />
         </TabsPanel>

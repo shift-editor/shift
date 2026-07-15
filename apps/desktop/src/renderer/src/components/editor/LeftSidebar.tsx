@@ -2,14 +2,13 @@ import { useState } from "react";
 import { Separator } from "@shift/ui";
 import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { AxesPanel } from "@/components/variation/AxesPanel";
-import { CreateAxisDialog } from "@/components/variation/CreateAxisDialog";
+import { CreateAxisMenu } from "@/components/variation/CreateAxisMenu";
 import { CreateSourceDialog } from "@/components/variation/CreateSourceDialog";
 import { Sources } from "@/components/variation/Sources";
 
 import PlusIcon from "@/assets/plus.svg";
 
 export const LeftSidebar = () => {
-  const [createAxisOpen, setCreateAxisOpen] = useState(false);
   const [createSourceOpen, setCreateSourceOpen] = useState(false);
 
   return (
@@ -27,19 +26,10 @@ export const LeftSidebar = () => {
           <Sources />
         </CollapsibleSection>
         <Separator />
-        <CollapsibleSection
-          title="Axes"
-          defaultOpen
-          actions={
-            <SidebarActionButton label="Create axis" onClick={() => setCreateAxisOpen(true)}>
-              <PlusIcon className="w-3 h-3" />
-            </SidebarActionButton>
-          }
-        >
+        <CollapsibleSection title="Axes" defaultOpen actions={<CreateAxisMenu />}>
           <AxesPanel />
         </CollapsibleSection>
       </div>
-      <CreateAxisDialog open={createAxisOpen} onOpenChange={setCreateAxisOpen} />
       <CreateSourceDialog open={createSourceOpen} onOpenChange={setCreateSourceOpen} />
     </aside>
   );

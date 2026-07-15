@@ -3,9 +3,10 @@ import { NumberField, NumberFieldGroup, NumberFieldInput, cn } from "@shift/ui";
 interface SettingsNumberFieldProps {
   value: number | null;
   onValueChange: (value: number | null) => void;
-  onValueCommitted: (value: number | null) => Promise<void>;
+  onValueCommitted: () => Promise<void>;
   ariaLabel: string;
   className?: string;
+  inputClassName?: string;
   disabled?: boolean;
 }
 
@@ -15,16 +16,22 @@ export const SettingsNumberField = ({
   onValueCommitted,
   ariaLabel,
   className,
+  inputClassName,
   disabled,
 }: SettingsNumberFieldProps) => (
   <NumberField
     value={value}
     onValueChange={onValueChange}
-    onValueCommitted={onValueCommitted}
+    onValueCommitted={async () => {
+      await onValueCommitted();
+    }}
     disabled={disabled}
   >
     <NumberFieldGroup className={cn("h-8 bg-white", className)}>
-      <NumberFieldInput aria-label={ariaLabel} className="px-2 text-xs" />
+      <NumberFieldInput
+        aria-label={ariaLabel}
+        className={cn("px-2 text-sm text-black", inputClassName)}
+      />
     </NumberFieldGroup>
   </NumberField>
 );

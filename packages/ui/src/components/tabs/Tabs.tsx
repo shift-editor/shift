@@ -52,7 +52,11 @@ export const TabsIndicator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <BaseTabs.Indicator
     ref={ref}
-    className={cn("absolute bottom-0 h-0.5 bg-accent transition-all", className)}
+    className={cn(
+      "absolute bottom-0 left-[var(--active-tab-left)] h-0.5",
+      "w-[var(--active-tab-width)] bg-accent transition-[left,width]",
+      className,
+    )}
     {...props}
   />
 ));

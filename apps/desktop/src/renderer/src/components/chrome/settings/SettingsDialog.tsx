@@ -9,44 +9,48 @@ import {
   X,
   cn,
 } from "@shift/ui";
-import { CreateAxisDialog } from "@/components/variation/CreateAxisDialog";
 import { CreateSourceDialog } from "@/components/variation/CreateSourceDialog";
+import type { SettingsCategory, SettingsTarget } from "@/types/settings";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { AxesSettingsPanel } from "./AxesSettingsPanel";
 import { FontSettingsPanel } from "./FontSettingsPanel";
 import { SettingsPlaceholder } from "./SettingsPlaceholder";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { SourcesSettingsPanel } from "./SourcesSettingsPanel";
-import type { SettingsCategory } from "./types";
 
 interface SettingsDialogProps {
-  open: boolean;
+  target: SettingsTarget | null;
+  onTargetChange: (target: SettingsTarget) => void;
   onOpenChange: (open: boolean) => void;
 }
 
-export const SettingsDialog = ({ open, onOpenChange }: SettingsDialogProps) => {
+export const SettingsDialog = ({ target, onTargetChange, onOpenChange }: SettingsDialogProps) => {
   const font = useFont();
-  const [category, setCategory] = useState<SettingsCategory>("font");
-  const [createAxisOpen, setCreateAxisOpen] = useState(false);
   const [createSourceOpen, setCreateSourceOpen] = useState(false);
+  const activeTarget: SettingsTarget = target ?? { category: "font" };
 
   if (!font.loaded) return null;
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={target !== null} onOpenChange={onOpenChange}>
         <DialogPortal>
           <DialogBackdrop />
           <DialogPopup
             className={cn(
-              "fixed left-1/2 top-1/2 h-[min(640px,calc(100vh-64px))]",
-              "w-[min(960px,calc(100vw-64px))] max-w-none -translate-x-1/2 -translate-y-1/2",
+              "fixed left-1/2 top-1/2 h-[500px]",
+              "w-[800px] max-w-none -translate-x-1/2 -translate-y-1/2",
               "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden rounded-lg",
               "border border-line-subtle bg-canvas shadow-lg",
             )}
           >
             <DialogTitle className="sr-only">Settings</DialogTitle>
-            <SettingsSidebar category={category} onCategoryChange={setCategory} />
+            <SettingsSidebar
+              category={activeTarget.category}
+              onCategoryChange={(category) => {
+                onTargetChange(targetForCategory(category));
+              }}
+            />
 
             <main className="relative min-h-0 min-w-0 overflow-hidden bg-canvas">
               <DialogClose
@@ -61,33 +65,25 @@ export const SettingsDialog = ({ open, onOpenChange }: SettingsDialogProps) => {
               </DialogClose>
 
               <SettingsCategoryPanel
-                category={category}
-                onCreateAxis={() => setCreateAxisOpen(true)}
+                target={activeTarget}
                 onCreateSource={() => setCreateSourceOpen(true)}
               />
             </main>
           </DialogPopup>
         </DialogPortal>
       </Dialog>
-
-      <CreateAxisDialog open={createAxisOpen} onOpenChange={setCreateAxisOpen} />
       <CreateSourceDialog open={createSourceOpen} onOpenChange={setCreateSourceOpen} />
     </>
   );
 };
 
 interface SettingsCategoryPanelProps {
-  category: SettingsCategory;
-  onCreateAxis: () => void;
+  target: SettingsTarget;
   onCreateSource: () => void;
 }
 
-const SettingsCategoryPanel = ({
-  category,
-  onCreateAxis,
-  onCreateSource,
-}: SettingsCategoryPanelProps) => {
-  switch (category) {
+const SettingsCategoryPanel = ({ target, onCreateSource }: SettingsCategoryPanelProps) => {
+  switch (target.category) {
     case "font":
       return (
         <ScrollablePanel>
@@ -95,9 +91,15 @@ const SettingsCategoryPanel = ({
         </ScrollablePanel>
       );
     case "sources":
-      return <SourcesSettingsPanel onCreateSource={onCreateSource} />;
+      return (
+        <SourcesSettingsPanel
+          key={target.sourceId ?? "sources"}
+          initialSourceId={target.sourceId}
+          onCreateSource={onCreateSource}
+        />
+      );
     case "axes":
-      return <AxesSettingsPanel onCreateAxis={onCreateAxis} />;
+      return <AxesSettingsPanel key={target.axisId ?? "axes"} initialAxisId={target.axisId} />;
     case "features":
       return (
         <ScrollablePanel>
@@ -110,6 +112,19 @@ const SettingsCategoryPanel = ({
   }
 };
 
+function targetForCategory(category: SettingsCategory): SettingsTarget {
+  switch (category) {
+    case "font":
+      return { category: "font" };
+    case "sources":
+      return { category: "sources" };
+    case "axes":
+      return { category: "axes" };
+    case "features":
+      return { category: "features" };
+  }
+}
+
 const ScrollablePanel = ({ children }: { children: ReactNode }) => (
-  <div className="h-full overflow-y-auto">{children}</div>
+  <div className="scrollbar-hidden h-full overflow-y-auto">{children}</div>
 );

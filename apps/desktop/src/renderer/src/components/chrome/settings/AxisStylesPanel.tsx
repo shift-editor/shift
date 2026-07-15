@@ -15,11 +15,12 @@ export const AxisStylesPanel = ({ draft }: AxisStylesPanelProps) => {
   const valueLabels = draft.axis.labels.filter((label) => !isRangeLabel(label));
   const rangeLabels = draft.axis.labels.filter(isRangeLabel);
   const labelsDisabled = draft.axis.role === "internal";
+  const canAddLabel = nextLabelValue(draft.axis) !== null;
 
   return (
-    <section className="flex flex-col gap-5 p-3">
+    <section className="flex flex-col gap-5 p-5 pr-8">
       <div>
-        <h3 className="text-xs font-medium text-primary">Axes Styles</h3>
+        <h3 className="text-sm font-medium text-primary">Axes Styles</h3>
         {labelsDisabled && (
           <p className="mt-1 text-xs text-secondary">Internal axes cannot own external labels.</p>
         )}
@@ -31,7 +32,7 @@ export const AxisStylesPanel = ({ draft }: AxisStylesPanelProps) => {
         onAdd={async () => {
           await addLabel(draft, false);
         }}
-        disabled={labelsDisabled}
+        disabled={labelsDisabled || !canAddLabel}
       >
         <ValueLabelsTable labels={valueLabels} draft={draft} />
       </StyleSection>
@@ -41,7 +42,7 @@ export const AxisStylesPanel = ({ draft }: AxisStylesPanelProps) => {
         onAdd={async () => {
           await addLabel(draft, true);
         }}
-        disabled={labelsDisabled}
+        disabled={labelsDisabled || !canAddLabel}
       >
         <RangeLabelsTable labels={rangeLabels} draft={draft} />
       </StyleSection>
@@ -58,13 +59,13 @@ interface StyleSectionProps {
 
 const StyleSection = ({ title, onAdd, disabled, children }: StyleSectionProps) => (
   <div className="flex flex-col gap-2">
-    <h4 className="text-xs text-primary">{title}</h4>
+    <h4 className="text-sm text-primary">{title}</h4>
     {children}
     <Button
       type="button"
       variant="primary"
       size="sm"
-      className="h-7 self-start px-2 text-[11px]"
+      className="h-7 self-start px-2 text-sm"
       disabled={disabled}
       onClick={onAdd}
     >
@@ -79,7 +80,7 @@ const ValueLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
     {labels.map(({ value: labelValue, ...rest }) => {
       const label = { ...rest, value: labelValue };
       return (
-        <tr key={label.id}>
+        <tr key={label.id} className="group">
           <NameCell label={label} draft={draft} />
           <NumberCell
             label={`${label.name} value`}
@@ -116,7 +117,7 @@ const RangeLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
     {labels.map(({ value: labelValue, ...rest }) => {
       const label = { ...rest, value: labelValue };
       return (
-        <tr key={label.id}>
+        <tr key={label.id} className="group">
           <NameCell label={label} draft={draft} />
           <NumberCell
             label={`${label.name} default`}
@@ -158,7 +159,7 @@ const RangeLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
 
 const StyleTable = ({ headings, children }: { headings: string[]; children: ReactNode }) => (
   <div className="overflow-hidden rounded border border-line-subtle bg-white">
-    <table className="w-full table-fixed border-collapse text-[11px]">
+    <table className="w-full table-fixed border-collapse text-center text-sm">
       <thead className="bg-input text-secondary">
         <tr>
           {headings.map((heading, index) => (
@@ -184,7 +185,7 @@ const NameCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) => (
       onBlur={async () => {
         await draft.commit();
       }}
-      className="h-6 bg-transparent text-center text-[11px]"
+      className="h-6 bg-transparent text-center text-sm text-black"
     />
   </td>
 );
@@ -207,6 +208,7 @@ const NumberCell = ({ label, value, optional, onChange, onCommit }: NumberCellPr
       onValueCommitted={onCommit}
       ariaLabel={label}
       className="h-6 bg-transparent"
+      inputClassName="text-center"
     />
   </td>
 );
@@ -217,9 +219,7 @@ const ElidableCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) 
       <Checkbox
         checked={label.elidable}
         onCheckedChange={async (elidable) => {
-          await draft.updateAndCommit((axis) =>
-            replaceLabel(axis, label.id, (item) => ({ ...item, elidable })),
-          );
+          await draft.updateAndCommit((axis) => setElidableLabel(axis, label.id, elidable));
         }}
         aria-label={`${label.name} elidable`}
       />
@@ -233,7 +233,7 @@ const RemoveCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) =>
       type="button"
       variant="ghost"
       size="icon-sm"
-      className="mx-auto h-5 w-5 text-muted"
+      className="mx-auto h-5 w-5 text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-icon-button-hover"
       aria-label={`Remove ${label.name}`}
       onClick={async () => {
         await draft.updateAndCommit((axis) => ({
@@ -270,16 +270,65 @@ function replaceLabel(
   };
 }
 
+function setElidableLabel(axis: Axis, labelId: AxisLabelId, elidable: boolean): Axis {
+  return {
+    ...axis,
+    labels: axis.labels.map((label) => {
+      if (label.id === labelId) return { ...label, elidable };
+      if (!elidable || !label.elidable) return label;
+
+      return { ...label, elidable: false };
+    }),
+  };
+}
+
 async function addLabel(draft: AxisDraft, range: boolean): Promise<void> {
   await draft.updateAndCommit((axis) => {
+    const value = nextLabelValue(axis);
+    if (value === null) return axis;
+
     const label: AxisLabel = {
       id: mintAxisLabelId(),
       name: "New style",
-      value: axis.default,
-      minimum: range ? axis.default : undefined,
-      maximum: range ? axis.default : undefined,
+      value,
+      minimum: range ? value : undefined,
+      maximum: range ? value : undefined,
       elidable: false,
     };
     return { ...axis, labels: [...axis.labels, label] };
   });
+}
+
+function nextLabelValue(axis: Axis): number | null {
+  const used = new Set(axis.labels.map(({ value }) => value));
+  if (!used.has(axis.default)) return axis.default;
+
+  if (axis.axisType === "discrete") {
+    return axis.values?.find((value) => !used.has(value)) ?? null;
+  }
+
+  const minimum = axis.minimum ?? axis.default;
+  const maximum = axis.maximum ?? axis.default;
+  if (!used.has(minimum)) return minimum;
+  if (!used.has(maximum)) return maximum;
+
+  const values = [...used]
+    .filter((value) => minimum <= value && value <= maximum)
+    .sort((left, right) => left - right);
+  let largestGap = 0;
+  let available: number | null = null;
+
+  for (let index = 1; index < values.length; index += 1) {
+    const left = values[index - 1];
+    const right = values[index];
+    const gap = right - left;
+    const midpoint = left + gap / 2;
+    if (gap <= largestGap || midpoint === left || midpoint === right || used.has(midpoint))
+      continue;
+
+    largestGap = gap;
+    available = midpoint;
+  }
+
+  return available;
 }

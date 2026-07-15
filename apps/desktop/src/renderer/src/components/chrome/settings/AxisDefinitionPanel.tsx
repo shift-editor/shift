@@ -13,7 +13,9 @@ import {
   SelectPositioner,
   SelectTrigger,
   SelectValue,
+  cn,
 } from "@shift/ui";
+import { isRegisteredOpenTypeAxisTag } from "@/lib/variation/registeredAxes";
 import { SettingsNumberField } from "./SettingsNumberField";
 import type { AxisDraft } from "./types";
 
@@ -23,6 +25,7 @@ interface AxisDefinitionPanelProps {
 
 export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
   const axis = draft.axis;
+  const registeredTag = isRegisteredOpenTypeAxisTag(axis.tag);
 
   const changeType = async (axisType: AxisType | null): Promise<void> => {
     if (!axisType || axisType === axis.axisType) return;
@@ -31,11 +34,11 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
   };
 
   return (
-    <section className="flex flex-col gap-5 p-3">
+    <section className="flex flex-col gap-5 p-5 pr-8">
       {draft.error && <p className="text-xs text-red-600">{draft.error}</p>}
 
       <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
-        <label className="flex flex-col gap-1.5 text-xs text-primary">
+        <label className="flex flex-col gap-1.5 text-sm text-primary">
           Name
           <Input
             value={axis.name}
@@ -46,18 +49,32 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             onBlur={async () => {
               await draft.commit();
             }}
-            className="h-8 bg-white text-xs"
+            className="h-8 bg-white text-sm text-black"
           />
         </label>
 
-        <label className="flex flex-col gap-1.5 text-xs text-secondary">
+        <label className="flex flex-col gap-1.5 text-sm text-secondary">
           Tag
-          <Input value={axis.tag} readOnly className="h-8 bg-input text-xs text-secondary" />
+          <Input
+            value={axis.tag}
+            disabled={registeredTag}
+            onChange={(event) => {
+              const tag = event.currentTarget.value;
+              draft.update((current) => ({ ...current, tag }));
+            }}
+            onBlur={async () => {
+              await draft.commit();
+            }}
+            className={cn(
+              "h-8 font-mono text-sm text-black",
+              registeredTag ? "bg-input" : "bg-white",
+            )}
+          />
         </label>
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-medium text-primary">Values</h3>
+        <h3 className="text-sm font-medium text-primary">Values</h3>
         <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_7rem] gap-2">
           <DefinitionNumberField
             label="Minimum"
@@ -80,10 +97,10 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             onCommit={draft.commit}
           />
 
-          <label className="flex flex-col gap-1.5 text-xs text-secondary">
+          <label className="flex flex-col gap-1.5 text-sm text-secondary">
             Type
             <Select value={axis.axisType} onValueChange={changeType}>
-              <SelectTrigger className="h-8 bg-white text-xs">
+              <SelectTrigger className="h-8 bg-white text-sm text-black">
                 <SelectValue />
                 <SelectIcon />
               </SelectTrigger>
@@ -108,7 +125,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-xs text-primary">
+      <label className="flex items-center gap-2 text-sm text-primary">
         <Checkbox
           checked={axis.hidden}
           onCheckedChange={async (hidden) => {
@@ -137,7 +154,7 @@ const DefinitionNumberField = ({
   onCommit,
   disabled,
 }: DefinitionNumberFieldProps) => (
-  <label className="flex flex-col gap-1.5 text-xs text-secondary">
+  <label className="flex flex-col gap-1.5 text-sm text-secondary">
     {label}
     <SettingsNumberField
       value={value}

@@ -53,6 +53,21 @@
     "test": {
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"]
+    },
+    "@shift/desktop#test": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "inputs": ["src/**", "*.config.ts"]
+    },
+    "shift-bridge#test": {
+      "dependsOn": ["build"],
+      "outputs": [],
+      "inputs": ["src/**", "*.config.ts"]
+    },
+    "test:watch": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
     }
   },
   "globalEnv": ["NODE_ENV"],

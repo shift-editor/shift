@@ -4,7 +4,7 @@ import FeaturesIcon from "@assets/settings/features.svg";
 import FontIcon from "@assets/settings/font.svg";
 import SourcesIcon from "@assets/settings/sources.svg";
 import type { SVG } from "@/types/common";
-import type { SettingsCategory } from "./types";
+import type { SettingsCategory } from "@/types/settings";
 
 interface SettingsSidebarProps {
   category: SettingsCategory;
@@ -32,8 +32,8 @@ export const SettingsSidebar = ({ category, onCategoryChange }: SettingsSidebarP
           size="sm"
           isActive={active}
           className={cn(
-            "h-8 w-full justify-start rounded-sm px-2 text-xs font-normal",
-            active && "bg-hover/70",
+            "h-8 w-full justify-start rounded-sm px-2 text-sm font-normal",
+            active && "bg-hover hover:bg-hover data-[active]:bg-hover",
           )}
           onClick={() => onCategoryChange(item.id)}
         >

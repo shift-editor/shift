@@ -5,6 +5,7 @@ import {
   MenuPopup,
   MenuPortal,
   MenuPositioner,
+  MenuSeparator,
   MenuTrigger,
 } from "@shift/ui";
 import type { SourceId } from "@shift/types";
@@ -12,6 +13,7 @@ import { useSources } from "@/hooks/useSources";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarActionRow } from "@/components/sidebar";
+import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 
 import VerticalElipsis from "@/assets/vertical-ellipsis.svg";
 
@@ -19,6 +21,7 @@ export const Sources = () => {
   const sources = useSources();
   const activeSourceId = useActiveSourceId();
   const editor = useEditor();
+  const settings = useSettingsNavigation();
 
   if (sources.length === 0) return null;
 
@@ -42,6 +45,7 @@ export const Sources = () => {
             <SourceActionsMenu
               sourceName={s.name}
               canDelete={sources.length > 1}
+              onEdit={() => settings.open({ category: "sources", sourceId: s.id })}
               onDelete={() => deleteSource(s.id)}
             />
           }
@@ -56,10 +60,12 @@ export const Sources = () => {
 const SourceActionsMenu = ({
   sourceName,
   canDelete,
+  onEdit,
   onDelete,
 }: {
   sourceName: string;
   canDelete: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }) => (
   <Menu modal={false}>
@@ -78,8 +84,8 @@ const SourceActionsMenu = ({
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">
         <MenuPopup>
-          <MenuItem>Rename source</MenuItem>
-          <MenuItem>Duplicate source</MenuItem>
+          <MenuItem onClick={onEdit}>Edit</MenuItem>
+          <MenuSeparator />
           <MenuItem variant="danger" disabled={!canDelete} onClick={onDelete}>
             Delete source
           </MenuItem>

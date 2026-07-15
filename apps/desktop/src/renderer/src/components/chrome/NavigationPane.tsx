@@ -1,13 +1,12 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@shift/ui";
 import { routes } from "@/app/routes";
-import { SettingsDialog } from "./settings/SettingsDialog";
+import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 
 export const NavigationPane = () => {
   const navigate = useNavigate();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settings = useSettingsNavigation();
 
   return (
     <section className="h-full flex flex-1 items-center ml-1">
@@ -23,7 +22,9 @@ export const NavigationPane = () => {
                   navigate(route.path);
                   return;
                 case "dialog":
-                  if (route.dialogId === "settings") setSettingsOpen(true);
+                  if (route.dialogId === "settings") {
+                    settings.open({ category: "font" });
+                  }
                   return;
               }
             };
@@ -41,7 +42,6 @@ export const NavigationPane = () => {
           })}
         </div>
       </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </section>
   );
 };

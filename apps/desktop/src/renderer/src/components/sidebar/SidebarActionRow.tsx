@@ -46,7 +46,7 @@ export const SidebarActionRow = ({
 );
 
 export const SidebarActionSlot = ({ children }: { children?: ReactNode }) => (
-  <div className="flex h-6 w-6 shrink-0 items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+  <div className="flex h-full w-6 shrink-0 items-center justify-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
     {children}
   </div>
 );

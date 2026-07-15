@@ -120,13 +120,24 @@ export class WorkspaceProcess {
   }
 
   /**
-   * Closes the utility-owned workspace and lets it prune clean/discarded state.
+   * Closes the live utility-owned workspace, treating an unavailable process as already closed.
+   *
+   * @remarks
+   * A running process prunes clean or explicitly discarded state. Closing is
+   * idempotent after utility-process termination because no live workspace
+   * remains to close; crash-recovery data remains owned by the next utility process.
    *
    * @param discard - true only when the user chose to discard dirty changes.
-   * @throws {Error} when the utility process rejects the close transition.
+   * @returns null after the workspace is closed or was already unavailable.
+   * @throws {Error} when a running utility process rejects the close transition.
    */
   closeWorkspace(discard: boolean): Promise<null> {
-    return this.#requireChannel().call("workspace.close", { discard });
+    if (!this.#channel) {
+      this.#log.info("close skipped: process is not running", { discard });
+      return Promise.resolve(null);
+    }
+
+    return this.#channel.call("workspace.close", { discard });
   }
 
   /**

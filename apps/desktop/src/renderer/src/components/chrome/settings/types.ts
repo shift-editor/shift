@@ -1,8 +1,5 @@
 import type { Axis, FontMetadata } from "@shift/types";
-
-export type SettingsCategory = "font" | "sources" | "axes" | "features";
-
-export type AxisSettingsSection = "definition" | "mapping" | "styles";
+import type { FieldValues, UseFormReturn } from "react-hook-form";
 
 export type TextMetadataKey = {
   [Key in keyof FontMetadata]-?: FontMetadata[Key] extends string | undefined ? Key : never;
@@ -13,6 +10,21 @@ export type NumberMetadataKey = {
 }[keyof FontMetadata];
 
 export type AxisTransform = (axis: Axis) => Axis;
+
+export interface SettingsFormOptions<T extends FieldValues> {
+  canonical: T;
+  save: (value: T) => Promise<T>;
+  errorMessage: string;
+}
+
+export interface SettingsForm<T extends FieldValues> {
+  draft: T;
+  error: string | null;
+  form: UseFormReturn<T>;
+  update: (transform: (value: T) => T) => T;
+  commit: (candidate?: T) => Promise<void>;
+  updateAndCommit: (transform: (value: T) => T) => Promise<void>;
+}
 
 /** Local axis replacement draft shared by the Definition and Styles tabs. */
 export interface AxisDraft {

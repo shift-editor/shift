@@ -11,6 +11,7 @@ import {
   Slider,
 } from "@shift/ui";
 import { EditableSidebarInput } from "@/components/editor/sidebar-right/EditableSidebarInput";
+import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useAxes } from "@/hooks/useAxes";
 import { useDesignLocation } from "@/hooks/useDesignLocation";
 import { axisValue, withAxisValue } from "@/lib/variation/location";
@@ -22,6 +23,7 @@ export const AxesPanel = () => {
   const font = useFont();
   const axes = useAxes();
   const [location, setDesignLocation] = useDesignLocation();
+  const settings = useSettingsNavigation();
 
   if (axes.length === 0) return <p className="text-ui text-muted pl-2">No axes defined</p>;
 
@@ -61,6 +63,7 @@ export const AxesPanel = () => {
               />
               <AxisActionsMenu
                 axis={axis}
+                onEdit={() => settings.open({ category: "axes", axisId: axis.id })}
                 onReset={() => resetAxis(axis)}
                 onDelete={() => deleteAxis(axis)}
               />
@@ -92,11 +95,12 @@ const AxisSlider = ({ axis, value, onChange, onReset }: AxisSliderProps) => (
 
 interface AxisActionsMenuProps {
   axis: Axis;
+  onEdit: () => void;
   onReset: () => void;
   onDelete: () => void;
 }
 
-const AxisActionsMenu = ({ axis, onReset, onDelete }: AxisActionsMenuProps) => (
+const AxisActionsMenu = ({ axis, onEdit, onReset, onDelete }: AxisActionsMenuProps) => (
   <Menu modal={false}>
     <MenuTrigger
       render={
@@ -113,11 +117,10 @@ const AxisActionsMenu = ({ axis, onReset, onDelete }: AxisActionsMenuProps) => (
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">
         <MenuPopup>
+          <MenuItem onClick={onEdit}>Edit</MenuItem>
           <MenuItem onClick={onReset}>Reset</MenuItem>
           <MenuSeparator />
-          <MenuItem variant="danger" onClick={onDelete}>
-            Delete axis
-          </MenuItem>
+          <MenuItem onClick={onDelete}>Delete axis</MenuItem>
         </MenuPopup>
       </MenuPositioner>
     </MenuPortal>
