@@ -1,11 +1,117 @@
-//! Location-bound, read-only glyph resolution.
+//! Location-independent glyph backing and location-bound read-only resolution.
 
 use std::collections::HashMap;
 
 use crate::composite::{
     preferred_layer_for_glyph, resolved_contours_for_layer, GlyphLayerProvider, ResolvedContour,
 };
-use crate::{CoreResult, Font, Glyph, GlyphId, GlyphLayer, Location, SourceId};
+use crate::interpolation::layers_are_compatible;
+use crate::{
+    Axis, CoreResult, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer, Location, Source,
+    SourceId,
+};
+
+/// One exact-source shape that cannot be represented by compatible variation.
+///
+/// This shape is selected only when a projection lands exactly on its authored
+/// source. Between sources, interpolation continues to use the compatible
+/// interpolation basis or the projection fallback.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphSourceShape {
+    source_id: SourceId,
+    layer: GlyphLayer,
+}
+
+impl GlyphSourceShape {
+    /// Returns the exact authored source that selects this shape.
+    pub fn source_id(&self) -> SourceId {
+        self.source_id.clone()
+    }
+
+    /// Returns the owned shape retained for that exact source.
+    pub fn layer(&self) -> &GlyphLayer {
+        &self.layer
+    }
+}
+
+/// Compact, location-independent projection for one glyph.
+///
+/// The projection contains a structural fallback, optional compatible interpolation,
+/// and exact-source exceptions for authored topology the variation cannot
+/// reproduce. It owns derived layer clones and never mutates the font.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphProjection {
+    glyph_id: GlyphId,
+    fallback: GlyphLayer,
+    interpolation: Option<GlyphInterpolation>,
+    exact_source_shapes: Vec<GlyphSourceShape>,
+    component_glyph_ids: Vec<GlyphId>,
+}
+
+impl GlyphProjection {
+    /// Returns the projected glyph's stable identity.
+    pub fn glyph_id(&self) -> GlyphId {
+        self.glyph_id.clone()
+    }
+
+    /// Returns the preferred structural and numeric fallback shape.
+    pub fn fallback(&self) -> &GlyphLayer {
+        &self.fallback
+    }
+
+    /// Returns compatible source interpolation when a viable basis exists.
+    pub fn interpolation(&self) -> Option<&GlyphInterpolation> {
+        self.interpolation.as_ref()
+    }
+
+    /// Returns exact-source shapes excluded from compatible interpolation.
+    pub fn exact_source_shapes(&self) -> &[GlyphSourceShape] {
+        &self.exact_source_shapes
+    }
+
+    /// Returns every component glyph needed by any shape in this projection.
+    pub fn component_glyph_ids(&self) -> &[GlyphId] {
+        &self.component_glyph_ids
+    }
+
+    /// Resolves a derived layer at one internal authoring location.
+    ///
+    /// Exact incompatible source shapes win. Otherwise compatible variation
+    /// is evaluated, falling back to the projection shape when no viable interpolation
+    /// exists. Missing axis coordinates use authoring defaults.
+    ///
+    /// # Errors
+    ///
+    /// Returns an interpolation error when the projection and its structural
+    /// template disagree, or when an interpolation support axis is absent.
+    pub fn resolve(
+        &self,
+        location: &Location,
+        axes: &[Axis],
+        sources: &[Source],
+    ) -> CoreResult<GlyphLayer> {
+        let exact_source_id = exact_source_id(location, axes, sources);
+        if let Some(source_id) = exact_source_id {
+            if source_id == self.fallback.source_id() {
+                return Ok(self.fallback.clone());
+            }
+
+            if let Some(source_shape) = self
+                .exact_source_shapes
+                .iter()
+                .find(|source_shape| source_shape.source_id == source_id)
+            {
+                return Ok(source_shape.layer.clone());
+            }
+        }
+
+        let Some(interpolation) = &self.interpolation else {
+            return Ok(self.fallback.clone());
+        };
+
+        interpolation.resolve(location, axes)
+    }
+}
 
 /// Read-only font projection fixed to one internal authoring location.
 ///
@@ -15,7 +121,6 @@ use crate::{CoreResult, Font, Glyph, GlyphId, GlyphLayer, Location, SourceId};
 pub struct FontProjection<'a> {
     font: &'a Font,
     location: Location,
-    exact_source_id: Option<SourceId>,
     layers: HashMap<GlyphId, Option<GlyphLayer>>,
 }
 
@@ -32,42 +137,105 @@ pub struct ResolvedGlyph {
 }
 
 impl ResolvedGlyph {
+    /// Returns the stable identity of the resolved glyph.
     pub fn glyph_id(&self) -> GlyphId {
         self.glyph_id.clone()
     }
 
+    /// Returns flattened contours with component transforms applied.
     pub fn contours(&self) -> &[ResolvedContour] {
         &self.contours
     }
 
+    /// Returns the resolved horizontal advance in font units.
     pub fn x_advance(&self) -> f64 {
         self.x_advance
     }
 }
 
 impl Font {
+    /// Builds a compact, location-independent projection for one glyph.
+    ///
+    /// Compatible master layers become one interpolation. Exact authored
+    /// layers with incompatible topology are retained as exact source shapes so
+    /// their shapes remain visible at their own source locations. A static or
+    /// otherwise nonviable glyph retains its non-fallback source layers as
+    /// exact-source shapes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is absent,
+    /// or an interpolation construction error from the glyph's variation data.
+    pub fn glyph_projection(&self, glyph_id: &GlyphId) -> CoreResult<Option<GlyphProjection>> {
+        let glyph = self
+            .glyph(glyph_id.clone())
+            .ok_or_else(|| crate::CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let Some(fallback) = fallback_layer(self, glyph).cloned() else {
+            return Ok(None);
+        };
+
+        let interpolation = self.glyph_interpolation(glyph_id)?;
+        let exact_source_shapes = self
+            .sources()
+            .iter()
+            .filter(|source| source.is_master())
+            .filter_map(|source| {
+                let layer = glyph.layer_for_source(source.id())?;
+                if layer.id() == fallback.id() {
+                    return None;
+                }
+
+                let represented_by_interpolation =
+                    interpolation.as_ref().is_some_and(|interpolation| {
+                        layers_are_compatible(interpolation.template(), layer)
+                    });
+                if represented_by_interpolation {
+                    return None;
+                }
+
+                Some(GlyphSourceShape {
+                    source_id: source.id(),
+                    layer: layer.clone(),
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut component_glyph_ids = fallback
+            .components_iter()
+            .map(|component| component.base_glyph_id())
+            .chain(exact_source_shapes.iter().flat_map(|source_shape| {
+                source_shape
+                    .layer
+                    .components_iter()
+                    .map(|component| component.base_glyph_id())
+            }))
+            .collect::<Vec<_>>();
+        component_glyph_ids.sort();
+        component_glyph_ids.dedup();
+
+        Ok(Some(GlyphProjection {
+            glyph_id: glyph_id.clone(),
+            fallback,
+            interpolation,
+            exact_source_shapes,
+            component_glyph_ids,
+        }))
+    }
+
     /// Creates a read-only projection at an internal authoring location.
     ///
     /// Missing axis coordinates use axis defaults. External axis mappings must
     /// be evaluated before constructing the projection.
     pub fn projection(&self, location: &Location) -> FontProjection<'_> {
-        let exact_source_id = self
-            .sources()
-            .iter()
-            .filter(|source| source.is_master())
-            .find(|source| source.location().is_equivalent_to(location, self.axes()))
-            .map(|source| source.id());
-
         FontProjection {
             font: self,
             location: location.clone(),
-            exact_source_id,
             layers: HashMap::new(),
         }
     }
 }
 
 impl FontProjection<'_> {
+    /// Returns the internal authoring location fixed for this projection.
     pub fn location(&self) -> &Location {
         &self.location
     }
@@ -75,7 +243,7 @@ impl FontProjection<'_> {
     /// Resolves one glyph without exposing editable layer identities.
     ///
     /// Exact authored layers win, followed by compatible interpolation and the
-    /// default-source fallback. Components resolve recursively at this
+    /// preferred fallback. Components resolve recursively at this
     /// projection's location and cyclic branches are skipped locally.
     ///
     /// # Errors
@@ -144,25 +312,18 @@ impl FontProjection<'_> {
             return Ok(());
         }
 
-        let Some(glyph) = self.font.glyph(glyph_id.clone()) else {
+        if self.font.glyph(glyph_id.clone()).is_none() {
             self.layers.insert(glyph_id.clone(), None);
             return Ok(());
-        };
+        }
 
-        let layer = if let Some(source_id) = self.exact_source_id.clone() {
-            glyph.layer_for_source(source_id).cloned()
-        } else {
-            None
-        };
-        let layer = match layer {
-            Some(layer) => Some(layer),
-            None => match self.font.glyph_interpolation(glyph_id)? {
-                Some(interpolation) => {
-                    Some(interpolation.resolve(&self.location, self.font.axes())?)
-                }
-                None => fallback_layer(self.font, glyph).cloned(),
-            },
-        };
+        let layer = self
+            .font
+            .glyph_projection(glyph_id)?
+            .map(|projection| {
+                projection.resolve(&self.location, self.font.axes(), self.font.sources())
+            })
+            .transpose()?;
         self.layers.insert(glyph_id.clone(), layer);
         Ok(())
     }
@@ -197,6 +358,14 @@ fn fallback_layer<'a>(font: &Font, glyph: &'a Glyph) -> Option<&'a GlyphLayer> {
     preferred_layer_for_glyph(glyph)
 }
 
+fn exact_source_id(location: &Location, axes: &[Axis], sources: &[Source]) -> Option<SourceId> {
+    sources
+        .iter()
+        .filter(|source| source.is_master())
+        .find(|source| source.location().is_equivalent_to(location, axes))
+        .map(|source| source.id())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::test_support::sample_variable_font;
@@ -220,6 +389,44 @@ mod tests {
 
         assert_eq!(glyph.x_advance(), 700.0);
         assert_eq!(glyph.contours()[0].points[1].x(), 340.0);
+    }
+
+    #[test]
+    fn glyph_projection_preserves_incompatible_exact_source_shapes() {
+        let mut font = sample_variable_font();
+        let glyph_id = font.glyph_by_name("A").unwrap().id();
+        let bold_source = font
+            .sources()
+            .iter()
+            .find(|source| source.name() == "Bold")
+            .unwrap()
+            .clone();
+        let bold_layer_id = font
+            .layer_id_for_glyph_source(glyph_id.clone(), bold_source.id())
+            .unwrap();
+        font.layer_mut(bold_layer_id)
+            .unwrap()
+            .contours_iter_mut()
+            .next()
+            .unwrap()
+            .add_point(600.0, 100.0, PointType::OnCurve, false);
+
+        let projection = font.glyph_projection(&glyph_id).unwrap().unwrap();
+        let bold = projection
+            .resolve(bold_source.location(), font.axes(), font.sources())
+            .unwrap();
+        let mut midpoint = Location::new();
+        midpoint.set(font.axes()[0].id(), 600.0);
+        let interpolated = projection
+            .resolve(&midpoint, font.axes(), font.sources())
+            .unwrap();
+
+        assert_eq!(projection.exact_source_shapes().len(), 1);
+        assert_eq!(bold.contours_iter().next().unwrap().points().len(), 4);
+        assert_eq!(
+            interpolated.contours_iter().next().unwrap().points().len(),
+            3
+        );
     }
 
     #[test]

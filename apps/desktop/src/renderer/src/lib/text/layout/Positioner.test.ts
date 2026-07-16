@@ -44,7 +44,7 @@ describe("Positioner", () => {
     const record = font.recordForName("A");
     const location = signal(font.defaultLocation());
     const expectedBounds = record
-      ? font.instance(record.id, location)?.render.outline.bounds
+      ? font.glyphView(record.id, location)?.render.outline.bounds
       : null;
 
     expect(positioned.glyphs[0].glyphId).toBe(record?.id);

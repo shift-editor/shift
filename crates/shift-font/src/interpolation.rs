@@ -7,7 +7,7 @@ use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
 use fontdrasil::variations::VariationModel;
 
-use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location};
+use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location, SourceId};
 
 mod values;
 
@@ -23,32 +23,127 @@ pub struct AxisSupport {
 }
 
 impl AxisSupport {
+    /// Returns the stable authoring-axis identity for this support.
     pub fn axis_id(&self) -> AxisId {
         self.axis_id.clone()
     }
 
+    /// Returns the normalized lower support boundary.
     pub fn minimum(&self) -> f64 {
         self.minimum
     }
 
+    /// Returns the normalized peak at which this support contributes fully.
     pub fn peak(&self) -> f64 {
         self.peak
     }
 
+    /// Returns the normalized upper support boundary.
     pub fn maximum(&self) -> f64 {
         self.maximum
     }
 }
 
-/// Multi-axis support associated with one glyph interpolation delta.
+/// Multi-axis support associated with one interpolation coefficient row.
 #[derive(Clone, Debug, PartialEq)]
 pub struct InterpolationRegion {
     supports: Vec<AxisSupport>,
 }
 
 impl InterpolationRegion {
+    /// Returns the axis supports whose scalars are multiplied for this region.
     pub fn supports(&self) -> &[AxisSupport] {
         &self.supports
+    }
+}
+
+/// Coordinate-independent interpolation weights for an ordered source set.
+///
+/// The basis depends only on source locations and authoring axes. Its
+/// coefficients contain no glyph coordinates or metric values, so renderers
+/// can combine it with live source-value signals without rebuilding native
+/// variation data after ordinary numeric edits.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InterpolationBasis {
+    source_ids: Vec<SourceId>,
+    regions: Vec<InterpolationRegion>,
+    coefficients: Vec<Vec<f64>>,
+}
+
+impl InterpolationBasis {
+    /// Builds a basis from ordered authored source locations.
+    ///
+    /// This constructor is value-agnostic: glyph coordinates, metrics, and
+    /// other interpolated domains remain separate source vectors.
+    pub(crate) fn from_source_locations(
+        sources: &[(SourceId, Location)],
+        axes: &[Axis],
+    ) -> Option<Self> {
+        let normalized_sources = sources
+            .iter()
+            .map(|(source_id, location)| (source_id.clone(), normalized_location(location, axes)))
+            .collect::<Vec<_>>();
+
+        interpolation_basis(&normalized_sources, axes)
+    }
+
+    /// Returns source identities in the order used by coefficient rows and weights.
+    pub fn source_ids(&self) -> &[SourceId] {
+        &self.source_ids
+    }
+
+    /// Returns the normalized support regions evaluated at each location.
+    pub fn regions(&self) -> &[InterpolationRegion] {
+        &self.regions
+    }
+
+    /// Returns one source-coefficient row for each interpolation region.
+    pub fn coefficients(&self) -> &[Vec<f64>] {
+        &self.coefficients
+    }
+
+    /// Evaluates one scalar weight per source at an internal location.
+    ///
+    /// The returned weights are ordered like [`Self::source_ids`]. Missing
+    /// axis coordinates use authoring defaults.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] when `axes` omits an axis referenced
+    /// by an interpolation region.
+    pub fn weights_at(&self, location: &Location, axes: &[Axis]) -> CoreResult<Vec<f64>> {
+        let mut weights = vec![0.0; self.source_ids.len()];
+        for (region, coefficients) in self.regions.iter().zip(&self.coefficients) {
+            let scalar = region_scalar(region, location, axes)?;
+            if scalar == 0.0 {
+                continue;
+            }
+
+            for (weight, coefficient) in weights.iter_mut().zip(coefficients) {
+                *weight += scalar * coefficient;
+            }
+        }
+
+        Ok(weights)
+    }
+}
+
+/// Initial numeric glyph values associated with one compatible source.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphInterpolationSource {
+    source_id: SourceId,
+    values: GlyphInterpolationValues,
+}
+
+impl GlyphInterpolationSource {
+    /// Returns the stable identity of the compatible authored source.
+    pub fn source_id(&self) -> SourceId {
+        self.source_id.clone()
+    }
+
+    /// Returns the source's initial structure-ordered numeric values.
+    pub fn values(&self) -> &GlyphInterpolationValues {
+        &self.values
     }
 }
 
@@ -56,8 +151,8 @@ impl InterpolationRegion {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlyphInterpolation {
     template: GlyphLayer,
-    regions: Vec<InterpolationRegion>,
-    deltas: Vec<GlyphInterpolationValues>,
+    basis: InterpolationBasis,
+    sources: Vec<GlyphInterpolationSource>,
 }
 
 impl GlyphInterpolation {
@@ -66,12 +161,14 @@ impl GlyphInterpolation {
         &self.template
     }
 
-    pub fn regions(&self) -> &[InterpolationRegion] {
-        &self.regions
+    /// Returns the coordinate-independent source contribution basis.
+    pub fn basis(&self) -> &InterpolationBasis {
+        &self.basis
     }
 
-    pub fn deltas(&self) -> &[GlyphInterpolationValues] {
-        &self.deltas
+    /// Returns initial values aligned with [`InterpolationBasis::source_ids`].
+    pub fn sources(&self) -> &[GlyphInterpolationSource] {
+        &self.sources
     }
 
     /// Resolves an owned glyph layer at an internal authoring location.
@@ -98,19 +195,19 @@ impl GlyphInterpolation {
         axes: &[Axis],
     ) -> CoreResult<GlyphInterpolationValues> {
         let value_count = self
-            .deltas
+            .sources
             .first()
-            .map_or(0, |delta| delta.as_slice().len());
+            .map_or(0, |source| source.values.as_slice().len());
         let mut values = vec![0.0; value_count];
+        let weights = self.basis.weights_at(location, axes)?;
 
-        for (region, deltas) in self.regions.iter().zip(&self.deltas) {
-            let scalar = region_scalar(region, location, axes)?;
-            if scalar == 0.0 {
+        for (source, weight) in self.sources.iter().zip(weights) {
+            if weight == 0.0 {
                 continue;
             }
 
-            for (value, delta) in values.iter_mut().zip(deltas.as_slice()) {
-                *value += scalar * delta;
+            for (value, source_value) in values.iter_mut().zip(source.values.as_slice()) {
+                *value += weight * source_value;
             }
         }
 
@@ -146,14 +243,7 @@ impl Font {
             return Ok(None);
         };
 
-        let tagged_axes = self
-            .axes()
-            .iter()
-            .filter_map(|axis| Tag::from_str(axis.tag()).ok().map(|tag| (tag, axis.id())))
-            .collect::<Vec<_>>();
-        let ordered_axes = tagged_axes.iter().map(|(tag, _)| *tag).collect();
-        let axis_ids_by_tag = tagged_axes.into_iter().collect::<HashMap<_, _>>();
-        let mut points = HashMap::new();
+        let mut compatible_sources = Vec::new();
 
         for source in self.sources().iter().filter(|source| source.is_master()) {
             let Some(layer) = glyph.layer_for_source(source.id()) else {
@@ -163,58 +253,96 @@ impl Font {
                 continue;
             }
 
-            let location = normalized_location(source.location(), self.axes());
-            if points
-                .insert(location, layer.interpolation_values().into_vec())
-                .is_some()
-            {
-                return Ok(None);
-            }
+            compatible_sources.push((
+                source.id(),
+                source.location().clone(),
+                layer.interpolation_values(),
+            ));
         }
 
-        if points.is_empty() {
-            return Ok(None);
-        }
-
-        let model = VariationModel::new(
-            points
-                .keys()
-                .cloned()
-                .collect::<HashSet<NormalizedLocation>>(),
-            ordered_axes,
-        );
-        let Ok(model_deltas) = model.deltas::<f64, f64>(&points) else {
+        let Some(basis) = InterpolationBasis::from_source_locations(
+            &compatible_sources
+                .iter()
+                .map(|(source_id, location, _)| (source_id.clone(), location.clone()))
+                .collect::<Vec<_>>(),
+            self.axes(),
+        ) else {
             return Ok(None);
         };
-
-        let regions = model_deltas
-            .iter()
-            .map(|(region, _)| InterpolationRegion {
-                supports: region
-                    .iter()
-                    .filter_map(|(tag, support)| {
-                        let axis_id = axis_ids_by_tag.get(tag)?;
-                        Some(AxisSupport {
-                            axis_id: axis_id.clone(),
-                            minimum: support.min.into_inner().into_inner(),
-                            peak: support.peak.into_inner().into_inner(),
-                            maximum: support.max.into_inner().into_inner(),
-                        })
-                    })
-                    .collect(),
-            })
-            .collect();
-        let deltas = model_deltas
+        let sources = compatible_sources
             .into_iter()
-            .map(|(_, values)| GlyphInterpolationValues::new(values))
+            .map(|(source_id, _, values)| GlyphInterpolationSource { source_id, values })
             .collect();
 
         Ok(Some(GlyphInterpolation {
             template: default_layer.clone(),
-            regions,
-            deltas,
+            basis,
+            sources,
         }))
     }
+}
+
+fn interpolation_basis(
+    sources: &[(SourceId, NormalizedLocation)],
+    axes: &[Axis],
+) -> Option<InterpolationBasis> {
+    if sources.is_empty() {
+        return None;
+    }
+
+    let tagged_axes = axes
+        .iter()
+        .filter_map(|axis| Tag::from_str(axis.tag()).ok().map(|tag| (tag, axis.id())))
+        .collect::<Vec<_>>();
+    let ordered_axes = tagged_axes.iter().map(|(tag, _)| *tag).collect();
+    let axis_ids_by_tag = tagged_axes.into_iter().collect::<HashMap<_, _>>();
+    let mut points = HashMap::new();
+    for (index, (_, location)) in sources.iter().enumerate() {
+        let mut unit = vec![0.0; sources.len()];
+        unit[index] = 1.0;
+        if points.insert(location.clone(), unit).is_some() {
+            return None;
+        }
+    }
+
+    let model = VariationModel::new(
+        points
+            .keys()
+            .cloned()
+            .collect::<HashSet<NormalizedLocation>>(),
+        ordered_axes,
+    );
+    let model_coefficients = model.deltas::<f64, f64>(&points).ok()?;
+    let regions = model_coefficients
+        .iter()
+        .map(|(region, _)| InterpolationRegion {
+            supports: region
+                .iter()
+                .filter_map(|(tag, support)| {
+                    let axis_id = axis_ids_by_tag.get(tag)?;
+                    Some(AxisSupport {
+                        axis_id: axis_id.clone(),
+                        minimum: support.min.into_inner().into_inner(),
+                        peak: support.peak.into_inner().into_inner(),
+                        maximum: support.max.into_inner().into_inner(),
+                    })
+                })
+                .collect(),
+        })
+        .collect();
+    let coefficients = model_coefficients
+        .into_iter()
+        .map(|(_, coefficients)| coefficients)
+        .collect();
+
+    Some(InterpolationBasis {
+        source_ids: sources
+            .iter()
+            .map(|(source_id, _)| source_id.clone())
+            .collect(),
+        regions,
+        coefficients,
+    })
 }
 
 fn normalized_location(location: &Location, axes: &[Axis]) -> NormalizedLocation {
@@ -227,7 +355,8 @@ fn normalized_location(location: &Location, axes: &[Axis]) -> NormalizedLocation
         .collect()
 }
 
-fn layers_are_compatible(template: &GlyphLayer, candidate: &GlyphLayer) -> bool {
+/// Returns whether two layers can share structure-ordered interpolation values.
+pub(crate) fn layers_are_compatible(template: &GlyphLayer, candidate: &GlyphLayer) -> bool {
     if template.contours().len() != candidate.contours().len()
         || template.anchors().len() != candidate.anchors().len()
         || template.components().len() != candidate.components().len()
@@ -385,6 +514,34 @@ mod tests {
 
         assert_eq!(layer.width(), 700.0);
         assert_eq!(layer.contours_iter().next().unwrap().points()[1].x(), 340.0);
+    }
+
+    #[test]
+    fn interpolation_basis_recovers_each_authored_source() {
+        let font = sample_variable_font();
+        let glyph = font.glyph_by_name("A").unwrap();
+        let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
+
+        for (expected_index, source_id) in interpolation.basis().source_ids().iter().enumerate() {
+            let source = font
+                .sources()
+                .iter()
+                .find(|source| source.id() == *source_id)
+                .unwrap();
+            let weights = interpolation
+                .basis()
+                .weights_at(source.location(), font.axes())
+                .unwrap();
+
+            for (source_index, weight) in weights.into_iter().enumerate() {
+                let expected = if source_index == expected_index {
+                    1.0
+                } else {
+                    0.0
+                };
+                assert!((weight - expected).abs() < 1e-9);
+            }
+        }
     }
 
     #[test]

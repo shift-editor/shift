@@ -60,7 +60,6 @@
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",
-    "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-virtual": "^3.13.18",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",

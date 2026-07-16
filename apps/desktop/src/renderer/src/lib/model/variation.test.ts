@@ -16,10 +16,9 @@ import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceSt
  * interpolation suite from the WS6 inventory) on the workspace stack: the
  * two-master font is authored through intents instead of MutatorSans.
  *
- * Known gap (font-reactivity follow-up): variation deltas are computed when
- * a glyph model is pulled; edits made to a master AFTER the pull do not
- * refresh an already-open model's interpolation. Tests that interpolate
- * author both masters first, then open.
+ * Interpolated views combine a coordinate-independent native basis with the
+ * current authored layer signals. Numeric master edits therefore update an
+ * existing view without pulling or rebuilding native variation data.
  */
 const SQUARE = (width: number): Array<[number, number]> => [
   [0, 0],
@@ -192,13 +191,13 @@ describe("variable editing across sources", () => {
 
     // wght 550 is halfway between the masters at 400 and 700.
     const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
-    const instance = stack.font.instance(glyph.id, mid);
-    if (!instance) throw new Error("Expected glyph instance");
+    const view = stack.font.glyphView(glyph.id, mid);
+    if (!view) throw new Error("Expected glyph view");
 
     expect(stack.font.editableLayerAt(glyph.id, mid)).toBeNull();
-    expect(instance.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
+    expect(view.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
 
-    const xs = instance.geometry.allPoints.map((point) => point.x);
+    const xs = view.geometry.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);
   });
 
@@ -208,10 +207,24 @@ describe("variable editing across sources", () => {
 
     const axis = stack.font.getAxes()[0]!;
     const atBold = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 700);
-    const instance = stack.font.instance(glyph.id, atBold);
-    if (!instance) throw new Error("Expected glyph instance");
+    const view = stack.font.glyphView(glyph.id, atBold);
+    if (!view) throw new Error("Expected glyph view");
 
     expect(stack.font.editableLayerAt(glyph.id, atBold)?.id).toBe(boldLayerId);
-    expect(instance.xAdvance).toBe(500);
+    expect(view.xAdvance).toBe(500);
+  });
+
+  it("updates an existing interpolated view after a master value edit", async () => {
+    const glyph = await loadGlyph(stack, glyphId);
+    const boldSource = await loadGlyphLayer(stack, glyphId, bold);
+    const axis = stack.font.getAxes()[0]!;
+    const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    const view = stack.font.glyphView(glyph.id, mid);
+    if (!view) throw new Error("Expected glyph view");
+
+    boldSource.setXAdvance(700);
+    await stack.editCoordinator.settled();
+
+    expect(view.xAdvance).toBe(500);
   });
 });

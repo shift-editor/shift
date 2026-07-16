@@ -14,20 +14,22 @@ use shift_font::{
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
-    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview,
+    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphProjection,
     NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
     NapiNamedInstance, NapiPointSeed, NapiSource,
   },
-  interpolation::glyph_variation_data,
-  preview::glyph_previews,
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
-  GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, NamedInstance,
-  Source,
+  GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure,
+  NamedInstance, Source,
 };
 use shift_workspace::{
   FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError, WorkspaceSource,
 };
-use std::{path::Path, sync::Arc};
+use std::{
+  collections::{HashSet, VecDeque},
+  path::Path,
+  sync::Arc,
+};
 
 #[napi(object)]
 #[derive(Clone, Debug)]
@@ -548,10 +550,7 @@ impl Bridge {
         continue;
       };
 
-      let variation_data = font
-        .glyph_interpolation(&glyph_id)?
-        .map(|interpolation| glyph_variation_data(&interpolation, font.axes()))
-        .transpose()?;
+      let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
 
       let layers = glyph
         .layers()
@@ -566,7 +565,7 @@ impl Bridge {
 
       snapshots.push(GlyphSnapshot {
         glyph_id,
-        variation_data,
+        projection,
         layers,
       });
     }
@@ -574,25 +573,40 @@ impl Bridge {
     Ok(snapshots.into_iter().map(Into::into).collect())
   }
 
-  /// Resolves lightweight glyph previews at one internal design location.
+  /// Returns compact glyph projections without resolving a location.
   ///
-  /// The result preserves request order for existing glyphs and omits missing
-  /// identities. It contains flattened SVG path data and advances only; no
-  /// editable glyph models or source snapshots are created.
-  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, location: NapiLocation")]
-  pub fn get_glyph_previews(
+  /// Missing glyph identities and glyphs without authored shapes are omitted.
+  /// The projections retain compatible interpolation and exact-source shapes so a
+  /// renderer can evaluate design-location changes without further IPC.
+  #[napi(ts_args_type = "glyphIds: Array<GlyphId>")]
+  pub fn get_glyph_projections(
     &self,
     glyph_ids: Vec<String>,
-    location: NapiLocation,
-  ) -> errors::Result<Vec<NapiGlyphPreview>> {
-    let glyph_ids = glyph_ids
+  ) -> errors::Result<Vec<NapiGlyphProjection>> {
+    let font = self.font()?;
+    let mut projections = Vec::new();
+    let mut pending = glyph_ids
       .iter()
       .map(|glyph_id| parse::<GlyphId>(glyph_id))
-      .collect::<errors::Result<Vec<_>>>()?;
-    let location = map_location(location)?;
-    let previews = glyph_previews(self.font()?, &glyph_ids, &location)?;
+      .collect::<errors::Result<VecDeque<_>>>()?;
+    let mut seen = HashSet::new();
 
-    Ok(previews.into_iter().map(Into::into).collect())
+    while let Some(glyph_id) = pending.pop_front() {
+      if !seen.insert(glyph_id.clone()) {
+        continue;
+      }
+      if font.glyph(glyph_id.clone()).is_none() {
+        continue;
+      }
+
+      let Some(projection) = font.glyph_projection(&glyph_id)? else {
+        continue;
+      };
+      pending.extend(projection.component_glyph_ids().iter().cloned());
+      projections.push(GlyphProjection::from(&projection).into());
+    }
+
+    Ok(projections)
   }
 
   #[napi]
@@ -2766,6 +2780,35 @@ mod tests {
       .unwrap();
 
     assert!(snapshots.is_empty());
+  }
+
+  #[test]
+  fn get_glyph_projections_returns_location_independent_shape_backing() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let glyph = bridge.get_glyphs().unwrap().remove(0);
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&shift_font::PointId::new().to_string(), 10.0, 20.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let projections = bridge
+      .get_glyph_projections(vec![glyph.id.to_string()])
+      .unwrap();
+
+    assert_eq!(projections.len(), 1);
+    assert_eq!(projections[0].glyph_id, glyph.id.to_string());
+    assert_eq!(
+      projections[0].fallback.values.as_ref(),
+      &[500.0, 10.0, 20.0]
+    );
   }
 
   #[test]

@@ -4,10 +4,11 @@ import type {
   ContourData,
   ContourId,
   GlyphId,
+  GlyphProjection,
   GlyphRecord,
   GlyphStructure,
   GlyphState,
-  GlyphVariationData,
+  InterpolationBasis,
   LayerId,
   PointData,
   PointId,
@@ -22,15 +23,16 @@ import type {
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "@/types";
+import type { AxisLocation } from "@/types/variation";
 import { GlyphLayerState } from "./GlyphLayerState";
-import type { Glyph, GlyphLayer } from "./Glyph";
+import { GlyphView, type Glyph, type GlyphLayer, type GlyphViewInput } from "./Glyph";
 
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
 type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
 
 /**
- * Renderer-local owner for font records, concrete glyph layer state, and model caches.
+ * Renderer-local owner for font records, concrete glyph layer state, glyphs, and views.
  *
  * Workspace mutation and async read ordering are owned by
  * `WorkspaceEditCoordinator`. This store materializes returned glyph snapshots
@@ -45,9 +47,11 @@ export class FontStore {
   readonly #layerByGlyphSource = new Map<GlyphSourceKey, LayerId>();
   readonly #glyphByLayer = new Map<LayerId, GlyphId>();
   readonly #glyphById = new Map<GlyphId, GlyphRecord>();
-  readonly #glyphModels = new Map<GlyphId, Glyph>();
-  readonly #glyphLayerModels = new Map<GlyphSourceKey, GlyphLayer>();
-  readonly #variationDataCells = new Map<GlyphId, WritableSignal<GlyphVariationData | null>>();
+  readonly #glyphs = new Map<GlyphId, Glyph>();
+  readonly #glyphLayers = new Map<GlyphSourceKey, GlyphLayer>();
+  readonly #glyphViews = new Map<GlyphId, WeakMap<Signal<AxisLocation>, GlyphView>>();
+  readonly #projectionCells = new Map<GlyphId, WritableSignal<GlyphProjection | null>>();
+  readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
   constructor(workspace: WorkspaceSnapshot | null = null) {
     this.#workspace = signal(workspace, { name: "fontStore.workspace" });
@@ -91,9 +95,11 @@ export class FontStore {
       this.#workspace.set(snapshot);
       this.#indexWorkspace(snapshot);
       this.#clearLayerStates();
-      this.#clearVariationData();
-      this.#glyphModels.clear();
-      this.#glyphLayerModels.clear();
+      this.#clearProjections();
+      this.#interpolationBases.clear();
+      this.#glyphs.clear();
+      this.#glyphLayers.clear();
+      this.#glyphViews.clear();
       this.#rebuildGlyphObjectIndex();
     });
   }
@@ -105,7 +111,9 @@ export class FontStore {
       for (const snapshot of snapshots) {
         if (!this.#glyphById.has(snapshot.glyphId)) continue;
 
-        this.#variationDataCell(snapshot.glyphId).set(snapshot.variationData ?? null);
+        this.#projectionCell(snapshot.glyphId).set(
+          snapshot.projection ? this.#internProjection(snapshot.projection) : null,
+        );
 
         for (const layer of snapshot.layers) {
           if (this.#applyLayerSnapshot(layer)) layerChanged = true;
@@ -116,9 +124,68 @@ export class FontStore {
     });
   }
 
-  applyWorkspaceChange(applied: AppliedChange): void {
+  applyGlyphProjections(projections: readonly GlyphProjection[]): void {
+    batch(() => {
+      for (const projection of projections) {
+        if (!this.#glyphById.has(projection.glyphId)) continue;
+        this.#projectionCell(projection.glyphId).set(this.#internProjection(projection));
+      }
+    });
+  }
+
+  /**
+   * Replaces a requested projection set after a structural workspace change.
+   *
+   * @remarks
+   * The replacement is published in one signal batch. A requested glyph that
+   * no longer has an authored shape resolves to `null`; additional component
+   * projections returned by the bridge are retained too.
+   *
+   * @param glyphIds - Root glyph identities included in the native refresh.
+   * @param projections - Refreshed roots and their transitive component projections.
+   */
+  replaceGlyphProjections(
+    glyphIds: readonly GlyphId[],
+    projections: readonly GlyphProjection[],
+  ): void {
+    const interned = projections.map((projection) => this.#internProjection(projection));
+    const byGlyphId = new Map(interned.map((projection) => [projection.glyphId, projection]));
+
+    batch(() => {
+      for (const glyphId of glyphIds) {
+        this.#projectionCell(glyphId).set(byGlyphId.get(glyphId) ?? null);
+      }
+      for (const projection of interned) {
+        if (!this.#glyphById.has(projection.glyphId)) continue;
+        this.#projectionCell(projection.glyphId).set(projection);
+      }
+    });
+  }
+
+  /**
+   * Folds a replace-grade workspace echo and reports structural projection work.
+   *
+   * @remarks
+   * Numeric layer edits flow through live layer signals and return no projection
+   * work. Axis/source topology, glyph-layer membership, and structural layer
+   * replacements return only resident glyph identities that need native rebuilding.
+   *
+   * @param applied - Replace-grade workspace echo to fold into renderer state.
+   * @returns Resident glyph identities whose projections need replacement.
+   */
+  applyWorkspaceChange(applied: AppliedChange): readonly GlyphId[] {
     const current = this.#workspace.peek();
-    if (!current) return;
+    if (!current) return [];
+    const changedGlyphLayers = applied.next?.glyphs
+      ? glyphIdsWithChangedLayers(current.glyphs, applied.next.glyphs)
+      : [];
+    const structurallyChangedGlyphIds = new Set(changedGlyphLayers);
+    for (const layer of applied.layers) {
+      if (!layer.structure) continue;
+
+      const glyphId = this.#glyphByLayer.get(layer.layerId);
+      if (glyphId) structurallyChangedGlyphIds.add(glyphId);
+    }
 
     batch(() => {
       const next = applied.next;
@@ -140,6 +207,14 @@ export class FontStore {
 
       let layerSetChanged = false;
       if (nextWorkspace !== current) {
+        if (changedGlyphLayers.length > 0) {
+          for (const glyphId of changedGlyphLayers) this.#glyphs.delete(glyphId);
+        }
+        if (next?.axes || next?.sources || changedGlyphLayers.length > 0) {
+          this.#glyphLayers.clear();
+        }
+        if (next?.axes || next?.sources) this.#interpolationBases.clear();
+
         for (const [layerId, cell] of this.#layerStateCells) {
           if (this.#glyphByLayer.has(layerId)) continue;
 
@@ -148,11 +223,12 @@ export class FontStore {
           layerSetChanged = true;
         }
 
-        for (const [glyphId, cell] of this.#variationDataCells) {
+        for (const [glyphId, cell] of this.#projectionCells) {
           if (this.#glyphById.has(glyphId)) continue;
 
           cell.set(null);
-          this.#variationDataCells.delete(glyphId);
+          this.#projectionCells.delete(glyphId);
+          this.#glyphViews.delete(glyphId);
         }
       }
 
@@ -174,10 +250,23 @@ export class FontStore {
 
       if (structureChanged || layerSetChanged) this.#rebuildGlyphObjectIndex();
     });
+
+    if (applied.next?.axes || applied.next?.sources) {
+      return this.#residentProjectionGlyphIds();
+    }
+
+    return [...structurallyChangedGlyphIds].filter(
+      (glyphId) =>
+        this.#glyphById.has(glyphId) && Boolean(this.#projectionCells.get(glyphId)?.peek()),
+    );
   }
 
   layerState(layerId: LayerId): GlyphLayerState | null {
     return this.#layerStateCell(layerId).peek();
+  }
+
+  layerStateCell(layerId: LayerId): Signal<GlyphLayerState | null> {
+    return this.#layerStateCell(layerId);
   }
 
   hasGlyph(glyphId: GlyphId): boolean {
@@ -188,31 +277,54 @@ export class FontStore {
     return this.#glyphById.get(glyphId) ?? null;
   }
 
-  variationData(glyphId: GlyphId): GlyphVariationData | null {
-    return this.#variationDataCell(glyphId).peek();
+  projection(glyphId: GlyphId): GlyphProjection | null {
+    return this.#projectionCell(glyphId).peek();
   }
 
-  glyphModel(glyphId: GlyphId, create: () => Glyph | null): Glyph | null {
-    const cached = this.#glyphModels.get(glyphId);
+  projectionCell(glyphId: GlyphId): Signal<GlyphProjection | null> {
+    return this.#projectionCell(glyphId);
+  }
+
+  glyph(glyphId: GlyphId, create: () => Glyph | null): Glyph | null {
+    const cached = this.#glyphs.get(glyphId);
     if (cached) return cached;
 
     const created = create();
-    if (created) this.#glyphModels.set(glyphId, created);
+    if (created) this.#glyphs.set(glyphId, created);
     return created;
   }
 
-  glyphLayerModel(
+  glyphLayer(
     glyphId: GlyphId,
     sourceId: SourceId,
     create: () => GlyphLayer | null,
   ): GlyphLayer | null {
     const key = glyphSourceKey(glyphId, sourceId);
-    const cached = this.#glyphLayerModels.get(key);
+    const cached = this.#glyphLayers.get(key);
     if (cached) return cached;
 
     const created = create();
-    if (created) this.#glyphLayerModels.set(key, created);
+    if (created) this.#glyphLayers.set(key, created);
     return created;
+  }
+
+  glyphView(
+    glyphId: GlyphId,
+    location: Signal<AxisLocation>,
+    create: () => GlyphViewInput,
+  ): GlyphView {
+    let views = this.#glyphViews.get(glyphId);
+    if (!views) {
+      views = new WeakMap();
+      this.#glyphViews.set(glyphId, views);
+    }
+
+    const cached = views.get(location);
+    if (cached) return cached;
+
+    const view = new GlyphView(create());
+    views.set(location, view);
+    return view;
   }
 
   componentBaseGlyphIdsInLayerState(glyphId: GlyphId): readonly GlyphId[] {
@@ -276,18 +388,44 @@ export class FontStore {
     this.#layerStateCells.clear();
   }
 
-  #variationDataCell(glyphId: GlyphId): WritableSignal<GlyphVariationData | null> {
-    let cell = this.#variationDataCells.get(glyphId);
+  #projectionCell(glyphId: GlyphId): WritableSignal<GlyphProjection | null> {
+    let cell = this.#projectionCells.get(glyphId);
     if (!cell) {
-      cell = signal(null, { name: `fontStore.variationData.${glyphId}` });
-      this.#variationDataCells.set(glyphId, cell);
+      cell = signal(null, { name: `fontStore.projection.${glyphId}` });
+      this.#projectionCells.set(glyphId, cell);
     }
     return cell;
   }
 
-  #clearVariationData(): void {
-    for (const cell of this.#variationDataCells.values()) cell.set(null);
-    this.#variationDataCells.clear();
+  #clearProjections(): void {
+    for (const cell of this.#projectionCells.values()) cell.set(null);
+    this.#projectionCells.clear();
+  }
+
+  #residentProjectionGlyphIds(): GlyphId[] {
+    const glyphIds: GlyphId[] = [];
+    for (const [glyphId, cell] of this.#projectionCells) {
+      if (cell.peek()) glyphIds.push(glyphId);
+    }
+    return glyphIds;
+  }
+
+  #internProjection(projection: GlyphProjection): GlyphProjection {
+    const interpolation = projection.interpolation;
+    if (!interpolation) return projection;
+
+    const key = interpolation.basis.sourceIds.join("\u0000");
+    const basis = this.#interpolationBases.get(key);
+    if (!basis) {
+      this.#interpolationBases.set(key, interpolation.basis);
+      return projection;
+    }
+    if (basis === interpolation.basis) return projection;
+
+    return {
+      ...projection,
+      interpolation: { ...interpolation, basis },
+    };
   }
 
   #rebuildGlyphObjectIndex(): void {
@@ -359,6 +497,32 @@ export class FontStore {
 
 function glyphSourceKey(glyphId: GlyphId, sourceId: SourceId): GlyphSourceKey {
   return `${glyphId}:${sourceId}` as GlyphSourceKey;
+}
+
+function glyphIdsWithChangedLayers(
+  before: readonly GlyphRecord[],
+  after: readonly GlyphRecord[],
+): GlyphId[] {
+  const beforeById = new Map(before.map((glyph) => [glyph.id, glyph]));
+  const changed: GlyphId[] = [];
+
+  for (const glyph of after) {
+    const previous = beforeById.get(glyph.id);
+    if (!previous || !sameGlyphLayers(previous, glyph)) changed.push(glyph.id);
+    beforeById.delete(glyph.id);
+  }
+
+  changed.push(...beforeById.keys());
+  return changed;
+}
+
+function sameGlyphLayers(left: GlyphRecord, right: GlyphRecord): boolean {
+  if (left.layers.length !== right.layers.length) return false;
+
+  return left.layers.every((layer, index) => {
+    const other = right.layers[index];
+    return other?.id === layer.id && other.sourceId === layer.sourceId;
+  });
 }
 
 function componentBaseGlyphIds(structure: GlyphStructure): readonly GlyphId[] {

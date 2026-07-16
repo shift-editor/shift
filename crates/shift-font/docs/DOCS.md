@@ -18,8 +18,8 @@ crates/shift-font/src/
   changes.rs       -- replace-grade semantic change records
   layer_edit.rs    -- glyph-layer geometry mutations
   variation.rs     -- external-to-design mapping evaluation
-  interpolation.rs -- source compatibility, glyph values, variation models
-  projection.rs    -- location-bound resolved glyph views
+  interpolation.rs -- source compatibility, reusable bases, source values
+  projection.rs    -- location-independent glyph payloads and resolved views
   composite.rs     -- recursive component flattening
 ```
 
@@ -33,7 +33,9 @@ crates/shift-font/src/
 - `Source` is an editable designspace position with a name and location.
 - `Glyph` is a glyph concept identified by `GlyphId`.
 - `GlyphLayer` is authored editable data for one glyph at one source.
-- `GlyphInterpolation` is a reusable model built from one glyph's compatible authored source layers. Its default-source template owns topology; its regions and deltas own native interpolation semantics.
+- `InterpolationBasis` is coordinate-independent variation math for an ordered source set. It contains normalized supports and source coefficient rows, never glyph coordinates or metrics.
+- `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. Its default-source template owns topology.
+- `GlyphProjection` is a compact location-independent glyph payload: fallback shape, optional compatible interpolation, exact-source shapes for incompatible topology, and component identities.
 - `FontProjection` is a read-only, location-bound view that reuses resolved component layers across one or many glyph requests.
 - `ResolvedGlyph` is derived, flattened geometry plus x advance. An existing blank glyph resolves to an empty contour list; a missing glyph resolves to `None`.
 - `Contour` and `Point` describe outline geometry inside a glyph layer.
@@ -57,15 +59,17 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - Own canonical glyph interpolation value ordering, source compatibility, variation-model construction, interpolation evaluation, and location-bound glyph resolution.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 
-`Font::glyph_interpolation(glyph_id)` builds a reusable model from compatible master-source layers. The default source defines structural topology. Incompatible non-default layers and nonviable models do not become transport errors; callers receive `None` and may use their documented authored-layer fallback.
+`Font::glyph_interpolation(glyph_id)` builds compatible source values over an `InterpolationBasis`. The default source defines structural topology. The basis depends only on axes and ordered source locations, so the same mechanism can interpolate other numeric domains without copying glyph concepts into them.
 
-`Font::projection(location)` expects an internal authoring location. Apply external axis mappings before creating the projection. Resolution prefers an exact authored layer, then compatible interpolation, then the default or preferred authored layer. Component branches resolve at the same location and are flattened into each `ResolvedGlyph`.
+`Font::glyph_projection(glyph_id)` preserves the preferred fallback, compatible interpolation, and incompatible authored source shapes without resolving a location. The fallback is normally the default-source layer and uses the glyph's preferred layer when the default source has no layer for that glyph. A renderer can retain this compact payload and combine its basis with current authored source signals. No arbitrary location result is persisted.
+
+`Font::projection(location)` expects an internal authoring location. Apply external axis mappings before constructing it. Resolution prefers an exact authored layer/shape, then compatible interpolation, then the default or preferred fallback. A globally authored source with no glyph layer is not blank by definition: it uses interpolation/fallback while remaining non-editable at that source. Component branches resolve at the same location and are flattened into each `ResolvedGlyph`.
 
 ## Boundaries
 
 `shift-font` should not expose TypeScript-facing wire contracts. Those belong in `shift-wire`.
 
-`shift-wire` may translate native interpolation regions and deltas into transport DTOs, but it must not rebuild source samples, define topology compatibility, or evaluate variation models.
+`shift-wire` may translate native bases, source values, and projections into transport DTOs, but it must not rebuild source samples, define topology compatibility, or evaluate variation models.
 
 `shift-font` should not perform SQLite persistence. Durable working-store reads and writes belong in `shift-store`.
 

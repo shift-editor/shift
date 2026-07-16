@@ -13,7 +13,7 @@ import {
 } from "@/lib/editor/rendering/overlays";
 import { displayAdvance } from "@/lib/utils/unicode";
 import { track } from "@/lib/signals";
-import type { GlyphInstance } from "@/lib/model/Glyph";
+import type { GlyphView } from "@/lib/model/Glyph";
 import { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import type { GlyphNode } from "@/types/node";
 import type { RenderContext, RenderPass } from "@/types/rendering";
@@ -35,15 +35,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   hit(node: GlyphNode, point: NodePoint): PointerTarget | null {
-    const instance = this.editor.font.instance(node.glyphId, this.editor.designLocationCell);
-    if (!instance) return null;
+    const view = this.editor.font.glyphView(node.glyphId, this.editor.designLocationCell);
+    if (!view) return null;
 
-    const hit = instance.geometry.hitAt(point, this.editor.hitRadius);
+    const hit = view.geometry.hitAt(point, this.editor.hitRadius);
     if (!hit) return null;
 
     switch (hit.kind) {
       case "segment": {
-        const segment = instance.geometry.segment(hit.id);
+        const segment = view.geometry.segment(hit.id);
         if (!segment) return null;
 
         return {
@@ -97,8 +97,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     }
   }
 
-  #instance(node: GlyphNode): GlyphInstance | null {
-    return this.editor.font.instance(node.glyphId, this.editor.designLocationCell);
+  #view(node: GlyphNode): GlyphView | null {
+    return this.editor.font.glyphView(node.glyphId, this.editor.designLocationCell);
   }
 
   #isEditing(node: GlyphNode): boolean {
@@ -109,32 +109,32 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const record = this.editor.font.glyph(node.glyphId);
     if (!record) return;
 
-    const instance = this.#instance(node);
-    if (!instance) return;
+    const view = this.#view(node);
+    if (!view) return;
 
     const unicode = record.unicodes[0] ?? null;
-    track(instance.xAdvanceCell);
+    track(view.xAdvanceCell);
 
-    const advance = displayAdvance(instance.xAdvanceCell.peek(), record.name, unicode);
+    const advance = displayAdvance(view.xAdvanceCell.peek(), record.name, unicode);
     this.#guides.draw(ctx.canvas, this.editor.font.metrics, advance);
   }
 
   #drawContent(node: GlyphNode, ctx: RenderContext, editing: boolean): void {
-    const instance = this.#instance(node);
-    if (!instance) return;
+    const view = this.#view(node);
+    if (!view) return;
 
-    instance.render.trackShape();
+    view.render.trackShape();
 
     if (editing) {
-      this.#drawEditableContent(node, ctx, instance);
+      this.#drawEditableContent(node, ctx, view);
       return;
     }
 
-    this.#drawDisplayContent(ctx, instance);
+    this.#drawDisplayContent(ctx, view);
   }
 
-  #drawEditableContent(node: GlyphNode, ctx: RenderContext, instance: GlyphInstance): void {
-    this.#outline.draw(ctx.canvas, instance.render.outline, {
+  #drawEditableContent(node: GlyphNode, ctx: RenderContext, view: GlyphView): void {
+    this.#outline.draw(ctx.canvas, view.render.outline, {
       fill: null,
       stroke: {
         color: ctx.canvas.theme.glyph.stroke,
@@ -142,39 +142,39 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       },
     });
 
-    this.#drawDebugOverlays(node, ctx, instance);
+    this.#drawDebugOverlays(node, ctx, view);
   }
 
-  #drawDisplayContent(ctx: RenderContext, instance: GlyphInstance): void {
-    this.#outline.draw(ctx.canvas, instance.render.outline, {
+  #drawDisplayContent(ctx: RenderContext, view: GlyphView): void {
+    this.#outline.draw(ctx.canvas, view.render.outline, {
       fill: ctx.canvas.theme.glyph.fill,
     });
   }
 
   #drawControls(node: GlyphNode, ctx: RenderContext): void {
-    const instance = this.#instance(node);
-    if (!instance) return;
+    const view = this.#view(node);
+    if (!view) return;
 
-    const renderModel = instance.render;
+    const renderModel = view.render;
 
     this.#segments.draw(
       ctx.canvas,
-      instance.geometry,
+      view.geometry,
       this.#selectedSegmentIds(node),
       this.#hoveredSegmentId(node),
     );
     this.#drawControlLines(node, ctx, renderModel.contours);
-    this.#handles.draw(ctx, node, instance, this.editor.selection, this.editor.hover);
+    this.#handles.draw(ctx, node, view, this.editor.selection, this.editor.hover);
     this.#anchors.draw(ctx.canvas, renderModel.anchors, {
       selection: this.editor.selection,
       hover: this.editor.hover,
     });
   }
 
-  #drawDebugOverlays(node: GlyphNode, ctx: RenderContext, instance: GlyphInstance): void {
+  #drawDebugOverlays(node: GlyphNode, ctx: RenderContext, view: GlyphView): void {
     this.#debugOverlays.draw(
       ctx.canvas,
-      instance.geometry,
+      view.geometry,
       this.editor.debugOverlays,
       this.#hoveredSegmentId(node),
       ctx.canvas.pxToUpm(SCREEN_HIT_RADIUS),
@@ -184,7 +184,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   #drawControlLines(
     node: GlyphNode,
     ctx: RenderContext,
-    contours: GlyphInstance["render"]["contours"],
+    contours: GlyphView["render"]["contours"],
   ): void {
     const sceneBounds = this.editor.camera.visibleSceneBounds(64);
     const origin = node.position;

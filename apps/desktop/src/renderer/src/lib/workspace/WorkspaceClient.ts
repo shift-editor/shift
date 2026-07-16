@@ -9,7 +9,7 @@ import type {
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { AppliedChange, FontIntent, GlyphId, GlyphPreview, Location } from "@shift/types";
+import type { AppliedChange, FontIntent, GlyphId, GlyphProjection, Location } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
 /**
@@ -148,19 +148,16 @@ export class WorkspaceClient {
   }
 
   /**
-   * Resolves lightweight glyph projections in the utility workspace.
+   * Reads compact glyph projection models and their component dependencies.
    *
-   * @param glyphIds - Stable glyph identities to resolve in request order.
-   * @param location - Internal design location shared by the whole batch.
-   * @returns Fresh preview values; missing glyph identities are omitted.
-   * @throws {Error} when the workspace is disconnected or native resolution fails.
+   * @param glyphIds - Stable root glyph identities requested by the caller.
+   * @returns Location-independent models suitable for synchronous renderer evaluation.
    */
-  async glyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]> {
+  async glyphProjections(glyphIds: readonly GlyphId[]): Promise<GlyphProjection[]> {
     await this.connect();
 
-    return this.#require().call("workspace.glyphPreviews", {
+    return this.#require().call("workspace.glyphProjections", {
       glyphIds: [...glyphIds],
-      location,
     });
   }
 

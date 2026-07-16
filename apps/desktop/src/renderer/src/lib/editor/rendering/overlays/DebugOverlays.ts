@@ -1,11 +1,11 @@
 import type { Canvas } from "../Canvas";
-import type { GlyphInstanceGeometry } from "@/lib/model/Glyph";
+import type { GlyphViewGeometry } from "@/lib/model/Glyph";
 import type { SegmentId } from "@/types/indicator";
 
 export class DebugOverlays {
   draw(
     canvas: Canvas,
-    geometry: GlyphInstanceGeometry,
+    geometry: GlyphViewGeometry,
     overlays: {
       segmentBounds: boolean;
       tightBounds: boolean;
@@ -31,7 +31,7 @@ export class DebugOverlays {
     }
   }
 
-  #drawSegmentBounds(canvas: Canvas, geometry: GlyphInstanceGeometry, color: string): void {
+  #drawSegmentBounds(canvas: Canvas, geometry: GlyphViewGeometry, color: string): void {
     for (const contour of geometry.contours) {
       for (const segment of contour.segments()) {
         const b = segment.bounds;
@@ -42,7 +42,7 @@ export class DebugOverlays {
 
   #drawTightBounds(
     canvas: Canvas,
-    geometry: GlyphInstanceGeometry,
+    geometry: GlyphViewGeometry,
     hoveredSegmentId: SegmentId | null,
     color: string,
   ): void {
@@ -59,7 +59,7 @@ export class DebugOverlays {
 
   #drawHitRadii(
     canvas: Canvas,
-    geometry: GlyphInstanceGeometry,
+    geometry: GlyphViewGeometry,
     hitRadiusUpm: number,
     color: string,
   ): void {
@@ -69,7 +69,7 @@ export class DebugOverlays {
     }
   }
 
-  #drawGlyphBbox(canvas: Canvas, geometry: GlyphInstanceGeometry, color: string): void {
+  #drawGlyphBbox(canvas: Canvas, geometry: GlyphViewGeometry, color: string): void {
     const b = geometry.bounds;
     if (!b) return;
     canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
