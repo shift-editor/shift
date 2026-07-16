@@ -625,6 +625,19 @@ impl Location {
             (value - axis.default()).abs() < f64::EPSILON
         })
     }
+
+    /// Returns whether two locations address the same position on `axes`.
+    ///
+    /// Missing coordinates use axis defaults, values within `1e-6` axis units
+    /// are equivalent, and coordinates outside `axes` do not participate. Use
+    /// [`PartialEq`] when exact stored-coordinate equality is required.
+    pub fn is_equivalent_to(&self, other: &Self, axes: &[Axis]) -> bool {
+        axes.iter().all(|axis| {
+            let left = self.get(&axis.id()).unwrap_or(axis.default());
+            let right = other.get(&axis.id()).unwrap_or(axis.default());
+            (left - right).abs() <= 1e-6
+        })
+    }
 }
 
 #[cfg(test)]
@@ -767,5 +780,22 @@ mod tests {
         assert_eq!(loc.get(&weight), Some(700.0));
         assert_eq!(loc.get(&width), Some(100.0));
         assert_eq!(loc.get(&slant), None);
+    }
+
+    #[test]
+    fn location_equivalence_uses_axis_defaults_and_tolerance() {
+        let axis = Axis::weight();
+        let implicit_default = Location::new();
+        let mut explicit_default = Location::new();
+        explicit_default.set(axis.id(), axis.default());
+        let mut near_default = Location::new();
+        near_default.set(axis.id(), axis.default() + 0.0000005);
+        let mut distinct = Location::new();
+        distinct.set(axis.id(), axis.default() + 0.001);
+
+        assert_ne!(implicit_default, explicit_default);
+        assert!(implicit_default.is_equivalent_to(&explicit_default, std::slice::from_ref(&axis)));
+        assert!(implicit_default.is_equivalent_to(&near_default, std::slice::from_ref(&axis)));
+        assert!(!implicit_default.is_equivalent_to(&distinct, std::slice::from_ref(&axis)));
     }
 }

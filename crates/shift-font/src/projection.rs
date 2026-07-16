@@ -55,7 +55,7 @@ impl Font {
             .sources()
             .iter()
             .filter(|source| source.is_master())
-            .find(|source| locations_equal(source.location(), location, self))
+            .find(|source| source.location().is_equivalent_to(location, self.axes()))
             .map(|source| source.id());
 
         FontProjection {
@@ -195,14 +195,6 @@ fn fallback_layer<'a>(font: &Font, glyph: &'a Glyph) -> Option<&'a GlyphLayer> {
     }
 
     preferred_layer_for_glyph(glyph)
-}
-
-fn locations_equal(left: &Location, right: &Location, font: &Font) -> bool {
-    font.axes().iter().all(|axis| {
-        let left = left.get(&axis.id()).unwrap_or(axis.default());
-        let right = right.get(&axis.id()).unwrap_or(axis.default());
-        (left - right).abs() <= 1e-6
-    })
 }
 
 #[cfg(test)]
