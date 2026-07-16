@@ -60,6 +60,7 @@
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",
+    "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-virtual": "^3.13.18",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
@@ -75,7 +76,7 @@
     "shift-bridge": "workspace:*",
     "tailwind-merge": "^3.3.1",
     "throttle-debounce": "^5.0.2",
-    "zustand": "^5.0.6",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "zustand": "^5.0.6"
   }
 }
