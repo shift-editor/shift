@@ -7,7 +7,7 @@ use shift_font::{GlyphId, PointType as IrPointType};
 use crate::{
     AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, AxisTent, ComponentData,
     ContourData, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
-    GlyphLayerSnapshot, GlyphMaster, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState,
+    GlyphLayerSnapshot, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState,
     GlyphStructure, GlyphVariationData, Location, NamedInstance, PointData, PointType, Source,
 };
 
@@ -635,30 +635,6 @@ impl From<GlyphVariationData> for NapiGlyphVariationData {
                 .map(|region| region.into_iter().map(Into::into).collect())
                 .collect(),
             deltas: data.deltas.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiGlyphMaster {
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-    pub source_name: String,
-    pub is_default_source: bool,
-    pub location: NapiLocation,
-    pub structure: NapiGlyphStructure,
-    pub values: Float64Array,
-}
-
-impl From<GlyphMaster> for NapiGlyphMaster {
-    fn from(master: GlyphMaster) -> Self {
-        Self {
-            source_id: master.source_id,
-            source_name: master.source_name,
-            is_default_source: master.is_default_source,
-            location: master.location.into(),
-            structure: master.structure.into(),
-            values: master.values.into(),
         }
     }
 }

@@ -1,0 +1,400 @@
+//! Native glyph interpolation over Shift sources and internal locations.
+
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
+
+use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
+use fontdrasil::types::Tag;
+use fontdrasil::variations::VariationModel;
+
+use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location};
+
+mod values;
+
+pub use values::GlyphInterpolationValues;
+
+/// Normalized support for one authoring axis within an interpolation region.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AxisSupport {
+    axis_id: AxisId,
+    minimum: f64,
+    peak: f64,
+    maximum: f64,
+}
+
+impl AxisSupport {
+    pub fn axis_id(&self) -> AxisId {
+        self.axis_id.clone()
+    }
+
+    pub fn minimum(&self) -> f64 {
+        self.minimum
+    }
+
+    pub fn peak(&self) -> f64 {
+        self.peak
+    }
+
+    pub fn maximum(&self) -> f64 {
+        self.maximum
+    }
+}
+
+/// Multi-axis support associated with one glyph interpolation delta.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InterpolationRegion {
+    supports: Vec<AxisSupport>,
+}
+
+impl InterpolationRegion {
+    pub fn supports(&self) -> &[AxisSupport] {
+        &self.supports
+    }
+}
+
+/// Reusable interpolation for one glyph's compatible authored source layers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphInterpolation {
+    template: GlyphLayer,
+    regions: Vec<InterpolationRegion>,
+    deltas: Vec<GlyphInterpolationValues>,
+}
+
+impl GlyphInterpolation {
+    /// Returns the default-source layer that defines compatible topology.
+    pub fn template(&self) -> &GlyphLayer {
+        &self.template
+    }
+
+    pub fn regions(&self) -> &[InterpolationRegion] {
+        &self.regions
+    }
+
+    pub fn deltas(&self) -> &[GlyphInterpolationValues] {
+        &self.deltas
+    }
+
+    /// Resolves an owned glyph layer at an internal authoring location.
+    ///
+    /// Missing axis coordinates use authoring defaults. The returned layer
+    /// preserves the default source's topology and identities but is a derived
+    /// value; mutating it does not change the font.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] if `axes` does not contain every
+    /// support axis, or a glyph-value shape error if the interpolation model
+    /// and its structural template are inconsistent.
+    pub fn resolve(&self, location: &Location, axes: &[Axis]) -> CoreResult<GlyphLayer> {
+        let mut layer = self.template.clone();
+        let values = self.values_at(location, axes)?;
+        layer.apply_interpolation_values(&values)?;
+        Ok(layer)
+    }
+
+    fn values_at(
+        &self,
+        location: &Location,
+        axes: &[Axis],
+    ) -> CoreResult<GlyphInterpolationValues> {
+        let value_count = self
+            .deltas
+            .first()
+            .map_or(0, |delta| delta.as_slice().len());
+        let mut values = vec![0.0; value_count];
+
+        for (region, deltas) in self.regions.iter().zip(&self.deltas) {
+            let scalar = region_scalar(region, location, axes)?;
+            if scalar == 0.0 {
+                continue;
+            }
+
+            for (value, delta) in values.iter_mut().zip(deltas.as_slice()) {
+                *value += scalar * delta;
+            }
+        }
+
+        Ok(GlyphInterpolationValues::new(values))
+    }
+}
+
+impl Font {
+    /// Builds interpolation for one glyph from compatible authored sources.
+    ///
+    /// The default source defines topology. Incompatible non-default source
+    /// layers are ignored. `None` means the font is static or no viable model
+    /// can be formed; callers may then use their documented source fallback.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when `glyph_id` is not in the font.
+    pub fn glyph_interpolation(
+        &self,
+        glyph_id: &GlyphId,
+    ) -> CoreResult<Option<GlyphInterpolation>> {
+        let glyph = self
+            .glyph(glyph_id.clone())
+            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        if !self.is_variable() {
+            return Ok(None);
+        }
+
+        let Some(default_source_id) = self.default_source_id() else {
+            return Ok(None);
+        };
+        let Some(default_layer) = glyph.layer_for_source(default_source_id.clone()) else {
+            return Ok(None);
+        };
+
+        let tagged_axes = self
+            .axes()
+            .iter()
+            .filter_map(|axis| Tag::from_str(axis.tag()).ok().map(|tag| (tag, axis.id())))
+            .collect::<Vec<_>>();
+        let ordered_axes = tagged_axes.iter().map(|(tag, _)| *tag).collect();
+        let axis_ids_by_tag = tagged_axes.into_iter().collect::<HashMap<_, _>>();
+        let mut points = HashMap::new();
+
+        for source in self.sources().iter().filter(|source| source.is_master()) {
+            let Some(layer) = glyph.layer_for_source(source.id()) else {
+                continue;
+            };
+            if !layers_are_compatible(default_layer, layer) {
+                continue;
+            }
+
+            let location = normalized_location(source.location(), self.axes());
+            if points
+                .insert(location, layer.interpolation_values().into_vec())
+                .is_some()
+            {
+                return Ok(None);
+            }
+        }
+
+        if points.is_empty() {
+            return Ok(None);
+        }
+
+        let model = VariationModel::new(
+            points
+                .keys()
+                .cloned()
+                .collect::<HashSet<NormalizedLocation>>(),
+            ordered_axes,
+        );
+        let Ok(model_deltas) = model.deltas::<f64, f64>(&points) else {
+            return Ok(None);
+        };
+
+        let regions = model_deltas
+            .iter()
+            .map(|(region, _)| InterpolationRegion {
+                supports: region
+                    .iter()
+                    .filter_map(|(tag, support)| {
+                        let axis_id = axis_ids_by_tag.get(tag)?;
+                        Some(AxisSupport {
+                            axis_id: axis_id.clone(),
+                            minimum: support.min.into_inner().into_inner(),
+                            peak: support.peak.into_inner().into_inner(),
+                            maximum: support.max.into_inner().into_inner(),
+                        })
+                    })
+                    .collect(),
+            })
+            .collect();
+        let deltas = model_deltas
+            .into_iter()
+            .map(|(_, values)| GlyphInterpolationValues::new(values))
+            .collect();
+
+        Ok(Some(GlyphInterpolation {
+            template: default_layer.clone(),
+            regions,
+            deltas,
+        }))
+    }
+}
+
+fn normalized_location(location: &Location, axes: &[Axis]) -> NormalizedLocation {
+    axes.iter()
+        .filter_map(|axis| {
+            let tag = Tag::from_str(axis.tag()).ok()?;
+            let value = location.get(&axis.id()).unwrap_or(axis.default());
+            Some((tag, NormalizedCoord::new(axis.normalize(value))))
+        })
+        .collect()
+}
+
+fn layers_are_compatible(template: &GlyphLayer, candidate: &GlyphLayer) -> bool {
+    if template.contours().len() != candidate.contours().len()
+        || template.anchors().len() != candidate.anchors().len()
+        || template.components().len() != candidate.components().len()
+    {
+        return false;
+    }
+
+    for (template, candidate) in template.contours_iter().zip(candidate.contours_iter()) {
+        if template.is_closed() != candidate.is_closed()
+            || template.points().len() != candidate.points().len()
+        {
+            return false;
+        }
+
+        if template
+            .points()
+            .iter()
+            .zip(candidate.points())
+            .any(|(template, candidate)| template.is_on_curve() != candidate.is_on_curve())
+        {
+            return false;
+        }
+    }
+
+    if template
+        .anchors_iter()
+        .zip(candidate.anchors_iter())
+        .any(|(template, candidate)| template.name() != candidate.name())
+    {
+        return false;
+    }
+
+    !template
+        .components_iter()
+        .zip(candidate.components_iter())
+        .any(|(template, candidate)| template.base_glyph_id() != candidate.base_glyph_id())
+}
+
+fn region_scalar(
+    region: &InterpolationRegion,
+    location: &Location,
+    axes: &[Axis],
+) -> CoreResult<f64> {
+    let mut scalar = 1.0;
+
+    for support in region.supports() {
+        if support.minimum > support.peak
+            || support.peak > support.maximum
+            || (support.minimum < 0.0 && support.maximum > 0.0)
+        {
+            continue;
+        }
+
+        let axis = axes
+            .iter()
+            .find(|axis| axis.id() == support.axis_id)
+            .ok_or_else(|| CoreError::AxisNotFound(support.axis_id.clone()))?;
+        let value = location.get(&axis.id()).unwrap_or(axis.default());
+        let normalized = axis.normalize(value);
+
+        if normalized == support.peak
+            || (support.minimum == 0.0 && support.peak == 0.0 && support.maximum == 0.0)
+        {
+            continue;
+        }
+
+        if normalized <= support.minimum || support.maximum <= normalized {
+            return Ok(0.0);
+        }
+
+        let edge = if normalized < support.peak {
+            support.minimum
+        } else {
+            support.maximum
+        };
+        scalar *= (normalized - edge) / (support.peak - edge);
+    }
+
+    Ok(scalar)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_support::sample_variable_font;
+    use crate::{GlyphInterpolationValues, Location};
+
+    #[test]
+    fn layer_values_roundtrip_without_changing_topology() {
+        let font = sample_variable_font();
+        let glyph = font.glyph_by_name("A").unwrap();
+        let layer = glyph
+            .layer_for_source(font.default_source_id().unwrap())
+            .unwrap();
+        let mut restored = layer.clone();
+
+        restored
+            .apply_interpolation_values(&GlyphInterpolationValues::from_layer(layer))
+            .unwrap();
+
+        assert_eq!(restored, *layer);
+    }
+
+    #[test]
+    fn applying_invalid_values_does_not_partially_mutate_a_layer() {
+        let font = sample_variable_font();
+        let layer = font
+            .glyph_by_name("A")
+            .unwrap()
+            .layer_for_source(font.default_source_id().unwrap())
+            .unwrap();
+        let mut restored = layer.clone();
+
+        let error = restored
+            .apply_interpolation_values(&GlyphInterpolationValues::new(vec![123.0]))
+            .unwrap_err();
+
+        assert!(matches!(error, crate::CoreError::MissingGlyphValue { .. }));
+        assert_eq!(restored, *layer);
+    }
+
+    #[test]
+    fn smooth_metadata_does_not_make_layers_incompatible() {
+        let font = sample_variable_font();
+        let glyph = font.glyph_by_name("A").unwrap();
+        let template = glyph
+            .layer_for_source(font.default_source_id().unwrap())
+            .unwrap();
+        let mut candidate = template.clone();
+        let point = candidate
+            .contours_iter_mut()
+            .next()
+            .unwrap()
+            .points_mut()
+            .first_mut()
+            .unwrap();
+        point.set_smooth(!point.is_smooth());
+
+        assert!(super::layers_are_compatible(template, &candidate));
+    }
+
+    #[test]
+    fn glyph_interpolation_resolves_intermediate_outline_and_advance() {
+        let font = sample_variable_font();
+        let glyph = font.glyph_by_name("A").unwrap();
+        let axis_id = font.axes()[0].id();
+        let mut location = Location::new();
+        location.set(axis_id, 600.0);
+
+        let layer = font
+            .glyph_interpolation(&glyph.id())
+            .unwrap()
+            .unwrap()
+            .resolve(&location, font.axes())
+            .unwrap();
+
+        assert_eq!(layer.width(), 700.0);
+        assert_eq!(layer.contours_iter().next().unwrap().points()[1].x(), 340.0);
+    }
+
+    #[test]
+    fn glyph_interpolation_rejects_missing_axis_definitions() {
+        let font = sample_variable_font();
+        let glyph = font.glyph_by_name("A").unwrap();
+        let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
+
+        let error = interpolation.resolve(&Location::new(), &[]).unwrap_err();
+
+        assert!(matches!(error, crate::CoreError::AxisNotFound(_)));
+    }
+}

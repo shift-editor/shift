@@ -18,7 +18,7 @@ use shift_wire::{
     NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
     NapiNamedInstance, NapiPointSeed, NapiSource,
   },
-  interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
+  interpolation::glyph_variation_data,
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
   GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, NamedInstance,
   Source,
@@ -547,9 +547,10 @@ impl Bridge {
         continue;
       };
 
-      let variation_data = self
-        .variation_build_for_glyph(glyph)?
-        .and_then(|(_, build)| build.variation_data);
+      let variation_data = font
+        .glyph_interpolation(&glyph_id)?
+        .map(|interpolation| glyph_variation_data(&interpolation, font.axes()))
+        .transpose()?;
 
       let layers = glyph
         .layers()
@@ -638,19 +639,6 @@ impl Bridge {
 
   fn save_snapshot(&self) -> BridgeResult<FontSaveSnapshot> {
     Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
-  }
-
-  fn variation_build_for_glyph(
-    &self,
-    glyph: &Glyph,
-  ) -> BridgeResult<Option<(usize, GlyphVariationBuild)>> {
-    let font = self.font()?;
-
-    Ok(build_masters(font, glyph).map(|masters| {
-      let master_count = masters.len();
-      let build = build_glyph_variation_data(&masters, font.axes());
-      (master_count, build)
-    }))
   }
 
   fn workspace(&self) -> BridgeResult<&FontWorkspace> {

@@ -34,16 +34,20 @@ pub mod composite;
 pub mod curve;
 pub mod error;
 pub mod intents;
+pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
+pub mod projection;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
 pub use changes::*;
 pub use error::{CoreError, CoreResult};
 pub use intents::*;
+pub use interpolation::*;
 pub use ir::*;
 pub use ir::{
     anchor, axis, boolean, component, contour, entity, features, font, glyph, glyph_name,
     guideline, kerning, lib_data, metrics, named_instance, point, segment, source, variation,
 };
+pub use projection::*;

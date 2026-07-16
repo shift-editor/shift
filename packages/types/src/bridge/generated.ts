@@ -392,15 +392,6 @@ export interface GlyphLayerSnapshot {
   state: GlyphState
 }
 
-export interface GlyphMaster {
-  sourceId: SourceId
-  sourceName: string
-  isDefaultSource: boolean
-  location: Location
-  structure: GlyphStructure
-  values: Float64Array
-}
-
 export interface GlyphRecord {
   id: GlyphId
   name: GlyphName

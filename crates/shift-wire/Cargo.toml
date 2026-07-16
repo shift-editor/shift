@@ -15,7 +15,6 @@ napi = ["dep:napi", "dep:napi-derive"]
 [dependencies]
 shift-font = { workspace = true }
 
-fontdrasil = "0.4.0"
 napi = { version = "=3.8.6", optional = true, default-features = false, features = [
     "napi6",
 ] }

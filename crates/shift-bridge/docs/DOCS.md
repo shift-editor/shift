@@ -47,10 +47,11 @@ crates/shift-bridge/
 2. JS calls a mutation such as `closeContour(layerId, contourId)`.
 3. `Bridge` parses boundary strings and asks `FontWorkspace` to run the edit against that layer.
 4. The bridge returns a `shift-wire` change DTO and bumps the live version.
-5. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
-6. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
-7. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
-8. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
+5. Read-only glyph snapshots ask `shift-font` for native interpolation and use `shift-wire` only to adapt its regions and deltas into renderer DTOs.
+6. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
+7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
+8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
+9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
 
 ## Type Boundary
 

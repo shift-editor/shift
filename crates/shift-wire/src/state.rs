@@ -5,8 +5,8 @@ use std::str::FromStr;
 use crate::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Component as IrComponent, ComponentId, Contour as IrContour,
-    ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphId, GlyphLayer,
-    LayerId, PointId, PointType as IrPointType, SourceId,
+    ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphId,
+    GlyphInterpolationValues, GlyphLayer, LayerId, PointId, PointType as IrPointType, SourceId,
 };
 
 pub fn layer_from_state(
@@ -20,90 +20,20 @@ pub fn layer_from_state(
     Ok(layer)
 }
 
-pub fn apply_state_to_layer(
+fn apply_state_to_layer(
     layer: &mut GlyphLayer,
     structure: &GlyphStructure,
     values: &[GlyphValue],
 ) -> CoreResult<()> {
-    let mut cursor = GlyphValueCursor::new(values);
-    let width = cursor.read_x_advance()?;
-
     layer.clear_contours();
     layer.clear_anchors();
     layer.clear_components();
-    layer.set_width(width);
 
-    restore_contours(layer, &structure.contours, &mut cursor)?;
-    restore_anchors(layer, &structure.anchors, &mut cursor)?;
-    restore_components(layer, &structure.components, &mut cursor)?;
+    restore_contours(layer, &structure.contours)?;
+    restore_anchors(layer, &structure.anchors)?;
+    restore_components(layer, &structure.components)?;
 
-    cursor.finish()?;
-    Ok(())
-}
-
-#[derive(Debug, Clone, Copy)]
-struct PointPosition {
-    x: GlyphValue,
-    y: GlyphValue,
-}
-
-struct GlyphValueCursor<'a> {
-    values: &'a [GlyphValue],
-    index: usize,
-}
-
-impl<'a> GlyphValueCursor<'a> {
-    fn new(values: &'a [GlyphValue]) -> Self {
-        Self { values, index: 0 }
-    }
-
-    fn read_x_advance(&mut self) -> CoreResult<GlyphValue> {
-        self.next()
-    }
-
-    fn read_point(&mut self) -> CoreResult<PointPosition> {
-        Ok(PointPosition {
-            x: self.next()?,
-            y: self.next()?,
-        })
-    }
-
-    fn read_component_transform(&mut self) -> CoreResult<IrTransform> {
-        Ok(IrTransform {
-            translate_x: self.next()?,
-            translate_y: self.next()?,
-            rotation: self.next()?,
-            scale_x: self.next()?,
-            scale_y: self.next()?,
-            skew_x: self.next()?,
-            skew_y: self.next()?,
-            t_center_x: self.next()?,
-            t_center_y: self.next()?,
-        })
-    }
-
-    fn finish(self) -> CoreResult<()> {
-        if self.index == self.values.len() {
-            Ok(())
-        } else {
-            Err(CoreError::TrailingGlyphValues {
-                expected: self.index,
-                actual: self.values.len(),
-            })
-        }
-    }
-
-    fn next(&mut self) -> CoreResult<GlyphValue> {
-        let idx = self.index;
-        let value = self
-            .values
-            .get(idx)
-            .copied()
-            .ok_or(CoreError::MissingGlyphValue { index: idx })?;
-
-        self.index += 1;
-        Ok(value)
-    }
+    layer.apply_interpolation_values(&GlyphInterpolationValues::new(values.to_vec()))
 }
 
 fn parse_id<T>(value: &str, invalid: impl FnOnce(String) -> CoreError) -> CoreResult<T>
@@ -113,20 +43,15 @@ where
     value.parse().map_err(|_| invalid(value.to_string()))
 }
 
-fn restore_contours(
-    layer: &mut GlyphLayer,
-    contours: &[ContourData],
-    cursor: &mut GlyphValueCursor<'_>,
-) -> CoreResult<()> {
+fn restore_contours(layer: &mut GlyphLayer, contours: &[ContourData]) -> CoreResult<()> {
     for contour_data in contours {
         let contour_id: ContourId = parse_id(&contour_data.id, CoreError::InvalidContourId)?;
         let mut new_contour = IrContour::with_id(contour_id);
 
         for point in &contour_data.points {
             let point_id: PointId = parse_id(&point.id, CoreError::InvalidPointId)?;
-            let new_pos = cursor.read_point()?;
             let point_type = IrPointType::from(point.point_type);
-            new_contour.add_point_with_id(point_id, new_pos.x, new_pos.y, point_type, point.smooth);
+            new_contour.add_point_with_id(point_id, 0.0, 0.0, point_type, point.smooth);
         }
 
         if contour_data.closed {
@@ -139,15 +64,10 @@ fn restore_contours(
     Ok(())
 }
 
-fn restore_anchors(
-    layer: &mut GlyphLayer,
-    anchors: &[AnchorData],
-    cursor: &mut GlyphValueCursor<'_>,
-) -> CoreResult<()> {
+fn restore_anchors(layer: &mut GlyphLayer, anchors: &[AnchorData]) -> CoreResult<()> {
     for anchor_data in anchors {
         let anchor_id: AnchorId = parse_id(&anchor_data.id, CoreError::InvalidAnchorId)?;
-        let position = cursor.read_point()?;
-        let anchor = IrAnchor::with_id(anchor_id, anchor_data.name.clone(), position.x, position.y);
+        let anchor = IrAnchor::with_id(anchor_id, anchor_data.name.clone(), 0.0, 0.0);
 
         layer.add_anchor(anchor);
     }
@@ -155,11 +75,7 @@ fn restore_anchors(
     Ok(())
 }
 
-fn restore_components(
-    layer: &mut GlyphLayer,
-    components: &[ComponentData],
-    cursor: &mut GlyphValueCursor<'_>,
-) -> CoreResult<()> {
+fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> CoreResult<()> {
     for component_data in components {
         let component_id: ComponentId =
             parse_id(&component_data.id, CoreError::InvalidComponentId)?;
@@ -167,12 +83,11 @@ fn restore_components(
             component_data.base_glyph_id.as_str(),
             CoreError::InvalidGlyphId,
         )?;
-        let transform = cursor.read_component_transform()?;
         let component = IrComponent::with_id(
             component_id,
             base_glyph_id,
             component_data.base_glyph_name.clone(),
-            transform,
+            IrTransform::identity(),
         );
 
         layer.add_component(component);

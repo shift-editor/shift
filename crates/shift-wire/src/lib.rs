@@ -9,11 +9,10 @@ use serde::{Deserialize, Serialize};
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
     AxisMapping as IrAxisMapping, AxisMappingId, AxisRole as IrAxisRole, Component as IrComponent,
-    ComponentId, Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
-    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
-    GlyphLayer, GlyphName, GuidelineId, LayerId, Location as IrLocation,
-    NamedInstance as IrNamedInstance, NamedInstanceId, Point as IrPoint, PointId,
-    PointType as IrPointType, Source as IrSource, SourceId,
+    ComponentId, Contour as IrContour, ContourId, FontMetadata as IrFontMetadata,
+    FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId, GlyphLayer, GlyphName, GuidelineId,
+    LayerId, Location as IrLocation, NamedInstance as IrNamedInstance, NamedInstanceId,
+    Point as IrPoint, PointId, PointType as IrPointType, Source as IrSource, SourceId,
 };
 
 pub mod bridges;
@@ -565,49 +564,7 @@ pub struct GlyphVariationData {
     pub deltas: Vec<Vec<f64>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GlyphMaster {
-    pub source_id: String,
-    pub source_name: String,
-    pub is_default_source: bool,
-    pub location: Location,
-    pub structure: GlyphStructure,
-    pub values: GlyphValues,
-}
-
 /// Flatten mutable numeric glyph state in the order described by `GlyphState::values`.
 pub fn values_from_layer(layer: &GlyphLayer) -> GlyphValues {
-    let mut values = Vec::new();
-    values.push(layer.width());
-
-    for contour in layer.contours_iter() {
-        for point in contour.points() {
-            values.push(point.x());
-            values.push(point.y());
-        }
-    }
-
-    for anchor in layer.anchors_iter() {
-        values.push(anchor.x());
-        values.push(anchor.y());
-    }
-
-    for component in layer.components_iter() {
-        push_transform_values(&mut values, component.transform());
-    }
-
-    values
-}
-
-fn push_transform_values(values: &mut Vec<f64>, transform: &IrTransform) {
-    values.push(transform.translate_x);
-    values.push(transform.translate_y);
-    values.push(transform.rotation);
-    values.push(transform.scale_x);
-    values.push(transform.scale_y);
-    values.push(transform.skew_x);
-    values.push(transform.skew_y);
-    values.push(transform.t_center_x);
-    values.push(transform.t_center_y);
+    layer.interpolation_values().into_vec()
 }
