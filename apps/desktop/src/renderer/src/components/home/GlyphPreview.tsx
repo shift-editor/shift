@@ -1,7 +1,4 @@
-import type { FontMetrics, GlyphId } from "@shift/types";
-import type { Font } from "@/lib/model/Font";
-import { type Signal, useSignalTrigger } from "@/lib/signals";
-import type { AxisLocation } from "@/types/variation";
+import type { FontMetrics, GlyphPreview as GlyphPreviewValue } from "@shift/types";
 
 export const CELL_HEIGHT = 75;
 
@@ -43,66 +40,42 @@ export function computeCellWidth(
 }
 
 interface GlyphPreviewProps {
-  font: Font;
-  glyphId: GlyphId | null;
+  preview: GlyphPreviewValue | null;
   unicode: number | null;
   metrics: FontMetrics;
-  designLocation: Signal<AxisLocation>;
   height?: number;
 }
 
 export function GlyphPreview({
-  font,
-  glyphId,
+  preview,
   unicode,
   metrics,
-  designLocation,
   height = CELL_HEIGHT,
 }: GlyphPreviewProps) {
-  if (!glyphId) {
+  if (!preview) {
     return <FallbackCell metrics={metrics} height={height} unicode={unicode} advance={null} />;
   }
 
-  return (
-    <GlyphCell
-      font={font}
-      metrics={metrics}
-      height={height}
-      glyphId={glyphId}
-      unicode={unicode}
-      designLocation={designLocation}
-    />
-  );
+  return <GlyphCell metrics={metrics} height={height} preview={preview} />;
 }
 
 function GlyphCell({
-  font,
   metrics,
   height,
-  glyphId,
-  unicode,
-  designLocation,
+  preview,
 }: {
-  font: Font;
   metrics: FontMetrics;
   height: number;
-  glyphId: GlyphId;
-  unicode: number | null;
-  designLocation: Signal<AxisLocation>;
+  preview: GlyphPreviewValue;
 }) {
-  const instance = font.instance(glyphId, designLocation);
-  const outline = instance?.render.outline ?? null;
-
-  useSignalTrigger(outline?.svgPathCell);
-  useSignalTrigger(instance?.xAdvanceCell);
-  const svgPath = outline?.svgPath ?? "";
-  const advance = instance?.xAdvance ?? null;
+  const svgPath = preview.svgPath;
+  const advance = preview.xAdvance;
 
   const cellWidth = computeCellWidth(metrics, advance, height);
   const containerStyle = { width: cellWidth, height };
 
   if (!svgPath) {
-    return <FallbackCell metrics={metrics} height={height} unicode={unicode} advance={advance} />;
+    return <div style={containerStyle} />;
   }
 
   const viewBox = glyphPreviewViewBox(metrics, advance);

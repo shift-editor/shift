@@ -7,7 +7,7 @@ use shift_font::{GlyphId, PointType as IrPointType};
 use crate::{
     AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, AxisTent, ComponentData,
     ContourData, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
-    GlyphLayerSnapshot, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState,
+    GlyphLayerSnapshot, GlyphPreview, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState,
     GlyphStructure, GlyphVariationData, Location, NamedInstance, PointData, PointType, Source,
 };
 
@@ -393,6 +393,24 @@ impl From<GlyphSnapshot> for NapiGlyphSnapshot {
             glyph_id: snapshot.glyph_id.to_string(),
             variation_data: snapshot.variation_data.map(Into::into),
             layers: snapshot.layers.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphPreview {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    pub svg_path: String,
+    pub x_advance: f64,
+}
+
+impl From<GlyphPreview> for NapiGlyphPreview {
+    fn from(preview: GlyphPreview) -> Self {
+        Self {
+            glyph_id: preview.glyph_id.to_string(),
+            svg_path: preview.svg_path,
+            x_advance: preview.x_advance,
         }
     }
 }

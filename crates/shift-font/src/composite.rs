@@ -371,6 +371,21 @@ pub fn layer_to_svg_path(layer: &GlyphLayer, component_contours: &[ResolvedConto
     parts.join(" ")
 }
 
+/// Builds one SVG path string from already resolved contours in font units.
+///
+/// Empty contours and contours without drawable segments are omitted. An empty
+/// result therefore represents a present blank glyph, not a missing glyph.
+pub fn resolved_contours_to_svg_path(contours: &[ResolvedContour]) -> String {
+    contours
+        .iter()
+        .filter_map(|contour| {
+            let path = contour_to_svg_d(&contour.points, contour.closed);
+            (!path.is_empty()).then_some(path)
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn accumulate_contour_bbox(
     points: &[Point],
     closed: bool,

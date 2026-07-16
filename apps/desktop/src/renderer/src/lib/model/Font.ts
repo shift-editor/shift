@@ -6,6 +6,7 @@ import type {
   AxisMapping,
   Source,
   GlyphId,
+  GlyphPreview,
   GlyphRecord,
   GlyphLayerRecord,
   GlyphName,
@@ -997,6 +998,30 @@ export class Font {
     const glyph = (await this.loadGlyphs([glyphId]))[0];
     if (!glyph) throw new Error(`current-font glyph ${glyphId} could not be read`);
     return glyph;
+  }
+
+  /**
+   * Resolves lightweight glyph projections at an internal design location.
+   *
+   * @remarks
+   * This read does not populate `FontStore` or create live {@link Glyph} models.
+   * Existing blank glyphs return an empty SVG path; missing identities are omitted.
+   *
+   * @param glyphIds - Stable glyph identities to resolve in request order.
+   * @param location - Internal design location shared by the whole batch.
+   * @returns Fresh preview values containing flattened paths and root advances.
+   * @throws {Error} when the workspace is unavailable or native resolution fails.
+   */
+  async glyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: AxisLocation,
+  ): Promise<readonly GlyphPreview[]> {
+    if (!this.#editCoordinator || glyphIds.length === 0) return [];
+
+    const wireLocation: Location = {
+      values: Object.fromEntries(location) as Location["values"],
+    };
+    return this.#editCoordinator.readGlyphPreviews(glyphIds, wireLocation);
   }
 
   /**

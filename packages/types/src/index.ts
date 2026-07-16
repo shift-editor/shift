@@ -105,6 +105,7 @@ export type {
   GlyphHandle,
   GlyphLayerRecord,
   GlyphName,
+  GlyphPreview,
   GlyphRecord,
   GlyphState,
   GlyphStructure,
