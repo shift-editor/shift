@@ -89,7 +89,13 @@ const AxisSlider = ({ axis, value, onChange, onReset }: AxisSliderProps) => (
       onReset();
     }}
   >
-    <Slider min={axis.minimum} max={axis.maximum} step={1} value={value} onValueChange={onChange} />
+    <Slider
+      min={axis.minimum}
+      max={axis.maximum}
+      step={0.01}
+      value={value}
+      onValueChange={onChange}
+    />
   </div>
 );
 
