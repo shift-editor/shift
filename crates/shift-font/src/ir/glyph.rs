@@ -184,6 +184,10 @@ impl GlyphLayer {
         self.components.values()
     }
 
+    pub fn components_iter_mut(&mut self) -> impl Iterator<Item = &mut Component> {
+        self.components.values_mut()
+    }
+
     pub fn component(&self, id: ComponentId) -> Option<&Component> {
         self.components.get(&id)
     }
@@ -208,6 +212,10 @@ impl GlyphLayer {
 
     pub fn anchors_iter(&self) -> impl Iterator<Item = &Anchor> {
         self.anchors.iter()
+    }
+
+    pub fn anchors_iter_mut(&mut self) -> impl Iterator<Item = &mut Anchor> {
+        self.anchors.iter_mut()
     }
 
     pub fn anchor(&self, id: AnchorId) -> Option<&Anchor> {

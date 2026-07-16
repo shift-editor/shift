@@ -104,7 +104,6 @@ export type {
   GlyphChangedEntities,
   GlyphHandle,
   GlyphLayerRecord,
-  GlyphMaster,
   GlyphName,
   GlyphRecord,
   GlyphState,

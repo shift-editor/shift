@@ -280,6 +280,28 @@ pub fn flatten_component_contours_for_layer(
         .collect()
 }
 
+/// Resolves root and component contours for one derived glyph layer.
+///
+/// Root points receive fresh identities because the result is read-only
+/// derived geometry. Components use the supplied provider and skip cyclic
+/// branches without dropping other contours.
+pub fn resolved_contours_for_layer(
+    provider: &impl GlyphLayerProvider,
+    layer: &GlyphLayer,
+    root_glyph_id: &GlyphId,
+) -> Vec<ResolvedContour> {
+    let mut contours = layer
+        .contours_iter()
+        .map(|contour| transform_contour_points(contour, Transform::identity()))
+        .collect::<Vec<_>>();
+    contours.extend(flatten_component_contours_for_layer(
+        provider,
+        layer,
+        root_glyph_id,
+    ));
+    contours
+}
+
 /// Resolves root-level component instances with provenance data.
 ///
 /// Each returned instance corresponds to a direct component of `layer` and

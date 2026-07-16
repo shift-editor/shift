@@ -393,15 +393,6 @@ export interface NapiGlyphLayerSnapshot {
   state: NapiGlyphState
 }
 
-export interface NapiGlyphMaster {
-  sourceId: SourceId
-  sourceName: string
-  isDefaultSource: boolean
-  location: NapiLocation
-  structure: NapiGlyphStructure
-  values: Float64Array
-}
-
 export interface NapiGlyphRecord {
   id: GlyphId
   name: GlyphName
