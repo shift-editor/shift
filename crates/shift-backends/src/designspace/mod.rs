@@ -13,7 +13,7 @@ mod tests {
     use crate::traits::{FontReader, FontWriter};
     use shift_font::{
         Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, Contour, Font,
-        Glyph, GlyphLayer, LayerId, Location, PointType,
+        Glyph, GlyphLayer, LayerId, Location, NamedInstance, PointType,
     };
     use std::fs;
 
@@ -125,6 +125,12 @@ mod tests {
         );
         cross.set_description(Some("Italic masters become lighter".to_string()));
         font.set_axis_mappings(vec![independent, cross]).unwrap();
+        font.set_named_instances(vec![NamedInstance::new(
+            "Black Italic".to_string(),
+            location(&[(weight_id.clone(), 900.0), (italic_id.clone(), 1.0)]),
+            Some("PlaceholderSans-BlackItalic".to_string()),
+        )])
+        .unwrap();
 
         DesignspaceWriter::new()
             .save(&font, designspace_path.to_str().unwrap())
@@ -137,6 +143,9 @@ mod tests {
         assert!(xml.contains("<label name=\"Regular\" uservalue=\"400\""));
         assert!(xml.contains("<mappings"));
         assert!(xml.contains("Italic masters become lighter"));
+        assert!(xml.contains("stylename=\"Black Italic\""));
+        assert!(xml.contains("postscriptfontname=\"PlaceholderSans-BlackItalic\""));
+        assert!(xml.contains("<dimension name=\"Weight\" uservalue=\"900\""));
 
         let loaded = DesignspaceReader::new()
             .load(designspace_path.to_str().unwrap())
@@ -166,6 +175,61 @@ mod tests {
         assert!(loaded.axis_mappings()[0].is_independent());
         assert!(!loaded.axis_mappings()[1].is_independent());
         assert_eq!(loaded.axis_mappings()[1].points().len(), 1);
+        assert_eq!(loaded.named_instances().len(), 1);
+        assert_eq!(loaded.named_instances()[0].name(), "Black Italic");
+        assert_eq!(
+            loaded.named_instances()[0]
+                .location()
+                .get(&loaded_weight.id()),
+            Some(900.0)
+        );
+        assert_eq!(
+            loaded.named_instances()[0].postscript_name(),
+            Some("PlaceholderSans-BlackItalic")
+        );
+    }
+
+    #[test]
+    fn round_trips_a_linked_label_outside_a_constant_discrete_axis() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let designspace_path = temp_dir.path().join("Roman.designspace");
+        let mut font = test_font();
+        let mut italic = Axis::discrete_with_id(
+            shift_font::AxisId::new(),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0],
+            0.0,
+        );
+        italic.set_labels(vec![AxisLabel::new(
+            "Roman".to_string(),
+            0.0,
+            None,
+            Some(1.0),
+            true,
+        )]);
+        font.add_axis(italic)
+            .expect("a linked family counterpart may be outside the local axis");
+
+        DesignspaceWriter::new()
+            .save(&font, designspace_path.to_str().unwrap())
+            .unwrap();
+
+        let xml = fs::read_to_string(&designspace_path).unwrap();
+        assert!(xml.contains("values=\"0\""));
+        assert!(xml.contains("linkeduservalue=\"1\""));
+
+        let loaded = DesignspaceReader::new()
+            .load(designspace_path.to_str().unwrap())
+            .unwrap();
+        let loaded_italic = loaded
+            .axes()
+            .iter()
+            .find(|axis| axis.tag() == "ital")
+            .unwrap();
+
+        assert_eq!(loaded_italic.labels()[0].linked_value, Some(1.0));
+        assert!(loaded_italic.validate().is_ok());
     }
 
     fn mapping_point(

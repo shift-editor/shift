@@ -341,9 +341,6 @@ impl Axis {
             }
 
             let mut values = vec![label.value];
-            if let Some(linked_value) = label.linked_value {
-                values.push(linked_value);
-            }
             if let Some(range) = &label.range {
                 values.extend([range.minimum, range.maximum]);
             }
@@ -747,6 +744,26 @@ mod tests {
                 message,
             }) if invalid_id == label_id && message.contains("inside the axis range")
         ));
+    }
+
+    #[test]
+    fn linked_axis_label_value_can_reference_a_family_counterpart() {
+        let mut axis = Axis::discrete_with_id(
+            AxisId::from_raw("italic"),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0],
+            0.0,
+        );
+        axis.set_labels(vec![AxisLabel::new(
+            "Roman".to_string(),
+            0.0,
+            None,
+            Some(1.0),
+            true,
+        )]);
+
+        assert!(axis.validate().is_ok());
     }
 
     #[test]
