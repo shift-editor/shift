@@ -335,7 +335,7 @@ describe("font-level intents make the font variable", () => {
     expect(glyph.unicode).toBe(0xe001);
   });
 
-  it("exact sources without glyph layers have no live layer and do not render default geometry", async () => {
+  it("exact sources without glyph layers have no live layer and use projected fallback geometry", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();
     const glyphId = mintGlyphId();
@@ -383,12 +383,12 @@ describe("font-level intents make the font variable", () => {
     const bold = stack.font.source(sourceId);
     if (!bold) throw new Error("Expected created source");
     const location = axisLocationFromLocation(bold.location);
-    const instance = stack.font.instance(glyph.id, location);
-    if (!instance) throw new Error("Expected glyph instance");
+    const view = stack.font.glyphView(glyph.id, location);
+    if (!view) throw new Error("Expected glyph view");
 
     expect(stack.font.editableLayerAt(glyph.id, location)).toBeNull();
-    expect(instance.xAdvance).toBe(0);
-    expect(instance.geometry.allPoints).toEqual([]);
+    expect(view.xAdvance).toBe(640);
+    expect(view.geometry.allPoints).toEqual([]);
   });
 
   it("loads every authored layer in one glyph snapshot", async () => {

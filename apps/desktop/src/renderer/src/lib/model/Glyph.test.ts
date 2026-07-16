@@ -90,14 +90,14 @@ describe("Glyph", () => {
 
   it("updates positions synchronously and keeps them after the echo folds", async () => {
     const [first] = await addTriangle(editor, layer);
-    const instance = editor.sceneGlyphInstance;
-    if (!instance) throw new Error("Expected glyph instance");
+    const view = editor.sceneGlyphView;
+    if (!view) throw new Error("Expected glyph view");
 
     layer.applyPositionPatch([{ kind: "point", id: first!.id, x: 25, y: 75 }]);
-    expect(instance.geometry.point(first!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.geometry.point(first!.id)).toMatchObject({ x: 25, y: 75 });
 
     await editor.settle();
-    expect(instance.geometry.point(first!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.geometry.point(first!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
   it("feeds consumers that track source coordinate changes before reading geometry", async () => {
@@ -216,7 +216,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
       x: 25,
       y: 75,
     });
-    expect(layer.bounds).toEqual(editor.sceneGlyphInstance?.geometry.bounds);
+    expect(layer.bounds).toEqual(editor.sceneGlyphView?.geometry.bounds);
   });
 
   it("applies committed point patches to the source and owning glyph geometry", async () => {
@@ -227,7 +227,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
     expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(editor.sceneGlyphInstance?.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(editor.sceneGlyphView?.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
   it("commits a preview without double-applying local positions", async () => {
@@ -255,45 +255,39 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     expect(pointPosition(layer, second!.id)).toEqual({ x: 35, y: 80 });
   });
 
-  it("keeps source-backed instance geometry contours fresh after position edits", async () => {
+  it("keeps source-backed view geometry contours fresh after position edits", async () => {
     const [, second] = await addTriangle(editor, layer);
-    const instance = editor.font.instance(
-      record.id,
-      axisLocationFromLocation(layer.source.location),
-    );
-    if (!instance) throw new Error("Expected glyph instance");
+    const view = editor.font.glyphView(record.id, axisLocationFromLocation(layer.source.location));
+    if (!view) throw new Error("Expected glyph view");
 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
     await editor.settle();
 
-    expect(instance.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
-    expect(instance.geometry.allPoints.find((point) => point.id === second!.id)).toMatchObject({
+    expect(view.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.geometry.allPoints.find((point) => point.id === second!.id)).toMatchObject({
       x: 25,
       y: 75,
     });
     expect(
-      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+      view.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
     ).toMatchObject({ x: 25, y: 75 });
   });
 
-  it("invalidates source-backed instance contours that were read before a position edit", async () => {
+  it("invalidates source-backed view contours that were read before a position edit", async () => {
     const [, second] = await addTriangle(editor, layer);
-    const instance = editor.font.instance(
-      record.id,
-      axisLocationFromLocation(layer.source.location),
-    );
-    if (!instance) throw new Error("Expected glyph instance");
+    const view = editor.font.glyphView(record.id, axisLocationFromLocation(layer.source.location));
+    if (!view) throw new Error("Expected glyph view");
 
     expect(
-      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+      view.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
     ).toMatchObject({ x: 100, y: 0 });
 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
     await editor.settle();
 
-    expect(instance.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
     expect(
-      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+      view.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
     ).toMatchObject({ x: 25, y: 75 });
   });
 });

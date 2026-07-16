@@ -22,16 +22,18 @@ export class Positioner {
 
     for (const [idx, g] of run.glyphs.entries()) {
       const record = font.recordForName(g.glyphName);
-      const instance = record ? font.instance(record.id, designLocation) : null;
+      const view = record ? font.glyphView(record.id, designLocation) : null;
       let glyphName = g.glyphName;
       let bounds: Bounds | null = null;
 
-      if (record && instance) {
+      if (record && view) {
         glyphName = record.name;
-        bounds = instance.render.outline.bounds;
+        bounds = view.render.outline.bounds;
       }
 
-      const xAdvance = resolveAdvance(g, font, source);
+      const xAdvance = view
+        ? displayAdvance(view.xAdvance, g.glyphName, g.codepoint)
+        : resolveAdvance(g, font, source);
       const origin = { x: totalAdvance, y: 0 };
       const offset = resolveGlyphOffset(g, font, source);
       totalAdvance += xAdvance;

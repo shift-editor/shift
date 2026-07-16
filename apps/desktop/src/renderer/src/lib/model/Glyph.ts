@@ -82,13 +82,13 @@ interface GlyphEditState {
 }
 
 /**
- * Resolved reactive inputs used to construct one read-only glyph instance.
+ * Resolved reactive inputs used to construct one read-only glyph view.
  *
  * @remarks
  * `Font` owns these signals so source matching, interpolation, and outline
- * component lookup stay outside `GlyphInstance`.
+ * component lookup stay outside `GlyphView`.
  */
-export interface GlyphInstanceInput {
+export interface GlyphViewInput {
   readonly location: Signal<AxisLocation>;
   readonly layer: Signal<GlyphLayer | null>;
   readonly geometry: Signal<GlyphGeometry>;
@@ -96,15 +96,15 @@ export interface GlyphInstanceInput {
 }
 
 /**
- * Geometry lookup surface for a glyph instance.
+ * Geometry lookup surface for a glyph view.
  *
  * @remarks
- * Exact source instances read sparse reactive coordinate buffers so lookup and
+ * Exact-source views read sparse reactive coordinate buffers so lookup and
  * hit testing avoid rebuilding full `GlyphGeometry` snapshots during pointer
- * previews. Interpolated instances currently resolve through immutable
+ * previews. Interpolated views currently resolve through immutable
  * geometry snapshots; callers should treat that as an implementation detail.
  */
-export interface GlyphInstanceGeometry {
+export interface GlyphViewGeometry {
   readonly xAdvance: number;
   readonly xAdvanceCell: Signal<number>;
   readonly sidebearings: GlyphSidebearings;
@@ -903,23 +903,23 @@ export class GlyphLayer {
  * @remarks
  * `geometry` is the lookup and hit-testing surface, and `render` is the drawing
  * surface. Editability is resolved separately through `Font.layer` or
- * `Font.editableLayerAt`; instances are read/render views only.
+ * `Font.editableLayerAt`; glyph views never own authored geometry.
  */
-export class GlyphInstance {
+export class GlyphView {
   readonly #location: Signal<AxisLocation>;
-  readonly geometry: GlyphInstanceGeometry;
+  readonly geometry: GlyphViewGeometry;
   readonly render: GlyphRenderModel;
 
   /**
-   * Creates a glyph instance tied to a live designspace location.
+   * Creates a glyph view tied to a live designspace location.
    *
    * @param input - Resolved reactive inputs assembled by the owning font.
    */
-  constructor(input: GlyphInstanceInput) {
+  constructor(input: GlyphViewInput) {
     this.#location = input.location;
 
-    this.geometry = new InstanceGeometry(input.layer, input.geometry);
-    this.render = new InstanceRender(input.layer, input.geometry, input.outline).model;
+    this.geometry = new ViewGeometry(input.layer, input.geometry);
+    this.render = new ViewRender(input.layer, input.geometry, input.outline).model;
   }
 
   get location(): AxisLocation {
@@ -943,15 +943,15 @@ export class GlyphInstance {
   }
 }
 
-class InstanceRender {
+class ViewRender {
   readonly #contours = keyedCache({
-    name: "glyphInstance.render.contours",
+    name: "glyphView.render.contours",
     key: (input: GlyphRenderContourInput) => input.data.id,
     create: (input) => new LayerRenderContour(input),
   });
 
   readonly #anchors = keyedCache({
-    name: "glyphInstance.render.anchors",
+    name: "glyphView.render.anchors",
     key: (input: GlyphRenderAnchorInput) => input.data.id,
     create: (input) => new LayerRenderAnchor(input),
   });
@@ -1020,8 +1020,8 @@ class InstanceRender {
   }
 }
 
-class InstanceGeometry implements GlyphInstanceGeometry {
-  readonly #resolved: ComputedSignal<GlyphInstanceGeometry>;
+class ViewGeometry implements GlyphViewGeometry {
+  readonly #resolved: ComputedSignal<GlyphViewGeometry>;
   readonly #xAdvance: ComputedSignal<number>;
   readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
 
@@ -1033,13 +1033,13 @@ class InstanceGeometry implements GlyphInstanceGeometry {
 
         return new SnapshotGeometryCache(geometry.value);
       },
-      { name: "glyphInstance.geometry" },
+      { name: "glyphView.geometry" },
     );
     this.#xAdvance = computed(() => this.#resolved.value.xAdvance, {
-      name: "glyphInstance.geometry.xAdvance",
+      name: "glyphView.geometry.xAdvance",
     });
     this.#sidebearings = computed(() => this.#resolved.value.sidebearings, {
-      name: "glyphInstance.geometry.sidebearings",
+      name: "glyphView.geometry.sidebearings",
     });
   }
 
@@ -1104,7 +1104,7 @@ class InstanceGeometry implements GlyphInstanceGeometry {
   }
 }
 
-class SnapshotGeometryCache implements GlyphInstanceGeometry {
+class SnapshotGeometryCache implements GlyphViewGeometry {
   readonly #geometry: GlyphGeometry;
   readonly #xAdvance: Signal<number>;
   readonly #sidebearings: Signal<GlyphSidebearings>;
@@ -1112,10 +1112,10 @@ class SnapshotGeometryCache implements GlyphInstanceGeometry {
   constructor(geometry: GlyphGeometry) {
     this.#geometry = geometry;
     this.#xAdvance = computed(() => geometry.xAdvance, {
-      name: "glyphInstance.snapshotGeometry.xAdvance",
+      name: "glyphView.snapshotGeometry.xAdvance",
     });
     this.#sidebearings = computed(() => geometry.sidebearings, {
-      name: "glyphInstance.snapshotGeometry.sidebearings",
+      name: "glyphView.snapshotGeometry.sidebearings",
     });
   }
 
@@ -1180,11 +1180,11 @@ class SnapshotGeometryCache implements GlyphInstanceGeometry {
   }
 }
 
-class SourceGeometryCache implements GlyphInstanceGeometry {
+class SourceGeometryCache implements GlyphViewGeometry {
   readonly #source: GlyphLayer;
 
   readonly #contourCache = keyedCache({
-    name: "instanceGeometry.contours",
+    name: "glyphView.geometry.contours",
     key: (input: ContourInput) => input.data.id,
     create: (input) => new ContourCache(input),
   });
@@ -1471,11 +1471,11 @@ class ContourCache {
  *
  * @remarks
  * Public callers should resolve glyph identity, authored layers, and rendered
- * instances through `Font.glyph`, `Font.layer`, and `Font.instance`.
+ * views through `Font.glyph`, `Font.layer`, and `Font.glyphView`.
  */
 export class Glyph {
   readonly #font: Font;
-  readonly #source: Source;
+  readonly #sourceId: SourceId;
   readonly #fallbackHandle: GlyphHandle;
 
   readonly #layerState: GlyphLayerState;
@@ -1485,7 +1485,6 @@ export class Glyph {
 
   readonly #xAdvance: ComputedSignal<number>;
   readonly #edit: GlyphEditSession;
-  readonly #instances = new WeakMap<Signal<AxisLocation>, GlyphInstance>();
 
   constructor(
     font: Font,
@@ -1496,7 +1495,7 @@ export class Glyph {
   ) {
     this.#fallbackHandle = handle;
     this.#font = font;
-    this.#source = source;
+    this.#sourceId = source.id;
     this.#glyphId = glyphId;
 
     this.#layerState = state;
@@ -1560,53 +1559,16 @@ export class Glyph {
     return this.#geometry.peek().allPoints;
   }
 
-  /**
-   * Returns the cached instance for a live designspace location.
-   *
-   * @param location - Signal whose value controls source resolution and interpolation.
-   * @returns The cached instance object for this glyph/location signal pair.
-   * @internal
-   */
-  cachedInstanceForFont(location: Signal<AxisLocation>): GlyphInstance | null {
-    return this.#instances.get(location) ?? null;
-  }
-
-  /**
-   * Stores a font-created instance for this glyph/location signal pair.
-   *
-   * @param input - Resolved reactive inputs assembled by the owning font.
-   * @returns The created instance object.
-   * @internal
-   */
-  createInstanceForFont(input: GlyphInstanceInput): GlyphInstance {
-    const existing = this.#instances.get(input.location);
-    if (existing) return existing;
-
-    const instance = new GlyphInstance(input);
-    this.#instances.set(input.location, instance);
-    return instance;
-  }
-
-  /** @internal Primary authored source backing the cached glyph model. */
-  get primarySourceForFont(): Source {
-    return this.#source;
-  }
-
   /** @internal Primary source geometry backing fallback and interpolation. */
   get primaryGeometryForFont(): GlyphGeometry {
     return this.#geometry.peek();
   }
 
-  /** @internal Structure used by variation interpolation values. */
-  get interpolationStructureForFont(): GlyphStructure {
-    return this.#layerState.structure;
-  }
-
   isPrimarySource(source: Source): boolean {
-    return source.id === this.#source.id;
+    return source.id === this.#sourceId;
   }
 
-  /** @internal GlyphLayer caching is owned by the id-keyed FontStore model cache. */
+  /** @internal Glyph-layer identity is owned by the id-keyed FontStore. */
   createGlyphLayer(source: Source, state?: GlyphLayerState | null): GlyphLayer | null {
     if (!this.#font.source(source.id)) return null;
     if (this.isPrimarySource(source)) return new GlyphLayer(source, this.#edit);

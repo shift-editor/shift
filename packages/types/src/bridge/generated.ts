@@ -55,13 +55,13 @@ export interface BridgeApi {
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   /**
-   * Resolves lightweight glyph previews at one internal design location.
+   * Returns compact glyph projections without resolving a location.
    *
-   * The result preserves request order for existing glyphs and omits missing
-   * identities. It contains flattened SVG path data and advances only; no
-   * editable glyph models or source snapshots are created.
+   * Missing glyph identities and glyphs without authored shapes are omitted.
+   * The projections retain compatible interpolation and exact-source shapes so a
+   * renderer can evaluate design-location changes without further IPC.
    */
-  getGlyphPreviews(glyphIds: Array<GlyphId>, location: Location): Array<GlyphPreview>
+  getGlyphProjections(glyphIds: Array<GlyphId>): Array<GlyphProjection>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
@@ -190,13 +190,6 @@ export interface AxisMappingPoint {
 }
 
 export type AxisRole = "external" | "internal";
-
-export interface AxisTent {
-  axisTag: string
-  lower: number
-  peak: number
-  upper: number
-}
 
 export type AxisType = "continuous" | "discrete";
 
@@ -389,6 +382,11 @@ export interface GlyphChangedEntities {
   componentIds: Array<ComponentId>
 }
 
+export interface GlyphInterpolation {
+  basis: InterpolationBasis
+  sources: Array<GlyphSourceValues>
+}
+
 export interface GlyphLayerRecord {
   id: LayerId
   sourceId: SourceId
@@ -400,10 +398,12 @@ export interface GlyphLayerSnapshot {
   state: GlyphState
 }
 
-export interface GlyphPreview {
+export interface GlyphProjection {
   glyphId: GlyphId
-  svgPath: string
-  xAdvance: number
+  fallback: GlyphShape
+  interpolation?: GlyphInterpolation
+  exactSourceShapes: Array<GlyphSourceShape>
+  componentGlyphIds: Array<GlyphId>
 }
 
 export interface GlyphRecord {
@@ -414,14 +414,29 @@ export interface GlyphRecord {
   layers: Array<GlyphLayerRecord>
 }
 
+export interface GlyphShape {
+  structure: GlyphStructure
+  values: Float64Array
+}
+
 export interface GlyphSnapshot {
   glyphId: GlyphId
-  variationData?: GlyphVariationData
+  projection?: GlyphProjection
   layers: Array<GlyphLayerSnapshot>
 }
 
 export interface GlyphSnapshotRequest {
   glyphId: GlyphId
+}
+
+export interface GlyphSourceShape {
+  sourceId: SourceId
+  shape: GlyphShape
+}
+
+export interface GlyphSourceValues {
+  sourceId: SourceId
+  values: Float64Array
 }
 
 export interface GlyphState {
@@ -437,11 +452,17 @@ export interface GlyphStructure {
   components: Array<ComponentData>
 }
 
-export interface GlyphVariationData {
-  /** One entry per region. Inner = tents on the axes the region depends on. */
-  regions: Array<Array<AxisTent>>
-  /** Deltas are flattened in `GlyphState::values` order. */
-  deltas: Array<Float64Array>
+export interface InterpolationBasis {
+  sourceIds: Array<SourceId>
+  regions: Array<Array<InterpolationSupport>>
+  coefficients: Array<Float64Array>
+}
+
+export interface InterpolationSupport {
+  axisId: AxisId
+  lower: number
+  peak: number
+  upper: number
 }
 
 /**

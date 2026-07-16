@@ -30,6 +30,8 @@ Import from `@shift/types`.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
+- `InterpolationBasis` -- ordered source identities, normalized support regions, and source coefficient rows; contains no glyph-specific values.
+- `GlyphProjection` -- location-independent renderer backing with fallback shape, compatible source values, exact-source shapes, and component identities.
 - `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.

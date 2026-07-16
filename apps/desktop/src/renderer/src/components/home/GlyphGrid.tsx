@@ -43,15 +43,14 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueries } from "@tanstack/react-query";
 import { type VirtualItem, useVirtualizer } from "@tanstack/react-virtual";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
-import { useEditor, useWorkspace } from "@/workspace/WorkspaceContext";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
-import { useSignalState } from "@/lib/signals";
+import { useGlyphViews } from "@/hooks/useGlyphViews";
 import { Button, Input } from "@shift/ui";
-import type { GlyphId, GlyphName, GlyphPreview as GlyphPreviewValue } from "@shift/types";
+import type { GlyphId, GlyphName } from "@shift/types";
 
 const ROW_HEIGHT = CELL_HEIGHT + 40 + 8;
 const NOMINAL_CELL_WIDTH = 100;
@@ -59,9 +58,7 @@ const GAP = 8;
 const SCROLL_PADDING = 4;
 const ROW_PADDING_X = 4;
 const OVERSCAN = 5;
-const GLYPH_QUERY_CHUNK_SIZE = 32;
-const GLYPH_QUERY_OVERSCAN_CHUNKS = 1;
-const GLYPH_QUERY_GC_TIME = 30_000;
+const PROJECTION_OVERSCAN = 32;
 
 function computeLayout(width: number) {
   const availableWidth = width - SCROLL_PADDING - ROW_PADDING_X;
@@ -91,13 +88,9 @@ function visibleGlyphRowsForRows(
 
 export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
-  const workspace = useWorkspace();
-  const editor = workspace.editor;
+  const editor = useEditor();
   const font = editor.font;
   const metrics = font.metrics;
-  const designLocation = useSignalState(editor.designLocationCell, { schedule: "frame" });
-  const documentState = useSignalState(workspace.documentStateCell);
-  const documentId = documentState?.documentId ?? null;
   const { filteredGlyphs: catalogGlyphs } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -148,59 +141,17 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const visibleEndIndex = lastVisibleRow
     ? Math.min(catalogGlyphs.length, (lastVisibleRow.index + 1) * columns)
     : 0;
-  const previewGlyphChunks = useMemo((): readonly (readonly GlyphId[])[] => {
+  const previewGlyphIds = useMemo((): readonly GlyphId[] => {
     if (visibleEndIndex <= visibleStartIndex) return [];
 
-    const queryStartIndex = Math.max(
-      0,
-      visibleStartIndex - GLYPH_QUERY_OVERSCAN_CHUNKS * GLYPH_QUERY_CHUNK_SIZE,
-    );
-    const queryEndIndex = Math.min(
-      catalogGlyphs.length,
-      visibleEndIndex + GLYPH_QUERY_OVERSCAN_CHUNKS * GLYPH_QUERY_CHUNK_SIZE,
-    );
-    const firstChunkStart =
-      Math.floor(queryStartIndex / GLYPH_QUERY_CHUNK_SIZE) * GLYPH_QUERY_CHUNK_SIZE;
-    const chunks: GlyphId[][] = [];
-
-    for (
-      let chunkStart = firstChunkStart;
-      chunkStart < queryEndIndex;
-      chunkStart += GLYPH_QUERY_CHUNK_SIZE
-    ) {
-      chunks.push(
-        catalogGlyphs
-          .slice(chunkStart, chunkStart + GLYPH_QUERY_CHUNK_SIZE)
-          .map((glyph) => glyph.id),
-      );
-    }
-
-    return chunks;
+    const startIndex = Math.max(0, visibleStartIndex - PROJECTION_OVERSCAN);
+    const endIndex = Math.min(catalogGlyphs.length, visibleEndIndex + PROJECTION_OVERSCAN);
+    return catalogGlyphs.slice(startIndex, endIndex).map((glyph) => glyph.id);
   }, [catalogGlyphs, visibleEndIndex, visibleStartIndex]);
-  const locationKey = useMemo(
-    () => [...designLocation].sort(([left], [right]) => left.localeCompare(right)),
-    [designLocation],
-  );
-  const glyphChunkQueries = useQueries({
-    queries: previewGlyphChunks.map((glyphIds) => ({
-      queryKey: ["glyph-previews", documentId, locationKey, glyphIds] as const,
-      queryFn: async (): Promise<readonly GlyphPreviewValue[]> => {
-        try {
-          return await font.glyphPreviews(glyphIds, designLocation);
-        } catch (error) {
-          console.error("failed to resolve glyph preview chunk", error);
-          throw error;
-        }
-      },
-      enabled: documentId !== null,
-      staleTime: Infinity,
-      gcTime: GLYPH_QUERY_GC_TIME,
-    })),
-  });
-  const previewsByGlyphId = new Map(
-    glyphChunkQueries
-      .flatMap((query) => query.data ?? [])
-      .map((preview) => [preview.glyphId, preview] as const),
+  const glyphViews = useGlyphViews(font, previewGlyphIds, editor.designLocationCell);
+  const viewsByGlyphId = useMemo(
+    () => new Map(previewGlyphIds.map((glyphId, index) => [glyphId, glyphViews[index]] as const)),
+    [glyphViews, previewGlyphIds],
   );
 
   const handleCellClick = useCallback(
@@ -263,8 +214,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
                         onClick={() => handleCellClick(glyph)}
                       >
                         <GlyphPreview
-                          preview={previewsByGlyphId.get(glyph.id) ?? null}
-                          unicode={glyph.unicode}
+                          view={viewsByGlyphId.get(glyph.id) ?? null}
                           metrics={metrics}
                           height={CELL_HEIGHT}
                         />

@@ -1,4 +1,4 @@
-import type { AppliedChange, FontIntent, GlyphId, GlyphPreview, Location } from "@shift/types";
+import type { AppliedChange, FontIntent, GlyphId, GlyphProjection, Location } from "@shift/types";
 import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
@@ -135,7 +135,7 @@ export class WorkspaceEditCoordinator {
   apply(intents: FontIntent[]): Promise<AppliedChange> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.apply(intents);
-      this.#store.applyWorkspaceChange(applied);
+      await this.#applyChange(applied);
       return applied;
     });
   }
@@ -144,7 +144,7 @@ export class WorkspaceEditCoordinator {
   undo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.undo();
-      if (applied) this.#store.applyWorkspaceChange(applied);
+      if (applied) await this.#applyChange(applied);
       return applied;
     });
   }
@@ -157,20 +157,11 @@ export class WorkspaceEditCoordinator {
     return this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
   }
 
-  /**
-   * Resolves read-only glyph previews after pending authored edits settle.
-   *
-   * @param glyphIds - Stable glyph identities to resolve in request order.
-   * @param location - Internal design location shared by the whole batch.
-   * @returns Fresh preview values without populating renderer glyph models.
-   */
-  async readGlyphPreviews(
-    glyphIds: readonly GlyphId[],
-    location: Location,
-  ): Promise<GlyphPreview[]> {
+  /** Pulls reusable glyph projection models behind pending authored edits. */
+  async readGlyphProjections(glyphIds: readonly GlyphId[]): Promise<GlyphProjection[]> {
     if (glyphIds.length === 0) return [];
 
-    return this.#withFlush(() => this.#workspace.glyphPreviews(glyphIds, location));
+    return this.#withFlush(() => this.#workspace.glyphProjections(glyphIds));
   }
 
   /**
@@ -187,7 +178,7 @@ export class WorkspaceEditCoordinator {
   redo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#workspace.redo();
-      if (applied) this.#store.applyWorkspaceChange(applied);
+      if (applied) await this.#applyChange(applied);
       return applied;
     });
   }
@@ -237,7 +228,7 @@ export class WorkspaceEditCoordinator {
       try {
         this.#commitState.set("applying");
         const applied = await this.#workspace.apply(intents);
-        this.#store.applyWorkspaceChange(applied);
+        await this.#applyChange(applied);
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
         await this.#resync();
@@ -255,6 +246,14 @@ export class WorkspaceEditCoordinator {
     );
 
     return run;
+  }
+
+  async #applyChange(applied: AppliedChange): Promise<void> {
+    const glyphIds = this.#store.applyWorkspaceChange(applied);
+    if (glyphIds.length === 0) return;
+
+    const projections = await this.#workspace.glyphProjections(glyphIds);
+    this.#store.replaceGlyphProjections(glyphIds, projections);
   }
 
   #afterJob(): void {

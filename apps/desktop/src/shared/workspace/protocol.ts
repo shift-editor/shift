@@ -6,10 +6,9 @@ import type {
   FontMetadata,
   FontMetrics,
   GlyphId,
-  GlyphPreview,
+  GlyphProjection,
   GlyphRecord,
   GlyphState,
-  GlyphVariationData,
   Location,
   NamedInstance,
   Source,
@@ -42,7 +41,7 @@ export type WorkspaceGlyphSnapshotRequest = {
 
 export type WorkspaceGlyphSnapshot = {
   glyphId: GlyphId;
-  variationData?: GlyphVariationData;
+  projection?: GlyphProjection;
   layers: WorkspaceGlyphLayerSnapshot[];
 };
 
@@ -166,9 +165,9 @@ export type SyncCallMap = {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };
     response: WorkspaceGlyphSnapshot[];
   };
-  "workspace.glyphPreviews": {
-    request: { glyphIds: GlyphId[]; location: Location };
-    response: GlyphPreview[];
+  "workspace.glyphProjections": {
+    request: { glyphIds: GlyphId[] };
+    response: GlyphProjection[];
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };

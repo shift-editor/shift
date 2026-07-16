@@ -5,10 +5,12 @@ use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
-    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, AxisTent, ComponentData,
-    ContourData, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
-    GlyphLayerSnapshot, GlyphPreview, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState,
-    GlyphStructure, GlyphVariationData, Location, NamedInstance, PointData, PointType, Source,
+    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, ComponentData, ContourData,
+    FontMetadata, FontMetrics, GlyphChangedEntities, GlyphInterpolation, GlyphLayerRecord,
+    GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphShape, GlyphSnapshot,
+    GlyphSnapshotRequest, GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure,
+    InterpolationBasis, InterpolationSupport, Location, NamedInstance, PointData, PointType,
+    Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -383,7 +385,7 @@ impl From<NapiGlyphSnapshotRequest> for GlyphSnapshotRequest {
 pub struct NapiGlyphSnapshot {
     #[napi(ts_type = "GlyphId")]
     pub glyph_id: String,
-    pub variation_data: Option<NapiGlyphVariationData>,
+    pub projection: Option<NapiGlyphProjection>,
     pub layers: Vec<NapiGlyphLayerSnapshot>,
 }
 
@@ -391,26 +393,147 @@ impl From<GlyphSnapshot> for NapiGlyphSnapshot {
     fn from(snapshot: GlyphSnapshot) -> Self {
         Self {
             glyph_id: snapshot.glyph_id.to_string(),
-            variation_data: snapshot.variation_data.map(Into::into),
+            projection: snapshot.projection.map(Into::into),
             layers: snapshot.layers.into_iter().map(Into::into).collect(),
         }
     }
 }
 
 #[napi(object)]
-pub struct NapiGlyphPreview {
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    pub svg_path: String,
-    pub x_advance: f64,
+pub struct NapiGlyphShape {
+    pub structure: NapiGlyphStructure,
+    pub values: Float64Array,
 }
 
-impl From<GlyphPreview> for NapiGlyphPreview {
-    fn from(preview: GlyphPreview) -> Self {
+impl From<GlyphShape> for NapiGlyphShape {
+    fn from(shape: GlyphShape) -> Self {
         Self {
-            glyph_id: preview.glyph_id.to_string(),
-            svg_path: preview.svg_path,
-            x_advance: preview.x_advance,
+            structure: shape.structure.into(),
+            values: shape.values.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiInterpolationSupport {
+    #[napi(ts_type = "AxisId")]
+    pub axis_id: String,
+    pub lower: f64,
+    pub peak: f64,
+    pub upper: f64,
+}
+
+impl From<InterpolationSupport> for NapiInterpolationSupport {
+    fn from(support: InterpolationSupport) -> Self {
+        Self {
+            axis_id: support.axis_id.to_string(),
+            lower: support.lower,
+            peak: support.peak,
+            upper: support.upper,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiInterpolationBasis {
+    #[napi(ts_type = "Array<SourceId>")]
+    pub source_ids: Vec<String>,
+    pub regions: Vec<Vec<NapiInterpolationSupport>>,
+    pub coefficients: Vec<Float64Array>,
+}
+
+impl From<InterpolationBasis> for NapiInterpolationBasis {
+    fn from(basis: InterpolationBasis) -> Self {
+        Self {
+            source_ids: basis
+                .source_ids
+                .into_iter()
+                .map(|source_id| source_id.to_string())
+                .collect(),
+            regions: basis
+                .regions
+                .into_iter()
+                .map(|region| region.into_iter().map(Into::into).collect())
+                .collect(),
+            coefficients: basis.coefficients.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphSourceValues {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub values: Float64Array,
+}
+
+impl From<GlyphSourceValues> for NapiGlyphSourceValues {
+    fn from(source: GlyphSourceValues) -> Self {
+        Self {
+            source_id: source.source_id.to_string(),
+            values: source.values.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphInterpolation {
+    pub basis: NapiInterpolationBasis,
+    pub sources: Vec<NapiGlyphSourceValues>,
+}
+
+impl From<GlyphInterpolation> for NapiGlyphInterpolation {
+    fn from(interpolation: GlyphInterpolation) -> Self {
+        Self {
+            basis: interpolation.basis.into(),
+            sources: interpolation.sources.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphSourceShape {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub shape: NapiGlyphShape,
+}
+
+impl From<GlyphSourceShape> for NapiGlyphSourceShape {
+    fn from(source_shape: GlyphSourceShape) -> Self {
+        Self {
+            source_id: source_shape.source_id.to_string(),
+            shape: source_shape.shape.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphProjection {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    pub fallback: NapiGlyphShape,
+    pub interpolation: Option<NapiGlyphInterpolation>,
+    pub exact_source_shapes: Vec<NapiGlyphSourceShape>,
+    #[napi(ts_type = "Array<GlyphId>")]
+    pub component_glyph_ids: Vec<String>,
+}
+
+impl From<GlyphProjection> for NapiGlyphProjection {
+    fn from(projection: GlyphProjection) -> Self {
+        Self {
+            glyph_id: projection.glyph_id.to_string(),
+            fallback: projection.fallback.into(),
+            interpolation: projection.interpolation.map(Into::into),
+            exact_source_shapes: projection
+                .exact_source_shapes
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            component_glyph_ids: projection
+                .component_glyph_ids
+                .into_iter()
+                .map(|glyph_id| glyph_id.to_string())
+                .collect(),
         }
     }
 }
@@ -613,46 +736,6 @@ impl From<Location> for NapiLocation {
                 .into_iter()
                 .map(|(axis_id, value)| (axis_id.to_string(), value))
                 .collect(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiAxisTent {
-    pub axis_tag: String,
-    pub lower: f64,
-    pub peak: f64,
-    pub upper: f64,
-}
-
-impl From<AxisTent> for NapiAxisTent {
-    fn from(tent: AxisTent) -> Self {
-        Self {
-            axis_tag: tent.axis_tag,
-            lower: tent.lower,
-            peak: tent.peak,
-            upper: tent.upper,
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiGlyphVariationData {
-    /// One entry per region. Inner = tents on the axes the region depends on.
-    pub regions: Vec<Vec<NapiAxisTent>>,
-    /// Deltas are flattened in `GlyphState::values` order.
-    pub deltas: Vec<Float64Array>,
-}
-
-impl From<GlyphVariationData> for NapiGlyphVariationData {
-    fn from(data: GlyphVariationData) -> Self {
-        Self {
-            regions: data
-                .regions
-                .into_iter()
-                .map(|region| region.into_iter().map(Into::into).collect())
-                .collect(),
-            deltas: data.deltas.into_iter().map(Into::into).collect(),
         }
     }
 }

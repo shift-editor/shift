@@ -10,14 +10,14 @@ use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
     AxisMapping as IrAxisMapping, AxisMappingId, AxisRole as IrAxisRole, Component as IrComponent,
     ComponentId, Contour as IrContour, ContourId, FontMetadata as IrFontMetadata,
-    FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId, GlyphLayer, GlyphName, GuidelineId,
+    FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
+    GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
+    GlyphProjection as IrGlyphProjection, GuidelineId, InterpolationBasis as IrInterpolationBasis,
     LayerId, Location as IrLocation, NamedInstance as IrNamedInstance, NamedInstanceId,
     Point as IrPoint, PointId, PointType as IrPointType, Source as IrSource, SourceId,
 };
 
 pub mod bridges;
-pub mod interpolation;
-pub mod preview;
 pub mod state;
 
 /// Flat numeric glyph values ordered to match `GlyphStructure`.
@@ -352,21 +352,139 @@ pub struct GlyphSnapshotRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GlyphSnapshot {
     pub glyph_id: GlyphId,
-    pub variation_data: Option<GlyphVariationData>,
+    pub projection: Option<GlyphProjection>,
     pub layers: Vec<GlyphLayerSnapshot>,
 }
 
-/// Read-only glyph projection resolved at one internal design location.
-///
-/// `svg_path` contains flattened root and component contours in font units.
-/// An existing blank glyph has an empty path and remains distinguishable from
-/// a missing glyph, which is omitted from a preview batch.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// One compact glyph shape suitable for local projection evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphPreview {
+pub struct GlyphShape {
+    pub structure: GlyphStructure,
+    pub values: GlyphValues,
+}
+
+impl From<&GlyphLayer> for GlyphShape {
+    fn from(layer: &GlyphLayer) -> Self {
+        Self {
+            structure: GlyphStructure::from(layer),
+            values: values_from_layer(layer),
+        }
+    }
+}
+
+/// One axis support within an interpolation coefficient region.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterpolationSupport {
+    pub axis_id: AxisId,
+    pub lower: f64,
+    pub peak: f64,
+    pub upper: f64,
+}
+
+/// Coordinate-independent interpolation weights for an ordered source set.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterpolationBasis {
+    pub source_ids: Vec<SourceId>,
+    pub regions: Vec<Vec<InterpolationSupport>>,
+    pub coefficients: Vec<Vec<f64>>,
+}
+
+impl From<&IrInterpolationBasis> for InterpolationBasis {
+    fn from(basis: &IrInterpolationBasis) -> Self {
+        Self {
+            source_ids: basis.source_ids().to_vec(),
+            regions: basis
+                .regions()
+                .iter()
+                .map(|region| {
+                    region
+                        .supports()
+                        .iter()
+                        .map(|support| InterpolationSupport {
+                            axis_id: support.axis_id(),
+                            lower: support.minimum(),
+                            peak: support.peak(),
+                            upper: support.maximum(),
+                        })
+                        .collect()
+                })
+                .collect(),
+            coefficients: basis.coefficients().to_vec(),
+        }
+    }
+}
+
+/// Initial numeric values for one compatible glyph source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphSourceValues {
+    pub source_id: SourceId,
+    pub values: GlyphValues,
+}
+
+/// Compatible glyph interpolation over a shared structural fallback.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphInterpolation {
+    pub basis: InterpolationBasis,
+    pub sources: Vec<GlyphSourceValues>,
+}
+
+impl From<&IrGlyphInterpolation> for GlyphInterpolation {
+    fn from(interpolation: &IrGlyphInterpolation) -> Self {
+        Self {
+            basis: interpolation.basis().into(),
+            sources: interpolation
+                .sources()
+                .iter()
+                .map(|source| GlyphSourceValues {
+                    source_id: source.source_id(),
+                    values: source.values().as_slice().to_vec(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Exact authored source shape not represented by compatible interpolation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphSourceShape {
+    pub source_id: SourceId,
+    pub shape: GlyphShape,
+}
+
+/// Location-independent glyph payload evaluated synchronously by renderers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphProjection {
     pub glyph_id: GlyphId,
-    pub svg_path: String,
-    pub x_advance: f64,
+    pub fallback: GlyphShape,
+    pub interpolation: Option<GlyphInterpolation>,
+    pub exact_source_shapes: Vec<GlyphSourceShape>,
+    pub component_glyph_ids: Vec<GlyphId>,
+}
+
+impl From<&IrGlyphProjection> for GlyphProjection {
+    fn from(projection: &IrGlyphProjection) -> Self {
+        Self {
+            glyph_id: projection.glyph_id(),
+            fallback: GlyphShape::from(projection.fallback()),
+            interpolation: projection.interpolation().map(Into::into),
+            exact_source_shapes: projection
+                .exact_source_shapes()
+                .iter()
+                .map(|source_shape| GlyphSourceShape {
+                    source_id: source_shape.source_id(),
+                    shape: GlyphShape::from(source_shape.layer()),
+                })
+                .collect(),
+            component_glyph_ids: projection.component_glyph_ids().to_vec(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -558,24 +676,6 @@ impl From<&IrLocation> for Location {
                 .collect(),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AxisTent {
-    pub axis_tag: String,
-    pub lower: f64,
-    pub peak: f64,
-    pub upper: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GlyphVariationData {
-    /// One entry per region. Inner = tents on the axes the region depends on.
-    pub regions: Vec<Vec<AxisTent>>,
-    /// Deltas are flattened in `GlyphState::values` order.
-    pub deltas: Vec<Vec<f64>>,
 }
 
 /// Flatten mutable numeric glyph state in the order described by `GlyphState::values`.

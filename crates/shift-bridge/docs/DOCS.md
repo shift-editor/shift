@@ -40,6 +40,7 @@ crates/shift-bridge/
 - `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
+- `NapiGlyphProjection` -- compact location-independent glyph backing with a reusable interpolation basis and exact-source shapes.
 
 ## How it works
 
@@ -47,7 +48,7 @@ crates/shift-bridge/
 2. JS calls a mutation such as `closeContour(layerId, contourId)`.
 3. `Bridge` parses boundary strings and asks `FontWorkspace` to run the edit against that layer.
 4. The bridge returns a `shift-wire` change DTO and bumps the live version.
-5. Read-only glyph snapshots ask `shift-font` for native interpolation and use `shift-wire` only to adapt its regions and deltas into renderer DTOs.
+5. Full glyph snapshots include authored layer state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` batches roots and transitive component projections without resolving a design location.
 6. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
@@ -75,6 +76,8 @@ crates/shift-bridge/
 1. Prefer committed font reads unless the method is explicitly asking for the currently focused renderer source.
 2. Return native NAPI DTOs rather than serialized JSON.
 3. Keep editor/rendering concerns out of Rust; TypeScript owns canvas-specific interpretation.
+
+Glyph preview reads must stay location-independent. Do not add resolved SVG/path queries or location-keyed bridge caches: the renderer evaluates retained projections through its reactive location signals.
 
 ## Verification
 

@@ -12,7 +12,7 @@
  */
 
 import { Editor } from "@/lib/editor/Editor";
-import type { Glyph, GlyphInstance, GlyphLayer } from "@/lib/model/Glyph";
+import type { Glyph, GlyphView, GlyphLayer } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { Point2D } from "@shift/geo";
@@ -179,11 +179,11 @@ export class TestEditor extends Editor {
     return this.scene.nodesOfKind("glyph")[0] ?? null;
   }
 
-  get sceneGlyphInstance(): GlyphInstance | null {
+  get sceneGlyphView(): GlyphView | null {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.font.instance(node.glyphId, this.designLocationCell);
+    return this.font.glyphView(node.glyphId, this.designLocationCell);
   }
 
   get glyphRecord(): GlyphRecord | null {

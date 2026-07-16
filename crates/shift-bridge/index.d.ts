@@ -50,13 +50,13 @@ export declare class Bridge {
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
   /**
-   * Resolves lightweight glyph previews at one internal design location.
+   * Returns compact glyph projections without resolving a location.
    *
-   * The result preserves request order for existing glyphs and omits missing
-   * identities. It contains flattened SVG path data and advances only; no
-   * editable glyph models or source snapshots are created.
+   * Missing glyph identities and glyphs without authored shapes are omitted.
+   * The projections retain compatible interpolation and exact-source shapes so a
+   * renderer can evaluate design-location changes without further IPC.
    */
-  getGlyphPreviews(glyphIds: Array<GlyphId>, location: NapiLocation): Array<NapiGlyphPreview>
+  getGlyphProjections(glyphIds: Array<GlyphId>): Array<NapiGlyphProjection>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
@@ -187,13 +187,6 @@ export interface NapiAxisMappingPoint {
 export declare const enum NapiAxisRole {
   External = 'external',
   Internal = 'internal'
-}
-
-export interface NapiAxisTent {
-  axisTag: string
-  lower: number
-  peak: number
-  upper: number
 }
 
 export declare const enum NapiAxisType {
@@ -390,6 +383,11 @@ export interface NapiGlyphChangedEntities {
   componentIds: Array<ComponentId>
 }
 
+export interface NapiGlyphInterpolation {
+  basis: NapiInterpolationBasis
+  sources: Array<NapiGlyphSourceValues>
+}
+
 export interface NapiGlyphLayerRecord {
   id: LayerId
   sourceId: SourceId
@@ -401,10 +399,12 @@ export interface NapiGlyphLayerSnapshot {
   state: NapiGlyphState
 }
 
-export interface NapiGlyphPreview {
+export interface NapiGlyphProjection {
   glyphId: GlyphId
-  svgPath: string
-  xAdvance: number
+  fallback: NapiGlyphShape
+  interpolation?: NapiGlyphInterpolation
+  exactSourceShapes: Array<NapiGlyphSourceShape>
+  componentGlyphIds: Array<GlyphId>
 }
 
 export interface NapiGlyphRecord {
@@ -415,14 +415,29 @@ export interface NapiGlyphRecord {
   layers: Array<NapiGlyphLayerRecord>
 }
 
+export interface NapiGlyphShape {
+  structure: NapiGlyphStructure
+  values: Float64Array
+}
+
 export interface NapiGlyphSnapshot {
   glyphId: GlyphId
-  variationData?: NapiGlyphVariationData
+  projection?: NapiGlyphProjection
   layers: Array<NapiGlyphLayerSnapshot>
 }
 
 export interface NapiGlyphSnapshotRequest {
   glyphId: GlyphId
+}
+
+export interface NapiGlyphSourceShape {
+  sourceId: SourceId
+  shape: NapiGlyphShape
+}
+
+export interface NapiGlyphSourceValues {
+  sourceId: SourceId
+  values: Float64Array
 }
 
 export interface NapiGlyphState {
@@ -438,11 +453,17 @@ export interface NapiGlyphStructure {
   components: Array<NapiComponentData>
 }
 
-export interface NapiGlyphVariationData {
-  /** One entry per region. Inner = tents on the axes the region depends on. */
-  regions: Array<Array<NapiAxisTent>>
-  /** Deltas are flattened in `GlyphState::values` order. */
-  deltas: Array<Float64Array>
+export interface NapiInterpolationBasis {
+  sourceIds: Array<SourceId>
+  regions: Array<Array<NapiInterpolationSupport>>
+  coefficients: Array<Float64Array>
+}
+
+export interface NapiInterpolationSupport {
+  axisId: AxisId
+  lower: number
+  peak: number
+  upper: number
 }
 
 /**

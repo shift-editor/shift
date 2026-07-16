@@ -1,4 +1,4 @@
-import type { GlyphInstance } from "@/lib/model/Glyph";
+import type { GlyphView } from "@/lib/model/Glyph";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
 import type { GlyphNode } from "@/types/node";
@@ -21,11 +21,11 @@ export class Handles {
   draw(
     ctx: RenderContext,
     node: GlyphNode,
-    instance: GlyphInstance,
+    view: GlyphView,
     selection: Selection,
     hover: Hover,
   ): void {
-    const list = this.#items.fromContours(instance.render.contours, {
+    const list = this.#items.fromContours(view.render.contours, {
       selection,
       hover,
     });

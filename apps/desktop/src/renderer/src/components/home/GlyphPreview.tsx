@@ -1,4 +1,6 @@
-import type { FontMetrics, GlyphPreview as GlyphPreviewValue } from "@shift/types";
+import type { FontMetrics } from "@shift/types";
+import { useSignalState } from "@/lib/signals";
+import type { GlyphView } from "@/lib/model/Glyph";
 
 export const CELL_HEIGHT = 75;
 
@@ -40,36 +42,32 @@ export function computeCellWidth(
 }
 
 interface GlyphPreviewProps {
-  preview: GlyphPreviewValue | null;
-  unicode: number | null;
+  view: GlyphView | null;
   metrics: FontMetrics;
   height?: number;
 }
 
-export function GlyphPreview({
-  preview,
-  unicode,
-  metrics,
-  height = CELL_HEIGHT,
-}: GlyphPreviewProps) {
-  if (!preview) {
-    return <FallbackCell metrics={metrics} height={height} unicode={unicode} advance={null} />;
+export function GlyphPreview({ view, metrics, height = CELL_HEIGHT }: GlyphPreviewProps) {
+  if (!view) {
+    // Showing the system font here makes fast scrolling flash the wrong glyph
+    // before the authored projection arrives.
+    return <div style={{ width: height, height }} />;
   }
 
-  return <GlyphCell metrics={metrics} height={height} preview={preview} />;
+  return <GlyphCell metrics={metrics} height={height} view={view} />;
 }
 
 function GlyphCell({
   metrics,
   height,
-  preview,
+  view,
 }: {
   metrics: FontMetrics;
   height: number;
-  preview: GlyphPreviewValue;
+  view: GlyphView;
 }) {
-  const svgPath = preview.svgPath;
-  const advance = preview.xAdvance;
+  const svgPath = useSignalState(view.render.outline.svgPathCell, { schedule: "frame" });
+  const advance = useSignalState(view.xAdvanceCell, { schedule: "frame" });
 
   const cellWidth = computeCellWidth(metrics, advance, height);
   const containerStyle = { width: cellWidth, height };
@@ -93,32 +91,6 @@ function GlyphCell({
           <path d={svgPath} fill="currentColor" fillRule="nonzero" />
         </g>
       </svg>
-    </div>
-  );
-}
-
-function FallbackCell({
-  metrics,
-  height,
-  unicode,
-  advance,
-}: {
-  metrics: FontMetrics;
-  height: number;
-  unicode: number | null;
-  advance: number | null;
-}) {
-  const cellWidth = computeCellWidth(metrics, advance, height);
-  const label = unicode === null ? "" : String.fromCodePoint(unicode);
-
-  return (
-    <div
-      style={{ width: cellWidth, height }}
-      className="flex items-center justify-center text-secondary"
-    >
-      <span className="text-2xl" style={{ fontSize: height * 0.5 }}>
-        {label}
-      </span>
     </div>
   );
 }
