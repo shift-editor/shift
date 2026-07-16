@@ -13,7 +13,7 @@ import type { SettingsCategory, SettingsTarget } from "@/types/settings";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { AxesSettingsPanel } from "./AxesSettingsPanel";
 import { FontSettingsPanel } from "./FontSettingsPanel";
-import { SettingsPlaceholder } from "./SettingsPlaceholder";
+import { InstancesSettingsPanel } from "./InstancesSettingsPanel";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { SourcesSettingsPanel } from "./SourcesSettingsPanel";
 
@@ -88,17 +88,15 @@ const SettingsCategoryPanel = ({ target }: SettingsCategoryPanelProps) => {
           initialSourceId={target.sourceId}
         />
       );
+    case "instances":
+      return (
+        <InstancesSettingsPanel
+          key={target.instanceId ?? "instances"}
+          initialInstanceId={target.instanceId}
+        />
+      );
     case "axes":
       return <AxesSettingsPanel key={target.axisId ?? "axes"} initialAxisId={target.axisId} />;
-    case "features":
-      return (
-        <ScrollablePanel>
-          <SettingsPlaceholder
-            title="Features"
-            description="OpenType feature authoring will use this settings surface once the feature model is editable."
-          />
-        </ScrollablePanel>
-      );
   }
 };
 
@@ -108,10 +106,10 @@ function targetForCategory(category: SettingsCategory): SettingsTarget {
       return { category: "font" };
     case "sources":
       return { category: "sources" };
+    case "instances":
+      return { category: "instances" };
     case "axes":
       return { category: "axes" };
-    case "features":
-      return { category: "features" };
   }
 }
 

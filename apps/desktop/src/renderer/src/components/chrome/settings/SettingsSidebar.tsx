@@ -1,7 +1,7 @@
 import { Button, cn } from "@shift/ui";
 import AxesIcon from "@assets/settings/axes.svg";
-import FeaturesIcon from "@assets/settings/features.svg";
 import FontIcon from "@assets/settings/font.svg";
+import InstancesIcon from "@assets/settings/instances.svg";
 import SourcesIcon from "@assets/settings/sources.svg";
 import type { SVG } from "@/types/common";
 import type { SettingsCategory } from "@/types/settings";
@@ -14,8 +14,8 @@ interface SettingsSidebarProps {
 const categories: { id: SettingsCategory; label: string; icon: SVG }[] = [
   { id: "font", label: "Font", icon: FontIcon },
   { id: "sources", label: "Sources", icon: SourcesIcon },
+  { id: "instances", label: "Instances", icon: InstancesIcon },
   { id: "axes", label: "Axes", icon: AxesIcon },
-  { id: "features", label: "Features", icon: FeaturesIcon },
 ];
 
 export const SettingsSidebar = ({ category, onCategoryChange }: SettingsSidebarProps) => (

@@ -1622,12 +1622,22 @@ export class Font {
     return instanceId;
   }
 
-  /** Replaces an authored product preset while preserving stable identity. */
-  updateNamedInstance(instance: NamedInstance): void {
-    this.editCoordinator.push({
-      kind: "updateNamedInstance",
-      updateNamedInstance: { instance },
-    });
+  /**
+   * Replaces an authored product preset and resolves after the workspace accepts it.
+   *
+   * @param instance - complete replacement retaining the preset's stable identity.
+   * @throws {Error} when the replacement violates instance or axis constraints, or persistence fails.
+   */
+  async updateNamedInstance(instance: NamedInstance): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "updateNamedInstance",
+          updateNamedInstance: { instance },
+        },
+      ],
+      "Update Instance",
+    );
   }
 
   /** Removes an authored product preset without touching sources or glyph geometry. */

@@ -1,11 +1,11 @@
-import type { AxisId, SourceId } from "@shift/types";
+import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 
-export type SettingsCategory = "font" | "sources" | "axes" | "features";
+export type SettingsCategory = "font" | "sources" | "instances" | "axes";
 
 export type AxisSettingsSection = "definition" | "mapping" | "styles";
 
 export type SettingsTarget =
   | { category: "font" }
   | { category: "sources"; sourceId?: SourceId }
-  | { category: "axes"; axisId?: AxisId }
-  | { category: "features" };
+  | { category: "instances"; instanceId?: NamedInstanceId }
+  | { category: "axes"; axisId?: AxisId };
