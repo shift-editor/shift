@@ -60,6 +60,7 @@ const SCROLL_PADDING = 4;
 const ROW_PADDING_X = 4;
 const OVERSCAN = 5;
 const GLYPH_QUERY_CHUNK_SIZE = 32;
+const GLYPH_QUERY_OVERSCAN_CHUNKS = 1;
 const GLYPH_QUERY_GC_TIME = 30_000;
 
 function computeLayout(width: number) {
@@ -147,16 +148,24 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const visibleEndIndex = lastVisibleRow
     ? Math.min(catalogGlyphs.length, (lastVisibleRow.index + 1) * columns)
     : 0;
-  const visibleGlyphChunks = useMemo((): readonly (readonly GlyphId[])[] => {
+  const previewGlyphChunks = useMemo((): readonly (readonly GlyphId[])[] => {
     if (visibleEndIndex <= visibleStartIndex) return [];
 
+    const queryStartIndex = Math.max(
+      0,
+      visibleStartIndex - GLYPH_QUERY_OVERSCAN_CHUNKS * GLYPH_QUERY_CHUNK_SIZE,
+    );
+    const queryEndIndex = Math.min(
+      catalogGlyphs.length,
+      visibleEndIndex + GLYPH_QUERY_OVERSCAN_CHUNKS * GLYPH_QUERY_CHUNK_SIZE,
+    );
     const firstChunkStart =
-      Math.floor(visibleStartIndex / GLYPH_QUERY_CHUNK_SIZE) * GLYPH_QUERY_CHUNK_SIZE;
+      Math.floor(queryStartIndex / GLYPH_QUERY_CHUNK_SIZE) * GLYPH_QUERY_CHUNK_SIZE;
     const chunks: GlyphId[][] = [];
 
     for (
       let chunkStart = firstChunkStart;
-      chunkStart < visibleEndIndex;
+      chunkStart < queryEndIndex;
       chunkStart += GLYPH_QUERY_CHUNK_SIZE
     ) {
       chunks.push(
@@ -173,7 +182,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     [designLocation],
   );
   const glyphChunkQueries = useQueries({
-    queries: visibleGlyphChunks.map((glyphIds) => ({
+    queries: previewGlyphChunks.map((glyphIds) => ({
       queryKey: ["glyph-previews", documentId, locationKey, glyphIds] as const,
       queryFn: async (): Promise<readonly GlyphPreviewValue[]> => {
         try {
@@ -183,7 +192,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
           throw error;
         }
       },
-      enabled: documentId !== null && !virtualizer.isScrolling,
+      enabled: documentId !== null,
       staleTime: Infinity,
       gcTime: GLYPH_QUERY_GC_TIME,
     })),
