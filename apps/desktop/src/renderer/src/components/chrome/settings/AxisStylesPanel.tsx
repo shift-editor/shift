@@ -160,7 +160,7 @@ const RangeLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
 const StyleTable = ({ headings, children }: { headings: string[]; children: ReactNode }) => (
   <div className="overflow-hidden rounded border border-line-subtle bg-white">
     <table className="w-full table-fixed border-collapse text-center text-sm">
-      <thead className="bg-input text-secondary">
+      <thead className="bg-input text-black">
         <tr>
           {headings.map((heading, index) => (
             <th key={`${heading}-${index}`} className="h-7 px-1 text-center font-medium">
