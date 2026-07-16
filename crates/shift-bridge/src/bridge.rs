@@ -14,11 +14,12 @@ use shift_font::{
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
-    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphRecord,
-    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
+    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview,
+    NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
     NapiNamedInstance, NapiPointSeed, NapiSource,
   },
   interpolation::glyph_variation_data,
+  preview::glyph_previews,
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
   GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure, NamedInstance,
   Source,
@@ -571,6 +572,27 @@ impl Bridge {
     }
 
     Ok(snapshots.into_iter().map(Into::into).collect())
+  }
+
+  /// Resolves lightweight glyph previews at one internal design location.
+  ///
+  /// The result preserves request order for existing glyphs and omits missing
+  /// identities. It contains flattened SVG path data and advances only; no
+  /// editable glyph models or source snapshots are created.
+  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, location: NapiLocation")]
+  pub fn get_glyph_previews(
+    &self,
+    glyph_ids: Vec<String>,
+    location: NapiLocation,
+  ) -> errors::Result<Vec<NapiGlyphPreview>> {
+    let glyph_ids = glyph_ids
+      .iter()
+      .map(|glyph_id| parse::<GlyphId>(glyph_id))
+      .collect::<errors::Result<Vec<_>>>()?;
+    let location = map_location(location)?;
+    let previews = glyph_previews(self.font()?, &glyph_ids, &location)?;
+
+    Ok(previews.into_iter().map(Into::into).collect())
   }
 
   #[napi]

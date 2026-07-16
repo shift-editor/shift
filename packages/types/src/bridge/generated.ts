@@ -54,6 +54,14 @@ export interface BridgeApi {
   redo(): AppliedChange | null
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
+  /**
+   * Resolves lightweight glyph previews at one internal design location.
+   *
+   * The result preserves request order for existing glyphs and omits missing
+   * identities. It contains flattened SVG path data and advances only; no
+   * editable glyph models or source snapshots are created.
+   */
+  getGlyphPreviews(glyphIds: Array<GlyphId>, location: Location): Array<GlyphPreview>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
@@ -390,6 +398,12 @@ export interface GlyphLayerSnapshot {
   glyphId: GlyphId
   sourceId: SourceId
   state: GlyphState
+}
+
+export interface GlyphPreview {
+  glyphId: GlyphId
+  svgPath: string
+  xAdvance: number
 }
 
 export interface GlyphRecord {

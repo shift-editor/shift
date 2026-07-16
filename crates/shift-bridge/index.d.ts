@@ -49,6 +49,14 @@ export declare class Bridge {
   redo(): NapiAppliedChange | null
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
+  /**
+   * Resolves lightweight glyph previews at one internal design location.
+   *
+   * The result preserves request order for existing glyphs and omits missing
+   * identities. It contains flattened SVG path data and advances only; no
+   * editable glyph models or source snapshots are created.
+   */
+  getGlyphPreviews(glyphIds: Array<GlyphId>, location: NapiLocation): Array<NapiGlyphPreview>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
@@ -391,6 +399,12 @@ export interface NapiGlyphLayerSnapshot {
   glyphId: GlyphId
   sourceId: SourceId
   state: NapiGlyphState
+}
+
+export interface NapiGlyphPreview {
+  glyphId: GlyphId
+  svgPath: string
+  xAdvance: number
 }
 
 export interface NapiGlyphRecord {

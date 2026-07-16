@@ -17,6 +17,7 @@ use shift_font::{
 
 pub mod bridges;
 pub mod interpolation;
+pub mod preview;
 pub mod state;
 
 /// Flat numeric glyph values ordered to match `GlyphStructure`.
@@ -353,6 +354,19 @@ pub struct GlyphSnapshot {
     pub glyph_id: GlyphId,
     pub variation_data: Option<GlyphVariationData>,
     pub layers: Vec<GlyphLayerSnapshot>,
+}
+
+/// Read-only glyph projection resolved at one internal design location.
+///
+/// `svg_path` contains flattened root and component contours in font units.
+/// An existing blank glyph has an empty path and remains distinguishable from
+/// a missing glyph, which is omitted from a preview batch.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphPreview {
+    pub glyph_id: GlyphId,
+    pub svg_path: String,
+    pub x_advance: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

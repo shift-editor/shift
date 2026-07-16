@@ -20,4 +20,4 @@ export type {
 } from "./signal";
 export { KeyedCache, keyedCache } from "./KeyedCache";
 export type { KeyedCacheOptions } from "./KeyedCache";
-export { useSignalState, useSignalTrigger } from "./useSignal";
+export { useSignalState } from "./useSignal";

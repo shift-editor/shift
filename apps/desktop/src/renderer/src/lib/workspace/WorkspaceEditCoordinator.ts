@@ -1,4 +1,4 @@
-import type { AppliedChange, FontIntent, Location } from "@shift/types";
+import type { AppliedChange, FontIntent, GlyphId, GlyphPreview, Location } from "@shift/types";
 import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
@@ -155,6 +155,22 @@ export class WorkspaceEditCoordinator {
   ): Promise<WorkspaceGlyphSnapshot[]> {
     if (requests.length === 0) return [];
     return this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
+  }
+
+  /**
+   * Resolves read-only glyph previews after pending authored edits settle.
+   *
+   * @param glyphIds - Stable glyph identities to resolve in request order.
+   * @param location - Internal design location shared by the whole batch.
+   * @returns Fresh preview values without populating renderer glyph models.
+   */
+  async readGlyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: Location,
+  ): Promise<GlyphPreview[]> {
+    if (glyphIds.length === 0) return [];
+
+    return this.#withFlush(() => this.#workspace.glyphPreviews(glyphIds, location));
   }
 
   /**

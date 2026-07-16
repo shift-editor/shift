@@ -20,3 +20,6 @@ napi = { version = "=3.8.6", optional = true, default-features = false, features
 ] }
 napi-derive = { version = "=3.5.5", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
+
+[dev-dependencies]
+shift-font = { workspace = true, features = ["test-support"] }

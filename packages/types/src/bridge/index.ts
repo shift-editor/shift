@@ -40,6 +40,7 @@ export type {
   GlyphChangedEntities,
   GlyphLayerRecord,
   GlyphName,
+  GlyphPreview,
   GlyphRecord,
   GlyphState,
   GlyphStructure,
