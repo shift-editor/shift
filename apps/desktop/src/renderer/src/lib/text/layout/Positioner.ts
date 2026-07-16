@@ -1,6 +1,7 @@
 import { displayAdvance, isNonSpacingGlyph } from "@/lib/utils/unicode";
 import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
 import type { Font } from "@/lib/model/Font";
+import type { GlyphView } from "@/lib/model/Glyph";
 import type { Signal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
 import type { Bounds, Point2D } from "@shift/geo";
@@ -31,9 +32,7 @@ export class Positioner {
         bounds = view.render.outline.bounds;
       }
 
-      const xAdvance = view
-        ? displayAdvance(view.xAdvance, g.glyphName, g.codepoint)
-        : resolveAdvance(g, font, source);
+      const xAdvance = resolveAdvance(g, view);
       const origin = { x: totalAdvance, y: 0 };
       const offset = resolveGlyphOffset(g, font, source);
       totalAdvance += xAdvance;
@@ -57,9 +56,8 @@ export class Positioner {
 }
 
 /** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
-export function resolveAdvance(item: GlyphTextItem, font: Font, source: Source | null): number {
-  const record = recordForTextItem(item, font);
-  const raw = source && record ? (font.layer(record.id, source.id)?.xAdvance ?? 0) : 0;
+export function resolveAdvance(item: GlyphTextItem, view: GlyphView | null): number {
+  const raw = view?.xAdvance ?? 0;
   return displayAdvance(raw, item.glyphName, item.codepoint);
 }
 

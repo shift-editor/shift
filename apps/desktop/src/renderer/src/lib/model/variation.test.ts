@@ -9,6 +9,9 @@ import {
   mintSourceId,
 } from "@shift/types";
 import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
+import { signal } from "@/lib/signals/signal";
+import { TextRun } from "@/lib/text/TextRun";
+import { Positioner } from "@/lib/text/layout/Positioner";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
 /**
@@ -237,6 +240,21 @@ describe("variable editing across sources", () => {
 
     const xs = view.geometry.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);
+  });
+
+  it("updates an editor text run with interpolated advances between masters", async () => {
+    const glyph = await loadGlyph(stack, glyphId);
+    const axis = stack.font.getAxes()[0]!;
+    const location = signal(defaultAxisLocation(stack.font.getAxes()));
+    const run = new TextRun("variable-advance", stack.font, new Positioner(), location);
+    run.setSingleGlyph(glyph.handle);
+
+    expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(300);
+
+    const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    location.set(mid);
+
+    expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(400);
   });
 
   it("materializes interpolated geometry and metrics at a new source", async () => {
