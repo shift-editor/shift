@@ -15,6 +15,23 @@ Drive the code through its user-facing surface (`editor.copy()`, `editor.click()
 
 Everything else here is a consequence of that rule.
 
+## When not to add a test
+
+Do not treat line coverage or "every changed file needs a test" as the goal. Add a test only when it protects an observable behavior, domain invariant, or public boundary that could regress independently of the implementation.
+
+Skip a new test when it would only:
+
+- repeat declarative framework wiring, dependency setup, or static configuration;
+- snapshot private query keys, option objects, CSS classes, component structure, or other implementation choices;
+- exercise a trivial delegation whose behavior is already covered at the owning boundary;
+- justify extracting a tiny helper solely so the implementation has something easy to unit-test;
+- assert behavior already guaranteed by TypeScript, Rust's type system, or the library being configured;
+- require mocks, spies, a parallel harness, or broad DOM/IPC infrastructure for code that is better verified by focused manual QA.
+
+Examples: do not test that a `QueryClientProvider` is mounted, that a query key contains a particular string, or that a fixed-size chunk helper calls `slice()` correctly. Do test stable batching if it is exposed as a reusable contract with edge cases, or test the user-visible result through a real integration boundary when one exists.
+
+When no worthwhile automated test exists, say so explicitly in the handoff and record the focused manual verification performed. Do not create a low-value test to make the diff look complete.
+
 ## If you're stuck, research — don't invent a mock
 
 The moment you think "I'll just mock this out" is the moment to stop and look for prior art. Real Electron / font-editor / reactive-signal codebases have solved the same class of problem: VSCode, Obsidian, Signal Desktop, Bitwarden, Fontra, tldraw. Their patterns are on GitHub.
