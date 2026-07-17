@@ -2,7 +2,7 @@
 name = "shift-cli"
 version = "0.1.0"
 edition = "2024"
-description = "Command-line tools for inspecting and compiling Shift source packages"
+description = "Command-line tools for authoring, inspecting, and compiling Shift source packages"
 readme = "README.md"
 
 [dependencies]
