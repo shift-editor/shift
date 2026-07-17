@@ -247,7 +247,8 @@ fn parses_minimal_handwritten_tree() {
       { "id": "metric_baseline", "kind": "baseline", "name": "Baseline" },
       { "id": "metric_descender", "kind": "descender", "name": "Descender" }
     ]
-  }
+  },
+  "glyphOrder": []
 }
 "#
             .to_vec(),

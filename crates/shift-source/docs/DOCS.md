@@ -8,6 +8,7 @@ Source-package crate for Shift's user-authored `.shift` format.
 - **Architecture Invariant:** Every `.shift` manifest carries a stable `packageId`. Filesystem moves and byte-for-byte copies preserve it; Save As mints a new one.
 - **Architecture Invariant:** This crate owns the stable source schema DTOs and converts to/from `shift_font::Font`. It does not expose serde for private `shift-font` storage structs as the file contract.
 - **Architecture Invariant:** Serialization is tree-first: `font_to_tree` emits `Vec<(path, bytes)>`; `write_tree_atomic` is the zip container layer. A future loose-directory container can reuse the same tree schema.
+- **Architecture Invariant:** Deterministic serialization must preserve domain order. Ordered entities are encoded as JSON arrays containing their stable IDs; sorted JSON objects are reserved for dictionaries whose order has no authoring meaning.
 - **Architecture Invariant:** `.shift` is separate from the app-managed SQLite working store. SQLite import/export wiring belongs in `shift-workspace`, not here.
 
 ## Codemap
@@ -60,12 +61,14 @@ and `FontLoader`:
 - `instances.json` stores explicit named product presets. Every location is a
   complete `axisId -> external value` map; instances do not reference sources
   and do not store Designspace or compiler fields.
-- `font.json` stores global UPM and ordered, stable-ID metric definitions.
+- `font.json` stores global UPM, ordered stable-ID metric definitions, and the glyph order for the independently stored glyph files.
 - `sources.json` stores source locations as `axisId -> design-space value`, plus values and overshoots keyed by `metricId` and optional source technical metrics.
 - Each glyph file is `glyphs/<glyphId>.json`; glyph layers are keyed by
   `sourceId`.
-- Components store `baseGlyphId` as the canonical reference and
-  `baseGlyphName` as a label cache.
+- Components are an ordered array containing stable component identity,
+  `baseGlyphId` as the canonical reference, and `baseGlyphName` as a label
+  cache. Component order participates in rendering and interpolation
+  compatibility.
 - Load rejects non-finite metrics/coordinates/transforms/location values,
   invalid axis ranges, mismatched glyph file IDs, dangling source/layer/axis
   references, and component base caches that do not match the referenced glyph.

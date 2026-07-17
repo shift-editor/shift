@@ -10,11 +10,11 @@ use std::{
 use serde::{Deserialize, Serialize};
 use shift_font::{
     Anchor, Axis, AxisId, AxisKind, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
-    AxisMappingId, AxisMappingPoint, AxisRole, Component, ComponentId, Contour,
-    DecomposedTransform, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphLayer,
-    GlyphName, Guideline, KerningData, KerningPair, KerningSide, LibData, LibValue, Location,
-    MetricDefinition, MetricId, MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point,
-    PointType, Source, SourceId, SourceRole,
+    AxisMappingId, AxisMappingPoint, AxisRole, Component, Contour, DecomposedTransform,
+    FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, Guideline,
+    KerningData, KerningPair, KerningSide, LibData, LibValue, Location, MetricDefinition, MetricId,
+    MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point, PointType, Source, SourceId,
+    SourceRole,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, result::ZipError, write::SimpleFileOptions};
 
@@ -134,6 +134,9 @@ pub enum SourcePackageError {
 
     #[error("glyph file path {path} does not match glyph id {id}")]
     MismatchedGlyphFileId { path: String, id: String },
+
+    #[error("invalid glyph order: {0}")]
+    InvalidGlyphOrder(String),
 
     #[error("invalid unicode scalar value: {0}")]
     InvalidUnicode(String),
@@ -282,6 +285,7 @@ struct ManifestDoc {
 struct FontDoc {
     metadata: MetadataDoc,
     metrics: MetricsDoc,
+    glyph_order: Vec<String>,
     #[serde(default)]
     guidelines: Vec<GuidelineDoc>,
 }
@@ -478,7 +482,7 @@ struct LayerDoc {
     advance: f64,
     height: Option<f64>,
     contours: Vec<ContourDoc>,
-    components: BTreeMap<String, ComponentDoc>,
+    components: Vec<ComponentDoc>,
     anchors: Vec<AnchorDoc>,
     #[serde(default)]
     guidelines: Vec<GuidelineDoc>,
@@ -516,6 +520,7 @@ struct PointDoc {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ComponentDoc {
+    id: String,
     base_glyph_id: String,
     base_glyph_name: String,
     transform: TransformDoc,
@@ -666,6 +671,7 @@ pub fn font_to_tree(
     let font_doc = FontDoc {
         metadata: MetadataDoc::from(font.metadata()),
         metrics: MetricsDoc::try_from(font)?,
+        glyph_order: font.glyphs().map(|glyph| glyph.id().to_string()).collect(),
         guidelines: font
             .guidelines()
             .iter()
@@ -873,8 +879,27 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
         })
         .collect::<Result<Vec<_>, SourcePackageError>>()?;
     let glyph_names_by_id = glyph_doc_names_by_id(&glyph_docs)?;
+    let mut glyph_docs_by_id = glyph_docs
+        .into_iter()
+        .map(|(path, glyph_doc)| (glyph_doc.id.clone(), (path, glyph_doc)))
+        .collect::<HashMap<_, _>>();
+    let mut ordered_glyph_docs = Vec::with_capacity(font_doc.glyph_order.len());
 
-    for (_, glyph_doc) in glyph_docs {
+    for glyph_id in font_doc.glyph_order {
+        let Some(glyph_doc) = glyph_docs_by_id.remove(&glyph_id) else {
+            return Err(SourcePackageError::InvalidGlyphOrder(format!(
+                "{glyph_id} is missing or listed more than once"
+            )));
+        };
+        ordered_glyph_docs.push(glyph_doc);
+    }
+    if let Some(glyph_id) = glyph_docs_by_id.keys().next() {
+        return Err(SourcePackageError::InvalidGlyphOrder(format!(
+            "{glyph_id} is not listed"
+        )));
+    }
+
+    for (_, glyph_doc) in ordered_glyph_docs {
         validate_glyph_component_references(&glyph_doc, &glyph_names_by_id)?;
         let mut glyph = Glyph::try_from(glyph_doc)?;
         if let Some(module_doc) = &mut lib_module_doc {
@@ -1115,7 +1140,7 @@ fn validate_glyph_component_references(
     names_by_id: &HashMap<String, GlyphName>,
 ) -> Result<(), SourcePackageError> {
     for layer_doc in glyph_doc.layers.values() {
-        for component_doc in layer_doc.components.values() {
+        for component_doc in &layer_doc.components {
             glyph_name_from_ref(
                 component_doc.base_glyph_id.clone(),
                 component_doc.base_glyph_name.clone(),
@@ -2361,12 +2386,9 @@ impl LayerDoc {
                 .map(ContourDoc::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
             components: layer
-                .components()
-                .iter()
-                .map(|(id, component)| {
-                    ComponentDoc::from_component(font, component).map(|doc| (id.to_string(), doc))
-                })
-                .collect::<Result<BTreeMap<_, _>, _>>()?,
+                .components_iter()
+                .map(|component| ComponentDoc::from_component(font, component))
+                .collect::<Result<Vec<_>, _>>()?,
             anchors: layer
                 .anchors_iter()
                 .map(AnchorDoc::try_from)
@@ -2394,10 +2416,8 @@ impl LayerDoc {
             layer.add_contour(Contour::try_from(contour_doc)?);
         }
 
-        for (component_id, component_doc) in self.components {
-            layer.add_component(
-                component_doc.into_component(parse_id("component", &component_id)?)?,
-            );
+        for component_doc in self.components {
+            layer.add_component(component_doc.into_component()?);
         }
 
         for anchor_doc in self.anchors {
@@ -2490,17 +2510,18 @@ impl ComponentDoc {
         })?;
 
         Ok(Self {
+            id: component.id().to_string(),
             base_glyph_id: base_glyph_id.to_string(),
             base_glyph_name: base_glyph.name().to_string(),
             transform: TransformDoc::try_from(*component.transform())?,
         })
     }
 
-    fn into_component(self, id: ComponentId) -> Result<Component, SourcePackageError> {
+    fn into_component(self) -> Result<Component, SourcePackageError> {
         let base_glyph_name = GlyphName::new(self.base_glyph_name.clone())
             .map_err(|_| SourcePackageError::InvalidGlyphName(self.base_glyph_name.clone()))?;
         Ok(Component::with_id(
-            id,
+            parse_id("component", &self.id)?,
             parse_id("glyph", &self.base_glyph_id)?,
             base_glyph_name,
             DecomposedTransform::try_from(self.transform)?,

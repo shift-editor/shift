@@ -1,3 +1,4 @@
+use crate::collection::Identified;
 use crate::entity::{ContourId, PointId};
 use crate::point::{Point, PointType};
 use crate::segment::CurveSegmentIter;
@@ -9,6 +10,14 @@ pub struct Contour {
     id: ContourId,
     points: Vec<Point>,
     closed: bool,
+}
+
+impl Identified for Contour {
+    type Id = ContourId;
+
+    fn id(&self) -> Self::Id {
+        Contour::id(self)
+    }
 }
 
 impl Default for Contour {

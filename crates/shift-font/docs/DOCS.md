@@ -6,6 +6,7 @@ First-class Rust font object model for Shift.
 
 - **Architecture Invariant:** `shift-font` owns Shift authoring concepts and semantic validation, never format/compiler DTOs.
 - **Architecture Invariant:** Stable IDs are identity. Names, tags, Unicode assignments, and coordinates remain editable authoring values.
+- **Architecture Invariant:** Ordered, identity-addressable authoring collections use `EntityList`. Its iteration, equality, and serialization preserve authored order; its private backing container is not part of the model contract.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
@@ -16,6 +17,7 @@ First-class Rust font object model for Shift.
 ```text
 crates/shift-font/src/
   ir/              -- font entities, IDs, axes, mappings, instances, glyph data
+    collection.rs  -- semantic ordered identity collections
   intents.rs       -- atomic authoring intents and semantic application
   changes.rs       -- replace-grade semantic change records
   layer_edit.rs    -- glyph-layer geometry mutations
@@ -28,6 +30,7 @@ crates/shift-font/src/
 ## Key Types
 
 - `Font` owns glyphs, sources, axes, axis mappings, named instances, metadata, and font-level data.
+- `EntityList` owns stable-ID lookup and authoring order for glyphs, contours, components, and future ordered entity collections.
 - `FontMetadata` is the complete authored naming and attribution snapshot replaced by `UpdateFontMetadata`.
 - `Axis` has stable identity, an external/internal role, a continuous or discrete kind, and optional external/user-space value labels.
 - `AxisLabel` has font-wide stable identity so UI rows and later instance recipes survive renames and reordering.

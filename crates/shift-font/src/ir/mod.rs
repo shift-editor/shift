@@ -2,6 +2,7 @@ pub mod anchor;
 pub mod axis;
 pub mod binary_data;
 pub mod boolean;
+pub mod collection;
 pub mod component;
 pub mod contour;
 pub mod entity;

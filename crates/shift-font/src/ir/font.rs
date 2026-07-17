@@ -1,5 +1,6 @@
 use crate::axis::{Axis, AxisMapping, Location};
 use crate::binary_data::BinaryData;
+use crate::collection::EntityList;
 use crate::entity::{AxisId, GlyphId, LayerId, MetricId, SourceId};
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
@@ -12,7 +13,6 @@ use crate::named_instance::{validate_named_instances, NamedInstance};
 use crate::source::source_locations_equal;
 use crate::source::Source;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
-use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -104,7 +104,7 @@ struct FontData {
     sources: Vec<Source>,
     #[serde(default)]
     default_source_id: Option<SourceId>,
-    glyphs: IndexMap<GlyphId, Arc<Glyph>>,
+    glyphs: EntityList<Arc<Glyph>>,
     kerning: KerningData,
     features: FeatureData,
     guidelines: Vec<Guideline>,
@@ -126,10 +126,10 @@ struct FontIndex {
 }
 
 impl FontIndex {
-    fn from_glyphs(glyphs: &IndexMap<GlyphId, Arc<Glyph>>) -> CoreResult<Self> {
+    fn from_glyphs(glyphs: &EntityList<Arc<Glyph>>) -> CoreResult<Self> {
         let mut index = Self::default();
 
-        for (glyph_id, glyph) in glyphs {
+        for (glyph_id, glyph) in glyphs.iter() {
             if *glyph_id != glyph.id() {
                 return Err(CoreError::MismatchedGlyphId {
                     key: glyph_id.clone(),
@@ -308,7 +308,7 @@ impl Default for Font {
                     named_instances: Vec::new(),
                     sources: vec![default_source],
                     default_source_id: Some(default_source_id),
-                    glyphs: IndexMap::new(),
+                    glyphs: EntityList::new(),
                     kerning: KerningData::new(),
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
@@ -341,7 +341,7 @@ impl Font {
                     named_instances: Vec::new(),
                     sources: Vec::new(),
                     default_source_id: None,
-                    glyphs: IndexMap::new(),
+                    glyphs: EntityList::new(),
                     kerning: KerningData::new(),
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
@@ -844,7 +844,7 @@ impl Font {
 
     pub fn insert_glyph(&mut self, glyph: Glyph) -> CoreResult<GlyphId> {
         let glyph_id = glyph.id();
-        if self.data().glyphs.contains_key(&glyph_id) {
+        if self.data().glyphs.contains(&glyph_id) {
             return Err(CoreError::DuplicateGlyphId(glyph_id));
         }
         self.index()
@@ -852,7 +852,7 @@ impl Font {
 
         let state = self.state_mut();
         state.index.insert_glyph(glyph_id.clone(), &glyph);
-        state.data.glyphs.insert(glyph_id.clone(), Arc::new(glyph));
+        state.data.glyphs.insert(Arc::new(glyph));
         Ok(glyph_id)
     }
 
@@ -1657,8 +1657,8 @@ mod tests {
         let mut glyph = Glyph::new("A");
         glyph.set_layer(GlyphLayer::new(LayerId::new(), source_id.clone()));
         glyph.set_layer(GlyphLayer::new(LayerId::new(), source_id.clone()));
-        let mut glyphs = IndexMap::new();
-        glyphs.insert(glyph.id(), Arc::new(glyph));
+        let mut glyphs = EntityList::new();
+        glyphs.insert(Arc::new(glyph));
 
         let error = FontIndex::from_glyphs(&glyphs).unwrap_err();
 

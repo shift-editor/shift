@@ -13,6 +13,9 @@ use std::collections::HashMap;
 ///
 /// Checklist when adding a new `FontData` field: populate it here with a
 /// non-default, distinguishable value before relying on equality round-trips.
+/// Ordered collections need multiple entries whose identity sort order differs
+/// from their authored order so deterministic serializers cannot reorder them
+/// unnoticed.
 pub fn sample_font() -> Font {
     let mut font = Font::empty();
     font.metadata_mut().family_name = Some("Dogfood Sans".to_string());
@@ -259,8 +262,8 @@ pub fn sample_font() -> Font {
         700.0,
     ));
     regular_layer.add_component(Component::with_id(
-        ComponentId::from_raw("acute_component"),
-        acute_id,
+        ComponentId::from_raw("z_first"),
+        acute_id.clone(),
         "acute",
         DecomposedTransform {
             translate_x: 10.0,
@@ -272,6 +275,16 @@ pub fn sample_font() -> Font {
             skew_y: -1.5,
             t_center_x: 50.0,
             t_center_y: 75.0,
+        },
+    ));
+    regular_layer.add_component(Component::with_id(
+        ComponentId::from_raw("a_second"),
+        acute_id,
+        "acute",
+        DecomposedTransform {
+            translate_x: 120.0,
+            translate_y: 240.0,
+            ..DecomposedTransform::identity()
         },
     ));
     regular_layer.add_guideline(Guideline::with_id(

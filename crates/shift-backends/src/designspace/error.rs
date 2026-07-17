@@ -16,6 +16,9 @@ pub enum DesignspaceError {
     #[error("designspace has no sources")]
     NoSources,
 
+    #[error("designspace has no source at the mapped default location")]
+    MissingDefaultSource,
+
     #[error("layer '{layer}' not found in '{filename}'")]
     MissingLayer { layer: String, filename: String },
 
@@ -60,9 +63,6 @@ pub enum DesignspaceError {
 
     #[error("failed to parse designspace XML: {details}")]
     ParseDesignspaceXml { details: String },
-
-    #[error("axis '{axis}' has a non-invertible map: {details}")]
-    NonInvertibleAxisMap { axis: String, details: String },
 
     #[error(transparent)]
     Font(#[from] shift_font::CoreError),

@@ -1,3 +1,4 @@
+use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
 use crate::GlyphName;
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,14 @@ pub struct Component {
     base_glyph_id: GlyphId,
     base_glyph_name: GlyphName,
     transform: DecomposedTransform,
+}
+
+impl Identified for Component {
+    type Id = ComponentId;
+
+    fn id(&self) -> Self::Id {
+        Component::id(self)
+    }
 }
 
 /// Raw 2D affine transformation matrix (6 values).
