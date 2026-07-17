@@ -44,6 +44,7 @@ crates/shift-font/src/
 - `GlyphLayer` is authored editable data for one glyph at one source.
 - `InterpolationBasis` is coordinate-independent variation math for an ordered source set. It contains normalized supports and source coefficient rows, never glyph coordinates or metrics.
 - `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. Its default-source template owns topology.
+- `LayerCompatibility` records every hard structural difference between an interpolation reference layer and another source layer. `LayerDifference` retains ordered path, node, anchor, and component evidence for diagnostics.
 - `GlyphProjection` is a compact location-independent glyph payload: fallback shape, optional compatible interpolation, exact-source shapes for incompatible topology, and component identities.
 - `FontProjection` is a read-only, location-bound view that reuses resolved component layers across one or many glyph requests.
 - `ResolvedGlyph` is derived, flattened geometry plus x advance. An existing blank glyph resolves to an empty contour list; a missing glyph resolves to `None`.
@@ -71,6 +72,10 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 
 `Font::glyph_interpolation(glyph_id)` builds compatible source values over an `InterpolationBasis`. The default source defines structural topology. The basis depends only on axes and ordered source locations, so the same mechanism can interpolate other numeric domains without copying glyph concepts into them.
+
+`GlyphLayer::interpolation_compatibility_with(source)` is the source of truth for hard structural compatibility. The receiver is the interpolation reference. It compares paths, nodes, anchors, and components in authored order and never sorts them. OpenType requires corresponding outlines to have the same contour and point structure, and `gvar` addresses composite components by their ordered component index. Shift therefore treats component identity and order as structural. See the [OpenType Font Variations overview](https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview), the [`gvar` composite processing rules](https://learn.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs), and [fontTools interpolatability diagnostics](https://fonttools.readthedocs.io/en/latest/varLib/interpolatable.html).
+
+Coordinates, advance width, smooth flags, anchor positions, and component transforms are interpolated values, not structural compatibility. Matching anchor count, names, and order is currently a Shift-specific restriction because anchor positions share the ordered glyph interpolation vector; OpenType `gvar` and fontTools do not define source-anchor compatibility. Variable component scale or matrix transforms need a separate export diagnostic because `gvar` varies component placement rather than those transforms. Correspondence and quality warnings such as contour order, wrong start point, and kinks are separate from this hard structural result.
 
 `Font::glyph_projection(glyph_id)` preserves the preferred fallback, compatible interpolation, and incompatible authored source shapes without resolving a location. The fallback is normally the default-source layer and uses the glyph's preferred layer when the default source has no layer for that glyph. A renderer can retain this compact payload and combine its basis with current authored source signals. No arbitrary location result is persisted.
 

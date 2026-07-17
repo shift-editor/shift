@@ -9,9 +9,11 @@ use fontdrasil::variations::VariationModel;
 
 use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location, SourceId};
 
+mod compatibility;
 mod metrics;
 mod values;
 
+pub use compatibility::{LayerCompatibility, LayerDifference};
 pub use metrics::{
     ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
 };
@@ -253,7 +255,10 @@ impl Font {
             let Some(layer) = glyph.layer_for_source(source.id()) else {
                 continue;
             };
-            if !layers_are_compatible(default_layer, layer) {
+            if !default_layer
+                .interpolation_compatibility_with(layer)
+                .is_compatible()
+            {
                 continue;
             }
 
@@ -356,46 +361,6 @@ fn normalized_location(location: &Location, axes: &[Axis]) -> NormalizedLocation
             Some((tag, NormalizedCoord::new(axis.normalize(value))))
         })
         .collect()
-}
-
-/// Returns whether two layers can share structure-ordered interpolation values.
-pub(crate) fn layers_are_compatible(template: &GlyphLayer, candidate: &GlyphLayer) -> bool {
-    if template.contours().len() != candidate.contours().len()
-        || template.anchors().len() != candidate.anchors().len()
-        || template.components().len() != candidate.components().len()
-    {
-        return false;
-    }
-
-    for (template, candidate) in template.contours_iter().zip(candidate.contours_iter()) {
-        if template.is_closed() != candidate.is_closed()
-            || template.points().len() != candidate.points().len()
-        {
-            return false;
-        }
-
-        if template
-            .points()
-            .iter()
-            .zip(candidate.points())
-            .any(|(template, candidate)| template.is_on_curve() != candidate.is_on_curve())
-        {
-            return false;
-        }
-    }
-
-    if template
-        .anchors_iter()
-        .zip(candidate.anchors_iter())
-        .any(|(template, candidate)| template.name() != candidate.name())
-    {
-        return false;
-    }
-
-    !template
-        .components_iter()
-        .zip(candidate.components_iter())
-        .any(|(template, candidate)| template.base_glyph_id() != candidate.base_glyph_id())
 }
 
 fn region_scalar(
@@ -520,7 +485,9 @@ mod tests {
             .unwrap();
         point.set_smooth(!point.is_smooth());
 
-        assert!(super::layers_are_compatible(template, &candidate));
+        assert!(template
+            .interpolation_compatibility_with(&candidate)
+            .is_compatible());
     }
 
     #[test]

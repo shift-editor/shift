@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use crate::composite::{
     preferred_layer_for_glyph, resolved_contours_for_layer, GlyphLayerProvider, ResolvedContour,
 };
-use crate::interpolation::layers_are_compatible;
 use crate::{
     Axis, CoreResult, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer, Location, Source,
     SourceId,
@@ -187,7 +186,7 @@ impl Font {
 
                 let represented_by_interpolation =
                     interpolation.as_ref().is_some_and(|interpolation| {
-                        layers_are_compatible(interpolation.template(), layer)
+                        interpolation.basis().source_ids().contains(&source.id())
                     });
                 if represented_by_interpolation {
                     return None;
@@ -392,24 +391,30 @@ mod tests {
     }
 
     #[test]
-    fn glyph_projection_preserves_incompatible_exact_source_shapes() {
+    fn glyph_projection_preserves_reordered_components_as_an_exact_source_shape() {
         let mut font = sample_variable_font();
         let glyph_id = font.glyph_by_name("A").unwrap().id();
+        let reference_source_id = font.default_source_id().unwrap();
         let bold_source = font
             .sources()
             .iter()
             .find(|source| source.name() == "Bold")
             .unwrap()
             .clone();
+        let reference_layer_id = font
+            .layer_id_for_glyph_source(glyph_id.clone(), reference_source_id)
+            .unwrap();
         let bold_layer_id = font
             .layer_id_for_glyph_source(glyph_id.clone(), bold_source.id())
             .unwrap();
-        font.layer_mut(bold_layer_id)
-            .unwrap()
-            .contours_iter_mut()
-            .next()
-            .unwrap()
-            .add_point(600.0, 100.0, PointType::OnCurve, false);
+        let c_id = GlyphId::from_raw("C");
+        let caron_id = GlyphId::from_raw("caron.cap");
+        let reference_layer = font.layer_mut(reference_layer_id).unwrap();
+        reference_layer.add_component(Component::new(c_id.clone(), "C"));
+        reference_layer.add_component(Component::new(caron_id.clone(), "caron.cap"));
+        let bold_layer = font.layer_mut(bold_layer_id).unwrap();
+        bold_layer.add_component(Component::new(caron_id.clone(), "caron.cap"));
+        bold_layer.add_component(Component::new(c_id.clone(), "C"));
 
         let projection = font.glyph_projection(&glyph_id).unwrap().unwrap();
         let bold = projection
@@ -422,10 +427,18 @@ mod tests {
             .unwrap();
 
         assert_eq!(projection.exact_source_shapes().len(), 1);
-        assert_eq!(bold.contours_iter().next().unwrap().points().len(), 4);
         assert_eq!(
-            interpolated.contours_iter().next().unwrap().points().len(),
-            3
+            bold.components_iter()
+                .map(|component| component.base_glyph_id())
+                .collect::<Vec<_>>(),
+            vec![caron_id.clone(), c_id.clone()]
+        );
+        assert_eq!(
+            interpolated
+                .components_iter()
+                .map(|component| component.base_glyph_id())
+                .collect::<Vec<_>>(),
+            vec![c_id, caron_id]
         );
     }
 
