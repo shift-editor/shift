@@ -20,6 +20,8 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** TrueType export compiles an owned snapshot of the Shift `Font` IR directly through fontir/fontc. It must not serialize a temporary UFO or fall back to another authoring format. WHY: `.shift` is the canonical authoring source, and an intermediate format would discard or reinterpret Shift concepts before compilation.
 
+**Architecture Invariant:** Designspace source locations are imported as complete design-space locations. An omitted source dimension resolves to that axis's user-space default mapped into design space; default-source selection compares against that same completed mapped location and never silently substitutes the first source. A `layer` attribute only selects where a source's outlines live and does not make it ineligible to be the default. WHY: these are the reference designspaceLib semantics, and mixing user defaults with design coordinates corrupts interpolation bases.
+
 ## Codemap
 
 ```
@@ -66,6 +68,8 @@ src/
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
 
 **Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation; imported labels receive newly minted Shift identity because Designspace has no equivalent stable label ID.
+
+**Designspace conformance references:** The [Designspace XML source definition](https://fonttools.readthedocs.io/en/latest/designspaceLib/xml.html#source-element) defines source locations in design-space coordinates. The reference [`SourceDescriptor.getFullDesignLocation`](https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.SourceDescriptor.getFullDesignLocation) completes omitted dimensions with mapped axis defaults, and [`DesignSpaceDocument.findDefault`](https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.DesignSpaceDocument.findDefault) selects the source at that complete mapped default. Instance import follows the corresponding complete-location precedence and the reference continuous/discrete axis mapping behavior. Keep importer behavior and fixtures aligned with those APIs when extending Designspace support.
 
 **Saving authoring sources:** `UfoWriter` builds a `norad::Font`, projects the default source's standard metrics, populates metadata/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `.shift` packages are written by `ShiftSourcePackage` through `FontLoader`.
 

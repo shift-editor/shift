@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use norad::designspace::{Axis as DsAxis, DesignSpaceDocument, Dimension, Source as DsSource};
+use norad::designspace::{
+    Axis as DsAxis, AxisMapping as DsAxisMapping, DesignSpaceDocument, Dimension,
+    Source as DsSource,
+};
 use shift_backends::font_loader::FontLoader;
 use shift_font::Font;
 
@@ -73,6 +76,14 @@ fn ds_source(style: &str, filename: &str, layer: Option<&str>, weight: f32) -> D
     }
 }
 
+fn unnamed_ds_source(filename: &str, weight: f32) -> DsSource {
+    DsSource {
+        filename: filename.to_string(),
+        location: vec![weight_dimension(weight)],
+        ..Default::default()
+    }
+}
+
 /// A designspace spread over two master UFOs, with an intermediate master
 /// declared as a layer of the bold UFO.
 fn multi_ufo_designspace(dir: &Path) -> PathBuf {
@@ -109,6 +120,88 @@ fn multi_ufo_designspace(dir: &Path) -> PathBuf {
     path
 }
 
+fn mapped_sparse_layer_default_designspace(dir: &Path) -> PathBuf {
+    let ufo_path = master_ufo(dir, "Mapped.ufo", "Display", 700.0, 750.0);
+    let mut ufo = norad::Font::load(&ufo_path).unwrap();
+    ufo.layers
+        .new_layer("Regular")
+        .unwrap()
+        .insert_glyph(triangle_glyph("A", 500.0, 650.0));
+    ufo.save(&ufo_path).unwrap();
+
+    let weight = DsAxis {
+        name: "Weight".to_string(),
+        tag: "wght".to_string(),
+        minimum: Some(100.0),
+        default: 400.0,
+        maximum: Some(900.0),
+        map: Some(vec![
+            DsAxisMapping {
+                input: 100.0,
+                output: 100.0,
+            },
+            DsAxisMapping {
+                input: 400.0,
+                output: 350.0,
+            },
+            DsAxisMapping {
+                input: 900.0,
+                output: 900.0,
+            },
+        ]),
+        ..Default::default()
+    };
+    let italic = DsAxis {
+        name: "Italic".to_string(),
+        tag: "ital".to_string(),
+        default: 0.0,
+        values: Some(vec![0.0, 1.0]),
+        ..Default::default()
+    };
+    let display = DsSource {
+        familyname: Some("Grouped".to_string()),
+        stylename: Some("Display".to_string()),
+        name: Some("Display".to_string()),
+        filename: "Mapped.ufo".to_string(),
+        location: vec![
+            Dimension {
+                name: "Weight".to_string(),
+                xvalue: Some(900.0),
+                ..Default::default()
+            },
+            Dimension {
+                name: "Italic".to_string(),
+                xvalue: Some(0.0),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let regular = DsSource {
+        familyname: Some("Grouped".to_string()),
+        stylename: Some("Regular".to_string()),
+        name: Some("Regular".to_string()),
+        filename: "Mapped.ufo".to_string(),
+        layer: Some("Regular".to_string()),
+        // Weight is already in design coordinates; Italic is omitted and
+        // therefore resolves to its mapped default.
+        location: vec![Dimension {
+            name: "Weight".to_string(),
+            xvalue: Some(350.0),
+            ..Default::default()
+        }],
+    };
+    let document = DesignSpaceDocument {
+        format: 5.0,
+        axes: vec![weight, italic],
+        sources: vec![display, regular],
+        ..Default::default()
+    };
+    let path = dir.join("Mapped.designspace");
+    document.save(&path).unwrap();
+    path
+}
+
 /// (name, filename, layer name, weight location) per source.
 type SourceShape = (String, Option<String>, Option<String>, Option<f64>);
 
@@ -138,6 +231,74 @@ fn layer_width(font: &Font, source_name: &str, glyph_name: &str) -> f64 {
         .layer_for_source(source.id())
         .unwrap_or_else(|| panic!("{glyph_name} should have a layer for {source_name}"))
         .width()
+}
+
+#[test]
+fn imports_the_complete_mapped_default_location_from_a_named_layer() {
+    let fixture_dir = tempfile::tempdir().unwrap();
+    let font = load_font(&mapped_sparse_layer_default_designspace(fixture_dir.path()));
+
+    let default = font
+        .default_source()
+        .expect("mapped designspace should have a default source");
+    let weight = font.axis_id_by_tag("wght").unwrap();
+    let italic = font.axis_id_by_tag("ital").unwrap();
+
+    assert_eq!(default.name(), "Regular");
+    assert_eq!(default.location().get(&weight), Some(350.0));
+    assert_eq!(default.location().get(&italic), Some(0.0));
+    assert_eq!(layer_width(&font, "Regular", "A"), 500.0);
+}
+
+#[test]
+fn imports_missing_source_names_from_ufo_metadata_and_filenames() {
+    let fixture_dir = tempfile::tempdir().unwrap();
+    master_ufo(fixture_dir.path(), "Grouped-Text.ufo", "Text", 400.0, 600.0);
+    master_ufo(
+        fixture_dir.path(),
+        "Grouped-Text-Alt.ufo",
+        "Text",
+        550.0,
+        675.0,
+    );
+    master_ufo(
+        fixture_dir.path(),
+        "Grouped-Display.ufo",
+        "Display",
+        700.0,
+        750.0,
+    );
+
+    let mut explicitly_named = unnamed_ds_source("Grouped-Display.ufo", 700.0);
+    explicitly_named.name = Some("Editorial".to_string());
+    let document = DesignSpaceDocument {
+        format: 5.0,
+        axes: vec![DsAxis {
+            name: "Weight".to_string(),
+            tag: "wght".to_string(),
+            minimum: Some(300.0),
+            default: 300.0,
+            maximum: Some(700.0),
+            ..Default::default()
+        }],
+        sources: vec![
+            unnamed_ds_source("Grouped-Text.ufo", 300.0),
+            unnamed_ds_source("Grouped-Text-Alt.ufo", 500.0),
+            explicitly_named,
+        ],
+        ..Default::default()
+    };
+    let path = fixture_dir.path().join("Unnamed.designspace");
+    document.save(&path).unwrap();
+
+    let font = load_font(&path);
+    let source_names = font
+        .sources()
+        .iter()
+        .map(|source| source.name())
+        .collect::<Vec<_>>();
+
+    assert_eq!(source_names, ["Text", "Grouped-Text-Alt", "Editorial"]);
 }
 
 #[test]

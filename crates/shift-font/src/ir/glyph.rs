@@ -1,4 +1,5 @@
 use crate::anchor::Anchor;
+use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
 use crate::entity::{
@@ -8,7 +9,6 @@ use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::point::Point;
 use crate::GlyphName;
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,14 +22,22 @@ pub struct Glyph {
     lib: LibData,
 }
 
+impl Identified for Glyph {
+    type Id = GlyphId;
+
+    fn id(&self) -> Self::Id {
+        Glyph::id(self)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GlyphLayer {
     id: LayerId,
     source_id: SourceId,
     width: f64,
     height: Option<f64>,
-    contours: IndexMap<ContourId, Contour>,
-    components: IndexMap<ComponentId, Component>,
+    contours: EntityList<Contour>,
+    components: EntityList<Component>,
     anchors: Vec<Anchor>,
     guidelines: Vec<Guideline>,
     lib: LibData,
@@ -42,8 +50,8 @@ impl GlyphLayer {
             source_id,
             width: 0.0,
             height: None,
-            contours: IndexMap::new(),
-            components: IndexMap::new(),
+            contours: EntityList::new(),
+            components: EntityList::new(),
             anchors: Vec::new(),
             guidelines: Vec::new(),
             lib: LibData::new(),
@@ -142,7 +150,7 @@ impl GlyphLayer {
         self.height = height;
     }
 
-    pub fn contours(&self) -> &IndexMap<ContourId, Contour> {
+    pub fn contours(&self) -> &EntityList<Contour> {
         &self.contours
     }
 
@@ -164,7 +172,7 @@ impl GlyphLayer {
 
     pub fn add_contour(&mut self, contour: Contour) -> ContourId {
         let id = contour.id();
-        self.contours.insert(id.clone(), contour);
+        self.contours.insert(contour);
         id
     }
 
@@ -176,7 +184,7 @@ impl GlyphLayer {
         self.contours.clear();
     }
 
-    pub fn components(&self) -> &IndexMap<ComponentId, Component> {
+    pub fn components(&self) -> &EntityList<Component> {
         &self.components
     }
 
@@ -194,7 +202,7 @@ impl GlyphLayer {
 
     pub fn add_component(&mut self, component: Component) -> ComponentId {
         let id = component.id();
-        self.components.insert(id.clone(), component);
+        self.components.insert(component);
         id
     }
 
