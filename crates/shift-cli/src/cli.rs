@@ -53,6 +53,18 @@ pub enum Command {
         #[command(subcommand)]
         command: SourceCommand,
     },
+
+    /// Author glyph identities.
+    Glyph {
+        #[command(subcommand)]
+        command: GlyphCommand,
+    },
+
+    /// Author sparse glyph layers.
+    Layer {
+        #[command(subcommand)]
+        command: LayerCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -71,6 +83,21 @@ pub enum AxisCommand {
 pub enum SourceCommand {
     /// Add a master source at a design-space location.
     Add(AddSourceArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GlyphCommand {
+    /// Add glyph identity and Unicode assignments without creating layers.
+    Add(AddGlyphArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum LayerCommand {
+    /// Add one authored layer from a semantic JSON payload.
+    Add(AddLayerArgs),
+
+    /// Copy one glyph's authored layer to another source with fresh internal ids.
+    Copy(CopyLayerArgs),
 }
 
 #[derive(Debug, Args)]
@@ -93,10 +120,6 @@ pub struct AddAxisArgs {
     /// Path to the canonical .shift source package.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
-
-    /// Caller-minted stable identity; the axis_ prefix is optional.
-    #[arg(long)]
-    pub id: Option<String>,
 
     /// Four-character OpenType axis tag.
     #[arg(long)]
@@ -128,10 +151,6 @@ pub struct AddSourceArgs {
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
-    /// Caller-minted stable identity; the source_ prefix is optional.
-    #[arg(long)]
-    pub id: Option<String>,
-
     /// Human-readable source name.
     #[arg(long)]
     pub name: String,
@@ -139,6 +158,67 @@ pub struct AddSourceArgs {
     /// Design-space coordinate as TAG=VALUE; repeat or comma-separate values.
     #[arg(long, value_name = "TAG=VALUE", value_delimiter = ',')]
     pub location: Vec<String>,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct AddGlyphArgs {
+    /// Path to the canonical .shift source package.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Glyph name, such as A or a.alt.
+    pub name: String,
+
+    /// Unicode scalar in U+XXXX form; repeat or comma-separate values.
+    #[arg(long, value_name = "U+XXXX", value_delimiter = ',')]
+    pub unicode: Vec<String>,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct AddLayerArgs {
+    /// Path to the canonical .shift source package.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Glyph name or full stable glyph id.
+    #[arg(long)]
+    pub glyph: String,
+
+    /// Source name or full stable source id.
+    #[arg(long)]
+    pub source: String,
+
+    /// JSON layer payload path, or - to read it from stdin.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub input: PathBuf,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct CopyLayerArgs {
+    /// Path to the canonical .shift source package.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Glyph name or full stable glyph id.
+    #[arg(long)]
+    pub glyph: String,
+
+    /// Source owning the layer to copy, by name or full stable id.
+    #[arg(long = "from-source")]
+    pub from_source: String,
+
+    /// Destination source, by name or full stable id.
+    #[arg(long)]
+    pub source: String,
 
     #[command(flatten)]
     pub mutation: MutationArgs,

@@ -16,9 +16,9 @@ use crate::ir::{
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
-/// A point to create, with its caller-minted id.
+/// A point to create, with stable identity minted by a trusted caller.
 #[derive(Clone, Debug)]
 pub struct PointSeed {
     pub id: PointId,
@@ -28,7 +28,7 @@ pub struct PointSeed {
     pub smooth: bool,
 }
 
-/// An anchor to create, with its caller-minted id.
+/// An anchor to create, with stable identity minted by a trusted caller.
 #[derive(Clone, Debug)]
 pub struct AnchorSeed {
     pub id: AnchorId,
@@ -802,75 +802,85 @@ impl Font {
                 before,
                 points,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
-
+                let mut point_ids = HashSet::new();
                 for seed in points {
-                    if layer.has_point(seed.id.clone()) {
+                    if self.has_point_id(&seed.id) || !point_ids.insert(seed.id.clone()) {
                         return Err(CoreError::DuplicatePointId(seed.id.clone()));
                     }
                 }
 
-                let contour_id = match (contour_id, before) {
-                    (Some(contour_id), _) => contour_id.clone(),
-                    (None, Some(before_id)) => layer.contour_of_point(before_id.clone())?,
-                    (None, None) => {
-                        return Err(CoreError::InvalidContourId(
-                            "addPoints requires a contour or a before anchor".to_string(),
-                        ));
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let contour_id = match (contour_id, before) {
+                        (Some(contour_id), _) => contour_id.clone(),
+                        (None, Some(before_id)) => layer.contour_of_point(before_id.clone())?,
+                        (None, None) => {
+                            return Err(CoreError::InvalidContourId(
+                                "addPoints requires a contour or a before anchor".to_string(),
+                            ));
+                        }
+                    };
+
+                    let contour = layer
+                        .contour_mut(contour_id.clone())
+                        .ok_or(CoreError::ContourNotFound(contour_id))?;
+
+                    let insert_at = match before {
+                        Some(before_id) => Some(
+                            contour
+                                .points()
+                                .iter()
+                                .position(|point| point.id() == *before_id)
+                                .ok_or(CoreError::PointNotFound(before_id.clone()))?,
+                        ),
+                        None => None,
+                    };
+
+                    let mut ids = Vec::with_capacity(points.len());
+                    for (offset, seed) in points.iter().enumerate() {
+                        let point = crate::ir::Point::new(
+                            seed.id.clone(),
+                            seed.x,
+                            seed.y,
+                            seed.point_type,
+                            seed.smooth,
+                        );
+
+                        match insert_at {
+                            Some(index) => contour.insert_point(index + offset, point),
+                            None => contour.push_point(point),
+                        }
+                        ids.push(seed.id.clone());
                     }
+
+                    FontChange::points_added(layer_id.clone(), contour, ids)
                 };
 
-                let contour = layer
-                    .contour_mut(contour_id.clone())
-                    .ok_or(CoreError::ContourNotFound(contour_id))?;
-
-                let insert_at = match before {
-                    Some(before_id) => Some(
-                        contour
-                            .points()
-                            .iter()
-                            .position(|point| point.id() == *before_id)
-                            .ok_or(CoreError::PointNotFound(before_id.clone()))?,
-                    ),
-                    None => None,
-                };
-
-                let mut ids = Vec::with_capacity(points.len());
-                for (offset, seed) in points.iter().enumerate() {
-                    let point = crate::ir::Point::new(
-                        seed.id.clone(),
-                        seed.x,
-                        seed.y,
-                        seed.point_type,
-                        seed.smooth,
-                    );
-
-                    match insert_at {
-                        Some(index) => contour.insert_point(index + offset, point),
-                        None => contour.push_point(point),
-                    }
-                    ids.push(seed.id.clone());
-                }
-
-                Ok(FontChange::points_added(layer_id.clone(), contour, ids))
+                self.record_point_ids(points.iter().map(|seed| seed.id.clone()));
+                Ok(change)
             }
             FontIntent::AddContour {
                 layer_id,
                 contour_id,
                 closed,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
-                if layer.contour(contour_id.clone()).is_some() {
+                if self.has_contour_id(contour_id) {
                     return Err(CoreError::DuplicateContourId(contour_id.clone()));
                 }
 
-                let mut contour = Contour::with_id(contour_id.clone());
-                if *closed {
-                    contour.close();
-                }
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let mut contour = Contour::with_id(contour_id.clone());
+                    if *closed {
+                        contour.close();
+                    }
 
-                layer.add_contour(contour.clone());
-                Ok(FontChange::contour_added(layer_id.clone(), &contour))
+                    layer.add_contour(contour.clone());
+                    FontChange::contour_added(layer_id.clone(), &contour)
+                };
+
+                self.record_contour_id(contour_id.clone());
+                Ok(change)
             }
             FontIntent::SetContourClosed {
                 layer_id,
@@ -945,30 +955,39 @@ impl Font {
                 layer_id,
                 point_ids,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
-                layer.remove_points(point_ids)?;
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    layer.remove_points(point_ids)?;
+                    FontChange::layer_geometry_replaced(layer)
+                };
 
-                Ok(FontChange::layer_geometry_replaced(layer))
+                self.forget_point_ids(point_ids);
+                Ok(change)
             }
             FontIntent::AddAnchors { layer_id, anchors } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
-
+                let mut anchor_ids = HashSet::new();
                 for seed in anchors {
-                    if layer.has_anchor(seed.id.clone()) {
+                    if self.has_anchor_id(&seed.id) || !anchor_ids.insert(seed.id.clone()) {
                         return Err(CoreError::DuplicateAnchorId(seed.id.clone()));
                     }
                 }
 
-                for seed in anchors {
-                    layer.add_anchor(Anchor::with_id(
-                        seed.id.clone(),
-                        seed.name.clone(),
-                        seed.x,
-                        seed.y,
-                    ));
-                }
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    for seed in anchors {
+                        layer.add_anchor(Anchor::with_id(
+                            seed.id.clone(),
+                            seed.name.clone(),
+                            seed.x,
+                            seed.y,
+                        ));
+                    }
 
-                Ok(FontChange::layer_geometry_replaced(layer))
+                    FontChange::layer_geometry_replaced(layer)
+                };
+
+                self.record_anchor_ids(anchors.iter().map(|seed| seed.id.clone()));
+                Ok(change)
             }
             FontIntent::MoveAnchors {
                 layer_id,
@@ -1011,10 +1030,14 @@ impl Font {
                 layer_id,
                 anchor_ids,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
-                layer.remove_anchors(anchor_ids)?;
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    layer.remove_anchors(anchor_ids)?;
+                    FontChange::layer_geometry_replaced(layer)
+                };
 
-                Ok(FontChange::layer_geometry_replaced(layer))
+                self.forget_anchor_ids(anchor_ids);
+                Ok(change)
             }
             FontIntent::ReverseContour {
                 layer_id,
@@ -1067,10 +1090,18 @@ impl Font {
                 contour_id_b,
                 operation,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
-                layer.apply_boolean_op(contour_id_a.clone(), contour_id_b.clone(), *operation)?;
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    layer.apply_boolean_op(
+                        contour_id_a.clone(),
+                        contour_id_b.clone(),
+                        *operation,
+                    )?;
+                    FontChange::layer_geometry_replaced(layer)
+                };
 
-                Ok(FontChange::layer_geometry_replaced(layer))
+                self.rebuild_structure_index()?;
+                Ok(change)
             }
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }
@@ -1160,6 +1191,45 @@ mod tests {
             result,
             Err(CoreError::DuplicateSourceLocation { .. })
         ));
+    }
+
+    #[test]
+    fn intent_set_rejects_contour_identity_used_by_another_layer() {
+        let mut font = Font::new();
+        let default_source_id = font.default_source_id().unwrap();
+        let contour_id = ContourId::from_raw("shared");
+        let glyph_id = GlyphId::new();
+        let mut contour = Contour::with_id(contour_id.clone());
+        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+        let mut layer = GlyphLayer::new(LayerId::new(), default_source_id);
+        layer.add_contour(contour);
+        let mut glyph = Glyph::with_id(glyph_id.clone(), "A");
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+
+        let source_id = font.add_source(Source::new("Other".to_string(), Location::new()));
+        let layer_id = LayerId::new();
+        let mut candidate = font.clone();
+        let result = candidate.apply_intents(FontIntentSet {
+            intents: vec![
+                FontIntent::CreateGlyphLayer {
+                    layer_id: layer_id.clone(),
+                    glyph_id,
+                    source_id,
+                },
+                FontIntent::AddContour {
+                    layer_id,
+                    contour_id: contour_id.clone(),
+                    closed: true,
+                },
+            ],
+        });
+
+        assert!(matches!(
+            result,
+            Err(CoreError::DuplicateContourId(id)) if id == contour_id
+        ));
+        assert_eq!(font.glyphs().next().unwrap().layers().len(), 1);
     }
 
     #[test]

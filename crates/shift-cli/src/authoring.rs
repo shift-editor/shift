@@ -9,10 +9,14 @@ use std::path::{Path, PathBuf};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde::Serialize;
-use shift_font::{Axis, AxisId, Font, FontChange, FontIntent, FontIntentSet, Location, SourceId};
+use shift_font::{Axis, Font, FontChange, FontIntent, FontIntentSet, Location, SourceId};
 use shift_source::ShiftSourcePackage;
 
 use crate::cli::{AddAxisArgs, AddSourceArgs, CreateFontArgs, MutationArgs};
+
+mod glyph;
+
+pub use glyph::{add_glyph, add_layer, copy_layer};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +50,21 @@ pub enum AuthoringChange {
         source_id: String,
         name: String,
         location: BTreeMap<String, f64>,
+    },
+    GlyphCreated {
+        glyph_id: String,
+        name: String,
+        unicodes: Vec<String>,
+    },
+    GlyphLayerCreated {
+        layer_id: String,
+        glyph_id: String,
+        source_id: String,
+        advance: f64,
+        contour_count: usize,
+        point_count: usize,
+        anchor_count: usize,
+        component_count: usize,
     },
     NamedInstancesUpdated {
         count: usize,
@@ -83,6 +102,31 @@ impl AuthoringReport {
                         .join(", ");
                     lines.push(format!("+ source  {name}  {source_id}  {location}"));
                 }
+                AuthoringChange::GlyphCreated {
+                    glyph_id,
+                    name,
+                    unicodes,
+                } => {
+                    let unicodes = unicodes.join(", ");
+                    let suffix = if unicodes.is_empty() {
+                        String::new()
+                    } else {
+                        format!("  {unicodes}")
+                    };
+                    lines.push(format!("+ glyph   {name}  {glyph_id}{suffix}"));
+                }
+                AuthoringChange::GlyphLayerCreated {
+                    layer_id,
+                    glyph_id,
+                    source_id,
+                    advance,
+                    contour_count,
+                    point_count,
+                    anchor_count,
+                    component_count,
+                } => lines.push(format!(
+                    "+ layer   {layer_id}  {glyph_id} @ {source_id}  advance {advance}; {contour_count} contours, {point_count} points, {anchor_count} anchors, {component_count} components"
+                )),
                 AuthoringChange::NamedInstancesUpdated { count } => {
                     lines.push(format!("~ instances  {count} product locations completed"));
                 }
@@ -137,9 +181,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
     let font = ShiftSourcePackage::load_font(&args.path)
         .into_diagnostic()
         .wrap_err("failed to load Shift font")?;
-    let axis_id = args.id.map_or_else(AxisId::new, AxisId::from_raw);
-    let axis = Axis::with_id(
-        axis_id,
+    let axis = Axis::new(
         args.tag,
         args.name,
         args.minimum,
@@ -150,7 +192,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
         intents: vec![FontIntent::CreateAxis { axis }],
     };
 
-    apply_mutation(&args.path, &args.mutation, font, set, None)
+    apply_mutation(&args.path, &args.mutation, font, set)
 }
 
 /// Adds one master source after resolving axis tags to stable identities.
@@ -166,8 +208,8 @@ pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
     let font = ShiftSourcePackage::load_font(&args.path)
         .into_diagnostic()
         .wrap_err("failed to load Shift font")?;
-    let (location, rendered_location) = parse_location(&font, &args.location)?;
-    let source_id = args.id.map_or_else(SourceId::new, SourceId::from_raw);
+    let location = parse_location(&font, &args.location)?;
+    let source_id = SourceId::new();
     let set = FontIntentSet {
         intents: vec![FontIntent::CreateSource {
             source_id,
@@ -176,21 +218,14 @@ pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
         }],
     };
 
-    apply_mutation(
-        &args.path,
-        &args.mutation,
-        font,
-        set,
-        Some(rendered_location),
-    )
+    apply_mutation(&args.path, &args.mutation, font, set)
 }
 
-fn apply_mutation(
+pub(super) fn apply_mutation(
     path: &Path,
     options: &MutationArgs,
     font: Font,
     set: FontIntentSet,
-    source_location: Option<BTreeMap<String, f64>>,
 ) -> Result<AuthoringReport> {
     let destination = mutation_destination(path, options.output.as_deref())?;
     let mut next = font.clone();
@@ -198,7 +233,7 @@ fn apply_mutation(
         .apply_intents(set)
         .into_diagnostic()
         .wrap_err("authoring change is invalid")?;
-    let changes = report_changes(outcome.changes.changes, source_location);
+    let changes = report_changes(&next, outcome.changes.changes);
 
     if !options.dry_run {
         if options.output.is_some() {
@@ -221,10 +256,7 @@ fn apply_mutation(
     })
 }
 
-fn report_changes(
-    changes: Vec<FontChange>,
-    source_location: Option<BTreeMap<String, f64>>,
-) -> Vec<AuthoringChange> {
+fn report_changes(font: &Font, changes: Vec<FontChange>) -> Vec<AuthoringChange> {
     changes
         .into_iter()
         .filter_map(|change| match change {
@@ -239,8 +271,45 @@ fn report_changes(
             FontChange::SourceCreated(change) => Some(AuthoringChange::SourceCreated {
                 source_id: change.source_id.to_string(),
                 name: change.name,
-                location: source_location.clone().unwrap_or_default(),
+                location: change
+                    .location
+                    .into_iter()
+                    .filter_map(|coordinate| {
+                        let tag = font
+                            .axes()
+                            .iter()
+                            .find(|axis| axis.id() == coordinate.axis_id)?
+                            .tag()
+                            .to_string();
+                        Some((tag, coordinate.value))
+                    })
+                    .collect(),
             }),
+            FontChange::GlyphCreated(change) => Some(AuthoringChange::GlyphCreated {
+                glyph_id: change.glyph_id.to_string(),
+                name: change.name.to_string(),
+                unicodes: change
+                    .unicodes
+                    .into_iter()
+                    .map(|unicode| format!("U+{unicode:04X}"))
+                    .collect(),
+            }),
+            FontChange::GlyphLayerCreated(change) => {
+                let layer = font.layer(change.layer_id.clone())?;
+                Some(AuthoringChange::GlyphLayerCreated {
+                    layer_id: change.layer_id.to_string(),
+                    glyph_id: change.glyph_id.to_string(),
+                    source_id: change.source_id.to_string(),
+                    advance: layer.width(),
+                    contour_count: layer.contours().len(),
+                    point_count: layer
+                        .contours_iter()
+                        .map(|contour| contour.points().len())
+                        .sum(),
+                    anchor_count: layer.anchors().len(),
+                    component_count: layer.components().len(),
+                })
+            }
             FontChange::NamedInstancesUpdated(change) => {
                 Some(AuthoringChange::NamedInstancesUpdated {
                     count: change.instances.len(),
@@ -251,15 +320,10 @@ fn report_changes(
         .collect()
 }
 
-fn parse_location(
-    font: &Font,
-    coordinates: &[String],
-) -> Result<(Location, BTreeMap<String, f64>)> {
+fn parse_location(font: &Font, coordinates: &[String]) -> Result<Location> {
     let mut location = Location::new();
-    let mut rendered = BTreeMap::new();
     for axis in font.axes() {
         location.set(axis.id(), axis.default());
-        rendered.insert(axis.tag().to_string(), axis.default());
     }
 
     let mut seen = HashSet::new();
@@ -286,10 +350,9 @@ fn parse_location(
         }
 
         location.set(axis_id, value);
-        rendered.insert(tag.to_string(), value);
     }
 
-    Ok((location, rendered))
+    Ok(location)
 }
 
 fn mutation_destination(path: &Path, output: Option<&Path>) -> Result<PathBuf> {
@@ -314,173 +377,4 @@ fn validate_new_package_path(path: &Path) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::fs;
-
-    use super::*;
-
-    fn mutation(dry_run: bool) -> MutationArgs {
-        MutationArgs {
-            output: None,
-            dry_run,
-            json: false,
-        }
-    }
-
-    fn create_package(path: &Path) {
-        create_font(CreateFontArgs {
-            path: path.to_path_buf(),
-            dry_run: false,
-            json: false,
-        })
-        .unwrap();
-    }
-
-    fn weight_axis(path: &Path, mutation: MutationArgs) -> AddAxisArgs {
-        AddAxisArgs {
-            path: path.to_path_buf(),
-            id: Some("weight".to_string()),
-            tag: "wght".to_string(),
-            name: "Weight".to_string(),
-            minimum: 100.0,
-            default: 400.0,
-            maximum: 900.0,
-            mutation,
-        }
-    }
-
-    #[test]
-    fn create_font_writes_a_new_package_and_refuses_to_overwrite_it() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("Lab.shift");
-
-        let report = create_font(CreateFontArgs {
-            path: path.clone(),
-            dry_run: false,
-            json: false,
-        })
-        .unwrap();
-
-        assert!(report.wrote);
-        assert_eq!(
-            ShiftSourcePackage::load_font(&path)
-                .unwrap()
-                .sources()
-                .len(),
-            1
-        );
-        assert!(
-            create_font(CreateFontArgs {
-                path,
-                dry_run: false,
-                json: false,
-            })
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn axis_dry_run_uses_real_validation_without_writing() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("Lab.shift");
-        create_package(&path);
-        let before = fs::read(&path).unwrap();
-
-        let report = add_axis(weight_axis(&path, mutation(true))).unwrap();
-
-        assert!(!report.wrote);
-        assert_eq!(fs::read(&path).unwrap(), before);
-        assert!(
-            ShiftSourcePackage::load_font(&path)
-                .unwrap()
-                .axes()
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn axis_mutation_preserves_package_identity() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("Lab.shift");
-        create_package(&path);
-        let package_id = ShiftSourcePackage::open(&path)
-            .unwrap()
-            .package_id()
-            .clone();
-
-        add_axis(weight_axis(&path, mutation(false))).unwrap();
-
-        let package = ShiftSourcePackage::open(&path).unwrap();
-        let font = ShiftSourcePackage::load_font(&path).unwrap();
-        assert_eq!(package.package_id(), &package_id);
-        assert_eq!(font.axes()[0].tag(), "wght");
-    }
-
-    #[test]
-    fn invalid_axis_does_not_change_the_package() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("Lab.shift");
-        create_package(&path);
-        let before = fs::read(&path).unwrap();
-        let mut args = weight_axis(&path, mutation(false));
-        args.minimum = 500.0;
-        args.default = 400.0;
-
-        assert!(add_axis(args).is_err());
-        assert_eq!(fs::read(&path).unwrap(), before);
-    }
-
-    #[test]
-    fn output_writes_an_independent_package_without_changing_input() {
-        let temp = tempfile::tempdir().unwrap();
-        let input = temp.path().join("Lab.shift");
-        let output = temp.path().join("Variant.shift");
-        create_package(&input);
-        let before = fs::read(&input).unwrap();
-        let mut options = mutation(false);
-        options.output = Some(output.clone());
-
-        add_axis(weight_axis(&input, options)).unwrap();
-
-        assert_eq!(fs::read(&input).unwrap(), before);
-        assert!(
-            ShiftSourcePackage::load_font(&input)
-                .unwrap()
-                .axes()
-                .is_empty()
-        );
-        assert_eq!(
-            ShiftSourcePackage::load_font(&output).unwrap().axes().len(),
-            1
-        );
-        assert_ne!(
-            ShiftSourcePackage::open(&input).unwrap().package_id(),
-            ShiftSourcePackage::open(&output).unwrap().package_id()
-        );
-    }
-
-    #[test]
-    fn source_location_is_completed_with_axis_defaults() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("Lab.shift");
-        create_package(&path);
-        add_axis(weight_axis(&path, mutation(false))).unwrap();
-
-        add_source(AddSourceArgs {
-            path: path.clone(),
-            id: Some("black".to_string()),
-            name: "Black".to_string(),
-            location: vec!["wght=900".to_string()],
-            mutation: mutation(false),
-        })
-        .unwrap();
-
-        let font = ShiftSourcePackage::load_font(&path).unwrap();
-        let source = font
-            .sources()
-            .iter()
-            .find(|source| source.name() == "Black")
-            .unwrap();
-        assert_eq!(source.location().get(&font.axes()[0].id()), Some(900.0));
-    }
-}
+mod tests;

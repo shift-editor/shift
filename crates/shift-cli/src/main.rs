@@ -4,9 +4,13 @@ mod inspect;
 
 use std::io::{self, IsTerminal, Write};
 
-use authoring::{AuthoringReport, add_axis, add_source, create_font};
+use authoring::{
+    AuthoringReport, add_axis, add_glyph, add_layer, add_source, copy_layer, create_font,
+};
 use clap::Parser;
-use cli::{AxisCommand, Cli, Command, CompileArgs, FontCommand, SourceCommand};
+use cli::{
+    AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, LayerCommand, SourceCommand,
+};
 use inspect::{InspectReport, RenderMode};
 use miette::IntoDiagnostic;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
@@ -35,6 +39,22 @@ fn main() -> miette::Result<()> {
             SourceCommand::Add(args) => {
                 let json = args.mutation.json;
                 write_authoring_result(add_source(args), json)
+            }
+        },
+        Command::Glyph { command } => match command {
+            GlyphCommand::Add(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(add_glyph(args), json)
+            }
+        },
+        Command::Layer { command } => match command {
+            LayerCommand::Add(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(add_layer(args), json)
+            }
+            LayerCommand::Copy(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(copy_layer(args), json)
             }
         },
     }

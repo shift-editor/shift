@@ -1,6 +1,6 @@
 use crate::{
-    AnchorId, AxisId, AxisLabelId, AxisMappingId, ContourId, GlyphId, GlyphName, LayerId, MetricId,
-    MetricKind, NamedInstanceId, PointId, SourceId,
+    AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, GlyphId, GlyphName,
+    GuidelineId, LayerId, MetricId, MetricKind, NamedInstanceId, PointId, SourceId,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -16,6 +16,12 @@ pub enum CoreError {
 
     #[error("anchor id {0} already exists")]
     DuplicateAnchorId(AnchorId),
+
+    #[error("component id {0} already exists")]
+    DuplicateComponentId(ComponentId),
+
+    #[error("guideline id {0} already exists")]
+    DuplicateGuidelineId(GuidelineId),
 
     #[error("invalid contour id {0}")]
     InvalidContourId(String),

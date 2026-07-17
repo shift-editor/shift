@@ -23,8 +23,6 @@ fn authors_axis_and_source_through_the_cli() {
         "axis",
         "add",
         path,
-        "--id",
-        "weight",
         "--tag",
         "wght",
         "--name",
@@ -42,14 +40,17 @@ fn authors_axis_and_source_through_the_cli() {
     assert_eq!(report["valid"], true);
     assert_eq!(report["wrote"], true);
     assert_eq!(report["changes"][0]["kind"], "axisCreated");
-    assert_eq!(report["changes"][0]["axisId"], "axis_weight");
+    assert!(
+        report["changes"][0]["axisId"]
+            .as_str()
+            .unwrap()
+            .starts_with("axis_")
+    );
 
     let source = shift(&[
         "source",
         "add",
         path,
-        "--id",
-        "black",
         "--name",
         "Black",
         "--location",
