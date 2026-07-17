@@ -6,6 +6,7 @@ First-class Rust font object model for Shift.
 
 - **Architecture Invariant:** `shift-font` owns Shift authoring concepts and semantic validation, never format/compiler DTOs.
 - **Architecture Invariant:** Stable IDs are identity. Names, tags, Unicode assignments, and coordinates remain editable authoring values.
+- **Architecture Invariant:** Glyph-structure IDs are font-wide within their entity type. Contours, points, components, anchors, and glyph-layer guidelines are never addressed by a layer-qualified identity.
 - **Architecture Invariant:** Ordered, identity-addressable authoring collections use `EntityList`. Its iteration, equality, and serialization preserve authored order; its private backing container is not part of the model contract.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
@@ -55,6 +56,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - `GlyphId` identifies a glyph.
 - `SourceId` identifies a source.
 - `LayerId` identifies a glyph layer: the authored data for one glyph at one source.
+- `ContourId`, `PointId`, `ComponentId`, `AnchorId`, and glyph-layer `GuidelineId` identify one authored node anywhere in the font; authoring operations mint them rather than accepting user-chosen values.
 - `AxisMappingId` identifies a font-owned mapping independently of its editable name.
 - `AxisLabelId` identifies an axis value label independently of its editable name or position.
 - `NamedInstanceId` identifies an explicit product preset independently of its editable name and location.
