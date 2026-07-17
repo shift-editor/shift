@@ -1,6 +1,7 @@
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, NamedInstance, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph, GlyphId,
+    GlyphLayer, GlyphName, LayerId, MetricDefinition, MetricId, MetricValue, NamedInstance, Point,
+    PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -30,12 +31,16 @@ impl From<FontChange> for FontChangeSet {
 
 #[derive(Clone, Debug)]
 pub enum FontChange {
+    /// Authored font metadata was replaced without changing metrics.
+    FontMetadataUpdated(FontMetadataUpdated),
     AxisCreated(AxisCreated),
     AxisUpdated(AxisUpdated),
     AxisDeleted(AxisDeleted),
     AxisMappingsUpdated(AxisMappingsUpdated),
+    MetricDefinitionsUpdated(MetricDefinitionsUpdated),
     NamedInstancesUpdated(NamedInstancesUpdated),
     SourceCreated(SourceCreated),
+    SourceUpdated(SourceUpdated),
     SourceDeleted(SourceDeleted),
     GlyphCreated(GlyphCreated),
     GlyphDeleted(GlyphDeleted),
@@ -54,6 +59,13 @@ pub enum FontChange {
 }
 
 impl FontChange {
+    /// Builds a replacement-grade metadata change from the committed snapshot.
+    pub fn font_metadata_updated(metadata: &FontMetadata) -> Self {
+        Self::FontMetadataUpdated(FontMetadataUpdated {
+            metadata: metadata.clone(),
+        })
+    }
+
     pub fn axis_created(axis: &Axis) -> Self {
         Self::AxisCreated(AxisCreated::from(axis))
     }
@@ -72,6 +84,12 @@ impl FontChange {
         })
     }
 
+    pub fn metric_definitions_updated(definitions: &[MetricDefinition]) -> Self {
+        Self::MetricDefinitionsUpdated(MetricDefinitionsUpdated {
+            definitions: definitions.to_vec(),
+        })
+    }
+
     pub fn named_instances_updated(instances: &[NamedInstance]) -> Self {
         Self::NamedInstancesUpdated(NamedInstancesUpdated {
             instances: instances.to_vec(),
@@ -80,6 +98,12 @@ impl FontChange {
 
     pub fn source_created(source: &Source) -> Self {
         Self::SourceCreated(SourceCreated::from(source))
+    }
+
+    pub fn source_updated(source: &Source) -> Self {
+        Self::SourceUpdated(SourceUpdated {
+            source: source.clone(),
+        })
     }
 
     pub fn source_deleted(source_id: SourceId) -> Self {
@@ -181,6 +205,13 @@ impl FontChange {
     }
 }
 
+/// Complete authored metadata snapshot after one replacement.
+#[derive(Clone, Debug)]
+pub struct FontMetadataUpdated {
+    /// Complete authored metadata after the edit.
+    pub metadata: FontMetadata,
+}
+
 #[derive(Clone, Debug)]
 pub struct AxisCreated {
     pub axis: Axis,
@@ -203,6 +234,11 @@ pub struct AxisMappingsUpdated {
 }
 
 #[derive(Clone, Debug)]
+pub struct MetricDefinitionsUpdated {
+    pub definitions: Vec<MetricDefinition>,
+}
+
+#[derive(Clone, Debug)]
 pub struct NamedInstancesUpdated {
     pub instances: Vec<NamedInstance>,
 }
@@ -212,6 +248,11 @@ pub struct SourceCreated {
     pub source_id: SourceId,
     pub name: String,
     pub location: Vec<SourceAxisValue>,
+    pub metric_values: Vec<SourceMetricValue>,
+    pub italic_angle: Option<f64>,
+    pub line_gap: Option<f64>,
+    pub underline_position: Option<f64>,
+    pub underline_thickness: Option<f64>,
 }
 
 impl From<&Source> for SourceCreated {
@@ -227,8 +268,25 @@ impl From<&Source> for SourceCreated {
                     value: *value,
                 })
                 .collect(),
+            metric_values: source
+                .metric_values()
+                .iter()
+                .map(|(metric_id, value)| SourceMetricValue {
+                    metric_id: metric_id.clone(),
+                    value: *value,
+                })
+                .collect(),
+            italic_angle: source.italic_angle(),
+            line_gap: source.line_gap(),
+            underline_position: source.underline_position(),
+            underline_thickness: source.underline_thickness(),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceUpdated {
+    pub source: Source,
 }
 
 #[derive(Clone, Debug)]
@@ -245,6 +303,12 @@ pub struct SourceDeleted {
 pub struct SourceAxisValue {
     pub axis_id: AxisId,
     pub value: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceMetricValue {
+    pub metric_id: MetricId,
+    pub value: MetricValue,
 }
 
 #[derive(Clone, Debug)]

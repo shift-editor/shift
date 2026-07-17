@@ -5,8 +5,9 @@ use std::{
 
 use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
 use shift_font::{
-    AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet, Glyph,
-    GlyphId, GlyphLayer, NamedInstance, Source, SourceId, TouchedLayer, error::CoreError,
+    AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
+    FontMetadata, Glyph, GlyphId, GlyphLayer, MetricDefinition, NamedInstance, Source, SourceId,
+    TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
@@ -320,7 +321,17 @@ impl FontWorkspace {
                         post: change.mappings.clone(),
                     });
                 }
-                FontChange::NamedInstancesUpdated(_) => {}
+                FontChange::MetricDefinitionsUpdated(change) => {
+                    steps.push(LedgerStep::MetricDefinitions {
+                        pre: pre
+                            .metric_definitions
+                            .as_deref()
+                            .unwrap_or_default()
+                            .to_vec(),
+                        post: change.definitions.clone(),
+                    });
+                }
+                FontChange::FontMetadataUpdated(_) | FontChange::NamedInstancesUpdated(_) => {}
                 FontChange::GlyphIdentityChanged(change) => {
                     steps.push(LedgerStep::GlyphIdentity {
                         glyph_id: change.glyph_id.clone(),
@@ -350,6 +361,14 @@ impl FontWorkspace {
                         .find(|source| source.id() == change.source_id)
                         .cloned(),
                     post: None,
+                }),
+                FontChange::SourceUpdated(change) => steps.push(LedgerStep::Source {
+                    pre: pre
+                        .sources
+                        .iter()
+                        .find(|source| source.id() == change.source.id())
+                        .cloned(),
+                    post: Some(change.source.clone()),
                 }),
                 FontChange::GlyphLayerCreated(change) => {
                     // A created glyph's layers ride its Glyph snapshot.
@@ -407,6 +426,15 @@ impl FontWorkspace {
             });
         }
 
+        if let Some(metadata) = pre.metadata.as_ref()
+            && metadata != self.font.metadata()
+        {
+            steps.push(LedgerStep::FontMetadata {
+                pre: metadata.clone(),
+                post: self.font.metadata().clone(),
+            });
+        }
+
         steps
     }
 
@@ -457,12 +485,17 @@ impl FontWorkspace {
         side: ReplaySide,
     ) -> Result<AppliedIntents, WorkspaceError> {
         let mut named_instances = None;
+        let mut metric_definitions = None;
         let mut steps = entry
             .steps
             .iter()
             .filter_map(|step| match step {
                 LedgerStep::NamedInstances { pre, post } => {
                     named_instances = Some((pre.clone(), post.clone()));
+                    None
+                }
+                LedgerStep::MetricDefinitions { pre, post } => {
+                    metric_definitions = Some((pre.clone(), post.clone()));
                     None
                 }
                 step => Some(step.clone()),
@@ -476,6 +509,11 @@ impl FontWorkspace {
             let mut changes = FontChangeSet::default();
             let mut touched: Vec<TouchedLayer> = Vec::new();
 
+            if let Some((pre, post)) = metric_definitions {
+                let (_from, to) = side.orient(pre, post);
+                replay_metric_definitions(font, to, &mut changes)?;
+            }
+
             for step in steps {
                 match step {
                     LedgerStep::Layers(pairs) => {
@@ -484,6 +522,10 @@ impl FontWorkspace {
                     LedgerStep::Glyph { pre, post } => {
                         let (from, to) = side.orient(pre, post);
                         replay_glyph(font, from, to, &mut changes, &mut touched)?;
+                    }
+                    LedgerStep::FontMetadata { pre, post } => {
+                        let (_from, to) = side.orient(pre, post);
+                        replay_font_metadata(font, to, &mut changes);
                     }
                     LedgerStep::Axis {
                         pre,
@@ -499,6 +541,9 @@ impl FontWorkspace {
                     }
                     LedgerStep::NamedInstances { .. } => {
                         unreachable!("named instances replay after axis topology")
+                    }
+                    LedgerStep::MetricDefinitions { .. } => {
+                        unreachable!("metric definitions replay before sources")
                     }
                     LedgerStep::Source { pre, post } => {
                         let (from, to) = side.orient(pre, post);
@@ -710,9 +755,11 @@ struct PreLayer {
 #[derive(Default)]
 struct FontLevelPreState {
     layers: Vec<PreLayer>,
+    metadata: Option<FontMetadata>,
     sources: Vec<Source>,
     axes: Vec<Axis>,
     axis_mappings: Option<Vec<shift_font::AxisMapping>>,
+    metric_definitions: Option<Vec<MetricDefinition>>,
     named_instances: Option<Vec<NamedInstance>>,
     axis_locations: Vec<(AxisId, SourceId, f64)>,
 }
@@ -722,6 +769,10 @@ fn capture_font_level_pre_state(
     intent: &FontIntent,
     pre: &mut FontLevelPreState,
 ) {
+    if matches!(intent, FontIntent::UpdateFontMetadata { .. }) && pre.metadata.is_none() {
+        pre.metadata = Some(font.metadata().clone());
+    }
+
     if matches!(
         intent,
         FontIntent::CreateAxis { .. }
@@ -736,6 +787,30 @@ fn capture_font_level_pre_state(
     }
 
     match intent {
+        FontIntent::SetMetricDefinitions { .. } => {
+            if pre.metric_definitions.is_none() {
+                pre.metric_definitions = Some(font.metric_definitions().to_vec());
+            }
+            for source in font.sources() {
+                if !pre
+                    .sources
+                    .iter()
+                    .any(|existing| existing.id() == source.id())
+                {
+                    pre.sources.push(source.clone());
+                }
+            }
+        }
+        FontIntent::UpdateSource { source_id, .. } => {
+            if !pre.sources.iter().any(|source| source.id() == *source_id)
+                && let Some(source) = font
+                    .sources()
+                    .iter()
+                    .find(|source| source.id() == *source_id)
+            {
+                pre.sources.push(source.clone());
+            }
+        }
         FontIntent::DeleteSource { source_id } => {
             if !pre.sources.iter().any(|source| source.id() == *source_id)
                 && let Some(source) = font
@@ -880,6 +955,15 @@ fn replay_glyph(
     Ok(())
 }
 
+fn replay_font_metadata(
+    font: &mut shift_font::Font,
+    metadata: FontMetadata,
+    changes: &mut FontChangeSet,
+) {
+    font.replace_metadata(metadata.clone());
+    changes.push(FontChange::font_metadata_updated(&metadata));
+}
+
 fn replay_axis(
     font: &mut shift_font::Font,
     from: Option<Axis>,
@@ -944,6 +1028,19 @@ fn replay_axis_mappings(
     Ok(())
 }
 
+fn replay_metric_definitions(
+    font: &mut shift_font::Font,
+    definitions: Vec<MetricDefinition>,
+    changes: &mut FontChangeSet,
+) -> Result<(), WorkspaceError> {
+    font.set_metric_definitions(definitions.clone())?;
+    changes.push(FontChange::metric_definitions_updated(&definitions));
+    for source in font.sources() {
+        changes.push(FontChange::source_updated(source));
+    }
+    Ok(())
+}
+
 fn replay_named_instances(
     font: &mut shift_font::Font,
     instances: Vec<NamedInstance>,
@@ -980,6 +1077,14 @@ fn replay_source(
     to: Option<Source>,
     changes: &mut FontChangeSet,
 ) -> Result<(), WorkspaceError> {
+    if let (Some(from), Some(to)) = (from.as_ref(), to.as_ref())
+        && from.id() == to.id()
+    {
+        font.replace_source(to.clone())?;
+        changes.push(FontChange::source_updated(to));
+        return Ok(());
+    }
+
     if let Some(source) = from {
         font.remove_source(source.id())
             .ok_or(CoreError::SourceNotFound(source.id()))?;
@@ -1047,14 +1152,6 @@ fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
         version_major: metadata.version_major.map(i64::from),
         version_minor: metadata.version_minor.map(i64::from),
         units_per_em: metrics.units_per_em,
-        ascender: metrics.ascender,
-        descender: metrics.descender,
-        cap_height: metrics.cap_height,
-        x_height: metrics.x_height,
-        line_gap: metrics.line_gap,
-        italic_angle: metrics.italic_angle,
-        underline_position: metrics.underline_position,
-        underline_thickness: metrics.underline_thickness,
         default_source_id: font.default_source_id().map(|id| id.to_string()),
     }
 }

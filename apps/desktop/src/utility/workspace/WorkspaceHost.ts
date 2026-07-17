@@ -146,6 +146,8 @@ export class WorkspaceHost {
       documentId,
       metadata: this.#bridge.getMetadata(),
       metrics: this.#bridge.getMetrics(),
+      metricDefinitions: this.#bridge.getMetricDefinitions(),
+      sourceMetricsInterpolation: this.#bridge.getSourceMetricsInterpolation(),
       glyphs: this.#bridge.getGlyphs(),
       sources: this.#bridge.getSources(),
       axes: this.#bridge.getAxes(),

@@ -6,6 +6,7 @@ pub mod export;
 pub mod font_loader;
 pub mod format;
 pub mod glyphs;
+mod metrics;
 mod shift2fontir;
 mod traits;
 pub mod ufo;

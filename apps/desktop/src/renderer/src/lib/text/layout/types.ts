@@ -1,5 +1,5 @@
 import type { Bounds, Point2D } from "@shift/geo";
-import type { FontMetrics, GlyphId } from "@shift/types";
+import type { GlyphId, SourceMetrics } from "@shift/types";
 
 export type TextItemId = string;
 export type TextRunId = string;
@@ -118,4 +118,4 @@ export interface ParagraphSlice {
   clusterStart: number;
 }
 
-export type { FontMetrics, Point2D };
+export type { Point2D, SourceMetrics };

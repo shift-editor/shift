@@ -200,4 +200,7 @@ fn compiles_variable_shift_source_to_variation_tables() {
     compiled
         .gvar()
         .expect("variable outlines should produce gvar");
+    compiled
+        .mvar()
+        .expect("per-source standard metrics should produce MVAR");
 }

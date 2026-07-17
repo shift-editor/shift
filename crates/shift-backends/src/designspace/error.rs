@@ -61,6 +61,9 @@ pub enum DesignspaceError {
     #[error("failed to parse designspace XML: {details}")]
     ParseDesignspaceXml { details: String },
 
+    #[error("axis '{axis}' has a non-invertible map: {details}")]
+    NonInvertibleAxisMap { axis: String, details: String },
+
     #[error(transparent)]
     Font(#[from] shift_font::CoreError),
 }

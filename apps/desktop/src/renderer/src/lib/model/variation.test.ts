@@ -9,6 +9,9 @@ import {
   mintSourceId,
 } from "@shift/types";
 import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
+import { signal } from "@/lib/signals/signal";
+import { TextRun } from "@/lib/text/TextRun";
+import { Positioner } from "@/lib/text/layout/Positioner";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
 /**
@@ -46,7 +49,10 @@ async function drawSquare(stack: WorkspaceStack, layerId: LayerId, width: number
         })),
       },
     },
-    { kind: "setContourClosed", setContourClosed: { layerId, contourId, closed: true } },
+    {
+      kind: "setContourClosed",
+      setContourClosed: { layerId, contourId, closed: true },
+    },
   ]);
 }
 
@@ -65,7 +71,11 @@ async function variableFont(): Promise<{
   const created = await stack.editCoordinator.apply([
     {
       kind: "createGlyph",
-      createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+      createGlyph: {
+        glyphId,
+        name: "A" as GlyphName,
+        unicodes: [65 as Unicode],
+      },
     },
     {
       kind: "createGlyphLayer",
@@ -106,11 +116,36 @@ async function variableFont(): Promise<{
   expect(bold.id).toBe(boldSourceId);
   expect(sourced.layers).toEqual([]);
 
+  const ascender = stack.font.metricDefinitions.find(
+    (definition) => definition.kind === "ascender",
+  );
+  if (!ascender) throw new Error("Expected the default ascender definition");
+  const xHeight = stack.font.metricDefinitions.find((definition) => definition.kind === "xHeight");
+  if (!xHeight) throw new Error("Expected the default x-height definition");
+  const variedMetricPositions = new Map([
+    [ascender.id, 900],
+    [xHeight.id, 600],
+  ]);
+  await stack.font.updateSource({
+    ...bold,
+    metricValues: bold.metricValues.map((value) =>
+      variedMetricPositions.has(value.metricId)
+        ? { ...value, position: variedMetricPositions.get(value.metricId)! }
+        : value,
+    ),
+  });
+  const updatedBold = stack.font.source(boldSourceId);
+  if (!updatedBold) throw new Error("Expected the updated Bold source");
+
   const boldLayerId = mintLayerId();
   await stack.editCoordinator.apply([
     {
       kind: "createGlyphLayer",
-      createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldSourceId },
+      createGlyphLayer: {
+        layerId: boldLayerId,
+        glyphId,
+        sourceId: boldSourceId,
+      },
     },
   ]);
 
@@ -119,13 +154,16 @@ async function variableFont(): Promise<{
   await drawSquare(stack, regularLayerId, 100);
   await drawSquare(stack, boldLayerId, 200);
   await stack.editCoordinator.apply([
-    { kind: "setXAdvance", setXAdvance: { layerId: regularLayerId, width: 300 } },
+    {
+      kind: "setXAdvance",
+      setXAdvance: { layerId: regularLayerId, width: 300 },
+    },
   ]);
   await stack.editCoordinator.apply([
     { kind: "setXAdvance", setXAdvance: { layerId: boldLayerId, width: 500 } },
   ]);
 
-  return { stack, glyphId, regularLayerId, boldLayerId, bold };
+  return { stack, glyphId, regularLayerId, boldLayerId, bold: updatedBold };
 }
 
 function continuousAxis(axisId: AxisId) {
@@ -157,11 +195,12 @@ async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: S
 describe("variable editing across sources", () => {
   let stack: WorkspaceStack;
   let glyphId: GlyphId;
+  let regularLayerId: LayerId;
   let boldLayerId: LayerId;
   let bold: Source;
 
   beforeEach(async () => {
-    ({ stack, glyphId, boldLayerId, bold } = await variableFont());
+    ({ stack, glyphId, regularLayerId, boldLayerId, bold } = await variableFont());
   });
 
   it("opens an authored glyph layer at a non-default master", async () => {
@@ -185,7 +224,7 @@ describe("variable editing across sources", () => {
     expect(boldSource.point(point.id)).toMatchObject({ x: 200, y: 0 });
   });
 
-  it("interpolates geometry and metrics between masters", async () => {
+  it("interpolates geometry, advances, and source metrics between masters", async () => {
     const glyph = await loadGlyph(stack, glyphId);
     const axis = stack.font.getAxes()[0]!;
 
@@ -196,9 +235,53 @@ describe("variable editing across sources", () => {
 
     expect(stack.font.editableLayerAt(glyph.id, mid)).toBeNull();
     expect(view.xAdvance).toBeCloseTo(300 + (500 - 300) * 0.5);
+    expect(stack.font.metricsAtLocation(mid).ascender).toBeCloseTo(850);
+    expect(stack.font.metricsAtLocation(mid).xHeight).toBeCloseTo(550);
 
     const xs = view.geometry.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);
+  });
+
+  it("updates an editor text run with interpolated advances between masters", async () => {
+    const glyph = await loadGlyph(stack, glyphId);
+    const axis = stack.font.getAxes()[0]!;
+    const location = signal(defaultAxisLocation(stack.font.getAxes()));
+    const run = new TextRun("variable-advance", stack.font, new Positioner(), location);
+    run.setSingleGlyph(glyph.handle);
+
+    expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(300);
+
+    const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    location.set(mid);
+
+    expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(400);
+  });
+
+  it("materializes interpolated geometry and metrics at a new source", async () => {
+    const glyph = await loadGlyph(stack, glyphId);
+    const axis = stack.font.getAxes()[0]!;
+    const location = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    const sourceId = stack.editCoordinator.transaction("Create source", () => {
+      const id = stack.font.createSource("Medium", {
+        values: { [axis.id]: 550 } as Record<AxisId, number>,
+      });
+      stack.font.materializeGlyphLayer(glyph.id, id, regularLayerId, location);
+      return id;
+    });
+    await stack.editCoordinator.settled();
+
+    const layer = stack.font.layer(glyph.id, sourceId);
+    if (!layer) throw new Error("Expected materialized source layer");
+
+    expect(layer.xAdvance).toBeCloseTo(400);
+    expect(Math.max(...layer.geometry.allPoints.map((point) => point.x))).toBeCloseTo(150);
+    expect(layer.contours[0]?.points.map((point) => point.id)).not.toEqual(
+      stack.font
+        .layer(glyph.id, stack.font.defaultSource.id)
+        ?.contours[0]?.points.map((point) => point.id),
+    );
+    expect(stack.font.metricsForSource(sourceId).ascender).toBeCloseTo(850);
+    expect(stack.font.metricsForSource(sourceId).xHeight).toBeCloseTo(550);
   });
 
   it("resolves live layer geometry at exact master locations", async () => {

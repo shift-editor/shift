@@ -1,7 +1,9 @@
-use crate::axis::Location;
-use crate::entity::SourceId;
+use crate::axis::{Axis, Location};
+use crate::entity::{MetricId, SourceId};
 use crate::lib_data::LibData;
+use crate::metrics::{MetricDefinition, MetricValue};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// How a source participates in the font. A `Master` is a genuine
 /// designspace source: it has a design-space location and earns a
@@ -23,6 +25,16 @@ pub struct Source {
     id: SourceId,
     name: String,
     location: Location,
+    #[serde(default)]
+    metric_values: BTreeMap<MetricId, MetricValue>,
+    #[serde(default)]
+    italic_angle: Option<f64>,
+    #[serde(default)]
+    line_gap: Option<f64>,
+    #[serde(default)]
+    underline_position: Option<f64>,
+    #[serde(default)]
+    underline_thickness: Option<f64>,
     filename: Option<String>,
     #[serde(default)]
     color: Option<String>,
@@ -40,6 +52,11 @@ impl Source {
             id: SourceId::new(),
             name,
             location,
+            metric_values: BTreeMap::new(),
+            italic_angle: None,
+            line_gap: None,
+            underline_position: None,
+            underline_thickness: None,
             filename: None,
             color: None,
             lib: LibData::new(),
@@ -53,6 +70,11 @@ impl Source {
             id: SourceId::new(),
             name,
             location,
+            metric_values: BTreeMap::new(),
+            italic_angle: None,
+            line_gap: None,
+            underline_position: None,
+            underline_thickness: None,
             filename: Some(filename),
             color: None,
             lib: LibData::new(),
@@ -71,6 +93,11 @@ impl Source {
             id,
             name,
             location,
+            metric_values: BTreeMap::new(),
+            italic_angle: None,
+            line_gap: None,
+            underline_position: None,
+            underline_thickness: None,
             filename,
             color: None,
             lib: LibData::new(),
@@ -86,6 +113,11 @@ impl Source {
             id: SourceId::new(),
             name,
             location: Location::new(),
+            metric_values: BTreeMap::new(),
+            italic_angle: None,
+            line_gap: None,
+            underline_position: None,
+            underline_thickness: None,
             filename: None,
             color: None,
             lib: LibData::new(),
@@ -108,6 +140,68 @@ impl Source {
 
     pub fn filename(&self) -> Option<&str> {
         self.filename.as_deref()
+    }
+
+    /// Returns source-local metric values keyed by stable font metric identity.
+    pub fn metric_values(&self) -> &BTreeMap<MetricId, MetricValue> {
+        &self.metric_values
+    }
+
+    pub(crate) fn metric_values_mut(&mut self) -> &mut BTreeMap<MetricId, MetricValue> {
+        &mut self.metric_values
+    }
+
+    pub fn metric_value(&self, metric_id: &MetricId) -> Option<MetricValue> {
+        self.metric_values.get(metric_id).copied()
+    }
+
+    pub fn set_metric_value(&mut self, metric_id: MetricId, value: MetricValue) {
+        self.metric_values.insert(metric_id, value);
+    }
+
+    pub fn set_metric_values(&mut self, values: BTreeMap<MetricId, MetricValue>) {
+        self.metric_values = values;
+    }
+
+    /// Fills any missing metric rows without replacing authored values.
+    pub fn fill_metric_values(&mut self, definitions: &[MetricDefinition], units_per_em: f64) {
+        for definition in definitions {
+            self.metric_values
+                .entry(definition.id())
+                .or_insert_with(|| MetricValue::for_kind(definition.kind(), units_per_em));
+        }
+    }
+
+    pub fn italic_angle(&self) -> Option<f64> {
+        self.italic_angle
+    }
+
+    pub fn set_italic_angle(&mut self, value: Option<f64>) {
+        self.italic_angle = value;
+    }
+
+    pub fn line_gap(&self) -> Option<f64> {
+        self.line_gap
+    }
+
+    pub fn set_line_gap(&mut self, value: Option<f64>) {
+        self.line_gap = value;
+    }
+
+    pub fn underline_position(&self) -> Option<f64> {
+        self.underline_position
+    }
+
+    pub fn set_underline_position(&mut self, value: Option<f64>) {
+        self.underline_position = value;
+    }
+
+    pub fn underline_thickness(&self) -> Option<f64> {
+        self.underline_thickness
+    }
+
+    pub fn set_underline_thickness(&mut self, value: Option<f64>) {
+        self.underline_thickness = value;
     }
 
     pub fn role(&self) -> SourceRole {
@@ -165,6 +259,18 @@ impl Source {
     pub fn remove_axis_location(&mut self, axis_id: &crate::AxisId) -> Option<f64> {
         self.location.remove(axis_id)
     }
+}
+
+/// Compares master locations after completing omitted axes with their defaults.
+///
+/// A small tolerance absorbs serialization noise while preserving the domain
+/// invariant that two master sources cannot occupy the same design location.
+pub(crate) fn source_locations_equal(left: &Location, right: &Location, axes: &[Axis]) -> bool {
+    axes.iter().all(|axis| {
+        let left = left.get(&axis.id()).unwrap_or(axis.default());
+        let right = right.get(&axis.id()).unwrap_or(axis.default());
+        (left - right).abs() <= 1e-6
+    })
 }
 
 #[cfg(test)]

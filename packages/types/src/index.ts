@@ -14,6 +14,7 @@ export type {
   GuidelineId,
   GlyphId,
   LayerId,
+  MetricId,
   NamedInstanceId,
   NodeId,
   RunId,
@@ -30,6 +31,7 @@ export {
   asGuidelineId,
   asGlyphId,
   asLayerId,
+  asMetricId,
   asNamedInstanceId,
   asNodeId,
   asRunId,
@@ -44,6 +46,7 @@ export {
   isGuidelineId,
   isGlyphId,
   isLayerId,
+  isMetricId,
   isNamedInstanceId,
   isNodeId,
   isRunId,
@@ -56,13 +59,14 @@ export {
   mintPointId,
   mintGlyphId,
   mintLayerId,
+  mintMetricId,
   mintNamedInstanceId,
   mintNodeId,
   mintRunId,
   mintSourceId,
 } from "./ids";
 
-export type { AxisDefinition, NamedInstanceDefinition } from "./domain";
+export type { AxisDefinition, NamedInstanceDefinition, SourceMetrics } from "./domain";
 
 export type {
   AddAnchorsIntent,
@@ -100,6 +104,11 @@ export type {
   FontIntent,
   FontMetadata,
   FontMetrics,
+  MetricDefinition,
+  MetricKind,
+  SourceMetricField,
+  SourceMetricsInterpolationReplacement,
+  SourceMetricsInterpolationSnapshot,
   GlyphChangedEntities,
   GlyphHandle,
   GlyphLayerRecord,
@@ -123,8 +132,12 @@ export type {
   PointSeed,
   PointType,
   SetAxisMappingsIntent,
+  SetMetricDefinitionsIntent,
   Source,
+  SourceMetricValue,
   Unicode,
   UpdateAxisIntent,
+  UpdateFontMetadataIntent,
   UpdateNamedInstanceIntent,
+  UpdateSourceIntent,
 } from "./bridge";

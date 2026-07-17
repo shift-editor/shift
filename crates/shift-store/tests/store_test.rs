@@ -1,4 +1,4 @@
-use shift_font::test_support::sample_font;
+use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
     AxisId, ComponentId, Evidence, FileIdentity, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph,
     NewGlyphComponent, NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceIdentitySnapshot,
@@ -25,6 +25,54 @@ fn writes_and_reads_font_info() {
         .expect("font info should exist");
 
     assert_eq!(loaded, font_info);
+}
+
+#[test]
+fn metadata_change_set_preserves_metrics_and_store_only_font_info() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let mut original = open_sans_font_info();
+    original.sample_text = Some("Hamburgefontsiv".to_string());
+    original.vendor_id = Some("SHFT".to_string());
+    store
+        .set_font_info(original.clone())
+        .expect("font info should be written");
+    let metadata = FontMetadata {
+        family_name: Some("Shift Sans".to_string()),
+        style_name: Some("Text".to_string()),
+        version_major: Some(4),
+        version_minor: Some(2),
+        copyright: None,
+        trademark: None,
+        designer: Some("Shift Type".to_string()),
+        designer_url: Some("https://shift-editor.dev".to_string()),
+        manufacturer: Some("Shift".to_string()),
+        manufacturer_url: None,
+        license: Some("SIL Open Font License 1.1".to_string()),
+        license_url: Some("https://openfontlicense.org".to_string()),
+        description: Some("A dogfood family".to_string()),
+        note: None,
+    };
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::font_metadata_updated(&metadata),
+        ]))
+        .expect("metadata change should apply");
+
+    let loaded = store
+        .get_font_info()
+        .expect("font info query should succeed")
+        .expect("font info should exist");
+    assert_eq!(loaded.family_name, metadata.family_name);
+    assert_eq!(loaded.style_name, metadata.style_name);
+    assert_eq!(loaded.designer, metadata.designer);
+    assert_eq!(loaded.license_description, metadata.license);
+    assert_eq!(loaded.version_major, metadata.version_major.map(i64::from));
+    assert_eq!(loaded.version_minor, metadata.version_minor.map(i64::from));
+    assert_eq!(loaded.sample_text, original.sample_text);
+    assert_eq!(loaded.vendor_id, original.vendor_id);
+    assert_eq!(loaded.units_per_em, original.units_per_em);
+    assert_eq!(loaded.default_source_id, original.default_source_id);
 }
 
 #[test]
@@ -692,14 +740,6 @@ fn open_sans_font_info() -> FontInfo {
         version_major: Some(3),
         version_minor: Some(3),
         units_per_em: 2048.0,
-        ascender: 1500.0,
-        descender: -500.0,
-        cap_height: Some(1456.0),
-        x_height: Some(1012.0),
-        line_gap: Some(42.0),
-        italic_angle: Some(-9.5),
-        underline_position: Some(-175.0),
-        underline_thickness: Some(96.0),
         default_source_id: Some("source_regular".to_string()),
     }
 }
@@ -724,14 +764,6 @@ fn empty_font_info() -> FontInfo {
         version_major: None,
         version_minor: None,
         units_per_em: metrics.units_per_em,
-        ascender: metrics.ascender,
-        descender: metrics.descender,
-        cap_height: metrics.cap_height,
-        x_height: metrics.x_height,
-        line_gap: metrics.line_gap,
-        italic_angle: metrics.italic_angle,
-        underline_position: metrics.underline_position,
-        underline_thickness: metrics.underline_thickness,
         default_source_id: None,
     }
 }

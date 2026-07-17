@@ -1,9 +1,11 @@
 use crate::atomic::sync_parent;
 use crate::errors::{FormatBackendError, FormatBackendResult};
+use crate::metrics::metric_position;
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_font::{
-    Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, Point, PointType,
+    Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, MetricKind, Point,
+    PointType,
 };
 use std::path::{Path, PathBuf};
 
@@ -348,11 +350,43 @@ impl UfoWriter {
         font_info.note = font.metadata().note.clone();
 
         font_info.units_per_em = Some((font.metrics().units_per_em as u32).into());
-        font_info.ascender = Some(font.metrics().ascender);
-        font_info.descender = Some(font.metrics().descender);
-        font_info.cap_height = font.metrics().cap_height;
-        font_info.x_height = font.metrics().x_height;
-        font_info.italic_angle = font.metrics().italic_angle;
+        let default_source_id = font
+            .default_source_id()
+            .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
+        let default_source = font
+            .sources()
+            .iter()
+            .find(|source| source.id() == default_source_id)
+            .ok_or_else(|| {
+                FormatBackendError::Ufo("the default source does not exist".to_string())
+            })?;
+        font_info.ascender = metric_position(
+            font.metric_definitions(),
+            default_source,
+            MetricKind::Ascender,
+        );
+        font_info.descender = metric_position(
+            font.metric_definitions(),
+            default_source,
+            MetricKind::Descender,
+        );
+        font_info.cap_height = metric_position(
+            font.metric_definitions(),
+            default_source,
+            MetricKind::CapHeight,
+        );
+        font_info.x_height = metric_position(
+            font.metric_definitions(),
+            default_source,
+            MetricKind::XHeight,
+        );
+        font_info.italic_angle = default_source.italic_angle();
+        font_info.open_type_hhea_line_gap =
+            default_source.line_gap().map(|value| value.round() as i32);
+        font_info.open_type_os2_typo_line_gap =
+            default_source.line_gap().map(|value| value.round() as i32);
+        font_info.postscript_underline_position = default_source.underline_position();
+        font_info.postscript_underline_thickness = default_source.underline_thickness();
         font_info.guidelines = None;
 
         Ok(font_info)

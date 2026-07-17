@@ -539,6 +539,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     let glyph_a = create_glyph(&mut workspace, "A", vec![65]);
     let glyph_b = create_glyph(&mut workspace, "B", vec![66]);
     let source_id = SourceId::from_raw("source_alt");
+    let axis_id = create_weight_axis(&mut workspace);
 
     workspace
         .apply(
@@ -546,7 +547,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
                 intents: vec![FontIntent::CreateSource {
                     source_id: source_id.clone(),
                     name: "Alt".to_string(),
-                    location: Location::new(),
+                    location: weight_location(axis_id, 700.0),
                 }],
             },
             Some("Create Source".to_string()),
@@ -1116,6 +1117,27 @@ fn weight_axis(axis_id: AxisId) -> Axis {
     )
 }
 
+fn create_weight_axis(workspace: &mut FontWorkspace) -> AxisId {
+    let axis_id = AxisId::from_raw("axis_weight");
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateAxis {
+                    axis: weight_axis(axis_id.clone()),
+                }],
+            },
+            Some("Create Axis".to_string()),
+        )
+        .unwrap();
+    axis_id
+}
+
+fn weight_location(axis_id: AxisId, value: f64) -> Location {
+    let mut location = Location::new();
+    location.set(axis_id, value);
+    location
+}
+
 #[test]
 fn create_axis_undo_redo_removes_and_restores_axis() {
     let temp = tempfile::tempdir().unwrap();
@@ -1140,6 +1162,67 @@ fn create_axis_undo_redo_removes_and_restores_axis() {
 
     workspace.redo().unwrap().expect("createAxis should redo");
     assert_eq!(workspace.font().axes(), &[created]);
+}
+
+#[test]
+fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let original_metadata = workspace.font().metadata().clone();
+    let original_metrics = *workspace.font().metrics();
+    let mut updated = original_metadata.clone();
+    updated.family_name = Some("Shift Dogfood Sans".to_string());
+    updated.style_name = Some("Text".to_string());
+    updated.version_major = Some(2);
+    updated.version_minor = Some(5);
+    updated.designer = Some("Shift Type".to_string());
+    updated.license = Some("SIL Open Font License 1.1".to_string());
+
+    let applied = workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::UpdateFontMetadata {
+                    metadata: updated.clone(),
+                }],
+            },
+            Some("Update Font Metadata".to_string()),
+        )
+        .unwrap();
+
+    assert_eq!(workspace.font().metadata(), &updated);
+    assert_eq!(workspace.font().metrics(), &original_metrics);
+    assert!(applied.changes.changes.iter().any(|change| matches!(
+        change,
+        FontChange::FontMetadataUpdated(change) if change.metadata == updated
+    )));
+    let stored = workspace
+        .font_info()
+        .unwrap()
+        .expect("font info should exist");
+    assert_eq!(stored.family_name, updated.family_name);
+    assert_eq!(stored.style_name, updated.style_name);
+    assert_eq!(stored.designer, updated.designer);
+    assert_eq!(stored.license_description, updated.license);
+    assert_eq!(stored.units_per_em, original_metrics.units_per_em);
+
+    let undone = workspace
+        .undo()
+        .unwrap()
+        .expect("metadata update should undo");
+    assert!(undone.changes.changes.iter().any(|change| matches!(
+        change,
+        FontChange::FontMetadataUpdated(change) if change.metadata == original_metadata
+    )));
+    assert_eq!(workspace.font().metadata(), &original_metadata);
+    assert_eq!(workspace.font().metrics(), &original_metrics);
+
+    workspace
+        .redo()
+        .unwrap()
+        .expect("metadata update should redo");
+    assert_eq!(workspace.font().metadata(), &updated);
+    assert_eq!(workspace.font().metrics(), &original_metrics);
 }
 
 #[test]
@@ -1357,6 +1440,7 @@ fn create_source_undo_redo_removes_and_restores_source() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = SourceId::from_raw("bold");
     let base_sources = workspace.font().sources().len();
+    let axis_id = create_weight_axis(&mut workspace);
 
     workspace
         .apply(
@@ -1364,7 +1448,7 @@ fn create_source_undo_redo_removes_and_restores_source() {
                 intents: vec![FontIntent::CreateSource {
                     source_id: source_id.clone(),
                     name: "Bold".to_string(),
-                    location: Location::new(),
+                    location: weight_location(axis_id, 700.0),
                 }],
             },
             Some("Create Source".to_string()),
@@ -1437,6 +1521,7 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
     let store_path = temp.path().join("working.sqlite");
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = SourceId::from_raw("bold");
+    let axis_id = create_weight_axis(&mut workspace);
 
     workspace
         .apply(
@@ -1444,7 +1529,7 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
                 intents: vec![FontIntent::CreateSource {
                     source_id: source_id.clone(),
                     name: "Bold".to_string(),
-                    location: Location::new(),
+                    location: weight_location(axis_id, 700.0),
                 }],
             },
             None,

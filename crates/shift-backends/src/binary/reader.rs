@@ -1,5 +1,5 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, PointType};
+use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
@@ -7,6 +7,8 @@ use skrifa::{
     string::StringId,
     FontRef, MetadataProvider,
 };
+
+use crate::metrics::set_metric_position;
 
 pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
     let bytes = std::fs::read(path)
@@ -158,10 +160,34 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
         .expect("new font should have a default source");
 
     ir_font.metrics_mut().units_per_em = metrics.units_per_em as f64;
-    ir_font.metrics_mut().ascender = metrics.ascent as f64;
-    ir_font.metrics_mut().descender = metrics.descent as f64;
-    ir_font.metrics_mut().cap_height = Some(metrics.cap_height.unwrap_or(0.0) as f64);
-    ir_font.metrics_mut().x_height = Some(metrics.x_height.unwrap_or(0.0) as f64);
+    let metric_definitions = ir_font.metric_definitions().to_vec();
+    let default_source = ir_font
+        .source_mut(default_source_id.clone())
+        .expect("new font should contain its default source");
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::Ascender,
+        Some(metrics.ascent as f64),
+    );
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::Descender,
+        Some(metrics.descent as f64),
+    );
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::CapHeight,
+        metrics.cap_height.map(|value| value as f64),
+    );
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::XHeight,
+        metrics.x_height.map(|value| value as f64),
+    );
 
     if let Some(family_name) = localized_string(font, StringId::FAMILY_NAME) {
         ir_font.metadata_mut().family_name = Some(family_name);

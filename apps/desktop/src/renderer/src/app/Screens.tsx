@@ -9,6 +9,7 @@ import { useSignalState } from "@/lib/signals/useSignal";
 import { useEditor, useFont, useWorkspace } from "@/workspace/WorkspaceContext";
 import { WorkspaceProvider } from "@/workspace/WorkspaceProvider";
 import { DebugProvider } from "@/context/DebugProvider";
+import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
 
 /**
  * Routes launcher and workspace windows to their screen trees.
@@ -92,5 +93,9 @@ const WorkspaceScreens = () => {
 
   if (!documentLoaded) return null;
 
-  return <Outlet />;
+  return (
+    <SettingsNavigationProvider>
+      <Outlet />
+    </SettingsNavigationProvider>
+  );
 };

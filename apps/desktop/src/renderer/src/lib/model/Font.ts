@@ -1,5 +1,7 @@
 import type {
   FontMetrics,
+  MetricDefinition,
+  MetricKind,
   FontMetadata,
   Axis,
   AxisDefinition,
@@ -24,6 +26,7 @@ import type {
   NamedInstanceDefinition,
   NamedInstanceId,
   InterpolationBasis,
+  SourceMetrics,
 } from "@shift/types";
 import {
   mintAxisId,
@@ -47,6 +50,7 @@ import { GlyphOutline } from "./GlyphOutline";
 import type { FontStore } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import type { GlyphHandle } from "@shift/bridge";
+import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   axisLocationDistanceSquared,
   axisLocationFromLocation,
@@ -323,10 +327,6 @@ class GlyphDirectory {
 
 const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
-  ascender: 800,
-  descender: -200,
-  capHeight: 700,
-  xHeight: 500,
 };
 
 /**
@@ -343,6 +343,9 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
 export class Font {
   readonly #loadedCell: Signal<boolean>;
   readonly #metricsCell: Signal<FontMetrics>;
+  readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
+  readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
+  readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<Source[]>;
   readonly #axesCell: Signal<Axis[]>;
@@ -374,9 +377,27 @@ export class Font {
     const workspaceCell = store.workspaceCell;
     this.#loadedCell = computed(() => workspaceCell.value !== null);
     this.#metricsCell = computed(() => workspaceCell.value?.metrics ?? DEFAULT_FONT_METRICS);
+    this.#metricDefinitionsCell = computed(() => workspaceCell.value?.metricDefinitions ?? []);
+    this.#sourceMetricsInterpolationCell = computed(() => {
+      const workspace = workspaceCell.value;
+      return SourceMetricsInterpolation.from(
+        workspace?.sourceMetricsInterpolation ?? null,
+        workspace?.metricDefinitions ?? [],
+        workspace?.metrics ?? DEFAULT_FONT_METRICS,
+      );
+    });
     this.#metadataCell = computed(() => workspaceCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => workspaceCell.value?.sources ?? []);
     this.#axesCell = computed(() => workspaceCell.value?.axes ?? []);
+    this.#defaultSourceMetricsCell = computed(() => {
+      const sources = this.#sourcesCell.value;
+      const axes = this.#axesCell.value;
+      track(this.#metricsCell);
+      track(this.#metricDefinitionsCell);
+      const source =
+        sourceAtLocation(sources, axes, defaultAxisLocation(axes)) ?? sources[0] ?? null;
+      return this.#metricsForSource(source);
+    });
     this.#axisMappingsCell = computed(() => workspaceCell.value?.axisMappings ?? []);
     this.#namedInstancesCell = computed(() => workspaceCell.value?.namedInstances ?? []);
     this.#directoryCell = computed(() =>
@@ -400,6 +421,11 @@ export class Font {
     return this.#metricsCell.peek();
   }
 
+  /** Standard and technical metrics resolved for the default authored source. */
+  get defaultSourceMetrics(): SourceMetrics {
+    return this.#defaultSourceMetricsCell.peek();
+  }
+
   /** @knipclassignore */
   get unicodes(): readonly Unicode[] {
     return this.#directoryCell.peek().unicodes;
@@ -413,6 +439,26 @@ export class Font {
   /** Reactive committed font metrics. */
   get metricsCell(): Signal<FontMetrics> {
     return this.#metricsCell;
+  }
+
+  /** Reactive standard and technical metrics for the default authored source. */
+  get defaultSourceMetricsCell(): Signal<SourceMetrics> {
+    return this.#defaultSourceMetricsCell;
+  }
+
+  /** Reactive font-owned identities for authored metric rows. */
+  get metricDefinitionsCell(): Signal<MetricDefinition[]> {
+    return this.#metricDefinitionsCell;
+  }
+
+  /** Reactive decoder for the Rust-built source-metric interpolation model. */
+  get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null> {
+    return this.#sourceMetricsInterpolationCell;
+  }
+
+  /** Reactive committed authored font metadata. */
+  get metadataCell(): Signal<FontMetadata> {
+    return this.#metadataCell;
   }
 
   /** Reactive committed Unicode assignments. */
@@ -521,6 +567,24 @@ export class Font {
   /** @knipclassignore */
   get metadata(): FontMetadata {
     return this.#metadataCell.peek();
+  }
+
+  /**
+   * Replaces authored font metadata as one persisted, undoable edit.
+   *
+   * @param metadata - Complete replacement snapshot; omitted optional fields are cleared.
+   * @throws {Error} when the workspace rejects or cannot persist the replacement.
+   */
+  async updateMetadata(metadata: FontMetadata): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "updateFontMetadata",
+          updateFontMetadata: { metadata },
+        },
+      ],
+      "Update Font Metadata",
+    );
   }
 
   /**
@@ -717,6 +781,41 @@ export class Font {
     this.editCoordinator.push({
       kind: "cloneGlyphLayer",
       cloneGlyphLayer: { layerId, glyphId, sourceId, fromLayerId },
+    });
+    return layerId;
+  }
+
+  /**
+   * Creates an authored layer from resolved geometry at a design-space location.
+   *
+   * @remarks
+   * The existing layer supplies compatible structure and non-varying authored
+   * data. Rust assigns fresh internal identities and applies the resolved
+   * advance, coordinates, and component transforms as one workspace intent.
+   *
+   * @param glyphId - Glyph that will own the sparse authored layer.
+   * @param sourceId - Source where the layer becomes editable.
+   * @param fromLayerId - Compatible authored layer whose structure is retained.
+   * @param location - Internal design-space location to materialize.
+   * @returns The minted layer id submitted to the workspace.
+   */
+  materializeGlyphLayer(
+    glyphId: GlyphId,
+    sourceId: SourceId,
+    fromLayerId: LayerId,
+    location: AxisLocation,
+  ): LayerId {
+    const layerId = mintLayerId();
+    const geometry = this.#glyphGeometry(glyphId, location, axisLocationSignal(location));
+    this.editCoordinator.push({
+      kind: "materializeGlyphLayer",
+      materializeGlyphLayer: {
+        layerId,
+        glyphId,
+        sourceId,
+        fromLayerId,
+        values: geometry.values,
+      },
     });
     return layerId;
   }
@@ -1391,10 +1490,26 @@ export class Font {
    */
   createSource(name: string, location: Location): SourceId {
     const sourceId = mintSourceId();
+    const metrics = this.metricsAtLocation(axisLocationFromLocation(location));
     this.editCoordinator.push({
       kind: "createSource",
       createSource: { sourceId, name, location },
     });
+    if (metrics.metricValues.length === this.#metricDefinitionsCell.peek().length) {
+      this.editCoordinator.push({
+        kind: "updateSource",
+        updateSource: {
+          sourceId,
+          name,
+          location,
+          metricValues: [...metrics.metricValues],
+          italicAngle: metrics.italicAngle,
+          lineGap: metrics.lineGap,
+          underlinePosition: metrics.underlinePosition,
+          underlineThickness: metrics.underlineThickness,
+        },
+      });
+    }
 
     return sourceId;
   }
@@ -1416,27 +1531,74 @@ export class Font {
   }
 
   /**
-   * Replaces an existing axis definition while preserving its stable id.
+   * Replaces an existing axis definition as one persisted, undoable edit.
    *
    * @param axis - Complete replacement axis returned from the current font model.
+   * @throws {Error} when the definition is invalid or cannot be persisted.
    */
-  updateAxis(axis: Axis): void {
-    this.editCoordinator.push({
-      kind: "updateAxis",
-      updateAxis: { axis },
-    });
+  async updateAxis(axis: Axis): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "updateAxis",
+          updateAxis: { axis },
+        },
+      ],
+      "Update Axis",
+    );
   }
 
   /**
    * Replaces the font-owned mapping collection as one undoable edit.
    *
    * @param mappings - Complete ordered mapping collection; Rust validates all axis references.
+   * @throws {Error} when the collection is invalid or cannot be persisted.
    */
-  setAxisMappings(mappings: readonly AxisMapping[]): void {
-    this.editCoordinator.push({
-      kind: "setAxisMappings",
-      setAxisMappings: { mappings: [...mappings] },
-    });
+  async setAxisMappings(mappings: readonly AxisMapping[]): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "setAxisMappings",
+          setAxisMappings: { mappings: [...mappings] },
+        },
+      ],
+      "Update Axis Mappings",
+    );
+  }
+
+  /** Replaces the font-owned metric row definitions as one undoable edit. */
+  async setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "setMetricDefinitions",
+          setMetricDefinitions: { definitions: [...definitions] },
+        },
+      ],
+      "Update Metric Definitions",
+    );
+  }
+
+  /** Replaces one source's name, location, and complete metric values. */
+  async updateSource(source: Source): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "updateSource",
+          updateSource: {
+            sourceId: source.id,
+            name: source.name,
+            location: source.location,
+            metricValues: source.metricValues,
+            italicAngle: source.italicAngle,
+            lineGap: source.lineGap,
+            underlinePosition: source.underlinePosition,
+            underlineThickness: source.underlineThickness,
+          },
+        },
+      ],
+      "Update Source",
+    );
   }
 
   /**
@@ -1460,12 +1622,22 @@ export class Font {
     return instanceId;
   }
 
-  /** Replaces an authored product preset while preserving stable identity. */
-  updateNamedInstance(instance: NamedInstance): void {
-    this.editCoordinator.push({
-      kind: "updateNamedInstance",
-      updateNamedInstance: { instance },
-    });
+  /**
+   * Replaces an authored product preset and resolves after the workspace accepts it.
+   *
+   * @param instance - complete replacement retaining the preset's stable identity.
+   * @throws {Error} when the replacement violates instance or axis constraints, or persistence fails.
+   */
+  async updateNamedInstance(instance: NamedInstance): Promise<void> {
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "updateNamedInstance",
+          updateNamedInstance: { instance },
+        },
+      ],
+      "Update Instance",
+    );
   }
 
   /** Removes an authored product preset without touching sources or glyph geometry. */
@@ -1501,6 +1673,11 @@ export class Font {
     return this.#axisMappingsCell.peek();
   }
 
+  /** Returns font-owned identities and semantics for authored metric rows. */
+  get metricDefinitions(): MetricDefinition[] {
+    return this.#metricDefinitionsCell.peek();
+  }
+
   /** Returns the current explicit named product presets. */
   get namedInstances(): NamedInstance[] {
     return this.#namedInstancesCell.peek();
@@ -1519,6 +1696,64 @@ export class Font {
   /** @knipclassignore — used by VariationPanel component */
   get sources(): Source[] {
     return this.#sourcesCell.peek();
+  }
+
+  /** Resolves standard and technical metrics for one authored source. */
+  metricsForSource(sourceId: SourceId): SourceMetrics {
+    const source = this.source(sourceId);
+    if (!source) throw new Error(`Unknown source: ${sourceId}`);
+
+    return this.#metricsForSource(source);
+  }
+
+  /**
+   * Resolves source-owned metrics at a design-space location.
+   *
+   * @remarks
+   * Exact source locations return their authored values. Intermediate
+   * locations evaluate the Rust-built variation model used by the glyph
+   * interpolation path. Sparse optional technical fields remain undefined
+   * between sources; the model includes them only when every master authors a
+   * value.
+   *
+   * @param location - Internal design-space location used by source masters.
+   * @returns Resolved standard and technical metrics in font units.
+   */
+  metricsAtLocation(location: AxisLocation): SourceMetrics {
+    const axes = this.#axesCell.peek();
+    const exactSource = sourceAtLocation(this.#sourcesCell.peek(), axes, location);
+    if (exactSource) return this.#metricsForSource(exactSource);
+
+    return (
+      this.#sourceMetricsInterpolationCell.peek()?.resolve(location, axes) ??
+      this.defaultSourceMetrics
+    );
+  }
+
+  #metricsForSource(source: Source | null): SourceMetrics {
+    const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
+    const definitions = this.#metricDefinitionsCell.peek();
+    const position = (kind: MetricKind): number | undefined => {
+      const definition = definitions.find((candidate) => candidate.kind === kind);
+      if (!definition) return undefined;
+
+      return source?.metricValues.find((value) => value.metricId === definition.id)?.position;
+    };
+    const unloaded = source === null;
+
+    return {
+      unitsPerEm,
+      metricValues: source?.metricValues ?? [],
+      ascender: position("ascender") ?? unitsPerEm * 0.8,
+      descender: position("descender") ?? unitsPerEm * -0.2,
+      baseline: position("baseline") ?? 0,
+      capHeight: position("capHeight") ?? (unloaded ? unitsPerEm * 0.7 : undefined),
+      xHeight: position("xHeight") ?? (unloaded ? unitsPerEm * 0.5 : undefined),
+      lineGap: source?.lineGap,
+      italicAngle: source?.italicAngle,
+      underlinePosition: source?.underlinePosition,
+      underlineThickness: source?.underlineThickness,
+    };
   }
 
   defaultLocation(): AxisLocation {

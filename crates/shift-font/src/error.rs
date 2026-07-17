@@ -1,6 +1,6 @@
 use crate::{
-    AnchorId, AxisId, AxisLabelId, AxisMappingId, ContourId, GlyphId, GlyphName, LayerId,
-    NamedInstanceId, PointId, SourceId,
+    AnchorId, AxisId, AxisLabelId, AxisMappingId, ContourId, GlyphId, GlyphName, LayerId, MetricId,
+    MetricKind, NamedInstanceId, PointId, SourceId,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -153,8 +153,30 @@ pub enum CoreError {
     #[error("invalid source name {0:?}")]
     InvalidSourceName(String),
 
+    #[error("metric definition {metric_id} is invalid: {message}")]
+    InvalidMetricDefinition {
+        metric_id: MetricId,
+        message: String,
+    },
+
+    #[error("metric id {0} already exists")]
+    DuplicateMetricId(MetricId),
+
+    #[error("metric kind {0:?} already exists")]
+    DuplicateMetricKind(MetricKind),
+
+    #[error("source {source_id} has an invalid metric value for {metric_id}: {message}")]
+    InvalidSourceMetric {
+        source_id: SourceId,
+        metric_id: MetricId,
+        message: String,
+    },
+
     #[error("source name {0} already exists")]
     DuplicateSourceName(String),
+
+    #[error("sources {first} and {second} have the same design-space location")]
+    DuplicateSourceLocation { first: SourceId, second: SourceId },
 
     #[error("cannot delete the last source")]
     CannotDeleteLastSource,

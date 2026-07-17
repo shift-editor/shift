@@ -10,6 +10,7 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  MetricId,
   NamedInstanceId,
   SourceId,
   Unicode,
@@ -60,7 +61,10 @@ export declare class Bridge {
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
+  getMetricDefinitions(): Array<NapiMetricDefinition>
   getNamedInstances(): Array<NapiNamedInstance>
+  /** Returns the precomputed source-metric interpolation model for this font. */
+  getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -290,10 +294,10 @@ export interface NapiFontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include "createAxis", "updateAxis",
-   * "deleteAxis", "setAxisMappings", named-instance create/update/delete,
-   * source create/delete, and glyph or layer creation. Every kind shares the
-   * same apply path; one set is one undo step.
+   * Font-level kinds additionally include metadata replacement, axis
+   * create/update/delete, mapping replacement, named-instance
+   * create/update/delete, source create/delete, and glyph or layer creation.
+   * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
   addPoints?: NapiAddPointsIntent
@@ -311,17 +315,21 @@ export interface NapiFontIntent {
   applyBooleanOp?: NapiBooleanOpIntent
   createGlyph?: NapiCreateGlyphIntent
   updateGlyph?: NapiUpdateGlyphIntent
+  updateFontMetadata?: NapiUpdateFontMetadataIntent
   createAxis?: NapiCreateAxisIntent
   updateAxis?: NapiUpdateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
   setAxisMappings?: NapiSetAxisMappingsIntent
+  setMetricDefinitions?: NapiSetMetricDefinitionsIntent
   createNamedInstance?: NapiCreateNamedInstanceIntent
   updateNamedInstance?: NapiUpdateNamedInstanceIntent
   deleteNamedInstance?: NapiDeleteNamedInstanceIntent
   createSource?: NapiCreateSourceIntent
+  updateSource?: NapiUpdateSourceIntent
   deleteSource?: NapiDeleteSourceIntent
   createGlyphLayer?: NapiCreateGlyphLayerIntent
   cloneGlyphLayer?: NapiCloneGlyphLayerIntent
+  materializeGlyphLayer?: NapiMaterializeGlyphLayerIntent
 }
 
 export interface NapiFontMetadata {
@@ -343,14 +351,6 @@ export interface NapiFontMetadata {
 
 export interface NapiFontMetrics {
   unitsPerEm: number
-  ascender: number
-  descender: number
-  capHeight?: number
-  xHeight?: number
-  lineGap?: number
-  italicAngle?: number
-  underlinePosition?: number
-  underlineThickness?: number
 }
 
 /**
@@ -360,12 +360,18 @@ export interface NapiFontMetrics {
  * it must be retained from the renderer's current workspace snapshot.
  */
 export interface NapiFontReplacement {
+  /** Complete authored metadata when font metadata changed; absent otherwise. */
+  metadata?: NapiFontMetadata
   /** Full records list when glyph identity changed; absent when untouched. */
   glyphs?: Array<NapiGlyphRecord>
   /** Full axes list when font-level axis structure changed; absent otherwise. */
   axes?: Array<NapiAxis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
   axisMappings?: Array<NapiAxisMapping>
+  /** Full font-owned metric definitions when their identity or order changed. */
+  metricDefinitions?: Array<NapiMetricDefinition>
+  /** Refreshed source-metric interpolation model when any of its inputs changed. */
+  sourceMetricsInterpolation?: NapiSourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
   namedInstances?: Array<NapiNamedInstance>
   /**
@@ -482,6 +488,31 @@ export interface NapiLocation {
   values: Record<AxisId, number>
 }
 
+/** Creates one sparse layer from resolved values at a design-space location. */
+export interface NapiMaterializeGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+  /** Numeric state ordered like `GlyphState.values`. */
+  values: Float64Array
+}
+
+export interface NapiMetricDefinition {
+  id: MetricId
+  kind: NapiMetricKind
+  name: string
+}
+
+export declare const enum NapiMetricKind {
+  Ascender = 'ascender',
+  CapHeight = 'capHeight',
+  XHeight = 'xHeight',
+  Baseline = 'baseline',
+  Descender = 'descender',
+  Custom = 'custom'
+}
+
 export interface NapiMoveAnchorsIntent {
   layerId: LayerId
   anchorIds: Array<AnchorId>
@@ -552,6 +583,10 @@ export interface NapiSetContourClosedIntent {
   closed: boolean
 }
 
+export interface NapiSetMetricDefinitionsIntent {
+  definitions: Array<NapiMetricDefinition>
+}
+
 export interface NapiSetPointSmoothIntent {
   layerId: LayerId
   pointId: PointId
@@ -568,6 +603,44 @@ export interface NapiSource {
   name: string
   location: NapiLocation
   filename?: string
+  metricValues: Array<NapiSourceMetricValue>
+  italicAngle?: number
+  lineGap?: number
+  underlinePosition?: number
+  underlineThickness?: number
+}
+
+export declare const enum NapiSourceMetricField {
+  ItalicAngle = 'italicAngle',
+  LineGap = 'lineGap',
+  UnderlinePosition = 'underlinePosition',
+  UnderlineThickness = 'underlineThickness'
+}
+
+/**
+ * Replacement wrapper whose presence distinguishes "unchanged" from a
+ * changed font that no longer has a valid source-metric variation model.
+ */
+export interface NapiSourceMetricsInterpolationReplacement {
+  snapshot?: NapiSourceMetricsInterpolationSnapshot
+}
+
+export interface NapiSourceMetricsInterpolationSnapshot {
+  metricIds: Array<MetricId>
+  technicalFields: Array<NapiSourceMetricField>
+  basis: NapiInterpolationBasis
+  sources: Array<NapiSourceMetricValues>
+}
+
+export interface NapiSourceMetricValue {
+  metricId: MetricId
+  position: number
+  overshoot: number
+}
+
+export interface NapiSourceMetricValues {
+  sourceId: SourceId
+  values: Float64Array
 }
 
 /** Affine move: O(selection-ids) wire instead of O(N) coords. */
@@ -580,6 +653,12 @@ export interface NapiTranslatePointsIntent {
 
 export interface NapiUpdateAxisIntent {
   axis: NapiAxis
+}
+
+/** Replaces the complete authored metadata snapshot without changing metrics. */
+export interface NapiUpdateFontMetadataIntent {
+  /** Complete replacement snapshot; omitted optional fields are cleared. */
+  metadata: NapiFontMetadata
 }
 
 /**
@@ -595,4 +674,15 @@ export interface NapiUpdateGlyphIntent {
 /** Replaces an authored named instance while retaining its identity. */
 export interface NapiUpdateNamedInstanceIntent {
   instance: NapiNamedInstance
+}
+
+export interface NapiUpdateSourceIntent {
+  sourceId: SourceId
+  name: string
+  location: NapiLocation
+  metricValues: Array<NapiSourceMetricValue>
+  italicAngle?: number
+  lineGap?: number
+  underlinePosition?: number
+  underlineThickness?: number
 }

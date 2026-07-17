@@ -33,8 +33,6 @@ mod tests {
         font.metadata_mut().family_name = Some("TestFamily".to_string());
         font.metadata_mut().style_name = Some("Regular".to_string());
         font.metrics_mut().units_per_em = 1000.0;
-        font.metrics_mut().ascender = 800.0;
-        font.metrics_mut().descender = -200.0;
 
         let default_source_id = font.default_source_id().unwrap();
 

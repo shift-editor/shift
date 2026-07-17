@@ -1,4 +1,4 @@
-import type { Axis, NamedInstance } from "./bridge";
+import type { Axis, FontMetrics, NamedInstance, SourceMetricValue } from "./bridge";
 
 /** Complete axis definition before the editor assigns its stable identity. */
 export type AxisDefinition = Pick<
@@ -17,3 +17,19 @@ export type AxisDefinition = Pick<
 
 /** Complete named-instance definition before the editor assigns its stable identity. */
 export type NamedInstanceDefinition = Omit<NamedInstance, "id">;
+
+/** Standard and technical metrics resolved for one authored source. */
+export type SourceMetrics = Readonly<
+  FontMetrics & {
+    metricValues: readonly SourceMetricValue[];
+    ascender: number;
+    descender: number;
+    baseline: number;
+    capHeight?: number;
+    xHeight?: number;
+    lineGap?: number;
+    italicAngle?: number;
+    underlinePosition?: number;
+    underlineThickness?: number;
+  }
+>;

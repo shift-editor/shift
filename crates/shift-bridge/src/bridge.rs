@@ -7,20 +7,22 @@ use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExpo
 use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
-  AxisRole, BooleanOp, ContourId, Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId,
-  LayerId, Location as FontLocation, NamedInstance as FontNamedInstance, NamedInstanceId, PointId,
-  PointSeed, SourceId,
+  AxisRole, BooleanOp, ContourId, Font, FontChange, FontIntent, FontIntentSet,
+  FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
+  MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
+  NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
     NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphProjection,
     NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
-    NapiNamedInstance, NapiPointSeed, NapiSource,
+    NapiMetricDefinition, NapiMetricKind, NapiNamedInstance, NapiPointSeed, NapiSource,
+    NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
   GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure,
-  NamedInstance, Source,
+  MetricDefinition, NamedInstance, Source, SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError, WorkspaceSource,
@@ -171,6 +173,10 @@ impl FontView for FontSaveSnapshot {
 
   fn metrics(&self) -> &shift_font::FontMetrics {
     self.font.metrics()
+  }
+
+  fn metric_definitions(&self) -> &[shift_font::MetricDefinition] {
+    self.font.metric_definitions()
   }
 
   fn axes(&self) -> &[shift_font::Axis] {
@@ -433,13 +439,16 @@ impl Bridge {
   /// records grain (glyphs/axes/sources lists) rides along whenever the
   /// change set touched that structure.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
+    let mut metadata_changed = false;
     let mut glyphs_changed = false;
     let mut axes_changed = false;
     let mut axis_mappings_changed = false;
+    let mut metric_definitions_changed = false;
     let mut named_instances_changed = false;
     let mut sources_changed = false;
     for change in &outcome.changes.changes {
       match change {
+        FontChange::FontMetadataUpdated(_) => metadata_changed = true,
         FontChange::GlyphCreated(_)
         | FontChange::GlyphDeleted(_)
         | FontChange::GlyphIdentityChanged(_)
@@ -451,8 +460,11 @@ impl Bridge {
           sources_changed = true;
         }
         FontChange::AxisMappingsUpdated(_) => axis_mappings_changed = true,
+        FontChange::MetricDefinitionsUpdated(_) => metric_definitions_changed = true,
         FontChange::NamedInstancesUpdated(_) => named_instances_changed = true,
-        FontChange::SourceCreated(_) | FontChange::SourceDeleted(_) => sources_changed = true,
+        FontChange::SourceCreated(_)
+        | FontChange::SourceUpdated(_)
+        | FontChange::SourceDeleted(_) => sources_changed = true,
         _ => {}
       }
     }
@@ -482,18 +494,35 @@ impl Bridge {
       })
       .collect();
 
-    let font_changed = glyphs_changed
+    let font_changed = metadata_changed
+      || glyphs_changed
       || axes_changed
       || axis_mappings_changed
+      || metric_definitions_changed
       || named_instances_changed
       || sources_changed;
+    let source_metrics_interpolation_changed =
+      axes_changed || metric_definitions_changed || sources_changed;
     let next = font_changed
       .then(|| -> errors::Result<NapiFontReplacement> {
         Ok(NapiFontReplacement {
+          metadata: metadata_changed.then(|| self.get_metadata()).transpose()?,
           glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
           axes: axes_changed.then(|| self.get_axes()).transpose()?,
           axis_mappings: axis_mappings_changed
             .then(|| self.get_axis_mappings())
+            .transpose()?,
+          metric_definitions: metric_definitions_changed
+            .then(|| self.get_metric_definitions())
+            .transpose()?,
+          source_metrics_interpolation: source_metrics_interpolation_changed
+            .then(
+              || -> errors::Result<NapiSourceMetricsInterpolationReplacement> {
+                Ok(NapiSourceMetricsInterpolationReplacement {
+                  snapshot: self.get_source_metrics_interpolation()?,
+                })
+              },
+            )
             .transpose()?,
           named_instances: named_instances_changed
             .then(|| self.get_named_instances())
@@ -641,6 +670,19 @@ impl Bridge {
   }
 
   #[napi]
+  pub fn get_metric_definitions(&self) -> errors::Result<Vec<NapiMetricDefinition>> {
+    Ok(
+      self
+        .font()?
+        .metric_definitions()
+        .iter()
+        .map(MetricDefinition::from)
+        .map(Into::into)
+        .collect(),
+    )
+  }
+
+  #[napi]
   pub fn get_named_instances(&self) -> errors::Result<Vec<NapiNamedInstance>> {
     Ok(
       self
@@ -651,6 +693,20 @@ impl Bridge {
         .map(Into::into)
         .collect(),
     )
+  }
+
+  /// Returns the precomputed source-metric interpolation model for this font.
+  #[napi]
+  pub fn get_source_metrics_interpolation(
+    &self,
+  ) -> errors::Result<Option<NapiSourceMetricsInterpolationSnapshot>> {
+    let font = self.font()?;
+    let Some(interpolation) = font.source_metric_interpolation() else {
+      return Ok(None);
+    };
+    let snapshot = SourceMetricsInterpolationSnapshot::from(&interpolation);
+
+    Ok(Some(snapshot.into()))
   }
 
   #[napi]
@@ -898,6 +954,14 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         new_unicodes: payload.new_unicodes,
       })
     }
+    "updateFontMetadata" => {
+      let payload = intent
+        .update_font_metadata
+        .ok_or_else(|| missing("updateFontMetadata"))?;
+      Ok(FontIntent::UpdateFontMetadata {
+        metadata: map_font_metadata(payload.metadata),
+      })
+    }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
       Ok(FontIntent::CreateAxis {
@@ -925,6 +989,18 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           .mappings
           .into_iter()
           .map(map_axis_mapping)
+          .collect::<errors::Result<Vec<_>>>()?,
+      })
+    }
+    "setMetricDefinitions" => {
+      let payload = intent
+        .set_metric_definitions
+        .ok_or_else(|| missing("setMetricDefinitions"))?;
+      Ok(FontIntent::SetMetricDefinitions {
+        definitions: payload
+          .definitions
+          .into_iter()
+          .map(map_metric_definition)
           .collect::<errors::Result<Vec<_>>>()?,
       })
     }
@@ -970,6 +1046,31 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         location: map_location(payload.location)?,
       })
     }
+    "updateSource" => {
+      let payload = intent
+        .update_source
+        .ok_or_else(|| missing("updateSource"))?;
+      let metric_values = payload
+        .metric_values
+        .into_iter()
+        .map(|value| {
+          Ok((
+            parse::<MetricId>(&value.metric_id)?,
+            MetricValue::new(value.position, value.overshoot),
+          ))
+        })
+        .collect::<errors::Result<_>>()?;
+      Ok(FontIntent::UpdateSource {
+        source_id: parse::<SourceId>(&payload.source_id)?,
+        name: payload.name,
+        location: map_location(payload.location)?,
+        metric_values,
+        italic_angle: payload.italic_angle,
+        line_gap: payload.line_gap,
+        underline_position: payload.underline_position,
+        underline_thickness: payload.underline_thickness,
+      })
+    }
     "createGlyphLayer" => {
       let payload = intent
         .create_glyph_layer
@@ -989,6 +1090,18 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
         source_id: parse::<SourceId>(&payload.source_id)?,
         from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
+      })
+    }
+    "materializeGlyphLayer" => {
+      let payload = intent
+        .materialize_glyph_layer
+        .ok_or_else(|| missing("materializeGlyphLayer"))?;
+      Ok(FontIntent::MaterializeGlyphLayer {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
+        source_id: parse::<SourceId>(&payload.source_id)?,
+        from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
+        values: shift_font::GlyphInterpolationValues::new(payload.values.to_vec()),
       })
     }
     other => Err(BridgeError::InvalidInput {
@@ -1037,6 +1150,41 @@ fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
     .map(|(axis_id, value)| Ok((parse::<AxisId>(&axis_id)?, value)))
     .collect::<errors::Result<_>>()?;
   Ok(FontLocation::from_map(values))
+}
+
+fn map_font_metadata(metadata: NapiFontMetadata) -> FontMetadataModel {
+  FontMetadataModel {
+    family_name: metadata.family_name,
+    style_name: metadata.style_name,
+    version_major: metadata.version_major,
+    version_minor: metadata.version_minor,
+    copyright: metadata.copyright,
+    trademark: metadata.trademark,
+    designer: metadata.designer,
+    designer_url: metadata.designer_url,
+    manufacturer: metadata.manufacturer,
+    manufacturer_url: metadata.manufacturer_url,
+    license: metadata.license,
+    license_url: metadata.license_url,
+    description: metadata.description,
+    note: metadata.note,
+  }
+}
+
+fn map_metric_definition(definition: NapiMetricDefinition) -> errors::Result<FontMetricDefinition> {
+  let kind = match definition.kind {
+    NapiMetricKind::Ascender => MetricKind::Ascender,
+    NapiMetricKind::CapHeight => MetricKind::CapHeight,
+    NapiMetricKind::XHeight => MetricKind::XHeight,
+    NapiMetricKind::Baseline => MetricKind::Baseline,
+    NapiMetricKind::Descender => MetricKind::Descender,
+    NapiMetricKind::Custom => MetricKind::Custom,
+  };
+  Ok(FontMetricDefinition::with_id(
+    parse::<MetricId>(&definition.id)?,
+    kind,
+    definition.name,
+  ))
 }
 
 fn map_axis(axis: NapiAxis) -> errors::Result<FontAxis> {
@@ -1173,17 +1321,21 @@ mod tests {
       apply_boolean_op: None,
       create_glyph: None,
       update_glyph: None,
+      update_font_metadata: None,
       create_axis: None,
       update_axis: None,
       delete_axis: None,
       set_axis_mappings: None,
+      set_metric_definitions: None,
       create_named_instance: None,
       update_named_instance: None,
       delete_named_instance: None,
       create_source: None,
+      update_source: None,
       delete_source: None,
       create_glyph_layer: None,
       clone_glyph_layer: None,
+      materialize_glyph_layer: None,
     }
   }
 
@@ -2416,8 +2568,16 @@ mod tests {
         None,
       )
       .unwrap();
+    bridge.apply(vec![weight_axis_intent()], None).unwrap();
     bridge
-      .apply(vec![create_source_intent("source_bold", "Bold", &[])], None)
+      .apply(
+        vec![create_source_intent(
+          "source_bold",
+          "Bold",
+          &[("axis_weight", 700.0)],
+        )],
+        None,
+      )
       .unwrap();
 
     let layer_id = LayerId::new().to_string();
@@ -2689,8 +2849,8 @@ mod tests {
     assert_eq!(metadata.family_name.as_deref(), Some("Untitled Font"));
     assert_eq!(metadata.style_name.as_deref(), Some("Regular"));
     assert_eq!(metrics.units_per_em, 1000.0);
-    assert_eq!(metrics.ascender, 800.0);
-    assert_eq!(metrics.descender, -200.0);
+    assert_eq!(bridge.get_metric_definitions().unwrap().len(), 5);
+    assert_eq!(bridge.get_sources().unwrap()[0].metric_values.len(), 5);
   }
 
   #[test]

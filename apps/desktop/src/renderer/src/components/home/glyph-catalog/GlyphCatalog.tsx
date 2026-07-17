@@ -9,7 +9,7 @@ import {
 } from "@shift/ui";
 
 import AllIcon from "@/assets/sidebar-left/all.svg";
-import PlusIcon from "@/assets/plus.svg";
+import PlusIcon from "@/assets/general/plus.svg";
 
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";

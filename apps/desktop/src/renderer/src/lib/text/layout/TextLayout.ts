@@ -9,7 +9,7 @@ import { Caret } from "./Caret";
 import type {
   CaretPosition,
   TextItem,
-  FontMetrics,
+  SourceMetrics,
   GlyphAnchor,
   GlyphTextItem,
   Hit,
@@ -42,7 +42,7 @@ interface AssembledLayout {
 }
 
 export class TextLayout {
-  readonly metrics: FontMetrics;
+  readonly metrics: SourceMetrics;
   readonly origin: Point2D;
   readonly lines: readonly Line[];
   readonly totalAdvance: number;
@@ -54,7 +54,7 @@ export class TextLayout {
   constructor(params: TextLayoutParams) {
     const { items, origin, font, positioner, designLocation } = params;
     this.#items = items;
-    this.metrics = font.metrics;
+    this.metrics = font.metricsAtLocation(designLocation.peek());
     this.origin = origin;
     this.bufferLength = items.length;
 
@@ -312,7 +312,7 @@ interface PositionedParagraph {
 function assembleLayout(
   paragraphs: PositionedParagraph[],
   origin: Point2D,
-  metrics: FontMetrics,
+  metrics: SourceMetrics,
 ): AssembledLayout {
   const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 

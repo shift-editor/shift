@@ -19,6 +19,7 @@ declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
+declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
 declare const RunIdBrand: unique symbol;
@@ -89,6 +90,9 @@ export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
  * Branded string type - can't be confused with other IDs or plain strings.
  */
 export type LayerId = string & { readonly [LayerIdBrand]: typeof LayerIdBrand };
+
+/** Stable identity of one font-owned metric definition. */
+export type MetricId = string & { readonly [MetricIdBrand]: typeof MetricIdBrand };
 
 /** A stable identifier for one authored product preset. */
 export type NamedInstanceId = string & {
@@ -194,6 +198,11 @@ export function asLayerId(id: string): LayerId {
   return id as LayerId;
 }
 
+/** Converts a Rust metric identifier into a typed MetricId. */
+export function asMetricId(id: string): MetricId {
+  return id as MetricId;
+}
+
 /** Convert a Rust named-instance identifier into a typed NamedInstanceId. */
 export function asNamedInstanceId(id: string): NamedInstanceId {
   return id as NamedInstanceId;
@@ -273,6 +282,11 @@ export function isLayerId(id: unknown): id is LayerId {
   return hasIdPrefix(id, "layer");
 }
 
+/** Returns whether a value is a runtime-discriminable metric id. */
+export function isMetricId(id: unknown): id is MetricId {
+  return hasIdPrefix(id, "metric");
+}
+
 /** Returns whether a value is a runtime-discriminable named-instance id. */
 export function isNamedInstanceId(id: unknown): id is NamedInstanceId {
   return hasIdPrefix(id, "namedInstance");
@@ -308,6 +322,7 @@ type MintedIdByPrefix = {
   guideline: GuidelineId;
   glyph: GlyphId;
   layer: LayerId;
+  metric: MetricId;
   namedInstance: NamedInstanceId;
   node: NodeId;
   run: RunId;
@@ -381,6 +396,11 @@ export function mintGlyphId(): GlyphId {
 /** Mints a new layer id. See {@link mintPointId}. */
 export function mintLayerId(): LayerId {
   return mintPrefixedId("layer");
+}
+
+/** Mints a stable metric-definition id. See {@link mintAxisId}. */
+export function mintMetricId(): MetricId {
+  return mintPrefixedId("metric");
 }
 
 /** Mints a stable named-instance id. See {@link mintAxisId}. */

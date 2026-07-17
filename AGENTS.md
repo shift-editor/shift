@@ -73,8 +73,12 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 
 ### Testing
 
-- `pnpm test` - Run tests once
-- `pnpm test:watch` - Run tests in watch mode
+- `pnpm test` - Run all tests once through Turbo
+- `pnpm test:desktop <test-file>` - Run focused desktop tests through Turbo
+- `pnpm test:native` - Run native bridge tests through Turbo
+- `pnpm test:watch` - Run tests in watch mode through Turbo
+
+Use these root commands instead of invoking a package's Vitest script directly. The Turbo graph builds the NAPI bridge before desktop and native tests, preventing stale or partially written native addons from crashing Vitest workers.
 
 ### Building
 

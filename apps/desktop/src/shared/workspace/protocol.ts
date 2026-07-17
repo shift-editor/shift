@@ -10,6 +10,8 @@ import type {
   GlyphRecord,
   GlyphState,
   Location,
+  MetricDefinition,
+  SourceMetricsInterpolationSnapshot,
   NamedInstance,
   Source,
   SourceId,
@@ -22,6 +24,8 @@ export type WorkspaceSnapshot = {
   documentId: string;
   metadata: FontMetadata;
   metrics: FontMetrics;
+  metricDefinitions: MetricDefinition[];
+  sourceMetricsInterpolation: SourceMetricsInterpolationSnapshot | null;
   glyphs: GlyphRecord[];
   sources: Source[];
   axes: Axis[];

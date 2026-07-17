@@ -49,6 +49,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useGlyphViews } from "@/hooks/useGlyphViews";
+import { useSignalState } from "@/lib/signals";
 import { Button, Input } from "@shift/ui";
 import type { GlyphId, GlyphName } from "@shift/types";
 
@@ -90,7 +91,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
   const editor = useEditor();
   const font = editor.font;
-  const metrics = font.metrics;
+  const designLocation = useSignalState(editor.designLocationCell, { schedule: "frame" });
+  const metrics = font.metricsAtLocation(designLocation);
   const { filteredGlyphs: catalogGlyphs } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);

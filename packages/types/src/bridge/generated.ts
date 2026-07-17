@@ -9,6 +9,7 @@ import type {
   GuidelineId,
   GlyphId,
   LayerId,
+  MetricId,
   NamedInstanceId,
   SourceId,
 } from "../ids";
@@ -65,7 +66,10 @@ export interface BridgeApi {
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
+  getMetricDefinitions(): Array<MetricDefinition>
   getNamedInstances(): Array<NamedInstance>
+  /** Returns the precomputed source-metric interpolation model for this font. */
+  getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -289,10 +293,10 @@ export interface FontIntent {
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
    * "removeAnchors" | "reverseContour" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include "createAxis", "updateAxis",
-   * "deleteAxis", "setAxisMappings", named-instance create/update/delete,
-   * source create/delete, and glyph or layer creation. Every kind shares the
-   * same apply path; one set is one undo step.
+   * Font-level kinds additionally include metadata replacement, axis
+   * create/update/delete, mapping replacement, named-instance
+   * create/update/delete, source create/delete, and glyph or layer creation.
+   * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
   addPoints?: AddPointsIntent
@@ -310,17 +314,21 @@ export interface FontIntent {
   applyBooleanOp?: BooleanOpIntent
   createGlyph?: CreateGlyphIntent
   updateGlyph?: UpdateGlyphIntent
+  updateFontMetadata?: UpdateFontMetadataIntent
   createAxis?: CreateAxisIntent
   updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
   setAxisMappings?: SetAxisMappingsIntent
+  setMetricDefinitions?: SetMetricDefinitionsIntent
   createNamedInstance?: CreateNamedInstanceIntent
   updateNamedInstance?: UpdateNamedInstanceIntent
   deleteNamedInstance?: DeleteNamedInstanceIntent
   createSource?: CreateSourceIntent
+  updateSource?: UpdateSourceIntent
   deleteSource?: DeleteSourceIntent
   createGlyphLayer?: CreateGlyphLayerIntent
   cloneGlyphLayer?: CloneGlyphLayerIntent
+  materializeGlyphLayer?: MaterializeGlyphLayerIntent
 }
 
 export interface FontMetadata {
@@ -342,14 +350,6 @@ export interface FontMetadata {
 
 export interface FontMetrics {
   unitsPerEm: number
-  ascender: number
-  descender: number
-  capHeight?: number
-  xHeight?: number
-  lineGap?: number
-  italicAngle?: number
-  underlinePosition?: number
-  underlineThickness?: number
 }
 
 /**
@@ -359,12 +359,18 @@ export interface FontMetrics {
  * it must be retained from the renderer's current workspace snapshot.
  */
 export interface FontReplacement {
+  /** Complete authored metadata when font metadata changed; absent otherwise. */
+  metadata?: FontMetadata
   /** Full records list when glyph identity changed; absent when untouched. */
   glyphs?: Array<GlyphRecord>
   /** Full axes list when font-level axis structure changed; absent otherwise. */
   axes?: Array<Axis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
   axisMappings?: Array<AxisMapping>
+  /** Full font-owned metric definitions when their identity or order changed. */
+  metricDefinitions?: Array<MetricDefinition>
+  /** Refreshed source-metric interpolation model when any of its inputs changed. */
+  sourceMetricsInterpolation?: SourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
   namedInstances?: Array<NamedInstance>
   /**
@@ -481,6 +487,24 @@ export interface Location {
   values: Record<AxisId, number>
 }
 
+/** Creates one sparse layer from resolved values at a design-space location. */
+export interface MaterializeGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+  /** Numeric state ordered like `GlyphState.values`. */
+  values: Float64Array
+}
+
+export interface MetricDefinition {
+  id: MetricId
+  kind: MetricKind
+  name: string
+}
+
+export type MetricKind = "ascender" | "capHeight" | "xHeight" | "baseline" | "descender" | "custom";
+
 export interface MoveAnchorsIntent {
   layerId: LayerId
   anchorIds: Array<AnchorId>
@@ -548,6 +572,10 @@ export interface SetContourClosedIntent {
   closed: boolean
 }
 
+export interface SetMetricDefinitionsIntent {
+  definitions: Array<MetricDefinition>
+}
+
 export interface SetPointSmoothIntent {
   layerId: LayerId
   pointId: PointId
@@ -564,6 +592,39 @@ export interface Source {
   name: string
   location: Location
   filename?: string
+  metricValues: Array<SourceMetricValue>
+  italicAngle?: number
+  lineGap?: number
+  underlinePosition?: number
+  underlineThickness?: number
+}
+
+export type SourceMetricField = "italicAngle" | "lineGap" | "underlinePosition" | "underlineThickness";
+
+/**
+ * Replacement wrapper whose presence distinguishes "unchanged" from a
+ * changed font that no longer has a valid source-metric variation model.
+ */
+export interface SourceMetricsInterpolationReplacement {
+  snapshot?: SourceMetricsInterpolationSnapshot
+}
+
+export interface SourceMetricsInterpolationSnapshot {
+  metricIds: Array<MetricId>
+  technicalFields: Array<SourceMetricField>
+  basis: InterpolationBasis
+  sources: Array<SourceMetricValues>
+}
+
+export interface SourceMetricValue {
+  metricId: MetricId
+  position: number
+  overshoot: number
+}
+
+export interface SourceMetricValues {
+  sourceId: SourceId
+  values: Float64Array
 }
 
 /** Affine move: O(selection-ids) wire instead of O(N) coords. */
@@ -576,6 +637,12 @@ export interface TranslatePointsIntent {
 
 export interface UpdateAxisIntent {
   axis: Axis
+}
+
+/** Replaces the complete authored metadata snapshot without changing metrics. */
+export interface UpdateFontMetadataIntent {
+  /** Complete replacement snapshot; omitted optional fields are cleared. */
+  metadata: FontMetadata
 }
 
 /**
@@ -591,4 +658,15 @@ export interface UpdateGlyphIntent {
 /** Replaces an authored named instance while retaining its identity. */
 export interface UpdateNamedInstanceIntent {
   instance: NamedInstance
+}
+
+export interface UpdateSourceIntent {
+  sourceId: SourceId
+  name: string
+  location: Location
+  metricValues: Array<SourceMetricValue>
+  italicAngle?: number
+  lineGap?: number
+  underlinePosition?: number
+  underlineThickness?: number
 }

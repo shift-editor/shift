@@ -40,8 +40,10 @@ impl ShiftStore {
         tx.execute("DELETE FROM glyph_unicodes", [])?;
         tx.execute("DELETE FROM glyphs", [])?;
         tx.execute("DELETE FROM source_locations", [])?;
+        tx.execute("DELETE FROM source_metric_values", [])?;
         tx.execute("DELETE FROM source_lib", [])?;
         tx.execute("DELETE FROM sources", [])?;
+        tx.execute("DELETE FROM metric_definitions", [])?;
         tx.execute("DELETE FROM axis_mappings", [])?;
         tx.execute("DELETE FROM named_instances", [])?;
         tx.execute("DELETE FROM axes", [])?;
@@ -66,6 +68,7 @@ impl ShiftStore {
         }
         replace_axis_mappings(&tx, font.axis_mappings())?;
         replace_named_instances(&tx, font.named_instances())?;
+        replace_metric_definitions(&tx, font.metric_definitions())?;
 
         for (order_index, source) in font.sources().iter().enumerate() {
             upsert_source(
@@ -77,9 +80,14 @@ impl ShiftStore {
                     color: source.color(),
                     kind: SourceKind::from(source.role()),
                     layer_name: source.layer_name(),
+                    italic_angle: source.italic_angle(),
+                    line_gap: source.line_gap(),
+                    underline_position: source.underline_position(),
+                    underline_thickness: source.underline_thickness(),
                     order_index: order_index as i64,
                 },
             )?;
+            replace_source_metric_values(&tx, source.id(), source.metric_values().iter())?;
             replace_lib_data(
                 &tx,
                 "source_lib",
@@ -128,6 +136,7 @@ impl ShiftStore {
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
+        font::FontChange::FontMetadataUpdated(change) => update_font_metadata(tx, &change.metadata),
         font::FontChange::AxisCreated(change) => insert_axis(tx, &change.axis, 0, false),
         font::FontChange::AxisUpdated(change) => upsert_axis_with_order(tx, &change.axis, 0),
         font::FontChange::AxisDeleted(change) => {
@@ -142,6 +151,9 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         font::FontChange::AxisMappingsUpdated(change) => {
             replace_axis_mappings(tx, &change.mappings)
         }
+        font::FontChange::MetricDefinitionsUpdated(change) => {
+            replace_metric_definitions(tx, &change.definitions)
+        }
         font::FontChange::NamedInstancesUpdated(change) => {
             replace_named_instances(tx, &change.instances)
         }
@@ -155,8 +167,21 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                     color: None,
                     kind: SourceKind::Master,
                     layer_name: None,
+                    italic_angle: change.italic_angle,
+                    line_gap: change.line_gap,
+                    underline_position: change.underline_position,
+                    underline_thickness: change.underline_thickness,
                     order_index: 0,
                 },
+            )?;
+
+            replace_source_metric_values(
+                tx,
+                change.source_id.clone(),
+                change
+                    .metric_values
+                    .iter()
+                    .map(|value| (&value.metric_id, &value.value)),
             )?;
 
             for axis_value in &change.location {
@@ -169,6 +194,40 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             }
 
             Ok(())
+        }
+        font::FontChange::SourceUpdated(change) => {
+            let source = &change.source;
+            upsert_source(
+                tx,
+                &source.id(),
+                SourceRow {
+                    name: Some(source.name()),
+                    filename: source.filename(),
+                    color: source.color(),
+                    kind: SourceKind::from(source.role()),
+                    layer_name: source.layer_name(),
+                    italic_angle: source.italic_angle(),
+                    line_gap: source.line_gap(),
+                    underline_position: source.underline_position(),
+                    underline_thickness: source.underline_thickness(),
+                    order_index: 0,
+                },
+            )?;
+            tx.execute(
+                "DELETE FROM source_locations WHERE source_id = ?1",
+                [source.id().to_string()],
+            )?;
+            for (axis_id, value) in source.location().iter() {
+                upsert_source_location(tx, &source.id(), axis_id, *value)?;
+            }
+            replace_source_metric_values(tx, source.id(), source.metric_values().iter())?;
+            replace_lib_data(
+                tx,
+                "source_lib",
+                "source_id",
+                Some(&source.id().to_string()),
+                source.lib(),
+            )
         }
         font::FontChange::SourceDeleted(change) => {
             // glyph_layers and source_locations cascade on the source row.
@@ -385,6 +444,59 @@ fn replace_named_instances(
     Ok(())
 }
 
+fn replace_metric_definitions(
+    tx: &Transaction<'_>,
+    definitions: &[font::MetricDefinition],
+) -> Result<(), StoreError> {
+    tx.execute("DELETE FROM metric_definitions", [])?;
+    for (order_index, definition) in definitions.iter().enumerate() {
+        let kind = match definition.kind() {
+            font::MetricKind::Ascender => "ascender",
+            font::MetricKind::CapHeight => "cap_height",
+            font::MetricKind::XHeight => "x_height",
+            font::MetricKind::Baseline => "baseline",
+            font::MetricKind::Descender => "descender",
+            font::MetricKind::Custom => "custom",
+        };
+        tx.execute(
+            "INSERT INTO metric_definitions (id, kind, name, order_index) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                definition.id().to_string(),
+                kind,
+                definition.name(),
+                order_index as i64,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn replace_source_metric_values<'a>(
+    tx: &Transaction<'_>,
+    source_id: font::SourceId,
+    values: impl IntoIterator<Item = (&'a font::MetricId, &'a font::MetricValue)>,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "DELETE FROM source_metric_values WHERE source_id = ?1",
+        [source_id.to_string()],
+    )?;
+    for (metric_id, value) in values {
+        tx.execute(
+            "
+            INSERT INTO source_metric_values (source_id, metric_id, position, overshoot)
+            VALUES (?1, ?2, ?3, ?4)
+            ",
+            params![
+                source_id.to_string(),
+                metric_id.to_string(),
+                value.position,
+                value.overshoot,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
 fn upsert_source_location(
     tx: &Transaction<'_>,
     source_id: &font::SourceId,
@@ -409,6 +521,10 @@ struct SourceRow<'a> {
     color: Option<&'a str>,
     kind: SourceKind,
     layer_name: Option<&'a str>,
+    italic_angle: Option<f64>,
+    line_gap: Option<f64>,
+    underline_position: Option<f64>,
+    underline_thickness: Option<f64>,
     order_index: i64,
 }
 
@@ -419,14 +535,21 @@ fn upsert_source(
 ) -> Result<(), StoreError> {
     tx.execute(
         "
-        INSERT INTO sources (id, name, filename, color, kind, layer_name, order_index)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        INSERT INTO sources (
+            id, name, filename, color, kind, layer_name,
+            italic_angle, line_gap, underline_position, underline_thickness, order_index
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
         ON CONFLICT(id) DO UPDATE SET
             name = COALESCE(excluded.name, sources.name),
             filename = excluded.filename,
             color = excluded.color,
             kind = excluded.kind,
             layer_name = excluded.layer_name,
+            italic_angle = excluded.italic_angle,
+            line_gap = excluded.line_gap,
+            underline_position = excluded.underline_position,
+            underline_thickness = excluded.underline_thickness,
             order_index = excluded.order_index
         ",
         params![
@@ -436,6 +559,10 @@ fn upsert_source(
             row.color,
             row.kind.as_str(),
             row.layer_name,
+            row.italic_angle,
+            row.line_gap,
+            row.underline_position,
+            row.underline_thickness,
             row.order_index
         ],
     )?;
@@ -585,6 +712,50 @@ fn replace_full_layer_state(
     Ok(())
 }
 
+/// Updates only authored metadata columns, preserving metrics and store-only fields.
+fn update_font_metadata(
+    tx: &Transaction<'_>,
+    metadata: &font::FontMetadata,
+) -> Result<(), StoreError> {
+    let rows_changed = tx.execute(
+        "
+        UPDATE font_info
+        SET family_name = ?1,
+            style_name = ?2,
+            copyright = ?3,
+            trademark = ?4,
+            description = ?5,
+            note = ?6,
+            designer = ?7,
+            designer_url = ?8,
+            manufacturer = ?9,
+            manufacturer_url = ?10,
+            license_description = ?11,
+            license_info_url = ?12,
+            version_major = ?13,
+            version_minor = ?14
+        WHERE id = 1
+        ",
+        params![
+            metadata.family_name.as_deref(),
+            metadata.style_name.as_deref(),
+            metadata.copyright.as_deref(),
+            metadata.trademark.as_deref(),
+            metadata.description.as_deref(),
+            metadata.note.as_deref(),
+            metadata.designer.as_deref(),
+            metadata.designer_url.as_deref(),
+            metadata.manufacturer.as_deref(),
+            metadata.manufacturer_url.as_deref(),
+            metadata.license.as_deref(),
+            metadata.license_url.as_deref(),
+            metadata.version_major.map(i64::from),
+            metadata.version_minor.map(i64::from),
+        ],
+    )?;
+    require_changed(rows_changed, "font info", "1".to_string())
+}
+
 fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), StoreError> {
     let metadata = font.metadata();
     let metrics = font.metrics();
@@ -609,19 +780,11 @@ fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), Store
             version_major,
             version_minor,
             units_per_em,
-            ascender,
-            descender,
-            cap_height,
-            x_height,
-            line_gap,
-            italic_angle,
-            underline_position,
-            underline_thickness,
             default_source_id
         )
         VALUES (
             1, ?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8, ?9, ?10, ?11, ?12, NULL,
-            ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24
+            ?13, ?14, ?15, ?16
         )
         ON CONFLICT(id) DO UPDATE SET
             family_name = excluded.family_name,
@@ -641,14 +804,6 @@ fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), Store
             version_major = excluded.version_major,
             version_minor = excluded.version_minor,
             units_per_em = excluded.units_per_em,
-            ascender = excluded.ascender,
-            descender = excluded.descender,
-            cap_height = excluded.cap_height,
-            x_height = excluded.x_height,
-            line_gap = excluded.line_gap,
-            italic_angle = excluded.italic_angle,
-            underline_position = excluded.underline_position,
-            underline_thickness = excluded.underline_thickness,
             default_source_id = excluded.default_source_id
         ",
         params![
@@ -667,14 +822,6 @@ fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), Store
             metadata.version_major.map(i64::from),
             metadata.version_minor.map(i64::from),
             metrics.units_per_em,
-            metrics.ascender,
-            metrics.descender,
-            metrics.cap_height,
-            metrics.x_height,
-            metrics.line_gap,
-            metrics.italic_angle,
-            metrics.underline_position,
-            metrics.underline_thickness,
             font.default_source_id().map(|id| id.to_string()),
         ],
     )?;

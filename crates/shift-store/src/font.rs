@@ -19,14 +19,6 @@ pub struct FontInfo {
     pub version_major: Option<i64>,
     pub version_minor: Option<i64>,
     pub units_per_em: f64,
-    pub ascender: f64,
-    pub descender: f64,
-    pub cap_height: Option<f64>,
-    pub x_height: Option<f64>,
-    pub line_gap: Option<f64>,
-    pub italic_angle: Option<f64>,
-    pub underline_position: Option<f64>,
-    pub underline_thickness: Option<f64>,
     pub default_source_id: Option<String>,
 }
 
@@ -53,19 +45,11 @@ impl ShiftStore {
                 version_major,
                 version_minor,
                 units_per_em,
-                ascender,
-                descender,
-                cap_height,
-                x_height,
-                line_gap,
-                italic_angle,
-                underline_position,
-                underline_thickness,
                 default_source_id
             )
             VALUES (
                 1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26
+                ?16, ?17, ?18
             )
             ON CONFLICT(id) DO UPDATE SET
                 family_name = excluded.family_name,
@@ -85,14 +69,6 @@ impl ShiftStore {
                 version_major = excluded.version_major,
                 version_minor = excluded.version_minor,
                 units_per_em = excluded.units_per_em,
-                ascender = excluded.ascender,
-                descender = excluded.descender,
-                cap_height = excluded.cap_height,
-                x_height = excluded.x_height,
-                line_gap = excluded.line_gap,
-                italic_angle = excluded.italic_angle,
-                underline_position = excluded.underline_position,
-                underline_thickness = excluded.underline_thickness,
                 default_source_id = excluded.default_source_id
             ",
             rusqlite::params![
@@ -113,14 +89,6 @@ impl ShiftStore {
                 font_info.version_major,
                 font_info.version_minor,
                 font_info.units_per_em,
-                font_info.ascender,
-                font_info.descender,
-                font_info.cap_height,
-                font_info.x_height,
-                font_info.line_gap,
-                font_info.italic_angle,
-                font_info.underline_position,
-                font_info.underline_thickness,
                 font_info.default_source_id,
             ],
         )?;
@@ -149,14 +117,6 @@ impl ShiftStore {
                 version_major,
                 version_minor,
                 units_per_em,
-                ascender,
-                descender,
-                cap_height,
-                x_height,
-                line_gap,
-                italic_angle,
-                underline_position,
-                underline_thickness,
                 default_source_id
             FROM font_info
             WHERE id = 1
@@ -190,14 +150,6 @@ fn map_font_info_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FontInfo> {
         version_major: row.get(14)?,
         version_minor: row.get(15)?,
         units_per_em: row.get(16)?,
-        ascender: row.get(17)?,
-        descender: row.get(18)?,
-        cap_height: row.get(19)?,
-        x_height: row.get(20)?,
-        line_gap: row.get(21)?,
-        italic_angle: row.get(22)?,
-        underline_position: row.get(23)?,
-        underline_thickness: row.get(24)?,
-        default_source_id: row.get(25)?,
+        default_source_id: row.get(17)?,
     })
 }

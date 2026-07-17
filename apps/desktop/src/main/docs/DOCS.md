@@ -76,7 +76,7 @@ Export TrueType follows the same document and sync lanes. The utility process ca
 
 Close and quit call `DocumentSession.confirmClose`. If the document is clean, or the user saves successfully, or the user chooses discard, `DocumentSession` calls `workspace.close` in the utility process. The utility drops the Rust workspace handle, removes package bindings, and deletes the clean/discarded SQLite document. Dirty divergent documents created by package-source conflicts are orphaned by the utility process, not by main.
 
-Message lanes reject in-flight calls when their remote port closes. An unexpected utility-process exit also disconnects the renderer document lane, so close and quit guards fail instead of remaining pending indefinitely.
+Message lanes reject in-flight calls when their remote port closes. An unexpected utility-process exit also disconnects the renderer document lane: Save remains blocked because pending edits cannot be settled, while an explicit Discard treats the unavailable workspace as already closed so window and quit guards can finish.
 
 ### IPC
 

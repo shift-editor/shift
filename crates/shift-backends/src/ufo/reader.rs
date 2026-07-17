@@ -1,9 +1,11 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
+use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, Guideline, KerningData,
-    KerningPair, KerningSide, LayerId, LibData, LibValue, PointType, Source, SourceId, Transform,
+    KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType, Source, SourceId,
+    Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -35,6 +37,10 @@ pub(crate) const MAPPED_FONTINFO_KEYS: &[&str] = &[
     "capHeight",
     "xHeight",
     "italicAngle",
+    "openTypeHheaLineGap",
+    "openTypeOS2TypoLineGap",
+    "postscriptUnderlinePosition",
+    "postscriptUnderlineThickness",
     "guidelines",
 ];
 
@@ -350,11 +356,44 @@ impl FontReader for UfoReader {
             .map(|n| *n)
             .unwrap_or(1000.0);
         font.metrics_mut().units_per_em = upm;
-        font.metrics_mut().ascender = norad_font.font_info.ascender.unwrap_or(800.0);
-        font.metrics_mut().descender = norad_font.font_info.descender.unwrap_or(-200.0);
-        font.metrics_mut().cap_height = norad_font.font_info.cap_height;
-        font.metrics_mut().x_height = norad_font.font_info.x_height;
-        font.metrics_mut().italic_angle = norad_font.font_info.italic_angle;
+        let metric_definitions = font.metric_definitions().to_vec();
+        let default_source = font
+            .source_mut(default_source_id.clone())
+            .expect("new font should contain its default source");
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::Ascender,
+            norad_font.font_info.ascender,
+        );
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::Descender,
+            norad_font.font_info.descender,
+        );
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::CapHeight,
+            norad_font.font_info.cap_height,
+        );
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::XHeight,
+            norad_font.font_info.x_height,
+        );
+        default_source.set_italic_angle(norad_font.font_info.italic_angle);
+        default_source.set_line_gap(
+            norad_font
+                .font_info
+                .open_type_hhea_line_gap
+                .or(norad_font.font_info.open_type_os2_typo_line_gap)
+                .map(f64::from),
+        );
+        default_source.set_underline_position(norad_font.font_info.postscript_underline_position);
+        default_source.set_underline_thickness(norad_font.font_info.postscript_underline_thickness);
 
         if let Some(remainder) = Self::convert_fontinfo_remainder(&norad_font.font_info)? {
             *font.fontinfo_remainder_mut() = remainder;

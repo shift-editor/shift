@@ -18,6 +18,7 @@ const headerImports = idImportMatch
 const idTypeNames = new Set([
   "GlyphId",
   "LayerId",
+  "MetricId",
   "PointId",
   "ContourId",
   "AnchorId",

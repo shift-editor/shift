@@ -41,7 +41,7 @@ describe("Caret", () => {
   //                    → 2 (start of line 2, before B)
   it("next steps through paragraph boundary", () => {
     const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], font);
-    const metrics = font.metrics;
+    const metrics = font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     let c = Caret.atCluster(layout, 0);
 
@@ -71,7 +71,7 @@ describe("Caret", () => {
   //   line 1                  cluster 2 = empty line 1 (caret sits at originX)
   it("position on empty trailing line lands at that line's baseline", () => {
     const layout = makeLayout([glyph("A", 65), lineBreakTextItem()], font);
-    const metrics = font.metrics;
+    const metrics = font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     const caret = Caret.atCluster(layout, 2);
 
@@ -88,7 +88,7 @@ describe("Caret", () => {
   //   line 2                  cluster 2
   it("position on empty line between two linebreaks lands on the middle line", () => {
     const layout = makeLayout([lineBreakTextItem(), lineBreakTextItem()], font);
-    const metrics = font.metrics;
+    const metrics = font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     const caret = Caret.atCluster(layout, 1);
 

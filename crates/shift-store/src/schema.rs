@@ -20,15 +20,14 @@ CREATE TABLE IF NOT EXISTS font_info (
     version_major INTEGER CHECK (version_major IS NULL OR version_major >= 0),
     version_minor INTEGER CHECK (version_minor IS NULL OR version_minor >= 0),
     units_per_em REAL NOT NULL CHECK (units_per_em > 0),
-    ascender REAL NOT NULL,
-    descender REAL NOT NULL,
-    cap_height REAL,
-    x_height REAL,
-    line_gap REAL,
-    italic_angle REAL,
-    underline_position REAL,
-    underline_thickness REAL,
     default_source_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS metric_definitions (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('ascender', 'cap_height', 'x_height', 'baseline', 'descender', 'custom')),
+    name TEXT NOT NULL,
+    order_index INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS axes (
@@ -68,6 +67,10 @@ CREATE TABLE IF NOT EXISTS sources (
     filename TEXT,
     color TEXT,
     layer_name TEXT,
+    italic_angle REAL,
+    line_gap REAL,
+    underline_position REAL,
+    underline_thickness REAL,
     kind TEXT NOT NULL,
     order_index INTEGER NOT NULL DEFAULT 0
 );
@@ -215,6 +218,16 @@ CREATE TABLE IF NOT EXISTS source_locations (
     PRIMARY KEY (source_id, axis_id),
     FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
     FOREIGN KEY (axis_id) REFERENCES axes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS source_metric_values (
+    source_id TEXT NOT NULL,
+    metric_id TEXT NOT NULL,
+    position REAL NOT NULL,
+    overshoot REAL NOT NULL,
+    PRIMARY KEY (source_id, metric_id),
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
+    FOREIGN KEY (metric_id) REFERENCES metric_definitions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS feature_text (

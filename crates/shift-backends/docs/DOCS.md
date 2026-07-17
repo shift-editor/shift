@@ -67,15 +67,16 @@ src/
 
 **Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation; imported labels receive newly minted Shift identity because Designspace has no equivalent stable label ID.
 
-**Saving authoring sources:** `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `.shift` packages are written by `ShiftSourcePackage` through `FontLoader`.
+**Saving authoring sources:** `UfoWriter` builds a `norad::Font`, projects the default source's standard metrics, populates metadata/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `.shift` packages are written by `ShiftSourcePackage` through `FontLoader`.
 
-**Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and static kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. Variable compilation converts Shift axes and independent mappings to fontdrasil coordinate converters, normalizes master source locations, and emits each authored glyph master. Missing non-default glyph layers are sparse masters; every glyph must have a default-source layer. Shift's font-wide metrics and kerning remain constant across the variable font.
+**Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and static kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. Variable compilation converts Shift axes and independent mappings to fontdrasil coordinate converters, normalizes master source locations, and emits each authored glyph master. Missing non-default glyph layers are sparse masters; every glyph must have a default-source layer. Standard source metrics are emitted at every master location so fontc can build variable metric tables; kerning is currently static.
 
 **Variable metadata:** Independent axis mappings compile to OpenType `avar` version 1. Axis labels compile to `STAT` axis values, including ranges, linked values, and elidable flags. Only explicit Shift `NamedInstance` values compile to `fvar`; source names are never inferred as products. The adapter maps complete external instance locations to fontir and lets compiler-only defaults and name IDs remain compiler concerns. Cross-axis mappings remain authored in Shift but direct TTF export rejects them until the compiler stack supports `avar` version 2.
 
 ## Workflow recipes
 
 ### Add a new read-only backend
+
 1. Create `src/<format>/mod.rs` and `src/<format>/reader.rs`
 2. Implement `FontReader` for your struct -- the `load` method must return `Font`
 3. Export from `lib.rs` with `pub mod <format>`
@@ -83,11 +84,13 @@ src/
 5. Add the file extension mapping in `format_from_extension` in the same file
 
 ### Add write support to an existing backend
+
 1. Implement `FontWriter` on the backend struct
 2. The `FontBackend` blanket impl kicks in automatically
 3. Update `FontLoader::write_font` to allow the new format
 
 ### Modify point type conversion
+
 1. Read conversion: `UfoReader::convert_point_type` (norad -> IR)
 2. Write conversion: `UfoWriter::convert_point_type` (IR -> norad), which uses positional context
 3. Run the `round_trip_ufo` test to verify fidelity

@@ -35,7 +35,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     };
 
     return (
-      <div className="relative flex items-center">
+      <div className="relative flex min-w-0 w-full items-center">
         {label && (
           <span
             className={cn(
@@ -51,7 +51,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           className={cn(
             "w-full h-6 px-2 text-[11px] text-primary bg-input rounded",
-            "focus:outline-none focus:ring-1 focus:ring-accent",
+            "focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             label && !labelOnRight && "pl-5",
             label && labelOnRight && "pr-5",

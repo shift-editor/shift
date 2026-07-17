@@ -91,6 +91,12 @@ impl GlyphLayer {
         if actual > expected {
             return Err(CoreError::TrailingGlyphValues { expected, actual });
         }
+        if values.as_slice().iter().any(|value| !value.is_finite()) {
+            return Err(CoreError::InvalidPositionUpdateInput {
+                kind: "glyph interpolation values",
+                message: "values must be finite".to_string(),
+            });
+        }
 
         let mut cursor = ValueCursor::new(values.as_slice());
         self.set_width(cursor.next()?);

@@ -9,8 +9,9 @@ use crate::{
     FontMetadata, FontMetrics, GlyphChangedEntities, GlyphInterpolation, GlyphLayerRecord,
     GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphShape, GlyphSnapshot,
     GlyphSnapshotRequest, GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure,
-    InterpolationBasis, InterpolationSupport, Location, NamedInstance, PointData, PointType,
-    Source,
+    InterpolationBasis, InterpolationSupport, Location, MetricDefinition, MetricKind,
+    NamedInstance, PointData, PointType, Source, SourceMetricField, SourceMetricValue,
+    SourceMetricValues, SourceMetricsInterpolationSnapshot,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -87,28 +88,12 @@ impl From<FontMetadata> for NapiFontMetadata {
 #[napi(object)]
 pub struct NapiFontMetrics {
     pub units_per_em: f64,
-    pub ascender: f64,
-    pub descender: f64,
-    pub cap_height: Option<f64>,
-    pub x_height: Option<f64>,
-    pub line_gap: Option<f64>,
-    pub italic_angle: Option<f64>,
-    pub underline_position: Option<f64>,
-    pub underline_thickness: Option<f64>,
 }
 
 impl From<FontMetrics> for NapiFontMetrics {
     fn from(metrics: FontMetrics) -> Self {
         Self {
             units_per_em: metrics.units_per_em,
-            ascender: metrics.ascender,
-            descender: metrics.descender,
-            cap_height: metrics.cap_height,
-            x_height: metrics.x_height,
-            line_gap: metrics.line_gap,
-            italic_angle: metrics.italic_angle,
-            underline_position: metrics.underline_position,
-            underline_thickness: metrics.underline_thickness,
         }
     }
 }
@@ -270,6 +255,64 @@ pub struct NapiSource {
     pub name: String,
     pub location: NapiLocation,
     pub filename: Option<String>,
+    pub metric_values: Vec<NapiSourceMetricValue>,
+    pub italic_angle: Option<f64>,
+    pub line_gap: Option<f64>,
+    pub underline_position: Option<f64>,
+    pub underline_thickness: Option<f64>,
+}
+
+#[napi(object)]
+pub struct NapiSourceMetricValue {
+    #[napi(ts_type = "MetricId")]
+    pub metric_id: String,
+    pub position: f64,
+    pub overshoot: f64,
+}
+
+impl From<SourceMetricValue> for NapiSourceMetricValue {
+    fn from(value: SourceMetricValue) -> Self {
+        Self {
+            metric_id: value.metric_id.to_string(),
+            position: value.position,
+            overshoot: value.overshoot,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiMetricDefinition {
+    #[napi(ts_type = "MetricId")]
+    pub id: String,
+    pub kind: NapiMetricKind,
+    pub name: String,
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiMetricKind {
+    Ascender,
+    CapHeight,
+    XHeight,
+    Baseline,
+    Descender,
+    Custom,
+}
+
+impl From<MetricDefinition> for NapiMetricDefinition {
+    fn from(definition: MetricDefinition) -> Self {
+        Self {
+            id: definition.id.to_string(),
+            kind: match definition.kind {
+                MetricKind::Ascender => NapiMetricKind::Ascender,
+                MetricKind::CapHeight => NapiMetricKind::CapHeight,
+                MetricKind::XHeight => NapiMetricKind::XHeight,
+                MetricKind::Baseline => NapiMetricKind::Baseline,
+                MetricKind::Descender => NapiMetricKind::Descender,
+                MetricKind::Custom => NapiMetricKind::Custom,
+            },
+            name: definition.name,
+        }
+    }
 }
 
 impl From<Source> for NapiSource {
@@ -279,6 +322,11 @@ impl From<Source> for NapiSource {
             name: source.name,
             location: source.location.into(),
             filename: source.filename,
+            metric_values: source.metric_values.into_iter().map(Into::into).collect(),
+            italic_angle: source.italic_angle,
+            line_gap: source.line_gap,
+            underline_position: source.underline_position,
+            underline_thickness: source.underline_thickness,
         }
     }
 }
@@ -740,6 +788,76 @@ impl From<Location> for NapiLocation {
     }
 }
 
+#[napi(string_enum = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NapiSourceMetricField {
+    ItalicAngle,
+    LineGap,
+    UnderlinePosition,
+    UnderlineThickness,
+}
+
+impl From<SourceMetricField> for NapiSourceMetricField {
+    fn from(field: SourceMetricField) -> Self {
+        match field {
+            SourceMetricField::ItalicAngle => Self::ItalicAngle,
+            SourceMetricField::LineGap => Self::LineGap,
+            SourceMetricField::UnderlinePosition => Self::UnderlinePosition,
+            SourceMetricField::UnderlineThickness => Self::UnderlineThickness,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiSourceMetricValues {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub values: Float64Array,
+}
+
+impl From<SourceMetricValues> for NapiSourceMetricValues {
+    fn from(source: SourceMetricValues) -> Self {
+        Self {
+            source_id: source.source_id.to_string(),
+            values: source.values.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiSourceMetricsInterpolationSnapshot {
+    #[napi(ts_type = "Array<MetricId>")]
+    pub metric_ids: Vec<String>,
+    pub technical_fields: Vec<NapiSourceMetricField>,
+    pub basis: NapiInterpolationBasis,
+    pub sources: Vec<NapiSourceMetricValues>,
+}
+
+impl From<SourceMetricsInterpolationSnapshot> for NapiSourceMetricsInterpolationSnapshot {
+    fn from(snapshot: SourceMetricsInterpolationSnapshot) -> Self {
+        Self {
+            metric_ids: snapshot
+                .metric_ids
+                .into_iter()
+                .map(|metric_id| metric_id.to_string())
+                .collect(),
+            technical_fields: snapshot
+                .technical_fields
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            basis: snapshot.basis.into(),
+            sources: snapshot.sources.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// Replacement wrapper whose presence distinguishes "unchanged" from a
+/// changed font that no longer has a valid source-metric variation model.
+#[napi(object)]
+pub struct NapiSourceMetricsInterpolationReplacement {
+    pub snapshot: Option<NapiSourceMetricsInterpolationSnapshot>,
+}
 /// CS0 walking-skeleton intent. A stringly union covering exactly the two
 /// skeleton kinds; CS1 replaces this with per-variant intent structs.
 #[napi(object)]
@@ -749,10 +867,10 @@ pub struct NapiFontIntent {
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
     /// "removeAnchors" | "reverseContour" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Font-level kinds additionally include "createAxis", "updateAxis",
-    /// "deleteAxis", "setAxisMappings", named-instance create/update/delete,
-    /// source create/delete, and glyph or layer creation. Every kind shares the
-    /// same apply path; one set is one undo step.
+    /// Font-level kinds additionally include metadata replacement, axis
+    /// create/update/delete, mapping replacement, named-instance
+    /// create/update/delete, source create/delete, and glyph or layer creation.
+    /// Every kind shares the same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
     pub add_contour: Option<NapiAddContourIntent>,
@@ -769,17 +887,28 @@ pub struct NapiFontIntent {
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
     pub create_glyph: Option<NapiCreateGlyphIntent>,
     pub update_glyph: Option<NapiUpdateGlyphIntent>,
+    pub update_font_metadata: Option<NapiUpdateFontMetadataIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
     pub set_axis_mappings: Option<NapiSetAxisMappingsIntent>,
+    pub set_metric_definitions: Option<NapiSetMetricDefinitionsIntent>,
     pub create_named_instance: Option<NapiCreateNamedInstanceIntent>,
     pub update_named_instance: Option<NapiUpdateNamedInstanceIntent>,
     pub delete_named_instance: Option<NapiDeleteNamedInstanceIntent>,
     pub create_source: Option<NapiCreateSourceIntent>,
+    pub update_source: Option<NapiUpdateSourceIntent>,
     pub delete_source: Option<NapiDeleteSourceIntent>,
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
     pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
+    pub materialize_glyph_layer: Option<NapiMaterializeGlyphLayerIntent>,
+}
+
+/// Replaces the complete authored metadata snapshot without changing metrics.
+#[napi(object)]
+pub struct NapiUpdateFontMetadataIntent {
+    /// Complete replacement snapshot; omitted optional fields are cleared.
+    pub metadata: NapiFontMetadata,
 }
 
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
@@ -815,6 +944,11 @@ pub struct NapiUpdateAxisIntent {
 #[napi(object)]
 pub struct NapiSetAxisMappingsIntent {
     pub mappings: Vec<NapiAxisMapping>,
+}
+
+#[napi(object)]
+pub struct NapiSetMetricDefinitionsIntent {
+    pub definitions: Vec<NapiMetricDefinition>,
 }
 
 #[napi(object)]
@@ -868,6 +1002,19 @@ pub struct NapiCreateSourceIntent {
     pub location: NapiLocation,
 }
 
+#[napi(object)]
+pub struct NapiUpdateSourceIntent {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub name: String,
+    pub location: NapiLocation,
+    pub metric_values: Vec<NapiSourceMetricValue>,
+    pub italic_angle: Option<f64>,
+    pub line_gap: Option<f64>,
+    pub underline_position: Option<f64>,
+    pub underline_thickness: Option<f64>,
+}
+
 /// Creates one sparse glyph layer at an existing source for an existing glyph.
 #[napi(object)]
 pub struct NapiCreateGlyphLayerIntent {
@@ -892,6 +1039,21 @@ pub struct NapiCloneGlyphLayerIntent {
     pub from_layer_id: String,
 }
 
+/// Creates one sparse layer from resolved values at a design-space location.
+#[napi(object)]
+pub struct NapiMaterializeGlyphLayerIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    #[napi(ts_type = "LayerId")]
+    pub from_layer_id: String,
+    /// Numeric state ordered like `GlyphState.values`.
+    pub values: Float64Array,
+}
+
 /// Replace-grade state for one touched layer; the renderer folds by
 /// substitution, never by interpreting changes.
 #[napi(object)]
@@ -911,12 +1073,18 @@ pub struct NapiLayerReplaced {
 #[derive(Default)]
 #[napi(object)]
 pub struct NapiFontReplacement {
+    /// Complete authored metadata when font metadata changed; absent otherwise.
+    pub metadata: Option<NapiFontMetadata>,
     /// Full records list when glyph identity changed; absent when untouched.
     pub glyphs: Option<Vec<NapiGlyphRecord>>,
     /// Full axes list when font-level axis structure changed; absent otherwise.
     pub axes: Option<Vec<NapiAxis>>,
     /// Full mapping list when font-level axis mappings changed; absent otherwise.
     pub axis_mappings: Option<Vec<NapiAxisMapping>>,
+    /// Full font-owned metric definitions when their identity or order changed.
+    pub metric_definitions: Option<Vec<NapiMetricDefinition>>,
+    /// Refreshed source-metric interpolation model when any of its inputs changed.
+    pub source_metrics_interpolation: Option<NapiSourceMetricsInterpolationReplacement>,
     /// Full authored product-preset list when named instances changed.
     pub named_instances: Option<Vec<NapiNamedInstance>>,
     /// Full sources list when font-level source structure changed (createAxis

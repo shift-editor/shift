@@ -108,6 +108,36 @@ describe("Font projects the workspace snapshot", () => {
 });
 
 describe("font-level intents make the font variable", () => {
+  it("persists metadata replacement through the reactive font and undo ledger", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const original = stack.font.metadata;
+    const originalMetrics = stack.font.metrics;
+    const updated = {
+      ...original,
+      familyName: "Shift Dogfood Sans",
+      styleName: "Text",
+      versionMajor: 2,
+      versionMinor: 5,
+      designer: "Shift Type",
+      license: "SIL Open Font License 1.1",
+    };
+
+    await stack.font.updateMetadata(updated);
+
+    expect(stack.font.metadata).toEqual(updated);
+    expect(stack.font.metadataCell.value).toEqual(updated);
+    expect(stack.font.metrics).toEqual(originalMetrics);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.metadata).toEqual(original);
+    expect(stack.font.metrics).toEqual(originalMetrics);
+
+    await stack.editCoordinator.redo();
+    expect(stack.font.metadata).toEqual(updated);
+    expect(stack.font.metrics).toEqual(originalMetrics);
+  });
+
   it("createAxis and createSource project axes and sources without creating glyph layers", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();
@@ -115,7 +145,11 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
     ]);
     expect(stack.font.isVariable()).toBe(false);
@@ -139,7 +173,9 @@ describe("font-level intents make the font variable", () => {
         createSource: {
           sourceId: boldSourceId,
           name: "Bold",
-          location: { values: { [weightAxisId]: 700 } as Record<AxisId, number> },
+          location: {
+            values: { [weightAxisId]: 700 } as Record<AxisId, number>,
+          },
         },
       },
     ]);
@@ -157,7 +193,11 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
     ]);
 
@@ -191,7 +231,7 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.settled();
 
     const mappingId = mintAxisMappingId();
-    stack.font.setAxisMappings([
+    await stack.font.setAxisMappings([
       {
         id: mappingId,
         name: "Weight curve",
@@ -204,8 +244,6 @@ describe("font-level intents make the font variable", () => {
         ],
       },
     ]);
-    await stack.editCoordinator.settled();
-
     expect(stack.font.getAxisMappings().map((mapping) => mapping.id)).toEqual([mappingId]);
     const mapped = await stack.font.mapLocation({
       values: { [axisId]: 900 } as Record<AxisId, number>,
@@ -266,7 +304,7 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    stack.font.setAxisMappings([
+    await stack.font.setAxisMappings([
       {
         id: mintAxisMappingId(),
         name: "Weight curve",
@@ -279,8 +317,6 @@ describe("font-level intents make the font variable", () => {
         ],
       },
     ]);
-    await stack.editCoordinator.settled();
-
     expect(stack.font.namedInstances[0]?.location.values[axisId]).toBe(700);
 
     stack.font.deleteNamedInstance(instanceId);
@@ -343,7 +379,11 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
       {
         kind: "createGlyphLayer",
@@ -353,7 +393,10 @@ describe("font-level intents make the font variable", () => {
           sourceId: stack.font.defaultSource.id,
         },
       },
-      { kind: "setXAdvance", setXAdvance: { layerId: defaultLayerId, width: 640 } },
+      {
+        kind: "setXAdvance",
+        setXAdvance: { layerId: defaultLayerId, width: 640 },
+      },
     ]);
 
     const axisId = mintAxisId();
@@ -400,11 +443,19 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.apply([
       {
         kind: "createGlyph",
-        createGlyph: { glyphId, name: "A" as GlyphName, unicodes: [65 as Unicode] },
+        createGlyph: {
+          glyphId,
+          name: "A" as GlyphName,
+          unicodes: [65 as Unicode],
+        },
       },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId: defaultLayerId, glyphId, sourceId: defaultSourceId },
+        createGlyphLayer: {
+          layerId: defaultLayerId,
+          glyphId,
+          sourceId: defaultSourceId,
+        },
       },
     ]);
 
@@ -430,7 +481,11 @@ describe("font-level intents make the font variable", () => {
       },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldSourceId },
+        createGlyphLayer: {
+          layerId: boldLayerId,
+          glyphId,
+          sourceId: boldSourceId,
+        },
       },
     ]);
 

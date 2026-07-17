@@ -9,7 +9,7 @@ type NavItemBase = {
 };
 
 export type NavRoute = NavItemBase &
-  ({ kind: "route"; path: string } | { kind: "dialog"; dialogId: "font-info" });
+  ({ kind: "route"; path: string } | { kind: "dialog"; dialogId: "settings" });
 
 export const routes: NavRoute[] = [
   {
@@ -22,7 +22,7 @@ export const routes: NavRoute[] = [
   {
     id: "info",
     kind: "dialog",
-    dialogId: "font-info",
+    dialogId: "settings",
     icon: InfoSvg,
     description: "Display and edit font information, such as family name, weight, style, etc.",
   },

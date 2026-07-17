@@ -6,14 +6,15 @@ use crate::traits::{FontView, FontWriter};
 use crate::ufo::UfoWriter;
 use norad::designspace::{
     Axis as DsAxis, AxisMapping as DsAxisMapping, AxisMappingEntry as DsAxisMappingEntry,
-    AxisMappings as DsAxisMappings, DesignSpaceDocument, Dimension, Source as DsSource,
+    AxisMappings as DsAxisMappings, DesignSpaceDocument, Dimension, Instance as DsInstance,
+    Source as DsSource,
 };
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
 use serde::Serialize;
 use shift_font::{
     Axis, AxisKind, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph,
-    Guideline, KerningData, LibData, Location, NamedInstance, Source, SourceId,
+    Guideline, KerningData, LibData, Location, MetricDefinition, NamedInstance, Source, SourceId,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -70,6 +71,10 @@ impl FontView for UfoFileView<'_> {
 
     fn metrics(&self) -> &FontMetrics {
         self.font.metrics()
+    }
+
+    fn metric_definitions(&self) -> &[MetricDefinition] {
+        self.font.metric_definitions()
     }
 
     fn axes(&self) -> &[Axis] {
@@ -335,6 +340,16 @@ impl DesignspaceWriter {
             .collect()
     }
 
+    fn user_location(location: &Location, axes: &[Axis]) -> Vec<Dimension> {
+        axes.iter()
+            .map(|axis| Dimension {
+                name: axis.name().to_string(),
+                uservalue: Some(location.get(&axis.id()).unwrap_or(axis.default()) as f32),
+                ..Default::default()
+            })
+            .collect()
+    }
+
     fn source(
         source: &Source,
         font: &Font,
@@ -349,6 +364,17 @@ impl DesignspaceWriter {
             filename: filename.to_string(),
             layer: layer.map(str::to_string),
             location: Self::location(source.location(), axes),
+        }
+    }
+
+    fn instance(instance: &NamedInstance, font: &Font, axes: &[Axis]) -> DsInstance {
+        DsInstance {
+            familyname: font.metadata().family_name.clone(),
+            stylename: Some(instance.name().to_string()),
+            name: Some(instance.name().to_string()),
+            postscriptfontname: instance.postscript_name().map(str::to_string),
+            location: Self::user_location(instance.location(), axes),
+            ..Default::default()
         }
     }
 
@@ -538,6 +564,11 @@ impl DesignspaceWriter {
 
         let axis_mappings = Self::cross_axis_mappings(font.axis_mappings(), axes);
         let format = if axis_mappings.is_some() { 5.2 } else { 5.0 };
+        let instances = font
+            .named_instances()
+            .iter()
+            .map(|instance| Self::instance(instance, font, axes))
+            .collect();
         let document = DesignSpaceDocument {
             format,
             axes: axes
@@ -546,6 +577,7 @@ impl DesignspaceWriter {
                 .collect(),
             axis_mappings,
             sources,
+            instances,
             ..Default::default()
         };
 

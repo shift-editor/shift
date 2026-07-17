@@ -36,6 +36,11 @@ export type {
   FontIntent,
   FontMetadata,
   FontMetrics,
+  MetricDefinition,
+  MetricKind,
+  SourceMetricField,
+  SourceMetricsInterpolationReplacement,
+  SourceMetricsInterpolationSnapshot,
   GlyphChangedEntities,
   GlyphLayerRecord,
   GlyphName,
@@ -58,10 +63,14 @@ export type {
   PointSeed,
   PointType,
   SetAxisMappingsIntent,
+  SetMetricDefinitionsIntent,
   Source,
+  SourceMetricValue,
   Unicode,
   UpdateAxisIntent,
+  UpdateFontMetadataIntent,
   UpdateNamedInstanceIntent,
+  UpdateSourceIntent,
 } from "./generated";
 
 /**

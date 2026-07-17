@@ -1,14 +1,15 @@
 use crate::axis::{Axis, AxisMapping, Location};
 use crate::binary_data::BinaryData;
-use crate::entity::{AxisId, GlyphId, LayerId, SourceId};
+use crate::entity::{AxisId, GlyphId, LayerId, MetricId, SourceId};
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
 use crate::glyph::{Glyph, GlyphLayer};
 use crate::guideline::Guideline;
 use crate::kerning::KerningData;
 use crate::lib_data::LibData;
-use crate::metrics::FontMetrics;
+use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 use crate::named_instance::{validate_named_instances, NamedInstance};
+use crate::source::source_locations_equal;
 use crate::source::Source;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use indexmap::IndexMap;
@@ -94,6 +95,7 @@ struct FontState {
 struct FontData {
     metadata: FontMetadata,
     metrics: FontMetrics,
+    metric_definitions: Vec<MetricDefinition>,
     axes: Vec<Axis>,
     #[serde(default)]
     axis_mappings: Vec<AxisMapping>,
@@ -289,14 +291,18 @@ impl<'de> Deserialize<'de> for Font {
 
 impl Default for Font {
     fn default() -> Self {
-        let default_source = Source::new("Regular".to_string(), Location::new());
+        let metric_definitions = MetricDefinition::defaults();
+        let metrics = FontMetrics::default();
+        let mut default_source = Source::new("Regular".to_string(), Location::new());
+        default_source.fill_metric_values(&metric_definitions, metrics.units_per_em);
         let default_source_id = default_source.id();
 
         Self {
             state: Arc::new(FontState {
                 data: FontData {
                     metadata: FontMetadata::default(),
-                    metrics: FontMetrics::default(),
+                    metrics,
+                    metric_definitions,
                     axes: Vec::new(),
                     axis_mappings: Vec::new(),
                     named_instances: Vec::new(),
@@ -323,11 +329,13 @@ impl Font {
     }
 
     pub fn empty() -> Self {
+        let metric_definitions = MetricDefinition::defaults();
         Self {
             state: Arc::new(FontState {
                 data: FontData {
                     metadata: FontMetadata::default(),
                     metrics: FontMetrics::default(),
+                    metric_definitions,
                     axes: Vec::new(),
                     axis_mappings: Vec::new(),
                     named_instances: Vec::new(),
@@ -371,12 +379,78 @@ impl Font {
         &mut self.data_mut().metadata
     }
 
+    /// Replaces the authored font metadata and returns the previous snapshot.
+    ///
+    /// Metrics and every other font-owned collection remain unchanged.
+    pub fn replace_metadata(&mut self, metadata: FontMetadata) -> FontMetadata {
+        std::mem::replace(&mut self.data_mut().metadata, metadata)
+    }
+
     pub fn metrics(&self) -> &FontMetrics {
         &self.data().metrics
     }
 
     pub fn metrics_mut(&mut self) -> &mut FontMetrics {
         &mut self.data_mut().metrics
+    }
+
+    /// Returns the stable definitions shared by every master source's values.
+    pub fn metric_definitions(&self) -> &[MetricDefinition] {
+        &self.data().metric_definitions
+    }
+
+    pub fn metric_definition(&self, metric_id: &MetricId) -> Option<&MetricDefinition> {
+        self.metric_definitions()
+            .iter()
+            .find(|definition| definition.id() == *metric_id)
+    }
+
+    pub fn metric_definition_for_kind(&self, kind: MetricKind) -> Option<&MetricDefinition> {
+        self.metric_definitions()
+            .iter()
+            .find(|definition| definition.kind() == kind)
+    }
+
+    /// Returns one source's authored value for a standard metric role.
+    ///
+    /// The font performs the join because it owns both stable metric
+    /// definitions and source-local values. `None` means the source or role is
+    /// absent; it does not synthesize a default value.
+    pub fn metric_value(&self, source_id: SourceId, kind: MetricKind) -> Option<MetricValue> {
+        let metric_id = self.metric_definition_for_kind(kind)?.id();
+        self.sources()
+            .iter()
+            .find(|source| source.id() == source_id)?
+            .metric_value(&metric_id)
+    }
+
+    /// Replaces metric definitions while retaining source values by stable ID.
+    ///
+    /// Removed identities are pruned from sources. Newly introduced identities
+    /// receive kind-appropriate initial values on every master source.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation error for empty names, duplicate identities, or
+    /// duplicate non-custom semantic kinds.
+    pub fn set_metric_definitions(&mut self, definitions: Vec<MetricDefinition>) -> CoreResult<()> {
+        validate_metric_definitions(&definitions)?;
+        let retained = definitions
+            .iter()
+            .map(MetricDefinition::id)
+            .collect::<HashSet<_>>();
+        let units_per_em = self.metrics().units_per_em;
+        let data = self.data_mut();
+        for source in &mut data.sources {
+            source
+                .metric_values_mut()
+                .retain(|metric_id, _| retained.contains(metric_id));
+            if source.is_master() {
+                source.fill_metric_values(&definitions, units_per_em);
+            }
+        }
+        data.metric_definitions = definitions;
+        Ok(())
     }
 
     pub fn axes(&self) -> &[Axis] {
@@ -634,7 +708,10 @@ impl Font {
             .find(|source| source.id() == source_id)
     }
 
-    pub fn add_source(&mut self, source: Source) -> SourceId {
+    pub fn add_source(&mut self, mut source: Source) -> SourceId {
+        if source.is_master() {
+            source.fill_metric_values(self.metric_definitions(), self.metrics().units_per_em);
+        }
         let source_id = source.id();
         let data = self.data_mut();
         if data.default_source_id.is_none() {
@@ -642,6 +719,31 @@ impl Font {
         }
         data.sources.push(source);
         source_id
+    }
+
+    /// Replaces one complete source while preserving its stable identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation error for unknown identity, duplicate or empty
+    /// names, invalid axis references, non-finite values, or incomplete master
+    /// metric values.
+    pub fn replace_source(&mut self, source: Source) -> CoreResult<Source> {
+        validate_source(
+            &source,
+            self.sources(),
+            self.axes(),
+            self.metric_definitions(),
+        )?;
+        let index = self
+            .sources()
+            .iter()
+            .position(|current| current.id() == source.id())
+            .ok_or_else(|| CoreError::SourceNotFound(source.id()))?;
+        Ok(std::mem::replace(
+            &mut self.data_mut().sources[index],
+            source,
+        ))
     }
 
     /// Removes a source record only; the caller removes the source's glyph
@@ -934,6 +1036,121 @@ fn validate_axis_label_ids(axes: &[Axis]) -> CoreResult<()> {
         }
     }
 
+    Ok(())
+}
+
+fn validate_metric_definitions(definitions: &[MetricDefinition]) -> CoreResult<()> {
+    let mut ids = HashSet::new();
+    let mut standard_kinds = HashSet::new();
+    for definition in definitions {
+        if definition.name().trim().is_empty() {
+            return Err(CoreError::InvalidMetricDefinition {
+                metric_id: definition.id(),
+                message: "name must not be empty".to_string(),
+            });
+        }
+        if !ids.insert(definition.id()) {
+            return Err(CoreError::DuplicateMetricId(definition.id()));
+        }
+        if definition.kind() != MetricKind::Custom && !standard_kinds.insert(definition.kind()) {
+            return Err(CoreError::DuplicateMetricKind(definition.kind()));
+        }
+    }
+    Ok(())
+}
+
+fn validate_source(
+    source: &Source,
+    sources: &[Source],
+    axes: &[Axis],
+    definitions: &[MetricDefinition],
+) -> CoreResult<()> {
+    let name = source.name().trim();
+    if name.is_empty() {
+        return Err(CoreError::InvalidSourceName(name.to_string()));
+    }
+    if sources
+        .iter()
+        .any(|current| current.id() != source.id() && current.name() == name)
+    {
+        return Err(CoreError::DuplicateSourceName(name.to_string()));
+    }
+    if let Some(existing) = sources.iter().find(|current| {
+        current.id() != source.id()
+            && current.is_master()
+            && source.is_master()
+            && source_locations_equal(current.location(), source.location(), axes)
+    }) {
+        return Err(CoreError::DuplicateSourceLocation {
+            first: existing.id(),
+            second: source.id(),
+        });
+    }
+    for (axis_id, value) in source.location().iter() {
+        if !axes.iter().any(|axis| axis.id() == *axis_id) {
+            return Err(CoreError::AxisNotFound(axis_id.clone()));
+        }
+        if !value.is_finite() {
+            return Err(CoreError::InvalidSourceName(format!(
+                "{} has a non-finite location",
+                source.name()
+            )));
+        }
+    }
+    if source.is_master() {
+        for definition in definitions {
+            let metric_id = definition.id();
+            let Some(value) = source.metric_value(&metric_id) else {
+                return Err(CoreError::InvalidSourceMetric {
+                    source_id: source.id(),
+                    metric_id,
+                    message: "master source is missing a value".to_string(),
+                });
+            };
+            if !value.position.is_finite() || !value.overshoot.is_finite() {
+                return Err(CoreError::InvalidSourceMetric {
+                    source_id: source.id(),
+                    metric_id,
+                    message: "position and overshoot must be finite".to_string(),
+                });
+            }
+            if definition.kind() == MetricKind::Baseline && value.position != 0.0 {
+                return Err(CoreError::InvalidSourceMetric {
+                    source_id: source.id(),
+                    metric_id,
+                    message: "baseline position must be zero".to_string(),
+                });
+            }
+        }
+    }
+    for metric_id in source.metric_values().keys() {
+        if !definitions
+            .iter()
+            .any(|definition| definition.id() == *metric_id)
+        {
+            return Err(CoreError::InvalidSourceMetric {
+                source_id: source.id(),
+                metric_id: metric_id.clone(),
+                message: "metric definition does not exist".to_string(),
+            });
+        }
+    }
+    for value in [
+        source.italic_angle(),
+        source.line_gap(),
+        source.underline_position(),
+        source.underline_thickness(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !value.is_finite() {
+            return Err(CoreError::InvalidSourceName(format!(
+                "{} has a non-finite source metric",
+                source.name()
+            )));
+        }
+    }
     Ok(())
 }
 

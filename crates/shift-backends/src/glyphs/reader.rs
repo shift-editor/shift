@@ -1,12 +1,13 @@
 use glyphs_reader::{FeatureSnippet, Font as GlyphsFont, NodeType, Shape};
 use shift_font::{
     Anchor, Axis, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, KerningData,
-    KerningPair, KerningSide, LayerId, Location, Source, Transform,
+    KerningPair, KerningSide, LayerId, Location, MetricKind, Source, Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
 
 use crate::errors::{FormatBackendError, FormatBackendResult};
+use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
@@ -172,11 +173,6 @@ impl FontReader for GlyphsReader {
         }
         if let Some(default_master) = glyphs_font.masters.get(glyphs_font.default_master_idx) {
             font.metadata_mut().style_name = Some(default_master.name.clone());
-            font.metrics_mut().ascender = default_master.ascender().unwrap_or(800.0);
-            font.metrics_mut().descender = default_master.descender().unwrap_or(-200.0);
-            font.metrics_mut().cap_height = default_master.cap_height();
-            font.metrics_mut().x_height = default_master.x_height();
-            font.metrics_mut().italic_angle = default_master.italic_angle();
         }
         font.metadata_mut().version_major = Some(glyphs_font.version_major);
         font.metadata_mut().version_minor = Some(glyphs_font.version_minor as i32);
@@ -227,6 +223,35 @@ impl FontReader for GlyphsReader {
                 }
             }
             let source_id = font.add_source(Source::new(master.name.clone(), location));
+            let metric_definitions = font.metric_definitions().to_vec();
+            let source = font
+                .source_mut(source_id.clone())
+                .expect("a newly added source should exist");
+            set_metric_position(
+                &metric_definitions,
+                source,
+                MetricKind::Ascender,
+                master.ascender(),
+            );
+            set_metric_position(
+                &metric_definitions,
+                source,
+                MetricKind::Descender,
+                master.descender(),
+            );
+            set_metric_position(
+                &metric_definitions,
+                source,
+                MetricKind::CapHeight,
+                master.cap_height(),
+            );
+            set_metric_position(
+                &metric_definitions,
+                source,
+                MetricKind::XHeight,
+                master.x_height(),
+            );
+            source.set_italic_angle(master.italic_angle());
             source_by_master_id.insert(master.id.clone(), source_id.clone());
             if master_idx == glyphs_font.default_master_idx {
                 font.set_default_source_id(source_id);

@@ -4,8 +4,8 @@
  * goal-x persistence).
  *
  * Reactive boundaries:
- *   - layoutCell: computed from buffer.items + buffer.originX + font (rebuilt
- *     when any of those change). Cursor/anchor changes do NOT recompute.
+ *   - layoutCell: computed from buffer.items + buffer.originX + font + design
+ *     location. Cursor/anchor changes do NOT recompute.
  *   - caretCell: computed from layoutCell + buffer.cursor. Rebuilt on cursor move
  *     OR layout rebuild.
  *   - selectionRectsCell: computed from layoutCell + buffer.range + hasSelection.
@@ -14,7 +14,7 @@
  * previousLine so vertical motion preserves horizontal position across short
  * lines. goalX resets on horizontal nav, click, and edits.
  */
-import { signal, computed, type Signal, type ComputedSignal } from "@/lib/signals/signal";
+import { signal, computed, track, type Signal, type ComputedSignal } from "@/lib/signals/signal";
 import { TextBuffer } from "./TextBuffer";
 import { TextInteraction } from "./TextInteraction";
 import { Caret, glyphTextItem, TextLayout } from "./layout";
@@ -68,6 +68,8 @@ export class TextRun {
     this.#cursorVisible = signal(false);
 
     this.#layout = computed(() => {
+      track(this.#designLocation);
+
       const items = this.buffer.itemsCell.value;
       if (items.length === 0) return null;
       return new TextLayout({

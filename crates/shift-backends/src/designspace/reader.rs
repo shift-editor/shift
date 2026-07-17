@@ -1,6 +1,7 @@
 use super::axis_labels;
 use super::error::{DesignspaceError, DesignspaceResult};
 use crate::errors::{FormatBackendError, FormatBackendResult};
+use crate::metrics::copy_source_metrics;
 use crate::traits::FontReader;
 use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
@@ -8,7 +9,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, Component, Font, GlyphLayer,
-    LayerId, Location, Source, SourceId,
+    LayerId, Location, NamedInstance, Source, SourceId,
 };
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -89,6 +90,10 @@ impl DesignspaceReader {
         let default_ufo_source_id = font
             .default_source_id()
             .ok_or(DesignspaceError::NoSources)?;
+        let default_ufo_source = font
+            .default_source()
+            .cloned()
+            .ok_or(DesignspaceError::NoSources)?;
         font.clear_sources();
 
         if let Some(ref family) = default_ds_source.familyname {
@@ -128,16 +133,25 @@ impl DesignspaceReader {
             font.add_axis(axis)?;
         }
         font.set_axis_mappings(axis_mappings_from_designspace(&doc, font.axes())?)?;
+        font.set_named_instances(named_instances_from_designspace(&doc, font.axes())?)?;
 
         // Register the default source.
         let default_location =
             location_from_dimensions(&default_ds_source.location, &doc, font.axes());
         let default_name = source_name(default_ds_source, default_idx);
-        let default_source_id = font.add_source(Source::with_filename(
+        let mut default_source = Source::with_filename(
             default_name,
             default_location,
             default_ds_source.filename.clone(),
-        ));
+        );
+        let metric_definitions = font.metric_definitions().to_vec();
+        copy_source_metrics(
+            &metric_definitions,
+            &default_ufo_source,
+            &metric_definitions,
+            &mut default_source,
+        );
+        let default_source_id = font.add_source(default_source);
         font.set_default_source_id(default_source_id.clone());
         move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
 
@@ -189,6 +203,17 @@ impl DesignspaceReader {
             let location = location_from_dimensions(&ds_source.location, &doc, font.axes());
             let mut source = Source::with_filename(name, location, ds_source.filename.clone());
             source.set_layer_name(ds_source.layer.clone());
+            let imported_source = source_font
+                .sources()
+                .iter()
+                .find(|source| source.id() == source_source_id)
+                .ok_or(DesignspaceError::NoSources)?;
+            copy_source_metrics(
+                source_font.metric_definitions(),
+                imported_source,
+                font.metric_definitions(),
+                &mut source,
+            );
             let source_id = font.add_source(source);
 
             // Copy glyphs from the resolved layer into the new layer.
@@ -213,6 +238,122 @@ impl DesignspaceReader {
         remove_glyph_layers_without_source(&mut font)?;
         Ok(font)
     }
+}
+
+fn named_instances_from_designspace(
+    doc: &DesignSpaceDocument,
+    axes: &[Axis],
+) -> DesignspaceResult<Vec<NamedInstance>> {
+    let mut imported = Vec::new();
+    for (index, instance) in doc.instances.iter().enumerate() {
+        // Legacy Designspace instances can also describe anisotropic or
+        // extrapolated static-export recipes. Shift named instances are
+        // variable-font presets, so only retain locations that fit that model.
+        if instance.location.iter().any(|dimension| {
+            dimension
+                .yvalue
+                .is_some_and(|y| dimension.xvalue != Some(y))
+        }) {
+            continue;
+        }
+
+        let name = instance
+            .stylename
+            .clone()
+            .or_else(|| instance.name.clone())
+            .unwrap_or_else(|| format!("Instance {}", index + 1));
+        let location = external_location_from_dimensions(&instance.location, doc, axes)?;
+        let postscript_name = instance.postscriptfontname.clone().filter(|name| {
+            !imported
+                .iter()
+                .any(|existing: &NamedInstance| existing.postscript_name() == Some(name))
+        });
+        let candidate = NamedInstance::new(name, location, postscript_name);
+
+        if candidate.validate(axes).is_err()
+            || imported.iter().any(|existing: &NamedInstance| {
+                existing.name() == candidate.name() || existing.location() == candidate.location()
+            })
+        {
+            continue;
+        }
+        imported.push(candidate);
+    }
+
+    Ok(imported)
+}
+
+fn external_location_from_dimensions(
+    dimensions: &[norad::designspace::Dimension],
+    doc: &DesignSpaceDocument,
+    axes: &[Axis],
+) -> DesignspaceResult<Location> {
+    let mut location = Location::new();
+    for ds_axis in &doc.axes {
+        let Some(axis) = axes.iter().find(|axis| axis.tag() == ds_axis.tag) else {
+            continue;
+        };
+        let value = match dimensions
+            .iter()
+            .find(|dimension| dimension.name == ds_axis.name)
+        {
+            Some(dimension) => match (dimension.uservalue, dimension.xvalue) {
+                (Some(value), _) => value as f64,
+                (None, Some(value)) => unmap_axis_value(ds_axis, value as f64)?,
+                (None, None) => axis.default(),
+            },
+            None => axis.default(),
+        };
+        location.set(axis.id(), value);
+    }
+
+    Ok(location)
+}
+
+fn unmap_axis_value(axis: &norad::designspace::Axis, value: f64) -> DesignspaceResult<f64> {
+    let Some(map) = axis.map.as_ref().filter(|map| !map.is_empty()) else {
+        return Ok(value);
+    };
+    let mut points = map
+        .iter()
+        .map(|point| (point.input as f64, point.output as f64))
+        .collect::<Vec<_>>();
+    points.sort_by(|left, right| left.0.total_cmp(&right.0));
+
+    if points
+        .windows(2)
+        .any(|pair| pair[0].0 >= pair[1].0 || pair[0].1 >= pair[1].1)
+    {
+        return Err(DesignspaceError::NonInvertibleAxisMap {
+            axis: axis.name.clone(),
+            details: "input and output values must be strictly increasing".to_string(),
+        });
+    }
+    if let Some((input, _)) = points.iter().find(|(_, output)| *output == value) {
+        return Ok(*input);
+    }
+
+    let first = points[0];
+    if value < first.1 {
+        return Ok(value + first.0 - first.1);
+    }
+    let last = points[points.len() - 1];
+    if value > last.1 {
+        return Ok(value + last.0 - last.1);
+    }
+
+    let Some(pair) = points
+        .windows(2)
+        .find(|pair| pair[0].1 < value && value < pair[1].1)
+    else {
+        return Err(DesignspaceError::NonInvertibleAxisMap {
+            axis: axis.name.clone(),
+            details: format!("cannot invert design value {value}"),
+        });
+    };
+    let lower = pair[0];
+    let upper = pair[1];
+    Ok(lower.0 + (upper.0 - lower.0) * (value - lower.1) / (upper.1 - lower.1))
 }
 
 fn axis_mappings_from_designspace(
@@ -366,17 +507,29 @@ fn load_axisless_designspace(
     let default_ufo_source_id = font
         .default_source_id()
         .ok_or(DesignspaceError::NoSources)?;
+    let default_ufo_source = font
+        .default_source()
+        .cloned()
+        .ok_or(DesignspaceError::NoSources)?;
     font.clear_sources();
 
     if let Some(family) = &default_source.familyname {
         font.metadata_mut().family_name = Some(family.clone());
     }
 
-    let default_source_id = font.add_source(Source::with_filename(
+    let mut new_default_source = Source::with_filename(
         axisless_source_name(default_source, 0),
         Location::new(),
         default_source.filename.clone(),
-    ));
+    );
+    let metric_definitions = font.metric_definitions().to_vec();
+    copy_source_metrics(
+        &metric_definitions,
+        &default_ufo_source,
+        &metric_definitions,
+        &mut new_default_source,
+    );
+    let default_source_id = font.add_source(new_default_source);
     font.set_default_source_id(default_source_id.clone());
     move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
 
@@ -419,6 +572,17 @@ fn load_axisless_designspace(
         let name = axisless_source_name(ds_source, idx);
         let mut source = Source::with_filename(name, Location::new(), ds_source.filename.clone());
         source.set_layer_name(ds_source.layer.clone());
+        let imported_source = source_font
+            .sources()
+            .iter()
+            .find(|source| source.id() == source_source_id)
+            .ok_or(DesignspaceError::NoSources)?;
+        copy_source_metrics(
+            source_font.metric_definitions(),
+            imported_source,
+            font.metric_definitions(),
+            &mut source,
+        );
         let source_id = font.add_source(source);
 
         for source_glyph in source_font.glyphs() {
@@ -697,6 +861,33 @@ mod axis_range_tests {
     fn continuous_uses_explicit_min_max() {
         let a = axis(Some(100.0), Some(900.0), 400.0, None);
         assert_eq!(derive_axis_range(&a), (100.0, 900.0));
+    }
+
+    #[test]
+    fn mapped_design_values_are_inverted_to_external_values() {
+        let mut axis = axis(Some(100.0), Some(900.0), 400.0, None);
+        axis.name = "Weight".to_string();
+        axis.map = Some(vec![
+            norad::designspace::AxisMapping {
+                input: 100.0,
+                output: 100.0,
+            },
+            norad::designspace::AxisMapping {
+                input: 300.0,
+                output: 260.0,
+            },
+            norad::designspace::AxisMapping {
+                input: 400.0,
+                output: 420.0,
+            },
+            norad::designspace::AxisMapping {
+                input: 900.0,
+                output: 900.0,
+            },
+        ]);
+
+        assert_eq!(unmap_axis_value(&axis, 260.0).unwrap(), 300.0);
+        assert_eq!(unmap_axis_value(&axis, 420.0).unwrap(), 400.0);
     }
 
     #[test]

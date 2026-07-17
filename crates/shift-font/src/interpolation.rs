@@ -9,8 +9,12 @@ use fontdrasil::variations::VariationModel;
 
 use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location, SourceId};
 
+mod metrics;
 mod values;
 
+pub use metrics::{
+    ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
+};
 pub use values::GlyphInterpolationValues;
 
 /// Normalized support for one authoring axis within an interpolation region.
@@ -304,7 +308,6 @@ fn interpolation_basis(
             return None;
         }
     }
-
     let model = VariationModel::new(
         points
             .keys()
@@ -474,6 +477,29 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, crate::CoreError::MissingGlyphValue { .. }));
+        assert_eq!(restored, *layer);
+    }
+
+    #[test]
+    fn applying_non_finite_values_does_not_partially_mutate_a_layer() {
+        let font = sample_variable_font();
+        let layer = font
+            .glyph_by_name("A")
+            .unwrap()
+            .layer_for_source(font.default_source_id().unwrap())
+            .unwrap();
+        let mut restored = layer.clone();
+        let mut values = GlyphInterpolationValues::from_layer(layer).into_vec();
+        values[0] = f64::NAN;
+
+        let error = restored
+            .apply_interpolation_values(&GlyphInterpolationValues::new(values))
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::CoreError::InvalidPositionUpdateInput { .. }
+        ));
         assert_eq!(restored, *layer);
     }
 

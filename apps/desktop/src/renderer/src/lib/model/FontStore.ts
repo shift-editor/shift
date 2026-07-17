@@ -192,9 +192,14 @@ export class FontStore {
       const nextWorkspace = next
         ? {
             ...current,
+            metadata: next.metadata ?? current.metadata,
             glyphs: next.glyphs ?? current.glyphs,
             axes: next.axes ?? current.axes,
             axisMappings: next.axisMappings ?? current.axisMappings,
+            metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
+            sourceMetricsInterpolation: next.sourceMetricsInterpolation
+              ? (next.sourceMetricsInterpolation.snapshot ?? null)
+              : current.sourceMetricsInterpolation,
             namedInstances: next.namedInstances ?? current.namedInstances,
             sources: next.sources ?? current.sources,
           }
