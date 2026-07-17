@@ -73,7 +73,7 @@ export class ApplicationMenu {
         submenu: [
           ...this.#viewZoomItems(),
           { type: "separator" },
-          { label: "Developer", submenu: [{ role: "toggleDevTools" }] },
+          { label: "Developer", submenu: this.#developerItems() },
         ],
       },
       {
@@ -115,6 +115,13 @@ export class ApplicationMenu {
       this.#commandItem("ui.zoomOut"),
       this.#commandItem("ui.zoomReset"),
     ];
+  }
+
+  #developerItems(): MenuItemConstructorOptions[] {
+    const tools: MenuItemConstructorOptions[] = [{ role: "toggleDevTools" }];
+    if (app.isPackaged) return tools;
+
+    return [{ role: "reload" }, { role: "forceReload" }, { type: "separator" }, ...tools];
   }
 
   #fileItems(): MenuItemConstructorOptions[] {

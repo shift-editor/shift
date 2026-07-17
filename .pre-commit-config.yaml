@@ -23,9 +23,9 @@ repos:
         language: system
         types_or: [javascript, jsx, ts, tsx, rust, css, json]
 
-      - id: no-console-log
-        name: no console.log in production code
-        entry: "bash -c 'for f in \"$@\"; do case \"$f\" in *.test.*|*/testing/*|*/e2e/*|scripts/*|*/scripts/*) continue;; esac; if grep -n \"^\\s*console\\.log\\b\" \"$f\" >/dev/null 2>&1; then echo \"$f has console.log:\"; grep -n \"^\\s*console\\.log\\b\" \"$f\"; exit 1; fi; done'"
+      - id: no-console-debug-output
+        name: no console debug output in production code
+        entry: "bash -c 'for f in \"$@\"; do case \"$f\" in *.test.*|*/testing/*|*/e2e/*|scripts/*|*/scripts/*) continue;; esac; if grep -En \"^[[:space:]]*console\\.(log|debug|table|group|groupCollapsed|groupEnd)\\b\" \"$f\" >/dev/null 2>&1; then echo \"$f has console debug output:\"; grep -En \"^[[:space:]]*console\\.(log|debug|table|group|groupCollapsed|groupEnd)\\b\" \"$f\"; exit 1; fi; done'"
         language: system
         types_or: [javascript, jsx, ts, tsx]
 
