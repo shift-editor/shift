@@ -34,8 +34,8 @@ describe("Positioner", () => {
     expect(positioned.glyphs.map((g) => g.cluster)).toEqual([7, 8]);
   });
 
-  // Each positioned glyph carries the bounds from the glyph outline.
-  it("bounds pass through from glyph outline", () => {
+  // Each positioned glyph carries the bounds from its resolved view.
+  it("bounds pass through from the glyph view", () => {
     const positioner = new Positioner();
     const a = glyph("A", 65);
     const run = ltrRun([a]);
@@ -43,9 +43,7 @@ describe("Positioner", () => {
     const positioned = positioner.position(run, font, signal(font.defaultLocation()));
     const record = font.recordForName("A");
     const location = signal(font.defaultLocation());
-    const expectedBounds = record
-      ? font.glyphView(record.id, location)?.render.outline.bounds
-      : null;
+    const expectedBounds = record ? font.glyphView(record.id, location)?.bounds : null;
 
     expect(positioned.glyphs[0].glyphId).toBe(record?.id);
     expect(positioned.glyphs[0].bounds).toEqual(expectedBounds);

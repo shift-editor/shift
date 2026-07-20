@@ -214,10 +214,30 @@ export interface NapiCloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
+export interface NapiComponentAnchorAttachment {
+  source: NapiComponentAnchorReference
+  target: NapiComponentAnchorReference
+}
+
+export interface NapiComponentAnchorReference {
+  componentPath: Array<ComponentId>
+  glyphId: GlyphId
+  anchorId: AnchorId
+}
+
 export interface NapiComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+}
+
+export interface NapiComponentGlyph {
+  parentGlyphId: GlyphId
+  componentId: ComponentId
+  baseGlyphId: GlyphId
+  parentPath: Array<ComponentId>
+  componentPath: Array<ComponentId>
+  attachment?: NapiComponentAnchorAttachment
 }
 
 export interface NapiContourData {
@@ -389,6 +409,11 @@ export interface NapiGlyphChangedEntities {
   componentIds: Array<ComponentId>
 }
 
+export interface NapiGlyphComponents {
+  rootGlyphId: GlyphId
+  components: Array<NapiComponentGlyph>
+}
+
 export interface NapiGlyphInterpolation {
   basis: NapiInterpolationBasis
   sources: Array<NapiGlyphSourceValues>
@@ -399,6 +424,11 @@ export interface NapiGlyphLayerRecord {
   sourceId: SourceId
 }
 
+export interface NapiGlyphLayerShape {
+  structure: NapiGlyphStructure
+  values: Float64Array
+}
+
 export interface NapiGlyphLayerSnapshot {
   glyphId: GlyphId
   sourceId: SourceId
@@ -407,9 +437,11 @@ export interface NapiGlyphLayerSnapshot {
 
 export interface NapiGlyphProjection {
   glyphId: GlyphId
-  fallback: NapiGlyphShape
+  fallback: NapiGlyphLayerShape
   interpolation?: NapiGlyphInterpolation
   exactSourceShapes: Array<NapiGlyphSourceShape>
+  components: NapiGlyphComponents
+  exactSourceComponents: Array<NapiGlyphSourceComponents>
   componentGlyphIds: Array<GlyphId>
 }
 
@@ -419,11 +451,6 @@ export interface NapiGlyphRecord {
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
   layers: Array<NapiGlyphLayerRecord>
-}
-
-export interface NapiGlyphShape {
-  structure: NapiGlyphStructure
-  values: Float64Array
 }
 
 export interface NapiGlyphSnapshot {
@@ -436,9 +463,14 @@ export interface NapiGlyphSnapshotRequest {
   glyphId: GlyphId
 }
 
+export interface NapiGlyphSourceComponents {
+  sourceId: SourceId
+  components: NapiGlyphComponents
+}
+
 export interface NapiGlyphSourceShape {
   sourceId: SourceId
-  shape: NapiGlyphShape
+  shape: NapiGlyphLayerShape
 }
 
 export interface NapiGlyphSourceValues {

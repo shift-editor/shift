@@ -14,6 +14,7 @@ import {
 import { displayAdvance } from "@/lib/utils/unicode";
 import { track } from "@/lib/signals";
 import type { GlyphView } from "@/lib/model/Glyph";
+import type { GlyphRenderContour } from "@/lib/model/GlyphRenderModel";
 import { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import type { GlyphNode } from "@/types/node";
 import type { RenderContext, RenderPass } from "@/types/rendering";
@@ -38,12 +39,12 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const view = this.editor.font.glyphView(node.glyphId, this.editor.designLocationCell);
     if (!view) return null;
 
-    const hit = view.geometry.hitAt(point, this.editor.hitRadius);
+    const hit = view.hitAt(point, this.editor.hitRadius);
     if (!hit) return null;
 
     switch (hit.kind) {
       case "segment": {
-        const segment = view.geometry.segment(hit.id);
+        const segment = view.segment(hit.id);
         if (!segment) return null;
 
         return {
@@ -126,7 +127,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const view = this.#view(node);
     if (!view) return;
 
-    view.render.trackShape();
+    view.trackShape();
 
     if (editing) {
       this.#drawEditableContent(node, ctx, view);
@@ -137,7 +138,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawEditableContent(node: GlyphNode, ctx: RenderContext, view: GlyphView): void {
-    this.#outline.draw(ctx.canvas, view.render.outline, {
+    this.#outline.draw(ctx.canvas, view, {
       fill: null,
       stroke: {
         color: ctx.canvas.theme.glyph.stroke,
@@ -149,7 +150,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawDisplayContent(ctx: RenderContext, view: GlyphView): void {
-    this.#outline.draw(ctx.canvas, view.render.outline, {
+    this.#outline.draw(ctx.canvas, view, {
       fill: ctx.canvas.theme.glyph.fill,
     });
   }
@@ -158,17 +159,24 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const view = this.#view(node);
     if (!view) return;
 
-    const renderModel = view.render;
+    track(view.contoursCell);
+    const rootContours = view.contours.filter((contour) => contour.component === null);
+    for (const contour of rootContours) contour.trackShape();
+    view.trackAnchors();
 
     this.#segments.draw(
       ctx.canvas,
-      view.geometry,
+      view,
       this.#selectedSegmentIds(node),
       this.#hoveredSegmentId(node),
     );
-    this.#drawControlLines(node, ctx, renderModel.contours);
-    this.#handles.draw(ctx, node, view, this.editor.selection, this.editor.hover);
-    this.#anchors.draw(ctx.canvas, renderModel.anchors, {
+    this.#drawControlLines(
+      node,
+      ctx,
+      rootContours.map((contour) => contour.contour),
+    );
+    this.#handles.draw(ctx, node, rootContours, this.editor.selection, this.editor.hover);
+    this.#anchors.draw(ctx.canvas, view.anchors, {
       selection: this.editor.selection,
       hover: this.editor.hover,
     });
@@ -177,7 +185,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   #drawDebugOverlays(node: GlyphNode, ctx: RenderContext, view: GlyphView): void {
     this.#debugOverlays.draw(
       ctx.canvas,
-      view.geometry,
+      view,
       this.editor.debugOverlays,
       this.#hoveredSegmentId(node),
       ctx.canvas.pxToUpm(SCREEN_HIT_RADIUS),
@@ -187,7 +195,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   #drawControlLines(
     node: GlyphNode,
     ctx: RenderContext,
-    contours: GlyphView["render"]["contours"],
+    contours: readonly GlyphRenderContour[],
   ): void {
     const sceneBounds = this.editor.camera.visibleSceneBounds(64);
     const origin = node.position;

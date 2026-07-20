@@ -62,6 +62,14 @@ pub enum CoreError {
     #[error("glyph {0} not found")]
     GlyphNotFound(GlyphId),
 
+    #[error(
+        "component {component_id} references glyph {base_glyph_id}, which has no resolvable master layer"
+    )]
+    UnresolvableComponentGlyph {
+        component_id: ComponentId,
+        base_glyph_id: GlyphId,
+    },
+
     #[error("source {0} not found")]
     SourceNotFound(SourceId),
 

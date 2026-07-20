@@ -213,10 +213,30 @@ export interface CloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
+export interface ComponentAnchorAttachment {
+  source: ComponentAnchorReference
+  target: ComponentAnchorReference
+}
+
+export interface ComponentAnchorReference {
+  componentPath: Array<ComponentId>
+  glyphId: GlyphId
+  anchorId: AnchorId
+}
+
 export interface ComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+}
+
+export interface ComponentGlyph {
+  parentGlyphId: GlyphId
+  componentId: ComponentId
+  baseGlyphId: GlyphId
+  parentPath: Array<ComponentId>
+  componentPath: Array<ComponentId>
+  attachment?: ComponentAnchorAttachment
 }
 
 export interface ContourData {
@@ -388,6 +408,11 @@ export interface GlyphChangedEntities {
   componentIds: Array<ComponentId>
 }
 
+export interface GlyphComponents {
+  rootGlyphId: GlyphId
+  components: Array<ComponentGlyph>
+}
+
 export interface GlyphInterpolation {
   basis: InterpolationBasis
   sources: Array<GlyphSourceValues>
@@ -398,6 +423,11 @@ export interface GlyphLayerRecord {
   sourceId: SourceId
 }
 
+export interface GlyphLayerShape {
+  structure: GlyphStructure
+  values: Float64Array
+}
+
 export interface GlyphLayerSnapshot {
   glyphId: GlyphId
   sourceId: SourceId
@@ -406,9 +436,11 @@ export interface GlyphLayerSnapshot {
 
 export interface GlyphProjection {
   glyphId: GlyphId
-  fallback: GlyphShape
+  fallback: GlyphLayerShape
   interpolation?: GlyphInterpolation
   exactSourceShapes: Array<GlyphSourceShape>
+  components: GlyphComponents
+  exactSourceComponents: Array<GlyphSourceComponents>
   componentGlyphIds: Array<GlyphId>
 }
 
@@ -418,11 +450,6 @@ export interface GlyphRecord {
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
   layers: Array<GlyphLayerRecord>
-}
-
-export interface GlyphShape {
-  structure: GlyphStructure
-  values: Float64Array
 }
 
 export interface GlyphSnapshot {
@@ -435,9 +462,14 @@ export interface GlyphSnapshotRequest {
   glyphId: GlyphId
 }
 
+export interface GlyphSourceComponents {
+  sourceId: SourceId
+  components: GlyphComponents
+}
+
 export interface GlyphSourceShape {
   sourceId: SourceId
-  shape: GlyphShape
+  shape: GlyphLayerShape
 }
 
 export interface GlyphSourceValues {

@@ -125,7 +125,7 @@ export class Segment {
   }
 
   /** Parse a contour's points into segment instances. */
-  static parse(contour: Contour): Segment[] {
+  static parse(contour: Pick<Contour, "points" | "closed">): Segment[] {
     const { points, closed } = contour;
     if (points.length < 2) {
       return [];

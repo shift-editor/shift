@@ -94,10 +94,10 @@ describe("Glyph", () => {
     if (!view) throw new Error("Expected glyph view");
 
     layer.applyPositionPatch([{ kind: "point", id: first!.id, x: 25, y: 75 }]);
-    expect(view.geometry.point(first!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.point(first!.id)).toMatchObject({ x: 25, y: 75 });
 
     await editor.settle();
-    expect(view.geometry.point(first!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.point(first!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
   it("feeds consumers that track source coordinate changes before reading geometry", async () => {
@@ -216,7 +216,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
       x: 25,
       y: 75,
     });
-    expect(layer.bounds).toEqual(editor.sceneGlyphView?.geometry.bounds);
+    expect(layer.bounds).toEqual(editor.sceneGlyphView?.bounds);
   });
 
   it("applies committed point patches to the source and owning glyph geometry", async () => {
@@ -227,7 +227,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
     expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(editor.sceneGlyphView?.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(editor.sceneGlyphView?.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
   it("commits a preview without double-applying local positions", async () => {
@@ -263,13 +263,13 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
     await editor.settle();
 
-    expect(view.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
-    expect(view.geometry.allPoints.find((point) => point.id === second!.id)).toMatchObject({
+    expect(view.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.allPoints.find((point) => point.id === second!.id)).toMatchObject({
       x: 25,
       y: 75,
     });
     expect(
-      view.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+      view.contours.at(-1)?.contour.points.find((point) => point.id === second!.id),
     ).toMatchObject({ x: 25, y: 75 });
   });
 
@@ -279,15 +279,15 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     if (!view) throw new Error("Expected glyph view");
 
     expect(
-      view.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+      view.contours.at(-1)?.contour.points.find((point) => point.id === second!.id),
     ).toMatchObject({ x: 100, y: 0 });
 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
     await editor.settle();
 
-    expect(view.geometry.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(view.point(second!.id)).toMatchObject({ x: 25, y: 75 });
     expect(
-      view.geometry.contours.at(-1)?.points.find((point) => point.id === second!.id),
+      view.contours.at(-1)?.contour.points.find((point) => point.id === second!.id),
     ).toMatchObject({ x: 25, y: 75 });
   });
 });

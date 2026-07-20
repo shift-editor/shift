@@ -5,12 +5,13 @@ use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
-    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, ComponentData, ContourData,
-    FontMetadata, FontMetrics, GlyphChangedEntities, GlyphInterpolation, GlyphLayerRecord,
-    GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphShape, GlyphSnapshot,
-    GlyphSnapshotRequest, GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure,
-    InterpolationBasis, InterpolationSupport, Location, MetricDefinition, MetricKind,
-    NamedInstance, PointData, PointType, Source, SourceMetricField, SourceMetricValue,
+    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, ComponentAnchorAttachment,
+    ComponentAnchorReference, ComponentData, ComponentGlyph, ContourData, FontMetadata,
+    FontMetrics, GlyphChangedEntities, GlyphComponents, GlyphInterpolation, GlyphLayerRecord,
+    GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
+    GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
+    GlyphStructure, InterpolationBasis, InterpolationSupport, Location, MetricDefinition,
+    MetricKind, NamedInstance, PointData, PointType, Source, SourceMetricField, SourceMetricValue,
     SourceMetricValues, SourceMetricsInterpolationSnapshot,
 };
 
@@ -448,13 +449,13 @@ impl From<GlyphSnapshot> for NapiGlyphSnapshot {
 }
 
 #[napi(object)]
-pub struct NapiGlyphShape {
+pub struct NapiGlyphLayerShape {
     pub structure: NapiGlyphStructure,
     pub values: Float64Array,
 }
 
-impl From<GlyphShape> for NapiGlyphShape {
-    fn from(shape: GlyphShape) -> Self {
+impl From<GlyphLayerShape> for NapiGlyphLayerShape {
+    fn from(shape: GlyphLayerShape) -> Self {
         Self {
             structure: shape.structure.into(),
             values: shape.values.into(),
@@ -543,7 +544,114 @@ impl From<GlyphInterpolation> for NapiGlyphInterpolation {
 pub struct NapiGlyphSourceShape {
     #[napi(ts_type = "SourceId")]
     pub source_id: String,
-    pub shape: NapiGlyphShape,
+    pub shape: NapiGlyphLayerShape,
+}
+
+#[napi(object)]
+pub struct NapiComponentAnchorReference {
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_path: Vec<String>,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "AnchorId")]
+    pub anchor_id: String,
+}
+
+impl From<ComponentAnchorReference> for NapiComponentAnchorReference {
+    fn from(anchor: ComponentAnchorReference) -> Self {
+        Self {
+            component_path: anchor
+                .component_path
+                .into_iter()
+                .map(|component_id| component_id.to_string())
+                .collect(),
+            glyph_id: anchor.glyph_id.to_string(),
+            anchor_id: anchor.anchor_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiComponentAnchorAttachment {
+    pub source: NapiComponentAnchorReference,
+    pub target: NapiComponentAnchorReference,
+}
+
+impl From<ComponentAnchorAttachment> for NapiComponentAnchorAttachment {
+    fn from(attachment: ComponentAnchorAttachment) -> Self {
+        Self {
+            source: attachment.source.into(),
+            target: attachment.target.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiComponentGlyph {
+    #[napi(ts_type = "GlyphId")]
+    pub parent_glyph_id: String,
+    #[napi(ts_type = "ComponentId")]
+    pub component_id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub base_glyph_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub parent_path: Vec<String>,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_path: Vec<String>,
+    pub attachment: Option<NapiComponentAnchorAttachment>,
+}
+
+impl From<ComponentGlyph> for NapiComponentGlyph {
+    fn from(component: ComponentGlyph) -> Self {
+        Self {
+            parent_glyph_id: component.parent_glyph_id.to_string(),
+            component_id: component.component_id.to_string(),
+            base_glyph_id: component.base_glyph_id.to_string(),
+            parent_path: component
+                .parent_path
+                .into_iter()
+                .map(|component_id| component_id.to_string())
+                .collect(),
+            component_path: component
+                .component_path
+                .into_iter()
+                .map(|component_id| component_id.to_string())
+                .collect(),
+            attachment: component.attachment.map(Into::into),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphComponents {
+    #[napi(ts_type = "GlyphId")]
+    pub root_glyph_id: String,
+    pub components: Vec<NapiComponentGlyph>,
+}
+
+impl From<GlyphComponents> for NapiGlyphComponents {
+    fn from(components: GlyphComponents) -> Self {
+        Self {
+            root_glyph_id: components.root_glyph_id.to_string(),
+            components: components.components.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphSourceComponents {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub components: NapiGlyphComponents,
+}
+
+impl From<GlyphSourceComponents> for NapiGlyphSourceComponents {
+    fn from(source: GlyphSourceComponents) -> Self {
+        Self {
+            source_id: source.source_id.to_string(),
+            components: source.components.into(),
+        }
+    }
 }
 
 impl From<GlyphSourceShape> for NapiGlyphSourceShape {
@@ -559,9 +667,11 @@ impl From<GlyphSourceShape> for NapiGlyphSourceShape {
 pub struct NapiGlyphProjection {
     #[napi(ts_type = "GlyphId")]
     pub glyph_id: String,
-    pub fallback: NapiGlyphShape,
+    pub fallback: NapiGlyphLayerShape,
     pub interpolation: Option<NapiGlyphInterpolation>,
     pub exact_source_shapes: Vec<NapiGlyphSourceShape>,
+    pub components: NapiGlyphComponents,
+    pub exact_source_components: Vec<NapiGlyphSourceComponents>,
     #[napi(ts_type = "Array<GlyphId>")]
     pub component_glyph_ids: Vec<String>,
 }
@@ -574,6 +684,12 @@ impl From<GlyphProjection> for NapiGlyphProjection {
             interpolation: projection.interpolation.map(Into::into),
             exact_source_shapes: projection
                 .exact_source_shapes
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            components: projection.components.into(),
+            exact_source_components: projection
+                .exact_source_components
                 .into_iter()
                 .map(Into::into)
                 .collect(),

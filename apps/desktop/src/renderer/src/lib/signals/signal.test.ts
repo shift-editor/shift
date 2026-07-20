@@ -218,9 +218,8 @@ describe("computed", () => {
     });
 
     it("a direct edge keeps a consumer reactive after an intermediate is disposed", () => {
-      // This is the invariant `GlyphOutline` relies on. A composite outline
-      // subscribes directly to the variation-location signal so it stays
-      // reactive through base glyph lookups.
+      // A consumer can subscribe directly to the variation-location signal so
+      // it stays reactive through an intermediate glyph lookup.
       const source = signal(0);
       const intermediate = computed(() => source.value * 2);
 

@@ -1,11 +1,11 @@
 //! Native glyph interpolation over Shift sources and internal locations.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::str::FromStr;
 
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
-use fontdrasil::variations::VariationModel;
+use fontdrasil::variations::{RoundingBehaviour, VariationModel};
 
 use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location, SourceId};
 
@@ -162,7 +162,7 @@ pub struct GlyphInterpolation {
 }
 
 impl GlyphInterpolation {
-    /// Returns the default-source layer that defines compatible topology.
+    /// Returns the master-backed layer that defines compatible topology.
     pub fn template(&self) -> &GlyphLayer {
         &self.template
     }
@@ -180,7 +180,7 @@ impl GlyphInterpolation {
     /// Resolves an owned glyph layer at an internal authoring location.
     ///
     /// Missing axis coordinates use authoring defaults. The returned layer
-    /// preserves the default source's topology and identities but is a derived
+    /// preserves the template layer's topology and identities but is a derived
     /// value; mutating it does not change the font.
     ///
     /// # Errors
@@ -224,9 +224,12 @@ impl GlyphInterpolation {
 impl Font {
     /// Builds interpolation for one glyph from compatible authored sources.
     ///
-    /// The default source defines topology. Incompatible non-default source
-    /// layers are ignored. `None` means the font is static or no viable model
-    /// can be formed; callers may then use their documented source fallback.
+    /// The font default source defines topology when that glyph has a layer
+    /// there. Otherwise the most structurally complete master-backed layer is
+    /// the template, allowing sparse glyphs to interpolate without inventing a
+    /// default-source layer. Incompatible master layers are ignored. `None`
+    /// means the font is static or no viable model can be formed; callers may
+    /// then use their documented source fallback.
     ///
     /// # Errors
     ///
@@ -242,10 +245,7 @@ impl Font {
             return Ok(None);
         }
 
-        let Some(default_source_id) = self.default_source_id() else {
-            return Ok(None);
-        };
-        let Some(default_layer) = glyph.layer_for_source(default_source_id.clone()) else {
+        let Some(template) = interpolation_template(self, glyph) else {
             return Ok(None);
         };
 
@@ -255,7 +255,7 @@ impl Font {
             let Some(layer) = glyph.layer_for_source(source.id()) else {
                 continue;
             };
-            if !default_layer
+            if !template
                 .interpolation_compatibility_with(layer)
                 .is_compatible()
             {
@@ -284,11 +284,42 @@ impl Font {
             .collect();
 
         Ok(Some(GlyphInterpolation {
-            template: default_layer.clone(),
+            template: template.clone(),
             basis,
             sources,
         }))
     }
+}
+
+fn interpolation_template<'a>(font: &Font, glyph: &'a crate::Glyph) -> Option<&'a GlyphLayer> {
+    if let Some(default_source_id) = font.default_source_id() {
+        let default_is_master = font
+            .sources()
+            .iter()
+            .find(|source| source.id() == default_source_id)
+            .is_some_and(crate::Source::is_master);
+        if default_is_master {
+            if let Some(layer) = glyph.layer_for_source(default_source_id) {
+                return Some(layer);
+            }
+        }
+    }
+
+    font.sources()
+        .iter()
+        .filter(|source| source.is_master())
+        .filter_map(|source| glyph.layer_for_source(source.id()))
+        .reduce(|preferred, candidate| {
+            if layer_complexity(candidate) > layer_complexity(preferred) {
+                candidate
+            } else {
+                preferred
+            }
+        })
+}
+
+fn layer_complexity(layer: &GlyphLayer) -> usize {
+    layer.contours().len() + layer.components().len()
 }
 
 fn interpolation_basis(
@@ -313,6 +344,10 @@ fn interpolation_basis(
             return None;
         }
     }
+    let default_location = normalized_location(&Location::new(), axes);
+    if let Entry::Vacant(entry) = points.entry(default_location) {
+        entry.insert(virtual_default_coefficients(sources)?);
+    }
     let model = VariationModel::new(
         points
             .keys()
@@ -320,7 +355,9 @@ fn interpolation_basis(
             .collect::<HashSet<NormalizedLocation>>(),
         ordered_axes,
     );
-    let model_coefficients = model.deltas::<f64, f64>(&points).ok()?;
+    let model_coefficients = model
+        .deltas_with_rounding::<f64, f64>(&points, RoundingBehaviour::None)
+        .ok()?;
     let regions = model_coefficients
         .iter()
         .map(|(region, _)| InterpolationRegion {
@@ -351,6 +388,57 @@ fn interpolation_basis(
         regions,
         coefficients,
     })
+}
+
+/// Derives a virtual default only when two masters bracket it on one axis.
+///
+/// OpenType's variation model requires a value at the normalized origin. A
+/// sparse glyph may omit the font's default master while still providing a
+/// well-defined one-axis interpolation on opposite sides of it. More complex
+/// sparse layouts remain nonviable and use the caller's static master fallback.
+fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> Option<Vec<f64>> {
+    let mut negative: Option<(usize, Tag, f64)> = None;
+    let mut positive: Option<(usize, Tag, f64)> = None;
+
+    for (index, (_, location)) in sources.iter().enumerate() {
+        let nonzero = location
+            .iter()
+            .filter_map(|(tag, coordinate)| {
+                let value = coordinate.to_f64();
+                (value != 0.0).then_some((*tag, value))
+            })
+            .collect::<Vec<_>>();
+        let [(tag, value)] = nonzero.as_slice() else {
+            continue;
+        };
+
+        if *value < 0.0
+            && negative
+                .as_ref()
+                .is_none_or(|(_, _, current)| *value > *current)
+        {
+            negative = Some((index, *tag, *value));
+        }
+        if *value > 0.0
+            && positive
+                .as_ref()
+                .is_none_or(|(_, _, current)| *value < *current)
+        {
+            positive = Some((index, *tag, *value));
+        }
+    }
+
+    let (negative_index, negative_axis, negative_value) = negative?;
+    let (positive_index, positive_axis, positive_value) = positive?;
+    if negative_axis != positive_axis {
+        return None;
+    }
+
+    let span = positive_value - negative_value;
+    let mut coefficients = vec![0.0; sources.len()];
+    coefficients[negative_index] = positive_value / span;
+    coefficients[positive_index] = -negative_value / span;
+    Some(coefficients)
 }
 
 fn normalized_location(location: &Location, axes: &[Axis]) -> NormalizedLocation {

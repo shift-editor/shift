@@ -238,7 +238,7 @@ describe("variable editing across sources", () => {
     expect(stack.font.metricsAtLocation(mid).ascender).toBeCloseTo(850);
     expect(stack.font.metricsAtLocation(mid).xHeight).toBeCloseTo(550);
 
-    const xs = view.geometry.allPoints.map((point) => point.x);
+    const xs = view.allPoints.map((point) => point.x);
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);
   });
 

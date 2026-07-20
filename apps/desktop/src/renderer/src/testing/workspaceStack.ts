@@ -16,6 +16,7 @@ export type WorkspaceStack = {
   editCoordinator: WorkspaceEditCoordinator;
   font: Font;
   createWorkspace(): Promise<void>;
+  openWorkspace(sourcePath: string): Promise<void>;
 };
 
 /**
@@ -53,6 +54,17 @@ export function createWorkspaceStack(): WorkspaceStack {
     font,
     async createWorkspace(): Promise<void> {
       await shell.call("workspace.create", undefined);
+      await client.connect();
+
+      const snapshot = client.workspaceCell.peek();
+      if (!snapshot) {
+        throw new Error("workspace stack connected without a snapshot");
+      }
+
+      store.replaceWorkspace(snapshot);
+    },
+    async openWorkspace(sourcePath: string): Promise<void> {
+      await shell.call("workspace.open", { path: sourcePath });
       await client.connect();
 
       const snapshot = client.workspaceCell.peek();

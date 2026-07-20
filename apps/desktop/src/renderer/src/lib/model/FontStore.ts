@@ -25,7 +25,7 @@ import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/s
 import type { GlyphObjectIndex, GlyphObjectSegment } from "@/types";
 import type { AxisLocation } from "@/types/variation";
 import { GlyphLayerState } from "./GlyphLayerState";
-import { GlyphView, type Glyph, type GlyphLayer, type GlyphViewInput } from "./Glyph";
+import type { Glyph, GlyphLayer, GlyphView } from "./Glyph";
 
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
@@ -313,11 +313,7 @@ export class FontStore {
     return created;
   }
 
-  glyphView(
-    glyphId: GlyphId,
-    location: Signal<AxisLocation>,
-    create: () => GlyphViewInput,
-  ): GlyphView {
+  glyphView(glyphId: GlyphId, location: Signal<AxisLocation>, create: () => GlyphView): GlyphView {
     let views = this.#glyphViews.get(glyphId);
     if (!views) {
       views = new WeakMap();
@@ -327,7 +323,7 @@ export class FontStore {
     const cached = views.get(location);
     if (cached) return cached;
 
-    const view = new GlyphView(create());
+    const view = create();
     views.set(location, view);
     return view;
   }

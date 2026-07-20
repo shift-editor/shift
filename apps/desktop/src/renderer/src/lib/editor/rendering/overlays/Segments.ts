@@ -1,26 +1,26 @@
 import type { Canvas } from "../Canvas";
 import type { Segment, SegmentId } from "@shift/glyph-state";
-import type { GlyphViewGeometry } from "@/lib/model/Glyph";
+import type { GlyphView } from "@/lib/model/Glyph";
 
 export class Segments {
   readonly #selected: Segment[] = [];
 
   draw(
     canvas: Canvas,
-    geometry: GlyphViewGeometry,
+    view: GlyphView,
     selectedSegmentIds: readonly SegmentId[],
     hoveredSegmentId: SegmentId | null,
   ): void {
     this.#selected.length = 0;
 
     for (const segmentId of selectedSegmentIds) {
-      const segment = geometry.segment(segmentId);
+      const segment = view.segment(segmentId);
       if (segment) this.#selected.push(segment);
     }
 
     this.#drawResolved(
       canvas,
-      hoveredSegmentId ? geometry.segment(hoveredSegmentId) : null,
+      hoveredSegmentId ? view.segment(hoveredSegmentId) : null,
       this.#selected,
     );
   }

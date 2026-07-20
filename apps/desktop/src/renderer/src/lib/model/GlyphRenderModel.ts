@@ -1,6 +1,5 @@
 import type { AnchorData, AnchorId, ContourData, ContourId } from "@shift/types";
 import { Point, type Anchor, type Contour } from "@shift/glyph-state";
-import type { GlyphOutline } from "./GlyphOutline";
 import type { GlyphGeometry } from "./Glyph";
 import type { LayerContourCoordinates } from "./GlyphLayerState";
 import { computed, track, type ComputedSignal, type Signal } from "@/lib/signals/signal";
@@ -43,92 +42,14 @@ export interface GlyphRenderAnchorInput {
   readonly offset: number;
 }
 
-/**
- * Render-facing projection for one displayed glyph.
- *
- * This keeps renderers off `GlyphGeometry` during exact-layer editing. Source
- * backed contours read per-contour value buffers, while geometry-backed
- * contours are immutable fallback data for interpolated locations.
- */
-export class GlyphRenderModel {
-  readonly #contours: Signal<readonly RenderContour[]>;
-  readonly #anchors: Signal<readonly RenderAnchor[]>;
+/** Builds contour readers for a resolved geometry snapshot. */
+export function geometryRenderContours(geometry: GlyphGeometry): readonly RenderContour[] {
+  return geometry.contours.map((contour) => new GeometryRenderContour(contour));
+}
 
-  readonly outline: GlyphOutline;
-
-  /**
-   * Creates a render projection over contour, anchor, and outline state.
-   *
-   * @param contours - Signal containing the displayed contour items.
-   * @param anchors - Signal containing the displayed anchor items.
-   * @param outline - Cached outline model for filled and stroked glyph drawing.
-   */
-  constructor(
-    contours: Signal<readonly RenderContour[]>,
-    anchors: Signal<readonly RenderAnchor[]>,
-    outline: GlyphOutline,
-  ) {
-    this.#contours = contours;
-    this.#anchors = anchors;
-    this.outline = outline;
-  }
-
-  /**
-   * Builds geometry-backed contour items from an immutable glyph snapshot.
-   *
-   * @param geometry - Snapshot geometry for a display location without a live layer.
-   * @returns Render contour items backed directly by the geometry snapshot.
-   */
-  static geometryContours(geometry: GlyphGeometry): readonly RenderContour[] {
-    return geometry.contours.map((contour) => new GeometryRenderContour(contour));
-  }
-
-  /**
-   * Builds geometry-backed anchor items from an immutable glyph snapshot.
-   *
-   * @param geometry - Snapshot geometry for a display location without a live layer.
-   * @returns Render anchor items backed directly by the geometry snapshot.
-   */
-  static geometryAnchors(geometry: GlyphGeometry): readonly RenderAnchor[] {
-    return geometry.anchors.map((anchor) => new GeometryRenderAnchor(anchor));
-  }
-
-  /**
-   * Returns the displayed contour items without subscribing to changes.
-   *
-   * @returns A read-only view of the current render contour items.
-   */
-  get contours(): readonly GlyphRenderContour[] {
-    return this.#contours.peek();
-  }
-
-  /**
-   * Returns the displayed anchor items without subscribing to changes.
-   *
-   * @returns A read-only view of the current render anchor items.
-   */
-  get anchors(): readonly GlyphRenderAnchor[] {
-    return this.#anchors.peek();
-  }
-
-  /**
-   * Establishes reactive dependencies for anything that can change displayed glyph shape.
-   *
-   * @remarks
-   * Call this inside a render dependency boundary. The method tracks structural
-   * replacement of contour and anchor lists, then delegates to each item so
-   * layer-backed coordinates can invalidate rendering without forcing callers
-   * to know which backing model they are reading.
-   */
-  trackShape(): void {
-    track(this.#contours);
-    track(this.#anchors);
-
-    this.outline.trackShape();
-
-    for (const contour of this.#contours.peek()) contour.trackShape();
-    for (const anchor of this.#anchors.peek()) anchor.trackShape();
-  }
+/** Builds anchor readers for a resolved geometry snapshot. */
+export function geometryRenderAnchors(geometry: GlyphGeometry): readonly RenderAnchor[] {
+  return geometry.anchors.map((anchor) => new GeometryRenderAnchor(anchor));
 }
 
 export abstract class RenderContour implements GlyphRenderContour {

@@ -539,9 +539,9 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Data Model**
 
-- [ ] ComponentRef structure (glyph reference, transform, metrics flag)
-- [ ] Add components array to Glyph struct
-- [ ] Snapshot serialization for components
+- [x] ComponentRef structure (glyph reference and transform)
+- [x] Add components array to Glyph struct
+- [x] Snapshot serialization for components
 
 **Component Creation**
 

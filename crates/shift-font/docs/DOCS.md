@@ -25,7 +25,7 @@ crates/shift-font/src/
   variation.rs     -- external-to-design mapping evaluation
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
-  composite.rs     -- recursive component flattening
+  composite.rs     -- component occurrences, attachment semantics, and flattening
 ```
 
 ## Key Types
@@ -43,9 +43,10 @@ crates/shift-font/src/
 - `Glyph` is a glyph concept identified by `GlyphId`.
 - `GlyphLayer` is authored editable data for one glyph at one source.
 - `InterpolationBasis` is coordinate-independent variation math for an ordered source set. It contains normalized supports and source coefficient rows, never glyph coordinates or metrics.
-- `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. Its default-source template owns topology.
+- `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. The glyph's default-source layer owns topology when present; otherwise a deterministic master-backed template allows sparse glyph interpolation.
 - `LayerCompatibility` records every hard structural difference between an interpolation reference layer and another source layer. `LayerDifference` retains ordered path, node, anchor, and component evidence for diagnostics.
-- `GlyphProjection` is a compact location-independent glyph payload: fallback shape, optional compatible interpolation, exact-source shapes for incompatible topology, and component identities.
+- `GlyphProjection` is a compact location-independent glyph payload: fallback layer values, optional compatible interpolation, exact-source topology exceptions, `GlyphComponents`, and transitive component identities.
+- `GlyphComponents` is the ordered, cycle-pruned component occurrence list for one root glyph. Every `ComponentGlyph` carries its full `ComponentId` ancestry and Rust-selected anchor attachment.
 - `FontProjection` is a read-only, location-bound view that reuses resolved component layers across one or many glyph requests.
 - `ResolvedGlyph` is derived, flattened geometry plus x advance. An existing blank glyph resolves to an empty contour list; a missing glyph resolves to `None`.
 - `Contour` and `Point` describe outline geometry inside a glyph layer.
@@ -71,17 +72,17 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - Own canonical glyph and source-metric interpolation value ordering, variation-model construction, interpolation evaluation, and location-bound glyph resolution.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 
-`Font::glyph_interpolation(glyph_id)` builds compatible source values over an `InterpolationBasis`. The default source defines structural topology. The basis depends only on axes and ordered source locations, so the same mechanism can interpolate other numeric domains without copying glyph concepts into them.
+`Font::glyph_interpolation(glyph_id)` builds compatible source values over an `InterpolationBasis`. The glyph's default-source layer defines structural topology when it exists. Sparse glyphs without that layer choose their most structurally complete master layer as the template. When two compatible masters bracket the normalized default on one axis, the basis derives a virtual default contribution from them; more complex underdetermined layouts use the documented static fallback. The basis depends only on axes and ordered source locations, so the same mechanism can interpolate other numeric domains without copying glyph concepts into them.
 
 `GlyphLayer::interpolation_compatibility_with(source)` is the source of truth for hard structural compatibility. The receiver is the interpolation reference. It compares paths, nodes, anchors, and components in authored order and never sorts them. OpenType requires corresponding outlines to have the same contour and point structure, and `gvar` addresses composite components by their ordered component index. Shift therefore treats component identity and order as structural. See the [OpenType Font Variations overview](https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview), the [`gvar` composite processing rules](https://learn.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs), and [fontTools interpolatability diagnostics](https://fonttools.readthedocs.io/en/latest/varLib/interpolatable.html).
 
 Coordinates, advance width, smooth flags, anchor positions, and component transforms are interpolated values, not structural compatibility. Matching anchor count, names, and order is currently a Shift-specific restriction because anchor positions share the ordered glyph interpolation vector; OpenType `gvar` and fontTools do not define source-anchor compatibility. Variable component scale or matrix transforms need a separate export diagnostic because `gvar` varies component placement rather than those transforms. Correspondence and quality warnings such as contour order, wrong start point, and kinks are separate from this hard structural result.
 
-`Font::glyph_projection(glyph_id)` preserves the preferred fallback, compatible interpolation, and incompatible authored source shapes without resolving a location. The fallback is normally the default-source layer and uses the glyph's preferred layer when the default source has no layer for that glyph. A renderer can retain this compact payload and combine its basis with current authored source signals. No arbitrary location result is persisted.
+`Font::glyph_projection(glyph_id)` preserves the preferred fallback, compatible interpolation, incompatible authored source topology, and Rust-owned component relationships without resolving a location. Each glyph in the component closure resolves independently at the shared root location: exact master, then interpolation, then static master fallback. Layer-only/background sources never supply projection geometry. A renderer can retain this compact payload and combine its basis with current authored source signals. No arbitrary location result is persisted.
 
 `Font::source_metric_interpolation()` combines the same coordinate-independent basis with complete master-source metric vectors. Optional technical fields participate only when every master authors them, so interpolation does not invent sparse values.
 
-`Font::projection(location)` expects an internal authoring location. Apply external axis mappings before constructing it. Resolution prefers an exact authored layer/shape, then compatible interpolation, then the default or preferred fallback. A globally authored source with no glyph layer is not blank by definition: it uses interpolation/fallback while remaining non-editable at that source. Component branches resolve at the same location and are flattened into each `ResolvedGlyph`.
+`Font::projection(location)` expects an internal authoring location. Apply external axis mappings before constructing it. Resolution prefers an exact authored layer, then compatible interpolation, then the default or preferred fallback. A globally authored source with no glyph layer is not blank by definition: it uses interpolation/fallback while remaining non-editable at that source. Component branches resolve independently at the same location and are flattened through the same `GlyphComponents` semantics exposed to renderers.
 
 ## Boundaries
 
