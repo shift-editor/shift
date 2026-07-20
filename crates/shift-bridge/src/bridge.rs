@@ -723,6 +723,7 @@ impl Bridge {
         .font()?
         .sources()
         .iter()
+        .filter(|source| source.is_master())
         .map(Source::from)
         .map(Into::into)
         .collect(),

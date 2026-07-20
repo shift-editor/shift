@@ -6,16 +6,21 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use shift_font::composite::{
+    ComponentAnchorReference as IrComponentAnchorReference, ComponentGlyph as IrComponentGlyph,
+    GlyphComponents as IrGlyphComponents,
+};
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
     AxisMapping as IrAxisMapping, AxisMappingId, AxisRole as IrAxisRole, Component as IrComponent,
     ComponentId, Contour as IrContour, ContourId, FontMetadata as IrFontMetadata,
     FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
-    GlyphProjection as IrGlyphProjection, GuidelineId, InterpolationBasis as IrInterpolationBasis,
-    LayerId, Location as IrLocation, MetricDefinition as IrMetricDefinition, MetricId,
-    MetricKind as IrMetricKind, NamedInstance as IrNamedInstance, NamedInstanceId,
-    Point as IrPoint, PointId, PointType as IrPointType, Source as IrSource, SourceId,
+    GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
+    GuidelineId, InterpolationBasis as IrInterpolationBasis, LayerId, Location as IrLocation,
+    MetricDefinition as IrMetricDefinition, MetricId, MetricKind as IrMetricKind,
+    NamedInstance as IrNamedInstance, NamedInstanceId, Point as IrPoint, PointId,
+    PointType as IrPointType, Source as IrSource, SourceId,
     SourceMetricField as IrSourceMetricField,
     SourceMetricInterpolation as IrSourceMetricInterpolation,
 };
@@ -406,15 +411,15 @@ pub struct GlyphSnapshot {
     pub layers: Vec<GlyphLayerSnapshot>,
 }
 
-/// One compact glyph shape suitable for local projection evaluation.
+/// One compact glyph layer shape suitable for local projection evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphShape {
+pub struct GlyphLayerShape {
     pub structure: GlyphStructure,
     pub values: GlyphValues,
 }
 
-impl From<&GlyphLayer> for GlyphShape {
+impl From<&GlyphLayer> for GlyphLayerShape {
     fn from(layer: &GlyphLayer) -> Self {
         Self {
             structure: GlyphStructure::from(layer),
@@ -504,7 +509,98 @@ impl From<&IrGlyphInterpolation> for GlyphInterpolation {
 #[serde(rename_all = "camelCase")]
 pub struct GlyphSourceShape {
     pub source_id: SourceId,
-    pub shape: GlyphShape,
+    pub shape: GlyphLayerShape,
+}
+
+/// One anchor occurrence selected by Rust component semantics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentAnchorReference {
+    pub component_path: Vec<ComponentId>,
+    pub glyph_id: GlyphId,
+    pub anchor_id: AnchorId,
+}
+
+impl From<&IrComponentAnchorReference> for ComponentAnchorReference {
+    fn from(anchor: &IrComponentAnchorReference) -> Self {
+        Self {
+            component_path: anchor.component_path().as_slice().to_vec(),
+            glyph_id: anchor.glyph_id(),
+            anchor_id: anchor.anchor_id(),
+        }
+    }
+}
+
+/// Rust-selected source and target anchors for one component attachment.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentAnchorAttachment {
+    pub source: ComponentAnchorReference,
+    pub target: ComponentAnchorReference,
+}
+
+/// One ordered, cycle-pruned component occurrence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentGlyph {
+    pub parent_glyph_id: GlyphId,
+    pub component_id: ComponentId,
+    pub base_glyph_id: GlyphId,
+    pub parent_path: Vec<ComponentId>,
+    pub component_path: Vec<ComponentId>,
+    pub attachment: Option<ComponentAnchorAttachment>,
+}
+
+impl From<&IrComponentGlyph> for ComponentGlyph {
+    fn from(component: &IrComponentGlyph) -> Self {
+        Self {
+            parent_glyph_id: component.parent_glyph_id(),
+            component_id: component.component_id(),
+            base_glyph_id: component.base_glyph_id(),
+            parent_path: component.parent_path().as_slice().to_vec(),
+            component_path: component.component_path().as_slice().to_vec(),
+            attachment: component
+                .attachment()
+                .map(|attachment| ComponentAnchorAttachment {
+                    source: attachment.source().into(),
+                    target: attachment.target().into(),
+                }),
+        }
+    }
+}
+
+/// Ordered component relationships for one resolved root glyph.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphComponents {
+    pub root_glyph_id: GlyphId,
+    pub components: Vec<ComponentGlyph>,
+}
+
+impl From<&IrGlyphComponents> for GlyphComponents {
+    fn from(components: &IrGlyphComponents) -> Self {
+        Self {
+            root_glyph_id: components.root_glyph_id(),
+            components: components.components().iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// Exact-source component relationships that differ from the default shape.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphSourceComponents {
+    pub source_id: SourceId,
+    pub components: GlyphComponents,
+}
+
+impl From<&IrGlyphSourceComponents> for GlyphSourceComponents {
+    fn from(source: &IrGlyphSourceComponents) -> Self {
+        Self {
+            source_id: source.source_id(),
+            components: source.components().into(),
+        }
+    }
 }
 
 /// Location-independent glyph payload evaluated synchronously by renderers.
@@ -512,9 +608,11 @@ pub struct GlyphSourceShape {
 #[serde(rename_all = "camelCase")]
 pub struct GlyphProjection {
     pub glyph_id: GlyphId,
-    pub fallback: GlyphShape,
+    pub fallback: GlyphLayerShape,
     pub interpolation: Option<GlyphInterpolation>,
     pub exact_source_shapes: Vec<GlyphSourceShape>,
+    pub components: GlyphComponents,
+    pub exact_source_components: Vec<GlyphSourceComponents>,
     pub component_glyph_ids: Vec<GlyphId>,
 }
 
@@ -522,15 +620,21 @@ impl From<&IrGlyphProjection> for GlyphProjection {
     fn from(projection: &IrGlyphProjection) -> Self {
         Self {
             glyph_id: projection.glyph_id(),
-            fallback: GlyphShape::from(projection.fallback()),
+            fallback: GlyphLayerShape::from(projection.fallback()),
             interpolation: projection.interpolation().map(Into::into),
             exact_source_shapes: projection
                 .exact_source_shapes()
                 .iter()
                 .map(|source_shape| GlyphSourceShape {
                     source_id: source_shape.source_id(),
-                    shape: GlyphShape::from(source_shape.layer()),
+                    shape: GlyphLayerShape::from(source_shape.layer()),
                 })
+                .collect(),
+            components: projection.components().into(),
+            exact_source_components: projection
+                .exact_source_components()
+                .iter()
+                .map(Into::into)
                 .collect(),
             component_glyph_ids: projection.component_glyph_ids().to_vec(),
         }

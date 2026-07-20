@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
 import {
   mintAxisId,
   mintAxisLabelId,
@@ -431,7 +432,7 @@ describe("font-level intents make the font variable", () => {
 
     expect(stack.font.editableLayerAt(glyph.id, location)).toBeNull();
     expect(view.xAdvance).toBe(640);
-    expect(view.geometry.allPoints).toEqual([]);
+    expect(view.allPoints).toEqual([]);
   });
 
   it("loads every authored layer in one glyph snapshot", async () => {
@@ -516,6 +517,29 @@ describe("font-level intents make the font variable", () => {
     const glyphs = await stack.font.loadGlyphs([b.id, a.id, b.id]);
 
     expect(glyphs.map((glyph) => glyph.id)).toEqual([b.id, a.id, b.id]);
+  });
+
+  it("measures a pure component glyph while keeping root controls empty", async () => {
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(resolve(process.cwd(), "../../fixtures/fonts/Homenaje.glyphs"));
+    const record = stack.font.recordForName("Aacute" as GlyphName);
+    if (!record) throw new Error("Expected Aacute fixture glyph");
+    await stack.font.loadGlyph(record.id);
+
+    const view = stack.font.glyphView(record.id, stack.font.defaultLocation());
+    if (!view) throw new Error("Expected Aacute glyph view");
+
+    expect(view.contours.filter((contour) => contour.component === null)).toEqual([]);
+    expect(view.components).toHaveLength(2);
+    expect(view.contours.length).toBeGreaterThan(0);
+    expect(view.contours.every((contour) => contour.component !== null)).toBe(true);
+    const componentContours = view.components.flatMap((component) => component.contours);
+    expect(componentContours).toHaveLength(view.contours.length);
+    for (let index = 0; index < componentContours.length; index++) {
+      expect(view.contours[index]).toBe(componentContours[index]);
+    }
+    expect(view.xAdvance).toBe(483);
+    expect(view.sidebearings).toEqual({ lsb: 20, rsb: 20 });
   });
 });
 

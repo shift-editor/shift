@@ -1,5 +1,5 @@
 import type { Canvas } from "../Canvas";
-import type { GlyphRenderContour } from "@/lib/model/GlyphRenderModel";
+import type { GlyphRenderContour } from "@/types/glyphRender";
 import { Validate } from "@shift/validation";
 
 /**

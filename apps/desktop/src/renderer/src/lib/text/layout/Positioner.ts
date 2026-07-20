@@ -29,7 +29,7 @@ export class Positioner {
 
       if (record && view) {
         glyphName = record.name;
-        bounds = view.render.outline.bounds;
+        bounds = view.bounds;
       }
 
       const xAdvance = resolveAdvance(g, view);

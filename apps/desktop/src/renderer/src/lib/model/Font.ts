@@ -10,7 +10,7 @@ import type {
   GlyphId,
   GlyphProjection,
   GlyphRecord,
-  GlyphShape,
+  GlyphLayerShape,
   GlyphLayerRecord,
   GlyphName,
   SourceId,
@@ -39,14 +39,7 @@ import type { SegmentId } from "@shift/glyph-state";
 import { computed, signal, track, type Signal } from "@/lib/signals/signal";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { WorkspaceGlyphSnapshotRequest } from "@shared/workspace/protocol";
-import {
-  Glyph,
-  GlyphGeometry,
-  type GlyphView,
-  type GlyphViewInput,
-  type GlyphLayer,
-} from "./Glyph";
-import { GlyphOutline } from "./GlyphOutline";
+import { Glyph, GlyphGeometry, GlyphView, type GlyphLayer } from "./Glyph";
 import type { FontStore } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import type { GlyphHandle } from "@shift/bridge";
@@ -947,7 +940,7 @@ export class Font {
 
     const locationSignal = axisLocationSignal(location);
     return this.#store.glyphView(glyphId, locationSignal, () =>
-      this.#glyphViewInput(glyphId, locationSignal),
+      this.#createGlyphView(glyphId, locationSignal),
     );
   }
 
@@ -1168,33 +1161,52 @@ export class Font {
     return state.state.values;
   }
 
-  #glyphViewInput(glyphId: GlyphId, location: Signal<AxisLocation>): GlyphViewInput {
-    return {
+  #createGlyphView(glyphId: GlyphId, location: Signal<AxisLocation>): GlyphView {
+    const layer = computed(
+      () => {
+        const currentLocation = location.value;
+        track(this.#directoryCell);
+        track(this.#axesCell);
+        track(this.#sourcesCell);
+
+        return this.editableLayerAt(glyphId, currentLocation);
+      },
+      { name: "font.glyphView.layer" },
+    );
+    const geometry = computed(
+      () => {
+        const currentLocation = location.value;
+        track(this.#directoryCell);
+        track(this.#axesCell);
+        track(this.#sourcesCell);
+
+        return this.#glyphGeometry(glyphId, currentLocation, location);
+      },
+      { name: "font.glyphView.geometry" },
+    );
+
+    return new GlyphView(
+      glyphId,
       location,
-      layer: computed(
-        () => {
-          const currentLocation = location.value;
-          track(this.#directoryCell);
-          track(this.#axesCell);
-          track(this.#sourcesCell);
+      layer,
+      geometry,
+      this.#store.projectionCell(glyphId),
+      (resolvedLocation) => this.sourceAt(resolvedLocation)?.id ?? null,
+      (resolvedGlyphId, resolvedLocation) => {
+        track(this.#directoryCell);
+        track(this.#axesCell);
+        track(this.#sourcesCell);
 
-          return this.editableLayerAt(glyphId, currentLocation);
-        },
-        { name: "font.glyphView.layer" },
-      ),
-      geometry: computed(
-        () => {
-          const currentLocation = location.value;
-          track(this.#directoryCell);
-          track(this.#axesCell);
-          track(this.#sourcesCell);
+        return this.editableLayerAt(resolvedGlyphId, resolvedLocation);
+      },
+      (resolvedGlyphId, resolvedLocation) => {
+        track(this.#directoryCell);
+        track(this.#axesCell);
+        track(this.#sourcesCell);
 
-          return this.#glyphGeometry(glyphId, currentLocation, location);
-        },
-        { name: "font.glyphView.geometry" },
-      ),
-      outline: this.outline(glyphId, location),
-    };
+        return this.#glyphGeometry(resolvedGlyphId, resolvedLocation, location);
+      },
+    );
   }
 
   /**
@@ -1330,34 +1342,6 @@ export class Font {
     } finally {
       this.#projectionRead = null;
     }
-  }
-
-  /**
-   * Create a reactive composed outline for a glyph.
-   *
-   * Font supplies layer and geometry lookup for component expansion.
-   *
-   * @returns A new outline object that follows `location`.
-   */
-  outline(glyphId: GlyphId, location: Signal<AxisLocation>): GlyphOutline {
-    return new GlyphOutline(
-      glyphId,
-      location,
-      (glyphId, resolvedLocation) => {
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        return this.editableLayerAt(glyphId, resolvedLocation);
-      },
-      (glyphId, resolvedLocation) => {
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        return this.#glyphGeometry(glyphId, resolvedLocation, location);
-      },
-    );
   }
 
   /**
@@ -1769,7 +1753,7 @@ function sourceById(sources: readonly Source[], sourceId: SourceId): Source | nu
   return null;
 }
 
-function glyphGeometryFromShape(shape: GlyphShape): GlyphGeometry {
+function glyphGeometryFromShape(shape: GlyphLayerShape): GlyphGeometry {
   return new GlyphGeometry(shape.structure, shape.values);
 }
 

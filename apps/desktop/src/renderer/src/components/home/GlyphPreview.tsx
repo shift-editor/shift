@@ -66,7 +66,7 @@ function GlyphCell({
   height: number;
   view: GlyphView;
 }) {
-  const svgPath = useSignalState(view.render.outline.svgPathCell, { schedule: "frame" });
+  const svgPath = useSignalState(view.svgPathCell, { schedule: "frame" });
   const advance = useSignalState(view.xAdvanceCell, { schedule: "frame" });
 
   const cellWidth = computeCellWidth(metrics, advance, height);

@@ -3,6 +3,12 @@ import type { SegmentId } from "@shift/glyph-state";
 
 export { currentEditingId } from "./editing";
 export type { EditingId } from "./editing";
+export type {
+  GlyphRenderAnchor,
+  GlyphRenderAnchorInput,
+  GlyphRenderContour,
+  GlyphRenderContourInput,
+} from "./glyphRender";
 export { currentSelectionId, objectIsKindOf } from "./object";
 export type {
   SelectableId,

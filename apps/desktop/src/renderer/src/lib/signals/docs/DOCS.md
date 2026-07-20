@@ -92,7 +92,7 @@ Pass `{ equals: () => false }` as the second argument to `signal()`. This is use
 - **Use `track(cell)` for invalidation-only dependencies.** Inside a computed/effect, prefer `track(fooCell)` when the code needs to subscribe to `fooCell` but does not need the current value. Prefer `const foo = fooCell.value` when the value is actually used.
 - **Circular computed chains.** There is no cycle detection. A computed that reads itself (directly or indirectly) will hit the `#computing` re-entrancy guard and return the stale value.
 - **`useSignalState` must not be called conditionally.** It is a React hook and follows the rules of hooks.
-- **Disposing a computed silently breaks chains that flowed through it.** If `A -> B -> C` (A is a source signal, B is a computed, C subscribes to B), and B is disposed, A no longer notifies C -- but C does not know it has been orphaned. Pattern: when C's lifetime can outlive B's, give C a direct edge to A in addition to the indirect one. The canonical case is `GlyphOutline`: it reads the variation-location signal directly so composite outlines stay reactive through base glyph lookups.
+- **Disposing a computed silently breaks chains that flowed through it.** If `A -> B -> C` (A is a source signal, B is a computed, C subscribes to B), and B is disposed, A no longer notifies C -- but C does not know it has been orphaned. Pattern: when C's lifetime can outlive B's, give C a direct edge to A in addition to the indirect one.
 
 ## Verification
 

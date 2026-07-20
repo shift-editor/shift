@@ -2,7 +2,7 @@ import type { SelectableId } from "@/types";
 import type { HandleState } from "@/types/graphics";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
-import type { GlyphRenderContour } from "@/lib/model/GlyphRenderModel";
+import type { GlyphRenderContour } from "@/types/glyphRender";
 import { PointHandleItem } from "./PointHandleItem";
 
 export interface HandleStateSource {

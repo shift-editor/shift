@@ -2,7 +2,7 @@ import type { Canvas } from "../Canvas";
 import type { HandleState } from "@/types/graphics";
 import { drawHandle } from "./handleDrawing";
 import type { HandleStateSource } from "./handles/HandleItems";
-import type { GlyphRenderAnchor } from "@/lib/model/GlyphRenderModel";
+import type { GlyphRenderAnchor } from "@/types/glyphRender";
 
 /**
  * Draws glyph attachment anchors as diamond handles in UPM space.
