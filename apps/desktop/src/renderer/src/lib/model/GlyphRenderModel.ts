@@ -1,46 +1,13 @@
-import type { AnchorData, AnchorId, ContourData, ContourId } from "@shift/types";
-import { Point, type Anchor, type Contour } from "@shift/glyph-state";
+import type { AnchorId, ContourId } from "@shift/types";
+import { Point, Segment, type Anchor, type Contour } from "@shift/glyph-state";
+import type {
+  GlyphRenderAnchor,
+  GlyphRenderAnchorInput,
+  GlyphRenderContour,
+  GlyphRenderContourInput,
+} from "@/types/glyphRender";
 import type { GlyphGeometry } from "./Glyph";
-import type { LayerContourCoordinates } from "./GlyphLayerState";
 import { computed, track, type ComputedSignal, type Signal } from "@/lib/signals/signal";
-
-/**
- * Contour shape as consumed by render code.
- *
- * @remarks
- * The `points` collection is a render-time view of authored contour structure
- * plus current coordinates. Layer-backed contours can change coordinates
- * without changing contour identity.
- */
-export interface GlyphRenderContour {
-  readonly id: ContourId;
-  readonly closed: boolean;
-  readonly points: readonly Point[];
-}
-
-/**
- * Anchor position as consumed by render code.
- *
- * @remarks
- * Layer-backed anchors can change position without replacing the anchor item.
- */
-export interface GlyphRenderAnchor {
-  readonly id: AnchorId;
-  readonly name?: string;
-  readonly x: number;
-  readonly y: number;
-}
-
-export interface GlyphRenderContourInput {
-  readonly data: ContourData;
-  readonly coordinates: LayerContourCoordinates;
-}
-
-export interface GlyphRenderAnchorInput {
-  readonly data: AnchorData;
-  readonly values: Signal<Float64Array>;
-  readonly offset: number;
-}
 
 /** Builds contour readers for a resolved geometry snapshot. */
 export function geometryRenderContours(geometry: GlyphGeometry): readonly RenderContour[] {
@@ -56,6 +23,10 @@ export abstract class RenderContour implements GlyphRenderContour {
   abstract readonly id: ContourId;
   abstract readonly closed: boolean;
   abstract readonly points: readonly Point[];
+
+  segments(): readonly Segment[] {
+    return Segment.parse(this);
+  }
 
   trackShape(): void {}
 }
@@ -134,6 +105,10 @@ class GeometryRenderContour extends RenderContour {
 
   get points(): readonly Point[] {
     return this.#contour.points;
+  }
+
+  override segments(): readonly Segment[] {
+    return this.#contour.segments();
   }
 }
 

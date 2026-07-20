@@ -156,15 +156,15 @@ impl GlyphInterpolationSource {
 /// Reusable interpolation for one glyph's compatible authored source layers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlyphInterpolation {
-    template: GlyphLayer,
+    reference_layer: GlyphLayer,
     basis: InterpolationBasis,
     sources: Vec<GlyphInterpolationSource>,
 }
 
 impl GlyphInterpolation {
     /// Returns the master-backed layer that defines compatible topology.
-    pub fn template(&self) -> &GlyphLayer {
-        &self.template
+    pub fn reference_layer(&self) -> &GlyphLayer {
+        &self.reference_layer
     }
 
     /// Returns the coordinate-independent source contribution basis.
@@ -180,16 +180,16 @@ impl GlyphInterpolation {
     /// Resolves an owned glyph layer at an internal authoring location.
     ///
     /// Missing axis coordinates use authoring defaults. The returned layer
-    /// preserves the template layer's topology and identities but is a derived
+    /// preserves the reference layer's topology and identities but is a derived
     /// value; mutating it does not change the font.
     ///
     /// # Errors
     ///
     /// Returns [`CoreError::AxisNotFound`] if `axes` does not contain every
     /// support axis, or a glyph-value shape error if the interpolation model
-    /// and its structural template are inconsistent.
+    /// and its structural reference layer are inconsistent.
     pub fn resolve(&self, location: &Location, axes: &[Axis]) -> CoreResult<GlyphLayer> {
-        let mut layer = self.template.clone();
+        let mut layer = self.reference_layer.clone();
         let values = self.values_at(location, axes)?;
         layer.apply_interpolation_values(&values)?;
         Ok(layer)
@@ -226,8 +226,8 @@ impl Font {
     ///
     /// The font default source defines topology when that glyph has a layer
     /// there. Otherwise the most structurally complete master-backed layer is
-    /// the template, allowing sparse glyphs to interpolate without inventing a
-    /// default-source layer. Incompatible master layers are ignored. `None`
+    /// the reference, allowing sparse glyphs to interpolate without inventing
+    /// a default-source layer. Incompatible master layers are ignored. `None`
     /// means the font is static or no viable model can be formed; callers may
     /// then use their documented source fallback.
     ///
@@ -245,7 +245,7 @@ impl Font {
             return Ok(None);
         }
 
-        let Some(template) = interpolation_template(self, glyph) else {
+        let Some(reference_layer) = interpolation_reference_layer(self, glyph) else {
             return Ok(None);
         };
 
@@ -255,7 +255,7 @@ impl Font {
             let Some(layer) = glyph.layer_for_source(source.id()) else {
                 continue;
             };
-            if !template
+            if !reference_layer
                 .interpolation_compatibility_with(layer)
                 .is_compatible()
             {
@@ -284,14 +284,17 @@ impl Font {
             .collect();
 
         Ok(Some(GlyphInterpolation {
-            template: template.clone(),
+            reference_layer: reference_layer.clone(),
             basis,
             sources,
         }))
     }
 }
 
-fn interpolation_template<'a>(font: &Font, glyph: &'a crate::Glyph) -> Option<&'a GlyphLayer> {
+fn interpolation_reference_layer<'a>(
+    font: &Font,
+    glyph: &'a crate::Glyph,
+) -> Option<&'a GlyphLayer> {
     if let Some(default_source_id) = font.default_source_id() {
         let default_is_master = font
             .sources()
@@ -560,10 +563,10 @@ mod tests {
     fn smooth_metadata_does_not_make_layers_incompatible() {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
-        let template = glyph
+        let reference_layer = glyph
             .layer_for_source(font.default_source_id().unwrap())
             .unwrap();
-        let mut candidate = template.clone();
+        let mut candidate = reference_layer.clone();
         let point = candidate
             .contours_iter_mut()
             .next()
@@ -573,7 +576,7 @@ mod tests {
             .unwrap();
         point.set_smooth(!point.is_smooth());
 
-        assert!(template
+        assert!(reference_layer
             .interpolation_compatibility_with(&candidate)
             .is_compatible());
     }

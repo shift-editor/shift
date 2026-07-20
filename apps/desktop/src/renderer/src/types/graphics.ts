@@ -3,19 +3,25 @@
  * Used for serializing and replaying vector outlines independently of the canvas API.
  */
 export type PathCommand =
-  | { type: "moveTo"; x: number; y: number }
-  | { type: "lineTo"; x: number; y: number }
+  | { readonly type: "moveTo"; readonly x: number; readonly y: number }
+  | { readonly type: "lineTo"; readonly x: number; readonly y: number }
   | {
-      type: "cubicTo";
-      cp1x: number;
-      cp1y: number;
-      cp2x: number;
-      cp2y: number;
-      x: number;
-      y: number;
+      readonly type: "cubicTo";
+      readonly cp1x: number;
+      readonly cp1y: number;
+      readonly cp2x: number;
+      readonly cp2y: number;
+      readonly x: number;
+      readonly y: number;
     }
-  | { type: "quadTo"; cp1x: number; cp1y: number; x: number; y: number }
-  | { type: "close" };
+  | {
+      readonly type: "quadTo";
+      readonly cp1x: number;
+      readonly cp1y: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly type: "close" };
 
 /** RGBA colour as a four-element tuple (0-255 per channel). */
 export type Colour = [number, number, number, number];

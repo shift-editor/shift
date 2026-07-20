@@ -128,6 +128,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 - Domain types belong in `/types/{domain}.ts`, not in implementation files
 - NEVER define types (interfaces, type aliases, enums) directly in classes or service files
 - Types should be imported from dedicated type files
+- NEVER write derived utility types such as `Pick<Contour, "points" | "closed">` or `Omit<...>` inline in a function signature or body. Give the contract its own named type declaration in the appropriate domain type file and import it.
 - Re-export types from their domain's index.ts for public API
 - NEVER re-declare types that exist in `@shift/types` (generated from Rust). Import from `@shift/types`; for derived views (e.g. readonly, nested) use the domain pattern in `packages/types/src/domain.ts`
 

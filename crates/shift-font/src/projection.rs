@@ -146,7 +146,7 @@ impl GlyphProjection {
     /// # Errors
     ///
     /// Returns an interpolation error when the projection and its structural
-    /// template disagree, or when an interpolation support axis is absent.
+    /// reference layer disagree, or when an interpolation support axis is absent.
     pub fn resolve(
         &self,
         location: &Location,
@@ -208,7 +208,7 @@ impl Font {
         let interpolation = self.glyph_interpolation(glyph_id)?;
         let fallback = interpolation
             .as_ref()
-            .map(GlyphInterpolation::template)
+            .map(GlyphInterpolation::reference_layer)
             .or_else(|| fallback_layer(self, glyph))
             .cloned();
         let Some(fallback) = fallback else {
@@ -398,7 +398,7 @@ impl FontProjection<'_> {
     ///
     /// Returns [`CoreError::UnresolvableComponentGlyph`] when a component
     /// reference has no master-backed projection, or an interpolation error
-    /// when derived values do not match their compatible structural template.
+    /// when derived values do not match their compatible structural reference layer.
     pub fn glyph(&mut self, glyph_id: &GlyphId) -> CoreResult<Option<ResolvedGlyph>> {
         if !self.prepare_layer_tree(glyph_id)? {
             return Ok(None);

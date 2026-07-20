@@ -69,9 +69,8 @@ import {
   LayerRenderContour,
   type RenderAnchor,
   type RenderContour,
-  type GlyphRenderAnchorInput,
-  type GlyphRenderContourInput,
 } from "./GlyphRenderModel";
+import type { GlyphRenderAnchorInput, GlyphRenderContourInput } from "@/types/glyphRender";
 import { GlyphLayerPositionList } from "./GlyphLayerPositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import {

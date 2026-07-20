@@ -19,6 +19,7 @@ packages/glyph-state/src/
   Anchor.ts             -- anchor reader and anchor value offsets
   Component.ts          -- component reader and decomposed transform matrix
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
+  types/contour.ts      -- minimal named contour geometry contract
   GlyphGeometry.ts      -- low-level segment parser and curve conversion helpers
 ```
 
@@ -29,9 +30,11 @@ packages/glyph-state/src/
 - **`Anchor`** -- reader for one anchor's metadata and coordinates.
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.
 - **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hitTest`.
+- **`ContourGeometry`** -- minimal named `points + closed` contract accepted by segment parsing.
+- **`SegmentedContour`** -- contour geometry that exposes domain-owned segment traversal to renderer path derivation.
 - **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used for source edit previews and sparse position patch packing.
 
-## How It Fits
+## How it works
 
 Rust owns loading, persistence, ID allocation, boolean operations, and authoritative mutation. The bridge returns `GlyphStructure + values` for a source. This package turns that state into useful geometry. The renderer wraps these readers in signals and editor APIs.
 
@@ -48,3 +51,9 @@ Renderer code should keep using cached `GlyphStateGeometry` instances from the m
 
 - `pnpm --filter @shift/glyph-state test`
 - `pnpm --filter @shift/glyph-state typecheck`
+
+## Related
+
+- [`@shift/geo`](../../geo/docs/DOCS.md) -- coordinate, curve, matrix, and bounds primitives
+- [`@shift/types`](../../types/docs/DOCS.md) -- canonical glyph structure and identity types
+- [Renderer font model](../../../apps/desktop/src/renderer/src/lib/model/docs/DOCS.md) -- reactive ownership over glyph-state readers

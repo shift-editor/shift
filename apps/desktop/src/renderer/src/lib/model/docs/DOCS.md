@@ -21,10 +21,14 @@ lib/model/
   Font.ts                    -- font facade, view resolution, shared basis weights
   FontStore.ts               -- workspace records, authored layer state, projection/view ownership
   Glyph.ts                   -- Glyph, GlyphLayer, GlyphView, root lookup, composed metrics
-  ComponentGlyph.ts          -- component occurrences, contour occurrences, lazy paths/bounds
+  ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
   GlyphLayerState.ts         -- reactive authored structure and numeric buffers
+lib/graphics/
+  ContourPath.ts             -- canonical transformed commands and lazy path outputs
 lib/interpolation/
   InterpolationBasis.ts      -- local support evaluation and source-value combination
+types/
+  glyphRender.ts             -- contour and anchor contracts consumed by renderers
 hooks/
   useGlyphViews.ts           -- React demand boundary for batched projection reads
 components/home/
@@ -40,7 +44,8 @@ components/home/
 - `InterpolationBasis` -- source contribution math shared by glyphs with the same ordered compatible sources.
 - `GlyphView` -- stable reactive view bound to a location signal. Its contours, bounds, paths, advance, and sidebearings describe the complete displayed glyph; root point/segment lookup remains root-owned.
 - `ComponentGlyph` -- one ordered component occurrence with a full `ComponentId[]` ancestry, current local/resolved transforms, direct contours, children, and bounds.
-- `GlyphContour` -- one displayed contour occurrence over a source contour, a current transform, and optional owning `ComponentGlyph`.
+- `GlyphContour` -- one displayed contour occurrence over a source contour, a current transform, and optional owning `ComponentGlyph`; it replaces a `ContourPath` when reactive geometry changes.
+- `ContourPath` -- non-reactive commands plus independently lazy SVG, Canvas path, and bounds for one transformed contour occurrence.
 
 ## Resolution and loading
 

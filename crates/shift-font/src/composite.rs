@@ -181,9 +181,7 @@ impl GlyphComponents {
         root_glyph_id: &GlyphId,
         layers: &HashMap<GlyphId, GlyphLayer>,
     ) -> CoreResult<Self> {
-        let root_layer = layers
-            .get(root_glyph_id)
-            .ok_or_else(|| CoreError::GlyphNotFound(root_glyph_id.clone()))?;
+        let root_layer = layer_for_glyph(layers, root_glyph_id)?;
         let mut components = Vec::new();
         let mut visiting = HashSet::from([root_glyph_id.clone()]);
         append_components(
@@ -209,6 +207,32 @@ impl GlyphComponents {
     pub fn components(&self) -> &[ComponentGlyph] {
         &self.components
     }
+}
+
+fn layer_for_glyph<'a>(
+    layers: &'a HashMap<GlyphId, GlyphLayer>,
+    glyph_id: &GlyphId,
+) -> CoreResult<&'a GlyphLayer> {
+    layers
+        .get(glyph_id)
+        .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))
+}
+
+fn layer_for_component<'a>(
+    layers: &'a HashMap<GlyphId, GlyphLayer>,
+    component_id: &ComponentId,
+    base_glyph_id: &GlyphId,
+) -> CoreResult<&'a GlyphLayer> {
+    layers
+        .get(base_glyph_id)
+        .ok_or_else(|| CoreError::UnresolvableComponentGlyph {
+            component_id: component_id.clone(),
+            base_glyph_id: base_glyph_id.clone(),
+        })
+}
+
+fn invalid_component(component: &ComponentGlyph) -> CoreError {
+    CoreError::InvalidComponentId(component.component_id().to_string())
 }
 
 trait NamedPlacedAnchor {
@@ -286,13 +310,7 @@ fn append_components(
             continue;
         }
 
-        let component_layer =
-            layers
-                .get(&base_glyph_id)
-                .ok_or_else(|| CoreError::UnresolvableComponentGlyph {
-                    component_id: component.id(),
-                    base_glyph_id: base_glyph_id.clone(),
-                })?;
+        let component_layer = layer_for_component(layers, &component.id(), &base_glyph_id)?;
 
         let component_path = parent_path.child(component.id());
         let attachment =
@@ -350,17 +368,13 @@ fn explicit_transform_for_component(
     layers: &HashMap<GlyphId, GlyphLayer>,
     component_glyph: &ComponentGlyph,
 ) -> CoreResult<Transform> {
-    let parent_layer = layers
-        .get(&component_glyph.parent_glyph_id())
-        .ok_or_else(|| CoreError::GlyphNotFound(component_glyph.parent_glyph_id()))?;
+    let parent_layer = layer_for_glyph(layers, &component_glyph.parent_glyph_id())?;
     let component = parent_layer
         .components_iter()
         .find(|component| component.id() == component_glyph.component_id())
-        .ok_or_else(|| CoreError::InvalidComponentId(component_glyph.component_id().to_string()))?;
+        .ok_or_else(|| invalid_component(component_glyph))?;
     if component.base_glyph_id() != component_glyph.base_glyph_id() {
-        return Err(CoreError::InvalidComponentId(
-            component_glyph.component_id().to_string(),
-        ));
+        return Err(invalid_component(component_glyph));
     }
 
     Ok(component.matrix())
@@ -370,9 +384,7 @@ fn anchor_for_reference<'a>(
     layers: &'a HashMap<GlyphId, GlyphLayer>,
     reference: &ComponentAnchorReference,
 ) -> CoreResult<&'a Anchor> {
-    let layer = layers
-        .get(&reference.glyph_id())
-        .ok_or_else(|| CoreError::GlyphNotFound(reference.glyph_id()))?;
+    let layer = layer_for_glyph(layers, &reference.glyph_id())?;
     layer
         .anchors_iter()
         .find(|anchor| anchor.id() == reference.anchor_id())
@@ -392,7 +404,7 @@ fn local_transform_for_component(
     let target_anchor = anchor_for_reference(layers, attachment.target())?;
     let target_transform = local_transforms
         .get(attachment.target().component_path())
-        .ok_or_else(|| CoreError::InvalidComponentId(component_glyph.component_id().to_string()))?;
+        .ok_or_else(|| invalid_component(component_glyph))?;
 
     let (source_x, source_y) = explicit.transform_point(source_anchor.x(), source_anchor.y());
     let (target_x, target_y) =
@@ -419,20 +431,17 @@ fn resolve_component_contours(
         } else {
             *resolved_transforms
                 .get(component_glyph.parent_path())
-                .ok_or_else(|| {
-                    CoreError::InvalidComponentId(component_glyph.component_id().to_string())
-                })?
+                .ok_or_else(|| invalid_component(component_glyph))?
         };
         let resolved_transform = compose_transform(parent_transform, local_transform);
         local_transforms.insert(component_glyph.component_path().clone(), local_transform);
         resolved_transforms.insert(component_glyph.component_path().clone(), resolved_transform);
 
-        let layer = layers
-            .get(&component_glyph.base_glyph_id())
-            .ok_or_else(|| CoreError::UnresolvableComponentGlyph {
-                component_id: component_glyph.component_id(),
-                base_glyph_id: component_glyph.base_glyph_id(),
-            })?;
+        let layer = layer_for_component(
+            layers,
+            &component_glyph.component_id(),
+            &component_glyph.base_glyph_id(),
+        )?;
         contours.extend(
             layer
                 .contours_iter()
@@ -478,9 +487,7 @@ pub fn resolved_contours_from_layers(
     root_glyph_id: &GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
 ) -> CoreResult<Vec<ResolvedContour>> {
-    let layer = layers
-        .get(root_glyph_id)
-        .ok_or_else(|| CoreError::GlyphNotFound(root_glyph_id.clone()))?;
+    let layer = layer_for_glyph(layers, root_glyph_id)?;
     let mut contours = layer
         .contours_iter()
         .map(|contour| transform_contour_points(contour, Transform::identity()))

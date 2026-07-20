@@ -1,7 +1,7 @@
 import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { Point } from "./Point";
-import { Contour } from "./Contour";
+import type { ContourGeometry } from "./types/contour";
 
 declare const SegmentIdBrand: unique symbol;
 
@@ -125,7 +125,7 @@ export class Segment {
   }
 
   /** Parse a contour's points into segment instances. */
-  static parse(contour: Pick<Contour, "points" | "closed">): Segment[] {
+  static parse(contour: ContourGeometry): Segment[] {
     const { points, closed } = contour;
     if (points.length < 2) {
       return [];

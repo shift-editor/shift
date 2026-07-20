@@ -14,7 +14,7 @@ import {
 import { displayAdvance } from "@/lib/utils/unicode";
 import { track } from "@/lib/signals";
 import type { GlyphView } from "@/lib/model/Glyph";
-import type { GlyphRenderContour } from "@/lib/model/GlyphRenderModel";
+import type { GlyphRenderContour } from "@/types/glyphRender";
 import { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import type { GlyphNode } from "@/types/node";
 import type { RenderContext, RenderPass } from "@/types/rendering";

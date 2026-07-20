@@ -1,33 +1,16 @@
-import {
-  Bounds,
-  Curve,
-  Mat,
-  type Bounds as BoundsType,
-  type MatModel,
-  type Point2D,
-} from "@shift/geo";
+import { Bounds, Mat, Vec2, type Bounds as BoundsType, type MatModel } from "@shift/geo";
 import { Point, Segment } from "@shift/glyph-state";
 import type {
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
   GlyphId,
 } from "@shift/types";
-import { computed, track, type ComputedSignal, type Signal } from "@/lib/signals";
+import { ContourPath } from "@/lib/graphics/ContourPath";
+import { computed, track, type Signal } from "@/lib/signals";
+import type { GlyphRenderContour } from "@/types/glyphRender";
 import type { AxisLocation } from "@/types/variation";
 import type { GlyphView } from "./Glyph";
-import type { GlyphRenderContour, RenderContour } from "./GlyphRenderModel";
-
-type OutlineCommand =
-  | { readonly kind: "move"; readonly to: Point2D }
-  | { readonly kind: "line"; readonly to: Point2D }
-  | { readonly kind: "quad"; readonly control: Point2D; readonly to: Point2D }
-  | {
-      readonly kind: "cubic";
-      readonly control1: Point2D;
-      readonly control2: Point2D;
-      readonly to: Point2D;
-    }
-  | { readonly kind: "close" };
+import type { RenderContour } from "./GlyphRenderModel";
 
 /**
  * Represents one Rust-projected component occurrence with live numeric transforms.
@@ -95,10 +78,8 @@ export class ComponentGlyph {
 
       const sourcePosition = Mat.applyToPoint(explicit, source);
       const targetPosition = Mat.applyToPoint(targetComponent.#localTransformCell.value, target);
-      const attachmentOffset = Mat.Translate(
-        targetPosition.x - sourcePosition.x,
-        targetPosition.y - sourcePosition.y,
-      );
+      const attachmentDelta = Vec2.sub(targetPosition, sourcePosition);
+      const attachmentOffset = Mat.Translate(attachmentDelta.x, attachmentDelta.y);
       return Mat.Compose(attachmentOffset, explicit);
     });
     this.resolvedTransformCell = computed(() => {
@@ -186,10 +167,7 @@ export class GlyphContour {
   readonly #contourCell: Signal<RenderContour>;
   readonly #matrixCell: Signal<MatModel>;
   readonly #component: ComponentGlyph | null;
-  readonly #commandsCell: Signal<readonly OutlineCommand[]>;
-  readonly #boundsCell: ComputedSignal<BoundsType | null>;
-  readonly #pathCell: Signal<Path2D>;
-  readonly #svgPathCell: Signal<string>;
+  readonly #contourPathCell: Signal<ContourPath>;
 
   /**
    * Creates a contour occurrence over live source coordinates and placement.
@@ -206,14 +184,11 @@ export class GlyphContour {
     this.#contourCell = contourCell;
     this.#matrixCell = matrixCell;
     this.#component = component;
-    this.#commandsCell = computed(() => {
+    this.#contourPathCell = computed(() => {
       const contour = this.#contourCell.value;
       contour.trackShape();
-      return OutlineCommands.fromRenderContour(contour, this.#matrixCell.value);
+      return ContourPath.fromContour(contour, this.#matrixCell.value);
     });
-    this.#boundsCell = computed(() => OutlineCommands.bounds(this.#commandsCell.value));
-    this.#pathCell = computed(() => OutlineCommands.toPath(this.#commandsCell.value));
-    this.#svgPathCell = computed(() => OutlineCommands.toSvgPath(this.#commandsCell.value));
   }
 
   get contour(): GlyphRenderContour {
@@ -232,16 +207,20 @@ export class GlyphContour {
     return this.#matrixCell.peek();
   }
 
+  get contourPath(): ContourPath {
+    return this.#contourPathCell.peek();
+  }
+
   get path(): Path2D {
-    return this.#pathCell.peek();
+    return this.contourPath.path;
   }
 
   get svgPath(): string {
-    return this.#svgPathCell.peek();
+    return this.contourPath.svgPath;
   }
 
   get bounds(): BoundsType | null {
-    return this.#boundsCell.peek();
+    return this.contourPath.bounds;
   }
 
   /** Returns this occurrence's segments in root-glyph coordinates. */
@@ -256,133 +235,6 @@ export class GlyphContour {
   }
 
   trackShape(): void {
-    track(this.#commandsCell);
-  }
-}
-
-class OutlineCommands {
-  static fromRenderContour(
-    contour: GlyphRenderContour,
-    matrix: MatModel,
-  ): readonly OutlineCommand[] {
-    const segments = Segment.parse(contour);
-    const first = segments[0];
-    if (!first) return [];
-
-    const commands: OutlineCommand[] = [
-      { kind: "move", to: Mat.applyToPoint(matrix, first.start) },
-    ];
-    for (const segment of segments) {
-      const points = segment.points;
-      switch (points.type) {
-        case "line":
-          commands.push({ kind: "line", to: Mat.applyToPoint(matrix, points.end) });
-          break;
-        case "quad":
-          commands.push({
-            kind: "quad",
-            control: Mat.applyToPoint(matrix, points.control),
-            to: Mat.applyToPoint(matrix, points.end),
-          });
-          break;
-        case "cubic":
-          commands.push({
-            kind: "cubic",
-            control1: Mat.applyToPoint(matrix, points.controlStart),
-            control2: Mat.applyToPoint(matrix, points.controlEnd),
-            to: Mat.applyToPoint(matrix, points.end),
-          });
-          break;
-      }
-    }
-    if (contour.closed) commands.push({ kind: "close" });
-    return commands;
-  }
-
-  static bounds(commands: readonly OutlineCommand[]): BoundsType | null {
-    let current: Point2D | null = null;
-    const bounds: BoundsType[] = [];
-    for (const command of commands) {
-      switch (command.kind) {
-        case "move":
-          current = command.to;
-          break;
-        case "line":
-          if (current) bounds.push(Curve.bounds(Curve.line(current, command.to)));
-          current = command.to;
-          break;
-        case "quad":
-          if (current)
-            bounds.push(Curve.bounds(Curve.quadratic(current, command.control, command.to)));
-          current = command.to;
-          break;
-        case "cubic":
-          if (current) {
-            bounds.push(
-              Curve.bounds(Curve.cubic(current, command.control1, command.control2, command.to)),
-            );
-          }
-          current = command.to;
-          break;
-        case "close":
-          break;
-      }
-    }
-    return Bounds.unionAll(bounds);
-  }
-
-  static toPath(commands: readonly OutlineCommand[]): Path2D {
-    const path = new Path2D();
-    for (const command of commands) {
-      switch (command.kind) {
-        case "move":
-          path.moveTo(command.to.x, command.to.y);
-          break;
-        case "line":
-          path.lineTo(command.to.x, command.to.y);
-          break;
-        case "quad":
-          path.quadraticCurveTo(command.control.x, command.control.y, command.to.x, command.to.y);
-          break;
-        case "cubic":
-          path.bezierCurveTo(
-            command.control1.x,
-            command.control1.y,
-            command.control2.x,
-            command.control2.y,
-            command.to.x,
-            command.to.y,
-          );
-          break;
-        case "close":
-          path.closePath();
-          break;
-      }
-    }
-    return path;
-  }
-
-  static toSvgPath(commands: readonly OutlineCommand[]): string {
-    return commands.map((command) => this.toSvg(command)).join(" ");
-  }
-
-  static toSvg(command: OutlineCommand): string {
-    switch (command.kind) {
-      case "move":
-        return `M ${this.formatNumber(command.to.x)} ${this.formatNumber(command.to.y)}`;
-      case "line":
-        return `L ${this.formatNumber(command.to.x)} ${this.formatNumber(command.to.y)}`;
-      case "quad":
-        return `Q ${this.formatNumber(command.control.x)} ${this.formatNumber(command.control.y)} ${this.formatNumber(command.to.x)} ${this.formatNumber(command.to.y)}`;
-      case "cubic":
-        return `C ${this.formatNumber(command.control1.x)} ${this.formatNumber(command.control1.y)} ${this.formatNumber(command.control2.x)} ${this.formatNumber(command.control2.y)} ${this.formatNumber(command.to.x)} ${this.formatNumber(command.to.y)}`;
-      case "close":
-        return "Z";
-    }
-  }
-
-  static formatNumber(value: number): string {
-    const rounded = Math.round(value * 1_000_000) / 1_000_000;
-    return Object.is(rounded, -0) ? "0" : `${rounded}`;
+    track(this.#contourPathCell);
   }
 }
