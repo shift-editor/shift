@@ -52,6 +52,10 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `packages/validation/**`  | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)   | Point sequence validation and persistence schemas                  |
 | `packages/rules/**`       | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)             | Point editing rules engine for geometric constraints               |
 
+## Cross-cutting guides
+
+- [`glyph-pipeline-performance.md`](./glyph-pipeline-performance.md) — perf lessons from the 2026-07 glyph grid investigation (Rust + renderer anti-patterns) and how to reconstruct the layered instrumentation for benchmarking (`git revert f6287fde`).
+
 ## API Boundaries
 
 These modules have stricter change rules. Changes affect multiple layers and require `pnpm typecheck` to validate.
