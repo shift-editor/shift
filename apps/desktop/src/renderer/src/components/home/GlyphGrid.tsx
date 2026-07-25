@@ -19,7 +19,6 @@ export const GlyphGrid = memo(function GlyphGrid() {
     totalHeight,
     viewportHeight,
     width,
-    columns,
     cellWidth,
     renderedGlyphIds,
     renderedStartIndex,
@@ -52,7 +51,6 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const initialMeasurementLoggedRef = useRef(false);
 
   const missingPreviews = pendingGlyphIds.filter((glyphId) => !frame.previews.has(glyphId)).length;
-  const blankEpisodeRef = useRef<{ since: number; maxMissing: number } | null>(null);
 
   // Atomic frames: a window is displayed only once every cell has a preview.
   // Until then the last complete window stays up — stale glyphs, never
@@ -82,35 +80,9 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const stickyOffset = Math.min(0, viewportHeight - blockHeight);
 
   useEffect(() => {
-    if (missingPreviews > 0) {
-      const episode = blankEpisodeRef.current;
-      if (episode) {
-        episode.maxMissing = Math.max(episode.maxMissing, missingPreviews);
-      } else {
-        blankEpisodeRef.current = { since: performance.now(), maxMissing: missingPreviews };
-      }
-      return;
-    }
-
-    if (blankEpisodeRef.current) {
-      console.info("[glyph-blank]", {
-        blankMs: Math.round(performance.now() - blankEpisodeRef.current.since),
-        maxMissing: blankEpisodeRef.current.maxMissing,
-      });
-      blankEpisodeRef.current = null;
-    }
-  }, [missingPreviews]);
-
-  useEffect(() => {
     if (width <= 0 || !firstFrameReady || initialMeasurementLoggedRef.current) return;
 
     initialMeasurementLoggedRef.current = true;
-    console.info("[glyph-grid] first frame ready", {
-      glyphCount: renderedGlyphIds.length,
-      rowCount: rows.length,
-      width,
-      columns,
-    });
 
     async function showMeasuredWorkspace(): Promise<void> {
       try {
@@ -121,7 +93,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     }
 
     void showMeasuredWorkspace();
-  }, [columns, firstFrameReady, renderedGlyphIds.length, rows, width]);
+  }, [firstFrameReady, width]);
 
   const handleCellClick = useCallback(
     async (glyph: GlyphCatalogItem) => {

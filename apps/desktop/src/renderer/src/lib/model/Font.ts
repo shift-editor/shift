@@ -862,7 +862,6 @@ export class Font {
   }
 
   async #readGlyphsIntoStore(glyphIds: readonly GlyphId[]): Promise<void> {
-    const startedAt = performance.now();
     const uniqueIds = uniqueInOrder(glyphIds).filter((glyphId) =>
       Boolean(this.#store.recordForId(glyphId)),
     );
@@ -870,7 +869,6 @@ export class Font {
     const seen = await this.#readGlyphSnapshots(
       uniqueIds.filter((glyphId) => !this.#store.glyphForId(glyphId)),
     );
-    const readDoneAt = performance.now();
     const glyphs = new Map<GlyphId, Glyph>();
 
     for (const glyphId of seen) {
@@ -891,18 +889,8 @@ export class Font {
       glyph.replaceComponentGlyphs(componentGlyphs);
     }
 
-    const assembledAt = performance.now();
     this.#store.setGlyphs([...glyphs.values()]);
     this.#updateGlyphsFromStore();
-
-    const finishedAt = performance.now();
-    console.info("[glyph-load]", {
-      requested: uniqueIds.length,
-      assembled: glyphs.size,
-      readMs: Math.round(readDoneAt - startedAt),
-      assembleMs: Math.round(assembledAt - readDoneAt),
-      storeUpdateMs: Math.round(finishedAt - assembledAt),
-    });
   }
 
   #updateGlyphsFromStore(): void {
@@ -996,29 +984,19 @@ export class Font {
     // No settled() here: readGlyphSnapshots already orders reads behind
     // pending writes via the coordinator queue, and draining the queue first
     // would stall every read behind all other in-flight reads.
-    const roundsMs: number[] = [];
-
     while (queue.length > 0) {
-      const roundStartedAt = performance.now();
       const batchGlyphIds = queue.splice(0);
       await this.#readAndApplyGlyphRequests(batchGlyphIds.map((glyphId) => ({ glyphId })));
-      roundsMs.push(Math.round(performance.now() - roundStartedAt));
 
       // load the component glyphs and skip ones we've seen
       for (const glyphId of batchGlyphIds) {
         for (const componentGlyphId of this.#store.componentBaseGlyphIdsInLayerState(glyphId)) {
-          // TODO: bad name for the store method
           if (seen.has(componentGlyphId)) continue;
           seen.add(componentGlyphId);
           if (!this.#store.glyphForId(componentGlyphId)) queue.push(componentGlyphId);
         }
       }
     }
-
-    console.info("[glyph-read]", {
-      requested: glyphIds.length,
-      roundsMs,
-    });
 
     return [...seen];
   }

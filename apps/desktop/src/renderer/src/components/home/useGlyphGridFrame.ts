@@ -49,7 +49,6 @@ export function createGlyphGridFrameCell(
 ): Signal<GlyphGridFrame> {
   return computed(
     () => {
-      const startedAt = performance.now();
       const currentLocation = location.value;
       const previews = new Map<GlyphId, GlyphGridPreview>();
 
@@ -65,11 +64,6 @@ export function createGlyphGridFrameCell(
       // model yet; a resident model always wins.
       for (const [glyphId, preview] of fallbackPreviews) {
         if (!previews.has(glyphId)) previews.set(glyphId, preview);
-      }
-
-      const buildMs = Math.round(performance.now() - startedAt);
-      if (buildMs >= 1) {
-        console.info("[glyph-frame]", { previews: previews.size, buildMs });
       }
 
       return { location: currentLocation, previews };
@@ -178,14 +172,7 @@ export function useGlyphGridFrame({
       modelLoadingRef.current = true;
       try {
         const requested = latestGlyphIdsRef.current;
-        const startedAt = performance.now();
         const loadedGlyphs = await font.loadGlyphs(requested);
-
-        console.info("[glyph-grid] loaded", {
-          glyphCount: requested.length,
-          durationMs: Math.round(performance.now() - startedAt),
-          stale: latestGlyphIdsRef.current !== requested,
-        });
 
         if (latestGlyphIdsRef.current !== requested) {
           scheduleSettledLoad();

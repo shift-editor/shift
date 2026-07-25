@@ -169,17 +169,7 @@ export class WorkspaceEditCoordinator {
     requests: readonly WorkspaceGlyphSnapshotRequest[],
   ): Promise<WorkspaceGlyphSnapshot[]> {
     if (requests.length === 0) return [];
-    const requestedAt = performance.now();
-    return this.#withFlush(async () => {
-      const startedAt = performance.now();
-      const snapshots = await this.#workspace.glyphSnapshots(requests);
-      console.info("[glyph-rpc]", {
-        requested: requests.length,
-        queueMs: Math.round(startedAt - requestedAt),
-        rpcMs: Math.round(performance.now() - startedAt),
-      });
-      return snapshots;
-    });
+    return this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
   }
 
   /** Pulls reusable glyph projection models behind pending authored edits. */

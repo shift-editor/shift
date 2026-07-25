@@ -2,32 +2,6 @@
 
 use std::collections::HashMap;
 
-/// Temporary aggregate timers isolating `glyph_projection` hot spots.
-///
-/// Phases accumulate across calls on relaxed atomics; the bridge drains them
-/// once per snapshot batch to log a per-batch breakdown.
-pub mod projection_timing {
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    pub static LAYER_PROJECTION_NS: AtomicU64 = AtomicU64::new(0);
-    pub static FALLBACK_RESOLVE_NS: AtomicU64 = AtomicU64::new(0);
-    pub static MASTER_RESOLVE_NS: AtomicU64 = AtomicU64::new(0);
-
-    pub fn add(counter: &AtomicU64, nanos: u128) {
-        counter.fetch_add(nanos as u64, Ordering::Relaxed);
-    }
-
-    /// Drains all counters, returning whole milliseconds per phase in
-    /// declaration order: layer projection, fallback resolve, master resolves.
-    pub fn drain_ms() -> (u64, u64, u64) {
-        (
-            LAYER_PROJECTION_NS.swap(0, Ordering::Relaxed) / 1_000_000,
-            FALLBACK_RESOLVE_NS.swap(0, Ordering::Relaxed) / 1_000_000,
-            MASTER_RESOLVE_NS.swap(0, Ordering::Relaxed) / 1_000_000,
-        )
-    }
-}
-
 use crate::composite::{resolved_contours_from_layers, GlyphComponents, ResolvedContour};
 use crate::{
     Axis, CoreError, CoreResult, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer, Location,
@@ -380,17 +354,10 @@ impl Font {
         if self.glyph(glyph_id.clone()).is_none() {
             return Err(CoreError::GlyphNotFound(glyph_id.clone()));
         }
-        let phase = std::time::Instant::now();
-        let layers = self.glyph_layer_projection(glyph_id)?;
-        projection_timing::add(
-            &projection_timing::LAYER_PROJECTION_NS,
-            phase.elapsed().as_nanos(),
-        );
-        let Some(layers) = layers else {
+        let Some(layers) = self.glyph_layer_projection(glyph_id)? else {
             return Ok(None);
         };
 
-        let phase = std::time::Instant::now();
         let mut component_projections = HashMap::new();
         self.collect_component_layer_projections(&layers, &mut component_projections)?;
         let fallback_source_id = layers.fallback.source_id();
@@ -400,12 +367,7 @@ impl Font {
             &component_projections,
             &fallback_source_id,
         )?;
-        projection_timing::add(
-            &projection_timing::FALLBACK_RESOLVE_NS,
-            phase.elapsed().as_nanos(),
-        );
 
-        let phase = std::time::Instant::now();
         let mut exact_source_components = Vec::new();
         for source in self.sources().iter().filter(|source| source.is_master()) {
             let source_id = source.id();
@@ -418,10 +380,6 @@ impl Font {
                 });
             }
         }
-        projection_timing::add(
-            &projection_timing::MASTER_RESOLVE_NS,
-            phase.elapsed().as_nanos(),
-        );
 
         let mut component_glyph_ids = components
             .components()

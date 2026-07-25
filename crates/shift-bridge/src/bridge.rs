@@ -573,9 +573,6 @@ impl Bridge {
   ) -> errors::Result<Vec<NapiGlyphSnapshot>> {
     let font = self.font()?;
     let mut snapshots = Vec::new();
-    let started = std::time::Instant::now();
-    let mut projection_time = std::time::Duration::ZERO;
-    let mut layers_time = std::time::Duration::ZERO;
 
     for request in requests {
       let request = GlyphSnapshotRequest::from(request);
@@ -584,11 +581,8 @@ impl Bridge {
         continue;
       };
 
-      let phase = std::time::Instant::now();
       let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
-      projection_time += phase.elapsed();
 
-      let phase = std::time::Instant::now();
       let layers = glyph
         .layers()
         .values()
@@ -599,7 +593,6 @@ impl Bridge {
           state: GlyphState::from_layer(layer),
         })
         .collect();
-      layers_time += phase.elapsed();
 
       snapshots.push(GlyphSnapshot {
         glyph_id,
@@ -608,23 +601,7 @@ impl Bridge {
       });
     }
 
-    let phase = std::time::Instant::now();
-    let converted: Vec<NapiGlyphSnapshot> = snapshots.into_iter().map(Into::into).collect();
-    let (layer_projection_ms, fallback_resolve_ms, master_resolve_ms) =
-      shift_font::projection_timing::drain_ms();
-    eprintln!(
-      "[bridge] get_glyph_snapshots count={} total_ms={} projection_ms={} (layer_projection_ms={} fallback_resolve_ms={} master_resolve_ms={}) layers_ms={} convert_ms={}",
-      converted.len(),
-      started.elapsed().as_millis(),
-      projection_time.as_millis(),
-      layer_projection_ms,
-      fallback_resolve_ms,
-      master_resolve_ms,
-      layers_time.as_millis(),
-      phase.elapsed().as_millis()
-    );
-
-    Ok(converted)
+    Ok(snapshots.into_iter().map(Into::into).collect())
   }
 
   /// Returns compact glyph projections without resolving a location.

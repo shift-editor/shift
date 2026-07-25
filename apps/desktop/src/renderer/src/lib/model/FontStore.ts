@@ -121,7 +121,6 @@ export class FontStore {
   }
 
   applyGlyphSnapshots(snapshots: readonly WorkspaceGlyphSnapshot[]): void {
-    const startedAt = performance.now();
     batch(() => {
       for (const snapshot of snapshots) {
         if (!this.#glyphById.has(snapshot.glyphId)) continue;
@@ -134,11 +133,6 @@ export class FontStore {
           this.#applyLayerSnapshot(layer);
         }
       }
-    });
-
-    console.info("[glyph-apply]", {
-      snapshots: snapshots.length,
-      applyMs: Math.round(performance.now() - startedAt),
     });
   }
 
