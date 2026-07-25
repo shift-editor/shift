@@ -1,4 +1,11 @@
-import type { AppliedChange, FontIntent, GlyphId, GlyphProjection, Location } from "@shift/types";
+import type {
+  AppliedChange,
+  FontIntent,
+  GlyphId,
+  GlyphPreview,
+  GlyphProjection,
+  Location,
+} from "@shift/types";
 import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
@@ -162,7 +169,17 @@ export class WorkspaceEditCoordinator {
     requests: readonly WorkspaceGlyphSnapshotRequest[],
   ): Promise<WorkspaceGlyphSnapshot[]> {
     if (requests.length === 0) return [];
-    return this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
+    const requestedAt = performance.now();
+    return this.#withFlush(async () => {
+      const startedAt = performance.now();
+      const snapshots = await this.#workspace.glyphSnapshots(requests);
+      console.info("[glyph-rpc]", {
+        requested: requests.length,
+        queueMs: Math.round(startedAt - requestedAt),
+        rpcMs: Math.round(performance.now() - startedAt),
+      });
+      return snapshots;
+    });
   }
 
   /** Pulls reusable glyph projection models behind pending authored edits. */
@@ -170,6 +187,16 @@ export class WorkspaceEditCoordinator {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#workspace.glyphProjections(glyphIds));
+  }
+
+  /** Pulls drawable previews at one internal location behind pending edits. */
+  async readGlyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: Location,
+  ): Promise<GlyphPreview[]> {
+    if (glyphIds.length === 0) return [];
+
+    return this.#withFlush(() => this.#workspace.glyphPreviews(glyphIds, location));
   }
 
   /**

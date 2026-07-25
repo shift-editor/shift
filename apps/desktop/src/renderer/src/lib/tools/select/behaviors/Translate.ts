@@ -241,7 +241,7 @@ class TranslateOperation {
     selection: readonly ShiftId[],
     dragAnchor: GlyphLayerPositionTarget | null,
   ): TranslateOperation | null {
-    const layer = editor.font.layerForGeometry({ points: pointIds, anchors: anchorIds });
+    const layer = editor.layerForGeometry({ points: pointIds, anchors: anchorIds });
     if (!layer || !isDisplayedLayer(editor, layer)) return null;
 
     return new TranslateOperation(layer, pointIds, anchorIds, selection, dragAnchor);

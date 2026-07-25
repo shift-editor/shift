@@ -19,10 +19,9 @@ import { TextBuffer } from "./TextBuffer";
 import { TextInteraction } from "./TextInteraction";
 import { Caret, glyphTextItem, TextLayout } from "./layout";
 import type { TextItem, GlyphAnchor, GlyphTextItem, Positioner, TextRunId } from "./layout";
-import type { Font } from "@/lib/model/Font";
+import type { Editor } from "@/lib/editor/Editor";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { Point2D } from "@shift/geo";
-import type { AxisLocation } from "@/types/variation";
 
 export interface SelectionRect {
   x: number;
@@ -42,9 +41,8 @@ export class TextRun {
   readonly id: TextRunId;
   readonly buffer: TextBuffer;
   readonly interaction: TextInteraction;
-  readonly #font: Font;
+  readonly #editor: Editor;
   readonly #positioner: Positioner;
-  readonly #designLocation: Signal<AxisLocation>;
 
   readonly #cursorVisible: ReturnType<typeof signal<boolean>>;
   readonly #layout: ComputedSignal<TextLayout | null>;
@@ -53,31 +51,25 @@ export class TextRun {
 
   #goalX: number | null = null;
 
-  constructor(
-    id: TextRunId,
-    font: Font,
-    positioner: Positioner,
-    designLocation: Signal<AxisLocation>,
-  ) {
+  constructor(id: TextRunId, editor: Editor, positioner: Positioner) {
     this.id = id;
     this.buffer = new TextBuffer();
     this.interaction = new TextInteraction();
-    this.#font = font;
+    this.#editor = editor;
     this.#positioner = positioner;
-    this.#designLocation = designLocation;
     this.#cursorVisible = signal(false);
 
     this.#layout = computed(() => {
-      track(this.#designLocation);
+      track(this.#editor.designLocationCell);
 
       const items = this.buffer.itemsCell.value;
       if (items.length === 0) return null;
       return new TextLayout({
         items,
         origin: { x: this.buffer.originXCell.value, y: 0 },
-        font: this.#font,
+        editor: this.#editor,
         positioner: this.#positioner,
-        designLocation: this.#designLocation,
+        designLocation: this.#editor.designLocationCell,
       });
     });
 

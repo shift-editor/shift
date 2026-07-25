@@ -14,7 +14,7 @@ export class SegmentDoubleClick implements SelectBehavior {
     const node = ctx.editor.scene.node(event.target.nodeId);
     if (node?.kind !== "glyph") return false;
 
-    const layer = ctx.editor.font.layer(node.glyphId, node.sourceId);
+    const layer = ctx.editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
     if (!layer) return false;
 
     const firstPoint = event.target.pointIds[0];

@@ -50,6 +50,7 @@ export type {
   GlyphLayerShape,
   GlyphName,
   GlyphInterpolation,
+  GlyphPreview,
   GlyphProjection,
   GlyphRecord,
   GlyphSourceComponents,

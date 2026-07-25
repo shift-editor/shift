@@ -82,7 +82,9 @@ describe("Editor scene bootstrap", () => {
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");
 
-    const defaultLayer = editor.font.layer(node.glyphId, editor.font.defaultSource.id);
+    const defaultLayer = editor
+      .glyphForId(node.glyphId)
+      ?.layerForSource(editor.font.defaultSource.id);
     if (!defaultLayer) throw new Error("Expected default glyph layer");
 
     const defaultContour = defaultLayer.contours[0];
@@ -98,7 +100,7 @@ describe("Editor scene bootstrap", () => {
     expect(editor.activeSourceId).toBe(sourceId);
     expect(editor.glyphNode?.sourceId).toBe(sourceId);
 
-    const createdLayer = editor.font.layer(node.glyphId, sourceId);
+    const createdLayer = editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!createdLayer) throw new Error("Expected seeded glyph layer");
 
     const createdContour = createdLayer.contours[0];
@@ -136,7 +138,9 @@ describe("Editor scene bootstrap", () => {
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");
 
-    const defaultLayer = editor.font.layer(node.glyphId, editor.font.defaultSource.id);
+    const defaultLayer = editor
+      .glyphForId(node.glyphId)
+      ?.layerForSource(editor.font.defaultSource.id);
     if (!defaultLayer) throw new Error("Expected default glyph layer");
 
     const axisId = editor.font.createAxis(weightAxis());
@@ -146,12 +150,12 @@ describe("Editor scene bootstrap", () => {
     });
     await editor.settle();
 
-    expect(editor.font.layer(node.glyphId, sourceId)).toBe(null);
+    expect(editor.glyphForId(node.glyphId)?.layerForSource(sourceId)).toBeNull();
 
     editor.selectSource(sourceId);
     await editor.settle();
 
-    const materializedLayer = editor.font.layer(node.glyphId, sourceId);
+    const materializedLayer = editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!materializedLayer) throw new Error("Expected materialized glyph layer");
 
     expect(editor.activeSourceId).toBe(sourceId);

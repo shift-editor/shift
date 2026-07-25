@@ -58,6 +58,17 @@ export declare class Bridge {
    * renderer can evaluate design-location changes without further IPC.
    */
   getGlyphProjections(glyphIds: Array<GlyphId>): Array<NapiGlyphProjection>
+  /**
+   * Location-resolved glyph previews: one svg path and advance per glyph.
+   *
+   * `location` is an internal authoring location; external axis mappings must
+   * be evaluated first (see `map_location`). Components and interpolation
+   * resolve at that location with shared component work across the batch.
+   * Missing glyph identities are omitted. No editable structure crosses the
+   * boundary, so the payload stays orders of magnitude lighter than
+   * `get_glyph_snapshots`.
+   */
+  getGlyphPreviews(glyphIds: Array<GlyphId>, location: NapiLocation): Array<NapiGlyphPreview>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
@@ -433,6 +444,16 @@ export interface NapiGlyphLayerSnapshot {
   glyphId: GlyphId
   sourceId: SourceId
   state: NapiGlyphState
+}
+
+/**
+ * Location-resolved drawable preview: one svg path and advance per glyph,
+ * with no editable structure crossing the boundary.
+ */
+export interface NapiGlyphPreview {
+  glyphId: GlyphId
+  svgPath: string
+  xAdvance: number
 }
 
 export interface NapiGlyphProjection {

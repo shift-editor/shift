@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { asPointId, mintNodeId } from "@shift/types";
+import { asPointId, mintGlyphId, mintNodeId, type GlyphName } from "@shift/types";
 import { objectIsKindOf } from "@/types";
 import { TestEditor } from "./TestEditor";
 
@@ -34,6 +34,21 @@ describe("TestEditor", () => {
       expect(first).toBeDefined();
       expect(second).toBeDefined();
       expect(second).not.toEqual(first);
+    });
+  });
+
+  describe("glyph resolution", () => {
+    it("distinguishes catalog records from acquired Glyphs", async () => {
+      const record = editor.font.createGlyph("B" as GlyphName);
+      await editor.settle();
+
+      expect(editor.font.recordForId(record.id)).not.toBeNull();
+      expect(editor.glyphForId(record.id)).toBeNull();
+
+      const glyph = await editor.font.loadGlyph(record.id);
+
+      expect(editor.glyphForId(record.id)).toBe(glyph);
+      expect(editor.glyphForId(mintGlyphId())).toBeNull();
     });
   });
 

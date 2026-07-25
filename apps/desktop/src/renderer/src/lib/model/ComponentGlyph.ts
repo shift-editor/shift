@@ -9,7 +9,7 @@ import { ContourPath } from "@/lib/graphics/ContourPath";
 import { computed, track, type Signal } from "@/lib/signals";
 import type { GlyphRenderContour } from "@/types/glyphRender";
 import type { AxisLocation } from "@/types/variation";
-import type { GlyphView } from "./Glyph";
+import type { GlyphRenderModel } from "./Glyph";
 import type { RenderContour } from "./GlyphRenderModel";
 
 /**
@@ -25,7 +25,7 @@ export class ComponentGlyph {
   readonly #definitionCell: Signal<ComponentGlyphDefinition>;
   readonly #glyphIdCell: Signal<GlyphId>;
   readonly #locationCell: Signal<AxisLocation>;
-  readonly #view: GlyphView;
+  readonly #renderModel: GlyphRenderModel;
   readonly #localTransformCell: Signal<MatModel>;
 
   readonly transformCell: Signal<MatModel>;
@@ -38,21 +38,24 @@ export class ComponentGlyph {
    * Creates a reactive component occurrence from a Rust projection node.
    *
    * @param definitionCell - Rust-owned occurrence definition selected for the current location.
-   * @param locationCell - Design location shared with the root glyph view.
-   * @param view - Complete glyph view that owns this occurrence.
+   * @param locationCell - Design location shared with the root Glyph render model.
+   * @param renderModel - Complete Glyph render model that owns this occurrence.
    */
   constructor(
     definitionCell: Signal<ComponentGlyphDefinition>,
     locationCell: Signal<AxisLocation>,
-    view: GlyphView,
+    renderModel: GlyphRenderModel,
   ) {
     this.#definitionCell = definitionCell;
     this.#glyphIdCell = computed(() => this.#definitionCell.value.baseGlyphId);
     this.#locationCell = locationCell;
-    this.#view = view;
+    this.#renderModel = renderModel;
     this.transformCell = computed(() => {
       const definition = this.#definitionCell.value;
-      const geometry = this.#view.geometryAt(definition.parentGlyphId, this.#locationCell.value);
+      const geometry = this.#renderModel.geometryAt(
+        definition.parentGlyphId,
+        this.#locationCell.value,
+      );
       return (
         geometry.components.find((component) => component.id === definition.componentId)?.matrix ??
         Mat.Identity()
@@ -65,14 +68,14 @@ export class ComponentGlyph {
       if (!attachment) return explicit;
 
       const location = this.#locationCell.value;
-      const sourceGeometry = this.#view.geometryAt(attachment.source.glyphId, location);
+      const sourceGeometry = this.#renderModel.geometryAt(attachment.source.glyphId, location);
       const source = sourceGeometry.anchor(attachment.source.anchorId);
       if (!source) return explicit;
 
-      const targetComponent = this.#view.componentAt(attachment.target.componentPath);
+      const targetComponent = this.#renderModel.componentAt(attachment.target.componentPath);
       if (!targetComponent) return explicit;
 
-      const targetGeometry = this.#view.geometryAt(attachment.target.glyphId, location);
+      const targetGeometry = this.#renderModel.geometryAt(attachment.target.glyphId, location);
       const target = targetGeometry.anchor(attachment.target.anchorId);
       if (!target) return explicit;
 
@@ -89,11 +92,11 @@ export class ComponentGlyph {
       return Mat.Compose(parent.resolvedTransformCell.value, this.#localTransformCell.value);
     });
 
-    this.contoursCell = view.contoursAt(this.#glyphIdCell, this.resolvedTransformCell, this);
+    this.contoursCell = renderModel.contoursAt(this.#glyphIdCell, this.resolvedTransformCell, this);
     this.childrenCell = computed(() =>
-      this.#view.childrenOf(
+      this.#renderModel.childrenOf(
         this.#definitionCell.value.componentPath,
-        this.#view.componentsCell.value,
+        this.#renderModel.componentsCell.value,
       ),
     );
     this.boundsCell = computed(() => {
@@ -150,12 +153,12 @@ export class ComponentGlyph {
   #parent(): ComponentGlyph | null {
     if (this.parentPath.length === 0) return null;
 
-    return this.#view.componentAt(this.parentPath);
+    return this.#renderModel.componentAt(this.parentPath);
   }
 }
 
 /**
- * Represents one contour occurrence in a glyph view.
+ * Represents one contour occurrence in a Glyph render model.
  *
  * @remarks
  * `component` is `null` for contours owned by the root glyph and identifies

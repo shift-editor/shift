@@ -47,17 +47,19 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         for (const glyph of run.glyphs) {
           if (!glyph.glyphId) continue;
 
-          const view = this.editor.font.glyphView(glyph.glyphId, this.editor.designLocationCell);
-          if (!view) continue;
+          const renderModel = this.editor
+            .glyphForId(glyph.glyphId)
+            ?.renderModelAt(this.editor.designLocationCell);
+          if (!renderModel) continue;
 
-          view.trackShape();
+          renderModel.trackShape();
 
           ctx.canvas.save();
           ctx.canvas.translate(
             runBase + glyph.origin.x + glyph.xOffset,
             line.y + glyph.origin.y + glyph.yOffset,
           );
-          this.#outline.draw(ctx.canvas, view, {
+          this.#outline.draw(ctx.canvas, renderModel, {
             fill: ctx.canvas.theme.glyph.fill,
           });
           ctx.canvas.restore();

@@ -4,6 +4,7 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
+use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
@@ -15,10 +16,11 @@ use shift_font::{
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
-    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphProjection,
-    NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerReplaced, NapiLocation,
-    NapiMetricDefinition, NapiMetricKind, NapiNamedInstance, NapiPointSeed, NapiSource,
-    NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
+    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview,
+    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
+    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
+    NapiPointSeed, NapiSource, NapiSourceMetricsInterpolationReplacement,
+    NapiSourceMetricsInterpolationSnapshot,
   },
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
   GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure,
@@ -571,6 +573,9 @@ impl Bridge {
   ) -> errors::Result<Vec<NapiGlyphSnapshot>> {
     let font = self.font()?;
     let mut snapshots = Vec::new();
+    let started = std::time::Instant::now();
+    let mut projection_time = std::time::Duration::ZERO;
+    let mut layers_time = std::time::Duration::ZERO;
 
     for request in requests {
       let request = GlyphSnapshotRequest::from(request);
@@ -579,8 +584,11 @@ impl Bridge {
         continue;
       };
 
+      let phase = std::time::Instant::now();
       let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
+      projection_time += phase.elapsed();
 
+      let phase = std::time::Instant::now();
       let layers = glyph
         .layers()
         .values()
@@ -591,6 +599,7 @@ impl Bridge {
           state: GlyphState::from_layer(layer),
         })
         .collect();
+      layers_time += phase.elapsed();
 
       snapshots.push(GlyphSnapshot {
         glyph_id,
@@ -599,7 +608,23 @@ impl Bridge {
       });
     }
 
-    Ok(snapshots.into_iter().map(Into::into).collect())
+    let phase = std::time::Instant::now();
+    let converted: Vec<NapiGlyphSnapshot> = snapshots.into_iter().map(Into::into).collect();
+    let (layer_projection_ms, fallback_resolve_ms, master_resolve_ms) =
+      shift_font::projection_timing::drain_ms();
+    eprintln!(
+      "[bridge] get_glyph_snapshots count={} total_ms={} projection_ms={} (layer_projection_ms={} fallback_resolve_ms={} master_resolve_ms={}) layers_ms={} convert_ms={}",
+      converted.len(),
+      started.elapsed().as_millis(),
+      projection_time.as_millis(),
+      layer_projection_ms,
+      fallback_resolve_ms,
+      master_resolve_ms,
+      layers_time.as_millis(),
+      phase.elapsed().as_millis()
+    );
+
+    Ok(converted)
   }
 
   /// Returns compact glyph projections without resolving a location.
@@ -636,6 +661,41 @@ impl Bridge {
     }
 
     Ok(projections)
+  }
+
+  /// Location-resolved glyph previews: one svg path and advance per glyph.
+  ///
+  /// `location` is an internal authoring location; external axis mappings must
+  /// be evaluated first (see `map_location`). Components and interpolation
+  /// resolve at that location with shared component work across the batch.
+  /// Missing glyph identities are omitted. No editable structure crosses the
+  /// boundary, so the payload stays orders of magnitude lighter than
+  /// `get_glyph_snapshots`.
+  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, location: NapiLocation")]
+  pub fn get_glyph_previews(
+    &self,
+    glyph_ids: Vec<String>,
+    location: NapiLocation,
+  ) -> errors::Result<Vec<NapiGlyphPreview>> {
+    let font = self.font()?;
+    let glyph_ids = glyph_ids
+      .iter()
+      .map(|glyph_id| parse::<GlyphId>(glyph_id))
+      .collect::<errors::Result<Vec<_>>>()?;
+    let location = map_location(location)?;
+
+    let mut projection = font.projection(&location);
+    let previews = projection
+      .glyphs(&glyph_ids)?
+      .into_iter()
+      .map(|glyph| NapiGlyphPreview {
+        glyph_id: glyph.glyph_id().to_string(),
+        svg_path: resolved_contours_to_svg_path(glyph.contours()),
+        x_advance: glyph.x_advance(),
+      })
+      .collect();
+
+    Ok(previews)
   }
 
   #[napi]
@@ -2970,6 +3030,42 @@ mod tests {
       projections[0].fallback.values.as_ref(),
       &[500.0, 10.0, 20.0]
     );
+  }
+
+  #[test]
+  fn get_glyph_previews_resolve_drawable_paths_at_a_location() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let glyph = bridge.get_glyphs().unwrap().remove(0);
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![
+            seed(&shift_font::PointId::new().to_string(), 10.0, 20.0),
+            seed(&shift_font::PointId::new().to_string(), 90.0, 20.0),
+          ],
+        )],
+        None,
+      )
+      .unwrap();
+    let missing_glyph_id = shift_font::GlyphId::new().to_string();
+
+    let previews = bridge
+      .get_glyph_previews(
+        vec![glyph.id.to_string(), missing_glyph_id],
+        NapiLocation {
+          values: std::collections::HashMap::new(),
+        },
+      )
+      .unwrap();
+
+    assert_eq!(previews.len(), 1);
+    assert_eq!(previews[0].glyph_id, glyph.id.to_string());
+    assert_eq!(previews[0].x_advance, 500.0);
+    assert!(previews[0].svg_path.starts_with('M'));
   }
 
   #[test]

@@ -20,12 +20,12 @@ export function useGlyphXAdvance(): GlyphXAdvanceState {
         if (!node) return { xAdvance: 0, hasLayer: false };
 
         const location = editor.designLocationCell.value;
-        const view = editor.font.glyphView(node.glyphId, editor.designLocationCell);
-        if (!view) return { xAdvance: 0, hasLayer: false };
+        const glyph = editor.glyphForId(node.glyphId);
+        if (!glyph) return { xAdvance: 0, hasLayer: false };
 
         return {
-          xAdvance: view.xAdvanceCell.value,
-          hasLayer: editor.font.editableLayerAt(node.glyphId, location) !== null,
+          xAdvance: glyph.geometryAt(location).xAdvance,
+          hasLayer: glyph.layerAt(location) !== null,
         };
       }),
     [editor],

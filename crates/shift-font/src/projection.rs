@@ -2,6 +2,32 @@
 
 use std::collections::HashMap;
 
+/// Temporary aggregate timers isolating `glyph_projection` hot spots.
+///
+/// Phases accumulate across calls on relaxed atomics; the bridge drains them
+/// once per snapshot batch to log a per-batch breakdown.
+pub mod projection_timing {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    pub static LAYER_PROJECTION_NS: AtomicU64 = AtomicU64::new(0);
+    pub static FALLBACK_RESOLVE_NS: AtomicU64 = AtomicU64::new(0);
+    pub static MASTER_RESOLVE_NS: AtomicU64 = AtomicU64::new(0);
+
+    pub fn add(counter: &AtomicU64, nanos: u128) {
+        counter.fetch_add(nanos as u64, Ordering::Relaxed);
+    }
+
+    /// Drains all counters, returning whole milliseconds per phase in
+    /// declaration order: layer projection, fallback resolve, master resolves.
+    pub fn drain_ms() -> (u64, u64, u64) {
+        (
+            LAYER_PROJECTION_NS.swap(0, Ordering::Relaxed) / 1_000_000,
+            FALLBACK_RESOLVE_NS.swap(0, Ordering::Relaxed) / 1_000_000,
+            MASTER_RESOLVE_NS.swap(0, Ordering::Relaxed) / 1_000_000,
+        )
+    }
+}
+
 use crate::composite::{resolved_contours_from_layers, GlyphComponents, ResolvedContour};
 use crate::{
     Axis, CoreError, CoreResult, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer, Location,
@@ -260,48 +286,80 @@ impl Font {
             .map(Some)
     }
 
-    fn resolve_component_layers_at(
+    /// Builds layer projections for every glyph reachable from the root's
+    /// component references, across the fallback and all exact-source shapes.
+    ///
+    /// The union walk covers the component closure of every master, so later
+    /// per-source structural walks never miss a glyph. Missing or shapeless
+    /// glyphs are recorded as `None` and surface as unresolvable-component
+    /// errors when a structural walk actually reaches them.
+    fn collect_component_layer_projections(
         &self,
-        root_glyph_id: &GlyphId,
-        location: &Location,
-    ) -> CoreResult<Option<HashMap<GlyphId, GlyphLayer>>> {
-        let Some(root_layer) = self.resolved_layer_at(root_glyph_id, location)? else {
-            return Ok(None);
-        };
-        let mut layers = HashMap::from([(root_glyph_id.clone(), root_layer)]);
-        self.append_component_layers_at(root_glyph_id, location, &mut layers)?;
-        Ok(Some(layers))
-    }
-
-    fn append_component_layers_at(
-        &self,
-        parent_glyph_id: &GlyphId,
-        location: &Location,
-        layers: &mut HashMap<GlyphId, GlyphLayer>,
+        root_projection: &GlyphLayerProjection,
+        projections: &mut HashMap<GlyphId, Option<GlyphLayerProjection>>,
     ) -> CoreResult<()> {
-        let components = layers
-            .get(parent_glyph_id)
-            .expect("parent layer was inserted before traversing its components")
-            .components_iter()
-            .map(|component| (component.id(), component.base_glyph_id()))
-            .collect::<Vec<_>>();
+        let mut pending: Vec<GlyphId> = component_base_glyph_ids(root_projection).collect();
 
-        for (component_id, base_glyph_id) in components {
-            if layers.contains_key(&base_glyph_id) {
+        while let Some(glyph_id) = pending.pop() {
+            if projections.contains_key(&glyph_id) {
                 continue;
             }
 
-            let Some(layer) = self.resolved_layer_at(&base_glyph_id, location)? else {
-                return Err(CoreError::UnresolvableComponentGlyph {
-                    component_id,
-                    base_glyph_id,
-                });
-            };
-            layers.insert(base_glyph_id.clone(), layer);
-            self.append_component_layers_at(&base_glyph_id, location, layers)?;
+            let projection = self.glyph_layer_projection(&glyph_id)?;
+            if let Some(projection) = &projection {
+                pending.extend(component_base_glyph_ids(projection));
+            }
+            projections.insert(glyph_id, projection);
         }
 
         Ok(())
+    }
+
+    /// Component relationships for the root's shape selected at one master.
+    ///
+    /// Every glyph contributes the layer `resolve` would select structurally at
+    /// that master: its exact-source shape when one exists, else its fallback —
+    /// never a compatible authored layer, whose per-layer component identities
+    /// interpolation does not carry. No geometry is evaluated.
+    fn structural_components(
+        &self,
+        root_glyph_id: &GlyphId,
+        root_projection: &GlyphLayerProjection,
+        projections: &HashMap<GlyphId, Option<GlyphLayerProjection>>,
+        source_id: &SourceId,
+    ) -> CoreResult<GlyphComponents> {
+        let root_layer = structural_layer(root_projection, source_id);
+        let mut layers = HashMap::from([(root_glyph_id.clone(), root_layer)]);
+        let mut pending: Vec<GlyphId> = vec![root_glyph_id.clone()];
+
+        while let Some(parent_glyph_id) = pending.pop() {
+            let components = layers
+                .get(&parent_glyph_id)
+                .expect("parent layer was inserted before traversing its components")
+                .components_iter()
+                .map(|component| (component.id(), component.base_glyph_id()))
+                .collect::<Vec<_>>();
+
+            for (component_id, base_glyph_id) in components {
+                if layers.contains_key(&base_glyph_id) {
+                    continue;
+                }
+
+                let Some(Some(projection)) = projections.get(&base_glyph_id) else {
+                    return Err(CoreError::UnresolvableComponentGlyph {
+                        component_id,
+                        base_glyph_id,
+                    });
+                };
+                layers.insert(
+                    base_glyph_id.clone(),
+                    structural_layer(projection, source_id),
+                );
+                pending.push(base_glyph_id);
+            }
+        }
+
+        GlyphComponents::from_layers(root_glyph_id, &layers)
     }
 
     /// Builds a compact, location-independent projection for one glyph.
@@ -322,30 +380,48 @@ impl Font {
         if self.glyph(glyph_id.clone()).is_none() {
             return Err(CoreError::GlyphNotFound(glyph_id.clone()));
         }
-        let Some(layers) = self.glyph_layer_projection(glyph_id)? else {
+        let phase = std::time::Instant::now();
+        let layers = self.glyph_layer_projection(glyph_id)?;
+        projection_timing::add(
+            &projection_timing::LAYER_PROJECTION_NS,
+            phase.elapsed().as_nanos(),
+        );
+        let Some(layers) = layers else {
             return Ok(None);
         };
 
-        let fallback_source = source_for_id(self, &layers.fallback.source_id())
-            .ok_or_else(|| CoreError::SourceNotFound(layers.fallback.source_id()))?;
-        let default_layers = self
-            .resolve_component_layers_at(glyph_id, fallback_source.location())?
-            .expect("a glyph layer projection resolves at its fallback source");
-        let components = GlyphComponents::from_layers(glyph_id, &default_layers)?;
+        let phase = std::time::Instant::now();
+        let mut component_projections = HashMap::new();
+        self.collect_component_layer_projections(&layers, &mut component_projections)?;
+        let fallback_source_id = layers.fallback.source_id();
+        let components = self.structural_components(
+            glyph_id,
+            &layers,
+            &component_projections,
+            &fallback_source_id,
+        )?;
+        projection_timing::add(
+            &projection_timing::FALLBACK_RESOLVE_NS,
+            phase.elapsed().as_nanos(),
+        );
 
+        let phase = std::time::Instant::now();
         let mut exact_source_components = Vec::new();
         for source in self.sources().iter().filter(|source| source.is_master()) {
-            let resolved_layers = self
-                .resolve_component_layers_at(glyph_id, source.location())?
-                .expect("a glyph layer projection resolves at every master location");
-            let source_components = GlyphComponents::from_layers(glyph_id, &resolved_layers)?;
+            let source_id = source.id();
+            let source_components =
+                self.structural_components(glyph_id, &layers, &component_projections, &source_id)?;
             if source_components != components {
                 exact_source_components.push(GlyphSourceComponents {
-                    source_id: source.id(),
+                    source_id,
                     components: source_components,
                 });
             }
         }
+        projection_timing::add(
+            &projection_timing::MASTER_RESOLVE_NS,
+            phase.elapsed().as_nanos(),
+        );
 
         let mut component_glyph_ids = components
             .components()
@@ -463,6 +539,39 @@ impl FontProjection<'_> {
     }
 }
 
+/// Layer whose structure `resolve` selects at one master: the exact-source
+/// shape when the master has one, else the fallback/reference layer whose
+/// component identities interpolation output carries.
+fn structural_layer<'a>(
+    projection: &'a GlyphLayerProjection,
+    source_id: &SourceId,
+) -> &'a GlyphLayer {
+    projection
+        .exact_source_shapes
+        .iter()
+        .find(|shape| shape.source_id == *source_id)
+        .map(|shape| &shape.layer)
+        .unwrap_or(&projection.fallback)
+}
+
+/// Component base ids across the fallback and every exact-source shape.
+fn component_base_glyph_ids(
+    projection: &GlyphLayerProjection,
+) -> impl Iterator<Item = GlyphId> + '_ {
+    std::iter::once(&projection.fallback)
+        .chain(
+            projection
+                .exact_source_shapes
+                .iter()
+                .map(|shape| &shape.layer),
+        )
+        .flat_map(|layer| {
+            layer
+                .components_iter()
+                .map(|component| component.base_glyph_id())
+        })
+}
+
 fn fallback_layer<'a>(font: &Font, glyph: &'a Glyph) -> Option<&'a GlyphLayer> {
     if let Some(default_source_id) = font.default_source_id() {
         let is_master = source_for_id(font, &default_source_id).is_some_and(Source::is_master);
@@ -499,8 +608,8 @@ fn exact_source_id(location: &Location, axes: &[Axis], sources: &[Source]) -> Op
 mod tests {
     use crate::test_support::sample_variable_font;
     use crate::{
-        Axis, AxisId, Component, Contour, CoreError, Font, Glyph, GlyphId, GlyphLayer, LayerId,
-        Location, PointType, Source, SourceId, Transform,
+        Anchor, Axis, AxisId, Component, Contour, CoreError, Font, Glyph, GlyphId, GlyphLayer,
+        LayerId, Location, PointType, Source, SourceId, Transform,
     };
 
     fn variable_font() -> (Font, AxisId, SourceId, SourceId, SourceId) {
@@ -727,6 +836,178 @@ mod tests {
                 .map(|component| component.base_glyph_id())
                 .collect::<Vec<_>>(),
             vec![c_id, caron_id]
+        );
+    }
+
+    #[test]
+    fn glyph_projection_records_no_component_exceptions_for_compatible_masters() {
+        let (mut font, _axis_id, light_id, regular_id, bold_id) = variable_font();
+        let base_id = GlyphId::from_raw("A");
+        let mut base = Glyph::with_id(base_id.clone(), "A");
+        for (source_id, x) in [
+            (light_id.clone(), 0.0),
+            (regular_id.clone(), 40.0),
+            (bold_id.clone(), 80.0),
+        ] {
+            base.set_layer(line_layer(source_id, x));
+        }
+        font.insert_glyph(base).unwrap();
+
+        let root_id = GlyphId::from_raw("Aacute");
+        let mut root = Glyph::with_id(root_id.clone(), "Aacute");
+        for (source_id, x) in [(light_id, 0.0), (regular_id, 40.0), (bold_id, 80.0)] {
+            let mut layer = line_layer(source_id, x);
+            layer.add_component(Component::new(base_id.clone(), "A"));
+            root.set_layer(layer);
+        }
+        font.insert_glyph(root).unwrap();
+
+        let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+
+        assert!(projection.exact_source_components().is_empty());
+        assert_eq!(
+            projection
+                .components()
+                .components()
+                .iter()
+                .map(|component| component.base_glyph_id())
+                .collect::<Vec<_>>(),
+            vec![base_id.clone()]
+        );
+        assert_eq!(projection.component_glyph_ids(), [base_id]);
+    }
+
+    #[test]
+    fn glyph_projection_records_a_decomposed_master_as_a_component_exception() {
+        let (mut font, _axis_id, _light_id, regular_id, bold_id) = variable_font();
+        let base_id = GlyphId::from_raw("A");
+        let mut base = Glyph::with_id(base_id.clone(), "A");
+        base.set_layer(line_layer(regular_id.clone(), 0.0));
+        base.set_layer(line_layer(bold_id.clone(), 80.0));
+        font.insert_glyph(base).unwrap();
+
+        let root_id = GlyphId::from_raw("Aacute");
+        let mut root = Glyph::with_id(root_id.clone(), "Aacute");
+        let mut composed = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
+        composed.add_component(Component::new(base_id.clone(), "A"));
+        root.set_layer(composed);
+        root.set_layer(line_layer(bold_id.clone(), 80.0));
+        font.insert_glyph(root).unwrap();
+
+        let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+
+        assert_eq!(
+            projection
+                .components()
+                .components()
+                .iter()
+                .map(|component| component.base_glyph_id())
+                .collect::<Vec<_>>(),
+            vec![base_id]
+        );
+        assert_eq!(projection.exact_source_components().len(), 1);
+        let exception = &projection.exact_source_components()[0];
+        assert_eq!(exception.source_id(), bold_id);
+        assert!(exception.components().components().is_empty());
+    }
+
+    #[test]
+    fn glyph_projection_keeps_default_structure_for_sparse_component_masters() {
+        let (mut font, _axis_id, light_id, regular_id, bold_id) = variable_font();
+        let base_id = GlyphId::from_raw("diaeresis");
+        let mut base = Glyph::with_id(base_id.clone(), "diaeresis");
+        base.set_layer(line_layer(light_id, 0.0));
+        base.set_layer(line_layer(bold_id, 80.0));
+        font.insert_glyph(base).unwrap();
+
+        let root_id = GlyphId::from_raw("Adieresis");
+        let mut root = Glyph::with_id(root_id.clone(), "Adieresis");
+        let mut layer = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
+        layer.add_component(Component::new(base_id.clone(), "diaeresis"));
+        root.set_layer(layer);
+        font.insert_glyph(root).unwrap();
+
+        let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+
+        assert!(projection.exact_source_components().is_empty());
+        assert_eq!(projection.component_glyph_ids(), [base_id]);
+    }
+
+    #[test]
+    fn glyph_projection_collects_the_nested_component_closure() {
+        let (mut font, _axis_id, _light_id, regular_id, _bold_id) = variable_font();
+        let acute_id = GlyphId::from_raw("acute");
+        let mut acute = Glyph::with_id(acute_id.clone(), "acute");
+        acute.set_layer(line_layer(regular_id.clone(), 0.0));
+        font.insert_glyph(acute).unwrap();
+
+        let acutecomb_id = GlyphId::from_raw("acutecomb");
+        let mut acutecomb = Glyph::with_id(acutecomb_id.clone(), "acutecomb");
+        let mut acutecomb_layer = GlyphLayer::with_width(LayerId::new(), regular_id.clone(), 0.0);
+        acutecomb_layer.add_component(Component::new(acute_id.clone(), "acute"));
+        acutecomb.set_layer(acutecomb_layer);
+        font.insert_glyph(acutecomb).unwrap();
+
+        let root_id = GlyphId::from_raw("Aacute");
+        let mut root = Glyph::with_id(root_id.clone(), "Aacute");
+        let mut root_layer = line_layer(regular_id, 40.0);
+        root_layer.add_component(Component::new(acutecomb_id.clone(), "acutecomb"));
+        root.set_layer(root_layer);
+        font.insert_glyph(root).unwrap();
+
+        let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+
+        assert_eq!(
+            projection
+                .components()
+                .components()
+                .iter()
+                .map(|component| component.base_glyph_id())
+                .collect::<Vec<_>>(),
+            vec![acutecomb_id.clone(), acute_id.clone()]
+        );
+        let mut expected_ids = vec![acutecomb_id, acute_id];
+        expected_ids.sort();
+        assert_eq!(projection.component_glyph_ids(), expected_ids);
+    }
+
+    #[test]
+    fn glyph_projection_fixes_anchor_attachment_choice() {
+        let (mut font, _axis_id, _light_id, regular_id, _bold_id) = variable_font();
+        let base_id = GlyphId::from_raw("A");
+        let mut base = Glyph::with_id(base_id.clone(), "A");
+        let mut base_layer = line_layer(regular_id.clone(), 0.0);
+        base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
+        base.set_layer(base_layer);
+        font.insert_glyph(base).unwrap();
+
+        let mark_id = GlyphId::from_raw("acutecomb");
+        let mut mark = Glyph::with_id(mark_id.clone(), "acutecomb");
+        let mut mark_layer = line_layer(regular_id.clone(), 0.0);
+        mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
+        mark.set_layer(mark_layer);
+        font.insert_glyph(mark).unwrap();
+
+        let root_id = GlyphId::from_raw("Aacute");
+        let mut root = Glyph::with_id(root_id.clone(), "Aacute");
+        let mut root_layer = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
+        root_layer.add_component(Component::new(base_id, "A"));
+        root_layer.add_component(Component::new(mark_id, "acutecomb"));
+        root.set_layer(root_layer);
+        font.insert_glyph(root).unwrap();
+
+        let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+
+        let components = projection.components().components();
+        assert_eq!(components.len(), 2);
+        let attachment = components[1].attachment().unwrap();
+        assert_eq!(
+            attachment.source().component_path(),
+            components[1].component_path()
+        );
+        assert_eq!(
+            attachment.target().component_path(),
+            components[0].component_path()
         );
     }
 

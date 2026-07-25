@@ -1,10 +1,9 @@
 import { mintRunId, type GlyphName, type RunId, type Unicode } from "@shift/types";
+import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
-import type { Signal } from "@/lib/signals";
 import type { ShiftStore } from "@/lib/store/ShiftStore";
 import type { ShiftEditorRecord, TextRunRecord } from "@/types";
 import type { TextRunNode } from "@/types/node";
-import type { AxisLocation } from "@/types/variation";
 import { glyphTextItem, lineBreakTextItem, Positioner, TextLayout, type TextItem } from "./layout";
 
 /**
@@ -17,18 +16,12 @@ import { glyphTextItem, lineBreakTextItem, Positioner, TextLayout, type TextItem
  */
 export class Text {
   readonly #store: ShiftStore<ShiftEditorRecord>;
-  readonly #font: Font;
-  readonly #designLocation: Signal<AxisLocation>;
+  readonly #editor: Editor;
   readonly #positioner = new Positioner();
 
-  constructor(
-    store: ShiftStore<ShiftEditorRecord>,
-    font: Font,
-    designLocation: Signal<AxisLocation>,
-  ) {
+  constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
-    this.#font = font;
-    this.#designLocation = designLocation;
+    this.#editor = editor;
   }
 
   /**
@@ -75,15 +68,15 @@ export class Text {
     const run = this.run(node.runId);
     if (!run) return null;
 
-    const items = itemsForText(run.text, this.#font);
+    const items = itemsForText(run.text, this.#editor.font);
     if (items.length === 0) return null;
 
     return new TextLayout({
       items,
       origin: { x: 0, y: 0 },
-      font: this.#font,
+      editor: this.#editor,
       positioner: this.#positioner,
-      designLocation: this.#designLocation,
+      designLocation: this.#editor.designLocationCell,
     });
   }
 }

@@ -119,6 +119,7 @@ export type {
   GlyphName,
   GlyphInterpolation,
   GlyphLayerShape,
+  GlyphPreview,
   GlyphProjection,
   GlyphRecord,
   GlyphSourceComponents,

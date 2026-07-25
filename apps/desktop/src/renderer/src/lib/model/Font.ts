@@ -8,10 +8,8 @@ import type {
   AxisMapping,
   Source,
   GlyphId,
-  GlyphProjection,
+  GlyphPreview,
   GlyphRecord,
-  GlyphLayerShape,
-  GlyphLayerRecord,
   GlyphName,
   SourceId,
   Unicode,
@@ -21,11 +19,9 @@ import type {
   LayerId,
   Location,
   PointId,
-  GlyphStructure,
   NamedInstance,
   NamedInstanceDefinition,
   NamedInstanceId,
-  InterpolationBasis,
   SourceMetrics,
 } from "@shift/types";
 import {
@@ -36,10 +32,10 @@ import {
   mintSourceId,
 } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
-import { computed, signal, track, type Signal } from "@/lib/signals/signal";
+import { batch, computed, effect, track, type Effect, type Signal } from "@/lib/signals/signal";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { WorkspaceGlyphSnapshotRequest } from "@shared/workspace/protocol";
-import { Glyph, GlyphGeometry, GlyphView, type GlyphLayer } from "./Glyph";
+import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import type { GlyphHandle } from "@shift/bridge";
@@ -47,6 +43,7 @@ import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   axisLocationDistanceSquared,
   axisLocationFromLocation,
+  locationFromAxisLocation,
   axisLocationsEqual,
   defaultAxisLocation,
   emptyAxisLocation,
@@ -55,28 +52,7 @@ import type { AxisLocation } from "@/types/variation";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { uniqueInOrder } from "@/lib/utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
-import {
-  interpolateSourceValues,
-  interpolationWeights,
-} from "@/lib/interpolation/InterpolationBasis";
-
-export interface GlyphGeometrySelection {
-  readonly points?: Iterable<PointId>;
-  readonly anchors?: Iterable<AnchorId>;
-  readonly contours?: Iterable<ContourId>;
-  readonly segments?: Iterable<SegmentId>;
-}
-
-interface LayerDirectoryEntry {
-  readonly glyphId: GlyphId;
-  readonly layer: GlyphLayerRecord;
-}
-
-const EMPTY_GLYPH_STRUCTURE: GlyphStructure = {
-  contours: [],
-  anchors: [],
-  components: [],
-};
+import { createBatchRequest } from "../utils/batchRequest";
 
 /**
  * Immutable lookup index for committed glyph records.
@@ -108,8 +84,6 @@ class GlyphDirectory {
   readonly recordsById: ReadonlyMap<GlyphId, GlyphRecord> = new Map();
   readonly nameById: ReadonlyMap<GlyphId, GlyphName> = new Map();
   readonly nameByUnicode: ReadonlyMap<Unicode, GlyphName> = new Map();
-  readonly layerById: ReadonlyMap<LayerId, LayerDirectoryEntry> = new Map();
-  readonly layerByGlyphAndSource: ReadonlyMap<string, GlyphLayerRecord> = new Map();
   readonly componentBasesById: ReadonlyMap<GlyphId, readonly GlyphId[]> = new Map();
   readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>> = new Map();
 
@@ -118,8 +92,6 @@ class GlyphDirectory {
     const recordsById = new Map<GlyphId, GlyphRecord>();
     const nameById = new Map<GlyphId, GlyphName>();
     const nameByUnicode = new Map<Unicode, GlyphName>();
-    const layerById = new Map<LayerId, LayerDirectoryEntry>();
-    const layerByGlyphAndSource = new Map<string, GlyphLayerRecord>();
     const componentBasesById = new Map<GlyphId, readonly GlyphId[]>();
     const dependentsById = new Map<GlyphId, Set<GlyphId>>();
 
@@ -127,11 +99,6 @@ class GlyphDirectory {
       recordsByName.set(record.name, record);
       recordsById.set(record.id, record);
       nameById.set(record.id, record.name);
-
-      for (const layer of record.layers) {
-        layerById.set(layer.id, { glyphId: record.id, layer });
-        layerByGlyphAndSource.set(glyphLayerKey(record.id, layer.sourceId), layer);
-      }
 
       for (const unicode of record.unicodes) {
         if (!nameByUnicode.has(unicode)) {
@@ -155,8 +122,6 @@ class GlyphDirectory {
     this.recordsById = recordsById;
     this.nameById = nameById;
     this.nameByUnicode = nameByUnicode;
-    this.layerById = layerById;
-    this.layerByGlyphAndSource = layerByGlyphAndSource;
     this.componentBasesById = componentBasesById;
     this.dependentsById = dependentsById;
   }
@@ -217,23 +182,6 @@ class GlyphDirectory {
   /** Returns the committed glyph record for a stable glyph id. */
   recordForId(glyphId: GlyphId): GlyphRecord | null {
     return this.recordsById.get(glyphId) ?? null;
-  }
-
-  /** Returns the sparse authored layer for a glyph/source pair. */
-  layerForGlyphAtSource(glyphId: GlyphId, sourceId: SourceId): GlyphLayerRecord | null {
-    return this.layerByGlyphAndSource.get(glyphLayerKey(glyphId, sourceId)) ?? null;
-  }
-
-  /** Returns the sparse authored layer and owning glyph for a layer id. */
-  layerForId(layerId: LayerId): LayerDirectoryEntry | null {
-    return this.layerById.get(layerId) ?? null;
-  }
-
-  /** Returns the sparse authored layer for a glyph name and source. */
-  layerForGlyphNameAtSource(name: GlyphName, sourceId: SourceId): GlyphLayerRecord | null {
-    const record = this.recordForName(name);
-    if (!record) return null;
-    return this.layerForGlyphAtSource(record.id, sourceId);
   }
 
   /**
@@ -335,28 +283,32 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
  */
 export class Font {
   readonly #loadedCell: Signal<boolean>;
+
   readonly #metricsCell: Signal<FontMetrics>;
   readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
+
   readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
+
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<Source[]>;
+
   readonly #axesCell: Signal<Axis[]>;
   readonly #axisMappingsCell: Signal<AxisMapping[]>;
+
   readonly #namedInstancesCell: Signal<NamedInstance[]>;
+
   readonly #unicodesCell: Signal<Unicode[]>;
   readonly #glyphRecordsCell: Signal<readonly GlyphRecord[]>;
-
   readonly #directoryCell: Signal<GlyphDirectory>;
+
+  readonly #glyphRequests = createBatchRequest<GlyphId>((glyphIds) =>
+    this.#readGlyphsIntoStore(glyphIds),
+  );
   readonly #store: FontStore;
   readonly #editCoordinator: WorkspaceEditCoordinator | null;
-  readonly #pendingProjectionIds = new Set<GlyphId>();
-  readonly #readingProjectionIds = new Set<GlyphId>();
-  #projectionRead: Promise<void> | null = null;
-  readonly #basisWeightCells = new WeakMap<
-    InterpolationBasis,
-    WeakMap<Signal<AxisLocation>, Signal<Float64Array>>
-  >();
+  readonly #glyphsEffect: Effect;
+
   /**
    * Builds a font model over renderer-local workspace state.
    *
@@ -366,11 +318,16 @@ export class Font {
    */
   constructor(store: FontStore, editCoordinator?: WorkspaceEditCoordinator) {
     this.#store = store;
+
     this.#editCoordinator = editCoordinator ?? null;
+
     const workspaceCell = store.workspaceCell;
+
     this.#loadedCell = computed(() => workspaceCell.value !== null);
+
     this.#metricsCell = computed(() => workspaceCell.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#metricDefinitionsCell = computed(() => workspaceCell.value?.metricDefinitions ?? []);
+
     this.#sourceMetricsInterpolationCell = computed(() => {
       const workspace = workspaceCell.value;
       return SourceMetricsInterpolation.from(
@@ -379,14 +336,17 @@ export class Font {
         workspace?.metrics ?? DEFAULT_FONT_METRICS,
       );
     });
+
     this.#metadataCell = computed(() => workspaceCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => workspaceCell.value?.sources ?? []);
     this.#axesCell = computed(() => workspaceCell.value?.axes ?? []);
     this.#defaultSourceMetricsCell = computed(() => {
       const sources = this.#sourcesCell.value;
       const axes = this.#axesCell.value;
+
       track(this.#metricsCell);
       track(this.#metricDefinitionsCell);
+
       const source =
         sourceAtLocation(sources, axes, defaultAxisLocation(axes)) ?? sources[0] ?? null;
       return this.#metricsForSource(source);
@@ -398,6 +358,14 @@ export class Font {
     );
     this.#unicodesCell = computed(() => [...this.#directoryCell.value.unicodes]);
     this.#glyphRecordsCell = computed(() => this.#directoryCell.value.records);
+    this.#glyphsEffect = effect(
+      () => {
+        track(this.#directoryCell);
+        track(this.#sourcesCell);
+        this.#updateGlyphsFromStore();
+      },
+      { name: "font.glyphs" },
+    );
   }
 
   /** @knipclassignore */
@@ -517,44 +485,6 @@ export class Font {
   /** Returns the point ids that define a segment, or null when unknown. */
   pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null {
     return this.#store.pointIdsForSegment(segmentId);
-  }
-
-  /**
-   * Resolves geometry ids to the single authored layer that owns all of them.
-   *
-   * @remarks
-   * This is the edit-scoping primitive for identity-only selections: continuous
-   * edits such as dragging or copying must target exactly one authored layer.
-   * Ownership comes from current concrete layer state, so ids that are unknown
-   * to the font model resolve to `null`.
-   *
-   * @param ids - Geometry ids to resolve. Empty input resolves to `null`.
-   * @returns The sole owning authored layer, or `null` when any id is unknown
-   * or the ids span multiple layers.
-   */
-  layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null {
-    let owner: LayerId | null = null;
-
-    const fold = (layerId: LayerId | null): boolean => {
-      if (!layerId || (owner !== null && owner !== layerId)) return false;
-      owner = layerId;
-      return true;
-    };
-
-    for (const pointId of ids.points ?? []) {
-      if (!fold(this.layerIdForPoint(pointId))) return null;
-    }
-    for (const anchorId of ids.anchors ?? []) {
-      if (!fold(this.layerIdForAnchor(anchorId))) return null;
-    }
-    for (const contourId of ids.contours ?? []) {
-      if (!fold(this.layerIdForContour(contourId))) return null;
-    }
-    for (const segmentId of ids.segments ?? []) {
-      if (!fold(this.layerIdForSegment(segmentId))) return null;
-    }
-
-    return owner === null ? null : this.layerById(owner);
   }
 
   /** @knipclassignore */
@@ -798,8 +728,11 @@ export class Font {
     fromLayerId: LayerId,
     location: AxisLocation,
   ): LayerId {
+    const glyph = this.#glyph(glyphId);
+    if (!glyph) throw new Error(`glyph ${glyphId} must be acquired before materializing a layer`);
+
     const layerId = mintLayerId();
-    const geometry = this.#glyphGeometry(glyphId, location, axisLocationSignal(location));
+    const geometry = glyph.geometryAt(location);
     this.editCoordinator.push({
       kind: "materializeGlyphLayer",
       materializeGlyphLayer: {
@@ -855,169 +788,8 @@ export class Font {
    * @param glyphId - Stable glyph identity to inspect.
    * @returns The committed glyph record, or `null` when the font does not contain the glyph.
    */
-  glyph(glyphId: GlyphId): GlyphRecord | null {
+  recordForId(glyphId: GlyphId): GlyphRecord | null {
     return this.#directoryCell.peek().recordForId(glyphId);
-  }
-
-  /**
-   * Returns a reactive glyph identity record for a glyph id cell.
-   *
-   * @param glyphId - Cell containing the glyph to resolve, or `null` when no glyph is selected.
-   * @returns A cell whose value is the committed glyph record, or `null` when unavailable.
-   */
-  glyphCell(glyphId: Signal<GlyphId | null>): Signal<GlyphRecord | null> {
-    return computed(
-      () => {
-        const id = glyphId.value;
-        if (!id) return null;
-
-        return this.#directoryCell.value.recordForId(id);
-      },
-      { name: "font.glyph" },
-    );
-  }
-
-  /**
-   * Returns the authored mutable layer for an exact glyph/source pair.
-   *
-   * @param glyphId - Stable glyph identity to resolve.
-   * @param sourceId - Authored source identity to resolve.
-   * @returns The authored layer, or `null` when the glyph/source pair is unavailable.
-   */
-  layer(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null {
-    return this.#glyphLayer(glyphId, sourceId);
-  }
-
-  /**
-   * Returns the authored mutable layer for a stable layer id.
-   *
-   * @param layerId - Stable authored layer identity from selection or font records.
-   * @returns The authored layer, or `null` when the layer is unavailable in the current font.
-   */
-  layerById(layerId: LayerId): GlyphLayer | null {
-    const entry = this.#directoryCell.peek().layerForId(layerId);
-    if (!entry) return null;
-
-    return this.#glyphLayer(entry.glyphId, entry.layer.sourceId);
-  }
-
-  /**
-   * Returns a reactive authored layer for glyph and source id cells.
-   *
-   * @param glyphId - Cell containing the glyph to resolve, or `null` when no glyph is selected.
-   * @param sourceId - Cell containing the exact source to resolve, or `null` when interpolated.
-   * @returns A cell whose value is the authored layer, or `null` when unavailable.
-   */
-  layerCell(
-    glyphId: Signal<GlyphId | null>,
-    sourceId: Signal<SourceId | null>,
-  ): Signal<GlyphLayer | null> {
-    return computed(
-      () => {
-        track(this.#directoryCell);
-        track(this.#sourcesCell);
-
-        const id = glyphId.value;
-        const source = sourceId.value;
-        if (!id || !source) return null;
-
-        return this.layer(id, source);
-      },
-      { name: "font.layer" },
-    );
-  }
-
-  /**
-   * Returns the resolved read/render/hit-test view for a glyph at a design location.
-   *
-   * @param glyphId - Stable glyph identity to resolve.
-   * @param location - Reactive designspace location for the view.
-   * @returns The resolved view, or `null` when its local backing is unavailable.
-   */
-  glyphView(glyphId: GlyphId, location: AxisLocation | Signal<AxisLocation>): GlyphView | null {
-    if (!this.#store.recordForId(glyphId)) return null;
-    if (!this.#glyph(glyphId) && !this.#store.projection(glyphId)) return null;
-
-    const locationSignal = axisLocationSignal(location);
-    return this.#store.glyphView(glyphId, locationSignal, () =>
-      this.#createGlyphView(glyphId, locationSignal),
-    );
-  }
-
-  /**
-   * Returns a reactive glyph view for a glyph id cell and design location cell.
-   *
-   * @param glyphId - Cell containing the glyph to resolve, or `null` when no glyph is selected.
-   * @param location - Cell containing the designspace location to render and hit-test.
-   * @returns A cell whose value is the resolved glyph view, or `null` when unavailable.
-   */
-  glyphViewCell(
-    glyphId: Signal<GlyphId | null>,
-    location: Signal<AxisLocation>,
-  ): Signal<GlyphView | null> {
-    return computed(
-      () => {
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        const id = glyphId.value;
-        if (!id) return null;
-
-        track(this.#store.projectionCell(id));
-        return this.glyphView(id, location);
-      },
-      { name: "font.glyphView" },
-    );
-  }
-
-  /**
-   * Returns reactive glyph views aligned with a stable list of glyph identities.
-   *
-   * @remarks
-   * The returned cell observes projection arrival, authored layer arrival, and
-   * font topology changes. Each non-null view follows `location` directly, so
-   * changing the location does not recreate the view or retain location-keyed
-   * geometry snapshots.
-   *
-   * This method is synchronous. Call {@link requestGlyphViews} at an async UI
-   * boundary when lightweight backing has not been requested yet.
-   *
-   * @param glyphIds - Glyph identities whose views should be returned in order.
-   * @param location - Shared reactive designspace location for the views.
-   * @returns A cell aligned with `glyphIds`; unavailable backing produces `null`.
-   */
-  glyphViewsCell(
-    glyphIds: readonly GlyphId[],
-    location: Signal<AxisLocation>,
-  ): Signal<readonly (GlyphView | null)[]> {
-    return computed(
-      () => {
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        return glyphIds.map((glyphId) => {
-          track(this.#store.projectionCell(glyphId));
-          return this.glyphView(glyphId, location);
-        });
-      },
-      { name: "font.glyphViews" },
-    );
-  }
-
-  /**
-   * Returns the authored layer that exactly matches a designspace location.
-   *
-   * @param glyphId - Stable glyph identity to resolve.
-   * @param location - Current designspace location.
-   * @returns The editable layer at the exact source location, or `null` for interpolated views.
-   */
-  editableLayerAt(glyphId: GlyphId, location: AxisLocation): GlyphLayer | null {
-    const source = this.sourceAt(location);
-    if (!source) return null;
-
-    return this.layer(glyphId, source.id);
   }
 
   /**
@@ -1027,186 +799,127 @@ export class Font {
    * @returns The id-keyed glyph model, or `null` when the glyph is not in the current font.
    */
   #glyph(glyphId: GlyphId): Glyph | null {
-    if (!this.loaded) return null;
+    return this.#store.glyphForId(glyphId);
+  }
 
-    const directory = this.#directoryCell.peek();
-    const record = directory.recordForId(glyphId);
+  #assembleGlyph(glyphId: GlyphId): Glyph | null {
+    const record = this.#directoryCell.peek().recordForId(glyphId);
     if (!record) return null;
 
-    return this.#store.glyph(glyphId, () => {
-      const source = this.defaultSource;
-      const layer = directory.layerForGlyphAtSource(glyphId, source.id);
-      if (!layer) return null;
+    const layers = this.#buildGlyphLayers(record);
+    if (!layers) return null;
 
-      const stateCell = this.#store.layerStateCell(layer.id);
+    return new Glyph({
+      record,
+      layers,
+      componentGlyphs: new Map(),
+      axesCell: this.#axesCell,
+      sourcesCell: this.#sourcesCell,
+      projectionCell: this.#store.projectionCell(record.id),
+      defaultSourceId: this.defaultSource.id,
+    });
+  }
+
+  #buildGlyphLayers(record: GlyphRecord): GlyphLayer[] | null {
+    const glyph = this.#store.glyphForId(record.id);
+    const layers: GlyphLayer[] = [];
+
+    for (const layerRecord of record.layers) {
+      const source = this.source(layerRecord.sourceId);
+      const stateCell = this.#store.layerStateCell(layerRecord.id);
       track(stateCell);
       const state = stateCell.peek();
-      if (!state) return null;
+      if (!source || !state || !this.#editCoordinator) return null;
 
-      return new Glyph(this, glyphId, directory.glyphHandleForName(record.name), source, state);
+      const existingLayer = glyph?.layerForId(layerRecord.id);
+      if (existingLayer && existingLayer.geometryCell === state.geometryCell) {
+        existingLayer.replaceSource(source);
+        layers.push(existingLayer);
+        continue;
+      }
+
+      layers.push(new GlyphLayer(source, this.#editCoordinator, state));
+    }
+
+    return layers;
+  }
+
+  #componentGlyphsFor(
+    record: GlyphRecord,
+    glyphs?: ReadonlyMap<GlyphId, Glyph>,
+  ): ReadonlyMap<GlyphId, Glyph> | null {
+    const componentGlyphs = new Map<GlyphId, Glyph>();
+
+    for (const componentGlyphId of record.componentBaseGlyphIds) {
+      const componentGlyph =
+        glyphs?.get(componentGlyphId) ?? this.#store.glyphForId(componentGlyphId);
+      if (!componentGlyph) return null;
+
+      componentGlyphs.set(componentGlyphId, componentGlyph);
+    }
+
+    return componentGlyphs;
+  }
+
+  async #readGlyphsIntoStore(glyphIds: readonly GlyphId[]): Promise<void> {
+    const startedAt = performance.now();
+    const uniqueIds = uniqueInOrder(glyphIds).filter((glyphId) =>
+      Boolean(this.#store.recordForId(glyphId)),
+    );
+
+    const seen = await this.#readGlyphSnapshots(
+      uniqueIds.filter((glyphId) => !this.#store.glyphForId(glyphId)),
+    );
+    const readDoneAt = performance.now();
+    const glyphs = new Map<GlyphId, Glyph>();
+
+    for (const glyphId of seen) {
+      if (this.#store.glyphForId(glyphId)) continue;
+
+      const glyph = this.#assembleGlyph(glyphId);
+      if (!glyph) {
+        throw new Error(`current-font glyph ${glyphId} could not be read`);
+      }
+      glyphs.set(glyphId, glyph);
+    }
+
+    for (const glyph of glyphs.values()) {
+      const componentGlyphs = this.#componentGlyphsFor(glyph.record, glyphs);
+      if (!componentGlyphs) {
+        throw new Error(`component glyphs for ${glyph.id} could not be read`);
+      }
+      glyph.replaceComponentGlyphs(componentGlyphs);
+    }
+
+    const assembledAt = performance.now();
+    this.#store.setGlyphs([...glyphs.values()]);
+    this.#updateGlyphsFromStore();
+
+    const finishedAt = performance.now();
+    console.info("[glyph-load]", {
+      requested: uniqueIds.length,
+      assembled: glyphs.size,
+      readMs: Math.round(readDoneAt - startedAt),
+      assembleMs: Math.round(assembledAt - readDoneAt),
+      storeUpdateMs: Math.round(finishedAt - assembledAt),
     });
   }
 
-  /**
-   * Returns local authored layer data for an exact glyph/source pair.
-   *
-   * @param glyphId - document glyph identity to resolve.
-   * @param sourceId - exact source whose authored layer should be loaded.
-   * @returns the id-keyed glyph layer model, or null when record or geometry is unavailable.
-   */
-  #glyphLayer(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null {
-    const source = this.source(sourceId);
-    if (!source) return null;
+  #updateGlyphsFromStore(): void {
+    batch(() => {
+      for (const record of this.#directoryCell.peek().records) {
+        const glyph = this.#store.glyphForId(record.id);
+        if (!glyph) continue;
 
-    const layer = this.#directoryCell.peek().layerForGlyphAtSource(glyphId, source.id);
-    if (!layer) return null;
+        const layers = this.#buildGlyphLayers(record);
+        const componentGlyphs = this.#componentGlyphsFor(record);
+        if (!layers || !componentGlyphs) continue;
 
-    return this.#store.glyphLayer(glyphId, source.id, () => {
-      const glyph = this.#glyph(glyphId);
-      if (!glyph) return null;
-
-      const stateCell = this.#store.layerStateCell(layer.id);
-      track(stateCell);
-      const state = glyph.isPrimarySource(source) ? undefined : stateCell.peek();
-      return glyph.createGlyphLayer(source, state);
+        glyph.replaceRecord(record);
+        glyph.replaceLayers(layers);
+        glyph.replaceComponentGlyphs(componentGlyphs);
+      }
     });
-  }
-
-  #glyphGeometry(
-    glyphId: GlyphId,
-    location: AxisLocation,
-    locationCell: Signal<AxisLocation>,
-  ): GlyphGeometry {
-    const exactSource = this.sourceAt(location);
-    if (exactSource) {
-      const layer = this.layer(glyphId, exactSource.id);
-      if (layer) return layer.geometry;
-    }
-
-    const projectionCell = this.#store.projectionCell(glyphId);
-    track(projectionCell);
-    const projection = projectionCell.peek();
-    if (projection) {
-      return this.#projectedGlyphGeometry(glyphId, projection, locationCell, exactSource);
-    }
-
-    return this.#glyph(glyphId)?.primaryGeometryForFont ?? emptyGlyphGeometry();
-  }
-
-  #projectedGlyphGeometry(
-    glyphId: GlyphId,
-    projection: GlyphProjection,
-    locationCell: Signal<AxisLocation>,
-    exactSource: Source | null,
-  ): GlyphGeometry {
-    if (exactSource?.id === this.defaultSource.id) {
-      return glyphGeometryFromShape(projection.fallback);
-    }
-
-    const exactShape = projection.exactSourceShapes.find(
-      (sourceShape) => sourceShape.sourceId === exactSource?.id,
-    );
-    if (exactShape) return glyphGeometryFromShape(exactShape.shape);
-
-    const interpolation = projection.interpolation;
-    if (!interpolation) return glyphGeometryFromShape(projection.fallback);
-
-    const weightsCell = this.#weightsForBasis(interpolation.basis, locationCell);
-    track(weightsCell);
-    const weights = weightsCell.peek();
-    const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
-      const liveValues = this.#authoredGlyphValues(glyphId, sourceId);
-      if (liveValues) return liveValues;
-
-      return interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
-    });
-    if (!values) return glyphGeometryFromShape(projection.fallback);
-
-    return new GlyphGeometry(projection.fallback.structure, values);
-  }
-
-  #weightsForBasis(
-    basis: InterpolationBasis,
-    location: Signal<AxisLocation>,
-  ): Signal<Float64Array> {
-    let byLocation = this.#basisWeightCells.get(basis);
-    if (!byLocation) {
-      byLocation = new WeakMap();
-      this.#basisWeightCells.set(basis, byLocation);
-    }
-
-    const existing = byLocation.get(location);
-    if (existing) return existing;
-
-    const weights = computed(
-      () => interpolationWeights(basis, location.value, this.#axesCell.value),
-      { name: "font.interpolationWeights" },
-    );
-    byLocation.set(location, weights);
-    return weights;
-  }
-
-  #authoredGlyphValues(glyphId: GlyphId, sourceId: SourceId): Float64Array | null {
-    track(this.#directoryCell);
-    const layer = this.#directoryCell.peek().layerForGlyphAtSource(glyphId, sourceId);
-    if (!layer) return null;
-
-    const stateCell = this.#store.layerStateCell(layer.id);
-    track(stateCell);
-    const state = stateCell.peek();
-    if (!state) return null;
-
-    track(state.structureCell);
-    track(state.coordinateBuffersChangedCell);
-    return state.state.values;
-  }
-
-  #createGlyphView(glyphId: GlyphId, location: Signal<AxisLocation>): GlyphView {
-    const layer = computed(
-      () => {
-        const currentLocation = location.value;
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        return this.editableLayerAt(glyphId, currentLocation);
-      },
-      { name: "font.glyphView.layer" },
-    );
-    const geometry = computed(
-      () => {
-        const currentLocation = location.value;
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        return this.#glyphGeometry(glyphId, currentLocation, location);
-      },
-      { name: "font.glyphView.geometry" },
-    );
-
-    return new GlyphView(
-      glyphId,
-      location,
-      layer,
-      geometry,
-      this.#store.projectionCell(glyphId),
-      (resolvedLocation) => this.sourceAt(resolvedLocation)?.id ?? null,
-      (resolvedGlyphId, resolvedLocation) => {
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        return this.editableLayerAt(resolvedGlyphId, resolvedLocation);
-      },
-      (resolvedGlyphId, resolvedLocation) => {
-        track(this.#directoryCell);
-        track(this.#axesCell);
-        track(this.#sourcesCell);
-
-        return this.#glyphGeometry(resolvedGlyphId, resolvedLocation, location);
-      },
-    );
   }
 
   /**
@@ -1215,43 +928,14 @@ export class Font {
    * @param glyphId - Current-font glyph identity whose model should be available.
    * @returns The glyph model for `glyphId`.
    * @throws {Error} when `glyphId` is not a current-font glyph or cannot be read.
-   * @see {@link loadGlyphs}
    */
   async loadGlyph(glyphId: GlyphId): Promise<Glyph> {
-    const glyph = (await this.loadGlyphs([glyphId]))[0];
-    if (!glyph) throw new Error(`current-font glyph ${glyphId} could not be read`);
-    return glyph;
-  }
+    const glyphs = await this.loadGlyphs([glyphId]);
 
-  /**
-   * Requests missing location-independent backing for renderer glyph views.
-   *
-   * @remarks
-   * Calls are batched and coalesced by glyph identity. The request does not
-   * capture a design location; existing views observe projection arrival and
-   * continue following their own location signals synchronously.
-   *
-   * UI code normally reaches this through `useGlyphViews` rather than managing
-   * bridge reads directly.
-   *
-   * @param glyphIds - Root glyph identities whose projections are needed.
-   * @internal
-   */
-  async requestGlyphViews(glyphIds: readonly GlyphId[]): Promise<void> {
-    if (!this.#editCoordinator) return;
+    const first = glyphs[0];
+    if (!first) throw new Error(`current-font glyph ${glyphId} could not be read`);
 
-    for (const glyphId of uniqueInOrder(glyphIds)) {
-      if (this.#store.projection(glyphId)) continue;
-      if (this.#readingProjectionIds.has(glyphId)) continue;
-
-      this.#pendingProjectionIds.add(glyphId);
-    }
-
-    if (!this.#projectionRead && this.#pendingProjectionIds.size > 0) {
-      this.#projectionRead = this.#drainProjectionReads();
-    }
-
-    await this.#projectionRead;
+    return first;
   }
 
   /**
@@ -1266,46 +950,77 @@ export class Font {
    * @throws {Error} when any requested glyph ID is not in the current font or cannot be read.
    */
   async loadGlyphs(glyphIds: readonly GlyphId[]): Promise<readonly Glyph[]> {
-    const uniqueIds = uniqueInOrder(glyphIds);
-    for (const glyphId of uniqueIds) {
+    for (const glyphId of glyphIds) {
       if (!this.#store.recordForId(glyphId)) {
         throw new Error(`glyph ${glyphId} is not in the current font`);
       }
     }
-    await this.#readGlyphSnapshots(uniqueIds);
 
-    const glyphs = new Map<GlyphId, Glyph>();
-    for (const glyphId of uniqueIds) {
-      const glyph = this.#glyph(glyphId);
-      if (!glyph) {
-        throw new Error(`current-font glyph ${glyphId} could not be read`);
-      }
-      glyphs.set(glyphId, glyph);
-    }
+    await this.#glyphRequests(glyphIds.filter((id) => !this.#store.glyphForId(id)));
 
-    return glyphIds.map((glyphId) => glyphs.get(glyphId)!);
+    return glyphIds.map((glyphId) => {
+      const glyph = this.#store.glyphForId(glyphId);
+      if (!glyph) throw new Error(`current-font glyph ${glyphId} could not be read`);
+
+      return glyph;
+    });
   }
 
-  async #readGlyphSnapshots(glyphIds: readonly GlyphId[]): Promise<void> {
-    if (!this.#editCoordinator || glyphIds.length === 0) return;
+  /**
+   * Resolves drawable previews (svg path + advance) at one design location.
+   *
+   * @remarks
+   * Previews are printed by the bridge at `location` and carry no editable
+   * structure — the payload stays orders of magnitude lighter than a glyph
+   * load. Use {@link loadGlyphs} when a live model is needed. Missing or
+   * shapeless glyphs are omitted from the result.
+   *
+   * @param glyphIds - Current-font glyph identities to preview.
+   * @param location - Internal design location to resolve shapes at.
+   * @returns One preview per resolvable glyph.
+   */
+  async glyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: AxisLocation,
+  ): Promise<readonly GlyphPreview[]> {
+    if (!this.#editCoordinator) return [];
 
-    await this.#editCoordinator.settled();
+    return this.#editCoordinator.readGlyphPreviews(glyphIds, locationFromAxisLocation(location));
+  }
 
+  async #readGlyphSnapshots(glyphIds: readonly GlyphId[]): Promise<readonly GlyphId[]> {
     const queue = uniqueInOrder(glyphIds);
     const seen = new Set<GlyphId>(queue);
+    if (!this.#editCoordinator || queue.length === 0) return [...seen];
+
+    // No settled() here: readGlyphSnapshots already orders reads behind
+    // pending writes via the coordinator queue, and draining the queue first
+    // would stall every read behind all other in-flight reads.
+    const roundsMs: number[] = [];
 
     while (queue.length > 0) {
+      const roundStartedAt = performance.now();
       const batchGlyphIds = queue.splice(0);
       await this.#readAndApplyGlyphRequests(batchGlyphIds.map((glyphId) => ({ glyphId })));
+      roundsMs.push(Math.round(performance.now() - roundStartedAt));
 
+      // load the component glyphs and skip ones we've seen
       for (const glyphId of batchGlyphIds) {
-        for (const baseGlyphId of this.#store.componentBaseGlyphIdsInLayerState(glyphId)) {
-          if (seen.has(baseGlyphId)) continue;
-          seen.add(baseGlyphId);
-          queue.push(baseGlyphId);
+        for (const componentGlyphId of this.#store.componentBaseGlyphIdsInLayerState(glyphId)) {
+          // TODO: bad name for the store method
+          if (seen.has(componentGlyphId)) continue;
+          seen.add(componentGlyphId);
+          if (!this.#store.glyphForId(componentGlyphId)) queue.push(componentGlyphId);
         }
       }
     }
+
+    console.info("[glyph-read]", {
+      requested: glyphIds.length,
+      roundsMs,
+    });
+
+    return [...seen];
   }
 
   async #readAndApplyGlyphRequests(
@@ -1313,35 +1028,8 @@ export class Font {
   ): Promise<void> {
     if (!this.#editCoordinator) return;
 
-    this.#store.applyGlyphSnapshots(await this.#editCoordinator.readGlyphSnapshots(requests));
-  }
-
-  async #readAndApplyGlyphProjections(glyphIds: readonly GlyphId[]): Promise<void> {
-    if (!this.#editCoordinator) return;
-
-    const projections = await this.#editCoordinator.readGlyphProjections(glyphIds);
-    this.#store.applyGlyphProjections(projections);
-  }
-
-  async #drainProjectionReads(): Promise<void> {
-    try {
-      while (this.#pendingProjectionIds.size > 0) {
-        const glyphIds = [...this.#pendingProjectionIds].filter(
-          (glyphId) => !this.#store.projection(glyphId),
-        );
-        this.#pendingProjectionIds.clear();
-        if (glyphIds.length === 0) continue;
-
-        for (const glyphId of glyphIds) this.#readingProjectionIds.add(glyphId);
-        try {
-          await this.#readAndApplyGlyphProjections(glyphIds);
-        } finally {
-          for (const glyphId of glyphIds) this.#readingProjectionIds.delete(glyphId);
-        }
-      }
-    } finally {
-      this.#projectionRead = null;
-    }
+    const snapshots = await this.#editCoordinator.readGlyphSnapshots(requests);
+    this.#store.applyGlyphSnapshots(snapshots);
   }
 
   /**
@@ -1740,6 +1428,10 @@ export class Font {
     };
   }
 
+  dispose(): void {
+    this.#glyphsEffect.dispose();
+  }
+
   defaultLocation(): AxisLocation {
     return this.isVariable() ? defaultAxisLocation(this.getAxes()) : emptyAxisLocation();
   }
@@ -1753,10 +1445,6 @@ function sourceById(sources: readonly Source[], sourceId: SourceId): Source | nu
   return null;
 }
 
-function glyphGeometryFromShape(shape: GlyphLayerShape): GlyphGeometry {
-  return new GlyphGeometry(shape.structure, shape.values);
-}
-
 function sourceAtLocation(
   sources: readonly Source[],
   axes: readonly Axis[],
@@ -1768,22 +1456,4 @@ function sourceAtLocation(
   }
 
   return null;
-}
-
-function glyphLayerKey(glyphId: GlyphId, sourceId: SourceId): string {
-  return `${glyphId}:${sourceId}`;
-}
-
-function axisLocationSignal(location: AxisLocation | Signal<AxisLocation>): Signal<AxisLocation> {
-  if (isSignal(location)) return location;
-
-  return signal(location);
-}
-
-function emptyGlyphGeometry(): GlyphGeometry {
-  return new GlyphGeometry(EMPTY_GLYPH_STRUCTURE, new Float64Array([0]));
-}
-
-function isSignal<T>(value: T | Signal<T>): value is Signal<T> {
-  return typeof value === "object" && value !== null && "peek" in value && "value" in value;
 }

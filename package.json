@@ -37,6 +37,7 @@
     "check": "pnpm lint:check && pnpm typecheck && pnpm deadcode:strict && pnpm test",
     "format": "oxfmt apps packages",
     "format:check": "oxfmt --check apps packages",
+    "format:files": "oxfmt",
     "clean": "rm -rf apps/*/.vite apps/*/out apps/*/node_modules/.vite packages/*/node_modules/.vite node_modules .turbo && cargo clean",
     "package": "pnpm run build:native && pnpm --filter @shift/desktop package",
     "make": "pnpm run build:native && pnpm --filter @shift/desktop make"

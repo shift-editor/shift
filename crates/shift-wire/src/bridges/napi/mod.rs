@@ -886,6 +886,16 @@ impl From<GlyphChangedEntities> for NapiGlyphChangedEntities {
     }
 }
 
+/// Location-resolved drawable preview: one svg path and advance per glyph,
+/// with no editable structure crossing the boundary.
+#[napi(object)]
+pub struct NapiGlyphPreview {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    pub svg_path: String,
+    pub x_advance: f64,
+}
+
 #[napi(object)]
 pub struct NapiLocation {
     #[napi(ts_type = "Record<AxisId, number>")]

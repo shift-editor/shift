@@ -64,9 +64,25 @@ export class WorkspaceHost {
   /** Serves the shell lane and announces readiness. Drafts are retained. */
   start(): void {
     this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
-      "workspace.create": () => this.#serialize(() => this.#create()),
+      "workspace.create": () =>
+        this.#serialize(() => {
+          const startedAt = performance.now();
+          const state = this.#create();
+          console.info("[workspace-host] create", {
+            execMs: Math.round(performance.now() - startedAt),
+          });
+          return state;
+        }),
       "workspace.inspectPackage": ({ path }) => this.#serialize(() => this.#inspectPackage(path)),
-      "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
+      "workspace.open": ({ path }) =>
+        this.#serialize(() => {
+          const startedAt = performance.now();
+          const state = this.#open(path);
+          console.info("[workspace-host] open", {
+            execMs: Math.round(performance.now() - startedAt),
+          });
+          return state;
+        }),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);
@@ -85,10 +101,18 @@ export class WorkspaceHost {
 
     this.#sync?.dispose();
     this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#syncTransport(port), {
-      "workspace.snapshot": () =>
-        this.#serialize(() =>
-          this.#documentId === null ? null : this.#snapshot(this.#documentId),
-        ),
+      "workspace.snapshot": () => {
+        const receivedAt = performance.now();
+        return this.#serialize(() => {
+          const startedAt = performance.now();
+          const snapshot = this.#documentId === null ? null : this.#snapshot(this.#documentId);
+          console.info("[workspace-host] snapshot", {
+            queueWaitMs: Math.round(startedAt - receivedAt),
+            execMs: Math.round(performance.now() - startedAt),
+          });
+          return snapshot;
+        });
+      },
       "document.state": () => this.#serialize(() => this.#documentState()),
       "workspace.apply": ({ intents, label }) =>
         this.#serialize(() => {
@@ -112,10 +136,40 @@ export class WorkspaceHost {
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.export": ({ path }) => this.#export(path),
-      "workspace.glyphSnapshots": ({ requests }) =>
-        this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[]),
+      "workspace.glyphSnapshots": ({ requests }) => {
+        const receivedAt = performance.now();
+        return this.#serialize(() => {
+          const startedAt = performance.now();
+          const snapshots = this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[];
+          const execMs = Math.round(performance.now() - startedAt);
+          // Payload probe for large batches only; JSON length approximates the
+          // structured-clone weight without paying it on every small read.
+          const payloadKb =
+            requests.length >= 50 ? Math.round(JSON.stringify(snapshots).length / 1024) : undefined;
+          console.info("[workspace-host] glyphSnapshots", {
+            requested: requests.length,
+            queueWaitMs: Math.round(startedAt - receivedAt),
+            execMs,
+            ...(payloadKb === undefined ? {} : { payloadKb }),
+          });
+          return snapshots;
+        });
+      },
       "workspace.glyphProjections": ({ glyphIds }) =>
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
+      "workspace.glyphPreviews": ({ glyphIds, location }) => {
+        const receivedAt = performance.now();
+        return this.#serialize(() => {
+          const startedAt = performance.now();
+          const previews = this.#bridge.getGlyphPreviews(glyphIds, location);
+          console.info("[workspace-host] glyphPreviews", {
+            requested: glyphIds.length,
+            queueWaitMs: Math.round(startedAt - receivedAt),
+            execMs: Math.round(performance.now() - startedAt),
+          });
+          return previews;
+        });
+      },
       "workspace.mapLocation": (location) =>
         this.#serialize(() => this.#bridge.mapLocation(location)),
     });

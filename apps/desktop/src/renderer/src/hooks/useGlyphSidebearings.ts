@@ -29,12 +29,14 @@ export function useGlyphSidebearings(): GlyphSidebearingsState {
         if (!node) return { sidebearings: EMPTY_SIDEBEARINGS, hasLayer: false };
 
         const location = editor.designLocationCell.value;
-        const view = editor.font.glyphView(node.glyphId, editor.designLocationCell);
-        if (!view) return { sidebearings: EMPTY_SIDEBEARINGS, hasLayer: false };
+        const glyph = editor.glyphForId(node.glyphId);
+        if (!glyph) return { sidebearings: EMPTY_SIDEBEARINGS, hasLayer: false };
+
+        const renderModel = glyph.renderModelAt(editor.designLocationCell);
 
         return {
-          sidebearings: view.sidebearingsCell.value,
-          hasLayer: editor.font.editableLayerAt(node.glyphId, location) !== null,
+          sidebearings: renderModel.sidebearingsCell.value,
+          hasLayer: glyph.layerAt(location) !== null,
         };
       }),
     [editor],

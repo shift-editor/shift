@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { glyphTextItem as glyph, lineBreakTextItem } from "./types";
-import { layoutTestFont, makeLayout } from "./testUtils";
-import type { Font } from "@/lib/model/Font";
+import { layoutTestEditor, makeLayout } from "./testUtils";
+import type { TestEditor } from "@/testing/TestEditor";
 
 describe("TextLayout", () => {
-  let font: Font;
+  let editor: TestEditor;
 
   beforeEach(async () => {
-    font = await layoutTestFont();
+    editor = await layoutTestEditor();
   });
 
   // Levien invariant via the public class surface.
   it("measure equals sum of xAdvance across all runs", () => {
-    const layout = makeLayout([glyph("A", 65), glyph("B", 66), glyph("C", 67)], font);
+    const layout = makeLayout([glyph("A", 65), glyph("B", 66), glyph("C", 67)], editor);
 
     const sum = layout.lines
       .flatMap((l) => l.runs)
@@ -26,7 +26,7 @@ describe("TextLayout", () => {
 
   // Empty input → no lines, zero advance.
   it("empty item buffer producesNoShapePositionerand zero advance", () => {
-    const layout = makeLayout([], font);
+    const layout = makeLayout([], editor);
 
     expect(layout.lines).toEqual([]);
     expect(layout.totalAdvance).toBe(0);
@@ -34,7 +34,7 @@ describe("TextLayout", () => {
 
   // Linebreak item splits the buffer into two lines.
   it("splits on linebreak item into separate lines", () => {
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], font);
+    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], editor);
 
     expect(layout.lines).toHaveLength(2);
     expect(layout.lines[1].y).toBeLessThan(layout.lines[0].y);
@@ -42,8 +42,8 @@ describe("TextLayout", () => {
 
   // Second-line baseline math: y = origin.y - lineHeight.
   it("second-line baseline is one lineHeight below first", () => {
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], font);
-    const metrics = font.defaultSourceMetrics;
+    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], editor);
+    const metrics = editor.font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
     expect(layout.lines[0].y).toBe(0);
@@ -53,9 +53,9 @@ describe("TextLayout", () => {
   // hit-test → pointAt round trip. Pin side resolution: a point inside the
   // left half of B's advance box hits cluster=1, side="left".
   it("pointAt after hitTest recovers cluster's leading edge", () => {
-    const layout = makeLayout([glyph("A", 65), glyph("B", 66)], font);
-    const aAdvance = xAdvance("A", font);
-    const bAdvance = xAdvance("B", font);
+    const layout = makeLayout([glyph("A", 65), glyph("B", 66)], editor);
+    const aAdvance = xAdvance("A", editor);
+    const bAdvance = xAdvance("B", editor);
     const bLeftHalfX = aAdvance + bAdvance / 4;
 
     const hit = layout.hitTest({ x: bLeftHalfX, y: 0 });
@@ -72,17 +72,17 @@ describe("TextLayout", () => {
   it("resolves edit origin by item id on the current line", () => {
     const a = glyph("A", 65);
     const b = glyph("B", 66);
-    const layout = makeLayout([a, b], font);
-    const aAdvance = xAdvance("A", font);
+    const layout = makeLayout([a, b], editor);
+    const aAdvance = xAdvance("A", editor);
 
     expect(layout.editOriginForItem(b.id)).toEqual({ x: aAdvance, y: 0 });
     expect(layout.primaryGlyphForItem(b.id)?.sourceItemIds).toEqual([b.id]);
-    expect(layout.primaryGlyphForItem(b.id)?.glyphId).toBe(font.recordForName("B")?.id);
+    expect(layout.primaryGlyphForItem(b.id)?.glyphId).toBe(editor.font.recordForName("B")?.id);
   });
 
   it("resolves edit origin by item id after a linebreak", () => {
     const b = glyph("B", 66);
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), b], font);
+    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), b], editor);
 
     expect(layout.editOriginForItem(b.id)).toEqual({
       x: 0,
@@ -92,8 +92,8 @@ describe("TextLayout", () => {
 
   it("returns anchors with item ids rather than cluster-only hits", () => {
     const b = glyph("B", 66);
-    const layout = makeLayout([glyph("A", 65), b], font);
-    const aAdvance = xAdvance("A", font);
+    const layout = makeLayout([glyph("A", 65), b], editor);
+    const aAdvance = xAdvance("A", editor);
 
     expect(layout.anchorAtPoint("run-1", { x: aAdvance + 1, y: 0 })).toEqual({
       runId: "run-1",
@@ -102,7 +102,8 @@ describe("TextLayout", () => {
   });
 });
 
-function xAdvance(name: string, font: Font): number {
-  const record = font.recordForName(name);
-  return record ? (font.layer(record.id, font.defaultSource.id)?.xAdvance ?? 0) : 0;
+function xAdvance(name: string, editor: TestEditor): number {
+  const record = editor.font.recordForName(name);
+  const glyph = record ? editor.glyphForId(record.id) : null;
+  return glyph?.geometryAt(editor.font.defaultLocation()).xAdvance ?? 0;
 }

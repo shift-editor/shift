@@ -17,6 +17,7 @@ import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { Font } from "./Font";
 import { FontStore } from "./FontStore";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
+import { signal } from "@/lib/signals/signal";
 import { axisLocationFromLocation } from "@/lib/variation/location";
 
 const SNAPSHOT: WorkspaceSnapshot = {
@@ -184,7 +185,9 @@ describe("font-level intents make the font variable", () => {
     expect(bold?.id).toBe(boldSourceId);
     expect(applied.next?.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
     expect(applied.layers).toEqual([]);
-    expect(stack.font.layer(glyphId, boldSourceId)).toBeNull();
+    expect(
+      stack.font.recordForId(glyphId)?.layers.some((layer) => layer.sourceId === boldSourceId),
+    ).toBe(false);
   });
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
@@ -212,7 +215,7 @@ describe("font-level intents make the font variable", () => {
     ]);
 
     expect(applied.next?.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
-    expect(stack.font.glyph(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(stack.font.recordForId(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
   });
 
   it("projects mapping edits and evaluates them in Rust", async () => {
@@ -340,12 +343,20 @@ describe("font-level intents make the font variable", () => {
 
     await stack.editCoordinator.settled();
 
-    const committed = stack.font.glyph(record.id);
+    const committed = stack.font.recordForId(record.id);
     expect(committed?.layers).toEqual(record.layers);
 
     const glyph = await stack.font.loadGlyph(record.id);
-    expect(stack.font.layer(record.id, source.id)?.id).toBe(record.layers[0]?.id);
+    const layer = glyph.layerForSource(source.id);
+    if (!layer) throw new Error("Expected default glyph layer");
+
+    expect(glyph.record).toEqual(record);
+    expect(glyph.layers).toEqual([layer]);
+    expect(layer.id).toBe(record.layers[0]?.id);
+    expect(glyph.layerForId(layer.id)).toBe(layer);
+    expect(glyph.layerAt(axisLocationFromLocation(source.location))).toBe(layer);
     expect(glyph.xAdvance).toBe(stack.font.defaultXAdvance);
+    expect(glyph.allPoints).toEqual([]);
   });
 
   it("preserves glyph object identity while record names change", async () => {
@@ -355,6 +366,7 @@ describe("font-level intents make the font variable", () => {
     const record = stack.font.createGlyph("A" as GlyphName);
     await stack.editCoordinator.settled();
     const glyph = await stack.font.loadGlyph(record.id);
+    const layers = glyph.layers;
 
     await stack.editCoordinator.apply([
       {
@@ -368,8 +380,11 @@ describe("font-level intents make the font variable", () => {
     ]);
 
     expect(await stack.font.loadGlyph(record.id)).toBe(glyph);
+    expect(glyph.record.name).toBe("A.alt");
     expect(glyph.name).toBe("A.alt");
     expect(glyph.unicode).toBe(0xe001);
+    expect(glyph.layers).toEqual(layers);
+    expect(glyph.layers[0]).toBe(layers[0]);
   });
 
   it("exact sources without glyph layers have no live layer and use projected fallback geometry", async () => {
@@ -427,12 +442,12 @@ describe("font-level intents make the font variable", () => {
     const bold = stack.font.source(sourceId);
     if (!bold) throw new Error("Expected created source");
     const location = axisLocationFromLocation(bold.location);
-    const view = stack.font.glyphView(glyph.id, location);
-    if (!view) throw new Error("Expected glyph view");
+    const renderModel = glyph.renderModelAt(signal(location));
 
-    expect(stack.font.editableLayerAt(glyph.id, location)).toBeNull();
-    expect(view.xAdvance).toBe(640);
-    expect(view.allPoints).toEqual([]);
+    expect(glyph.layerAt(location)).toBeNull();
+    expect(glyph.geometryAt(location).xAdvance).toBe(640);
+    expect(renderModel.xAdvance).toBe(640);
+    expect(renderModel.allPoints).toEqual([]);
   });
 
   it("loads every authored layer in one glyph snapshot", async () => {
@@ -493,10 +508,76 @@ describe("font-level intents make the font variable", () => {
     const boldSource = stack.font.source(boldSourceId);
     if (!boldSource) throw new Error("Expected bold source");
 
-    await stack.font.loadGlyph(glyphId);
+    const glyph = await stack.font.loadGlyph(glyphId);
 
-    expect(stack.font.layer(glyphId, defaultSourceId)?.id).toBe(defaultLayerId);
-    expect(stack.font.layer(glyphId, boldSource.id)?.id).toBe(boldLayerId);
+    expect(glyph.layers.map((layer) => layer.id)).toEqual(
+      glyph.record.layers.map((layer) => layer.id),
+    );
+    expect(glyph.layerForSource(defaultSourceId)?.id).toBe(defaultLayerId);
+    expect(glyph.layerForSource(boldSource.id)?.id).toBe(boldLayerId);
+    expect(glyph.layerForId(defaultLayerId)?.sourceId).toBe(defaultSourceId);
+    expect(glyph.layerForId(boldLayerId)?.sourceId).toBe(boldSourceId);
+    expect(glyph.primaryGeometryForFont).toBe(glyph.layerForSource(defaultSourceId)?.geometry);
+    expect(glyph.layerAt(axisLocationFromLocation(boldSource.location))?.id).toBe(boldLayerId);
+    const locationCell = signal(axisLocationFromLocation(boldSource.location));
+    expect(glyph.geometryAt(locationCell.peek())).toBe(glyph.layerForId(boldLayerId)?.geometry);
+    expect(glyph.renderModelAt(locationCell)).toBe(glyph.renderModelAt(locationCell));
+  });
+
+  it("loads an authored-empty glyph as a complete stable object", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const glyphId = mintGlyphId();
+
+    await stack.editCoordinator.apply([
+      {
+        kind: "createGlyph",
+        createGlyph: {
+          glyphId,
+          name: "empty" as GlyphName,
+          unicodes: [],
+        },
+      },
+    ]);
+
+    const glyph = await stack.font.loadGlyph(glyphId);
+
+    expect(glyph.layers).toEqual([]);
+    expect(glyph.allPoints).toEqual([]);
+    expect(glyph.xAdvance).toBe(0);
+    expect(glyph.geometryAt(stack.font.defaultLocation()).allPoints).toEqual([]);
+    expect(await stack.font.loadGlyph(glyphId)).toBe(glyph);
+  });
+
+  it("preserves glyph identity while authored layer membership changes", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+
+    const record = stack.font.createGlyph("A" as GlyphName);
+    await stack.editCoordinator.settled();
+    const glyph = await stack.font.loadGlyph(record.id);
+    const axisId = mintAxisId();
+    const sourceId = mintSourceId();
+    const layerId = mintLayerId();
+
+    await stack.editCoordinator.apply([
+      { kind: "createAxis", createAxis: { axis: continuousAxis(axisId) } },
+      {
+        kind: "createSource",
+        createSource: {
+          sourceId,
+          name: "Bold",
+          location: { values: { [axisId]: 700 } as Record<AxisId, number> },
+        },
+      },
+      { kind: "createGlyphLayer", createGlyphLayer: { layerId, glyphId: glyph.id, sourceId } },
+    ]);
+
+    expect(await stack.font.loadGlyph(glyph.id)).toBe(glyph);
+    expect(glyph.layerForSource(sourceId)?.id).toBe(layerId);
+    expect(glyph.layers.map((layer) => layer.id)).toEqual(
+      glyph.record.layers.map((layer) => layer.id),
+    );
   });
 
   it("rejects glyph loads for ids outside the current font", async () => {
@@ -506,17 +587,19 @@ describe("font-level intents make the font variable", () => {
     await expect(stack.font.loadGlyph(mintGlyphId())).rejects.toThrow("is not in the current font");
   });
 
-  it("loads glyph batches in request order", async () => {
+  it("creates new glyph identities after workspace replacement", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();
 
-    const a = stack.font.createGlyph("A" as GlyphName);
-    const b = stack.font.createGlyph("B" as GlyphName);
+    const record = stack.font.createGlyph("A" as GlyphName);
     await stack.editCoordinator.settled();
+    const glyph = await stack.font.loadGlyph(record.id);
+    const snapshot = stack.store.workspaceCell.peek();
+    if (!snapshot) throw new Error("Expected workspace snapshot");
 
-    const glyphs = await stack.font.loadGlyphs([b.id, a.id, b.id]);
+    stack.store.replaceWorkspace(snapshot);
 
-    expect(glyphs.map((glyph) => glyph.id)).toEqual([b.id, a.id, b.id]);
+    expect(await stack.font.loadGlyph(record.id)).not.toBe(glyph);
   });
 
   it("measures a pure component glyph while keeping root controls empty", async () => {
@@ -524,22 +607,28 @@ describe("font-level intents make the font variable", () => {
     await stack.openWorkspace(resolve(process.cwd(), "../../fixtures/fonts/Homenaje.glyphs"));
     const record = stack.font.recordForName("Aacute" as GlyphName);
     if (!record) throw new Error("Expected Aacute fixture glyph");
-    await stack.font.loadGlyph(record.id);
+    const glyph = await stack.font.loadGlyph(record.id);
 
-    const view = stack.font.glyphView(record.id, stack.font.defaultLocation());
-    if (!view) throw new Error("Expected Aacute glyph view");
+    for (const componentGlyphId of record.componentBaseGlyphIds) {
+      const componentGlyph = stack.store.glyphForId(componentGlyphId);
+      if (!componentGlyph) throw new Error(`Expected loaded component glyph ${componentGlyphId}`);
 
-    expect(view.contours.filter((contour) => contour.component === null)).toEqual([]);
-    expect(view.components).toHaveLength(2);
-    expect(view.contours.length).toBeGreaterThan(0);
-    expect(view.contours.every((contour) => contour.component !== null)).toBe(true);
-    const componentContours = view.components.flatMap((component) => component.contours);
-    expect(componentContours).toHaveLength(view.contours.length);
-    for (let index = 0; index < componentContours.length; index++) {
-      expect(view.contours[index]).toBe(componentContours[index]);
+      expect(await stack.font.loadGlyph(componentGlyphId)).toBe(componentGlyph);
     }
-    expect(view.xAdvance).toBe(483);
-    expect(view.sidebearings).toEqual({ lsb: 20, rsb: 20 });
+
+    const renderModel = glyph.renderModelAt(signal(stack.font.defaultLocation()));
+
+    expect(renderModel.contours.filter((contour) => contour.component === null)).toEqual([]);
+    expect(renderModel.components).toHaveLength(2);
+    expect(renderModel.contours.length).toBeGreaterThan(0);
+    expect(renderModel.contours.every((contour) => contour.component !== null)).toBe(true);
+    const componentContours = renderModel.components.flatMap((component) => component.contours);
+    expect(componentContours).toHaveLength(renderModel.contours.length);
+    for (let index = 0; index < componentContours.length; index++) {
+      expect(renderModel.contours[index]).toBe(componentContours[index]);
+    }
+    expect(renderModel.xAdvance).toBe(483);
+    expect(renderModel.sidebearings).toEqual({ lsb: 20, rsb: 20 });
   });
 });
 

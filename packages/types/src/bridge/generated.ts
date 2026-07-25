@@ -63,6 +63,17 @@ export interface BridgeApi {
    * renderer can evaluate design-location changes without further IPC.
    */
   getGlyphProjections(glyphIds: Array<GlyphId>): Array<GlyphProjection>
+  /**
+   * Location-resolved glyph previews: one svg path and advance per glyph.
+   *
+   * `location` is an internal authoring location; external axis mappings must
+   * be evaluated first (see `map_location`). Components and interpolation
+   * resolve at that location with shared component work across the batch.
+   * Missing glyph identities are omitted. No editable structure crosses the
+   * boundary, so the payload stays orders of magnitude lighter than
+   * `get_glyph_snapshots`.
+   */
+  getGlyphPreviews(glyphIds: Array<GlyphId>, location: Location): Array<GlyphPreview>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
@@ -432,6 +443,16 @@ export interface GlyphLayerSnapshot {
   glyphId: GlyphId
   sourceId: SourceId
   state: GlyphState
+}
+
+/**
+ * Location-resolved drawable preview: one svg path and advance per glyph,
+ * with no editable structure crossing the boundary.
+ */
+export interface GlyphPreview {
+  glyphId: GlyphId
+  svgPath: string
+  xAdvance: number
 }
 
 export interface GlyphProjection {

@@ -179,7 +179,7 @@ impl GlyphComponents {
     /// function.
     pub fn from_layers(
         root_glyph_id: &GlyphId,
-        layers: &HashMap<GlyphId, GlyphLayer>,
+        layers: &HashMap<GlyphId, &GlyphLayer>,
     ) -> CoreResult<Self> {
         let root_layer = layer_for_glyph(layers, root_glyph_id)?;
         let mut components = Vec::new();
@@ -209,22 +209,32 @@ impl GlyphComponents {
     }
 }
 
+/// Borrows an owned layer map as the layer view consumed by composite reads.
+fn layer_view(layers: &HashMap<GlyphId, GlyphLayer>) -> HashMap<GlyphId, &GlyphLayer> {
+    layers
+        .iter()
+        .map(|(glyph_id, layer)| (glyph_id.clone(), layer))
+        .collect()
+}
+
 fn layer_for_glyph<'a>(
-    layers: &'a HashMap<GlyphId, GlyphLayer>,
+    layers: &HashMap<GlyphId, &'a GlyphLayer>,
     glyph_id: &GlyphId,
 ) -> CoreResult<&'a GlyphLayer> {
     layers
         .get(glyph_id)
+        .copied()
         .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))
 }
 
 fn layer_for_component<'a>(
-    layers: &'a HashMap<GlyphId, GlyphLayer>,
+    layers: &HashMap<GlyphId, &'a GlyphLayer>,
     component_id: &ComponentId,
     base_glyph_id: &GlyphId,
 ) -> CoreResult<&'a GlyphLayer> {
     layers
         .get(base_glyph_id)
+        .copied()
         .ok_or_else(|| CoreError::UnresolvableComponentGlyph {
             component_id: component_id.clone(),
             base_glyph_id: base_glyph_id.clone(),
@@ -295,7 +305,7 @@ impl NamedPlacedAnchor for PlacedComponentAnchor {
 }
 
 fn append_components(
-    layers: &HashMap<GlyphId, GlyphLayer>,
+    layers: &HashMap<GlyphId, &GlyphLayer>,
     parent_layer: &GlyphLayer,
     parent_glyph_id: &GlyphId,
     parent_path: &ComponentPath,
@@ -365,7 +375,7 @@ fn append_components(
 }
 
 fn explicit_transform_for_component(
-    layers: &HashMap<GlyphId, GlyphLayer>,
+    layers: &HashMap<GlyphId, &GlyphLayer>,
     component_glyph: &ComponentGlyph,
 ) -> CoreResult<Transform> {
     let parent_layer = layer_for_glyph(layers, &component_glyph.parent_glyph_id())?;
@@ -381,7 +391,7 @@ fn explicit_transform_for_component(
 }
 
 fn anchor_for_reference<'a>(
-    layers: &'a HashMap<GlyphId, GlyphLayer>,
+    layers: &'a HashMap<GlyphId, &GlyphLayer>,
     reference: &ComponentAnchorReference,
 ) -> CoreResult<&'a Anchor> {
     let layer = layer_for_glyph(layers, &reference.glyph_id())?;
@@ -392,7 +402,7 @@ fn anchor_for_reference<'a>(
 }
 
 fn local_transform_for_component(
-    layers: &HashMap<GlyphId, GlyphLayer>,
+    layers: &HashMap<GlyphId, &GlyphLayer>,
     component_glyph: &ComponentGlyph,
     local_transforms: &HashMap<ComponentPath, Transform>,
 ) -> CoreResult<Transform> {
@@ -416,7 +426,7 @@ fn local_transform_for_component(
 }
 
 fn resolve_component_contours(
-    layers: &HashMap<GlyphId, GlyphLayer>,
+    layers: &HashMap<GlyphId, &GlyphLayer>,
     components: &GlyphComponents,
 ) -> CoreResult<Vec<ResolvedContour>> {
     let mut local_transforms = HashMap::<ComponentPath, Transform>::new();
@@ -469,8 +479,9 @@ pub fn flatten_component_contours_from_layers(
     root_glyph_id: &GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
 ) -> CoreResult<Vec<ResolvedContour>> {
-    let components = GlyphComponents::from_layers(root_glyph_id, layers)?;
-    resolve_component_contours(layers, &components)
+    let view = layer_view(layers);
+    let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
+    resolve_component_contours(&view, &components)
 }
 
 /// Resolves root and component contours for one derived glyph layer.
@@ -487,15 +498,14 @@ pub fn resolved_contours_from_layers(
     root_glyph_id: &GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
 ) -> CoreResult<Vec<ResolvedContour>> {
-    let layer = layer_for_glyph(layers, root_glyph_id)?;
+    let view = layer_view(layers);
+    let layer = layer_for_glyph(&view, root_glyph_id)?;
     let mut contours = layer
         .contours_iter()
         .map(|contour| transform_contour_points(contour, Transform::identity()))
         .collect::<Vec<_>>();
-    contours.extend(flatten_component_contours_from_layers(
-        root_glyph_id,
-        layers,
-    )?);
+    let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
+    contours.extend(resolve_component_contours(&view, &components)?);
     Ok(contours)
 }
 
@@ -739,7 +749,8 @@ mod tests {
         root.set_layer(root_layer);
         font.insert_glyph(root).unwrap();
 
-        let components = GlyphComponents::from_layers(&root_id, &default_layers(&font)).unwrap();
+        let layers = default_layers(&font);
+        let components = GlyphComponents::from_layers(&root_id, &layer_view(&layers)).unwrap();
         let paths = components
             .components()
             .iter()
@@ -821,7 +832,7 @@ mod tests {
         font.insert_glyph(comp).unwrap();
 
         let layers = default_layers(&font);
-        let components = GlyphComponents::from_layers(&comp_id, &layers).unwrap();
+        let components = GlyphComponents::from_layers(&comp_id, &layer_view(&layers)).unwrap();
         let attachment = components.components()[1].attachment().unwrap();
 
         assert_eq!(

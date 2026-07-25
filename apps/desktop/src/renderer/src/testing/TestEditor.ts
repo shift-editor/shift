@@ -12,7 +12,7 @@
  */
 
 import { Editor } from "@/lib/editor/Editor";
-import type { Glyph, GlyphView, GlyphLayer } from "@/lib/model/Glyph";
+import type { Glyph, GlyphRenderModel, GlyphLayer } from "@/lib/model/Glyph";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { Point2D } from "@shift/geo";
@@ -55,7 +55,7 @@ export class TestEditor extends Editor {
   constructor() {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ font: stack.font, clipboard });
+    super({ font: stack.font, fontStore: stack.store, clipboard });
     this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
@@ -158,7 +158,7 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.font.layer(node.glyphId, sourceId);
+    return this.glyphForId(node.glyphId)?.layerForSource(sourceId) ?? null;
   }
 
   requireGlyphLayer(): GlyphLayer {
@@ -179,18 +179,18 @@ export class TestEditor extends Editor {
     return this.scene.nodesOfKind("glyph")[0] ?? null;
   }
 
-  get sceneGlyphView(): GlyphView | null {
+  get sceneGlyphRenderModel(): GlyphRenderModel | null {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.font.glyphView(node.glyphId, this.designLocationCell);
+    return this.glyphForId(node.glyphId)?.renderModelAt(this.designLocationCell) ?? null;
   }
 
   get glyphRecord(): GlyphRecord | null {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.font.glyph(node.glyphId);
+    return this.font.recordForId(node.glyphId);
   }
 
   get glyphContours(): readonly Contour[] {

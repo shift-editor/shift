@@ -31,7 +31,7 @@ export const ScaleSection = () => {
     const [node] = glyphNodes;
     if (!node) return null;
 
-    return editor.font.layer(node.glyphId, sourceId);
+    return editor.glyphForId(node.glyphId)?.layerForSource(sourceId) ?? null;
   }, [editor, scene, sourceId]);
   const selectedPointIds = useMemo(() => selection.ids.filter(isPointId), [selection]);
 

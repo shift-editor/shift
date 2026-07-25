@@ -63,13 +63,16 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 
 ### Code Quality
 
-- `pnpm format` - Format code with Prettier
-- `pnpm format:check` - Check formatting without modifying files
+- `pnpm format` - Format `apps/` and `packages/` with Oxfmt
+- `pnpm format:check` - Check Oxfmt formatting without modifying files
+- `pnpm format:files <paths...>` - Format only the specified files with Oxfmt
 - `pnpm lint` - Lint code with Oxlint (auto-fix)
 - `pnpm lint:check` - Lint code without auto-fix
 - `pnpm typecheck` - Type check with tsgo
 - `cargo fmt` - Format Rust code (run after any Rust changes)
 - `cargo clippy` - Lint Rust code (run after any Rust changes)
+
+Use repository scripts when a matching command exists; they encode the intended tool, scope, and version. Run all TypeScript/JavaScript formatting through `pnpm format`, `pnpm format:check`, or `pnpm format:files`; never invoke Oxfmt directly and never use Prettier in this repository.
 
 ### Testing
 

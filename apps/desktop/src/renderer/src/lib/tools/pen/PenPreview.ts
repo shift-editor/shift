@@ -92,7 +92,9 @@ export class PenPreview extends CanvasItem<PenPreviewProps> {
     const context = this.#pen.contextCell.peek();
     if (!context?.activeContourId) return null;
 
-    const layer = this.#editor.font.layer(context.glyphNode.glyphId, context.glyphNode.sourceId);
+    const layer = this.#editor
+      .glyphForId(context.glyphNode.glyphId)
+      ?.layerForSource(context.glyphNode.sourceId);
     if (!layer) return null;
 
     track(layer.structureCell);

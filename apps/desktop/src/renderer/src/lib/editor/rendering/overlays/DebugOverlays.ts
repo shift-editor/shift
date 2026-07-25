@@ -1,11 +1,11 @@
 import type { Canvas } from "../Canvas";
-import type { GlyphView } from "@/lib/model/Glyph";
+import type { GlyphRenderModel } from "@/lib/model/Glyph";
 import type { SegmentId } from "@/types/indicator";
 
 export class DebugOverlays {
   draw(
     canvas: Canvas,
-    view: GlyphView,
+    view: GlyphRenderModel,
     overlays: {
       segmentBounds: boolean;
       tightBounds: boolean;
@@ -31,7 +31,7 @@ export class DebugOverlays {
     }
   }
 
-  #drawSegmentBounds(canvas: Canvas, view: GlyphView, color: string): void {
+  #drawSegmentBounds(canvas: Canvas, view: GlyphRenderModel, color: string): void {
     for (const contour of view.contours) {
       if (contour.component) continue;
 
@@ -44,7 +44,7 @@ export class DebugOverlays {
 
   #drawTightBounds(
     canvas: Canvas,
-    view: GlyphView,
+    view: GlyphRenderModel,
     hoveredSegmentId: SegmentId | null,
     color: string,
   ): void {
@@ -61,14 +61,14 @@ export class DebugOverlays {
     }
   }
 
-  #drawHitRadii(canvas: Canvas, view: GlyphView, hitRadiusUpm: number, color: string): void {
+  #drawHitRadii(canvas: Canvas, view: GlyphRenderModel, hitRadiusUpm: number, color: string): void {
     const r = hitRadiusUpm * canvas.camera.upmScale * canvas.camera.zoom;
     for (const point of view.allPoints) {
       canvas.strokeCircle({ x: point.x, y: point.y }, r, color, 1);
     }
   }
 
-  #drawGlyphBbox(canvas: Canvas, view: GlyphView, color: string): void {
+  #drawGlyphBbox(canvas: Canvas, view: GlyphRenderModel, color: string): void {
     const b = view.bounds;
     if (!b) return;
     canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
