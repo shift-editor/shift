@@ -1,9 +1,11 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
+use shift_font::{
+    Axis, Contour, Font, Glyph, GlyphLayer, LayerId, Location, MetricKind, NamedInstance, PointType,
+};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
-    raw::TableProvider,
+    raw::{ReadError, TableProvider},
     string::StringId,
     FontRef, MetadataProvider,
 };
@@ -196,6 +198,8 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
         ir_font.metadata_mut().style_name = Some(style_name);
     }
 
+    load_variation_metadata(font, &mut ir_font)?;
+
     for (unicode, glyph_id) in char_map.mappings() {
         let outline = outlines.get(glyph_id).ok_or_else(|| {
             FormatBackendError::Binary(format!(
@@ -236,6 +240,78 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     }
 
     Ok(ir_font)
+}
+
+fn load_variation_metadata(font: &FontRef<'_>, ir_font: &mut Font) -> FormatBackendResult<()> {
+    let fvar = match font.fvar() {
+        Ok(fvar) => fvar,
+        Err(ReadError::TableIsMissing(_)) => return Ok(()),
+        Err(error) => {
+            return Err(FormatBackendError::Binary(format!(
+                "failed to read fvar table: {error}"
+            )))
+        }
+    };
+    fvar.axes().map_err(|error| {
+        FormatBackendError::Binary(format!("failed to read fvar axes: {error}"))
+    })?;
+    let fvar_instances = fvar.instances().map_err(|error| {
+        FormatBackendError::Binary(format!("failed to read fvar instances: {error}"))
+    })?;
+    for index in 0..fvar.instance_count() as usize {
+        fvar_instances.get(index).map_err(|error| {
+            FormatBackendError::Binary(format!("failed to read fvar instance {index}: {error}"))
+        })?;
+    }
+
+    let mut axis_ids = Vec::with_capacity(fvar.axis_count() as usize);
+    let mut default_location = Location::new();
+    for source_axis in font.axes().iter() {
+        let tag = source_axis.tag().to_string();
+        let name = localized_string(font, source_axis.name_id()).unwrap_or_else(|| tag.clone());
+        let mut axis = Axis::new(
+            tag,
+            name,
+            source_axis.min_value() as f64,
+            source_axis.default_value() as f64,
+            source_axis.max_value() as f64,
+        );
+        axis.set_hidden(source_axis.is_hidden());
+        let axis_id = axis.id();
+        default_location.set(axis_id.clone(), axis.default());
+        ir_font.add_axis(axis)?;
+        axis_ids.push(axis_id);
+    }
+
+    let default_source_id = ir_font
+        .default_source_id()
+        .expect("new font should have a default source");
+    ir_font
+        .source_mut(default_source_id)
+        .expect("new font should contain its default source")
+        .set_location(default_location);
+
+    let instances = font
+        .named_instances()
+        .iter()
+        .enumerate()
+        .map(|(index, source_instance)| {
+            let name = localized_string(font, source_instance.subfamily_name_id())
+                .unwrap_or_else(|| format!("Instance {}", index + 1));
+            let postscript_name = source_instance
+                .postscript_name_id()
+                .and_then(|name_id| localized_string(font, name_id));
+            let mut location = Location::new();
+            for (axis_id, coordinate) in axis_ids.iter().zip(source_instance.user_coords()) {
+                location.set(axis_id.clone(), coordinate as f64);
+            }
+
+            NamedInstance::new(name, location, postscript_name)
+        })
+        .collect();
+    ir_font.set_named_instances(instances)?;
+
+    Ok(())
 }
 
 fn localized_string(font: &FontRef<'_>, id: StringId) -> Option<String> {

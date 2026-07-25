@@ -24,6 +24,15 @@ fn mutatorsans_otf_path() -> PathBuf {
     fixtures_path().join("fonts/mutatorsans/MutatorSans.otf")
 }
 
+fn host_grotesk_variable_ttf_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf")
+}
+
 fn homenaje_glyphs_path() -> PathBuf {
     fixtures_path().join("fonts/Homenaje.glyphs")
 }
@@ -165,6 +174,37 @@ fn loads_binary_fonts_with_contours() {
         assert!(font.glyph_count() > 0);
         assert!(!main_layer(glyph_a).contours().is_empty());
     }
+}
+
+#[test]
+fn loads_binary_variable_axes_and_named_instances() {
+    let font = load_font(&host_grotesk_variable_ttf_path());
+
+    assert!(font.is_variable());
+    assert_eq!(font.axes().len(), 1);
+    let weight = &font.axes()[0];
+    assert_eq!(weight.tag(), "wght");
+    assert_eq!(weight.name(), "Weight");
+    assert_eq!(weight.minimum(), 300.0);
+    assert_eq!(weight.default(), 300.0);
+    assert_eq!(weight.maximum(), 800.0);
+    assert!(!weight.is_hidden());
+    assert_eq!(
+        font.default_source()
+            .expect("binary font should have a default source")
+            .location()
+            .get(&weight.id()),
+        Some(300.0)
+    );
+
+    assert_eq!(font.named_instances().len(), 6);
+    let regular = font
+        .named_instances()
+        .iter()
+        .find(|instance| instance.name() == "Regular")
+        .expect("Host Grotesk should contain a Regular instance");
+    assert_eq!(regular.location().get(&weight.id()), Some(400.0));
+    assert_eq!(regular.postscript_name(), Some("HostGrotesk-Regular"));
 }
 
 fn assert_cubic_point_runs(contour: &Contour, context: &str) {
