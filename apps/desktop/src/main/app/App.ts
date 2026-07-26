@@ -4,6 +4,8 @@ import {
   clipboard,
   ipcMain,
   MessageChannelMain,
+  screen,
+  type Rectangle,
   type WebContents,
 } from "electron";
 import started from "electron-squirrel-startup";
@@ -124,9 +126,17 @@ export class App {
     });
   }
 
-  #createWindow(): Window {
+  #createWindow(autoShow = true, bounds?: Rectangle): Window {
     const window = new Window({
       preloadPath: path.join(__dirname, "preload.js"),
+      autoShow,
+      ...(bounds
+        ? {
+            width: bounds.width,
+            height: bounds.height,
+            browserWindowOptions: { x: bounds.x, y: bounds.y },
+          }
+        : {}),
     });
     this.#windows.add(window);
 
@@ -216,6 +226,14 @@ export class App {
       event.sender.postMessage("workspace.port", null, [port2]);
       this.#log.info("workspace port sent to renderer");
     });
+    ipc.handle(ipcMain, "workspace.ready", (event) => {
+      this.#workspaceForSender(event.sender, "workspace.ready");
+      const window = this.#requireWindowForWebContents(event.sender);
+      const browserWindow = window.window;
+      if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
+
+      window.focus();
+    });
   }
 
   #commandContext(): CommandContext {
@@ -284,9 +302,13 @@ export class App {
 
   #openWorkspaceWindow(opener: Window, session: WorkspaceSession): void {
     const closeOpener = this.#workspaces.getForBrowserWindow(opener.window) === null;
-    const workspaceWindow = this.#createWindow();
+
+    const bounds = screen.getDisplayMatching(opener.window.getBounds()).workArea;
+    const workspaceWindow = this.#createWindow(false, bounds);
+
     this.#workspaces.attachWindow(session.workspaceId, workspaceWindow);
     this.#loadWorkspace(workspaceWindow);
+
     if (closeOpener) opener.close();
   }
 

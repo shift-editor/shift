@@ -1,4 +1,11 @@
-import type { AppliedChange, FontIntent, GlyphId, GlyphProjection, Location } from "@shift/types";
+import type {
+  AppliedChange,
+  FontIntent,
+  GlyphId,
+  GlyphPreview,
+  GlyphProjection,
+  Location,
+} from "@shift/types";
 import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
@@ -170,6 +177,16 @@ export class WorkspaceEditCoordinator {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#workspace.glyphProjections(glyphIds));
+  }
+
+  /** Pulls drawable previews at one internal location behind pending edits. */
+  async readGlyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: Location,
+  ): Promise<GlyphPreview[]> {
+    if (glyphIds.length === 0) return [];
+
+    return this.#withFlush(() => this.#workspace.glyphPreviews(glyphIds, location));
   }
 
   /**

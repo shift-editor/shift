@@ -17,6 +17,10 @@ export function axisLocationFromLocation(location: Location): AxisLocation {
   return axisLocationFromRecord(location.values);
 }
 
+export function locationFromAxisLocation(location: AxisLocation): Location {
+  return { values: Object.fromEntries(location) };
+}
+
 export function defaultAxisLocation(axes: readonly Axis[]): AxisLocation {
   return new Map(axes.map((axis) => [axis.id, axis.default]));
 }

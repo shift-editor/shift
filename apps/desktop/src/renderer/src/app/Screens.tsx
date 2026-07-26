@@ -4,7 +4,6 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Landing } from "@/views/Landing";
 import { Home } from "@/views/Home";
 import { Editor } from "@/views/Editor";
-import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@/lib/signals/useSignal";
 import { useEditor, useFont, useWorkspace } from "@/workspace/WorkspaceContext";
 import { WorkspaceProvider } from "@/workspace/WorkspaceProvider";
@@ -66,21 +65,10 @@ const WorkspaceScreens = () => {
     };
   }, [workspace]);
 
-  // Side effect of a document loading: give the editor room.
   useEffect(() => {
     if (!documentLoaded) return;
 
-    async function maximiseWorkspaceWindow(): Promise<void> {
-      try {
-        await getShiftHost().commands.run("window.maximise");
-      } catch (error) {
-        console.error("maximise on document load failed", error);
-      }
-    }
-
     editor.setDesignLocation(font.defaultLocation());
-
-    void maximiseWorkspaceWindow();
   }, [documentLoaded, editor, font]);
 
   if (connectionError) {

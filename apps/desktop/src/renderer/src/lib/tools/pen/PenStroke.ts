@@ -23,7 +23,9 @@ export class PenStroke {
     const context = pen.context;
     if (!context) return null;
 
-    const layer = pen.editor.font.layer(context.glyphNode.glyphId, context.glyphNode.sourceId);
+    const layer = pen.editor
+      .glyphForId(context.glyphNode.glyphId)
+      ?.layerForSource(context.glyphNode.sourceId);
     if (!layer) return null;
 
     return new PenStroke(pen, context.glyphNode, layer);

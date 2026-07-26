@@ -112,7 +112,7 @@ export const TransformSection = () => {
     const [node] = glyphNodes;
     if (!node) return null;
 
-    return editor.font.layer(node.glyphId, sourceId);
+    return editor.glyphForId(node.glyphId)?.layerForSource(sourceId) ?? null;
   }, [editor, scene, sourceId]);
 
   useEffect(() => {

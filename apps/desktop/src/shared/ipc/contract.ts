@@ -38,6 +38,7 @@ export type RendererToMain = {
    * ports cannot travel through `invoke` responses.
    */
   "workspace.connect": () => void;
+  "workspace.ready": () => void;
 };
 
 /**

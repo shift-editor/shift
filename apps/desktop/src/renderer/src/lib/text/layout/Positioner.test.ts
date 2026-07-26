@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { Font } from "@/lib/model/Font";
+import type { TestEditor } from "@/testing/TestEditor";
 import { Positioner } from "./Positioner";
 import { glyphTextItem as glyph } from "./types";
-import { layoutTestFont, ltrRun } from "./testUtils";
+import { layoutTestEditor, ltrRun } from "./testUtils";
 import { signal } from "@/lib/signals/signal";
 
 describe("Positioner", () => {
-  let font: Font;
+  let editor: TestEditor;
 
   beforeEach(async () => {
-    font = await layoutTestFont();
+    editor = await layoutTestEditor();
   });
 
   // Levien invariant: positioned.advance === sum of xAdvance.
@@ -17,7 +17,7 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("A", 65), glyph("B", 66), glyph("C", 67)]);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
 
     const sum = positioned.glyphs.reduce((s, g) => s + g.xAdvance, 0);
     expect(positioned.advance).toBe(sum);
@@ -29,21 +29,23 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("A", 65), glyph("B", 66)], /* clusterStart */ 7);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
 
     expect(positioned.glyphs.map((g) => g.cluster)).toEqual([7, 8]);
   });
 
-  // Each positioned glyph carries the bounds from its resolved view.
-  it("bounds pass through from the glyph view", () => {
+  // Each positioned glyph carries the bounds from its resolved render model.
+  it("bounds pass through from the Glyph render model", () => {
     const positioner = new Positioner();
     const a = glyph("A", 65);
     const run = ltrRun([a]);
+    const locationCell = signal(editor.font.defaultLocation());
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
-    const record = font.recordForName("A");
-    const location = signal(font.defaultLocation());
-    const expectedBounds = record ? font.glyphView(record.id, location)?.bounds : null;
+    const positioned = positioner.position(run, editor, locationCell);
+    const record = editor.font.recordForName("A");
+    const expectedBounds = record
+      ? (editor.glyphForId(record.id)?.renderModelAt(locationCell).bounds ?? null)
+      : null;
 
     expect(positioned.glyphs[0].glyphId).toBe(record?.id);
     expect(positioned.glyphs[0].bounds).toEqual(expectedBounds);
@@ -56,7 +58,7 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("nonexistent-glyph-xyz", 65)]);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
 
     expect(positioned.glyphs[0].xAdvance).toBe(0);
     expect(positioned.glyphs[0].bounds).toBeNull();
@@ -68,7 +70,7 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([]);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
 
     expect(positioned.glyphs).toEqual([]);
     expect(positioned.advance).toBe(0);

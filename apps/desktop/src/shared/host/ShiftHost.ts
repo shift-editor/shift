@@ -49,6 +49,7 @@ export interface ShiftHost {
      * from the sender window.
      */
     connect: () => Promise<void>;
+    ready: () => Promise<void>;
   };
   /** App-shell UI events owned by the main process. */
   ui: {

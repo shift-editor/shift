@@ -10,8 +10,10 @@ import {
   type Location,
   type Source,
   type SourceId,
+  type GlyphId,
   type GlyphName,
   type GlyphRecord,
+  type LayerId,
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { AxisLocation } from "@/types/variation";
@@ -53,7 +55,9 @@ import type { TemporaryToolOptions } from "@/types/editor";
 import { Editing } from "./Editing";
 import { Selection } from "./Selection";
 import type { Font } from "../model/Font";
-import type { GlyphLayer } from "../model/Glyph";
+import type { FontStore } from "../model/FontStore";
+import type { Glyph, GlyphLayer } from "../model/Glyph";
+import type { GlyphGeometrySelection } from "@/types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "@/lib/text/Text";
 import { TextRuns } from "@/lib/text/TextRuns";
@@ -81,6 +85,7 @@ const DEFAULT_NODE_DEFINITIONS: NodeDefinitionConstructor[] = [
 
 interface EditorOptions {
   font: Font;
+  fontStore: FontStore;
   clipboard: SystemClipboard;
   nodeDefinitions?: readonly NodeDefinitionConstructor[];
 }
@@ -121,9 +126,9 @@ export class Editor {
   /**
    * Long-lived editor model objects.
    *
-   * `Selection` and `Hover` are mutable runtime state. `Font` owns document
-   * glyph/source models. Geometry remains immutable and is read through the
-   * explicit surfaces below.
+   * `Selection` and `Hover` are mutable runtime state. `Font` owns public
+   * document operations while the private `FontStore` resolves already-loaded
+   * Glyph objects for ID-based scene nodes.
    */
   readonly selection: Selection;
   readonly editing: Editing;
@@ -133,6 +138,7 @@ export class Editor {
   readonly text: Text;
   readonly #nodeDefinitions: Map<NodeKind, NodeDefinition> = new Map();
   readonly #store: ShiftStore<ShiftEditorRecord>;
+  readonly #fontStore: FontStore;
 
   /**
    * Rendering and camera infrastructure.
@@ -195,6 +201,7 @@ export class Editor {
 
     this.font = options.font;
     this.#store = new ShiftStore();
+    this.#fontStore = options.fontStore;
     this.scene = new Scene(this.#store);
 
     const initialDesignLocation = emptyAxisLocation();
@@ -208,7 +215,7 @@ export class Editor {
         name: "editor.source.active",
       },
     );
-    this.text = new Text(this.#store, this.font, this.#designLocation);
+    this.text = new Text(this.#store, this);
 
     const nodeDefs = new Map<NodeKind, NodeDefinition>();
     for (const Def of options.nodeDefinitions ?? DEFAULT_NODE_DEFINITIONS) {
@@ -261,7 +268,7 @@ export class Editor {
 
     this.#clipboard = new Clipboard(options.clipboard);
 
-    this.#textRuns = new TextRuns(this.font, new Positioner(), this.#designLocation);
+    this.#textRuns = new TextRuns(this, new Positioner());
 
     this.#renderer = new Renderer(this);
 
@@ -532,11 +539,43 @@ export class Editor {
     return null;
   }
 
+  /**
+   * Resolves geometry ids to the single available authored layer that owns all of them.
+   *
+   * @param ids - Geometry ids to resolve. Empty input resolves to `null`.
+   * @returns The sole owning authored layer, or `null` when any id is unknown
+   * or the ids span multiple layers.
+   */
+  layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null {
+    let owner: LayerId | null = null;
+
+    const fold = (layerId: LayerId | null): boolean => {
+      if (!layerId || (owner !== null && owner !== layerId)) return false;
+      owner = layerId;
+      return true;
+    };
+
+    for (const pointId of ids.points ?? []) {
+      if (!fold(this.font.layerIdForPoint(pointId))) return null;
+    }
+    for (const anchorId of ids.anchors ?? []) {
+      if (!fold(this.font.layerIdForAnchor(anchorId))) return null;
+    }
+    for (const contourId of ids.contours ?? []) {
+      if (!fold(this.font.layerIdForContour(contourId))) return null;
+    }
+    for (const segmentId of ids.segments ?? []) {
+      if (!fold(this.font.layerIdForSegment(segmentId))) return null;
+    }
+
+    return owner === null ? null : this.#layerForId(owner);
+  }
+
   #layerForPoint(pointId: PointId): GlyphLayer | null {
     const layerId = this.font.layerIdForPoint(pointId);
     if (!layerId) return null;
 
-    const layer = this.font.layerById(layerId);
+    const layer = this.#layerForId(layerId);
     if (!layer?.point(pointId)) return null;
 
     return layer;
@@ -546,7 +585,7 @@ export class Editor {
     const layerId = this.font.layerIdForAnchor(anchorId);
     if (!layerId) return null;
 
-    const layer = this.font.layerById(layerId);
+    const layer = this.#layerForId(layerId);
     if (!layer?.anchor(anchorId)) return null;
 
     return layer;
@@ -556,7 +595,7 @@ export class Editor {
     const layerId = this.font.layerIdForSegment(segmentId);
     if (!layerId) return null;
 
-    const layer = this.font.layerById(layerId);
+    const layer = this.#layerForId(layerId);
     if (!layer?.segment(segmentId)) return null;
 
     return layer;
@@ -566,21 +605,45 @@ export class Editor {
     const layerId = this.font.layerIdForContour(contourId);
     if (!layerId) return null;
 
-    const layer = this.font.layerById(layerId);
+    const layer = this.#layerForId(layerId);
     if (!layer?.contour(contourId)) return null;
 
     return layer;
+  }
+
+  #layerForId(layerId: LayerId): GlyphLayer | null {
+    for (const node of this.scene.nodesOfKind("glyph")) {
+      const layer = this.glyphForId(node.glyphId)?.layerForId(layerId);
+      if (layer) return layer;
+    }
+
+    return null;
   }
 
   #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
     for (const node of this.scene.nodesOfKind("glyph")) {
       if (node.sourceId !== layer.sourceId) continue;
 
-      const nodeLayer = this.font.layer(node.glyphId, node.sourceId);
+      const nodeLayer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
       if (nodeLayer?.id === layer.id) return node;
     }
 
     return null;
+  }
+
+  /**
+   * Returns a complete Glyph already available to this editor runtime.
+   *
+   * @remarks
+   * This is a synchronous NodeDefinition and plugin lookup. It never starts
+   * workspace I/O. Use `font.recordForId()` to test current-font existence and
+   * `font.loadGlyph()` to acquire a Glyph before publishing a dependent node.
+   *
+   * @param glyphId - Current-font Glyph identity to inspect.
+   * @returns The canonical complete Glyph, or `null` when it is not currently available.
+   */
+  glyphForId(glyphId: GlyphId): Glyph | null {
+    return this.#fontStore.glyphForId(glyphId);
   }
 
   nodeDefinition(kind: NodeKind): NodeDefinition | null {
@@ -658,7 +721,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    const layer = this.font.layer(node.glyphId, sourceId);
+    const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!layer) return;
 
     this.selection.select(layer.allPoints.map((point) => point.id));
@@ -714,10 +777,13 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    const liveLayer = this.font.layer(node.glyphId, sourceId);
+    const glyph = this.#fontStore.glyphForId(node.glyphId);
+    if (!glyph) return;
+
+    const liveLayer = glyph.layerForSource(sourceId);
 
     if (!liveLayer) {
-      const defaultLayer = this.font.layer(node.glyphId, this.font.defaultSource.id);
+      const defaultLayer = glyph.layerForSource(this.font.defaultSource.id);
       if (!defaultLayer) return;
 
       this.font.materializeGlyphLayer(
@@ -853,7 +919,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return 0;
 
-    return this.font.layer(node.glyphId, sourceId)?.xAdvance ?? 0;
+    return this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.xAdvance ?? 0;
   }
 
   /**
@@ -871,7 +937,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    this.font.layer(node.glyphId, sourceId)?.setXAdvance(width);
+    this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setXAdvance(width);
   }
 
   /**
@@ -889,7 +955,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    this.font.layer(node.glyphId, sourceId)?.setLeftSidebearing(value);
+    this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setLeftSidebearing(value);
   }
 
   /**
@@ -907,7 +973,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    this.font.layer(node.glyphId, sourceId)?.setRightSidebearing(value);
+    this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setRightSidebearing(value);
   }
 
   public updateMetricsFromFont(location: AxisLocation = this.designLocation): void {
@@ -1130,7 +1196,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return null;
 
-    const layer = this.font.layer(node.glyphId, sourceId);
+    const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!layer) return null;
 
     const inserted: SelectableId[] = [];
@@ -1247,7 +1313,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    const layer = this.font.layer(node.glyphId, sourceId);
+    const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!layer) return;
 
     layer.applyBooleanOp(contourIdA, contourIdB, operation);

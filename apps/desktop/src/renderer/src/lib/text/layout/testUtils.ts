@@ -1,15 +1,13 @@
 /**
  * Shared test fixtures for the layout module.
  *
- * Builds a real Font through the workspace stack (real NAPI, real SQLite):
+ * Builds a real Editor through the workspace stack (real NAPI, real SQLite):
  * glyphs A/B/C with distinct advances, and real triangle geometry on A so
  * outline bounds flow through positioning. No fakes; tests assert against
  * values read back from the workspace, not hardcoded advances.
  */
-import { mintGlyphId, mintLayerId, type GlyphName } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
-import type { Font } from "@/lib/model/Font";
-import { createWorkspaceStack } from "@/testing/workspaceStack";
+import { TestEditor } from "@/testing/TestEditor";
 import { TextLayout } from "./TextLayout";
 import { Positioner } from "./Positioner";
 import type { TextItem, GlyphTextItem, SegmentedRun } from "./types";
@@ -20,60 +18,44 @@ const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
   ["C", 67, 700],
 ];
 
-export async function layoutTestFont(): Promise<Font> {
-  const stack = createWorkspaceStack();
-  await stack.createWorkspace();
+export async function layoutTestEditor(): Promise<TestEditor> {
+  const editor = new TestEditor();
+  await editor.startSession();
 
   for (const [name, unicode, advance] of GLYPHS) {
-    const glyphId = mintGlyphId();
-    const layerId = mintLayerId();
-    const applied = await stack.editCoordinator.apply([
-      {
-        kind: "createGlyph",
-        createGlyph: { glyphId, name: name as GlyphName, unicodes: [unicode] },
-      },
-      {
-        kind: "createGlyphLayer",
-        createGlyphLayer: {
-          layerId,
-          glyphId,
-          sourceId: stack.font.defaultSource.id,
-        },
-      },
-    ]);
-    const record = applied.next?.glyphs?.find((glyph) => glyph.name === name);
-    if (!record) throw new Error(`createGlyph did not echo ${name}`);
+    if (name !== "A") await editor.addGlyph(name, unicode);
 
-    await stack.editCoordinator.apply([
-      { kind: "setXAdvance", setXAdvance: { layerId, width: advance } },
-    ]);
-    await stack.font.loadGlyph(record.id);
+    const record = editor.font.recordForName(name);
+    if (!record) throw new Error(`Expected Glyph record for ${name}`);
+    const glyph = editor.glyphForId(record.id);
+    if (!glyph) throw new Error(`Expected acquired Glyph for ${name}`);
+    const layer = glyph.layerForSource(editor.font.defaultSource.id);
+    if (!layer) throw new Error(`Expected authored Glyph layer for ${name}`);
+
+    layer.setXAdvance(advance);
   }
 
-  const record = stack.font.recordForName("A" as GlyphName);
-  const a = record ? stack.font.layer(record.id, stack.font.defaultSource.id) : null;
-  if (!a) throw new Error("Expected authored glyph layer for A");
+  const layer = editor.requireGlyphLayer();
+  const contourId = layer.addContour();
+  layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+  layer.addOnCurvePoint(contourId, { x: 100, y: 0 });
+  layer.addOnCurvePoint(contourId, { x: 50, y: 100 });
+  layer.closeContour(contourId);
+  await editor.settle();
 
-  const contourId = a.addContour();
-  a.addOnCurvePoint(contourId, { x: 0, y: 0 });
-  a.addOnCurvePoint(contourId, { x: 100, y: 0 });
-  a.addOnCurvePoint(contourId, { x: 50, y: 100 });
-  a.closeContour(contourId);
-  await stack.editCoordinator.settled();
-
-  return stack.font;
+  return editor;
 }
 
 export function ltrRun(glyphs: readonly GlyphTextItem[], clusterStart = 0): SegmentedRun {
   return { glyphs, direction: "ltr", clusterStart };
 }
 
-export function makeLayout(items: readonly TextItem[], font: Font): TextLayout {
+export function makeLayout(items: readonly TextItem[], editor: TestEditor): TextLayout {
   return new TextLayout({
     items,
     origin: { x: 0, y: 0 },
-    font,
+    editor,
     positioner: new Positioner(),
-    designLocation: signal(font.defaultLocation()),
+    designLocation: signal(editor.font.defaultLocation()),
   });
 }

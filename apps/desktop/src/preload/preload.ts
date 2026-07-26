@@ -16,6 +16,7 @@ const shiftHost: ShiftHost = {
   },
   workspace: {
     connect: invoke(ipcRenderer, "workspace.connect"),
+    ready: invoke(ipcRenderer, "workspace.ready"),
   },
   ui: {
     onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),

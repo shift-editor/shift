@@ -6,6 +6,12 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, edge-pan, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers.
 
+**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.
+
+**Architecture Invariant:** `Editor.#store` is the generic `ShiftStore<ShiftEditorRecord>` for scene and session records. The injected `Editor.#fontStore` owns canonical complete Glyph objects for those ID-based records. Neither store contains the other store's domain objects.
+
+**Architecture Invariant:** `Font.loadGlyph()` is the only asynchronous Glyph acquisition API. `Editor.glyphForId()` is the synchronous runtime and NodeDefinition lookup: it returns the canonical complete Glyph when available, returns `null` otherwise, and never starts I/O. Use `Font.recordForId()` when code must distinguish a nonexistent current-font ID from a Glyph that has not been acquired.
+
 **Architecture Invariant:** Pointer events still carry `screen`, `scene`, and active glyph-local coordinates for the current tool path. Placed scene item-local conversion is not global; it requires an `ItemId` through `Scene.toLocal()` / `Scene.toScene()`.
 
 **Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
@@ -55,7 +61,10 @@ editor/
 
 ## Key Types
 
-- **`Editor`** -- Facade class (~1750 lines). Owns `Selection`, `Hover`, `Camera`, `EdgePanManager`, `Renderer` (renderer), `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Passed directly to tools.
+- **`Editor`** -- Facade class (~1750 lines). Owns `Selection`, `Hover`, `Camera`, `EdgePanManager`, `Renderer` (renderer), `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
+- **`Scene`** -- Owns generic, serializable placed-node records and node-level queries. Glyph acquisition and retained object ownership remain outside Scene.
+- **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs.
+- **`FontStore`** -- Workspace-owned renderer mirror injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
 - **`Camera`** -- Owns zoom/pan/UPM signals, computed affine matrices (`Mat`), and all coordinate projection methods (`projectScreenToScene`, `projectSceneToScreen`, `screenToUpmDistance`).
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
 - **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `Theme`.
@@ -75,7 +84,7 @@ editor/
 
 ### Construction and wiring
 
-`new Editor({ bridge })` creates all managers and wires reactive effects. The four rendering effects each read a specific set of signals and schedule the matching canvas layer for redraw. A cursor effect reads tool/hover state and updates the CSS cursor.
+Workspace constructs `Editor` with the public `Font` model and its matching private `FontStore`. Editor creates its own `ShiftStore<ShiftEditorRecord>`, then wires managers and reactive effects. The rendering effects each read a specific set of signals and schedule the matching canvas layer for redraw. A cursor effect reads tool/hover state and updates the CSS cursor.
 
 ### Coordinate pipeline
 
@@ -167,7 +176,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ## Related
 
-- `Font` -- Font records and glyph/layer lookup; `Editor` reads authored glyph layers through this boundary.
+- `Font` -- Font metadata, source and metric APIs, mutation boundaries, and asynchronous Glyph acquisition.
 - `WorkspaceEditCoordinator` -- undo/redo boundary for layer mutations and explicit editor transactions.
 - `ToolManager` -- Tool lifecycle and dispatch; `Editor.#toolManager`. Tools receive `Editor` to access all subsystems.
 - `Clipboard` -- Copy/cut/paste via `Editor.#clipboard`.

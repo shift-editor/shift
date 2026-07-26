@@ -11,22 +11,68 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { useSignalState } from "@/lib/signals";
+import { asGlyphId, mintNodeId } from "@shift/types";
 
 export const Editor = () => {
-  const { glyphId } = useParams();
+  const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
+  const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
+  const glyph = glyphId ? editor.glyphForId(glyphId) : null;
   const cursorStyle = useSignalState(editor.cursorCell);
   const gesture = useSignalState(editor.gesture.cell);
+  const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
   const { activeZone, claimZone } = useFocusZone();
 
   useEffect(() => {
-    if (!glyphId) return;
+    if (!glyph) return;
 
     claimZone("canvas");
-  }, [glyphId, claimZone]);
+  }, [claimZone, glyph]);
+
+  // GlyphGrid acquires the complete Glyph before navigating. The route only
+  // publishes a scene node after synchronous acquisition is confirmed.
+  useEffect(() => {
+    if (!glyph) return undefined;
+
+    const nodeId = mintNodeId();
+    editor.scene.setNodes([
+      {
+        id: nodeId,
+        type: "node",
+        kind: "glyph",
+        parentId: null,
+        index: "a0",
+        glyphId: glyph.id,
+        sourceId: editor.activeSourceId ?? editor.font.defaultSource.id,
+        position: { x: 0, y: 0 },
+      },
+    ]);
+    editor.editing.enter(nodeId);
+
+    return () => {
+      editor.scene.deleteNode(nodeId);
+      if (editor.editing.has(nodeId)) editor.editing.clear();
+    };
+  }, [editor, glyph]);
 
   useEffect(() => {
+    if (!glyph) return;
+
+    const node = editor.scene
+      .nodesOfKind("glyph")
+      .find((candidate) => candidate.glyphId === glyph.id);
+    if (!node) return;
+
+    const sourceId = activeSourceId ?? editor.font.defaultSource.id;
+    if (node.sourceId === sourceId) return;
+
+    editor.scene.updateNode({ id: node.id, sourceId });
+  }, [activeSourceId, editor, glyph]);
+
+  useEffect(() => {
+    if (!glyph) return undefined;
+
     const toolManager = editor.toolManager;
     const keyboardRouter = new KeyboardRouter(() => ({
       canvasActive: activeZone === "canvas" || toolManager.isDragging,
@@ -58,9 +104,9 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [glyphId, activeZone, editor]);
+  }, [activeZone, editor, glyph]);
 
-  if (!glyphId) return null;
+  if (!glyph) return null;
 
   return (
     <div

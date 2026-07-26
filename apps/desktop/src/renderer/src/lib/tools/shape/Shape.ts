@@ -91,7 +91,7 @@ export class Shape extends BaseTool<ShapeState> {
     const [node] = glyphNodes;
     if (!node) return;
 
-    const layer = this.editor.font.layer(node.glyphId, node.sourceId);
+    const layer = this.editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
     if (!layer) return;
 
     this.editor.transaction("Draw rectangle", () => {

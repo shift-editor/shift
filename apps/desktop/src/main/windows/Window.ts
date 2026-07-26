@@ -10,6 +10,7 @@ export interface WindowOptions {
   maximised?: boolean;
   preloadPath: string;
   browserWindowOptions?: BrowserWindowConstructorOptions;
+  autoShow: boolean;
 }
 
 const WINDOW_DEFAULT_OPTIONS: Omit<WindowOptions, "preloadPath"> = {
@@ -18,6 +19,7 @@ const WINDOW_DEFAULT_OPTIONS: Omit<WindowOptions, "preloadPath"> = {
   title: "Shift",
   minWidth: 1200,
   maximised: false,
+  autoShow: false,
 };
 
 /** Chrome zoom steps, matching the browser-conventional ladder. */
@@ -59,7 +61,7 @@ export class Window {
       height: windowOptions.height,
       title: windowOptions.title,
       minWidth: windowOptions.minWidth,
-      show: windowOptions.maximised,
+      show: false,
       webPreferences: {
         ...BROWSER_WINDOW_DEFAULT_OPTIONS.webPreferences,
         ...windowOptions.browserWindowOptions?.webPreferences,
@@ -67,13 +69,15 @@ export class Window {
       },
     });
 
+    if (windowOptions.autoShow) {
+      this.#window.once("ready-to-show", () => {
+        this.#window.show();
+      });
+    }
+
     if (windowOptions.maximised) {
       this.#window.maximize();
     }
-
-    this.#window.once("ready-to-show", () => {
-      this.#window.show();
-    });
   }
 
   get window(): BrowserWindow {

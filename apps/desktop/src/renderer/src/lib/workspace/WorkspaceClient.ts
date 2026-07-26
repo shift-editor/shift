@@ -9,7 +9,14 @@ import type {
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { AppliedChange, FontIntent, GlyphId, GlyphProjection, Location } from "@shift/types";
+import type {
+  AppliedChange,
+  FontIntent,
+  GlyphId,
+  GlyphPreview,
+  GlyphProjection,
+  Location,
+} from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
 /**
@@ -166,6 +173,22 @@ export class WorkspaceClient {
 
     return this.#require().call("workspace.glyphProjections", {
       glyphIds: [...glyphIds],
+    });
+  }
+
+  /**
+   * Resolves drawable glyph previews at one internal authoring location.
+   *
+   * @param glyphIds - Stable glyph identities requested by the caller.
+   * @param location - Internal location; axis mappings must already be evaluated.
+   * @returns One svg path and advance per resolvable glyph; missing ids are omitted.
+   */
+  async glyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.glyphPreviews", {
+      glyphIds: [...glyphIds],
+      location,
     });
   }
 

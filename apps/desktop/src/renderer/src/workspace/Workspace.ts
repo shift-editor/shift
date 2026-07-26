@@ -40,7 +40,11 @@ export class Workspace {
     });
 
     this.font = new Font(this.#store, this.#edits);
-    this.editor = new Editor({ font: this.font, clipboard: options.clipboard });
+    this.editor = new Editor({
+      font: this.font,
+      fontStore: this.#store,
+      clipboard: options.clipboard,
+    });
     this.documentStateCell = this.#client.documentStateCell;
     this.commitStateCell = this.#edits.commitStateCell;
 
@@ -57,6 +61,7 @@ export class Workspace {
   }
 
   dispose(): void {
+    this.font.dispose();
     this.#documentBridge.dispose();
     this.#client.dispose();
   }

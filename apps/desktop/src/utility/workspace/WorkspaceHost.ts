@@ -116,6 +116,8 @@ export class WorkspaceHost {
         this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[]),
       "workspace.glyphProjections": ({ glyphIds }) =>
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
+      "workspace.glyphPreviews": ({ glyphIds, location }) =>
+        this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location)),
       "workspace.mapLocation": (location) =>
         this.#serialize(() => this.#bridge.mapLocation(location)),
     });

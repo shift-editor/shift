@@ -6,6 +6,7 @@ import type {
   FontMetadata,
   FontMetrics,
   GlyphId,
+  GlyphPreview,
   GlyphProjection,
   GlyphRecord,
   GlyphState,
@@ -172,6 +173,11 @@ export type SyncCallMap = {
   "workspace.glyphProjections": {
     request: { glyphIds: GlyphId[] };
     response: GlyphProjection[];
+  };
+  /** Resolves drawable previews (svg path + advance) at one internal location. */
+  "workspace.glyphPreviews": {
+    request: { glyphIds: GlyphId[]; location: Location };
+    response: GlyphPreview[];
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };

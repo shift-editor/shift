@@ -1,13 +1,13 @@
 import type { Canvas } from "../Canvas";
 import type { Segment, SegmentId } from "@shift/glyph-state";
-import type { GlyphView } from "@/lib/model/Glyph";
+import type { GlyphRenderModel } from "@/lib/model/Glyph";
 
 export class Segments {
   readonly #selected: Segment[] = [];
 
   draw(
     canvas: Canvas,
-    view: GlyphView,
+    view: GlyphRenderModel,
     selectedSegmentIds: readonly SegmentId[],
     hoveredSegmentId: SegmentId | null,
   ): void {
