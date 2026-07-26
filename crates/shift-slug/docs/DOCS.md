@@ -70,10 +70,11 @@ Apple M4 / Metal measurements use 120 serialized frames that each change weights
 | `f32ebd40` two-source scalar | 16 B/frame | 469,504 B | 0.934 ms | 2.120 ms | 4.257 ms | 5.857 ms |
 | `ff6ab527` indexed multi-source weights | 8 B/frame | 476,672 B | 0.754 ms | 1.640 ms | 1.967 ms | 3.441 ms |
 | `f5dc1281` authored topology + exact lines | 8 B/frame | 477,860 B | 1.048 ms | 2.177 ms | 4.234 ms | 4.302 ms |
+| `9c0b6510` components + exact visible bounds | 8 B/frame | 477,860 B | 1.001 ms | 2.554 ms | 4.761 ms | 4.949 ms |
 
 The indexed-weight run observed 19.3% lower p50, 22.6% lower p95, and 53.8% lower p99 than the initial scalar run while halving weight traffic to 960 bytes total. The authored-topology correction then added a one-bit-per-curve line mask and exact post-interpolation line controls. In one run it measured 39.0% higher p50, 32.7% higher p95, and 115.3% higher p99 than `ff6ab527`, while GPU submit/readback improved 11.5% from 6.474 to 5.729 ms. Treat all latency differences as run-to-run observations rather than isolated causal attribution.
 
-The corrected run built in 1.894 ms, retained zero geometry uploads and 960 weight bytes, passed curve and band validation, and produced checksum `c1cd8eb7631a65db`. Its p95 remains 6.123 ms below the preferred 8.3 ms gate and p99 remains 12.466 ms below the 16.7 ms hard frame gate. This is the latest measured native Metal semantic baseline. Exact visible-bound reduction subsequently added 16 bytes of scratch per visible glyph and a ninth compute storage binding; llvmpipe validates zero curve/bounds error, exact bands, unchanged checksum `6ce8d5ad25d480f2`, and zero geometry uploads. That WGSL change still needs its Metal timing.
+The `9c0b6510` run includes the component fast path and exact visible-bound reduction, which adds 16 scratch bytes per visible glyph and a ninth compute storage binding. It built in 1.373 ms, completed GPU submit/readback in 5.775 ms, retained zero geometry uploads and 960 weight bytes, passed curve and band validation, and preserved checksum `c1cd8eb7631a65db`. Relative to the preceding `f5dc1281` run, p50 improved 4.5% while p95, p99, and max were 17.3%, 12.4%, and 15.0% higher. Treat these as run-to-run observations. The latest p95 retains 5.746 ms below the preferred 8.3 ms gate and p99 retains 11.939 ms below the 16.7 ms hard frame gate.
 
 ## Reference implementation
 
