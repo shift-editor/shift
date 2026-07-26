@@ -8,7 +8,7 @@ GPU-independent preprocessing for the experimental Slug home/catalog glyph grid.
 - **Grid only.** This crate supports catalog previews. It does not replace the editor scene renderer, tools, hit testing, or REGL handles.
 - **No GPU ownership.** The crate produces deterministic CPU arrays and bytes shared by native `wgpu` benchmarks and Electron WebGPU. Device, queue, surface, and fallback policy belong to consumers.
 - **Checked ranges.** The reference implementation's unchecked 24-bit offset / 8-bit count packing is not used. Atlas offsets and counts are checked `u32` values; packed byte arithmetic is checked `usize`.
-- **Static bands are location-bound.** The first builder bands one resolved shape. Variable-font support must build conservative bands across every legal source contribution before weights may change without geometry upload.
+- **Bands are location-bound.** The static builder bands one resolved shape. The variable path resolves and re-bands only visible glyphs after every weight update, so current-location membership stays exact without geometry upload.
 - **Deterministic topology conversion.** Lines become quadratics and cubics become two quadratics with fixed rules. Compatible authored sources must pass through the same structural conversion.
 - **No shaping.** The grid addresses glyphs by dense atlas index and does not need a text shaper.
 
@@ -21,7 +21,7 @@ src/
   atlas.rs     glyph bounds, horizontal/vertical bands, atlas assembly
   pack.rs      aligned little-endian GPU upload layout
   render.rs    shared uniform and visible-instance byte layouts
-  variable.rs  two-source resident base/delta model and aligned packing
+  variable.rs  multi-source resident base/delta model and aligned packing
   error.rs     strict conversion and size failures
 shaders/
   slug.wgsl           shared static native-wgpu/Electron-WebGPU renderer
@@ -29,7 +29,7 @@ shaders/
 examples/
   analyze_font.rs          CPU-only TTF/OTF curve/band sizing harness
   benchmark_wgpu.rs        adapter probe plus native offscreen render/readback benchmark
-  benchmark_variable_wgpu.rs two-source compute scratch/readback validator
+  benchmark_variable_wgpu.rs variable compute scratch/readback validator
 tests/
   atlas.rs     conversion, band, range, shader-layout, and packing invariants
 ```
@@ -59,7 +59,14 @@ Curve correspondence must come from stable authored/raw point topology. `Variabl
 
 The authored `shift-font` variable fixture matches native midpoint projection within 0.001 font units. The real Host Grotesk variable UI font exercises 448 glyphs / 9,481 curves across `wght=100..900`: base, midpoint, and source GPU scratch readback have zero coordinate error, generated band membership matches the CPU oracle exactly, and endpoint/midpoint fragment checksums differ as expected. A 150-glyph pass uses about 289 KiB of visible scratch.
 
-On Apple M4 / Metal, 120 serialized frames that each uploaded a new 16-byte weight block, resolved visible curves, rebuilt visible bands, rendered, submitted, and waited for completion measured 0.934 / 2.120 / 4.257 / 5.857 ms p50/p95/p99/max. Geometry uploads and geometry-upload bytes remained zero; the 1,920 uploaded bytes were weights only. Scratch curve error was zero, curve and band validation passed, and the validation frame checksum was `bb147484ca434754`. This proves the resident delta, visible re-banding, and fragment mechanics, not yet complete product variation semantics.
+Apple M4 / Metal measurements use 120 serialized frames that each change weights, resolve visible curves, rebuild visible bands, render, submit, and wait for completion:
+
+| Commit | Weight update | Packed Host atlas | p50 | p95 | p99 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f32ebd40` two-source scalar | 16 B/frame | 469,504 B | 0.934 ms | 2.120 ms | 4.257 ms | 5.857 ms |
+| `ff6ab527` indexed multi-source weights | 8 B/frame | 476,672 B | 0.754 ms | 1.640 ms | 1.967 ms | 3.441 ms |
+
+The generalized run observed 19.3% lower p50, 22.6% lower p95, and 53.8% lower p99 while halving weight traffic to 960 bytes total. Its packed Host atlas grew by 7,168 bytes (1.53%) for source descriptors and alignment. Geometry uploads and geometry-upload bytes remained zero, GPU submit/readback took 6.474 ms, scratch curve error was zero, curve and band validation passed, and the validation frame checksum remained `bb147484ca434754`. The improvement is an observed run-to-run comparison, not yet an isolated causal attribution. This proves the resident delta, indexed-weight, visible re-banding, and fragment mechanics, not yet complete product variation semantics.
 
 ## Reference implementation
 
