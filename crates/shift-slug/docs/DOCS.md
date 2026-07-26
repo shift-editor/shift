@@ -79,10 +79,13 @@ Apple M4 / Metal measurements use 120 serialized frames that each change weights
 | `ff6ab527` indexed multi-source weights | 8 B/frame | 476,672 B | 0.754 ms | 1.640 ms | 1.967 ms | 3.441 ms |
 | `f5dc1281` authored topology + exact lines | 8 B/frame | 477,860 B | 1.048 ms | 2.177 ms | 4.234 ms | 4.302 ms |
 | `9c0b6510` components + exact visible bounds | 8 B/frame | 477,860 B | 1.001 ms | 2.554 ms | 4.761 ms | 4.949 ms |
+| `28bfe2ab` general components, three-run median | 8 B/frame | 481,444 B | 1.794 ms | 2.149 ms | 3.902 ms | 4.033 ms |
 
 The indexed-weight run observed 19.3% lower p50, 22.6% lower p95, and 53.8% lower p99 than the initial scalar run while halving weight traffic to 960 bytes total. The authored-topology correction then added a one-bit-per-curve line mask and exact post-interpolation line controls. In one run it measured 39.0% higher p50, 32.7% higher p95, and 115.3% higher p99 than `ff6ab527`, while GPU submit/readback improved 11.5% from 6.474 to 5.729 ms. Treat all latency differences as run-to-run observations rather than isolated causal attribution.
 
-The `9c0b6510` run includes the component fast path and exact visible-bound reduction, which adds 16 scratch bytes per visible glyph and a ninth compute storage binding. It built in 1.373 ms, completed GPU submit/readback in 5.775 ms, retained zero geometry uploads and 960 weight bytes, passed curve and band validation, and preserved checksum `c1cd8eb7631a65db`. Relative to the preceding `f5dc1281` run, p50 improved 4.5% while p95, p99, and max were 17.3%, 12.4%, and 15.0% higher. Treat these as run-to-run observations. The latest p95 retains 5.746 ms below the preferred 8.3 ms gate and p99 retains 11.939 ms below the 16.7 ms hard frame gate. Sparse lookup, GPU-resolved advances, and the pay-as-you-go component program raise the resolve stage to eighteen storage bindings, below the M4's 29. Direct-font resident bytes and llvmpipe output remain unchanged; updated Metal timing remains to be recorded.
+The `9c0b6510` run includes the component fast path and exact visible-bound reduction, which adds 16 scratch bytes per visible glyph and a ninth compute storage binding. It built in 1.373 ms, completed GPU submit/readback in 5.775 ms, retained zero geometry uploads and 960 weight bytes, passed curve and band validation, and preserved checksum `c1cd8eb7631a65db`. Relative to the preceding `f5dc1281` run, p50 improved 4.5% while p95, p99, and max were 17.3%, 12.4%, and 15.0% higher. Treat these as run-to-run observations.
+
+The `28bfe2ab` general-component model was measured in three separate 120-frame runs on macOS 26.3.1. Three-run medians were 2.326 ms build, 6.137 ms GPU submit/readback, and 1.794 / 2.149 / 3.902 / 4.033 ms serialized p50/p95/p99/max. Against `9c0b6510`, those medians are +69.4% build, +6.3% submit/readback, +79.2% p50, -15.9% p95, -18.0% p99, and -18.5% max; treat them as run-to-run observations rather than isolated attribution. Every run retained the 481,444-byte Host atlas, 298,784 scratch bytes, zero curve/advance error, exact bands, zero geometry uploads, 960 weight bytes, and checksum `c1cd8eb7631a65db`. The component-specific Metal correctness test also passed. The p95 retains 6.151 ms below the preferred 8.3 ms gate and p99 retains 12.798 ms below the 16.7 ms hard gate. Sparse lookup, GPU-resolved advances, and the pay-as-you-go component program use eighteen storage bindings, below the M4's 29.
 
 ## Reference implementation
 
@@ -150,7 +153,7 @@ pixel checksum            a57dae78d2cc2a36
 
 llvmpipe is CPU rasterization and is not production performance evidence. It proves that the complete 205.8 MiB atlas passes native `wgpu` validation, the shared shader runs, timestamps resolve, and pixels read back.
 
-The target MacBook Air adapter probe reports Apple M4/Metal, timestamp-query support, a 4 GiB maximum buffer and storage binding, 29 storage buffers per stage, and 32-byte storage-offset alignment. The atlas therefore clears this adapter's structural limits. Physical-Metal timing remains to be measured with the full command below.
+The target MacBook Air adapter probe reports Apple M4/Metal, timestamp-query support, a 4 GiB maximum buffer and storage binding, 29 storage buffers per stage, and 32-byte storage-offset alignment. The atlas clears these structural limits. The latest physical-Metal timing is recorded above; packaged Electron/Dawn presentation remains the product authority.
 
 ## Verification
 
