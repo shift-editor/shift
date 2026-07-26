@@ -69,10 +69,11 @@ Apple M4 / Metal measurements use 120 serialized frames that each change weights
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `f32ebd40` two-source scalar | 16 B/frame | 469,504 B | 0.934 ms | 2.120 ms | 4.257 ms | 5.857 ms |
 | `ff6ab527` indexed multi-source weights | 8 B/frame | 476,672 B | 0.754 ms | 1.640 ms | 1.967 ms | 3.441 ms |
+| `f5dc1281` authored topology + exact lines | 8 B/frame | 477,860 B | 1.048 ms | 2.177 ms | 4.234 ms | 4.302 ms |
 
-The generalized run observed 19.3% lower p50, 22.6% lower p95, and 53.8% lower p99 while halving weight traffic to 960 bytes total. Its packed Host atlas grew by 7,168 bytes (1.53%) for source descriptors and alignment. Geometry uploads and geometry-upload bytes remained zero, GPU submit/readback took 6.474 ms, scratch curve error was zero, curve and band validation passed, and the validation frame checksum remained `bb147484ca434754`. The improvement is an observed run-to-run comparison, not yet an isolated causal attribution. This proves the resident delta, indexed-weight, visible re-banding, and fragment mechanics, not yet complete product variation semantics.
+The indexed-weight run observed 19.3% lower p50, 22.6% lower p95, and 53.8% lower p99 than the initial scalar run while halving weight traffic to 960 bytes total. The authored-topology correction then added a one-bit-per-curve line mask and exact post-interpolation line controls. In one run it measured 39.0% higher p50, 32.7% higher p95, and 115.3% higher p99 than `ff6ab527`, while GPU submit/readback improved 11.5% from 6.474 to 5.729 ms. Treat all latency differences as run-to-run observations rather than isolated causal attribution.
 
-That Metal baseline predates exact post-interpolation line-control regeneration. The corrected Host atlas is 477,860 bytes; llvmpipe validates zero GPU/CPU curve error, exact bands, and checksum `6ce8d5ad25d480f2`. The changed WGSL needs a new serialized Metal run before its performance baseline is carried forward.
+The corrected run built in 1.894 ms, retained zero geometry uploads and 960 weight bytes, passed curve and band validation, and produced checksum `c1cd8eb7631a65db`. Its p95 remains 6.123 ms below the preferred 8.3 ms gate and p99 remains 12.466 ms below the 16.7 ms hard frame gate. This is the current native Metal semantic baseline.
 
 ## Reference implementation
 
