@@ -1,5 +1,10 @@
 use shift_glyph_codec::OutlineCommand;
-use shift_slug::{AtlasBuilder, Curve, Point, SlugError, LINE_EPSILON};
+#[cfg(feature = "wgpu-benchmark")]
+use shift_slug::SLUG_WGSL;
+use shift_slug::{
+    pack_render_instances, pack_render_params, AtlasBuilder, Curve, Point, RenderInstance,
+    RenderParams, SlugError, LINE_EPSILON, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES,
+};
 
 #[test]
 fn open_contours_are_closed_for_fill_rendering() {
@@ -128,4 +133,60 @@ fn invalid_inputs_fail_without_partial_glyphs() {
         AtlasBuilder::new(0).unwrap_err(),
         SlugError::InvalidBandCount(0)
     );
+}
+
+#[test]
+fn render_inputs_match_the_shared_little_endian_layout() {
+    let bytes = pack_render_instances(&[RenderInstance {
+        pixel_rect: [1.5, 2.0, 3.0, 4.0],
+        em_rect: [-10.0, -20.0, 30.0, 40.0],
+        glyph_index: 0x1234_5678,
+    }])
+    .unwrap();
+    let params = pack_render_params(RenderParams {
+        viewport_width: 1024.0,
+        viewport_height: 768.0,
+        cell_padding: 4.0,
+    });
+
+    assert_eq!(bytes.len(), RENDER_INSTANCE_BYTES);
+    assert_eq!(RENDER_INSTANCE_BYTES, 48);
+    assert_eq!(&bytes[0..4], &1.5_f32.to_le_bytes());
+    assert_eq!(&bytes[16..20], &(-10.0_f32).to_le_bytes());
+    assert_eq!(&bytes[32..36], &0x1234_5678_u32.to_le_bytes());
+    assert!(bytes[36..].iter().all(|byte| *byte == 0));
+    assert_eq!(params.len(), RENDER_PARAMS_BYTES);
+    assert_eq!(&params[8..12], &4.0_f32.to_le_bytes());
+    assert_eq!(&params[12..16], &[0; 4]);
+}
+
+#[cfg(feature = "wgpu-benchmark")]
+#[test]
+fn shared_shader_validates_and_has_the_host_side_strides() {
+    let module = naga::front::wgsl::parse_str(SLUG_WGSL).unwrap();
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .unwrap();
+
+    for (name, expected_span) in [
+        ("GlobalParams", 16),
+        ("Instance", 48),
+        ("Curve", 24),
+        ("Glyph", 32),
+        ("Band", 8),
+    ] {
+        let ty = module
+            .types
+            .iter()
+            .map(|(_, ty)| ty)
+            .find(|ty| ty.name.as_deref() == Some(name))
+            .unwrap();
+        let naga::TypeInner::Struct { span, .. } = ty.inner else {
+            panic!("{name} is not a WGSL struct");
+        };
+        assert_eq!(span, expected_span, "unexpected WGSL span for {name}");
+    }
 }

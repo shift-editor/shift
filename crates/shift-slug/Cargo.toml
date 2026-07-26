@@ -10,11 +10,12 @@ crate-type = ["rlib"]
 
 [features]
 default = []
-wgpu-benchmark = ["dep:pollster", "dep:wgpu"]
+wgpu-benchmark = ["dep:naga", "dep:pollster", "dep:wgpu"]
 
 [dependencies]
 shift-glyph-codec = { workspace = true }
 
+naga = { version = "30.0.0", optional = true, features = ["wgsl-in"] }
 pollster = { version = "0.4", optional = true }
 wgpu = { version = "30.0.0", optional = true, default-features = false, features = [
     "dx12",

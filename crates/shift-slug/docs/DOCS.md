@@ -20,11 +20,15 @@ src/
   curve.rs     outline commands -> quadratic curves
   atlas.rs     glyph bounds, horizontal/vertical bands, atlas assembly
   pack.rs      aligned little-endian GPU upload layout
+  render.rs    shared uniform and visible-instance byte layouts
   error.rs     strict conversion and size failures
+shaders/
+  slug.wgsl    shared native-wgpu/Electron-WebGPU renderer
 examples/
-  analyze_font.rs  CPU-only TTF/OTF curve/band sizing harness
+  analyze_font.rs   CPU-only TTF/OTF curve/band sizing harness
+  benchmark_wgpu.rs adapter probe plus native offscreen render/readback benchmark
 tests/
-  atlas.rs     conversion, band, range, and packing invariants
+  atlas.rs     conversion, band, range, shader-layout, and packing invariants
 ```
 
 ## Static atlas layout
@@ -78,12 +82,32 @@ Band-count tradeoff at `wght=900`:
 
 Eight bands remain the initial static-render candidate. The 5.49 million curves alone occupy 125.6 MiB at three `vec2<f32>` values each. Variable residency therefore needs base-plus-sparse-delta measurement; duplicating complete curve arrays per source is not acceptable by default. Per-glyph curve counts fit `u16` in this corpus, so packing two glyph-local curve indexes per `u32` is a promising derived optimization to measure without weakening checked CPU ranges.
 
+## Native offscreen baseline
+
+The native harness uses `SLUG_WGSL` and the exact `PackedAtlas` bytes exposed for Electron. It renders a uniformly sampled visible grid to `Rgba8Unorm`, reads pixels back, emits a checksum, and measures render-pass boundaries when timestamp queries are available.
+
+A full Source Han `wght=900` llvmpipe correctness run rendered 192 visible instances at 1024×768:
+
+```text
+atlas buffer creation    161.2 ms
+first warm submission    397.6 ms
+GPU pass p50/p95          19.50 / 19.79 ms
+pixel checksum            a57dae78d2cc2a36
+```
+
+llvmpipe is CPU rasterization and is not production performance evidence. It proves that the complete 205.8 MiB atlas passes native `wgpu` validation, the shared shader runs, timestamps resolve, and pixels read back.
+
+The target MacBook Air adapter probe reports Apple M4/Metal, timestamp-query support, a 4 GiB maximum buffer and storage binding, 29 storage buffers per stage, and 32-byte storage-offset alignment. The atlas therefore clears this adapter's structural limits. Physical-Metal timing remains to be measured with the full command below.
+
 ## Verification
 
 ```bash
-cargo test -p shift-slug
-cargo clippy -p shift-slug --all-targets -- -D warnings
+cargo test -p shift-slug --all-features
+cargo clippy -p shift-slug --all-targets --all-features -- -D warnings
 cargo run --release -p shift-slug --example analyze_font -- /path/to/font.ttf
+cargo run --release -p shift-slug --features wgpu-benchmark \
+  --example benchmark_wgpu -- /path/to/font.ttf \
+  --iterations 120 --output /tmp/shift-slug.pgm wght=900
 ```
 
-The analyzer is CPU-only and works on machines without a GPU. A native headless `wgpu` benchmark will consume the same packed layout in a later slice; Electron/Dawn remains the product acceptance environment.
+With no font argument, `benchmark_wgpu` only prints adapter capabilities. The analyzer remains CPU-only. The native benchmark is a correctness and diagnostic harness; packaged Electron/Dawn remains the product acceptance environment.

@@ -2203,6 +2203,7 @@ version = "0.1.0"
 name = "shift-slug"
 version = "0.1.0"
 dependencies = [
+ "naga",
  "pollster",
  "shift-glyph-codec",
  "skrifa",
