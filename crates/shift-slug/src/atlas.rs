@@ -2,7 +2,9 @@ use std::cmp::Ordering;
 
 use shift_glyph_codec::OutlineCommand;
 
-use crate::{curve::curves_from_commands, Bounds, Curve, Layout, PackedAtlas, SlugError};
+use crate::{
+    curve::curves_from_commands, Bounds, Curve, CurveIndexEncoding, Layout, PackedAtlas, SlugError,
+};
 
 pub const DEFAULT_BAND_COUNT: u32 = 8;
 pub const MAX_BAND_COUNT: u32 = 256;
@@ -82,11 +84,27 @@ impl Atlas {
     }
 
     pub fn layout(&self, alignment: usize) -> Result<Layout, SlugError> {
-        Layout::new(self, alignment)
+        self.layout_with_encoding(alignment, CurveIndexEncoding::GlobalU32)
+    }
+
+    pub fn layout_with_encoding(
+        &self,
+        alignment: usize,
+        index_encoding: CurveIndexEncoding,
+    ) -> Result<Layout, SlugError> {
+        Layout::new(self, alignment, index_encoding)
     }
 
     pub fn pack(&self, alignment: usize) -> Result<PackedAtlas, SlugError> {
-        PackedAtlas::new(self, alignment)
+        self.pack_with_encoding(alignment, CurveIndexEncoding::GlobalU32)
+    }
+
+    pub fn pack_with_encoding(
+        &self,
+        alignment: usize,
+        index_encoding: CurveIndexEncoding,
+    ) -> Result<PackedAtlas, SlugError> {
+        PackedAtlas::new(self, alignment, index_encoding)
     }
 }
 

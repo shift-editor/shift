@@ -147,7 +147,7 @@ fn curve_ranges(position_em: vec2<f32>, glyph_index: u32) -> vec4<u32> {
     return vec4<u32>(horizontal.start, horizontal.count, vertical.start, vertical.count);
 }
 
-fn slug_coverage(render_coordinate: vec2<f32>, ranges: vec4<u32>) -> f32 {
+fn slug_coverage_wide(render_coordinate: vec2<f32>, ranges: vec4<u32>) -> f32 {
     let ems_per_pixel = max(fwidth(render_coordinate), vec2<f32>(1.0 / 65536.0));
     let pixels_per_em = 1.0 / ems_per_pixel;
 
@@ -204,9 +204,90 @@ fn slug_coverage(render_coordinate: vec2<f32>, ranges: vec4<u32>) -> f32 {
     return calculate_coverage(x_coverage, y_coverage, x_weight, y_weight);
 }
 
+fn slug_coverage_compact(
+    render_coordinate: vec2<f32>,
+    ranges: vec4<u32>,
+    curve_start: u32,
+) -> f32 {
+    let ems_per_pixel = max(fwidth(render_coordinate), vec2<f32>(1.0 / 65536.0));
+    let pixels_per_em = 1.0 / ems_per_pixel;
+
+    var x_coverage = 0.0;
+    var x_weight = 0.0;
+    for (var offset = 0u; offset < ranges.y; offset += 1u) {
+        let index_offset = ranges.x + offset;
+        let index_word = curve_indices[index_offset >> 1u];
+        let index_shift = (index_offset & 1u) * 16u;
+        let curve = curves[curve_start + ((index_word >> index_shift) & 0xffffu)];
+        let p0 = curve.p0 - render_coordinate;
+        let p1 = curve.p1 - render_coordinate;
+        let p2 = curve.p2 - render_coordinate;
+        if max(max(p0.x, p1.x), p2.x) * pixels_per_em.x < -0.5 {
+            break;
+        }
+
+        let code = calculate_root_code(p0.y, p1.y, p2.y);
+        if code != 0u {
+            let roots = solve_horizontal(p0, p1, p2) * pixels_per_em.y;
+            if (code & 1u) != 0u {
+                x_coverage += saturate(roots.x + 0.5);
+                x_weight = max(x_weight, saturate(1.0 - abs(roots.x) * 2.0));
+            }
+            if code > 1u {
+                x_coverage -= saturate(roots.y + 0.5);
+                x_weight = max(x_weight, saturate(1.0 - abs(roots.y) * 2.0));
+            }
+        }
+    }
+
+    var y_coverage = 0.0;
+    var y_weight = 0.0;
+    for (var offset = 0u; offset < ranges.w; offset += 1u) {
+        let index_offset = ranges.z + offset;
+        let index_word = curve_indices[index_offset >> 1u];
+        let index_shift = (index_offset & 1u) * 16u;
+        let curve = curves[curve_start + ((index_word >> index_shift) & 0xffffu)];
+        let p0 = curve.p0 - render_coordinate;
+        let p1 = curve.p1 - render_coordinate;
+        let p2 = curve.p2 - render_coordinate;
+        if max(max(p0.y, p1.y), p2.y) * pixels_per_em.y < -0.5 {
+            break;
+        }
+
+        let code = calculate_root_code(p0.x, p1.x, p2.x);
+        if code != 0u {
+            let roots = solve_vertical(p0, p1, p2) * pixels_per_em.x;
+            if (code & 1u) != 0u {
+                y_coverage -= saturate(roots.x + 0.5);
+                y_weight = max(y_weight, saturate(1.0 - abs(roots.x) * 2.0));
+            }
+            if code > 1u {
+                y_coverage += saturate(roots.y + 0.5);
+                y_weight = max(y_weight, saturate(1.0 - abs(roots.y) * 2.0));
+            }
+        }
+    }
+
+    return calculate_coverage(x_coverage, y_coverage, x_weight, y_weight);
+}
+
 @fragment
-fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
+fn fragment_wide(input: VertexOutput) -> @location(0) vec4<f32> {
     let position_em = input.position.xy * input.em_scale + input.em_offset;
-    let coverage = slug_coverage(position_em, curve_ranges(position_em, input.glyph_index));
+    let coverage = slug_coverage_wide(
+        position_em,
+        curve_ranges(position_em, input.glyph_index),
+    );
+    return vec4<f32>(0.0, 0.0, 0.0, coverage);
+}
+
+@fragment
+fn fragment_compact(input: VertexOutput) -> @location(0) vec4<f32> {
+    let position_em = input.position.xy * input.em_scale + input.em_offset;
+    let coverage = slug_coverage_compact(
+        position_em,
+        curve_ranges(position_em, input.glyph_index),
+        glyphs[input.glyph_index].curve_start,
+    );
     return vec4<f32>(0.0, 0.0, 0.0, coverage);
 }

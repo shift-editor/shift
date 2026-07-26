@@ -36,13 +36,15 @@ tests/
 The packed upload contains four independently aligned sections:
 
 ```text
-Curve[]       3 × vec2<f32>                         24 bytes each
-u32[]         curve indexes grouped by glyph/band    4 bytes each
-Glyph[]       bounds + curve/band ranges             32 bytes each
-Band[]        u32 start + u32 count                   8 bytes each
+Curve[]       3 × vec2<f32>                              24 bytes each
+u32[]         global u32 indexes or paired local u16s      4 bytes/word
+Glyph[]       bounds + curve/band ranges                  32 bytes each
+Band[]        u32 start + u32 count                        8 bytes each
 ```
 
 Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical ranges. Empty glyphs have zero curves and empty ranges but retain a descriptor, so dense glyph indexing remains stable.
+
+`CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses compact indexes by default and retains `--wide-indices` as the pixel/performance control.
 
 ## Reference implementation
 
@@ -96,6 +98,8 @@ Two measurements are reported separately:
 Timestamp pairs with `end < start` are excluded and reported as `non_monotonic_pairs`; they are never converted with wrapping subtraction. Electron presentation timing is still a separate product measurement.
 
 On llvmpipe, tight quads reduced MutatorSans GPU latency from 6.36 ms to 3.68 ms while producing the same checksum. The uniformly sampled Source Han workload produced the same checksum but no meaningful timing change because CJK bounds occupy nearly the complete cell. Tight quads remain useful for Latin and sparse glyphs without regressing CJK correctness.
+
+Eight-band compact Source Han indexes reduce the atlas from 205.8 MiB to 170.7 MiB. Wide and compact shader entry points are intentionally static and share one WGSL file. An override branch or helper call inside the dynamic curve loop caused llvmpipe's first submission not to complete; inline decoding in a dedicated compact fragment path avoids that driver/compiler boundary and preserves identical pixels.
 
 A full Source Han `wght=900` llvmpipe correctness run rendered 192 visible instances at 1024×768:
 

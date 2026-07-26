@@ -1,7 +1,7 @@
 use std::{env, error::Error, fs, path::PathBuf, time::Instant};
 
 use shift_glyph_codec::OutlineCommand;
-use shift_slug::{AtlasBuilder, DEFAULT_BAND_COUNT};
+use shift_slug::{AtlasBuilder, CurveIndexEncoding, DEFAULT_BAND_COUNT};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
@@ -76,6 +76,7 @@ fn main() -> Result<()> {
     let build_elapsed = build_started.elapsed();
     let statistics = atlas.statistics();
     let layout = atlas.layout(256)?;
+    let compact_layout = atlas.layout_with_encoding(256, CurveIndexEncoding::GlyphLocalU16)?;
     let mut occupancies: Vec<_> = atlas.bands().iter().map(|band| band.count).collect();
     occupancies.sort_unstable();
     let count_over_u8 = occupancies
@@ -113,10 +114,12 @@ fn main() -> Result<()> {
         offset_over_24,
     );
     println!(
-        "gpu_bytes={} curves={} indices={} glyphs={} bands={}",
+        "gpu_bytes={} compact_gpu_bytes={} curves={} indices={} compact_indices={} glyphs={} bands={}",
         layout.total_length,
+        compact_layout.total_length,
         layout.curves.length,
         layout.curve_indices.length,
+        compact_layout.curve_indices.length,
         layout.glyphs.length,
         layout.bands.length,
     );

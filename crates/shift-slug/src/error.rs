@@ -9,6 +9,7 @@ pub enum SlugError {
     DrawingCommandWithoutContour { command_index: usize },
     CloseWithoutContour { command_index: usize },
     CloseWithoutDrawingSegment { command_index: usize },
+    CompactIndexOverflow { glyph_index: u32, curve_count: u32 },
     LengthOverflow,
 }
 
@@ -37,6 +38,13 @@ impl fmt::Display for SlugError {
             Self::CloseWithoutDrawingSegment { command_index } => write!(
                 formatter,
                 "outline command {command_index} closes a contour with no drawing segment"
+            ),
+            Self::CompactIndexOverflow {
+                glyph_index,
+                curve_count,
+            } => write!(
+                formatter,
+                "glyph {glyph_index} has {curve_count} curves, exceeding compact u16 indexes"
             ),
             Self::LengthOverflow => formatter.write_str("Slug atlas length exceeds u32 limits"),
         }

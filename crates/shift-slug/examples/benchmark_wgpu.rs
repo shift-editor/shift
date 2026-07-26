@@ -10,8 +10,9 @@ use std::{
 
 use shift_glyph_codec::OutlineCommand;
 use shift_slug::{
-    pack_render_instances, pack_render_params, Atlas, AtlasBuilder, Bounds, Layout, RenderInstance,
-    RenderParams, Section, DEFAULT_BAND_COUNT, RENDER_INSTANCE_BYTES, SLUG_WGSL,
+    pack_render_instances, pack_render_params, Atlas, AtlasBuilder, Bounds, CurveIndexEncoding,
+    Layout, RenderInstance, RenderParams, Section, DEFAULT_BAND_COUNT, RENDER_INSTANCE_BYTES,
+    SLUG_WGSL,
 };
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
@@ -83,6 +84,7 @@ struct Arguments {
     iterations: u32,
     output: Option<PathBuf>,
     full_cell_quads: bool,
+    wide_indices: bool,
 }
 
 struct TimestampResources {
@@ -121,20 +123,35 @@ fn main() -> Result<()> {
             .min_storage_buffer_offset_alignment
             .max(COPY_ALIGNMENT),
     )?;
-    let packed = atlas.pack(alignment)?;
+    let index_encoding = if arguments.wide_indices {
+        CurveIndexEncoding::GlobalU32
+    } else {
+        CurveIndexEncoding::GlyphLocalU16
+    };
+    let pack_started = Instant::now();
+    let packed = atlas.pack_with_encoding(alignment, index_encoding)?;
     let layout = packed.layout();
     validate_adapter_limits(&adapter, layout)?;
+    if index_encoding == CurveIndexEncoding::GlyphLocalU16 {
+        validate_compact_indices(&atlas, &packed)?;
+    }
+    let pack_elapsed = pack_started.elapsed();
 
     let statistics = atlas.statistics();
     println!("source={}", font_path.display());
     println!(
-        "source_bytes={} glyphs={} curves={} curve_indices={} atlas_bytes={} build_ms={:.3}",
+        "source_bytes={} glyphs={} curves={} curve_indices={} atlas_bytes={} index_encoding={} build_ms={:.3} pack_ms={:.3}",
         source_bytes,
         statistics.glyph_count,
         statistics.curve_count,
         statistics.curve_index_count,
         layout.total_length,
+        match index_encoding {
+            CurveIndexEncoding::GlobalU32 => "global_u32",
+            CurveIndexEncoding::GlyphLocalU16 => "glyph_local_u16",
+        },
         milliseconds(build_elapsed),
+        milliseconds(pack_elapsed),
     );
 
     let required_features = adapter.features() & Features::TIMESTAMP_QUERY;
@@ -211,7 +228,10 @@ fn main() -> Result<()> {
         multisample: Default::default(),
         fragment: Some(FragmentState {
             module: &shader,
-            entry_point: Some("fragment_main"),
+            entry_point: Some(match index_encoding {
+                CurveIndexEncoding::GlobalU32 => "fragment_wide",
+                CurveIndexEncoding::GlyphLocalU16 => "fragment_compact",
+            }),
             compilation_options: PipelineCompilationOptions::default(),
             targets: &[Some(ColorTargetState {
                 format: TextureFormat::Rgba8Unorm,
@@ -520,6 +540,53 @@ fn build_atlas(
     }
 
     Ok((bytes.len(), builder.finish()))
+}
+
+fn validate_compact_indices(atlas: &Atlas, packed: &shift_slug::PackedAtlas) -> Result<()> {
+    let layout = packed.layout();
+    let bytes = &packed.as_bytes()
+        [layout.curve_indices.offset..layout.curve_indices.offset + layout.curve_indices.length];
+    let mut processed = 0_usize;
+    for glyph in atlas.glyphs().iter().copied() {
+        let (horizontal, vertical) = atlas.bands_for(glyph);
+        let start = horizontal
+            .first()
+            .ok_or("glyph has no horizontal bands")?
+            .start as usize;
+        let last = vertical.last().ok_or("glyph has no vertical bands")?;
+        let end = last
+            .start
+            .checked_add(last.count)
+            .ok_or("compact index range overflow")? as usize;
+        if start != processed {
+            return Err("compact glyph index ranges are not contiguous".into());
+        }
+        for position in start..end {
+            let word_offset = (position / 2) * 4;
+            let word = u32::from_le_bytes(
+                bytes[word_offset..word_offset + 4]
+                    .try_into()
+                    .expect("compact word has four bytes"),
+            );
+            let local = (word >> ((position & 1) * 16)) & 0xffff;
+            let decoded = glyph
+                .curve_start
+                .checked_add(local)
+                .ok_or("decoded compact index overflow")?;
+            if decoded != atlas.curve_indices()[position] {
+                return Err(format!(
+                    "compact index {position} decoded as {decoded}, expected {}",
+                    atlas.curve_indices()[position]
+                )
+                .into());
+            }
+        }
+        processed = end;
+    }
+    if processed != atlas.curve_indices().len() {
+        return Err("compact index validation did not consume every index".into());
+    }
+    Ok(())
 }
 
 fn validate_adapter_limits(adapter: &wgpu::Adapter, layout: Layout) -> Result<()> {
@@ -913,6 +980,7 @@ fn arguments() -> Result<Arguments> {
         iterations: DEFAULT_ITERATIONS,
         output: None,
         full_cell_quads: false,
+        wide_indices: false,
     };
 
     while let Some(value) = values.next() {
@@ -927,6 +995,7 @@ fn arguments() -> Result<Arguments> {
                 arguments.iterations = required_value(&mut values, "--iterations")?.parse()?
             }
             "--full-cell-quads" => arguments.full_cell_quads = true,
+            "--wide-indices" => arguments.wide_indices = true,
             "--output" => {
                 arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?))
             }

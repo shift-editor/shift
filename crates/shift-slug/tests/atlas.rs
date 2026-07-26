@@ -2,8 +2,9 @@ use shift_glyph_codec::OutlineCommand;
 #[cfg(feature = "wgpu-benchmark")]
 use shift_slug::SLUG_WGSL;
 use shift_slug::{
-    pack_render_instances, pack_render_params, AtlasBuilder, Curve, Point, RenderInstance,
-    RenderParams, SlugError, LINE_EPSILON, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES,
+    pack_render_instances, pack_render_params, AtlasBuilder, Curve, CurveIndexEncoding, Point,
+    RenderInstance, RenderParams, SlugError, LINE_EPSILON, RENDER_INSTANCE_BYTES,
+    RENDER_PARAMS_BYTES,
 };
 
 #[test]
@@ -115,6 +116,47 @@ fn packing_is_aligned_deterministic_and_little_endian() {
     assert_eq!(layout.glyphs.offset % 256, 0);
     assert_eq!(layout.bands.offset % 256, 0);
     assert_eq!(&first.as_bytes()[..4], &1.5_f32.to_le_bytes());
+}
+
+#[test]
+fn compact_indexes_are_glyph_local_and_pair_packed() {
+    let mut builder = AtlasBuilder::new(1).unwrap();
+    for offset in [0.0, 100.0] {
+        builder
+            .add_glyph([
+                OutlineCommand::Move { x: offset, y: 0.0 },
+                OutlineCommand::Line {
+                    x: offset + 10.0,
+                    y: 10.0,
+                },
+                OutlineCommand::Close,
+            ])
+            .unwrap();
+    }
+    let atlas = builder.finish();
+    let wide = atlas
+        .pack_with_encoding(256, CurveIndexEncoding::GlobalU32)
+        .unwrap();
+    let compact = atlas
+        .pack_with_encoding(256, CurveIndexEncoding::GlyphLocalU16)
+        .unwrap();
+    let compact_layout = compact.layout();
+
+    assert_eq!(wide.index_encoding(), CurveIndexEncoding::GlobalU32);
+    assert_eq!(compact.index_encoding(), CurveIndexEncoding::GlyphLocalU16);
+    assert_eq!(
+        compact_layout.curve_indices.length,
+        atlas.curve_indices().len().div_ceil(2) * 4
+    );
+    assert!(compact_layout.curve_indices.length < wide.layout().curve_indices.length);
+
+    let compact_words = compact.as_bytes()[compact_layout.curve_indices.offset
+        ..compact_layout.curve_indices.offset + compact_layout.curve_indices.length]
+        .chunks_exact(4)
+        .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
+    assert!(compact_words
+        .flat_map(|word| [word & 0xffff, word >> 16])
+        .all(|index| index < 2));
 }
 
 #[test]

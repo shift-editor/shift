@@ -14,7 +14,7 @@ mod render;
 pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};
 pub use curve::{Bounds, Curve, Point, LINE_EPSILON};
 pub use error::SlugError;
-pub use pack::{Layout, PackedAtlas, Section};
+pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
 pub use render::{
     pack_render_instances, pack_render_params, RenderInstance, RenderParams, RENDER_INSTANCE_BYTES,
     RENDER_PARAMS_BYTES,
