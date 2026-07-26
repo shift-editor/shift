@@ -226,6 +226,40 @@ fn variable_atlas_rejects_incompatible_topology_atomically() {
 }
 
 #[test]
+fn variable_atlas_resolves_multiple_deduplicated_weights() {
+    let base = Curve {
+        p0: Point::new(0.0, 1.0),
+        p1: Point::new(2.0, 3.0),
+        p2: Point::new(4.0, 5.0),
+    };
+    let translate = |amount: f32| Curve {
+        p0: Point::new(base.p0.x + amount, base.p0.y + amount),
+        p1: Point::new(base.p1.x + amount, base.p1.y + amount),
+        p2: Point::new(base.p2.x + amount, base.p2.y + amount),
+    };
+    let mut builder = VariableAtlasBuilder::default();
+    builder
+        .add_curve_glyph_with_sources(
+            [base],
+            2,
+            [(5, vec![translate(10.0)]), (7, vec![translate(20.0)])],
+        )
+        .unwrap();
+    let atlas = builder.finish();
+    let mut weights = [0.0; 8];
+    weights[2] = 0.2;
+    weights[5] = 0.3;
+    weights[7] = 0.5;
+    let resolved = atlas.resolve_glyph_with_weights(0, &weights).unwrap();
+
+    assert_eq!(resolved[0].p0, Point::new(13.0, 14.0));
+    assert_eq!(atlas.glyphs()[0].source_count, 3);
+    assert_eq!(atlas.sources()[0].weight_index, 2);
+    assert_eq!(atlas.sources()[1].weight_index, 5);
+    assert_eq!(atlas.sources()[2].weight_index, 7);
+}
+
+#[test]
 fn variable_packing_is_aligned_deterministic_and_little_endian() {
     let mut builder = VariableAtlasBuilder::default();
     builder
@@ -249,6 +283,7 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
     assert_eq!(first.as_bytes().len(), layout.total_length);
     assert_eq!(layout.curve_deltas.offset % 256, 0);
     assert_eq!(layout.glyphs.offset % 256, 0);
+    assert_eq!(layout.sources.offset % 256, 0);
     assert_eq!(&first.as_bytes()[..4], &1.5_f32.to_le_bytes());
     assert_eq!(
         &first.as_bytes()[layout.curve_deltas.offset..layout.curve_deltas.offset + 4],
@@ -346,6 +381,7 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
         ("Instance", 48),
         ("Curve", 24),
         ("VariableGlyph", 32),
+        ("VariableSource", 8),
         ("Band", 8),
     ] {
         let ty = variable_module

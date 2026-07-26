@@ -110,8 +110,8 @@ fn main() -> Result<()> {
     let glyph_indices = sampled_glyph_indices(atlas.glyphs().len(), arguments.visible_glyphs);
     let (instances, scratch) = build_instances(&atlas, &glyph_indices)?;
     let instance_bytes = pack_render_instances(&instances)?;
-    let initial_variable_params =
-        variable_params(arguments.weight, instances.len(), arguments.band_count)?;
+    let variable_params = variable_params(instances.len(), arguments.band_count)?;
+    let initial_weights = source_weights(arguments.weight)?;
 
     println!(
         "source={} source_bytes={} glyphs={} curves={} variable_bytes={} build_ms={:.3}",
@@ -140,6 +140,7 @@ fn main() -> Result<()> {
         .length
         .max(layout.curve_deltas.length)
         .max(layout.glyphs.length)
+        .max(layout.sources.length)
         .max(scratch.curve_count * 24)
         .max(scratch.band_count * 8)
         .max(scratch.index_count * 4);
@@ -152,7 +153,7 @@ fn main() -> Result<()> {
         .max_storage_buffer_binding_size
         .max(u64::try_from(largest_binding)?);
     required_limits.max_storage_buffers_per_shader_stage =
-        required_limits.max_storage_buffers_per_shader_stage.max(6);
+        required_limits.max_storage_buffers_per_shader_stage.max(7);
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("shift-slug variable benchmark device"),
         required_features: wgpu::Features::empty(),
@@ -174,8 +175,13 @@ fn main() -> Result<()> {
     });
     let variable_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("shift-slug variable params"),
-        contents: &initial_variable_params,
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        contents: &variable_params,
+        usage: BufferUsages::UNIFORM,
+    });
+    let weight_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("shift-slug source weights"),
+        contents: &initial_weights,
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
     });
     let viewport_width = (GRID_COLUMNS as u32) * CELL_SIZE;
     let viewport_height = u32::try_from(instances.len().div_ceil(GRID_COLUMNS))?
@@ -263,6 +269,7 @@ fn main() -> Result<()> {
         &instance_buffer,
         &atlas_buffer,
         layout,
+        &weight_buffer,
         &variable_buffer,
         &resolved_curve_buffer,
     );
@@ -459,9 +466,9 @@ fn main() -> Result<()> {
     let mut frame_milliseconds = Vec::with_capacity(arguments.iterations as usize);
     for iteration in 0..arguments.iterations {
         let weight = ((iteration * 37) % 101) as f32 / 100.0;
-        let frame_params = variable_params(weight, instances.len(), arguments.band_count)?;
+        let frame_weights = source_weights(weight)?;
         let frame_started = Instant::now();
-        queue.write_buffer(&variable_buffer, 0, &frame_params);
+        queue.write_buffer(&weight_buffer, 0, &frame_weights);
         let mut frame_encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("shift-slug variable frame encoder"),
         });
@@ -489,7 +496,7 @@ fn main() -> Result<()> {
         percentile(&frame_milliseconds, 0.99),
         frame_milliseconds.last().copied().unwrap_or(0.0),
         arguments.iterations,
-        arguments.iterations * 16,
+        arguments.iterations * 8,
     );
 
     Ok(())
@@ -635,14 +642,20 @@ fn pixel_to_em_transform(cell_rect: [f32; 4], fitted_bounds: [f32; 4]) -> [f32; 
     ]
 }
 
-fn variable_params(weight: f32, instances: usize, band_count: u32) -> Result<[u8; 16]> {
-    if !weight.is_finite() {
+fn variable_params(instances: usize, band_count: u32) -> Result<[u8; 16]> {
+    let mut bytes = [0; 16];
+    bytes[0..4].copy_from_slice(&u32::try_from(instances)?.to_le_bytes());
+    bytes[4..8].copy_from_slice(&band_count.to_le_bytes());
+    Ok(bytes)
+}
+
+fn source_weights(source_weight: f32) -> Result<[u8; 8]> {
+    if !source_weight.is_finite() {
         return Err("weight must be finite".into());
     }
-    let mut bytes = [0; 16];
-    bytes[0..4].copy_from_slice(&weight.to_le_bytes());
-    bytes[4..8].copy_from_slice(&u32::try_from(instances)?.to_le_bytes());
-    bytes[8..12].copy_from_slice(&band_count.to_le_bytes());
+    let mut bytes = [0; 8];
+    bytes[0..4].copy_from_slice(&(1.0 - source_weight).to_le_bytes());
+    bytes[4..8].copy_from_slice(&source_weight.to_le_bytes());
     Ok(bytes)
 }
 
@@ -743,6 +756,7 @@ fn create_resolve_groups(
     instance_buffer: &wgpu::Buffer,
     atlas_buffer: &wgpu::Buffer,
     layout: shift_slug::VariableLayout,
+    weight_buffer: &wgpu::Buffer,
     variable_buffer: &wgpu::Buffer,
     resolved_curve_buffer: &wgpu::Buffer,
 ) -> [wgpu::BindGroup; 3] {
@@ -761,8 +775,13 @@ fn create_resolve_groups(
             atlas_entry(0, atlas_buffer, layout.base_curves),
             atlas_entry(1, atlas_buffer, layout.curve_deltas),
             atlas_entry(2, atlas_buffer, layout.glyphs),
+            atlas_entry(3, atlas_buffer, layout.sources),
             BindGroupEntry {
-                binding: 3,
+                binding: 4,
+                resource: weight_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 5,
                 resource: variable_buffer.as_entire_binding(),
             },
         ],
@@ -804,7 +823,7 @@ fn create_band_groups(
         entries: &[
             atlas_entry(2, atlas_buffer, layout.glyphs),
             BindGroupEntry {
-                binding: 3,
+                binding: 5,
                 resource: variable_buffer.as_entire_binding(),
             },
         ],
@@ -863,7 +882,7 @@ fn create_render_groups(
         entries: &[
             atlas_entry(2, atlas_buffer, layout.glyphs),
             BindGroupEntry {
-                binding: 3,
+                binding: 5,
                 resource: variable_buffer.as_entire_binding(),
             },
         ],

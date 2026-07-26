@@ -49,9 +49,9 @@ Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical
 
 `CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses wide indexes by default and exposes compact indexes through `--compact-indices`.
 
-## Two-source variable execution
+## Resident variable execution
 
-The first variable model keeps one base quadratic array and one same-length `f32` delta array resident. Axis changes update a small weight buffer; one compute workgroup per visible glyph resolves `base + weight × delta` into scratch. A second compute pass rebuilds the eight horizontal and vertical bands for only those resolved curves. Fragment rendering therefore sees exact current-location membership without uploading geometry or retaining all-location conservative indexes.
+The variable model keeps one base quadratic array plus one dense `f32` delta block per additional compatible source. Each glyph references source descriptors whose global weight indexes allow equal interpolation bases to share a small per-frame weight vector. Compute preserves the full weighted-source equation as `base × sum(weights) + Σ(weight × delta)`, rather than assuming weights always sum to one. One workgroup per visible glyph resolves curves into scratch; a second pass rebuilds the eight horizontal and vertical bands for only those resolved curves. Fragment rendering therefore sees exact current-location membership without uploading geometry or retaining all-location conservative indexes.
 
 For 150 uniformly sampled Source Han glyphs, worst-case scratch reservation is bounded by the visible curves and `curve_count × 16` temporary band-index slots rather than all 65,535 glyphs. Multi-source sparse deltas, component evaluation, attachments, and exact-source topology variants remain subsequent model layers.
 

@@ -4,33 +4,47 @@ use crate::{curve::curves_from_commands, Bounds, Curve, Point, Section, SlugErro
 
 const CURVE_BYTES: usize = 24;
 const VARIABLE_GLYPH_BYTES: usize = 32;
+const VARIABLE_SOURCE_BYTES: usize = 8;
+const BASE_SOURCE_DELTA: u32 = u32::MAX;
 
 /// One glyph in a two-source resident variable atlas.
 ///
 /// `bounds` encloses both source curve control hulls, so every interpolation in
-/// `0..=1` can use the same grid while GPU compute rebuilds exact band membership.
+/// between the supplied sources can use the same grid while GPU compute rebuilds exact band membership.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct VariableGlyph {
     pub bounds: Bounds,
     pub curve_start: u32,
     pub curve_count: u32,
+    pub source_start: u32,
+    pub source_count: u32,
 }
 
-/// Byte ranges for one packed two-source variable atlas.
+/// One source contribution for a variable glyph.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct VariableSource {
+    /// First delta curve, or `u32::MAX` for the base source.
+    pub delta_start: u32,
+    /// Index in the small per-frame deduplicated weight buffer.
+    pub weight_index: u32,
+}
+
+/// Byte ranges for one packed resident variable atlas.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VariableLayout {
     pub base_curves: Section,
     pub curve_deltas: Section,
     pub glyphs: Section,
+    pub sources: Section,
     pub total_length: usize,
 }
 
-/// CPU-owned two-source Slug model.
+/// CPU-owned resident Slug variation model.
 ///
-/// Curves are converted independently at both authored sources. Compatible
-/// command topology is required, and each source curve is stored as a delta
-/// from the base. No location-resolved bands or curve indexes are resident;
+/// Compatible curve topology is required, and each non-base source curve is
+/// stored as a delta from the base. No location-resolved bands or curve indexes are resident;
 /// those are generated only for visible glyphs by GPU compute.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VariableAtlas {
@@ -38,6 +52,7 @@ pub struct VariableAtlas {
     base_curves: Vec<Curve>,
     curve_deltas: Vec<Curve>,
     glyphs: Vec<VariableGlyph>,
+    sources: Vec<VariableSource>,
 }
 
 impl VariableAtlas {
@@ -57,10 +72,16 @@ impl VariableAtlas {
         &self.glyphs
     }
 
+    pub fn sources(&self) -> &[VariableSource] {
+        &self.sources
+    }
+
     pub fn statistics(&self) -> VariableStatistics {
         VariableStatistics {
             glyph_count: self.glyphs.len(),
             curve_count: self.base_curves.len(),
+            delta_curve_count: self.curve_deltas.len(),
+            source_count: self.sources.len(),
             bands_per_direction: self.band_count,
             max_curves_per_glyph: self
                 .glyphs
@@ -71,7 +92,7 @@ impl VariableAtlas {
         }
     }
 
-    /// Resolves one glyph with the same f32 arithmetic used by the compute shader.
+    /// Resolves the common two-source model with the compute shader's f32 arithmetic.
     pub fn resolve_glyph(
         &self,
         glyph_index: u32,
@@ -80,20 +101,63 @@ impl VariableAtlas {
         if !source_weight.is_finite() {
             return Err(SlugError::NonFiniteVariableWeight);
         }
+        self.resolve_glyph_with_weights(glyph_index, &[1.0 - source_weight, source_weight])
+    }
+
+    /// Resolves one glyph from an arbitrary deduplicated source-weight buffer.
+    pub fn resolve_glyph_with_weights(
+        &self,
+        glyph_index: u32,
+        weights: &[f32],
+    ) -> Result<Vec<Curve>, SlugError> {
+        if weights.iter().any(|weight| !weight.is_finite()) {
+            return Err(SlugError::NonFiniteVariableWeight);
+        }
         let glyph = self
             .glyphs
             .get(glyph_index as usize)
             .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
-        let start = glyph.curve_start as usize;
-        let end = start
+        let curve_start = glyph.curve_start as usize;
+        let curve_end = curve_start
             .checked_add(glyph.curve_count as usize)
             .ok_or(SlugError::LengthOverflow)?;
+        let source_start = glyph.source_start as usize;
+        let source_end = source_start
+            .checked_add(glyph.source_count as usize)
+            .ok_or(SlugError::LengthOverflow)?;
+        let sources = self
+            .sources
+            .get(source_start..source_end)
+            .ok_or(SlugError::LengthOverflow)?;
+        let mut weight_sum = 0.0_f32;
+        for source in sources {
+            weight_sum += *weights.get(source.weight_index as usize).ok_or(
+                SlugError::VariableWeightIndexOutOfRange(source.weight_index),
+            )?;
+        }
 
-        Ok(self.base_curves[start..end]
+        let mut curves = self.base_curves[curve_start..curve_end]
             .iter()
-            .zip(&self.curve_deltas[start..end])
-            .map(|(base, delta)| add_scaled_curve(*base, *delta, source_weight))
-            .collect())
+            .map(|curve| scale_curve(*curve, weight_sum))
+            .collect::<Vec<_>>();
+        for source in sources {
+            if source.delta_start == BASE_SOURCE_DELTA {
+                continue;
+            }
+            let weight = weights[source.weight_index as usize];
+            let delta_start = source.delta_start as usize;
+            let delta_end = delta_start
+                .checked_add(glyph.curve_count as usize)
+                .ok_or(SlugError::LengthOverflow)?;
+            for (curve, delta) in curves.iter_mut().zip(
+                self.curve_deltas
+                    .get(delta_start..delta_end)
+                    .ok_or(SlugError::LengthOverflow)?,
+            ) {
+                *curve = add_scaled_curve(*curve, *delta, weight);
+            }
+        }
+        Ok(curves)
     }
 
     pub fn layout(&self, alignment: usize) -> Result<VariableLayout, SlugError> {
@@ -113,15 +177,17 @@ impl VariableAtlas {
             VARIABLE_GLYPH_BYTES,
             alignment,
         )?;
-        let total_length = glyphs
+        let sources = next_section(glyphs, self.sources.len(), VARIABLE_SOURCE_BYTES, alignment)?;
+        let total_length = sources
             .offset
-            .checked_add(glyphs.length)
+            .checked_add(sources.length)
             .ok_or(SlugError::LengthOverflow)?;
 
         Ok(VariableLayout {
             base_curves,
             curve_deltas,
             glyphs,
+            sources,
             total_length,
         })
     }
@@ -143,25 +209,38 @@ impl VariableAtlas {
             ] {
                 write(&mut bytes, &mut offset, &value.to_le_bytes());
             }
-            for value in [glyph.curve_start, glyph.curve_count, 0, 0] {
+            for value in [
+                glyph.curve_start,
+                glyph.curve_count,
+                glyph.source_start,
+                glyph.source_count,
+            ] {
                 write(&mut bytes, &mut offset, &value.to_le_bytes());
             }
+        }
+
+        offset = layout.sources.offset;
+        for source in &self.sources {
+            write(&mut bytes, &mut offset, &source.delta_start.to_le_bytes());
+            write(&mut bytes, &mut offset, &source.weight_index.to_le_bytes());
         }
 
         Ok(PackedVariableAtlas { bytes, layout })
     }
 }
 
-/// Sizing summary for a two-source variable atlas.
+/// Sizing summary for a resident variable atlas.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VariableStatistics {
     pub glyph_count: usize,
     pub curve_count: usize,
+    pub delta_curve_count: usize,
+    pub source_count: usize,
     pub bands_per_direction: u32,
     pub max_curves_per_glyph: u32,
 }
 
-/// Incrementally builds a topology-compatible two-source variable atlas.
+/// Incrementally builds a topology-compatible resident variable atlas.
 #[derive(Debug)]
 pub struct VariableAtlasBuilder {
     atlas: VariableAtlas,
@@ -210,32 +289,84 @@ impl VariableAtlasBuilder {
         base_curves: impl IntoIterator<Item = Curve>,
         source_curves: impl IntoIterator<Item = Curve>,
     ) -> Result<u32, SlugError> {
+        self.add_curve_glyph_with_sources(
+            base_curves,
+            0,
+            [(1, source_curves.into_iter().collect())],
+        )
+    }
+
+    /// Adds any number of compatible sources and their global weight indexes.
+    pub fn add_curve_glyph_with_sources(
+        &mut self,
+        base_curves: impl IntoIterator<Item = Curve>,
+        base_weight_index: u32,
+        source_curves: impl IntoIterator<Item = (u32, Vec<Curve>)>,
+    ) -> Result<u32, SlugError> {
         let base_curves: Vec<_> = base_curves.into_iter().collect();
         let source_curves: Vec<_> = source_curves.into_iter().collect();
         let glyph_index = as_u32(self.atlas.glyphs.len())?;
-        if base_curves.len() != source_curves.len() {
+        if source_curves
+            .iter()
+            .any(|(_, curves)| curves.len() != base_curves.len())
+        {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
         }
 
         let curve_start = as_u32(self.atlas.base_curves.len())?;
         let curve_count = as_u32(base_curves.len())?;
-        let bounds = variable_bounds(&base_curves, &source_curves);
-        let curve_deltas = base_curves
-            .iter()
-            .zip(&source_curves)
-            .map(|(base, source)| subtract_curve(*source, *base))
-            .collect::<Vec<_>>();
+        let source_start = as_u32(self.atlas.sources.len())?;
+        let source_count = as_u32(
+            source_curves
+                .len()
+                .checked_add(1)
+                .ok_or(SlugError::LengthOverflow)?,
+        )?;
+        let bounds = variable_bounds(
+            base_curves
+                .iter()
+                .chain(source_curves.iter().flat_map(|(_, curves)| curves)),
+        );
+        let mut curve_deltas = Vec::new();
+        let mut sources = Vec::with_capacity(source_curves.len() + 1);
+        sources.push(VariableSource {
+            delta_start: BASE_SOURCE_DELTA,
+            weight_index: base_weight_index,
+        });
+        for (weight_index, curves) in &source_curves {
+            let delta_start = as_u32(
+                self.atlas
+                    .curve_deltas
+                    .len()
+                    .checked_add(curve_deltas.len())
+                    .ok_or(SlugError::LengthOverflow)?,
+            )?;
+            sources.push(VariableSource {
+                delta_start,
+                weight_index: *weight_index,
+            });
+            curve_deltas.extend(
+                base_curves
+                    .iter()
+                    .zip(curves)
+                    .map(|(base, source)| subtract_curve(*source, *base)),
+            );
+        }
 
         ensure_total(self.atlas.base_curves.len(), base_curves.len())?;
         ensure_total(self.atlas.curve_deltas.len(), curve_deltas.len())?;
+        ensure_total(self.atlas.sources.len(), sources.len())?;
         ensure_total(self.atlas.glyphs.len(), 1)?;
 
         self.atlas.base_curves.extend(base_curves);
         self.atlas.curve_deltas.extend(curve_deltas);
+        self.atlas.sources.extend(sources);
         self.atlas.glyphs.push(VariableGlyph {
             bounds,
             curve_start,
             curve_count,
+            source_start,
+            source_count,
         });
 
         Ok(glyph_index)
@@ -252,7 +383,7 @@ impl Default for VariableAtlasBuilder {
     }
 }
 
-/// Owned aligned bytes for the resident two-source model.
+/// Owned aligned bytes for the resident variable model.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackedVariableAtlas {
     bytes: Vec<u8>,
@@ -295,8 +426,8 @@ fn command_topology(commands: &[OutlineCommand<f32>]) -> Vec<CommandKind> {
         .collect()
 }
 
-fn variable_bounds(base: &[Curve], source: &[Curve]) -> Bounds {
-    let mut curves = base.iter().chain(source).copied();
+fn variable_bounds<'a>(curves: impl IntoIterator<Item = &'a Curve>) -> Bounds {
+    let mut curves = curves.into_iter().copied();
     let Some(first) = curves.next() else {
         return Bounds::default();
     };
@@ -321,6 +452,14 @@ fn subtract_curve(source: Curve, base: Curve) -> Curve {
 
 fn subtract_point(source: Point, base: Point) -> Point {
     Point::new(source.x - base.x, source.y - base.y)
+}
+
+fn scale_curve(curve: Curve, scale: f32) -> Curve {
+    Curve {
+        p0: Point::new(curve.p0.x * scale, curve.p0.y * scale),
+        p1: Point::new(curve.p1.x * scale, curve.p1.y * scale),
+        p2: Point::new(curve.p2.x * scale, curve.p2.y * scale),
+    }
 }
 
 fn add_scaled_curve(base: Curve, delta: Curve, weight: f32) -> Curve {

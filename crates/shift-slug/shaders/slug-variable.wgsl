@@ -8,10 +8,9 @@ struct GlobalParams {
 };
 
 struct VariableParams {
-    source_weight: f32,
     instance_count: u32,
     band_count: u32,
-    _padding: u32,
+    _padding: vec2<u32>,
 };
 
 struct Instance {
@@ -31,7 +30,13 @@ struct VariableGlyph {
     bounds: vec4<f32>,
     curve_start: u32,
     curve_count: u32,
-    _padding: vec2<u32>,
+    source_start: u32,
+    source_count: u32,
+};
+
+struct VariableSource {
+    delta_start: u32,
+    weight_index: u32,
 };
 
 struct Band {
@@ -51,10 +56,20 @@ struct VertexOutput {
 @group(1) @binding(0) var<storage, read> base_curves: array<Curve>;
 @group(1) @binding(1) var<storage, read> curve_deltas: array<Curve>;
 @group(1) @binding(2) var<storage, read> variable_glyphs: array<VariableGlyph>;
-@group(1) @binding(3) var<uniform> variable: VariableParams;
+@group(1) @binding(3) var<storage, read> variable_sources: array<VariableSource>;
+@group(1) @binding(4) var<storage, read> source_weights: array<f32>;
+@group(1) @binding(5) var<uniform> variable: VariableParams;
 @group(2) @binding(0) var<storage, read_write> resolved_curves: array<Curve>;
 @group(2) @binding(1) var<storage, read_write> resolved_bands: array<Band>;
 @group(2) @binding(2) var<storage, read_write> resolved_indices: array<u32>;
+
+fn scale_curve(curve: Curve, scale: f32) -> Curve {
+    var result: Curve;
+    result.p0 = curve.p0 * scale;
+    result.p1 = curve.p1 * scale;
+    result.p2 = curve.p2 * scale;
+    return result;
+}
 
 fn add_scaled_curve(base: Curve, delta: Curve, weight: f32) -> Curve {
     var curve: Curve;
@@ -76,14 +91,27 @@ fn resolve_visible_curves(
 
     let instance = instances[instance_index];
     let glyph = variable_glyphs[instance.glyph.x];
+    var weight_sum = 0.0;
+    for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
+        let source = variable_sources[glyph.source_start + source_offset];
+        weight_sum += source_weights[source.weight_index];
+    }
+
     var local_curve = local_id.x;
     while local_curve < glyph.curve_count {
         let source_index = glyph.curve_start + local_curve;
-        resolved_curves[instance.glyph.y + local_curve] = add_scaled_curve(
-            base_curves[source_index],
-            curve_deltas[source_index],
-            variable.source_weight,
-        );
+        var curve = scale_curve(base_curves[source_index], weight_sum);
+        for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
+            let source = variable_sources[glyph.source_start + source_offset];
+            if source.delta_start != 0xffffffffu {
+                curve = add_scaled_curve(
+                    curve,
+                    curve_deltas[source.delta_start + local_curve],
+                    source_weights[source.weight_index],
+                );
+            }
+        }
+        resolved_curves[instance.glyph.y + local_curve] = curve;
         local_curve += 64u;
     }
 }

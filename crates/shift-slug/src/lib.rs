@@ -22,7 +22,7 @@ pub use render::{
 };
 pub use variable::{
     PackedVariableAtlas, VariableAtlas, VariableAtlasBuilder, VariableGlyph, VariableLayout,
-    VariableStatistics,
+    VariableSource, VariableStatistics,
 };
 
 /// Shader source shared by native `wgpu` and Electron WebGPU consumers.

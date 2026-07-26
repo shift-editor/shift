@@ -12,6 +12,7 @@ pub enum SlugError {
     CompactIndexOverflow { glyph_index: u32, curve_count: u32 },
     VariableTopologyMismatch { glyph_index: u32 },
     GlyphIndexOutOfRange(u32),
+    VariableWeightIndexOutOfRange(u32),
     NonFiniteVariableWeight,
     LengthOverflow,
 }
@@ -56,6 +57,10 @@ impl fmt::Display for SlugError {
             Self::GlyphIndexOutOfRange(glyph_index) => {
                 write!(formatter, "Slug glyph index {glyph_index} is out of range")
             }
+            Self::VariableWeightIndexOutOfRange(weight_index) => write!(
+                formatter,
+                "Slug variable weight index {weight_index} is out of range"
+            ),
             Self::NonFiniteVariableWeight => {
                 formatter.write_str("Slug variable source weight must be finite")
             }
