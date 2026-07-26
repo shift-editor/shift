@@ -6,7 +6,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, edge-pan, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers.
 
-**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Editor-route lifecycle code finishes `Font.loadGlyph()` before publishing the ordinary ID-based glyph node.
+**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.
 
 **Architecture Invariant:** `Editor.#store` is the generic `ShiftStore<ShiftEditorRecord>` for scene and session records. The injected `Editor.#fontStore` owns canonical complete Glyph objects for those ID-based records. Neither store contains the other store's domain objects.
 

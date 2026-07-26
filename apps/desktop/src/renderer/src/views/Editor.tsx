@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { useParams } from "react-router-dom";
 
@@ -11,20 +11,13 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { useSignalState } from "@/lib/signals";
-import type { Glyph } from "@/lib/model/Glyph";
-import { asGlyphId, mintNodeId, type GlyphId, type NodeId } from "@shift/types";
+import { asGlyphId, mintNodeId } from "@shift/types";
 
 export const Editor = () => {
-  const { glyphId } = useParams();
-  if (!glyphId) return null;
-
-  return <GlyphEditor key={glyphId} glyphId={asGlyphId(glyphId)} />;
-};
-
-const GlyphEditor = ({ glyphId }: { readonly glyphId: GlyphId }) => {
+  const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
-  const [glyph, setGlyph] = useState<Glyph | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
+  const glyph = glyphId ? editor.glyphForId(glyphId) : null;
   const cursorStyle = useSignalState(editor.cursorCell);
   const gesture = useSignalState(editor.gesture.cell);
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
@@ -32,60 +25,36 @@ const GlyphEditor = ({ glyphId }: { readonly glyphId: GlyphId }) => {
   const { activeZone, claimZone } = useFocusZone();
 
   useEffect(() => {
+    if (!glyph) return;
+
     claimZone("canvas");
-  }, [claimZone]);
+  }, [claimZone, glyph]);
 
+  // GlyphGrid acquires the complete Glyph before navigating. The route only
+  // publishes a scene node after synchronous acquisition is confirmed.
   useEffect(() => {
-    let cancelled = false;
-    let placedNodeId: NodeId | null = null;
-    editor.scene.clear();
+    if (!glyph) return undefined;
 
-    async function loadRouteGlyph(): Promise<void> {
-      try {
-        const loadedGlyph = await editor.font.loadGlyph(glyphId);
-        if (cancelled) return;
-
-        const nodeId = mintNodeId();
-        editor.scene.setNodes([
-          {
-            id: nodeId,
-            type: "node",
-            kind: "glyph",
-            parentId: null,
-            index: "a0",
-            glyphId: loadedGlyph.id,
-            sourceId: editor.activeSourceId ?? editor.font.defaultSource.id,
-            position: { x: 0, y: 0 },
-          },
-        ]);
-        placedNodeId = nodeId;
-        editor.editing.enter(nodeId);
-        setGlyph(loadedGlyph);
-      } catch (error) {
-        if (cancelled) return;
-
-        console.error("editor glyph failed to load", error);
-
-        if (placedNodeId) {
-          editor.scene.deleteNode(placedNodeId);
-          if (editor.editing.has(placedNodeId)) editor.editing.clear();
-          placedNodeId = null;
-        }
-
-        setLoadFailed(true);
-      }
-    }
-
-    void loadRouteGlyph();
+    const nodeId = mintNodeId();
+    editor.scene.setNodes([
+      {
+        id: nodeId,
+        type: "node",
+        kind: "glyph",
+        parentId: null,
+        index: "a0",
+        glyphId: glyph.id,
+        sourceId: editor.activeSourceId ?? editor.font.defaultSource.id,
+        position: { x: 0, y: 0 },
+      },
+    ]);
+    editor.editing.enter(nodeId);
 
     return () => {
-      cancelled = true;
-      if (!placedNodeId) return;
-
-      editor.scene.deleteNode(placedNodeId);
-      if (editor.editing.has(placedNodeId)) editor.editing.clear();
+      editor.scene.deleteNode(nodeId);
+      if (editor.editing.has(nodeId)) editor.editing.clear();
     };
-  }, [editor, glyphId]);
+  }, [editor, glyph]);
 
   useEffect(() => {
     if (!glyph) return;
@@ -137,16 +106,7 @@ const GlyphEditor = ({ glyphId }: { readonly glyphId: GlyphId }) => {
     };
   }, [activeZone, editor, glyph]);
 
-  if (!glyph) {
-    return (
-      <main
-        aria-live="polite"
-        className="grid h-screen place-items-center bg-canvas text-sm text-primary"
-      >
-        {loadFailed ? "Glyph failed to load." : "Loading glyph…"}
-      </main>
-    );
-  }
+  if (!glyph) return null;
 
   return (
     <div
