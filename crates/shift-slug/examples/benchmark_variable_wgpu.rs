@@ -3,7 +3,7 @@ use std::{env, error::Error, fs, num::NonZeroU64, path::PathBuf, sync::mpsc, tim
 use shift_glyph_codec::OutlineCommand;
 use shift_slug::{
     pack_render_instances, pack_render_params, Bounds, Curve, RenderInstance, RenderParams,
-    VariableAtlas, VariableAtlasBuilder, DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
+    SlugError, VariableAtlas, VariableAtlasBuilder, DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
 };
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
@@ -72,6 +72,7 @@ struct Arguments {
     visible_glyphs: usize,
     band_count: u32,
     iterations: u32,
+    build_only: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -98,7 +99,7 @@ fn main() -> Result<()> {
     );
 
     let build_started = Instant::now();
-    let (source_bytes, atlas) = build_atlas(&arguments)?;
+    let (source_bytes, exact_variant_count, atlas) = build_atlas(&arguments)?;
     let build_elapsed = build_started.elapsed();
     let alignment = usize::try_from(
         adapter
@@ -106,8 +107,23 @@ fn main() -> Result<()> {
             .min_storage_buffer_offset_alignment
             .max(COPY_ALIGNMENT),
     )?;
-    let packed = atlas.pack(alignment)?;
-    let layout = packed.layout();
+    let pack_started = Instant::now();
+    let (packed, layout, upload_chunk_count) = if arguments.build_only {
+        let mut chunk_count = 0_usize;
+        let mut streamed_length = 0_usize;
+        let layout = atlas.write_packed_chunks(alignment, 4 * 1024 * 1024, |chunk| {
+            assert_eq!(chunk.offset, streamed_length);
+            streamed_length += chunk.bytes.len();
+            chunk_count += 1;
+        })?;
+        assert_eq!(streamed_length, layout.total_length);
+        (None, layout, chunk_count)
+    } else {
+        let packed = atlas.pack(alignment)?;
+        let layout = packed.layout();
+        (Some(packed), layout, 1)
+    };
+    let pack_elapsed = pack_started.elapsed();
     let glyph_indices = sampled_glyph_indices(atlas.glyphs().len(), arguments.visible_glyphs);
     let (instances, scratch) = build_instances(&atlas, &glyph_indices)?;
     let instance_bytes = pack_render_instances(&instances)?;
@@ -115,13 +131,16 @@ fn main() -> Result<()> {
     let initial_weights = source_weights(arguments.weight)?;
 
     println!(
-        "source={} source_bytes={} glyphs={} curves={} variable_bytes={} build_ms={:.3}",
+        "source={} source_bytes={} glyphs={} exact_variants={} curves={} variable_bytes={} build_ms={:.3} pack_ms={:.3} upload_chunks={}",
         arguments.font.display(),
         source_bytes,
         atlas.glyphs().len(),
+        exact_variant_count,
         atlas.base_curves().len(),
         layout.total_length,
         build_elapsed.as_secs_f64() * 1_000.0,
+        pack_elapsed.as_secs_f64() * 1_000.0,
+        upload_chunk_count,
     );
     println!(
         "axis={:?} base={} source={} weight={} visible={} scratch_curves={} scratch_bands={} scratch_indices={} scratch_bytes={}",
@@ -135,11 +154,24 @@ fn main() -> Result<()> {
         scratch.index_count,
         scratch_bytes(scratch)?,
     );
+    let statistics = atlas.statistics();
+    println!(
+        "delta_curves={} sparse_indices={} dense_sources={} sparse_sources={}",
+        statistics.delta_curve_count,
+        statistics.delta_index_count,
+        statistics.dense_delta_source_count,
+        statistics.sparse_delta_source_count,
+    );
+    if arguments.build_only {
+        return Ok(());
+    }
+    let packed = packed.expect("non-build-only execution creates contiguous benchmark bytes");
 
     let largest_binding = layout
         .base_curves
         .length
         .max(layout.curve_deltas.length)
+        .max(layout.sparse_deltas.length)
         .max(layout.glyphs.length)
         .max(layout.sources.length)
         .max(layout.line_bits.length)
@@ -156,7 +188,7 @@ fn main() -> Result<()> {
         .max_storage_buffer_binding_size
         .max(u64::try_from(largest_binding)?);
     required_limits.max_storage_buffers_per_shader_stage =
-        required_limits.max_storage_buffers_per_shader_stage.max(9);
+        required_limits.max_storage_buffers_per_shader_stage.max(10);
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("shift-slug variable benchmark device"),
         required_features: wgpu::Features::empty(),
@@ -526,7 +558,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn build_atlas(arguments: &Arguments) -> Result<(usize, VariableAtlas)> {
+fn build_atlas(arguments: &Arguments) -> Result<(usize, usize, VariableAtlas)> {
     let bytes = fs::read(&arguments.font)?;
     let font = FontRef::new(&bytes)?;
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
@@ -535,6 +567,7 @@ fn build_atlas(arguments: &Arguments) -> Result<(usize, VariableAtlas)> {
     let source_location = font.axes().location([(arguments.axis, arguments.source)]);
     let outlines = font.outline_glyphs();
     let mut builder = VariableAtlasBuilder::new(arguments.band_count)?;
+    let mut exact_variants = Vec::new();
 
     for glyph_id in 0..glyph_count {
         let glyph_id = GlyphId::new(glyph_id);
@@ -550,10 +583,22 @@ fn build_atlas(arguments: &Arguments) -> Result<(usize, VariableAtlas)> {
                 &mut source,
             )?;
         }
-        builder.add_glyph(base.0, source.0)?;
+        match builder.add_glyph(base.0.clone(), source.0.clone()) {
+            Ok(_) => {}
+            Err(SlugError::VariableTopologyMismatch { .. }) => {
+                builder.add_glyph(base.0.clone(), base.0)?;
+                exact_variants.push(source.0);
+            }
+            Err(error) => return Err(error.into()),
+        }
     }
 
-    Ok((bytes.len(), builder.finish()))
+    let exact_variant_count = exact_variants.len();
+    for source in exact_variants {
+        builder.add_glyph(source.clone(), source)?;
+    }
+
+    Ok((bytes.len(), exact_variant_count, builder.finish()))
 }
 
 fn sampled_glyph_indices(glyph_count: usize, requested: usize) -> Vec<u32> {
@@ -811,6 +856,7 @@ fn create_resolve_groups(
                 resource: variable_buffer.as_entire_binding(),
             },
             atlas_entry(6, atlas_buffer, layout.line_bits),
+            atlas_entry(7, atlas_buffer, layout.sparse_deltas),
         ],
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1176,7 +1222,7 @@ fn arguments() -> Result<Arguments> {
     let font = values
         .next()
         .map(PathBuf::from)
-        .ok_or("usage: benchmark_variable_wgpu FONT TAG=BASE,SOURCE [--weight VALUE] [--visible COUNT] [--bands COUNT] [--iterations COUNT]")?;
+        .ok_or("usage: benchmark_variable_wgpu FONT TAG=BASE,SOURCE [--weight VALUE] [--visible COUNT] [--bands COUNT] [--iterations COUNT] [--build-only]")?;
     let axis = values
         .next()
         .ok_or("axis endpoints must have TAG=BASE,SOURCE form")?;
@@ -1199,6 +1245,7 @@ fn arguments() -> Result<Arguments> {
         visible_glyphs: DEFAULT_VISIBLE_GLYPHS,
         band_count: DEFAULT_BAND_COUNT,
         iterations: DEFAULT_ITERATIONS,
+        build_only: false,
     };
 
     while let Some(option) = values.next() {
@@ -1219,6 +1266,7 @@ fn arguments() -> Result<Arguments> {
                     .ok_or("--iterations requires a count")?
                     .parse()?
             }
+            "--build-only" => arguments.build_only = true,
             _ => return Err(format!("unknown option {option}").into()),
         }
     }

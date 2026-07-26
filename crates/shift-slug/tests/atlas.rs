@@ -260,6 +260,42 @@ fn variable_atlas_resolves_multiple_deduplicated_weights() {
 }
 
 #[test]
+fn variable_sources_use_sparse_deltas_only_when_they_reduce_bytes() {
+    let base = [
+        Curve {
+            p0: Point::new(0.0, 0.0),
+            p1: Point::new(1.0, 1.0),
+            p2: Point::new(2.0, 2.0),
+        },
+        Curve {
+            p0: Point::new(3.0, 3.0),
+            p1: Point::new(4.0, 4.0),
+            p2: Point::new(5.0, 5.0),
+        },
+        Curve {
+            p0: Point::new(6.0, 6.0),
+            p1: Point::new(7.0, 7.0),
+            p2: Point::new(8.0, 8.0),
+        },
+    ];
+    let mut source = base;
+    source[1].p1.x += 10.0;
+    let mut builder = VariableAtlasBuilder::default();
+    builder
+        .add_curve_glyph_with_sources(base, 0, [(1, source.to_vec())])
+        .unwrap();
+    let atlas = builder.finish();
+    let resolved = atlas.resolve_glyph(0, 1.0).unwrap();
+
+    assert_eq!(atlas.curve_deltas().len(), 1);
+    assert_eq!(atlas.sparse_deltas(), &[0, 1, 1]);
+    assert_eq!(atlas.sources()[1].delta_start, 0x8000_0000);
+    assert_eq!(resolved, source);
+    assert_eq!(atlas.statistics().dense_delta_source_count, 0);
+    assert_eq!(atlas.statistics().sparse_delta_source_count, 1);
+}
+
+#[test]
 fn variable_packing_is_aligned_deterministic_and_little_endian() {
     let mut builder = VariableAtlasBuilder::default();
     builder
@@ -282,6 +318,7 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
     assert_eq!(first, second);
     assert_eq!(first.as_bytes().len(), layout.total_length);
     assert_eq!(layout.curve_deltas.offset % 256, 0);
+    assert_eq!(layout.sparse_deltas.offset % 256, 0);
     assert_eq!(layout.glyphs.offset % 256, 0);
     assert_eq!(layout.sources.offset % 256, 0);
     assert_eq!(layout.line_bits.offset % 256, 0);
@@ -295,6 +332,27 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
         &first.as_bytes()[layout.line_bits.offset..layout.line_bits.offset + 4],
         &3_u32.to_le_bytes()
     );
+
+    let mut streamed = Vec::new();
+    atlas
+        .write_packed_chunks(256, 256, |chunk| {
+            assert_eq!(chunk.offset, streamed.len());
+            streamed.extend_from_slice(chunk.bytes);
+        })
+        .unwrap();
+    assert_eq!(streamed, first.as_bytes());
+
+    let chunks = first.chunks(256).unwrap().collect::<Vec<_>>();
+    assert!(chunks.iter().all(|chunk| chunk.offset % 4 == 0));
+    assert!(chunks.iter().all(|chunk| chunk.bytes.len() <= 256));
+    assert_eq!(
+        chunks
+            .iter()
+            .flat_map(|chunk| chunk.bytes.iter().copied())
+            .collect::<Vec<_>>(),
+        first.as_bytes()
+    );
+    assert_eq!(first.chunks(3).unwrap_err(), SlugError::InvalidChunkSize(3));
 }
 
 #[test]

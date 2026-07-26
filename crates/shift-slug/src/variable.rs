@@ -6,9 +6,12 @@ use crate::{
 };
 
 const CURVE_BYTES: usize = 24;
+const DEFAULT_PACK_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 const VARIABLE_GLYPH_BYTES: usize = 32;
 const VARIABLE_SOURCE_BYTES: usize = 8;
 const BASE_SOURCE_DELTA: u32 = u32::MAX;
+const SPARSE_SOURCE_FLAG: u32 = 1 << 31;
+const SOURCE_OFFSET_MASK: u32 = !SPARSE_SOURCE_FLAG;
 
 /// One glyph in a resident variable atlas.
 ///
@@ -29,7 +32,7 @@ pub struct VariableGlyph {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VariableSource {
-    /// First delta curve, or `u32::MAX` for the base source.
+    /// Dense delta start, tagged sparse-table offset, or `u32::MAX` for the base.
     pub delta_start: u32,
     /// Index in the small per-frame deduplicated weight buffer.
     pub weight_index: u32,
@@ -40,6 +43,7 @@ pub struct VariableSource {
 pub struct VariableLayout {
     pub base_curves: Section,
     pub curve_deltas: Section,
+    pub sparse_deltas: Section,
     pub glyphs: Section,
     pub sources: Section,
     pub line_bits: Section,
@@ -48,14 +52,16 @@ pub struct VariableLayout {
 
 /// CPU-owned resident Slug variation model.
 ///
-/// Compatible curve topology is required, and each non-base source curve is
-/// stored as a delta from the base. No location-resolved bounds, bands, or curve
-/// indexes are resident; those are generated only for visible glyphs by GPU compute.
+/// Compatible curve topology is required. Each non-base source uses dense
+/// base-relative curve deltas or a sorted sparse subset, whichever occupies fewer
+/// bytes. No location-resolved bounds, bands, or curve indexes are resident;
+/// those are generated only for visible glyphs by GPU compute.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VariableAtlas {
     band_count: u32,
     base_curves: Vec<Curve>,
     curve_deltas: Vec<Curve>,
+    sparse_deltas: Vec<u32>,
     glyphs: Vec<VariableGlyph>,
     sources: Vec<VariableSource>,
     line_bits: Vec<u32>,
@@ -72,6 +78,11 @@ impl VariableAtlas {
 
     pub fn curve_deltas(&self) -> &[Curve] {
         &self.curve_deltas
+    }
+
+    /// Sparse descriptors followed by their sorted glyph-local curve indexes.
+    pub fn sparse_deltas(&self) -> &[u32] {
+        &self.sparse_deltas
     }
 
     pub fn glyphs(&self) -> &[VariableGlyph] {
@@ -97,7 +108,27 @@ impl VariableAtlas {
             glyph_count: self.glyphs.len(),
             curve_count: self.base_curves.len(),
             delta_curve_count: self.curve_deltas.len(),
+            delta_index_count: self
+                .sources
+                .iter()
+                .filter_map(|source| sparse_descriptor_start(*source))
+                .filter_map(|start| self.sparse_deltas.get(start + 1))
+                .map(|count| *count as usize)
+                .sum(),
             source_count: self.sources.len(),
+            dense_delta_source_count: self
+                .sources
+                .iter()
+                .filter(|source| {
+                    source.delta_start != BASE_SOURCE_DELTA
+                        && source.delta_start & SPARSE_SOURCE_FLAG == 0
+                })
+                .count(),
+            sparse_delta_source_count: self
+                .sources
+                .iter()
+                .filter(|source| sparse_descriptor_start(**source).is_some())
+                .count(),
             line_curve_count: self
                 .line_bits
                 .iter()
@@ -166,15 +197,48 @@ impl VariableAtlas {
                 continue;
             }
             let weight = weights[source.weight_index as usize];
-            let delta_start = source.delta_start as usize;
+            let Some(descriptor_start) = sparse_descriptor_start(*source) else {
+                let delta_start = source.delta_start as usize;
+                let delta_end = delta_start
+                    .checked_add(glyph.curve_count as usize)
+                    .ok_or(SlugError::LengthOverflow)?;
+                for (curve, delta) in curves.iter_mut().zip(
+                    self.curve_deltas
+                        .get(delta_start..delta_end)
+                        .ok_or(SlugError::LengthOverflow)?,
+                ) {
+                    *curve = add_scaled_curve(*curve, *delta, weight);
+                }
+                continue;
+            };
+
+            let delta_start = *self
+                .sparse_deltas
+                .get(descriptor_start)
+                .ok_or(SlugError::LengthOverflow)? as usize;
+            let delta_count = *self
+                .sparse_deltas
+                .get(descriptor_start + 1)
+                .ok_or(SlugError::LengthOverflow)? as usize;
             let delta_end = delta_start
-                .checked_add(glyph.curve_count as usize)
+                .checked_add(delta_count)
                 .ok_or(SlugError::LengthOverflow)?;
-            for (curve, delta) in curves.iter_mut().zip(
-                self.curve_deltas
-                    .get(delta_start..delta_end)
-                    .ok_or(SlugError::LengthOverflow)?,
-            ) {
+            let index_start = descriptor_start + 2;
+            let index_end = index_start
+                .checked_add(delta_count)
+                .ok_or(SlugError::LengthOverflow)?;
+            let deltas = self
+                .curve_deltas
+                .get(delta_start..delta_end)
+                .ok_or(SlugError::LengthOverflow)?;
+            let indices = self
+                .sparse_deltas
+                .get(index_start..index_end)
+                .ok_or(SlugError::LengthOverflow)?;
+            for (local_index, delta) in indices.iter().zip(deltas) {
+                let curve = curves
+                    .get_mut(*local_index as usize)
+                    .ok_or(SlugError::LengthOverflow)?;
                 *curve = add_scaled_curve(*curve, *delta, weight);
             }
         }
@@ -197,8 +261,14 @@ impl VariableAtlas {
         };
         let curve_deltas =
             next_section(base_curves, self.curve_deltas.len(), CURVE_BYTES, alignment)?;
-        let glyphs = next_section(
+        let sparse_deltas = next_section(
             curve_deltas,
+            self.sparse_deltas.len(),
+            std::mem::size_of::<u32>(),
+            alignment,
+        )?;
+        let glyphs = next_section(
+            sparse_deltas,
             self.glyphs.len(),
             VARIABLE_GLYPH_BYTES,
             alignment,
@@ -218,6 +288,7 @@ impl VariableAtlas {
         Ok(VariableLayout {
             base_curves,
             curve_deltas,
+            sparse_deltas,
             glyphs,
             sources,
             line_bits,
@@ -226,13 +297,42 @@ impl VariableAtlas {
     }
 
     pub fn pack(&self, alignment: usize) -> Result<PackedVariableAtlas, SlugError> {
+        let expected = self.layout(alignment)?;
+        let mut bytes = Vec::with_capacity(expected.total_length);
+        let maximum_length = expected.total_length.clamp(4, DEFAULT_PACK_CHUNK_BYTES);
+        let layout = self.write_packed_chunks(alignment, maximum_length, |chunk| {
+            bytes.extend_from_slice(chunk.bytes);
+        })?;
+        debug_assert_eq!(bytes.len(), layout.total_length);
+        Ok(PackedVariableAtlas { bytes, layout })
+    }
+
+    /// Serializes deterministic resident bytes through a bounded reusable chunk.
+    ///
+    /// Consumers can write each callback slice directly into its final GPU-buffer
+    /// offset. No full packed copy coexists with the authored atlas, and dropping
+    /// the atlas after the callback releases all redundant CPU geometry.
+    pub fn write_packed_chunks(
+        &self,
+        alignment: usize,
+        maximum_length: usize,
+        emit: impl FnMut(PackedVariableChunk<'_>),
+    ) -> Result<VariableLayout, SlugError> {
+        if maximum_length == 0 || !maximum_length.is_multiple_of(4) {
+            return Err(SlugError::InvalidChunkSize(maximum_length));
+        }
         let layout = self.layout(alignment)?;
-        let mut bytes = vec![0; layout.total_length];
+        let mut writer = PackedChunkWriter::new(maximum_length, emit);
 
-        write_curves(&mut bytes, layout.base_curves.offset, &self.base_curves);
-        write_curves(&mut bytes, layout.curve_deltas.offset, &self.curve_deltas);
-
-        let mut offset = layout.glyphs.offset;
+        writer.pad_to(layout.base_curves.offset)?;
+        writer.write_curves(&self.base_curves);
+        writer.pad_to(layout.curve_deltas.offset)?;
+        writer.write_curves(&self.curve_deltas);
+        writer.pad_to(layout.sparse_deltas.offset)?;
+        for word in &self.sparse_deltas {
+            writer.write(&word.to_le_bytes());
+        }
+        writer.pad_to(layout.glyphs.offset)?;
         for glyph in &self.glyphs {
             for value in [
                 glyph.bounds.min_x,
@@ -240,7 +340,7 @@ impl VariableAtlas {
                 glyph.bounds.max_x,
                 glyph.bounds.max_y,
             ] {
-                write(&mut bytes, &mut offset, &value.to_le_bytes());
+                writer.write(&value.to_le_bytes());
             }
             for value in [
                 glyph.curve_start,
@@ -248,22 +348,22 @@ impl VariableAtlas {
                 glyph.source_start,
                 glyph.source_count,
             ] {
-                write(&mut bytes, &mut offset, &value.to_le_bytes());
+                writer.write(&value.to_le_bytes());
             }
         }
-
-        offset = layout.sources.offset;
+        writer.pad_to(layout.sources.offset)?;
         for source in &self.sources {
-            write(&mut bytes, &mut offset, &source.delta_start.to_le_bytes());
-            write(&mut bytes, &mut offset, &source.weight_index.to_le_bytes());
+            writer.write(&source.delta_start.to_le_bytes());
+            writer.write(&source.weight_index.to_le_bytes());
         }
-
-        offset = layout.line_bits.offset;
+        writer.pad_to(layout.line_bits.offset)?;
         for word in &self.line_bits {
-            write(&mut bytes, &mut offset, &word.to_le_bytes());
+            writer.write(&word.to_le_bytes());
         }
+        writer.pad_to(layout.total_length)?;
+        writer.finish();
 
-        Ok(PackedVariableAtlas { bytes, layout })
+        Ok(layout)
     }
 }
 
@@ -273,14 +373,17 @@ pub struct VariableStatistics {
     pub glyph_count: usize,
     pub curve_count: usize,
     pub delta_curve_count: usize,
+    pub delta_index_count: usize,
     pub source_count: usize,
+    pub dense_delta_source_count: usize,
+    pub sparse_delta_source_count: usize,
     pub line_curve_count: usize,
     pub bands_per_direction: u32,
     pub max_curves_per_glyph: u32,
 }
 
 /// Incrementally builds a topology-compatible resident variable atlas.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VariableAtlasBuilder {
     atlas: VariableAtlas,
 }
@@ -404,12 +507,30 @@ impl VariableAtlasBuilder {
             bounds.max_y += LINE_EPSILON;
         }
         let mut curve_deltas = Vec::new();
+        let mut sparse_deltas = Vec::new();
         let mut sources = Vec::with_capacity(source_curves.len() + 1);
         sources.push(VariableSource {
             delta_start: BASE_SOURCE_DELTA,
             weight_index: base_weight_index,
         });
         for (weight_index, curves) in &source_curves {
+            let deltas = base_curves
+                .iter()
+                .zip(curves)
+                .map(|(base, source)| subtract_curve(*source, *base))
+                .collect::<Vec<_>>();
+            let changed = deltas
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(_, delta)| !curve_is_zero(*delta))
+                .collect::<Vec<_>>();
+            let dense_bytes = byte_length(deltas.len(), CURVE_BYTES)?;
+            let sparse_values_bytes =
+                byte_length(changed.len(), CURVE_BYTES + std::mem::size_of::<u32>())?;
+            let sparse_bytes = sparse_values_bytes
+                .checked_add(2 * std::mem::size_of::<u32>())
+                .ok_or(SlugError::LengthOverflow)?;
             let delta_start = as_u32(
                 self.atlas
                     .curve_deltas
@@ -417,20 +538,35 @@ impl VariableAtlasBuilder {
                     .checked_add(curve_deltas.len())
                     .ok_or(SlugError::LengthOverflow)?,
             )?;
-            sources.push(VariableSource {
-                delta_start,
-                weight_index: *weight_index,
-            });
-            curve_deltas.extend(
-                base_curves
-                    .iter()
-                    .zip(curves)
-                    .map(|(base, source)| subtract_curve(*source, *base)),
-            );
+            if sparse_bytes < dense_bytes {
+                let descriptor_start = self
+                    .atlas
+                    .sparse_deltas
+                    .len()
+                    .checked_add(sparse_deltas.len())
+                    .ok_or(SlugError::LengthOverflow)?;
+                sparse_deltas.push(delta_start);
+                sparse_deltas.push(as_u32(changed.len())?);
+                for (local_index, delta) in changed {
+                    sparse_deltas.push(as_u32(local_index)?);
+                    curve_deltas.push(delta);
+                }
+                sources.push(VariableSource {
+                    delta_start: tagged_sparse_offset(descriptor_start)?,
+                    weight_index: *weight_index,
+                });
+            } else {
+                sources.push(VariableSource {
+                    delta_start: dense_delta_offset(delta_start)?,
+                    weight_index: *weight_index,
+                });
+                curve_deltas.extend(deltas);
+            }
         }
 
         ensure_total(self.atlas.base_curves.len(), base_curves.len())?;
         ensure_total(self.atlas.curve_deltas.len(), curve_deltas.len())?;
+        ensure_total(self.atlas.sparse_deltas.len(), sparse_deltas.len())?;
         ensure_total(self.atlas.sources.len(), sources.len())?;
         ensure_total(self.atlas.glyphs.len(), 1)?;
         let total_curves = self
@@ -449,6 +585,7 @@ impl VariableAtlasBuilder {
         );
         self.atlas.base_curves.extend(base_curves);
         self.atlas.curve_deltas.extend(curve_deltas);
+        self.atlas.sparse_deltas.extend(sparse_deltas);
         self.atlas.sources.extend(sources);
         self.atlas.glyphs.push(VariableGlyph {
             bounds,
@@ -490,6 +627,130 @@ impl PackedVariableAtlas {
 
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
+    }
+
+    /// Borrows queue-write-sized pieces without duplicating the packed atlas.
+    pub fn chunks(&self, maximum_length: usize) -> Result<PackedVariableChunks<'_>, SlugError> {
+        if maximum_length == 0 || !maximum_length.is_multiple_of(4) {
+            return Err(SlugError::InvalidChunkSize(maximum_length));
+        }
+        Ok(PackedVariableChunks {
+            bytes: &self.bytes,
+            maximum_length,
+            offset: 0,
+        })
+    }
+}
+
+/// One borrowed piece of a packed variable-atlas upload.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PackedVariableChunk<'a> {
+    pub offset: usize,
+    pub bytes: &'a [u8],
+}
+
+/// Borrowed chunks spanning a packed atlas exactly once.
+#[derive(Clone, Debug)]
+pub struct PackedVariableChunks<'a> {
+    bytes: &'a [u8],
+    maximum_length: usize,
+    offset: usize,
+}
+
+impl<'a> Iterator for PackedVariableChunks<'a> {
+    type Item = PackedVariableChunk<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.offset == self.bytes.len() {
+            return None;
+        }
+        let end = self
+            .offset
+            .saturating_add(self.maximum_length)
+            .min(self.bytes.len());
+        let chunk = PackedVariableChunk {
+            offset: self.offset,
+            bytes: &self.bytes[self.offset..end],
+        };
+        self.offset = end;
+        Some(chunk)
+    }
+}
+
+struct PackedChunkWriter<F> {
+    emit: F,
+    bytes: Vec<u8>,
+    maximum_length: usize,
+    offset: usize,
+}
+
+impl<F> PackedChunkWriter<F>
+where
+    F: FnMut(PackedVariableChunk<'_>),
+{
+    fn new(maximum_length: usize, emit: F) -> Self {
+        Self {
+            emit,
+            bytes: Vec::with_capacity(maximum_length),
+            maximum_length,
+            offset: 0,
+        }
+    }
+
+    fn position(&self) -> usize {
+        self.offset + self.bytes.len()
+    }
+
+    fn write(&mut self, mut value: &[u8]) {
+        while !value.is_empty() {
+            let available = self.maximum_length - self.bytes.len();
+            let count = available.min(value.len());
+            self.bytes.extend_from_slice(&value[..count]);
+            value = &value[count..];
+            if self.bytes.len() == self.maximum_length {
+                self.flush();
+            }
+        }
+    }
+
+    fn write_curves(&mut self, curves: &[Curve]) {
+        for curve in curves {
+            for value in [
+                curve.p0.x, curve.p0.y, curve.p1.x, curve.p1.y, curve.p2.x, curve.p2.y,
+            ] {
+                self.write(&value.to_le_bytes());
+            }
+        }
+    }
+
+    fn pad_to(&mut self, target: usize) -> Result<(), SlugError> {
+        let padding = target
+            .checked_sub(self.position())
+            .ok_or(SlugError::LengthOverflow)?;
+        const ZEROS: [u8; 256] = [0; 256];
+        let mut remaining = padding;
+        while remaining != 0 {
+            let count = remaining.min(ZEROS.len());
+            self.write(&ZEROS[..count]);
+            remaining -= count;
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) {
+        if self.bytes.is_empty() {
+            return;
+        }
+        (self.emit)(PackedVariableChunk {
+            offset: self.offset,
+            bytes: &self.bytes,
+        });
+        self.offset += self.bytes.len();
+        self.bytes.clear();
+    }
+
+    fn finish(mut self) {
+        self.flush();
     }
 }
 
@@ -541,6 +802,14 @@ fn variable_bounds<'a>(curves: impl IntoIterator<Item = &'a Curve>) -> Bounds {
     bounds
 }
 
+fn curve_is_zero(curve: Curve) -> bool {
+    [
+        curve.p0.x, curve.p0.y, curve.p1.x, curve.p1.y, curve.p2.x, curve.p2.y,
+    ]
+    .into_iter()
+    .all(|value| value == 0.0)
+}
+
 fn subtract_curve(source: Curve, base: Curve) -> Curve {
     Curve {
         p0: subtract_point(source.p0, base.p0),
@@ -571,17 +840,6 @@ fn add_scaled_curve(base: Curve, delta: Curve, weight: f32) -> Curve {
 
 fn add_scaled_point(base: Point, delta: Point, weight: f32) -> Point {
     Point::new(base.x + delta.x * weight, base.y + delta.y * weight)
-}
-
-fn write_curves(target: &mut [u8], start: usize, curves: &[Curve]) {
-    let mut offset = start;
-    for curve in curves {
-        for value in [
-            curve.p0.x, curve.p0.y, curve.p1.x, curve.p1.y, curve.p2.x, curve.p2.y,
-        ] {
-            write(target, &mut offset, &value.to_le_bytes());
-        }
-    }
 }
 
 fn next_section(
@@ -620,8 +878,24 @@ fn as_u32(value: usize) -> Result<u32, SlugError> {
     u32::try_from(value).map_err(|_| SlugError::LengthOverflow)
 }
 
-fn write(target: &mut [u8], offset: &mut usize, value: &[u8]) {
-    let end = *offset + value.len();
-    target[*offset..end].copy_from_slice(value);
-    *offset = end;
+fn dense_delta_offset(offset: u32) -> Result<u32, SlugError> {
+    if offset <= SOURCE_OFFSET_MASK {
+        Ok(offset)
+    } else {
+        Err(SlugError::LengthOverflow)
+    }
+}
+
+fn tagged_sparse_offset(offset: usize) -> Result<u32, SlugError> {
+    let offset = as_u32(offset)?;
+    if offset <= SOURCE_OFFSET_MASK {
+        Ok(SPARSE_SOURCE_FLAG | offset)
+    } else {
+        Err(SlugError::LengthOverflow)
+    }
+}
+
+fn sparse_descriptor_start(source: VariableSource) -> Option<usize> {
+    (source.delta_start != BASE_SOURCE_DELTA && source.delta_start & SPARSE_SOURCE_FLAG != 0)
+        .then_some((source.delta_start & SOURCE_OFFSET_MASK) as usize)
 }

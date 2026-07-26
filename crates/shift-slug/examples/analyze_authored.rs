@@ -124,11 +124,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         report.exact_component_variants,
     );
     println!(
-        "atlas_glyphs={} curves={} delta_curves={} sources={} packed_bytes={}",
+        "atlas_glyphs={} curves={} delta_curves={} sparse_indices={} sources={} dense_sources={} sparse_sources={} packed_bytes={}",
         statistics.glyph_count,
         statistics.curve_count,
         statistics.delta_curve_count,
+        statistics.delta_index_count,
         statistics.source_count,
+        statistics.dense_delta_source_count,
+        statistics.sparse_delta_source_count,
         packed.as_bytes().len(),
     );
     println!(

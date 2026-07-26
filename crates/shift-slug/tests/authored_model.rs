@@ -5,7 +5,7 @@ use shift_font::{
     LayerId, Location, PointType, SourceId,
 };
 use shift_slug::{
-    add_authored_component_projection_glyph, add_authored_projection_glyph,
+    add_authored_component_projection_glyph, add_authored_glyph, add_authored_projection_glyph,
     authored_glyph_requirements, curves_from_resolved_contours, AuthoredCurveRecipe,
     AuthoredSlugError, Curve, VariableAtlasBuilder,
 };
@@ -114,7 +114,10 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
     assert_eq!(component_occurrences, 20);
     assert_eq!(bases.len(), 4);
     assert_eq!(atlas.statistics().curve_count, 702);
-    assert_eq!(atlas.statistics().delta_curve_count, 2_289);
+    assert_eq!(atlas.statistics().delta_curve_count, 2_211);
+    assert_eq!(atlas.statistics().delta_index_count, 7);
+    assert_eq!(atlas.statistics().dense_delta_source_count, 148);
+    assert_eq!(atlas.statistics().sparse_delta_source_count, 6);
 
     let mut locations = font
         .sources()
@@ -218,6 +221,68 @@ fn component_fast_path_rejects_varying_scale() {
         AuthoredSlugError::VariableComponentLinearTransform { .. }
     ));
     assert!(builder.finish().glyphs().is_empty());
+}
+
+#[test]
+fn authored_glyph_keeps_exact_source_topology_resident() {
+    let font = sample_font();
+    let glyph_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
+    let projection = font.glyph_projection(&glyph_id).unwrap().unwrap();
+    let interpolation = projection.interpolation().unwrap();
+    let weight_indices = (1..=interpolation.sources().len() as u32).collect::<Vec<_>>();
+    let mut invalid_builder = VariableAtlasBuilder::default();
+    assert!(add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).is_err());
+    assert!(invalid_builder.finish().glyphs().is_empty());
+
+    let mut builder = VariableAtlasBuilder::default();
+    let authored =
+        add_authored_glyph(&mut builder, &font, &projection, &weight_indices, 0).unwrap();
+    let atlas = builder.finish();
+
+    assert_eq!(authored.exact_sources.len(), 1);
+    let exact = &authored.exact_sources[0];
+    assert_eq!(authored.glyph_for_source(None), authored.default_glyph);
+    assert_eq!(
+        authored.glyph_for_source(Some(&exact.source_id)),
+        exact.glyph_index
+    );
+
+    let regular = font
+        .sources()
+        .iter()
+        .find(|source| source.id() == font.default_source_id().unwrap())
+        .unwrap();
+    let mut weights = vec![0.0_f32; weight_indices.len() + 1];
+    weights[0] = 1.0;
+    for (weight_index, weight) in weight_indices.iter().zip(
+        interpolation
+            .basis()
+            .weights_at(regular.location(), font.axes())
+            .unwrap(),
+    ) {
+        weights[*weight_index as usize] = weight as f32;
+    }
+    let default_actual = atlas
+        .resolve_glyph_with_weights(authored.default_glyph, &weights)
+        .unwrap();
+    let mut regular_projection = font.projection(regular.location());
+    let regular_resolved = regular_projection.glyph(&glyph_id).unwrap().unwrap();
+    let default_expected = curves_from_resolved_contours(regular_resolved.contours()).unwrap();
+    assert_curves_close(&default_actual, &default_expected, 0.001);
+
+    let exact_source = font
+        .sources()
+        .iter()
+        .find(|source| source.id() == exact.source_id)
+        .unwrap();
+    let exact_actual = atlas
+        .resolve_glyph_with_weights(exact.glyph_index, &weights)
+        .unwrap();
+    let mut exact_projection = font.projection(exact_source.location());
+    let exact_resolved = exact_projection.glyph(&glyph_id).unwrap().unwrap();
+    let exact_expected = curves_from_resolved_contours(exact_resolved.contours()).unwrap();
+    assert_curves_close(&exact_actual, &exact_expected, 0.001);
+    assert_ne!(default_actual, exact_actual);
 }
 
 #[test]

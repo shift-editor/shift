@@ -5,6 +5,7 @@ use std::{error::Error, fmt};
 pub enum SlugError {
     InvalidBandCount(u32),
     InvalidAlignment(usize),
+    InvalidChunkSize(usize),
     NonFiniteCoordinate { command_index: usize },
     DrawingCommandWithoutContour { command_index: usize },
     CloseWithoutContour { command_index: usize },
@@ -27,6 +28,10 @@ impl fmt::Display for SlugError {
             Self::InvalidAlignment(alignment) => write!(
                 formatter,
                 "Slug section alignment must be a non-zero power of two, got {alignment}"
+            ),
+            Self::InvalidChunkSize(size) => write!(
+                formatter,
+                "Slug upload chunk size must be a non-zero multiple of four, got {size}"
             ),
             Self::NonFiniteCoordinate { command_index } => write!(
                 formatter,

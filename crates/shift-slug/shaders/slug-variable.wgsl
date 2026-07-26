@@ -60,6 +60,7 @@ struct VertexOutput {
 @group(1) @binding(4) var<storage, read> source_weights: array<f32>;
 @group(1) @binding(5) var<uniform> variable: VariableParams;
 @group(1) @binding(6) var<storage, read> line_bits: array<u32>;
+@group(1) @binding(7) var<storage, read> sparse_deltas: array<u32>;
 @group(2) @binding(0) var<storage, read_write> resolved_curves: array<Curve>;
 @group(2) @binding(1) var<storage, read_write> resolved_bands: array<Band>;
 @group(2) @binding(2) var<storage, read_write> resolved_indices: array<u32>;
@@ -125,10 +126,39 @@ fn resolve_visible_curves(
         var curve = scale_curve(base_curves[source_index], weight_sum);
         for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
             let source = variable_sources[glyph.source_start + source_offset];
-            if source.delta_start != 0xffffffffu {
+            if source.delta_start == 0xffffffffu {
+                continue;
+            }
+
+            var delta_start = source.delta_start;
+            var delta_offset = local_curve;
+            if (source.delta_start & 0x80000000u) != 0u {
+                let descriptor_start = source.delta_start & 0x7fffffffu;
+                delta_start = sparse_deltas[descriptor_start];
+                let delta_count = sparse_deltas[descriptor_start + 1u];
+                let index_start = descriptor_start + 2u;
+                delta_offset = 0xffffffffu;
+                var lower = 0u;
+                var upper = delta_count;
+                while lower < upper {
+                    let middle = lower + (upper - lower) / 2u;
+                    let candidate = sparse_deltas[index_start + middle];
+                    if candidate < local_curve {
+                        lower = middle + 1u;
+                    } else {
+                        upper = middle;
+                    }
+                }
+                if lower < delta_count
+                    && sparse_deltas[index_start + lower] == local_curve
+                {
+                    delta_offset = lower;
+                }
+            }
+            if delta_offset != 0xffffffffu {
                 curve = add_scaled_curve(
                     curve,
-                    curve_deltas[source.delta_start + local_curve],
+                    curve_deltas[delta_start + delta_offset],
                     source_weights[source.weight_index],
                 );
             }
