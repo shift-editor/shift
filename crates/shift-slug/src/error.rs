@@ -10,6 +10,9 @@ pub enum SlugError {
     CloseWithoutContour { command_index: usize },
     CloseWithoutDrawingSegment { command_index: usize },
     CompactIndexOverflow { glyph_index: u32, curve_count: u32 },
+    VariableTopologyMismatch { glyph_index: u32 },
+    GlyphIndexOutOfRange(u32),
+    NonFiniteVariableWeight,
     LengthOverflow,
 }
 
@@ -46,6 +49,16 @@ impl fmt::Display for SlugError {
                 formatter,
                 "glyph {glyph_index} has {curve_count} curves, exceeding compact u16 indexes"
             ),
+            Self::VariableTopologyMismatch { glyph_index } => write!(
+                formatter,
+                "glyph {glyph_index} has incompatible command topology between variable sources"
+            ),
+            Self::GlyphIndexOutOfRange(glyph_index) => {
+                write!(formatter, "Slug glyph index {glyph_index} is out of range")
+            }
+            Self::NonFiniteVariableWeight => {
+                formatter.write_str("Slug variable source weight must be finite")
+            }
             Self::LengthOverflow => formatter.write_str("Slug atlas length exceeds u32 limits"),
         }
     }

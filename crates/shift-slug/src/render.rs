@@ -17,6 +17,12 @@ pub struct RenderInstance {
     /// consumer tightens quad bounds.
     pub em_transform: [f32; 4],
     pub glyph_index: u32,
+    /// First curve in per-frame scratch storage for variable rendering.
+    pub scratch_curve_start: u32,
+    /// First band descriptor in per-frame scratch storage.
+    pub scratch_band_start: u32,
+    /// First band-index slot in per-frame scratch storage.
+    pub scratch_index_start: u32,
 }
 
 /// Per-frame values consumed by the shared Slug vertex shader.
@@ -38,8 +44,14 @@ pub fn pack_render_instances(instances: &[RenderInstance]) -> Result<Vec<u8>, Sl
         for value in instance.pixel_rect.into_iter().chain(instance.em_transform) {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
-        bytes.extend_from_slice(&instance.glyph_index.to_le_bytes());
-        bytes.extend_from_slice(&[0; 12]);
+        for value in [
+            instance.glyph_index,
+            instance.scratch_curve_start,
+            instance.scratch_band_start,
+            instance.scratch_index_start,
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
     }
     Ok(bytes)
 }

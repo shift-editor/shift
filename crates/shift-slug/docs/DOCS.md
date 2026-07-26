@@ -21,12 +21,15 @@ src/
   atlas.rs     glyph bounds, horizontal/vertical bands, atlas assembly
   pack.rs      aligned little-endian GPU upload layout
   render.rs    shared uniform and visible-instance byte layouts
+  variable.rs  two-source resident base/delta model and aligned packing
   error.rs     strict conversion and size failures
 shaders/
-  slug.wgsl    shared native-wgpu/Electron-WebGPU renderer
+  slug.wgsl           shared static native-wgpu/Electron-WebGPU renderer
+  slug-variable.wgsl  visible curve resolve, GPU re-banding, and variable renderer
 examples/
-  analyze_font.rs   CPU-only TTF/OTF curve/band sizing harness
-  benchmark_wgpu.rs adapter probe plus native offscreen render/readback benchmark
+  analyze_font.rs          CPU-only TTF/OTF curve/band sizing harness
+  benchmark_wgpu.rs        adapter probe plus native offscreen render/readback benchmark
+  benchmark_variable_wgpu.rs two-source compute scratch/readback validator
 tests/
   atlas.rs     conversion, band, range, shader-layout, and packing invariants
 ```
@@ -45,6 +48,16 @@ Band[]        u32 start + u32 count                        8 bytes each
 Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical ranges. Empty glyphs have zero curves and empty ranges but retain a descriptor, so dense glyph indexing remains stable.
 
 `CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses wide indexes by default and exposes compact indexes through `--compact-indices`.
+
+## Two-source variable execution
+
+The first variable model keeps one base quadratic array and one same-length `f32` delta array resident. Axis changes update a small weight buffer; one compute workgroup per visible glyph resolves `base + weight × delta` into scratch. A second compute pass rebuilds the eight horizontal and vertical bands for only those resolved curves. Fragment rendering therefore sees exact current-location membership without uploading geometry or retaining all-location conservative indexes.
+
+For 150 uniformly sampled Source Han glyphs, worst-case scratch reservation is bounded by the visible curves and `curve_count × 16` temporary band-index slots rather than all 65,535 glyphs. Multi-source sparse deltas, component evaluation, attachments, and exact-source topology variants remain subsequent model layers.
+
+Curve correspondence must come from stable authored/raw point topology. `VariableAtlasBuilder::add_glyph` compares command topology and exists for compatible fixtures; production adapters should derive corresponding curves from one shared segment recipe and call `add_curve_glyph`. Source Han glyph 1663 demonstrated why: skrifa emitted different resolved pen command kinds at `wght=100` and `wght=900`, even though compiled-font point variation may remain valid. Pairing independently resolved callback streams would silently associate unrelated curves, so the builder rejects it.
+
+MutatorSans currently passes base, midpoint, and source native compute validation with zero curve-coordinate error. GPU-generated band membership also matches the CPU oracle exactly. This proves the resident delta and visible re-banding path, not yet complete product variation semantics.
 
 ## Reference implementation
 
@@ -123,6 +136,9 @@ cargo run --release -p shift-slug --example analyze_font -- /path/to/font.ttf
 cargo run --release -p shift-slug --features wgpu-benchmark \
   --example benchmark_wgpu -- /path/to/font.ttf \
   --iterations 120 --output /tmp/shift-slug.pgm wght=900
+cargo run --release -p shift-slug --features wgpu-benchmark \
+  --example benchmark_variable_wgpu -- /path/to/font.ttf \
+  wght=100,900 --weight 0.5
 ```
 
 With no font argument, `benchmark_wgpu` only prints adapter capabilities. The analyzer remains CPU-only. The native benchmark is a correctness and diagnostic harness; packaged Electron/Dawn remains the product acceptance environment.

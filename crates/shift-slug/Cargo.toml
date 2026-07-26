@@ -27,8 +27,14 @@ wgpu = { version = "30.0.0", optional = true, default-features = false, features
 ] }
 
 [dev-dependencies]
+shift-font = { workspace = true, features = ["test-support"] }
+shift-wire = { workspace = true }
 skrifa = "0.32.0"
 
 [[example]]
 name = "benchmark_wgpu"
+required-features = ["wgpu-benchmark"]
+
+[[example]]
+name = "benchmark_variable_wgpu"
 required-features = ["wgpu-benchmark"]

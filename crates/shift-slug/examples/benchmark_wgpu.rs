@@ -688,6 +688,7 @@ fn build_instances(
             pixel_rect,
             em_transform,
             glyph_index,
+            ..Default::default()
         });
     }
     Ok(pack_render_instances(&instances)?)

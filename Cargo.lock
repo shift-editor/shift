@@ -2205,7 +2205,9 @@ version = "0.1.0"
 dependencies = [
  "naga",
  "pollster",
+ "shift-font",
  "shift-glyph-codec",
+ "shift-wire",
  "skrifa",
  "wgpu",
 ]

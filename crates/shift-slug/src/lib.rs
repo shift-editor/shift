@@ -10,6 +10,7 @@ mod curve;
 mod error;
 mod pack;
 mod render;
+mod variable;
 
 pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};
 pub use curve::{Bounds, Curve, Point, LINE_EPSILON};
@@ -19,6 +20,13 @@ pub use render::{
     pack_render_instances, pack_render_params, RenderInstance, RenderParams, RENDER_INSTANCE_BYTES,
     RENDER_PARAMS_BYTES,
 };
+pub use variable::{
+    PackedVariableAtlas, VariableAtlas, VariableAtlasBuilder, VariableGlyph, VariableLayout,
+    VariableStatistics,
+};
 
 /// Shader source shared by native `wgpu` and Electron WebGPU consumers.
 pub const SLUG_WGSL: &str = include_str!("../shaders/slug.wgsl");
+
+/// Two-source compute/re-band/render shader shared by native and Electron.
+pub const VARIABLE_SLUG_WGSL: &str = include_str!("../shaders/slug-variable.wgsl");

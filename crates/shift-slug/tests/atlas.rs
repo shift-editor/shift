@@ -3,8 +3,8 @@ use shift_glyph_codec::OutlineCommand;
 use shift_slug::SLUG_WGSL;
 use shift_slug::{
     pack_render_instances, pack_render_params, AtlasBuilder, Curve, CurveIndexEncoding, Point,
-    RenderInstance, RenderParams, SlugError, LINE_EPSILON, RENDER_INSTANCE_BYTES,
-    RENDER_PARAMS_BYTES,
+    RenderInstance, RenderParams, SlugError, VariableAtlasBuilder, LINE_EPSILON,
+    RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES,
 };
 
 #[test]
@@ -160,6 +160,103 @@ fn compact_indexes_are_glyph_local_and_pair_packed() {
 }
 
 #[test]
+fn variable_atlas_resolves_source_deltas_and_union_bounds() {
+    let base = [
+        OutlineCommand::Move { x: 0.0, y: 0.0 },
+        OutlineCommand::Quad {
+            cx: 50.0,
+            cy: 100.0,
+            x: 100.0,
+            y: 0.0,
+        },
+        OutlineCommand::Close,
+    ];
+    let source = [
+        OutlineCommand::Move { x: 20.0, y: -10.0 },
+        OutlineCommand::Quad {
+            cx: 80.0,
+            cy: 160.0,
+            x: 140.0,
+            y: 10.0,
+        },
+        OutlineCommand::Close,
+    ];
+    let mut builder = VariableAtlasBuilder::new(8).unwrap();
+    builder.add_glyph(base, source).unwrap();
+    let atlas = builder.finish();
+    let glyph = atlas.glyphs()[0];
+    let midpoint = atlas.resolve_glyph(0, 0.5).unwrap();
+
+    assert_eq!(atlas.statistics().glyph_count, 1);
+    assert_eq!(midpoint[0].p0, Point::new(10.0, -5.0));
+    assert_eq!(midpoint[0].p1, Point::new(65.0, 130.0));
+    assert_eq!(midpoint[0].p2, Point::new(120.0, 5.0));
+    assert!(glyph.bounds.min_x <= 0.0);
+    assert!(glyph.bounds.min_y <= -10.0);
+    assert!(glyph.bounds.max_x >= 140.0);
+    assert!(glyph.bounds.max_y >= 160.0);
+}
+
+#[test]
+fn variable_atlas_rejects_incompatible_topology_atomically() {
+    let mut builder = VariableAtlasBuilder::default();
+    let error = builder
+        .add_glyph(
+            [
+                OutlineCommand::Move { x: 0.0, y: 0.0 },
+                OutlineCommand::Line { x: 10.0, y: 10.0 },
+            ],
+            [
+                OutlineCommand::Move { x: 0.0, y: 0.0 },
+                OutlineCommand::Quad {
+                    cx: 5.0,
+                    cy: 5.0,
+                    x: 10.0,
+                    y: 10.0,
+                },
+            ],
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        SlugError::VariableTopologyMismatch { glyph_index: 0 }
+    );
+    assert!(builder.finish().glyphs().is_empty());
+}
+
+#[test]
+fn variable_packing_is_aligned_deterministic_and_little_endian() {
+    let mut builder = VariableAtlasBuilder::default();
+    builder
+        .add_glyph(
+            [
+                OutlineCommand::Move { x: 1.5, y: -2.0 },
+                OutlineCommand::Line { x: 10.0, y: 20.0 },
+            ],
+            [
+                OutlineCommand::Move { x: 2.5, y: -4.0 },
+                OutlineCommand::Line { x: 12.0, y: 24.0 },
+            ],
+        )
+        .unwrap();
+    let atlas = builder.finish();
+    let first = atlas.pack(256).unwrap();
+    let second = atlas.pack(256).unwrap();
+    let layout = first.layout();
+
+    assert_eq!(first, second);
+    assert_eq!(first.as_bytes().len(), layout.total_length);
+    assert_eq!(layout.curve_deltas.offset % 256, 0);
+    assert_eq!(layout.glyphs.offset % 256, 0);
+    assert_eq!(&first.as_bytes()[..4], &1.5_f32.to_le_bytes());
+    assert_eq!(
+        &first.as_bytes()[layout.curve_deltas.offset..layout.curve_deltas.offset + 4],
+        &1.0_f32.to_le_bytes()
+    );
+}
+
+#[test]
 fn invalid_inputs_fail_without_partial_glyphs() {
     let mut builder = AtlasBuilder::default();
     let error = builder
@@ -183,6 +280,9 @@ fn render_inputs_match_the_shared_little_endian_layout() {
         pixel_rect: [1.5, 2.0, 3.0, 4.0],
         em_transform: [-10.0, -20.0, 30.0, 40.0],
         glyph_index: 0x1234_5678,
+        scratch_curve_start: 3,
+        scratch_band_start: 5,
+        scratch_index_start: 7,
     }])
     .unwrap();
     let params = pack_render_params(RenderParams {
@@ -196,7 +296,9 @@ fn render_inputs_match_the_shared_little_endian_layout() {
     assert_eq!(&bytes[0..4], &1.5_f32.to_le_bytes());
     assert_eq!(&bytes[16..20], &(-10.0_f32).to_le_bytes());
     assert_eq!(&bytes[32..36], &0x1234_5678_u32.to_le_bytes());
-    assert!(bytes[36..].iter().all(|byte| *byte == 0));
+    assert_eq!(&bytes[36..40], &3_u32.to_le_bytes());
+    assert_eq!(&bytes[40..44], &5_u32.to_le_bytes());
+    assert_eq!(&bytes[44..48], &7_u32.to_le_bytes());
     assert_eq!(params.len(), RENDER_PARAMS_BYTES);
     assert_eq!(&params[8..12], &4.0_f32.to_le_bytes());
     assert_eq!(&params[12..16], &[0; 4]);
@@ -211,6 +313,13 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
         naga::valid::Capabilities::all(),
     )
     .validate(&module)
+    .unwrap();
+    let variable_module = naga::front::wgsl::parse_str(shift_slug::VARIABLE_SLUG_WGSL).unwrap();
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&variable_module)
     .unwrap();
 
     for (name, expected_span) in [
@@ -230,5 +339,27 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
             panic!("{name} is not a WGSL struct");
         };
         assert_eq!(span, expected_span, "unexpected WGSL span for {name}");
+    }
+
+    for (name, expected_span) in [
+        ("VariableParams", 16),
+        ("Instance", 48),
+        ("Curve", 24),
+        ("VariableGlyph", 32),
+        ("Band", 8),
+    ] {
+        let ty = variable_module
+            .types
+            .iter()
+            .map(|(_, ty)| ty)
+            .find(|ty| ty.name.as_deref() == Some(name))
+            .unwrap();
+        let naga::TypeInner::Struct { span, .. } = ty.inner else {
+            panic!("{name} is not a WGSL struct");
+        };
+        assert_eq!(
+            span, expected_span,
+            "unexpected variable WGSL span for {name}"
+        );
     }
 }
