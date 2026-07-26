@@ -650,7 +650,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] File → Open dialog (UFO, TTF, OTF)
 - [ ] Drag-and-drop font files
 - [ ] Recent files list
-- [ ] Variable font axis reading from binary
+- [x] Variable font axis reading from binary
 
 **Saving**
 

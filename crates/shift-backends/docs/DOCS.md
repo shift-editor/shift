@@ -35,6 +35,8 @@ src/
   glyphs/
     mod.rs         -- GlyphsReader re-export; fixture-based integration tests
     reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_font::Font (read-only)
+  binary/
+    reader.rs      -- TTF/OTF outlines, metrics, names, and fvar metadata -> shift_font::Font
   shift2fontir/
     source.rs      -- owned Shift FontView snapshot and fontir Source implementation
     axes.rs         -- Shift axis/mapping conversion and source normalization
@@ -64,6 +66,8 @@ src/
 **Point type mapping (read):** norad uses separate `Move`, `Line`, `Curve`, `OffCurve`, `QCurve` types. The IR collapses `Move`/`Line`/`Curve` into `OnCurve` and keeps `OffCurve` and `QCurve` distinct. On write, context (position in contour, open/closed, preceding point type) is used to reconstruct the correct norad variant.
 
 **Multi-layer support:** `UfoReader` iterates all norad layers. The `public.default` layer maps to the IR's default layer; other layers are added via `Font::add_layer`. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
+
+**Binary variation metadata:** The TTF/OTF reader imports `fvar` axis definitions, hidden flags, and named instances into the Shift IR. Binary glyph geometry is still materialized only at the default variation location; recovering editable `gvar` sources is separate work.
 
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
 
