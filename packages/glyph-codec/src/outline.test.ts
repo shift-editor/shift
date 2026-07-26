@@ -59,6 +59,10 @@ function fixture(file: string): Uint8Array {
   return readFileSync(new URL(`../../../fixtures/glyph-codec/outline-v1/${file}`, import.meta.url));
 }
 
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
 function f32Commands(commands: readonly OutlineCommand[]): OutlineCommand[] {
   return commands.map((command) => {
     switch (command.kind) {
@@ -259,9 +263,12 @@ describe("strict outline decoding", () => {
 
       try {
         const outline = decodeOutline(mutated);
-        expect(packOutline([...outline]).toUint8Array()).toEqual(mutated);
+        const canonical = packOutline([...outline]).toUint8Array();
+        if (!bytesEqual(canonical, mutated)) {
+          throw new Error("decoder accepted a non-canonical outline encoding");
+        }
       } catch (error) {
-        expect(error).toBeInstanceOf(GlyphCodecError);
+        if (!(error instanceof GlyphCodecError)) throw error;
       }
     }
   });
