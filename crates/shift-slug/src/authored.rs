@@ -81,6 +81,23 @@ impl AuthoredAtlasBuilder {
         })
     }
 
+    /// Adds an identity-preserving blank for an authored glyph without layers.
+    pub fn add_empty_glyph(
+        &mut self,
+        constant_weight_index: u32,
+    ) -> Result<AuthoredGlyph, AuthoredSlugError> {
+        let default_glyph = self.builder.add_curve_glyph_with_sources_and_lines(
+            std::iter::empty(),
+            std::iter::empty(),
+            constant_weight_index,
+            std::iter::empty(),
+        )?;
+        Ok(AuthoredGlyph {
+            default_glyph,
+            exact_sources: Vec::new(),
+        })
+    }
+
     pub fn add_glyph(
         &mut self,
         font: &Font,

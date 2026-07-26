@@ -33,6 +33,8 @@ export interface GlyphGridOptions {
   /** Catalog index of the first rendered glyph; anchors outward warm-up. */
   readonly warmupCenterIndex?: number;
   readonly location: Signal<AxisLocation>;
+  /** Stops geometry acquisition after the resident Slug generation is visible. */
+  readonly enabled?: boolean;
 }
 
 /** Window must hold still this long before live models load for it. */
@@ -78,6 +80,7 @@ export function useGlyphGridFrame({
   warmupGlyphIds,
   warmupCenterIndex,
   location,
+  enabled = true,
 }: GlyphGridOptions): GlyphGridFrame {
   const editor = useEditor();
   const font = editor.font;
@@ -116,12 +119,18 @@ export function useGlyphGridFrame({
   // SETTLE_MS; windows scrolled past never load models at all.
   useEffect(() => {
     latestGlyphIdsRef.current = glyphIds;
+    if (!enabled) {
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+      return undefined;
+    }
+    let cancelled = false;
 
     async function loadLatestPreviews(): Promise<void> {
       if (previewLoadingRef.current) return;
       previewLoadingRef.current = true;
       try {
         for (;;) {
+          if (cancelled) return;
           const requested = latestGlyphIdsRef.current;
           const locationValue = location.peek();
           const key = axisLocationKey(locationValue);
@@ -146,7 +155,7 @@ export function useGlyphGridFrame({
 
           if (wanted.length > 0) {
             const results = await font.glyphPreviews(wanted, locationValue);
-            if (!mountedRef.current) return;
+            if (cancelled || !mountedRef.current) return;
             if (previewCache.key === key && results.length > 0) {
               previewCache.fill(results);
               setPrefetched({ key, version: previewCache.version });
@@ -173,6 +182,7 @@ export function useGlyphGridFrame({
       try {
         const requested = latestGlyphIdsRef.current;
         const loadedGlyphs = await font.loadGlyphs(requested);
+        if (cancelled) return;
 
         if (latestGlyphIdsRef.current !== requested) {
           scheduleSettledLoad();
@@ -189,13 +199,17 @@ export function useGlyphGridFrame({
     function scheduleSettledLoad(): void {
       if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
       settleTimerRef.current = setTimeout(() => {
-        void loadSettledWindow();
+        if (!cancelled) void loadSettledWindow();
       }, SETTLE_MS);
     }
 
     void loadLatestPreviews();
     scheduleSettledLoad();
-  }, [editor, font, glyphIds, location]);
+    return () => {
+      cancelled = true;
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    };
+  }, [editor, enabled, font, glyphIds, location]);
 
   // Resolve rendered ids to resident models so rows entering the window paint
   // as soon as their glyphs are in the store; ids without a model fall back to

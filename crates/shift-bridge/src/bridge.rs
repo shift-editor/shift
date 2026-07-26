@@ -13,18 +13,22 @@ use shift_font::{
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
 };
+use shift_slug::{
+  build_authored_atlas, AuthoredAtlas, Section as SlugSection, VariableAtlas, VariableLayout,
+};
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
     NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview,
     NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
-    NapiPointSeed, NapiSource, NapiSourceMetricsInterpolationReplacement,
+    NapiInterpolationBasis, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
+    NapiNamedInstance, NapiPointSeed, NapiSource, NapiSourceMetricsInterpolationReplacement,
     NapiSourceMetricsInterpolationSnapshot,
   },
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
   GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure,
-  MetricDefinition, NamedInstance, Source, SourceMetricsInterpolationSnapshot,
+  InterpolationBasis as WireInterpolationBasis, MetricDefinition, NamedInstance, Source,
+  SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError, WorkspaceSource,
@@ -77,6 +81,69 @@ pub struct NapiPackageDraft {
   pub source_path: String,
   pub base_fingerprint: String,
   pub dirty: bool,
+}
+
+#[napi(object)]
+pub struct NapiSlugSection {
+  pub offset: u32,
+  pub length: u32,
+}
+
+#[napi(object)]
+pub struct NapiSlugLayout {
+  pub base_curves: NapiSlugSection,
+  pub curve_deltas: NapiSlugSection,
+  pub sparse_deltas: NapiSlugSection,
+  pub glyphs: NapiSlugSection,
+  pub sources: NapiSlugSection,
+  pub source_advances: NapiSlugSection,
+  pub component_glyphs: NapiSlugSection,
+  pub component_parts: NapiSlugSection,
+  pub components: NapiSlugSection,
+  pub component_sources: NapiSlugSection,
+  pub anchor_sources: NapiSlugSection,
+  pub line_bits: NapiSlugSection,
+  pub total_length: u32,
+}
+
+#[napi(object)]
+pub struct NapiSlugExactSource {
+  #[napi(ts_type = "SourceId")]
+  pub source_id: String,
+  pub glyph_index: u32,
+}
+
+#[napi(object)]
+pub struct NapiSlugGlyph {
+  #[napi(ts_type = "GlyphId")]
+  pub glyph_id: String,
+  pub default_glyph: u32,
+  pub exact_sources: Vec<NapiSlugExactSource>,
+}
+
+#[napi(object)]
+pub struct NapiSlugWeightSet {
+  pub basis: NapiInterpolationBasis,
+  pub source_weight_indices: Vec<u32>,
+}
+
+#[napi(object)]
+pub struct NapiSlugAtlas {
+  pub generation: u32,
+  pub band_count: u32,
+  pub weight_count: u32,
+  pub layout: NapiSlugLayout,
+  pub glyphs: Vec<NapiSlugGlyph>,
+  pub weight_sets: Vec<NapiSlugWeightSet>,
+  pub atlas_glyph_count: u32,
+  pub curve_count: u32,
+  pub component_count: u32,
+}
+
+struct SlugAtlasGeneration {
+  generation: u32,
+  alignment: usize,
+  atlas: VariableAtlas,
 }
 
 fn new_workspace_from_options(options: Option<NapiNewWorkspace>) -> NewWorkspace {
@@ -142,6 +209,80 @@ impl TryFrom<PackageDraft> for NapiPackageDraft {
       dirty: draft.dirty,
     })
   }
+}
+
+fn napi_slug_section(section: SlugSection) -> BridgeResult<NapiSlugSection> {
+  Ok(NapiSlugSection {
+    offset: u32::try_from(section.offset).map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    length: u32::try_from(section.length).map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+  })
+}
+
+fn napi_slug_layout(layout: VariableLayout) -> BridgeResult<NapiSlugLayout> {
+  Ok(NapiSlugLayout {
+    base_curves: napi_slug_section(layout.base_curves)?,
+    curve_deltas: napi_slug_section(layout.curve_deltas)?,
+    sparse_deltas: napi_slug_section(layout.sparse_deltas)?,
+    glyphs: napi_slug_section(layout.glyphs)?,
+    sources: napi_slug_section(layout.sources)?,
+    source_advances: napi_slug_section(layout.source_advances)?,
+    component_glyphs: napi_slug_section(layout.component_glyphs)?,
+    component_parts: napi_slug_section(layout.component_parts)?,
+    components: napi_slug_section(layout.components)?,
+    component_sources: napi_slug_section(layout.component_sources)?,
+    anchor_sources: napi_slug_section(layout.anchor_sources)?,
+    line_bits: napi_slug_section(layout.line_bits)?,
+    total_length: u32::try_from(layout.total_length)
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+  })
+}
+
+fn napi_slug_atlas(
+  generation: u32,
+  authored: &AuthoredAtlas,
+  layout: VariableLayout,
+) -> BridgeResult<NapiSlugAtlas> {
+  let statistics = authored.atlas().statistics();
+  let glyphs = authored
+    .glyphs()
+    .iter()
+    .map(|glyph| NapiSlugGlyph {
+      glyph_id: glyph.glyph_id.to_string(),
+      default_glyph: glyph.authored.default_glyph,
+      exact_sources: glyph
+        .authored
+        .exact_sources
+        .iter()
+        .map(|source| NapiSlugExactSource {
+          source_id: source.source_id.to_string(),
+          glyph_index: source.glyph_index,
+        })
+        .collect(),
+    })
+    .collect();
+  let weight_sets = authored
+    .weight_sets()
+    .iter()
+    .map(|set| NapiSlugWeightSet {
+      basis: NapiInterpolationBasis::from(WireInterpolationBasis::from(set.basis())),
+      source_weight_indices: set.source_weight_indices().to_vec(),
+    })
+    .collect();
+
+  Ok(NapiSlugAtlas {
+    generation,
+    band_count: authored.atlas().band_count(),
+    weight_count: authored.weight_count(),
+    layout: napi_slug_layout(layout)?,
+    glyphs,
+    weight_sets,
+    atlas_glyph_count: u32::try_from(statistics.glyph_count)
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    curve_count: u32::try_from(statistics.curve_count)
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    component_count: u32::try_from(statistics.component_count)
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+  })
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -286,6 +427,8 @@ pub struct Bridge {
   workspace: Option<FontWorkspace>,
   live_version: DocumentVersion,
   saved_version: DocumentVersion,
+  slug_generation: u32,
+  slug_atlas: Option<SlugAtlasGeneration>,
 }
 
 #[napi]
@@ -296,6 +439,8 @@ impl Bridge {
       workspace: None,
       live_version: DocumentVersion::default(),
       saved_version: DocumentVersion::default(),
+      slug_generation: 0,
+      slug_atlas: None,
     }
   }
 
@@ -675,6 +820,98 @@ impl Bridge {
     Ok(previews)
   }
 
+  /// Builds one complete authored Slug generation without resolving a location.
+  ///
+  /// The returned metadata is small enough for the ordinary sync lane. Packed
+  /// geometry remains native until `stream_slug_atlas` emits bounded chunks.
+  #[napi]
+  pub fn prepare_slug_atlas(&mut self, alignment: u32) -> errors::Result<NapiSlugAtlas> {
+    let authored = build_authored_atlas(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+    let layout = authored.atlas().layout(alignment as usize)?;
+    self.slug_generation = self
+      .slug_generation
+      .checked_add(1)
+      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    let generation = self.slug_generation;
+    let result = napi_slug_atlas(generation, &authored, layout)?;
+    self.slug_atlas = Some(SlugAtlasGeneration {
+      generation,
+      alignment: alignment as usize,
+      atlas: authored.into_atlas(),
+    });
+    Ok(result)
+  }
+
+  /// Streams the prepared generation with native Web Stream backpressure.
+  ///
+  /// A capacity-one channel bounds temporary memory to one upload chunk. The
+  /// authored atlas moves to the producer thread and is dropped when the stream
+  /// completes, so GPU residency retains no second atlas-sized CPU copy.
+  #[napi]
+  pub fn stream_slug_atlas(
+    &mut self,
+    env: &Env,
+    generation: u32,
+    maximum_length: u32,
+  ) -> Result<ReadableStream<'_, BufferSlice<'_>>> {
+    let prepared_generation = self
+      .slug_atlas
+      .as_ref()
+      .map(|prepared| prepared.generation)
+      .ok_or_else(|| {
+        Error::new(
+          Status::InvalidArg,
+          format!("unknown Slug atlas generation {generation}"),
+        )
+      })?;
+    if prepared_generation != generation {
+      return Err(Error::new(
+        Status::InvalidArg,
+        format!("unknown Slug atlas generation {generation}"),
+      ));
+    }
+
+    let prepared = self
+      .slug_atlas
+      .take()
+      .expect("prepared Slug generation was checked above");
+    let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Vec<u8>>>(1);
+    std::thread::spawn(move || {
+      let mut receiver_closed = false;
+      let result =
+        prepared
+          .atlas
+          .write_packed_chunks(prepared.alignment, maximum_length as usize, |chunk| {
+            if receiver_closed {
+              return;
+            }
+            receiver_closed = sender.blocking_send(Ok(chunk.bytes.to_vec())).is_err();
+          });
+      if !receiver_closed {
+        if let Err(error) = result {
+          let _ = sender.blocking_send(Err(Error::new(Status::GenericFailure, error.to_string())));
+        }
+      }
+    });
+
+    ReadableStream::create_with_stream_bytes(
+      env,
+      tokio_stream::wrappers::ReceiverStream::new(receiver),
+    )
+  }
+
+  /// Releases a prepared generation after adapter rejection or initialization failure.
+  #[napi]
+  pub fn discard_slug_atlas(&mut self, generation: u32) {
+    if self
+      .slug_atlas
+      .as_ref()
+      .is_some_and(|prepared| prepared.generation == generation)
+    {
+      self.slug_atlas = None;
+    }
+  }
+
   #[napi]
   pub fn is_variable(&self) -> errors::Result<bool> {
     Ok(self.font()?.is_variable())
@@ -814,6 +1051,7 @@ impl Bridge {
   }
 
   fn mark_font_changed(&mut self) {
+    self.slug_atlas = None;
     self.bump_live_version();
   }
 
@@ -826,6 +1064,7 @@ impl Bridge {
   }
 
   fn reset_versions(&mut self) {
+    self.slug_atlas = None;
     self.live_version = DocumentVersion::default();
     self.saved_version = DocumentVersion::default();
   }

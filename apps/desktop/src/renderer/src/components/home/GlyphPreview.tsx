@@ -12,22 +12,29 @@ interface GlyphPreviewProps {
   preview: GlyphGridPreview;
   metrics: SourceMetrics;
   height?: number;
+  hideFill?: boolean;
 }
 
-export function GlyphPreview({ preview, metrics, height = CELL_HEIGHT }: GlyphPreviewProps) {
+export function GlyphPreview({
+  preview,
+  metrics,
+  height = CELL_HEIGHT,
+  hideFill = false,
+}: GlyphPreviewProps) {
   const layout = new GlyphPreviewLayout(metrics, preview.xAdvance, height);
   const containerStyle = { width: layout.width, height: layout.height };
 
-  if (!preview.svgPath) return <div style={containerStyle} />;
+  if (!preview.svgPath) return <div data-slug-preview style={containerStyle} />;
 
   return (
-    <div style={containerStyle} className="flex items-center justify-center">
+    <div data-slug-preview style={containerStyle} className="flex items-center justify-center">
       <svg
         width="100%"
         height="100%"
         viewBox={layout.viewBox}
         preserveAspectRatio="xMidYMid meet"
         className="overflow-hidden"
+        style={{ visibility: hideFill ? "hidden" : "visible" }}
       >
         <g transform="scale(1, -1)">
           <path d={preview.svgPath} fill="currentColor" fillRule="nonzero" />

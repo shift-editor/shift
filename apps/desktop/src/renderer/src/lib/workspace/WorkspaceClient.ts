@@ -1,5 +1,7 @@
 import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
 import type {
+  SlugAtlasStreamControl,
+  SlugAtlasStreamMessage,
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentState,
@@ -16,6 +18,7 @@ import type {
   GlyphPreview,
   GlyphProjection,
   Location,
+  SlugAtlas,
 } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
@@ -190,6 +193,76 @@ export class WorkspaceClient {
       glyphIds: [...glyphIds],
       location,
     });
+  }
+
+  /** Builds the current authored font's location-independent Slug generation. */
+  async prepareSlugAtlas(alignment: number): Promise<SlugAtlas> {
+    await this.connect();
+
+    return this.#require().call("workspace.slugAtlasPrepare", { alignment });
+  }
+
+  /** Writes one prepared Slug generation through bounded, ordered chunks. */
+  async streamSlugAtlas(
+    generation: number,
+    maximumLength: number,
+    write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
+  ): Promise<number> {
+    await this.connect();
+
+    const ports = new MessageChannel();
+    const completion = new Promise<{ totalLength: number; error: Error | null }>((resolve) => {
+      ports.port1.onmessage = (event: MessageEvent<SlugAtlasStreamMessage>) => {
+        const message = event.data;
+        switch (message.kind) {
+          case "chunk":
+            try {
+              write(message.offset, message.bytes);
+              ports.port1.postMessage({
+                kind: "ack",
+                nextOffset: message.offset + message.bytes.byteLength,
+              } satisfies SlugAtlasStreamControl);
+            } catch (error) {
+              const streamError = error instanceof Error ? error : new Error(String(error));
+              try {
+                ports.port1.postMessage({
+                  kind: "cancel",
+                  message: streamError.message,
+                } satisfies SlugAtlasStreamControl);
+              } catch (cancelError) {
+                console.error("failed to cancel resident Slug stream", cancelError);
+              }
+              resolve({ totalLength: message.offset, error: streamError });
+              ports.port1.close();
+            }
+            return;
+          case "complete":
+            resolve({ totalLength: message.totalLength, error: null });
+            return;
+          case "error":
+            resolve({ totalLength: 0, error: new Error(message.message) });
+        }
+      };
+    });
+    ports.port1.start();
+
+    try {
+      await this.#require().call("workspace.slugAtlasStream", { generation, maximumLength }, [
+        ports.port2,
+      ]);
+      const result = await completion;
+      if (result.error) throw result.error;
+      return result.totalLength;
+    } finally {
+      ports.port1.close();
+    }
+  }
+
+  /** Releases a prepared generation that was rejected before streaming. */
+  async discardSlugAtlas(generation: number): Promise<void> {
+    await this.connect();
+
+    await this.#require().call("workspace.slugAtlasDiscard", { generation });
   }
 
   /**

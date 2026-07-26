@@ -1,11 +1,13 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GlyphGridRow } from "./GlyphGridRow";
+import { SlugGlyphGrid } from "./SlugGlyphGrid";
 import { useGlyphGridFrame } from "./useGlyphGridFrame";
 import { ROW_HEIGHT, useGlyphGridVirtualization } from "./useGlyphGridVirtualization";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { getShiftHost } from "@/host/shiftHost";
+import { useSignalState } from "@/lib/signals";
 
 /** Coordinates catalog virtualization, Glyph frame preparation, and row rendering. */
 export const GlyphGrid = memo(function GlyphGrid() {
@@ -13,6 +15,11 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const editor = useEditor();
   const font = editor.font;
   const { filteredGlyphs } = useGlyphCatalog();
+  const atlasRevision = useSignalState(font.slugAtlasRevisionCell);
+  const [readyAtlasRevision, setReadyAtlasRevision] = useState<{
+    revision: unknown;
+  } | null>(null);
+  const slugReady = readyAtlasRevision?.revision === atlasRevision;
   const {
     scrollContainerRef,
     rows,
@@ -42,6 +49,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     warmupGlyphIds,
     warmupCenterIndex: renderedStartIndex,
     location: editor.designLocationCell,
+    enabled: !slugReady,
   });
 
   const metrics = useMemo(() => font.metricsAtLocation(frame.location), [font, frame.location]);
@@ -52,23 +60,25 @@ export const GlyphGrid = memo(function GlyphGrid() {
 
   const missingPreviews = pendingGlyphIds.filter((glyphId) => !frame.previews.has(glyphId)).length;
 
-  // Atomic frames: a window is displayed only once every cell has a preview.
-  // Until then the last complete window stays up — stale glyphs, never
-  // placeholder fields, per the review-surface doctrine.
-  const pendingComplete = pendingRows.length > 0 && missingPreviews === 0;
-  const completeFrameRef = useRef<{
+  // Preserve an independently complete SVG fallback even while Slug is active.
+  // Device loss can reveal this stale frame atomically while current previews
+  // refill; a GPU-only row must never overwrite the last complete DOM frame.
+  const pendingFallbackComplete = pendingRows.length > 0 && missingPreviews === 0;
+  const completeFallbackRef = useRef<{
     rows: typeof pendingRows;
     previews: typeof frame.previews;
     metrics: typeof metrics;
   } | null>(null);
-  if (pendingComplete) {
-    completeFrameRef.current = { rows: pendingRows, previews: frame.previews, metrics };
+  if (pendingFallbackComplete) {
+    completeFallbackRef.current = { rows: pendingRows, previews: frame.previews, metrics };
   }
-  const display = completeFrameRef.current ?? {
-    rows: pendingRows,
-    previews: frame.previews,
-    metrics,
-  };
+  const display = slugReady
+    ? { rows: pendingRows, previews: frame.previews, metrics }
+    : (completeFallbackRef.current ?? {
+        rows: pendingRows,
+        previews: frame.previews,
+        metrics,
+      });
 
   // Inverse sticky (Pierre): the rendered block lives in a sticky container
   // whose offsets keep it clung to whichever viewport edge outruns rendering.
@@ -95,6 +105,12 @@ export const GlyphGrid = memo(function GlyphGrid() {
     void showMeasuredWorkspace();
   }, [firstFrameReady, width]);
 
+  const handleSlugReady = useCallback(
+    () => setReadyAtlasRevision({ revision: atlasRevision }),
+    [atlasRevision],
+  );
+  const handleSlugUnavailable = useCallback(() => setReadyAtlasRevision(null), []);
+
   const handleCellClick = useCallback(
     async (glyph: GlyphCatalogItem) => {
       try {
@@ -112,6 +128,20 @@ export const GlyphGrid = memo(function GlyphGrid() {
       ref={scrollContainerRef}
       className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden p-5"
     >
+      {filteredGlyphs.length > 0 ? (
+        <SlugGlyphGrid
+          containerRef={scrollContainerRef}
+          glyphIds={display.rows.flatMap((row) => row.glyphs.map((glyph) => glyph.id))}
+          location={frame.location}
+          axes={font.getAxes()}
+          metrics={display.metrics}
+          sourceId={font.sourceAt(frame.location)?.id ?? null}
+          atlasRevision={atlasRevision}
+          visible={slugReady}
+          onFirstFrame={handleSlugReady}
+          onUnavailable={handleSlugUnavailable}
+        />
+      ) : null}
       {filteredGlyphs.length === 0 ? (
         <div className="flex h-full items-center justify-center px-4 text-sm text-muted">
           No glyphs match this filter.
@@ -147,6 +177,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
                   cellWidth={cellWidth}
                   previews={display.previews}
                   metrics={display.metrics}
+                  slugReady={slugReady}
                   openGlyph={handleCellClick}
                 />
               ))}

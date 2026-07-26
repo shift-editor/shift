@@ -13,6 +13,12 @@ struct VariableParams {
     _padding: vec2<u32>,
 };
 
+struct PreviewParams {
+    color: vec4<f32>,
+    // view height, font-space top, preview height, font-space side margin
+    geometry: vec4<f32>,
+};
+
 struct Instance {
     pixel_rect: vec4<f32>,
     em_transform: vec4<f32>,
@@ -125,6 +131,8 @@ struct VertexOutput {
 @group(2) @binding(3) var<storage, read_write> resolved_glyph_bounds: array<vec4<f32>>;
 @group(2) @binding(4) var<storage, read_write> resolved_glyph_advances: array<f32>;
 @group(2) @binding(5) var<storage, read_write> resolved_component_transforms: array<Affine>;
+@group(3) @binding(0) var<storage, read> preview_resolved_advances: array<f32>;
+@group(3) @binding(1) var<uniform> preview: PreviewParams;
 
 var<workgroup> workgroup_curve_bounds: array<vec4<f32>, 64>;
 var<workgroup> workgroup_transform_start: u32;
@@ -518,6 +526,44 @@ fn vertex_variable(
     return output;
 }
 
+// Advance-fitted preview path. Consumers provide the content rectangle and
+// layout values; this shader owns no row, cell, gap, or padding policy.
+@vertex
+fn vertex_variable_preview(
+    @builtin(vertex_index) vertex_index: u32,
+    @builtin(instance_index) instance_index: u32,
+) -> VertexOutput {
+    let instance = instances[instance_index];
+    let content_size = max(instance.pixel_rect.zw - instance.pixel_rect.xy, vec2<f32>(1.0));
+    let view_height = max(preview.geometry.x, 1.0);
+    let advance = preview_resolved_advances[instance_index];
+    let side_margin = preview.geometry.w;
+    let view_width = max(advance + 2.0 * side_margin, 1.0);
+    let requested_size = vec2<f32>(
+        max(preview.geometry.z, preview.geometry.z * view_width / view_height),
+        preview.geometry.z,
+    );
+    let preview_size = min(content_size, requested_size);
+    let preview_min = (instance.pixel_rect.xy + instance.pixel_rect.zw - preview_size) * 0.5;
+    let preview_max = preview_min + preview_size;
+    let pixel_position = mix(preview_min, preview_max, quad_coordinate(vertex_index));
+    let clip_position = vec2<f32>(
+        pixel_position.x / params.viewport_size.x * 2.0 - 1.0,
+        1.0 - pixel_position.y / params.viewport_size.y * 2.0,
+    );
+    let em_scale = vec2<f32>(view_width / preview_size.x, -view_height / preview_size.y);
+
+    var output: VertexOutput;
+    output.position = vec4<f32>(clip_position, 0.0, 1.0);
+    output.em_scale = em_scale;
+    output.em_offset = vec2<f32>(
+        -side_margin - preview_min.x * em_scale.x,
+        preview.geometry.y - preview_min.y * em_scale.y,
+    );
+    output.instance_index = instance_index;
+    return output;
+}
+
 fn calculate_root_code(y1: f32, y2: f32, y3: f32) -> u32 {
     let i1 = bitcast<u32>(y1) >> 31u;
     let i2 = bitcast<u32>(y2) >> 30u;
@@ -644,4 +690,15 @@ fn fragment_variable(input: VertexOutput) -> @location(0) vec4<f32> {
         variable_curve_ranges(position_em, input.instance_index),
     );
     return vec4<f32>(0.0, 0.0, 0.0, coverage);
+}
+
+@fragment
+fn fragment_variable_preview(input: VertexOutput) -> @location(0) vec4<f32> {
+    let position_em = input.position.xy * input.em_scale + input.em_offset;
+    let coverage = variable_coverage(
+        position_em,
+        variable_curve_ranges(position_em, input.instance_index),
+    );
+    let alpha = preview.color.a * coverage;
+    return vec4<f32>(preview.color.rgb * alpha, alpha);
 }

@@ -466,6 +466,7 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
 
     for (name, expected_span) in [
         ("VariableParams", 16),
+        ("PreviewParams", 32),
         ("Instance", 48),
         ("Curve", 24),
         ("VariableGlyph", 32),

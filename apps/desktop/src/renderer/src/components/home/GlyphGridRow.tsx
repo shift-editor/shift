@@ -11,6 +11,7 @@ interface GlyphGridRowProps {
   readonly cellWidth: number;
   readonly previews: ReadonlyMap<GlyphId, GlyphGridPreview>;
   readonly metrics: SourceMetrics;
+  readonly slugReady: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
 }
 
@@ -27,6 +28,7 @@ function rowPropsEqual(prev: GlyphGridRowProps, next: GlyphGridRowProps): boolea
   if (
     prev.cellWidth !== next.cellWidth ||
     prev.metrics !== next.metrics ||
+    prev.slugReady !== next.slugReady ||
     prev.openGlyph !== next.openGlyph ||
     prev.row.key !== next.row.key ||
     prev.row.start !== next.row.start ||
@@ -59,6 +61,7 @@ export const GlyphGridRow = memo(function GlyphGridRow({
   cellWidth,
   previews,
   metrics,
+  slugReady,
   openGlyph,
 }: GlyphGridRowProps) {
   return (
@@ -73,7 +76,9 @@ export const GlyphGridRow = memo(function GlyphGridRow({
       className="flex gap-2 px-4"
     >
       {row.glyphs.map((glyph) => {
-        const preview = previews.get(glyph.id);
+        const preview =
+          previews.get(glyph.id) ??
+          (slugReady ? { svgPath: "", xAdvance: metrics.unitsPerEm / 2 } : undefined);
 
         return (
           <div
@@ -90,11 +95,17 @@ export const GlyphGridRow = memo(function GlyphGridRow({
                 variant="ghost"
                 className="w-full min-w-0 overflow-hidden"
                 style={{ height: CELL_HEIGHT }}
+                data-slug-glyph-id={glyph.id}
                 onClick={async () => {
                   await openGlyph(glyph);
                 }}
               >
-                <GlyphPreview preview={preview} metrics={metrics} height={CELL_HEIGHT} />
+                <GlyphPreview
+                  preview={preview}
+                  metrics={metrics}
+                  height={CELL_HEIGHT}
+                  hideFill={slugReady}
+                />
               </Button>
             ) : (
               <div

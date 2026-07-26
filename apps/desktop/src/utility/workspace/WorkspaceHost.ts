@@ -4,6 +4,8 @@ import { serveChannel, type ChannelServer, type Transport } from "../../shared/w
 import type {
   ShellCallMap,
   ShellEventMap,
+  SlugAtlasStreamControl,
+  SlugAtlasStreamMessage,
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentSourceKind,
@@ -13,6 +15,7 @@ import type {
   WorkspacePackageIdentity,
   WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
+import { errorToMessage } from "../../shared/errors";
 import { DocumentStorage } from "./DocumentStorage";
 import { PackageOpener } from "./PackageOpener";
 import { PackageAddress, type DocumentAllocation } from "./types";
@@ -25,6 +28,41 @@ import { PackageAddress, type DocumentAllocation } from "./types";
  * Electron: tests pass `nodePortTransport`, the production entry passes
  * `parentPortTransport()` and `electronPortTransport`.
  */
+type SlugAtlasPort = {
+  postMessage(message: SlugAtlasStreamMessage): void;
+  once(event: string, listener: (value?: unknown) => void): void;
+  off(event: string, listener: (value?: unknown) => void): void;
+  start(): void;
+  close(): void;
+};
+
+function nextSlugAtlasControl(port: SlugAtlasPort): Promise<SlugAtlasStreamControl> {
+  return new Promise((resolve, reject) => {
+    const onMessage = (value?: unknown) => {
+      cleanup();
+      const message =
+        typeof value === "object" && value !== null && "data" in value
+          ? (value as { data: unknown }).data
+          : value;
+      if (typeof message !== "object" || message === null || !("kind" in message)) {
+        reject(new Error("resident Slug stream received invalid backpressure"));
+        return;
+      }
+      resolve(message as SlugAtlasStreamControl);
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error("resident Slug stream response port closed"));
+    };
+    const cleanup = () => {
+      port.off("message", onMessage);
+      port.off("close", onClose);
+    };
+    port.once("message", onMessage);
+    port.once("close", onClose);
+  });
+}
+
 export type WorkspaceHostOptions = {
   documentsRoot: string;
   shell: Transport;
@@ -118,9 +156,74 @@ export class WorkspaceHost {
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
       "workspace.glyphPreviews": ({ glyphIds, location }) =>
         this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location)),
+      "workspace.slugAtlasPrepare": ({ alignment }) =>
+        this.#serialize(() => this.#bridge.prepareSlugAtlas(alignment)),
+      "workspace.slugAtlasStream": ({ generation, maximumLength }, context) =>
+        this.#serialize(() => this.#streamSlugAtlas(generation, maximumLength, context.ports)),
+      "workspace.slugAtlasDiscard": ({ generation }) =>
+        this.#serialize(() => {
+          this.#bridge.discardSlugAtlas(generation);
+          return null;
+        }),
       "workspace.mapLocation": (location) =>
         this.#serialize(() => this.#bridge.mapLocation(location)),
     });
+  }
+
+  async #streamSlugAtlas(
+    generation: number,
+    maximumLength: number,
+    ports: readonly unknown[],
+  ): Promise<null> {
+    const port = ports.at(0) as SlugAtlasPort | undefined;
+    if (!port) throw new Error("workspace.slugAtlasStream requires a transferred response port");
+
+    let totalLength = 0;
+    port.start();
+    try {
+      const reader = this.#bridge.streamSlugAtlas(generation, maximumLength).getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const bytes = new Uint8Array(
+            value.buffer as ArrayBuffer,
+            value.byteOffset,
+            value.byteLength,
+          );
+          const nextOffset = totalLength + bytes.byteLength;
+          const acknowledgment = nextSlugAtlasControl(port);
+          port.postMessage({ kind: "chunk", offset: totalLength, bytes });
+          const control = await acknowledgment;
+          if (control.kind === "cancel") throw new Error(control.message);
+          if (control.kind !== "ack" || control.nextOffset !== nextOffset) {
+            throw new Error(`resident Slug stream expected acknowledgment ${nextOffset}`);
+          }
+          totalLength = nextOffset;
+        }
+      } catch (error) {
+        try {
+          await reader.cancel(errorToMessage(error));
+        } catch (cancelError) {
+          console.error("failed to cancel native Slug stream", cancelError);
+        }
+        throw error;
+      } finally {
+        reader.releaseLock();
+      }
+      port.postMessage({ kind: "complete", totalLength });
+      return null;
+    } catch (error) {
+      try {
+        port.postMessage({ kind: "error", message: errorToMessage(error) });
+      } catch (postError) {
+        console.error("failed to report resident Slug stream error", postError);
+      }
+      throw error;
+    } finally {
+      port.close();
+    }
   }
 
   #create(): WorkspaceDocumentState {

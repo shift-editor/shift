@@ -5,6 +5,7 @@ import type {
   GlyphPreview,
   GlyphProjection,
   Location,
+  SlugAtlas,
 } from "@shift/types";
 import type {
   WorkspaceDocumentState,
@@ -187,6 +188,25 @@ export class WorkspaceEditCoordinator {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#workspace.glyphPreviews(glyphIds, location));
+  }
+
+  /** Builds one authored Slug generation behind every pending edit. */
+  prepareSlugAtlas(alignment: number): Promise<SlugAtlas> {
+    return this.#withFlush(() => this.#workspace.prepareSlugAtlas(alignment));
+  }
+
+  /** Streams a prepared generation without constructing a contiguous JS atlas. */
+  streamSlugAtlas(
+    generation: number,
+    maximumLength: number,
+    write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
+  ): Promise<number> {
+    return this.#withFlush(() => this.#workspace.streamSlugAtlas(generation, maximumLength, write));
+  }
+
+  /** Releases native atlas residency after device/limit rejection. */
+  discardSlugAtlas(generation: number): Promise<void> {
+    return this.#withFlush(() => this.#workspace.discardSlugAtlas(generation));
   }
 
   /**

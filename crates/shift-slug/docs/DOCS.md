@@ -25,6 +25,7 @@ src/
   render.rs              shared uniform and visible-instance byte layouts
   variable.rs            multi-source resident base/delta model and aligned packing
   variable/component.rs  component records, CPU oracle, and component packing
+  resident.rs            complete-font authored atlas, identity map, and weight-basis deduplication
   error.rs     strict conversion and size failures
 shaders/
   slug.wgsl           shared static native-wgpu/Electron-WebGPU renderer
@@ -54,6 +55,8 @@ Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical
 `CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses wide indexes by default and exposes compact indexes through `--compact-indices`.
 
 ## Resident variable execution
+
+`build_authored_atlas()` is the product complete-font boundary. It compiles `Font::glyph_projection()` values in authored order, preserves explicit `GlyphId` mapping, deduplicates every independent interpolation basis before insertion, and retains exact-source selectors. Layerless glyph records receive resident zero-curve/zero-advance descriptors so one incomplete draft cannot disable the rest of the grid. The result is location-independent; axis movement changes only the shared weight vector and visible instances.
 
 The variable model keeps one base quadratic array plus base-relative `f32` source deltas. Each 8-byte source descriptor remains dense by default; only a source whose unchanged curves make sparse storage strictly smaller receives a tagged offset into a compact side table of sorted glyph-local indexes. Dense fonts therefore pay no sparse metadata tax. Each source references a global weight index so equal interpolation bases share a small per-frame weight vector. Compute preserves the full weighted-source equation as `base × sum(weights) + Σ(weight × delta)`, rather than assuming weights always sum to one. A one-bit-per-curve resident mask marks controls generated from authored lines: after endpoint interpolation, compute regenerates those controls with Slug's normalized perpendicular epsilon because that operation is nonlinear and cannot be represented exactly by source control deltas. One workgroup per visible glyph resolves curves and reduces exact current-location bounds into scratch; a second pass rebuilds the eight horizontal and vertical bands using those bounds. Fragment band selection reads the same scratch bounds. Cell sizing remains a consumer-owned metrics/advance transform, so neither loose all-location bounds nor current-location geometry can shrink or jump the grid layout. Offscreen glyphs perform none of this work until visible.
 

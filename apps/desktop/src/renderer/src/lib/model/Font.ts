@@ -452,6 +452,11 @@ export class Font {
     return this.#glyphRecordsCell;
   }
 
+  /** Invalidates complete resident generations after any committed font summary edit. */
+  get slugAtlasRevisionCell(): Signal<unknown> {
+    return this.#store.workspaceCell;
+  }
+
   /** Returns the layer owning a point id, or null when unknown. */
   layerIdForPoint(pointId: PointId): LayerId | null {
     return this.#store.layerIdForPoint(pointId);

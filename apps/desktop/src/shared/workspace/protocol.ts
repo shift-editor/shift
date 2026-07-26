@@ -14,6 +14,7 @@ import type {
   MetricDefinition,
   SourceMetricsInterpolationSnapshot,
   NamedInstance,
+  SlugAtlas,
   Source,
   SourceId,
 } from "@shift/types";
@@ -51,6 +52,17 @@ export type WorkspaceGlyphSnapshot = {
 };
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
+
+/** Bounded resident-atlas delivery over a dedicated transferred port. */
+export type SlugAtlasStreamMessage =
+  | { kind: "chunk"; offset: number; bytes: Uint8Array<ArrayBuffer> }
+  | { kind: "complete"; totalLength: number }
+  | { kind: "error"; message: string };
+
+/** Renderer backpressure for the dedicated resident-atlas stream. */
+export type SlugAtlasStreamControl =
+  | { kind: "ack"; nextOffset: number }
+  | { kind: "cancel"; message: string };
 
 /** Identifies one concrete `.shift` package instance on disk. */
 export type WorkspacePackageIdentity = {
@@ -178,6 +190,21 @@ export type SyncCallMap = {
   "workspace.glyphPreviews": {
     request: { glyphIds: GlyphId[]; location: Location };
     response: GlyphPreview[];
+  };
+  /** Builds one native, location-independent authored Slug generation. */
+  "workspace.slugAtlasPrepare": {
+    request: { alignment: number };
+    response: SlugAtlas;
+  };
+  /** Streams bounded atlas chunks over the transferred response port. */
+  "workspace.slugAtlasStream": {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
+  /** Releases native CPU residency when adapter initialization is rejected. */
+  "workspace.slugAtlasDiscard": {
+    request: { generation: number };
+    response: null;
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };

@@ -7,8 +7,9 @@ use shift_font::{
 use shift_slug::{
     add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
-    authored_glyph_requirements, curves_from_resolved_contours, AuthoredAtlasBuilder,
-    AuthoredCurveRecipe, AuthoredSlugError, AuthoredWeightSet, Curve, VariableAtlasBuilder,
+    authored_glyph_requirements, build_authored_atlas, curves_from_resolved_contours,
+    AuthoredAtlasBuilder, AuthoredCurveRecipe, AuthoredSlugError, AuthoredWeightSet, Curve,
+    VariableAtlasBuilder,
 };
 
 #[test]
@@ -62,6 +63,46 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     assert!((actual_advance - expected_layer.width() as f32).abs() <= 0.001);
     assert_eq!(atlas.sources()[0].weight_index, 2);
     assert_eq!(atlas.sources()[1].weight_index, 5);
+}
+
+#[test]
+fn authored_atlas_keeps_layerless_glyphs_as_resident_blanks() {
+    let mut builder = AuthoredAtlasBuilder::default();
+    let glyph = builder.add_empty_glyph(0).unwrap();
+    let atlas = builder.finish();
+
+    assert!(atlas
+        .resolve_glyph_with_weights(glyph.default_glyph, &[1.0])
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        atlas.resolve_advance_with_weights(glyph.default_glyph, &[1.0]),
+        Ok(0.0)
+    );
+}
+
+#[test]
+fn complete_authored_atlas_keeps_font_identity_and_independent_bases() {
+    let path = format!(
+        "{}/../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let font = FontLoader::new().read_font(&path).unwrap();
+
+    let resident = build_authored_atlas(&font, 8).unwrap();
+
+    assert_eq!(resident.glyphs().len(), font.glyphs().count());
+    assert_eq!(resident.weight_sets().len(), 4);
+    assert_eq!(resident.weight_count(), 21);
+    assert_eq!(resident.atlas().statistics().component_glyph_count, 10);
+    assert_eq!(
+        resident
+            .glyphs()
+            .iter()
+            .map(|glyph| glyph.glyph_id.clone())
+            .collect::<Vec<_>>(),
+        font.glyphs().map(Glyph::id).collect::<Vec<_>>()
+    );
 }
 
 #[test]

@@ -69,6 +69,23 @@ export declare class Bridge {
    * `get_glyph_snapshots`.
    */
   getGlyphPreviews(glyphIds: Array<GlyphId>, location: NapiLocation): Array<NapiGlyphPreview>
+  /**
+   * Builds one complete authored Slug generation without resolving a location.
+   *
+   * The returned metadata is small enough for the ordinary sync lane. Packed
+   * geometry remains native until `stream_slug_atlas` emits bounded chunks.
+   */
+  prepareSlugAtlas(alignment: number): NapiSlugAtlas
+  /**
+   * Streams the prepared generation with native Web Stream backpressure.
+   *
+   * A capacity-one channel bounds temporary memory to one upload chunk. The
+   * authored atlas moves to the producer thread and is dropped when the stream
+   * completes, so GPU residency retains no second atlas-sized CPU copy.
+   */
+  streamSlugAtlas(generation: number, maximumLength: number): ReadableStream<Buffer>
+  /** Releases a prepared generation after adapter rejection or initialization failure. */
+  discardSlugAtlas(generation: number): void
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
@@ -114,6 +131,55 @@ export interface NapiPackageIdentity {
   packageId: string
   canonicalPath: string
   fingerprint: string
+}
+
+export interface NapiSlugAtlas {
+  generation: number
+  bandCount: number
+  weightCount: number
+  layout: NapiSlugLayout
+  glyphs: Array<NapiSlugGlyph>
+  weightSets: Array<NapiSlugWeightSet>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface NapiSlugExactSource {
+  sourceId: SourceId
+  glyphIndex: number
+}
+
+export interface NapiSlugGlyph {
+  glyphId: GlyphId
+  defaultGlyph: number
+  exactSources: Array<NapiSlugExactSource>
+}
+
+export interface NapiSlugLayout {
+  baseCurves: NapiSlugSection
+  curveDeltas: NapiSlugSection
+  sparseDeltas: NapiSlugSection
+  glyphs: NapiSlugSection
+  sources: NapiSlugSection
+  sourceAdvances: NapiSlugSection
+  componentGlyphs: NapiSlugSection
+  componentParts: NapiSlugSection
+  components: NapiSlugSection
+  componentSources: NapiSlugSection
+  anchorSources: NapiSlugSection
+  lineBits: NapiSlugSection
+  totalLength: number
+}
+
+export interface NapiSlugSection {
+  offset: number
+  length: number
+}
+
+export interface NapiSlugWeightSet {
+  basis: NapiInterpolationBasis
+  sourceWeightIndices: Array<number>
 }
 export interface NapiAddAnchorsIntent {
   layerId: LayerId

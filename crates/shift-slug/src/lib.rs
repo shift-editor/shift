@@ -11,6 +11,7 @@ mod curve;
 mod error;
 mod pack;
 mod render;
+mod resident;
 mod variable;
 
 pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};
@@ -28,6 +29,7 @@ pub use render::{
     pack_render_instances, pack_render_params, RenderInstance, RenderParams, RENDER_INSTANCE_BYTES,
     RENDER_PARAMS_BYTES,
 };
+pub use resident::{build_authored_atlas, AuthoredAtlas, AuthoredAtlasGlyph};
 pub use variable::{
     PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks, VariableAnchorSource,
     VariableAtlas, VariableAtlasBuilder, VariableComponent, VariableComponentGlyph,
