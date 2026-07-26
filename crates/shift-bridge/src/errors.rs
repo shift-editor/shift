@@ -1,6 +1,7 @@
 use napi::{Error, JsError, Status};
 use shift_backends::BackendError;
 use shift_font::error::CoreError;
+use shift_glyph_codec::CodecError;
 use shift_workspace::WorkspaceError;
 
 #[derive(Debug, thiserror::Error)]
@@ -10,6 +11,9 @@ pub enum BridgeError {
 
   #[error(transparent)]
   Core(#[from] CoreError),
+
+  #[error(transparent)]
+  GlyphCodec(#[from] CodecError),
 
   #[error(transparent)]
   Backend(#[from] BackendError),
@@ -26,9 +30,10 @@ pub fn to_napi_error(error: BridgeError) -> Error {
     | BridgeError::Backend(BackendError::InvalidExtensionUtf8 { .. })
     | BridgeError::Backend(BackendError::UnsupportedFormat { .. })
     | BridgeError::Backend(BackendError::UnsupportedWriteFormat { .. }) => Status::InvalidArg,
-    BridgeError::Core(_) | BridgeError::Backend(_) | BridgeError::Workspace(_) => {
-      Status::GenericFailure
-    }
+    BridgeError::Core(_)
+    | BridgeError::GlyphCodec(_)
+    | BridgeError::Backend(_)
+    | BridgeError::Workspace(_) => Status::GenericFailure,
   };
 
   Error::new(status, error.to_string())

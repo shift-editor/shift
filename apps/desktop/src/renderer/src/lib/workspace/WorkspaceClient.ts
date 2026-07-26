@@ -14,6 +14,7 @@ import type {
   FontIntent,
   GlyphId,
   GlyphPreview,
+  PackedGlyphPreview,
   GlyphProjection,
   Location,
 } from "@shift/types";
@@ -187,6 +188,19 @@ export class WorkspaceClient {
     await this.connect();
 
     return this.#require().call("workspace.glyphPreviews", {
+      glyphIds: [...glyphIds],
+      location,
+    });
+  }
+
+  /** Resolves strict packed outline-v1 previews at one internal location. */
+  async packedGlyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: Location,
+  ): Promise<PackedGlyphPreview[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.packedGlyphPreviews", {
       glyphIds: [...glyphIds],
       location,
     });

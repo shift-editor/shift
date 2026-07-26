@@ -1,0 +1,45 @@
+[
+  {
+    "name": "empty",
+    "file": "empty.bin",
+    "commands": []
+  },
+  {
+    "name": "closed-line",
+    "file": "closed-line.bin",
+    "commands": [
+      { "kind": "move", "coordinates": [0, 0] },
+      { "kind": "line", "coordinates": [100, 200] },
+      { "kind": "close", "coordinates": [] }
+    ]
+  },
+  {
+    "name": "open",
+    "file": "open.bin",
+    "commands": [
+      { "kind": "move", "coordinates": [-12.5, 0.25] },
+      { "kind": "line", "coordinates": [123.75, -456.5] }
+    ]
+  },
+  {
+    "name": "quadratic-cubic",
+    "file": "quadratic-cubic.bin",
+    "commands": [
+      { "kind": "move", "coordinates": [-1.5, 2.25] },
+      { "kind": "quad", "coordinates": [0.5, -0.75, 1000.125, -2000.5] },
+      { "kind": "cubic", "coordinates": [-3, 4.5, 5.25, -6.75, 100000000000000000000, -100000000000000000000] },
+      { "kind": "close", "coordinates": [] }
+    ]
+  },
+  {
+    "name": "multiple-contours",
+    "file": "multiple-contours.bin",
+    "commands": [
+      { "kind": "move", "coordinates": [0, 0] },
+      { "kind": "line", "coordinates": [10, 0] },
+      { "kind": "close", "coordinates": [] },
+      { "kind": "move", "coordinates": [100.5, -100.25] },
+      { "kind": "line", "coordinates": [200, 300] }
+    ]
+  }
+]

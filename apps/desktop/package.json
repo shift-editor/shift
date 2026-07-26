@@ -54,6 +54,7 @@
     "@base-ui-components/react": "1.0.0-rc.0",
     "@shift/bridge": "workspace:*",
     "@shift/geo": "workspace:*",
+    "@shift/glyph-codec": "workspace:*",
     "@shift/glyph-info": "workspace:*",
     "@shift/glyph-state": "workspace:*",
     "@shift/rules": "workspace:*",

@@ -14,6 +14,7 @@ napi = ["dep:napi", "dep:napi-derive"]
 
 [dependencies]
 shift-font = { workspace = true }
+shift-glyph-codec = { workspace = true }
 
 napi = { version = "=3.8.6", optional = true, default-features = false, features = [
     "napi6",

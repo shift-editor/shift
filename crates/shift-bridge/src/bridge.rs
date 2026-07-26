@@ -19,9 +19,10 @@ use shift_wire::{
     NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview,
     NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
     NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
-    NapiPointSeed, NapiSource, NapiSourceMetricsInterpolationReplacement,
+    NapiPackedGlyphPreview, NapiPointSeed, NapiSource, NapiSourceMetricsInterpolationReplacement,
     NapiSourceMetricsInterpolationSnapshot,
   },
+  outline::pack_resolved_contours,
   Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
   GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure,
   MetricDefinition, NamedInstance, Source, SourceMetricsInterpolationSnapshot,
@@ -675,6 +676,40 @@ impl Bridge {
     Ok(previews)
   }
 
+  /// Location-resolved packed glyph outlines and advances.
+  ///
+  /// This sibling of `get_glyph_previews` keeps the SVG path available as a
+  /// fallback while the packed path is measured. Each `data` field is one
+  /// validated `shift.glyph-outline.v1` payload.
+  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, location: NapiLocation")]
+  pub fn get_packed_glyph_previews(
+    &self,
+    glyph_ids: Vec<String>,
+    location: NapiLocation,
+  ) -> errors::Result<Vec<NapiPackedGlyphPreview>> {
+    let font = self.font()?;
+    let glyph_ids = glyph_ids
+      .iter()
+      .map(|glyph_id| parse::<GlyphId>(glyph_id))
+      .collect::<errors::Result<Vec<_>>>()?;
+    let location = map_location(location)?;
+
+    let mut projection = font.projection(&location);
+    projection
+      .glyphs(&glyph_ids)?
+      .into_iter()
+      .map(|glyph| {
+        Ok(NapiPackedGlyphPreview {
+          glyph_id: glyph.glyph_id().to_string(),
+          data: pack_resolved_contours(glyph.contours())?
+            .into_bytes()
+            .into(),
+          x_advance: glyph.x_advance(),
+        })
+      })
+      .collect()
+  }
+
   #[napi]
   pub fn is_variable(&self) -> errors::Result<bool> {
     Ok(self.font()?.is_variable())
@@ -1326,6 +1361,7 @@ fn map_axis_mapping(mapping: NapiAxisMapping) -> errors::Result<FontAxisMapping>
 #[cfg(test)]
 mod tests {
   use super::*;
+  use shift_glyph_codec::{decode_outline, OutlineCommand};
   use shift_wire::bridges::napi::{
     NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiAxis, NapiAxisRole,
     NapiAxisType, NapiCloneGlyphLayerIntent, NapiCreateAxisIntent, NapiCreateGlyphIntent,
@@ -3032,7 +3068,7 @@ mod tests {
 
     let previews = bridge
       .get_glyph_previews(
-        vec![glyph.id.to_string(), missing_glyph_id],
+        vec![glyph.id.to_string(), missing_glyph_id.clone()],
         NapiLocation {
           values: std::collections::HashMap::new(),
         },
@@ -3043,6 +3079,28 @@ mod tests {
     assert_eq!(previews[0].glyph_id, glyph.id.to_string());
     assert_eq!(previews[0].x_advance, 500.0);
     assert!(previews[0].svg_path.starts_with('M'));
+
+    let packed = bridge
+      .get_packed_glyph_previews(
+        vec![glyph.id.to_string(), missing_glyph_id],
+        NapiLocation {
+          values: std::collections::HashMap::new(),
+        },
+      )
+      .unwrap();
+    assert_eq!(packed.len(), 1);
+    assert_eq!(packed[0].glyph_id, glyph.id.to_string());
+    assert_eq!(packed[0].x_advance, 500.0);
+    assert_eq!(
+      decode_outline(packed[0].data.as_ref())
+        .unwrap()
+        .commands()
+        .collect::<Vec<_>>(),
+      vec![
+        OutlineCommand::Move { x: 10.0, y: 20.0 },
+        OutlineCommand::Line { x: 90.0, y: 20.0 },
+      ]
+    );
   }
 
   #[test]

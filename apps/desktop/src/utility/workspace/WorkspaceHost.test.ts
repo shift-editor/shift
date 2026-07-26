@@ -1,3 +1,4 @@
+import { decodeOutline } from "@shift/glyph-codec";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { createBridge } from "@shift/bridge";
 import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker_threads";
@@ -18,6 +19,7 @@ import {
   type SourceId,
   type Unicode,
 } from "@shift/types";
+import { PackedOutlinePath } from "@/lib/graphics/PackedOutlinePath";
 import type {
   ShellCallMap,
   ShellEventMap,
@@ -120,6 +122,29 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     if (!snapshot) throw new Error("workspace.create did not create a snapshot");
     expect(snapshot.documentId).toBe(state.documentId);
     return snapshot;
+  }
+
+  async function createLineGlyph(sync: SyncChannel, sourceId: SourceId): Promise<GlyphId> {
+    const { glyphId, layerId, intents } = createGlyphALayer(sourceId);
+    await applyWorkspace(sync, { intents });
+    const contourId = mintContourId();
+    await applyWorkspace(sync, {
+      intents: [
+        { kind: "addContour", addContour: { layerId, contourId, closed: false } },
+        {
+          kind: "addPoints",
+          addPoints: {
+            layerId,
+            contourId,
+            points: [
+              { id: mintPointId(), x: 10, y: 20, pointType: "onCurve", smooth: false },
+              { id: mintPointId(), x: 30, y: 40, pointType: "onCurve", smooth: false },
+            ],
+          },
+        },
+      ],
+    });
+    return glyphId;
   }
 
   async function openWorkspace(
@@ -783,6 +808,23 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     await expect(undoWorkspace(sync)).resolves.toBeNull();
     await expect(redoWorkspace(sync)).resolves.toBeNull();
+  });
+
+  it("packed preview bytes survive the workspace structured-clone boundary", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const glyphId = await createLineGlyph(sync, snapshot.sources[0].id);
+
+    const request = { glyphIds: [glyphId], location: { values: {} } };
+    const [preview] = await sync.call("workspace.packedGlyphPreviews", request);
+    const [svgPreview] = await sync.call("workspace.glyphPreviews", request);
+
+    expect(preview.data).toBeInstanceOf(Uint8Array);
+    expect(PackedOutlinePath.fromBytes(preview.data).svgPath).toBe(svgPreview.svgPath);
+    expect([...decodeOutline(preview.data)]).toEqual([
+      { kind: "move", x: 10, y: 20 },
+      { kind: "line", x: 30, y: 40 },
+    ]);
   });
 
   it("workspace.glyphSnapshots pulls bounded source snapshots by stable glyph id", async () => {

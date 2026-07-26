@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use napi::bindgen_prelude::Float64Array;
+use napi::bindgen_prelude::{Float64Array, Uint8Array};
 use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
@@ -893,6 +893,19 @@ pub struct NapiGlyphPreview {
     #[napi(ts_type = "GlyphId")]
     pub glyph_id: String,
     pub svg_path: String,
+    pub x_advance: f64,
+}
+
+/// Location-resolved packed preview bytes and advance for one glyph.
+///
+/// `data` is a canonical `shift.glyph-outline.v1` payload. NAPI exposes the
+/// owned Rust bytes as a `Uint8Array`; workspace transport may structured-clone
+/// that typed array without interpreting the codec.
+#[napi(object)]
+pub struct NapiPackedGlyphPreview {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    pub data: Uint8Array,
     pub x_advance: f64,
 }
 

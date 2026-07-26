@@ -26,6 +26,7 @@ use shift_font::{
 };
 
 pub mod bridges;
+pub mod outline;
 pub mod state;
 
 /// Flat numeric glyph values ordered to match `GlyphStructure`.

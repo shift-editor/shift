@@ -8,6 +8,7 @@ shift-wire = { path = "crates/shift-wire" }
 shift-backends = { path = "crates/shift-backends" }
 shift-bridge = { path = "crates/shift-bridge" }
 shift-font = { path = "crates/shift-font" }
+shift-glyph-codec = { path = "crates/shift-glyph-codec" }
 shift-store = { path = "crates/shift-store" }
 shift-source = { path = "crates/shift-source" }
 shift-workspace = { path = "crates/shift-workspace" }

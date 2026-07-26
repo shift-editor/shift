@@ -51,6 +51,7 @@ export type {
   GlyphName,
   GlyphInterpolation,
   GlyphPreview,
+  PackedGlyphPreview,
   GlyphProjection,
   GlyphRecord,
   GlyphSourceComponents,

@@ -74,6 +74,14 @@ export interface BridgeApi {
    * `get_glyph_snapshots`.
    */
   getGlyphPreviews(glyphIds: Array<GlyphId>, location: Location): Array<GlyphPreview>
+  /**
+   * Location-resolved packed glyph outlines and advances.
+   *
+   * This sibling of `get_glyph_previews` keeps the SVG path available as a
+   * fallback while the packed path is measured. Each `data` field is one
+   * validated `shift.glyph-outline.v1` payload.
+   */
+  getPackedGlyphPreviews(glyphIds: Array<GlyphId>, location: Location): Array<PackedGlyphPreview>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
@@ -578,6 +586,19 @@ export interface NamedInstance {
   name: string
   location: Location
   postscriptName?: string
+}
+
+/**
+ * Location-resolved packed preview bytes and advance for one glyph.
+ *
+ * `data` is a canonical `shift.glyph-outline.v1` payload. NAPI exposes the
+ * owned Rust bytes as a `Uint8Array`; workspace transport may structured-clone
+ * that typed array without interpreting the codec.
+ */
+export interface PackedGlyphPreview {
+  glyphId: GlyphId
+  data: Uint8Array
+  xAdvance: number
 }
 
 export interface PointData {
