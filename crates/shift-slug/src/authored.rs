@@ -82,6 +82,9 @@ pub enum AuthoredSlugError {
         contour_index: usize,
         point_index: usize,
     },
+    NonFiniteAdvance {
+        source_index: usize,
+    },
     Core(CoreError),
     Slug(SlugError),
 }
@@ -131,6 +134,10 @@ impl fmt::Display for AuthoredSlugError {
             } => write!(
                 formatter,
                 "authored contour {contour_index} point {point_index} is not a finite f32 coordinate"
+            ),
+            Self::NonFiniteAdvance { source_index } => write!(
+                formatter,
+                "authored source {source_index} advance is not a finite f32 value"
             ),
             Self::Core(error) => error.fmt(formatter),
             Self::Slug(error) => error.fmt(formatter),
@@ -454,14 +461,15 @@ fn add_default_projection_glyph(
         }
         let recipe = AuthoredCurveRecipe::from_layer(projection.fallback());
         let curves = recipe.curves_from_layer(projection.fallback())?;
-        return builder
-            .add_curve_glyph_with_sources_and_lines(
-                curves,
-                recipe.line_flags(),
-                constant_weight_index,
-                [],
-            )
-            .map_err(Into::into);
+        let advance = authored_advance(projection.fallback().width(), 0)?;
+        let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
+            curves,
+            recipe.line_flags(),
+            constant_weight_index,
+            [],
+        )?;
+        builder.set_glyph_source_advances(glyph_index, [advance])?;
+        return Ok(glyph_index);
     };
 
     let sources = interpolation.sources();
@@ -477,9 +485,13 @@ fn add_default_projection_glyph(
 
     let recipe = AuthoredCurveRecipe::from_layer(interpolation.reference_layer());
     let mut source_curves = Vec::with_capacity(sources.len());
-    for (source, weight_index) in sources.iter().zip(source_weight_indices) {
+    let mut source_advances = Vec::with_capacity(sources.len());
+    for (source_index, (source, weight_index)) in
+        sources.iter().zip(source_weight_indices).enumerate()
+    {
         let mut layer = interpolation.reference_layer().clone();
         layer.apply_interpolation_values(source.values())?;
+        source_advances.push(authored_advance(layer.width(), source_index)?);
         source_curves.push((*weight_index, recipe.curves_from_layer(&layer)?));
     }
 
@@ -487,14 +499,14 @@ fn add_default_projection_glyph(
         .first()
         .cloned()
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
-    builder
-        .add_curve_glyph_with_sources_and_lines(
-            base_curves,
-            recipe.line_flags(),
-            base_weight_index,
-            source_curves.into_iter().skip(1),
-        )
-        .map_err(Into::into)
+    let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
+        base_curves,
+        recipe.line_flags(),
+        base_weight_index,
+        source_curves.into_iter().skip(1),
+    )?;
+    builder.set_glyph_source_advances(glyph_index, source_advances)?;
+    Ok(glyph_index)
 }
 
 /// Adds a component glyph when its flattened result remains in the root basis.
@@ -572,12 +584,18 @@ fn add_default_component_projection_glyph(
 
     let mut recipe = None;
     let mut source_curves = Vec::with_capacity(root_source_ids.len());
-    for (source_id, weight_index) in root_source_ids.iter().zip(source_weight_indices) {
+    let mut source_advances = Vec::with_capacity(root_source_ids.len());
+    for (source_index, (source_id, weight_index)) in root_source_ids
+        .iter()
+        .zip(source_weight_indices)
+        .enumerate()
+    {
         let location = source_location(font, source_id)?;
         let mut font_projection = font.projection(location);
         let resolved = font_projection
             .glyph(&projection.glyph_id())?
             .ok_or_else(|| CoreError::GlyphNotFound(projection.glyph_id()))?;
+        source_advances.push(authored_advance(resolved.x_advance(), source_index)?);
         let recipe =
             recipe.get_or_insert_with(|| ResolvedCurveRecipe::from_contours(resolved.contours()));
         source_curves.push((
@@ -591,14 +609,14 @@ fn add_default_component_projection_glyph(
         .first()
         .cloned()
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
-    builder
-        .add_curve_glyph_with_sources_and_lines(
-            base_curves,
-            recipe.line_flags(),
-            base_weight_index,
-            source_curves.into_iter().skip(1),
-        )
-        .map_err(Into::into)
+    let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
+        base_curves,
+        recipe.line_flags(),
+        base_weight_index,
+        source_curves.into_iter().skip(1),
+    )?;
+    builder.set_glyph_source_advances(glyph_index, source_advances)?;
+    Ok(glyph_index)
 }
 
 /// Adds the compatible default plus resident exact-source topology variants.
@@ -653,12 +671,14 @@ pub fn add_authored_glyph(
             .glyph(&projection.glyph_id())?
             .ok_or_else(|| CoreError::GlyphNotFound(projection.glyph_id()))?;
         let recipe = ResolvedCurveRecipe::from_contours(resolved.contours());
+        let advance = authored_advance(resolved.x_advance(), 0)?;
         let glyph_index = candidate.add_curve_glyph_with_sources_and_lines(
             recipe.curves_from_contours(resolved.contours())?,
             recipe.line_flags(),
             constant_weight_index,
             [],
         )?;
+        candidate.set_glyph_source_advances(glyph_index, [advance])?;
         exact_sources.push(AuthoredSourceGlyph {
             source_id,
             glyph_index,
@@ -767,6 +787,15 @@ fn segment_start(segment: SegmentRecipe) -> usize {
         SegmentRecipe::Line(points) => points[0],
         SegmentRecipe::Quad(points) => points[0],
         SegmentRecipe::Cubic(points) => points[0],
+    }
+}
+
+fn authored_advance(value: f64, source_index: usize) -> Result<f32, AuthoredSlugError> {
+    let advance = value as f32;
+    if value.is_finite() && advance.is_finite() {
+        Ok(advance)
+    } else {
+        Err(AuthoredSlugError::NonFiniteAdvance { source_index })
     }
 }
 

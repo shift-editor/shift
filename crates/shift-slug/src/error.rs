@@ -6,13 +6,37 @@ pub enum SlugError {
     InvalidBandCount(u32),
     InvalidAlignment(usize),
     InvalidChunkSize(usize),
-    NonFiniteCoordinate { command_index: usize },
-    DrawingCommandWithoutContour { command_index: usize },
-    CloseWithoutContour { command_index: usize },
-    CloseWithoutDrawingSegment { command_index: usize },
-    CompactIndexOverflow { glyph_index: u32, curve_count: u32 },
-    VariableTopologyMismatch { glyph_index: u32 },
-    VariableLineFlagMismatch { glyph_index: u32 },
+    NonFiniteCoordinate {
+        command_index: usize,
+    },
+    DrawingCommandWithoutContour {
+        command_index: usize,
+    },
+    CloseWithoutContour {
+        command_index: usize,
+    },
+    CloseWithoutDrawingSegment {
+        command_index: usize,
+    },
+    CompactIndexOverflow {
+        glyph_index: u32,
+        curve_count: u32,
+    },
+    VariableTopologyMismatch {
+        glyph_index: u32,
+    },
+    VariableLineFlagMismatch {
+        glyph_index: u32,
+    },
+    VariableAdvanceCountMismatch {
+        glyph_index: u32,
+        expected: usize,
+        actual: usize,
+    },
+    NonFiniteVariableAdvance {
+        glyph_index: u32,
+        source_index: usize,
+    },
     GlyphIndexOutOfRange(u32),
     VariableWeightIndexOutOfRange(u32),
     NonFiniteVariableWeight,
@@ -63,6 +87,21 @@ impl fmt::Display for SlugError {
             Self::VariableLineFlagMismatch { glyph_index } => write!(
                 formatter,
                 "glyph {glyph_index} has line flags that do not match its curve recipe"
+            ),
+            Self::VariableAdvanceCountMismatch {
+                glyph_index,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "glyph {glyph_index} needs {expected} source advances, got {actual}"
+            ),
+            Self::NonFiniteVariableAdvance {
+                glyph_index,
+                source_index,
+            } => write!(
+                formatter,
+                "glyph {glyph_index} source {source_index} has a non-finite advance"
             ),
             Self::GlyphIndexOutOfRange(glyph_index) => {
                 write!(formatter, "Slug glyph index {glyph_index} is out of range")

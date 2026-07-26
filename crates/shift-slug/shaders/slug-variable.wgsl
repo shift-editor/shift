@@ -61,10 +61,12 @@ struct VertexOutput {
 @group(1) @binding(5) var<uniform> variable: VariableParams;
 @group(1) @binding(6) var<storage, read> line_bits: array<u32>;
 @group(1) @binding(7) var<storage, read> sparse_deltas: array<u32>;
+@group(1) @binding(8) var<storage, read> source_advances: array<f32>;
 @group(2) @binding(0) var<storage, read_write> resolved_curves: array<Curve>;
 @group(2) @binding(1) var<storage, read_write> resolved_bands: array<Band>;
 @group(2) @binding(2) var<storage, read_write> resolved_indices: array<u32>;
 @group(2) @binding(3) var<storage, read_write> resolved_glyph_bounds: array<vec4<f32>>;
+@group(2) @binding(4) var<storage, read_write> resolved_glyph_advances: array<f32>;
 
 var<workgroup> workgroup_curve_bounds: array<vec4<f32>, 64>;
 
@@ -112,9 +114,13 @@ fn resolve_visible_curves(
     let instance = instances[instance_index];
     let glyph = variable_glyphs[instance.glyph.x];
     var weight_sum = 0.0;
+    var glyph_advance = 0.0;
     for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
-        let source = variable_sources[glyph.source_start + source_offset];
-        weight_sum += source_weights[source.weight_index];
+        let source_index = glyph.source_start + source_offset;
+        let source = variable_sources[source_index];
+        let weight = source_weights[source.weight_index];
+        weight_sum += weight;
+        glyph_advance += source_advances[source_index] * weight;
     }
 
     let maximum_f32 = 3.402823466e+38;
@@ -188,6 +194,7 @@ fn resolve_visible_curves(
         workgroupBarrier();
     }
     if local_id.x == 0u {
+        resolved_glyph_advances[instance_index] = glyph_advance;
         resolved_glyph_bounds[instance_index] = select(
             workgroup_curve_bounds[0],
             glyph.bounds,

@@ -46,6 +46,7 @@ pub struct VariableLayout {
     pub sparse_deltas: Section,
     pub glyphs: Section,
     pub sources: Section,
+    pub source_advances: Section,
     pub line_bits: Section,
     pub total_length: usize,
 }
@@ -64,6 +65,7 @@ pub struct VariableAtlas {
     sparse_deltas: Vec<u32>,
     glyphs: Vec<VariableGlyph>,
     sources: Vec<VariableSource>,
+    source_advances: Vec<f32>,
     line_bits: Vec<u32>,
 }
 
@@ -91,6 +93,10 @@ impl VariableAtlas {
 
     pub fn sources(&self) -> &[VariableSource] {
         &self.sources
+    }
+
+    pub fn source_advances(&self) -> &[f32] {
+        &self.source_advances
     }
 
     pub fn line_bits(&self) -> &[u32] {
@@ -250,6 +256,42 @@ impl VariableAtlas {
         Ok(curves)
     }
 
+    /// Resolves horizontal advance from the same resident source weights.
+    pub fn resolve_advance_with_weights(
+        &self,
+        glyph_index: u32,
+        weights: &[f32],
+    ) -> Result<f32, SlugError> {
+        if weights.iter().any(|weight| !weight.is_finite()) {
+            return Err(SlugError::NonFiniteVariableWeight);
+        }
+        let glyph = self
+            .glyphs
+            .get(glyph_index as usize)
+            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
+        let source_start = glyph.source_start as usize;
+        let source_end = source_start
+            .checked_add(glyph.source_count as usize)
+            .ok_or(SlugError::LengthOverflow)?;
+        let sources = self
+            .sources
+            .get(source_start..source_end)
+            .ok_or(SlugError::LengthOverflow)?;
+        let advances = self
+            .source_advances
+            .get(source_start..source_end)
+            .ok_or(SlugError::LengthOverflow)?;
+        sources
+            .iter()
+            .zip(advances)
+            .try_fold(0.0_f32, |advance, (source, source_advance)| {
+                let weight = weights.get(source.weight_index as usize).ok_or(
+                    SlugError::VariableWeightIndexOutOfRange(source.weight_index),
+                )?;
+                Ok(advance + source_advance * weight)
+            })
+    }
+
     pub fn layout(&self, alignment: usize) -> Result<VariableLayout, SlugError> {
         if alignment == 0 || !alignment.is_power_of_two() {
             return Err(SlugError::InvalidAlignment(alignment));
@@ -274,8 +316,14 @@ impl VariableAtlas {
             alignment,
         )?;
         let sources = next_section(glyphs, self.sources.len(), VARIABLE_SOURCE_BYTES, alignment)?;
-        let line_bits = next_section(
+        let source_advances = next_section(
             sources,
+            self.source_advances.len(),
+            std::mem::size_of::<f32>(),
+            alignment,
+        )?;
+        let line_bits = next_section(
+            source_advances,
             self.line_bits.len(),
             std::mem::size_of::<u32>(),
             alignment,
@@ -291,6 +339,7 @@ impl VariableAtlas {
             sparse_deltas,
             glyphs,
             sources,
+            source_advances,
             line_bits,
             total_length,
         })
@@ -355,6 +404,10 @@ impl VariableAtlas {
         for source in &self.sources {
             writer.write(&source.delta_start.to_le_bytes());
             writer.write(&source.weight_index.to_le_bytes());
+        }
+        writer.pad_to(layout.source_advances.offset)?;
+        for advance in &self.source_advances {
+            writer.write(&advance.to_le_bytes());
         }
         writer.pad_to(layout.line_bits.offset)?;
         for word in &self.line_bits {
@@ -568,6 +621,7 @@ impl VariableAtlasBuilder {
         ensure_total(self.atlas.curve_deltas.len(), curve_deltas.len())?;
         ensure_total(self.atlas.sparse_deltas.len(), sparse_deltas.len())?;
         ensure_total(self.atlas.sources.len(), sources.len())?;
+        ensure_total(self.atlas.source_advances.len(), sources.len())?;
         ensure_total(self.atlas.glyphs.len(), 1)?;
         let total_curves = self
             .atlas
@@ -586,6 +640,9 @@ impl VariableAtlasBuilder {
         self.atlas.base_curves.extend(base_curves);
         self.atlas.curve_deltas.extend(curve_deltas);
         self.atlas.sparse_deltas.extend(sparse_deltas);
+        self.atlas
+            .source_advances
+            .extend(std::iter::repeat_n(0.0, sources.len()));
         self.atlas.sources.extend(sources);
         self.atlas.glyphs.push(VariableGlyph {
             bounds,
@@ -596,6 +653,44 @@ impl VariableAtlasBuilder {
         });
 
         Ok(glyph_index)
+    }
+
+    /// Assigns one finite horizontal advance per resident source contribution.
+    pub fn set_glyph_source_advances(
+        &mut self,
+        glyph_index: u32,
+        advances: impl IntoIterator<Item = f32>,
+    ) -> Result<(), SlugError> {
+        let advances = advances.into_iter().collect::<Vec<_>>();
+        let glyph = self
+            .atlas
+            .glyphs
+            .get(glyph_index as usize)
+            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
+        let expected = glyph.source_count as usize;
+        if advances.len() != expected {
+            return Err(SlugError::VariableAdvanceCountMismatch {
+                glyph_index,
+                expected,
+                actual: advances.len(),
+            });
+        }
+        if let Some(source_index) = advances.iter().position(|advance| !advance.is_finite()) {
+            return Err(SlugError::NonFiniteVariableAdvance {
+                glyph_index,
+                source_index,
+            });
+        }
+        let start = glyph.source_start as usize;
+        let end = start
+            .checked_add(expected)
+            .ok_or(SlugError::LengthOverflow)?;
+        self.atlas
+            .source_advances
+            .get_mut(start..end)
+            .ok_or(SlugError::LengthOverflow)?
+            .copy_from_slice(&advances);
+        Ok(())
     }
 
     pub fn finish(self) -> VariableAtlas {

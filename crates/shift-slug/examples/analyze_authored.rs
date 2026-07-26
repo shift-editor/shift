@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let statistics = atlas.statistics();
     let packed = atlas.pack(256)?;
     let locations = validation_locations(&font);
-    let maximum_error = validate_locations(
+    let (maximum_error, maximum_advance_error) = validate_locations(
         &font,
         &atlas,
         &validation_glyphs,
@@ -135,7 +135,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         packed.as_bytes().len(),
     );
     println!(
-        "validation_locations={} maximum_curve_error={maximum_error}",
+        "validation_locations={} maximum_curve_error={maximum_error} maximum_advance_error={maximum_advance_error}",
         locations.len(),
     );
     Ok(())
@@ -176,8 +176,9 @@ fn validate_locations(
     glyphs: &[ValidationGlyph],
     locations: &[Location],
     weight_count: usize,
-) -> Result<f32, Box<dyn Error>> {
+) -> Result<(f32, f32), Box<dyn Error>> {
     let mut maximum_error = 0.0_f32;
+    let mut maximum_advance_error = 0.0_f32;
     for glyph in glyphs {
         let projection = font
             .glyph_projection(&glyph.glyph_id)?
@@ -197,24 +198,33 @@ fn validate_locations(
                 weights[*weight_index as usize] = weight as f32;
             }
             let actual = atlas.resolve_glyph_with_weights(glyph.atlas_index, &weights)?;
-            let expected = if glyph.component_glyph {
+            let (expected, expected_advance) = if glyph.component_glyph {
                 let mut font_projection = font.projection(location);
                 let resolved = font_projection
                     .glyph(&glyph.glyph_id)?
                     .ok_or("missing resolved glyph")?;
-                curves_from_resolved_contours(resolved.contours())?
+                (
+                    curves_from_resolved_contours(resolved.contours())?,
+                    resolved.x_advance() as f32,
+                )
             } else {
                 let expected_layer = interpolation.resolve(location, font.axes())?;
-                recipe.curves_from_layer(&expected_layer)?
+                (
+                    recipe.curves_from_layer(&expected_layer)?,
+                    expected_layer.width() as f32,
+                )
             };
             for (actual, expected) in actual.iter().zip(&expected) {
                 for (actual, expected) in curve_values(*actual).zip(curve_values(*expected)) {
                     maximum_error = maximum_error.max((actual - expected).abs());
                 }
             }
+            let actual_advance = atlas.resolve_advance_with_weights(glyph.atlas_index, &weights)?;
+            maximum_advance_error =
+                maximum_advance_error.max((actual_advance - expected_advance).abs());
         }
     }
-    Ok(maximum_error)
+    Ok((maximum_error, maximum_advance_error))
 }
 
 fn curve_values(curve: shift_slug::Curve) -> impl Iterator<Item = f32> {

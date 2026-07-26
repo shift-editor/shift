@@ -57,6 +57,8 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     let recipe = AuthoredCurveRecipe::from_layer(interpolation.reference_layer());
     let expected = recipe.curves_from_layer(&expected_layer).unwrap();
     assert_curves_close(&actual, &expected, 0.001);
+    let actual_advance = atlas.resolve_advance_with_weights(0, &weights).unwrap();
+    assert!((actual_advance - expected_layer.width() as f32).abs() <= 0.001);
     assert_eq!(atlas.sources()[0].weight_index, 2);
     assert_eq!(atlas.sources()[1].weight_index, 5);
 }
@@ -138,6 +140,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
     }
 
     let mut maximum_error = 0.0_f32;
+    let mut maximum_advance_error = 0.0_f32;
     for (glyph_id, atlas_index, weight_indices, component_glyph) in records {
         let projection = font.glyph_projection(&glyph_id).unwrap().unwrap();
         let interpolation = projection.interpolation().unwrap();
@@ -156,20 +159,35 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
             let actual = atlas
                 .resolve_glyph_with_weights(atlas_index, &weights)
                 .unwrap();
-            let expected = if component_glyph {
+            let (expected, expected_advance) = if component_glyph {
                 let mut font_projection = font.projection(location);
                 let resolved = font_projection.glyph(&glyph_id).unwrap().unwrap();
-                curves_from_resolved_contours(resolved.contours()).unwrap()
+                (
+                    curves_from_resolved_contours(resolved.contours()).unwrap(),
+                    resolved.x_advance() as f32,
+                )
             } else {
                 let expected_layer = interpolation.resolve(location, font.axes()).unwrap();
-                recipe.curves_from_layer(&expected_layer).unwrap()
+                (
+                    recipe.curves_from_layer(&expected_layer).unwrap(),
+                    expected_layer.width() as f32,
+                )
             };
             maximum_error = maximum_error.max(maximum_curve_error(&actual, &expected));
+            let actual_advance = atlas
+                .resolve_advance_with_weights(atlas_index, &weights)
+                .unwrap();
+            maximum_advance_error =
+                maximum_advance_error.max((actual_advance - expected_advance).abs());
         }
     }
     assert!(
         maximum_error <= 0.001,
         "maximum authored curve error was {maximum_error}"
+    );
+    assert!(
+        maximum_advance_error <= 0.001,
+        "maximum authored advance error was {maximum_advance_error}"
     );
 }
 
@@ -269,6 +287,10 @@ fn authored_glyph_keeps_exact_source_topology_resident() {
     let regular_resolved = regular_projection.glyph(&glyph_id).unwrap().unwrap();
     let default_expected = curves_from_resolved_contours(regular_resolved.contours()).unwrap();
     assert_curves_close(&default_actual, &default_expected, 0.001);
+    let default_advance = atlas
+        .resolve_advance_with_weights(authored.default_glyph, &weights)
+        .unwrap();
+    assert!((default_advance - regular_resolved.x_advance() as f32).abs() <= 0.001);
 
     let exact_source = font
         .sources()
@@ -282,6 +304,10 @@ fn authored_glyph_keeps_exact_source_topology_resident() {
     let exact_resolved = exact_projection.glyph(&glyph_id).unwrap().unwrap();
     let exact_expected = curves_from_resolved_contours(exact_resolved.contours()).unwrap();
     assert_curves_close(&exact_actual, &exact_expected, 0.001);
+    let exact_advance = atlas
+        .resolve_advance_with_weights(exact.glyph_index, &weights)
+        .unwrap();
+    assert!((exact_advance - exact_resolved.x_advance() as f32).abs() <= 0.001);
     assert_ne!(default_actual, exact_actual);
 }
 

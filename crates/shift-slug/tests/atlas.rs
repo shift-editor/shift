@@ -281,8 +281,19 @@ fn variable_sources_use_sparse_deltas_only_when_they_reduce_bytes() {
     let mut source = base;
     source[1].p1.x += 10.0;
     let mut builder = VariableAtlasBuilder::default();
-    builder
+    let glyph_index = builder
         .add_curve_glyph_with_sources(base, 0, [(1, source.to_vec())])
+        .unwrap();
+    assert!(matches!(
+        builder.set_glyph_source_advances(glyph_index, [500.0]),
+        Err(SlugError::VariableAdvanceCountMismatch { .. })
+    ));
+    assert!(matches!(
+        builder.set_glyph_source_advances(glyph_index, [500.0, f32::NAN]),
+        Err(SlugError::NonFiniteVariableAdvance { .. })
+    ));
+    builder
+        .set_glyph_source_advances(glyph_index, [500.0, 700.0])
         .unwrap();
     let atlas = builder.finish();
     let resolved = atlas.resolve_glyph(0, 1.0).unwrap();
@@ -291,6 +302,13 @@ fn variable_sources_use_sparse_deltas_only_when_they_reduce_bytes() {
     assert_eq!(atlas.sparse_deltas(), &[0, 1, 1]);
     assert_eq!(atlas.sources()[1].delta_start, 0x8000_0000);
     assert_eq!(resolved, source);
+    assert_eq!(
+        atlas
+            .resolve_advance_with_weights(glyph_index, &[0.25, 0.75])
+            .unwrap(),
+        650.0
+    );
+    assert_eq!(atlas.source_advances(), &[500.0, 700.0]);
     assert_eq!(atlas.statistics().dense_delta_source_count, 0);
     assert_eq!(atlas.statistics().sparse_delta_source_count, 1);
 }
@@ -321,6 +339,7 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
     assert_eq!(layout.sparse_deltas.offset % 256, 0);
     assert_eq!(layout.glyphs.offset % 256, 0);
     assert_eq!(layout.sources.offset % 256, 0);
+    assert_eq!(layout.source_advances.offset % 256, 0);
     assert_eq!(layout.line_bits.offset % 256, 0);
     assert_eq!(&first.as_bytes()[..4], &1.5_f32.to_le_bytes());
     assert_eq!(

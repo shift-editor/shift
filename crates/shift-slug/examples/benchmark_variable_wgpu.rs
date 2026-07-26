@@ -174,11 +174,13 @@ fn main() -> Result<()> {
         .max(layout.sparse_deltas.length)
         .max(layout.glyphs.length)
         .max(layout.sources.length)
+        .max(layout.source_advances.length)
         .max(layout.line_bits.length)
         .max(scratch.curve_count * 24)
         .max(scratch.band_count * 8)
         .max(scratch.index_count * 4)
-        .max(scratch.glyph_count * 16);
+        .max(scratch.glyph_count * 16)
+        .max(scratch.glyph_count * 4);
     let mut required_limits = wgpu::Limits::default();
     required_limits.max_buffer_size = required_limits
         .max_buffer_size
@@ -188,7 +190,7 @@ fn main() -> Result<()> {
         .max_storage_buffer_binding_size
         .max(u64::try_from(largest_binding)?);
     required_limits.max_storage_buffers_per_shader_stage =
-        required_limits.max_storage_buffers_per_shader_stage.max(10);
+        required_limits.max_storage_buffers_per_shader_stage.max(12);
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("shift-slug variable benchmark device"),
         required_features: wgpu::Features::empty(),
@@ -257,6 +259,12 @@ fn main() -> Result<()> {
         scratch.glyph_count * 16,
         BufferUsages::COPY_SRC,
     )?;
+    let resolved_advance_buffer = storage_buffer(
+        &device,
+        "shift-slug resolved glyph advances",
+        scratch.glyph_count * 4,
+        BufferUsages::COPY_SRC,
+    )?;
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("shift-slug variable shared shader"),
@@ -314,6 +322,7 @@ fn main() -> Result<()> {
         &variable_buffer,
         &resolved_curve_buffer,
         &resolved_bounds_buffer,
+        &resolved_advance_buffer,
     );
     let band_groups = create_band_groups(
         &device,
@@ -376,6 +385,11 @@ fn main() -> Result<()> {
         &device,
         "shift-slug bounds readback",
         scratch.glyph_count * 16,
+    )?;
+    let advance_readback = readback_buffer(
+        &device,
+        "shift-slug advance readback",
+        scratch.glyph_count * 4,
     )?;
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("shift-slug variable validation encoder"),
@@ -459,6 +473,13 @@ fn main() -> Result<()> {
         0,
         u64::try_from(scratch.glyph_count * 16)?,
     );
+    encoder.copy_buffer_to_buffer(
+        &resolved_advance_buffer,
+        0,
+        &advance_readback,
+        0,
+        u64::try_from(scratch.glyph_count * 4)?,
+    );
     encoder.copy_texture_to_buffer(
         TexelCopyTextureInfo {
             texture: &target,
@@ -487,9 +508,12 @@ fn main() -> Result<()> {
     let band_bytes = read_buffer(&device, &band_readback)?;
     let index_bytes = read_buffer(&device, &index_readback)?;
     let bounds_bytes = read_buffer(&device, &bounds_readback)?;
+    let advance_bytes = read_buffer(&device, &advance_readback)?;
     let pixel_bytes = read_buffer(&device, &pixel_readback)?;
     let gpu_elapsed = gpu_started.elapsed();
     let maximum_error = validate_curves(&atlas, &instances, arguments.weight, &curve_bytes)?;
+    let maximum_advance_error =
+        validate_advances(&atlas, &instances, arguments.weight, &advance_bytes)?;
     validate_bands(
         &atlas,
         &instances,
@@ -512,9 +536,10 @@ fn main() -> Result<()> {
         .map(|pixel| pixel[3])
         .collect::<Vec<_>>();
     println!(
-        "gpu_submit_to_readback_ms={:.3} max_curve_error={} curve_validation=pass band_validation=pass pixel_checksum={:016x} nonzero_alpha={}",
+        "gpu_submit_to_readback_ms={:.3} max_curve_error={} max_advance_error={} curve_validation=pass advance_validation=pass band_validation=pass pixel_checksum={:016x} nonzero_alpha={}",
         gpu_elapsed.as_secs_f64() * 1_000.0,
         maximum_error,
+        maximum_advance_error,
         fnv1a(&alpha),
         alpha.iter().filter(|value| **value != 0).count(),
     );
@@ -565,6 +590,8 @@ fn build_atlas(arguments: &Arguments) -> Result<(usize, usize, VariableAtlas)> {
     let glyph_count = u32::from(metrics.glyph_count);
     let base_location = font.axes().location([(arguments.axis, arguments.base)]);
     let source_location = font.axes().location([(arguments.axis, arguments.source)]);
+    let base_metrics = font.glyph_metrics(Size::unscaled(), &base_location);
+    let source_metrics = font.glyph_metrics(Size::unscaled(), &source_location);
     let outlines = font.outline_glyphs();
     let mut builder = VariableAtlasBuilder::new(arguments.band_count)?;
     let mut exact_variants = Vec::new();
@@ -583,19 +610,29 @@ fn build_atlas(arguments: &Arguments) -> Result<(usize, usize, VariableAtlas)> {
                 &mut source,
             )?;
         }
+        let base_advance = base_metrics
+            .advance_width(glyph_id)
+            .ok_or("base glyph advance is unavailable")?;
+        let source_advance = source_metrics
+            .advance_width(glyph_id)
+            .ok_or("source glyph advance is unavailable")?;
         match builder.add_glyph(base.0.clone(), source.0.clone()) {
-            Ok(_) => {}
+            Ok(glyph_index) => {
+                builder.set_glyph_source_advances(glyph_index, [base_advance, source_advance])?
+            }
             Err(SlugError::VariableTopologyMismatch { .. }) => {
-                builder.add_glyph(base.0.clone(), base.0)?;
-                exact_variants.push(source.0);
+                let glyph_index = builder.add_glyph(base.0.clone(), base.0)?;
+                builder.set_glyph_source_advances(glyph_index, [base_advance, base_advance])?;
+                exact_variants.push((source.0, source_advance));
             }
             Err(error) => return Err(error.into()),
         }
     }
 
     let exact_variant_count = exact_variants.len();
-    for source in exact_variants {
-        builder.add_glyph(source.clone(), source)?;
+    for (source, advance) in exact_variants {
+        let glyph_index = builder.add_glyph(source.clone(), source)?;
+        builder.set_glyph_source_advances(glyph_index, [advance, advance])?;
     }
 
     Ok((bytes.len(), exact_variant_count, builder.finish()))
@@ -830,6 +867,7 @@ fn create_resolve_groups(
     variable_buffer: &wgpu::Buffer,
     resolved_curve_buffer: &wgpu::Buffer,
     resolved_bounds_buffer: &wgpu::Buffer,
+    resolved_advance_buffer: &wgpu::Buffer,
 ) -> [wgpu::BindGroup; 3] {
     let group0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug resolve globals"),
@@ -857,6 +895,7 @@ fn create_resolve_groups(
             },
             atlas_entry(6, atlas_buffer, layout.line_bits),
             atlas_entry(7, atlas_buffer, layout.sparse_deltas),
+            atlas_entry(8, atlas_buffer, layout.source_advances),
         ],
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -870,6 +909,10 @@ fn create_resolve_groups(
             BindGroupEntry {
                 binding: 3,
                 resource: resolved_bounds_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 4,
+                resource: resolved_advance_buffer.as_entire_binding(),
             },
         ],
     });
@@ -1012,6 +1055,7 @@ fn scratch_bytes(layout: ScratchLayout) -> Result<usize> {
         .checked_add(layout.band_count * 8)
         .and_then(|bytes| bytes.checked_add(layout.index_count * 4))
         .and_then(|bytes| bytes.checked_add(layout.glyph_count * 16))
+        .and_then(|bytes| bytes.checked_add(layout.glyph_count * 4))
         .ok_or_else(|| "scratch byte count overflow".into())
 }
 
@@ -1034,6 +1078,25 @@ fn validate_curves(
     }
     if maximum_error > 0.001 {
         return Err(format!("GPU curve error {maximum_error} exceeds 0.001").into());
+    }
+    Ok(maximum_error)
+}
+
+fn validate_advances(
+    atlas: &VariableAtlas,
+    instances: &[RenderInstance],
+    weight: f32,
+    bytes: &[u8],
+) -> Result<f32> {
+    let weights = [1.0 - weight, weight];
+    let mut maximum_error = 0.0_f32;
+    for (instance_index, instance) in instances.iter().enumerate() {
+        let expected = atlas.resolve_advance_with_weights(instance.glyph_index, &weights)?;
+        let actual = read_f32(bytes, instance_index)?;
+        maximum_error = maximum_error.max((actual - expected).abs());
+    }
+    if maximum_error > 0.001 {
+        return Err(format!("GPU advance error {maximum_error} exceeds 0.001").into());
     }
     Ok(maximum_error)
 }
