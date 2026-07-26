@@ -86,12 +86,16 @@ Eight bands remain the initial static-render candidate. The 5.49 million curves 
 
 The native harness uses `SLUG_WGSL` and the exact `PackedAtlas` bytes exposed for Electron. It renders a uniformly sampled visible grid to `Rgba8Unorm`, reads pixels back, emits a checksum, and measures render-pass boundaries when timestamp queries are available. Its default 960×640 workload contains 150 visible 64-pixel cells.
 
+Visible instances carry an independent pixel-to-font transform, so consumers can tighten rasterized quads without changing fragment sampling. The benchmark uses one-pixel-guarded glyph quads by default and retains `--full-cell-quads` as an A/B control. Tight and full modes must produce identical checksums.
+
 Two measurements are reported separately:
 
 - **Latency:** one encoder, submission, and completion wait per pass. `latency_submit_to_completion_ms_*` is the serialized native upper bound; `latency_gpu_pass_ms_*` is the corresponding GPU timestamp interval.
 - **Throughput:** every pass is encoded into one saturated batch. `throughput_batch_wall_ms` and `wall_ms_per_pass` describe batch throughput, not individual-frame latency.
 
 Timestamp pairs with `end < start` are excluded and reported as `non_monotonic_pairs`; they are never converted with wrapping subtraction. Electron presentation timing is still a separate product measurement.
+
+On llvmpipe, tight quads reduced MutatorSans GPU latency from 6.36 ms to 3.68 ms while producing the same checksum. The uniformly sampled Source Han workload produced the same checksum but no meaningful timing change because CJK bounds occupy nearly the complete cell. Tight quads remain useful for Latin and sparse glyphs without regressing CJK correctness.
 
 A full Source Han `wght=900` llvmpipe correctness run rendered 192 visible instances at 1024×768:
 

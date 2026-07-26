@@ -139,7 +139,7 @@ fn invalid_inputs_fail_without_partial_glyphs() {
 fn render_inputs_match_the_shared_little_endian_layout() {
     let bytes = pack_render_instances(&[RenderInstance {
         pixel_rect: [1.5, 2.0, 3.0, 4.0],
-        em_rect: [-10.0, -20.0, 30.0, 40.0],
+        em_transform: [-10.0, -20.0, 30.0, 40.0],
         glyph_index: 0x1234_5678,
     }])
     .unwrap();

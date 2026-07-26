@@ -10,8 +10,12 @@ pub const RENDER_PARAMS_BYTES: usize = 16;
 pub struct RenderInstance {
     /// Pixel-space `[min_x, min_y, max_x, max_y]` rectangle.
     pub pixel_rect: [f32; 4],
-    /// Font-space `[min_x, min_y, max_x, max_y]` rectangle.
-    pub em_rect: [f32; 4],
+    /// Pixel-to-font transform `[scale_x, scale_y, offset_x, offset_y]`.
+    ///
+    /// Fragment coordinates use `font = pixel * scale + offset`. Keeping this
+    /// independent of the rasterized quad preserves identical sampling when a
+    /// consumer tightens quad bounds.
+    pub em_transform: [f32; 4],
     pub glyph_index: u32,
 }
 
@@ -31,7 +35,7 @@ pub fn pack_render_instances(instances: &[RenderInstance]) -> Result<Vec<u8>, Sl
         .ok_or(SlugError::LengthOverflow)?;
     let mut bytes = Vec::with_capacity(byte_length);
     for instance in instances {
-        for value in instance.pixel_rect.into_iter().chain(instance.em_rect) {
+        for value in instance.pixel_rect.into_iter().chain(instance.em_transform) {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
         bytes.extend_from_slice(&instance.glyph_index.to_le_bytes());

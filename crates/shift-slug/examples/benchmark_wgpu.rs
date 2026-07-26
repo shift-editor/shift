@@ -38,6 +38,8 @@ const DEFAULT_WIDTH: u32 = 960;
 const DEFAULT_HEIGHT: u32 = 640;
 const DEFAULT_CELL_SIZE: u32 = 64;
 const DEFAULT_ITERATIONS: u32 = 120;
+const CELL_PADDING: f32 = 4.0;
+const ANTIALIAS_GUARD_PIXELS: f32 = 1.0;
 
 #[derive(Default)]
 struct CommandPen(Vec<OutlineCommand<f32>>);
@@ -80,6 +82,7 @@ struct Arguments {
     cell_size: u32,
     iterations: u32,
     output: Option<PathBuf>,
+    full_cell_quads: bool,
 }
 
 struct TimestampResources {
@@ -166,12 +169,17 @@ fn main() -> Result<()> {
         arguments.width,
         arguments.height,
         arguments.cell_size,
+        arguments.full_cell_quads,
     )?;
     let instance_count = u32::try_from(instance_bytes.len() / RENDER_INSTANCE_BYTES)?;
     let uniform_bytes = pack_render_params(RenderParams {
         viewport_width: arguments.width as f32,
         viewport_height: arguments.height as f32,
-        cell_padding: 4.0,
+        cell_padding: if arguments.full_cell_quads {
+            CELL_PADDING
+        } else {
+            0.0
+        },
     });
     let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("shift-slug globals"),
@@ -401,12 +409,17 @@ fn main() -> Result<()> {
     }
 
     println!(
-        "viewport={}x{} cell_size={} visible_instances={} iterations={}",
+        "viewport={}x{} cell_size={} visible_instances={} iterations={} quad_mode={}",
         arguments.width,
         arguments.height,
         arguments.cell_size,
         instance_count,
         arguments.iterations,
+        if arguments.full_cell_quads {
+            "full_cell"
+        } else {
+            "tight_guarded"
+        },
     );
     println!(
         "atlas_buffer_create_ms={:.3} pipeline_create_ms={:.3} warm_submit_ms={:.3}",
@@ -563,7 +576,13 @@ fn atlas_entry<'a>(
     })
 }
 
-fn build_instances(atlas: &Atlas, width: u32, height: u32, cell_size: u32) -> Result<Vec<u8>> {
+fn build_instances(
+    atlas: &Atlas,
+    width: u32,
+    height: u32,
+    cell_size: u32,
+    full_cell_quads: bool,
+) -> Result<Vec<u8>> {
     let columns = width / cell_size;
     let rows = height / cell_size;
     if columns == 0 || rows == 0 {
@@ -582,14 +601,22 @@ fn build_instances(atlas: &Atlas, width: u32, height: u32, cell_size: u32) -> Re
         let glyph_index = ((u64::from(index) * u64::from(glyph_count)) / u64::from(instance_count))
             .min(u64::from(glyph_count - 1)) as u32;
         let bounds = atlas.glyphs()[glyph_index as usize].bounds;
+        let cell_rect = [
+            (column * cell_size) as f32,
+            (row * cell_size) as f32,
+            ((column + 1) * cell_size) as f32,
+            ((row + 1) * cell_size) as f32,
+        ];
+        let fitted_bounds = aspect_fitted_bounds(bounds, cell_size as f32, cell_size as f32);
+        let em_transform = pixel_to_em_transform(cell_rect, fitted_bounds);
+        let pixel_rect = if full_cell_quads {
+            cell_rect
+        } else {
+            tight_guarded_rect(bounds, cell_rect, fitted_bounds)
+        };
         instances.push(RenderInstance {
-            pixel_rect: [
-                (column * cell_size) as f32,
-                (row * cell_size) as f32,
-                ((column + 1) * cell_size) as f32,
-                ((row + 1) * cell_size) as f32,
-            ],
-            em_rect: aspect_fitted_bounds(bounds, cell_size as f32, cell_size as f32),
+            pixel_rect,
+            em_transform,
             glyph_index,
         });
     }
@@ -616,6 +643,52 @@ fn aspect_fitted_bounds(bounds: Bounds, pixel_width: f32, pixel_height: f32) -> 
         center_y - fitted_height * 0.5,
         center_x + fitted_width * 0.5,
         center_y + fitted_height * 0.5,
+    ]
+}
+
+fn pixel_to_em_transform(cell_rect: [f32; 4], fitted_bounds: [f32; 4]) -> [f32; 4] {
+    let drawable = [
+        cell_rect[0] + CELL_PADDING,
+        cell_rect[1] + CELL_PADDING,
+        cell_rect[2] - CELL_PADDING,
+        cell_rect[3] - CELL_PADDING,
+    ];
+    let scale_x = (fitted_bounds[2] - fitted_bounds[0]) / (drawable[2] - drawable[0]);
+    let scale_y = -(fitted_bounds[3] - fitted_bounds[1]) / (drawable[3] - drawable[1]);
+    [
+        scale_x,
+        scale_y,
+        fitted_bounds[0] - drawable[0] * scale_x,
+        fitted_bounds[3] - drawable[1] * scale_y,
+    ]
+}
+
+fn tight_guarded_rect(bounds: Bounds, cell_rect: [f32; 4], fitted_bounds: [f32; 4]) -> [f32; 4] {
+    if bounds.width() <= f32::EPSILON || bounds.height() <= f32::EPSILON {
+        let center_x = (cell_rect[0] + cell_rect[2]) * 0.5;
+        let center_y = (cell_rect[1] + cell_rect[3]) * 0.5;
+        return [center_x, center_y, center_x, center_y];
+    }
+
+    let drawable = [
+        cell_rect[0] + CELL_PADDING,
+        cell_rect[1] + CELL_PADDING,
+        cell_rect[2] - CELL_PADDING,
+        cell_rect[3] - CELL_PADDING,
+    ];
+    let scale_x = (drawable[2] - drawable[0]) / (fitted_bounds[2] - fitted_bounds[0]);
+    let scale_y = (drawable[3] - drawable[1]) / (fitted_bounds[3] - fitted_bounds[1]);
+    let actual_pixels = [
+        drawable[0] + (bounds.min_x - fitted_bounds[0]) * scale_x,
+        drawable[1] + (fitted_bounds[3] - bounds.max_y) * scale_y,
+        drawable[0] + (bounds.max_x - fitted_bounds[0]) * scale_x,
+        drawable[1] + (fitted_bounds[3] - bounds.min_y) * scale_y,
+    ];
+    [
+        (actual_pixels[0] - ANTIALIAS_GUARD_PIXELS).max(drawable[0]),
+        (actual_pixels[1] - ANTIALIAS_GUARD_PIXELS).max(drawable[1]),
+        (actual_pixels[2] + ANTIALIAS_GUARD_PIXELS).min(drawable[2]),
+        (actual_pixels[3] + ANTIALIAS_GUARD_PIXELS).min(drawable[3]),
     ]
 }
 
@@ -839,6 +912,7 @@ fn arguments() -> Result<Arguments> {
         cell_size: DEFAULT_CELL_SIZE,
         iterations: DEFAULT_ITERATIONS,
         output: None,
+        full_cell_quads: false,
     };
 
     while let Some(value) = values.next() {
@@ -852,6 +926,7 @@ fn arguments() -> Result<Arguments> {
             "--iterations" => {
                 arguments.iterations = required_value(&mut values, "--iterations")?.parse()?
             }
+            "--full-cell-quads" => arguments.full_cell_quads = true,
             "--output" => {
                 arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?))
             }
@@ -861,10 +936,12 @@ fn arguments() -> Result<Arguments> {
 
     if arguments.width == 0
         || arguments.height == 0
-        || arguments.cell_size == 0
+        || arguments.cell_size <= (CELL_PADDING * 2.0) as u32
         || arguments.iterations == 0
     {
-        return Err("width, height, cell size, and iterations must be nonzero".into());
+        return Err(
+            "width, height, iterations, and cell size above eight pixels are required".into(),
+        );
     }
     if arguments.font.is_none() && (arguments.output.is_some() || !arguments.settings.is_empty()) {
         return Err("font-dependent options require a FONT argument".into());
@@ -900,6 +977,35 @@ mod tests {
             (DEFAULT_WIDTH / DEFAULT_CELL_SIZE) * (DEFAULT_HEIGHT / DEFAULT_CELL_SIZE),
             150
         );
+    }
+
+    #[test]
+    fn tight_quad_uses_the_full_cell_fragment_transform() {
+        let bounds = Bounds {
+            min_x: -100.0,
+            min_y: -250.0,
+            max_x: 700.0,
+            max_y: 900.0,
+        };
+        let cell = [0.0, 0.0, 64.0, 64.0];
+        let fitted = aspect_fitted_bounds(bounds, 64.0, 64.0);
+        let transform = pixel_to_em_transform(cell, fitted);
+        let tight_pixels = tight_guarded_rect(bounds, cell, fitted);
+        let em_at_top_left = [
+            4.0 * transform[0] + transform[2],
+            4.0 * transform[1] + transform[3],
+        ];
+        let em_at_bottom_right = [
+            60.0 * transform[0] + transform[2],
+            60.0 * transform[1] + transform[3],
+        ];
+
+        assert!((em_at_top_left[0] - fitted[0]).abs() < 0.001);
+        assert!((em_at_top_left[1] - fitted[3]).abs() < 0.001);
+        assert!((em_at_bottom_right[0] - fitted[2]).abs() < 0.001);
+        assert!((em_at_bottom_right[1] - fitted[1]).abs() < 0.001);
+        assert!(tight_pixels[0] >= 4.0 && tight_pixels[1] >= 4.0);
+        assert!(tight_pixels[2] <= 60.0 && tight_pixels[3] <= 60.0);
     }
 
     #[test]

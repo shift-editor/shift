@@ -9,7 +9,7 @@ struct GlobalParams {
 
 struct Instance {
     pixel_rect: vec4<f32>,
-    em_rect: vec4<f32>,
+    em_transform: vec4<f32>,
     glyph: vec4<u32>,
 };
 
@@ -34,8 +34,9 @@ struct Band {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) position_em: vec2<f32>,
-    @location(1) @interpolate(flat) glyph_index: u32,
+    @location(0) @interpolate(flat) em_scale: vec2<f32>,
+    @location(1) @interpolate(flat) em_offset: vec2<f32>,
+    @location(2) @interpolate(flat) glyph_index: u32,
 };
 
 @group(0) @binding(0) var<uniform> params: GlobalParams;
@@ -74,10 +75,8 @@ fn vertex_main(
 
     var output: VertexOutput;
     output.position = vec4<f32>(clip_position, 0.0, 1.0);
-    output.position_em = vec2<f32>(
-        mix(instance.em_rect.x, instance.em_rect.z, uv.x),
-        mix(instance.em_rect.w, instance.em_rect.y, uv.y),
-    );
+    output.em_scale = instance.em_transform.xy;
+    output.em_offset = instance.em_transform.zw;
     output.glyph_index = instance.glyph.x;
     return output;
 }
@@ -207,6 +206,7 @@ fn slug_coverage(render_coordinate: vec2<f32>, ranges: vec4<u32>) -> f32 {
 
 @fragment
 fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let coverage = slug_coverage(input.position_em, curve_ranges(input.position_em, input.glyph_index));
+    let position_em = input.position.xy * input.em_scale + input.em_offset;
+    let coverage = slug_coverage(position_em, curve_ranges(position_em, input.glyph_index));
     return vec4<f32>(0.0, 0.0, 0.0, coverage);
 }
