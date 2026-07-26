@@ -1,0 +1,9 @@
+[package]
+name = "shift-glyph-codec"
+version = "0.1.0"
+edition = "2021"
+description = "Strict packed glyph payload codecs shared by Shift transports and stores"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["rlib"]
