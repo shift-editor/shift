@@ -1,0 +1,33 @@
+[package]
+name = "shift-slug"
+version = "0.1.0"
+edition = "2021"
+description = "GPU-independent Slug curve and band preprocessing for Shift glyph grids"
+license = "MIT"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+wgpu-benchmark = ["dep:pollster", "dep:wgpu"]
+
+[dependencies]
+shift-glyph-codec = { workspace = true }
+
+pollster = { version = "0.4", optional = true }
+wgpu = { version = "30.0.0", optional = true, default-features = false, features = [
+    "dx12",
+    "metal",
+    "parking_lot",
+    "std",
+    "vulkan",
+    "wgsl",
+] }
+
+[dev-dependencies]
+skrifa = "0.32.0"
+
+[[example]]
+name = "benchmark_wgpu"
+required-features = ["wgpu-benchmark"]
