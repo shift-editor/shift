@@ -12,6 +12,15 @@ const VARIABLE_SOURCE_BYTES: usize = 8;
 const BASE_SOURCE_DELTA: u32 = u32::MAX;
 const SPARSE_SOURCE_FLAG: u32 = 1 << 31;
 const SOURCE_OFFSET_MASK: u32 = !SPARSE_SOURCE_FLAG;
+const COMPONENT_GLYPH_FLAG: u32 = 1 << 31;
+const GLYPH_OFFSET_MASK: u32 = !COMPONENT_GLYPH_FLAG;
+
+mod component;
+pub(crate) use component::ROOT_COMPONENT;
+pub use component::{
+    VariableAnchorSource, VariableComponent, VariableComponentGlyph, VariableComponentPart,
+    VariableComponentSource,
+};
 
 /// One glyph in a resident variable atlas.
 ///
@@ -47,6 +56,11 @@ pub struct VariableLayout {
     pub glyphs: Section,
     pub sources: Section,
     pub source_advances: Section,
+    pub component_glyphs: Section,
+    pub component_parts: Section,
+    pub components: Section,
+    pub component_sources: Section,
+    pub anchor_sources: Section,
     pub line_bits: Section,
     pub total_length: usize,
 }
@@ -66,6 +80,11 @@ pub struct VariableAtlas {
     glyphs: Vec<VariableGlyph>,
     sources: Vec<VariableSource>,
     source_advances: Vec<f32>,
+    component_glyphs: Vec<VariableComponentGlyph>,
+    component_parts: Vec<VariableComponentPart>,
+    components: Vec<VariableComponent>,
+    component_sources: Vec<VariableComponentSource>,
+    anchor_sources: Vec<VariableAnchorSource>,
     line_bits: Vec<u32>,
 }
 
@@ -97,6 +116,26 @@ impl VariableAtlas {
 
     pub fn source_advances(&self) -> &[f32] {
         &self.source_advances
+    }
+
+    pub fn component_glyphs(&self) -> &[VariableComponentGlyph] {
+        &self.component_glyphs
+    }
+
+    pub fn component_parts(&self) -> &[VariableComponentPart] {
+        &self.component_parts
+    }
+
+    pub fn components(&self) -> &[VariableComponent] {
+        &self.components
+    }
+
+    pub fn component_sources(&self) -> &[VariableComponentSource] {
+        &self.component_sources
+    }
+
+    pub fn anchor_sources(&self) -> &[VariableAnchorSource] {
+        &self.anchor_sources
     }
 
     pub fn line_bits(&self) -> &[u32] {
@@ -140,6 +179,11 @@ impl VariableAtlas {
                 .iter()
                 .map(|word| word.count_ones() as usize)
                 .sum(),
+            component_glyph_count: self.component_glyphs.len(),
+            component_part_count: self.component_parts.len(),
+            component_count: self.components.len(),
+            component_source_count: self.component_sources.len(),
+            anchor_source_count: self.anchor_sources.len(),
             bands_per_direction: self.band_count,
             max_curves_per_glyph: self
                 .glyphs
@@ -175,6 +219,9 @@ impl VariableAtlas {
             .glyphs
             .get(glyph_index as usize)
             .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
+        if component_glyph_index(*glyph).is_some() {
+            return component::resolve_component_glyph(self, *glyph, weights);
+        }
         let curve_start = glyph.curve_start as usize;
         let curve_end = curve_start
             .checked_add(glyph.curve_count as usize)
@@ -269,6 +316,13 @@ impl VariableAtlas {
             .glyphs
             .get(glyph_index as usize)
             .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
+        if let Some(component_glyph_index) = component_glyph_index(*glyph) {
+            let component_glyph = self
+                .component_glyphs
+                .get(component_glyph_index)
+                .ok_or(SlugError::LengthOverflow)?;
+            return self.resolve_advance_with_weights(component_glyph.root_glyph_index, weights);
+        }
         let source_start = glyph.source_start as usize;
         let source_end = source_start
             .checked_add(glyph.source_count as usize)
@@ -322,8 +376,38 @@ impl VariableAtlas {
             std::mem::size_of::<f32>(),
             alignment,
         )?;
-        let line_bits = next_section(
+        let component_glyphs = next_section(
             source_advances,
+            self.component_glyphs.len(),
+            component::VARIABLE_COMPONENT_GLYPH_BYTES,
+            alignment,
+        )?;
+        let component_parts = next_section(
+            component_glyphs,
+            self.component_parts.len(),
+            component::VARIABLE_COMPONENT_PART_BYTES,
+            alignment,
+        )?;
+        let components = next_section(
+            component_parts,
+            self.components.len(),
+            component::VARIABLE_COMPONENT_BYTES,
+            alignment,
+        )?;
+        let component_sources = next_section(
+            components,
+            self.component_sources.len(),
+            component::VARIABLE_COMPONENT_SOURCE_BYTES,
+            alignment,
+        )?;
+        let anchor_sources = next_section(
+            component_sources,
+            self.anchor_sources.len(),
+            component::VARIABLE_ANCHOR_SOURCE_BYTES,
+            alignment,
+        )?;
+        let line_bits = next_section(
+            anchor_sources,
             self.line_bits.len(),
             std::mem::size_of::<u32>(),
             alignment,
@@ -340,6 +424,11 @@ impl VariableAtlas {
             glyphs,
             sources,
             source_advances,
+            component_glyphs,
+            component_parts,
+            components,
+            component_sources,
+            anchor_sources,
             line_bits,
             total_length,
         })
@@ -409,6 +498,16 @@ impl VariableAtlas {
         for advance in &self.source_advances {
             writer.write(&advance.to_le_bytes());
         }
+        writer.pad_to(layout.component_glyphs.offset)?;
+        component::write_component_glyphs(&mut writer, &self.component_glyphs);
+        writer.pad_to(layout.component_parts.offset)?;
+        component::write_component_parts(&mut writer, &self.component_parts);
+        writer.pad_to(layout.components.offset)?;
+        component::write_components(&mut writer, &self.components);
+        writer.pad_to(layout.component_sources.offset)?;
+        component::write_component_sources(&mut writer, &self.component_sources);
+        writer.pad_to(layout.anchor_sources.offset)?;
+        component::write_anchor_sources(&mut writer, &self.anchor_sources);
         writer.pad_to(layout.line_bits.offset)?;
         for word in &self.line_bits {
             writer.write(&word.to_le_bytes());
@@ -431,14 +530,36 @@ pub struct VariableStatistics {
     pub dense_delta_source_count: usize,
     pub sparse_delta_source_count: usize,
     pub line_curve_count: usize,
+    pub component_glyph_count: usize,
+    pub component_part_count: usize,
+    pub component_count: usize,
+    pub component_source_count: usize,
+    pub anchor_source_count: usize,
     pub bands_per_direction: u32,
     pub max_curves_per_glyph: u32,
 }
 
 /// Incrementally builds a topology-compatible resident variable atlas.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct VariableAtlasBuilder {
     atlas: VariableAtlas,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct VariableAtlasCheckpoint {
+    base_curves: usize,
+    curve_deltas: usize,
+    sparse_deltas: usize,
+    glyphs: usize,
+    sources: usize,
+    source_advances: usize,
+    component_glyphs: usize,
+    component_parts: usize,
+    components: usize,
+    component_sources: usize,
+    anchor_sources: usize,
+    line_bits: usize,
+    last_line_word: Option<u32>,
 }
 
 impl VariableAtlasBuilder {
@@ -541,7 +662,7 @@ impl VariableAtlasBuilder {
 
         let curve_start = as_u32(self.atlas.base_curves.len())?;
         let curve_count = as_u32(base_curves.len())?;
-        let source_start = as_u32(self.atlas.sources.len())?;
+        let source_start = direct_source_offset(self.atlas.sources.len())?;
         let source_count = as_u32(
             source_curves
                 .len()
@@ -691,6 +812,62 @@ impl VariableAtlasBuilder {
             .ok_or(SlugError::LengthOverflow)?
             .copy_from_slice(&advances);
         Ok(())
+    }
+
+    pub(crate) fn checkpoint(&self) -> VariableAtlasCheckpoint {
+        VariableAtlasCheckpoint {
+            base_curves: self.atlas.base_curves.len(),
+            curve_deltas: self.atlas.curve_deltas.len(),
+            sparse_deltas: self.atlas.sparse_deltas.len(),
+            glyphs: self.atlas.glyphs.len(),
+            sources: self.atlas.sources.len(),
+            source_advances: self.atlas.source_advances.len(),
+            component_glyphs: self.atlas.component_glyphs.len(),
+            component_parts: self.atlas.component_parts.len(),
+            components: self.atlas.components.len(),
+            component_sources: self.atlas.component_sources.len(),
+            anchor_sources: self.atlas.anchor_sources.len(),
+            line_bits: self.atlas.line_bits.len(),
+            last_line_word: self.atlas.line_bits.last().copied(),
+        }
+    }
+
+    pub(crate) fn rollback(&mut self, checkpoint: VariableAtlasCheckpoint) {
+        self.atlas.base_curves.truncate(checkpoint.base_curves);
+        self.atlas.curve_deltas.truncate(checkpoint.curve_deltas);
+        self.atlas.sparse_deltas.truncate(checkpoint.sparse_deltas);
+        self.atlas.glyphs.truncate(checkpoint.glyphs);
+        self.atlas.sources.truncate(checkpoint.sources);
+        self.atlas
+            .source_advances
+            .truncate(checkpoint.source_advances);
+        self.atlas
+            .component_glyphs
+            .truncate(checkpoint.component_glyphs);
+        self.atlas
+            .component_parts
+            .truncate(checkpoint.component_parts);
+        self.atlas.components.truncate(checkpoint.components);
+        self.atlas
+            .component_sources
+            .truncate(checkpoint.component_sources);
+        self.atlas
+            .anchor_sources
+            .truncate(checkpoint.anchor_sources);
+        self.atlas.line_bits.truncate(checkpoint.line_bits);
+        if let (Some(last), Some(value)) =
+            (self.atlas.line_bits.last_mut(), checkpoint.last_line_word)
+        {
+            *last = value;
+        }
+    }
+
+    pub(crate) fn glyph(&self, glyph_index: u32) -> Result<VariableGlyph, SlugError> {
+        self.atlas
+            .glyphs
+            .get(glyph_index as usize)
+            .copied()
+            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))
     }
 
     pub fn finish(self) -> VariableAtlas {
@@ -973,6 +1150,15 @@ fn as_u32(value: usize) -> Result<u32, SlugError> {
     u32::try_from(value).map_err(|_| SlugError::LengthOverflow)
 }
 
+fn direct_source_offset(offset: usize) -> Result<u32, SlugError> {
+    let offset = as_u32(offset)?;
+    if offset <= GLYPH_OFFSET_MASK {
+        Ok(offset)
+    } else {
+        Err(SlugError::LengthOverflow)
+    }
+}
+
 fn dense_delta_offset(offset: u32) -> Result<u32, SlugError> {
     if offset <= SOURCE_OFFSET_MASK {
         Ok(offset)
@@ -993,4 +1179,9 @@ fn tagged_sparse_offset(offset: usize) -> Result<u32, SlugError> {
 fn sparse_descriptor_start(source: VariableSource) -> Option<usize> {
     (source.delta_start != BASE_SOURCE_DELTA && source.delta_start & SPARSE_SOURCE_FLAG != 0)
         .then_some((source.delta_start & SOURCE_OFFSET_MASK) as usize)
+}
+
+fn component_glyph_index(glyph: VariableGlyph) -> Option<usize> {
+    (glyph.source_start & COMPONENT_GLYPH_FLAG != 0)
+        .then_some((glyph.source_start & GLYPH_OFFSET_MASK) as usize)
 }

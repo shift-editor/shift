@@ -2208,7 +2208,6 @@ dependencies = [
  "shift-backends",
  "shift-font",
  "shift-glyph-codec",
- "shift-wire",
  "skrifa",
  "wgpu",
 ]

@@ -1,7 +1,8 @@
-use shift_font::{test_support::sample_variable_font, GlyphId, Location};
-use shift_glyph_codec::{decode_outline, OutlineCommand};
+use shift_font::{
+    test_support::sample_variable_font, CurveSegment, CurveSegmentIter, GlyphId, Location,
+};
+use shift_glyph_codec::OutlineCommand;
 use shift_slug::{AtlasBuilder, VariableAtlasBuilder};
-use shift_wire::outline::pack_resolved_contours;
 
 #[test]
 fn resident_two_source_model_matches_shift_projection_at_midpoint() {
@@ -57,11 +58,44 @@ fn commands_at(
         .glyph(glyph_id)
         .unwrap()
         .expect("fixture glyph resolves");
-    let packed = pack_resolved_contours(glyph.contours()).unwrap();
-    decode_outline(packed.as_bytes())
-        .unwrap()
-        .commands()
-        .collect()
+    let mut commands = Vec::new();
+    for contour in glyph.contours() {
+        let Some(first) = contour.points.first() else {
+            continue;
+        };
+        commands.push(OutlineCommand::Move {
+            x: first.x() as f32,
+            y: first.y() as f32,
+        });
+        for segment in CurveSegmentIter::new(&contour.points, contour.closed) {
+            match segment {
+                CurveSegment::Line(_, end) => commands.push(OutlineCommand::Line {
+                    x: end.x() as f32,
+                    y: end.y() as f32,
+                }),
+                CurveSegment::Quad(_, control, end) => commands.push(OutlineCommand::Quad {
+                    cx: control.x() as f32,
+                    cy: control.y() as f32,
+                    x: end.x() as f32,
+                    y: end.y() as f32,
+                }),
+                CurveSegment::Cubic(_, first, second, end) => {
+                    commands.push(OutlineCommand::Cubic {
+                        c1x: first.x() as f32,
+                        c1y: first.y() as f32,
+                        c2x: second.x() as f32,
+                        c2y: second.y() as f32,
+                        x: end.x() as f32,
+                        y: end.y() as f32,
+                    });
+                }
+            }
+        }
+        if contour.closed {
+            commands.push(OutlineCommand::Close);
+        }
+    }
+    commands
 }
 
 fn location(axis_id: &shift_font::AxisId, value: f64) -> Location {

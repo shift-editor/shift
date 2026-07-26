@@ -5,7 +5,7 @@
 //! one recipe from the interpolation reference layer, then evaluates every
 //! compatible source through the same contour, point, and segment indexes.
 
-use std::{error::Error, fmt};
+use std::{collections::HashMap, error::Error, fmt};
 
 use shift_font::{
     composite::ResolvedContour, ContourId, CoreError, CurveSegment, CurveSegmentIter, Font,
@@ -13,6 +13,12 @@ use shift_font::{
 };
 
 use crate::{Curve, Point, SlugError, VariableAtlasBuilder};
+
+mod component;
+pub use component::{add_authored_glyph_with_weight_sets, AuthoredWeightSet};
+
+pub(crate) type AuthoredDefaultKey = (shift_font::GlyphId, Vec<u32>, u32);
+pub(crate) type AuthoredDefaultGlyphs = HashMap<AuthoredDefaultKey, u32>;
 
 /// Product semantics that the first authored contour adapter cannot yet encode.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -56,6 +62,65 @@ pub struct AuthoredSourceGlyph {
     pub glyph_index: u32,
 }
 
+/// One location-independent authored atlas generation.
+///
+/// Direct geometry is deduplicated only within this explicit generation. Drop
+/// the builder and start another generation after authored edits so no stale
+/// geometry can be selected by stable identity alone.
+#[derive(Debug)]
+pub struct AuthoredAtlasBuilder {
+    builder: VariableAtlasBuilder,
+    defaults: AuthoredDefaultGlyphs,
+}
+
+impl AuthoredAtlasBuilder {
+    pub fn new(band_count: u32) -> Result<Self, SlugError> {
+        Ok(Self {
+            builder: VariableAtlasBuilder::new(band_count)?,
+            defaults: HashMap::new(),
+        })
+    }
+
+    pub fn add_glyph(
+        &mut self,
+        font: &Font,
+        projection: &GlyphProjection,
+        weight_sets: &[AuthoredWeightSet],
+        constant_weight_index: u32,
+    ) -> Result<AuthoredGlyph, AuthoredSlugError> {
+        let checkpoint = self.builder.checkpoint();
+        let mut inserted_defaults = Vec::new();
+        match component::add_authored_glyph_with_weight_sets_cached(
+            &mut self.builder,
+            &mut self.defaults,
+            &mut inserted_defaults,
+            font,
+            projection,
+            weight_sets,
+            constant_weight_index,
+        ) {
+            Ok(glyph) => Ok(glyph),
+            Err(error) => {
+                self.builder.rollback(checkpoint);
+                for key in inserted_defaults {
+                    self.defaults.remove(&key);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    pub fn finish(self) -> crate::VariableAtlas {
+        self.builder.finish()
+    }
+}
+
+impl Default for AuthoredAtlasBuilder {
+    fn default() -> Self {
+        Self::new(crate::DEFAULT_BAND_COUNT).expect("default Slug band count is valid")
+    }
+}
+
 /// Failure while deriving resident Slug curves from canonical authored layers.
 #[derive(Debug)]
 pub enum AuthoredSlugError {
@@ -63,9 +128,11 @@ pub enum AuthoredSlugError {
     MissingInterpolationSources,
     MissingSourceLocation(SourceId),
     ComponentBasisMismatch,
-    ComponentExactSourceTopology,
-    VariableComponentLinearTransform {
+    MissingWeightBasis(shift_font::GlyphId),
+    NonFiniteComponentValue {
         component_index: usize,
+        source_index: usize,
+        kind: &'static str,
     },
     WeightCountMismatch {
         expected: usize,
@@ -109,12 +176,17 @@ impl fmt::Display for AuthoredSlugError {
             Self::ComponentBasisMismatch => formatter.write_str(
                 "component interpolation basis differs from the root glyph basis",
             ),
-            Self::ComponentExactSourceTopology => formatter.write_str(
-                "a component glyph has exact-source topology that needs a resident variant",
-            ),
-            Self::VariableComponentLinearTransform { component_index } => write!(
+            Self::MissingWeightBasis(glyph_id) => write!(
                 formatter,
-                "component occurrence {component_index} varies rotation, scale, skew, or center"
+                "component glyph {glyph_id} uses an interpolation basis without GPU weight indexes"
+            ),
+            Self::NonFiniteComponentValue {
+                component_index,
+                source_index,
+                kind,
+            } => write!(
+                formatter,
+                "component occurrence {component_index} {kind} source {source_index} is not a finite f32 value"
             ),
             Self::WeightCountMismatch { expected, actual } => write!(
                 formatter,
@@ -440,6 +512,8 @@ pub fn add_authored_projection_glyph(
     }
     add_default_projection_glyph(
         builder,
+        &mut AuthoredDefaultGlyphs::new(),
+        &mut Vec::new(),
         projection,
         source_weight_indices,
         constant_weight_index,
@@ -448,10 +522,22 @@ pub fn add_authored_projection_glyph(
 
 fn add_default_projection_glyph(
     builder: &mut VariableAtlasBuilder,
+    defaults: &mut AuthoredDefaultGlyphs,
+    inserted_defaults: &mut Vec<AuthoredDefaultKey>,
     projection: &GlyphProjection,
     source_weight_indices: &[u32],
     constant_weight_index: u32,
 ) -> Result<u32, AuthoredSlugError> {
+    let key = (
+        projection.glyph_id(),
+        source_weight_indices.to_vec(),
+        constant_weight_index,
+    );
+    if let Some(glyph_index) = defaults.get(&key) {
+        let glyph_index = *glyph_index;
+        return Ok(glyph_index);
+    }
+
     let Some(interpolation) = projection.interpolation() else {
         if !source_weight_indices.is_empty() {
             return Err(AuthoredSlugError::WeightCountMismatch {
@@ -469,6 +555,8 @@ fn add_default_projection_glyph(
             [],
         )?;
         builder.set_glyph_source_advances(glyph_index, [advance])?;
+        defaults.insert(key.clone(), glyph_index);
+        inserted_defaults.push(key);
         return Ok(glyph_index);
     };
 
@@ -506,15 +594,16 @@ fn add_default_projection_glyph(
         source_curves.into_iter().skip(1),
     )?;
     builder.set_glyph_source_advances(glyph_index, source_advances)?;
+    defaults.insert(key.clone(), glyph_index);
+    inserted_defaults.push(key);
     Ok(glyph_index)
 }
 
-/// Adds a component glyph when its flattened result remains in the root basis.
+/// Adds a component glyph through the general resident component evaluator.
 ///
-/// This exact fast path supports nested components with source-varying
-/// translations and constant linear matrices. Attachments, exact-source
-/// relationship variants, and varying rotation/scale/skew remain explicit
-/// requirements for the general GPU component evaluator.
+/// This compatibility API supplies the root basis for every component glyph.
+/// Use [`add_authored_glyph_with_weight_sets`] when component glyphs have
+/// independently deduplicated interpolation bases or exact-source variants.
 pub fn add_authored_component_projection_glyph(
     builder: &mut VariableAtlasBuilder,
     font: &Font,
@@ -525,105 +614,38 @@ pub fn add_authored_component_projection_glyph(
     if requirements.component_occurrences == 0 {
         return add_authored_projection_glyph(builder, projection, source_weight_indices, 0);
     }
-    if requirements.attachment_count != 0
-        || requirements.exact_source_shapes != 0
-        || requirements.exact_component_variants != 0
-    {
+    if requirements.exact_source_shapes != 0 || requirements.exact_component_variants != 0 {
         return Err(AuthoredSlugError::UnsupportedGlyph(requirements));
     }
-    add_default_component_projection_glyph(builder, font, projection, source_weight_indices)
-}
-
-fn add_default_component_projection_glyph(
-    builder: &mut VariableAtlasBuilder,
-    font: &Font,
-    projection: &GlyphProjection,
-    source_weight_indices: &[u32],
-) -> Result<u32, AuthoredSlugError> {
-    let default_attachments = projection
-        .components()
-        .components()
-        .iter()
-        .filter(|component| component.attachment().is_some())
-        .count();
-    if default_attachments != 0 {
-        let mut requirements = authored_glyph_requirements(projection);
-        requirements.attachment_count = default_attachments;
-        return Err(AuthoredSlugError::UnsupportedGlyph(requirements));
-    }
-
     let interpolation = projection
         .interpolation()
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
-    if source_weight_indices.len() != interpolation.sources().len() {
-        return Err(AuthoredSlugError::WeightCountMismatch {
-            expected: interpolation.sources().len(),
-            actual: source_weight_indices.len(),
-        });
-    }
-    let root_source_ids = interpolation.basis().source_ids();
-    for component_glyph_id in projection.component_glyph_ids() {
-        let component_projection = font
-            .glyph_projection(component_glyph_id)?
-            .ok_or_else(|| CoreError::GlyphNotFound(component_glyph_id.clone()))?;
-        if !component_projection.exact_source_shapes().is_empty()
-            || !component_projection.exact_source_components().is_empty()
-        {
-            return Err(AuthoredSlugError::ComponentExactSourceTopology);
-        }
-        if component_projection
-            .interpolation()
-            .is_some_and(|component_interpolation| {
-                component_interpolation.basis() != interpolation.basis()
-            })
-        {
-            return Err(AuthoredSlugError::ComponentBasisMismatch);
-        }
-    }
-    validate_component_linear_transforms(font, projection, root_source_ids)?;
-
-    let mut recipe = None;
-    let mut source_curves = Vec::with_capacity(root_source_ids.len());
-    let mut source_advances = Vec::with_capacity(root_source_ids.len());
-    for (source_index, (source_id, weight_index)) in root_source_ids
-        .iter()
-        .zip(source_weight_indices)
-        .enumerate()
-    {
-        let location = source_location(font, source_id)?;
-        let mut font_projection = font.projection(location);
-        let resolved = font_projection
-            .glyph(&projection.glyph_id())?
-            .ok_or_else(|| CoreError::GlyphNotFound(projection.glyph_id()))?;
-        source_advances.push(authored_advance(resolved.x_advance(), source_index)?);
-        let recipe =
-            recipe.get_or_insert_with(|| ResolvedCurveRecipe::from_contours(resolved.contours()));
-        source_curves.push((
-            *weight_index,
-            recipe.curves_from_contours(resolved.contours())?,
-        ));
-    }
-
-    let recipe = recipe.ok_or(AuthoredSlugError::MissingInterpolationSources)?;
-    let (base_weight_index, base_curves) = source_curves
-        .first()
-        .cloned()
-        .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
-    let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
-        base_curves,
-        recipe.line_flags(),
-        base_weight_index,
-        source_curves.into_iter().skip(1),
+    let weight_set = AuthoredWeightSet::new(
+        interpolation.basis().clone(),
+        source_weight_indices.to_vec(),
     )?;
-    builder.set_glyph_source_advances(glyph_index, source_advances)?;
+    let checkpoint = builder.checkpoint();
+    let glyph_index = component::add_default_component_projection_glyph(
+        builder,
+        &mut AuthoredDefaultGlyphs::new(),
+        &mut Vec::new(),
+        font,
+        projection,
+        &[weight_set],
+        0,
+    )
+    .map_err(|error| match error {
+        AuthoredSlugError::MissingWeightBasis(_) => AuthoredSlugError::ComponentBasisMismatch,
+        error => error,
+    })
+    .inspect_err(|_| builder.rollback(checkpoint))?;
     Ok(glyph_index)
 }
 
 /// Adds the compatible default plus resident exact-source topology variants.
 ///
-/// Variant selection is a small location/instance update: no geometry is
-/// uploaded when the current location lands exactly on an authored source.
-/// The operation is transactional across every atlas glyph it appends.
+/// This compatibility API uses the root basis for the complete component
+/// closure. Use [`add_authored_glyph_with_weight_sets`] for differing bases.
 pub fn add_authored_glyph(
     builder: &mut VariableAtlasBuilder,
     font: &Font,
@@ -631,104 +653,28 @@ pub fn add_authored_glyph(
     source_weight_indices: &[u32],
     constant_weight_index: u32,
 ) -> Result<AuthoredGlyph, AuthoredSlugError> {
-    let mut candidate = builder.clone();
-    let default_glyph = if projection.components().components().is_empty() {
-        add_default_projection_glyph(
-            &mut candidate,
-            projection,
-            source_weight_indices,
-            constant_weight_index,
-        )?
-    } else {
-        add_default_component_projection_glyph(
-            &mut candidate,
-            font,
-            projection,
-            source_weight_indices,
-        )?
-    };
-
-    let exact_source_ids = font
-        .sources()
-        .iter()
-        .map(shift_font::Source::id)
-        .filter(|source_id| {
-            projection
-                .exact_source_shapes()
-                .iter()
-                .any(|shape| shape.source_id() == *source_id)
-                || projection
-                    .exact_source_components()
-                    .iter()
-                    .any(|components| components.source_id() == *source_id)
+    let weight_sets = projection
+        .interpolation()
+        .map(|interpolation| {
+            AuthoredWeightSet::new(
+                interpolation.basis().clone(),
+                source_weight_indices.to_vec(),
+            )
         })
+        .transpose()?
+        .into_iter()
         .collect::<Vec<_>>();
-    let mut exact_sources = Vec::with_capacity(exact_source_ids.len());
-    for source_id in exact_source_ids {
-        let location = source_location(font, &source_id)?;
-        let mut font_projection = font.projection(location);
-        let resolved = font_projection
-            .glyph(&projection.glyph_id())?
-            .ok_or_else(|| CoreError::GlyphNotFound(projection.glyph_id()))?;
-        let recipe = ResolvedCurveRecipe::from_contours(resolved.contours());
-        let advance = authored_advance(resolved.x_advance(), 0)?;
-        let glyph_index = candidate.add_curve_glyph_with_sources_and_lines(
-            recipe.curves_from_contours(resolved.contours())?,
-            recipe.line_flags(),
-            constant_weight_index,
-            [],
-        )?;
-        candidate.set_glyph_source_advances(glyph_index, [advance])?;
-        exact_sources.push(AuthoredSourceGlyph {
-            source_id,
-            glyph_index,
-        });
-    }
-
-    *builder = candidate;
-    Ok(AuthoredGlyph {
-        default_glyph,
-        exact_sources,
+    add_authored_glyph_with_weight_sets(
+        builder,
+        font,
+        projection,
+        &weight_sets,
+        constant_weight_index,
+    )
+    .map_err(|error| match error {
+        AuthoredSlugError::MissingWeightBasis(_) => AuthoredSlugError::ComponentBasisMismatch,
+        error => error,
     })
-}
-
-fn validate_component_linear_transforms(
-    font: &Font,
-    projection: &GlyphProjection,
-    source_ids: &[SourceId],
-) -> Result<(), AuthoredSlugError> {
-    for (component_index, occurrence) in projection.components().components().iter().enumerate() {
-        let mut expected: Option<[f64; 4]> = None;
-        for source_id in source_ids {
-            let location = source_location(font, source_id)?;
-            let parent_projection = font
-                .glyph_projection(&occurrence.parent_glyph_id())?
-                .ok_or_else(|| CoreError::GlyphNotFound(occurrence.parent_glyph_id()))?;
-            let parent_layer = parent_projection.resolve(location, font.axes(), font.sources())?;
-            let component = parent_layer
-                .components_iter()
-                .find(|component| component.id() == occurrence.component_id())
-                .ok_or_else(|| {
-                    CoreError::InvalidComponentId(occurrence.component_id().to_string())
-                })?;
-            let matrix = component.matrix();
-            let linear = [matrix.xx, matrix.xy, matrix.yx, matrix.yy];
-            if let Some(expected) = expected {
-                if linear
-                    .iter()
-                    .zip(expected)
-                    .any(|(actual, expected)| (actual - expected).abs() > 1e-9)
-                {
-                    return Err(AuthoredSlugError::VariableComponentLinearTransform {
-                        component_index,
-                    });
-                }
-            } else {
-                expected = Some(linear);
-            }
-        }
-    }
-    Ok(())
 }
 
 fn source_location<'a>(

@@ -340,6 +340,11 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
     assert_eq!(layout.glyphs.offset % 256, 0);
     assert_eq!(layout.sources.offset % 256, 0);
     assert_eq!(layout.source_advances.offset % 256, 0);
+    assert_eq!(layout.component_glyphs.offset % 256, 0);
+    assert_eq!(layout.component_parts.offset % 256, 0);
+    assert_eq!(layout.components.offset % 256, 0);
+    assert_eq!(layout.component_sources.offset % 256, 0);
+    assert_eq!(layout.anchor_sources.offset % 256, 0);
     assert_eq!(layout.line_bits.offset % 256, 0);
     assert_eq!(&first.as_bytes()[..4], &1.5_f32.to_le_bytes());
     assert_eq!(
@@ -465,6 +470,12 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
         ("Curve", 24),
         ("VariableGlyph", 32),
         ("VariableSource", 8),
+        ("VariableComponentGlyph", 24),
+        ("VariableComponentPart", 16),
+        ("VariableComponent", 32),
+        ("VariableComponentSource", 40),
+        ("VariableAnchorSource", 12),
+        ("Affine", 32),
         ("Band", 8),
     ] {
         let ty = variable_module

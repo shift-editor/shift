@@ -39,6 +39,58 @@ struct VariableSource {
     weight_index: u32,
 };
 
+struct VariableComponentGlyph {
+    part_start: u32,
+    part_count: u32,
+    component_start: u32,
+    component_count: u32,
+    root_glyph_index: u32,
+    _padding: u32,
+};
+
+struct VariableComponentPart {
+    glyph_index: u32,
+    component_index: u32,
+    output_curve_start: u32,
+    _padding: u32,
+};
+
+struct VariableComponent {
+    parent_component: u32,
+    source_start: u32,
+    source_count: u32,
+    source_anchor_start: u32,
+    source_anchor_count: u32,
+    target_anchor_start: u32,
+    target_anchor_count: u32,
+    target_component: u32,
+};
+
+struct VariableComponentSource {
+    weight_index: u32,
+    translate_x: f32,
+    translate_y: f32,
+    rotation: f32,
+    scale_x: f32,
+    scale_y: f32,
+    skew_x: f32,
+    skew_y: f32,
+    center_x: f32,
+    center_y: f32,
+};
+
+struct VariableAnchorSource {
+    weight_index: u32,
+    x: f32,
+    y: f32,
+};
+
+struct Affine {
+    linear: vec4<f32>,
+    translation: vec2<f32>,
+    _padding: vec2<f32>,
+};
+
 struct Band {
     start: u32,
     count: u32,
@@ -62,13 +114,20 @@ struct VertexOutput {
 @group(1) @binding(6) var<storage, read> line_bits: array<u32>;
 @group(1) @binding(7) var<storage, read> sparse_deltas: array<u32>;
 @group(1) @binding(8) var<storage, read> source_advances: array<f32>;
+@group(1) @binding(9) var<storage, read> component_glyphs: array<VariableComponentGlyph>;
+@group(1) @binding(10) var<storage, read> component_parts: array<VariableComponentPart>;
+@group(1) @binding(11) var<storage, read> components: array<VariableComponent>;
+@group(1) @binding(12) var<storage, read> component_sources: array<VariableComponentSource>;
+@group(1) @binding(13) var<storage, read> anchor_sources: array<VariableAnchorSource>;
 @group(2) @binding(0) var<storage, read_write> resolved_curves: array<Curve>;
 @group(2) @binding(1) var<storage, read_write> resolved_bands: array<Band>;
 @group(2) @binding(2) var<storage, read_write> resolved_indices: array<u32>;
 @group(2) @binding(3) var<storage, read_write> resolved_glyph_bounds: array<vec4<f32>>;
 @group(2) @binding(4) var<storage, read_write> resolved_glyph_advances: array<f32>;
+@group(2) @binding(5) var<storage, read_write> resolved_component_transforms: array<Affine>;
 
 var<workgroup> workgroup_curve_bounds: array<vec4<f32>, 64>;
+var<workgroup> workgroup_transform_start: u32;
 
 fn scale_curve(curve: Curve, scale: f32) -> Curve {
     var result: Curve;
@@ -101,6 +160,152 @@ fn regenerate_line_control(curve: Curve) -> Curve {
     return result;
 }
 
+fn direct_weight_sum(glyph: VariableGlyph) -> f32 {
+    var result = 0.0;
+    for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
+        let source = variable_sources[glyph.source_start + source_offset];
+        result += source_weights[source.weight_index];
+    }
+    return result;
+}
+
+fn direct_advance(glyph: VariableGlyph) -> f32 {
+    var result = 0.0;
+    for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
+        let source_index = glyph.source_start + source_offset;
+        let source = variable_sources[source_index];
+        result += source_advances[source_index] * source_weights[source.weight_index];
+    }
+    return result;
+}
+
+fn resolve_direct_curve(glyph: VariableGlyph, local_curve: u32, weight_sum: f32) -> Curve {
+    let curve_index = glyph.curve_start + local_curve;
+    var curve = scale_curve(base_curves[curve_index], weight_sum);
+    for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
+        let source = variable_sources[glyph.source_start + source_offset];
+        if source.delta_start == 0xffffffffu {
+            continue;
+        }
+
+        var delta_start = source.delta_start;
+        var delta_offset = local_curve;
+        if (source.delta_start & 0x80000000u) != 0u {
+            let descriptor_start = source.delta_start & 0x7fffffffu;
+            delta_start = sparse_deltas[descriptor_start];
+            let delta_count = sparse_deltas[descriptor_start + 1u];
+            let index_start = descriptor_start + 2u;
+            delta_offset = 0xffffffffu;
+            var lower = 0u;
+            var upper = delta_count;
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2u;
+                let candidate = sparse_deltas[index_start + middle];
+                if candidate < local_curve {
+                    lower = middle + 1u;
+                } else {
+                    upper = middle;
+                }
+            }
+            if lower < delta_count && sparse_deltas[index_start + lower] == local_curve {
+                delta_offset = lower;
+            }
+        }
+        if delta_offset != 0xffffffffu {
+            curve = add_scaled_curve(
+                curve,
+                curve_deltas[delta_start + delta_offset],
+                source_weights[source.weight_index],
+            );
+        }
+    }
+    return curve;
+}
+
+fn direct_curve_is_line(glyph: VariableGlyph, local_curve: u32) -> bool {
+    let curve_index = glyph.curve_start + local_curve;
+    return (line_bits[curve_index / 32u] & (1u << (curve_index % 32u))) != 0u;
+}
+
+fn identity_affine() -> Affine {
+    return Affine(vec4<f32>(1.0, 0.0, 0.0, 1.0), vec2<f32>(0.0), vec2<f32>(0.0));
+}
+
+fn transform_point(transform: Affine, point: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        transform.linear.x * point.x + transform.linear.z * point.y + transform.translation.x,
+        transform.linear.y * point.x + transform.linear.w * point.y + transform.translation.y,
+    );
+}
+
+fn transform_curve(transform: Affine, curve: Curve) -> Curve {
+    var result: Curve;
+    result.p0 = transform_point(transform, curve.p0);
+    result.p1 = transform_point(transform, curve.p1);
+    result.p2 = transform_point(transform, curve.p2);
+    return result;
+}
+
+fn compose_affine(outer: Affine, inner: Affine) -> Affine {
+    let xx = outer.linear.x * inner.linear.x + outer.linear.z * inner.linear.y;
+    let xy = outer.linear.y * inner.linear.x + outer.linear.w * inner.linear.y;
+    let yx = outer.linear.x * inner.linear.z + outer.linear.z * inner.linear.w;
+    let yy = outer.linear.y * inner.linear.z + outer.linear.w * inner.linear.w;
+    let translation = transform_point(outer, inner.translation);
+    return Affine(vec4<f32>(xx, xy, yx, yy), translation, vec2<f32>(0.0));
+}
+
+fn component_affine(component: VariableComponent) -> Affine {
+    var values = array<f32, 9>();
+    for (var source_offset = 0u; source_offset < component.source_count; source_offset += 1u) {
+        let source = component_sources[component.source_start + source_offset];
+        let weight = source_weights[source.weight_index];
+        values[0] += source.translate_x * weight;
+        values[1] += source.translate_y * weight;
+        values[2] += source.rotation * weight;
+        values[3] += source.scale_x * weight;
+        values[4] += source.scale_y * weight;
+        values[5] += source.skew_x * weight;
+        values[6] += source.skew_y * weight;
+        values[7] += source.center_x * weight;
+        values[8] += source.center_y * weight;
+    }
+
+    let radians = 0.017453292519943295;
+    let cos_rotation = cos(values[2] * radians);
+    let sin_rotation = sin(values[2] * radians);
+    let tan_skew_x = tan(values[5] * radians);
+    let tan_skew_y = tan(values[6] * radians);
+    let xx = values[3] * cos_rotation + values[4] * tan_skew_x * sin_rotation;
+    let xy = values[3] * sin_rotation - values[4] * tan_skew_x * cos_rotation;
+    let yx = -values[4] * sin_rotation + values[3] * tan_skew_y * cos_rotation;
+    let yy = values[4] * cos_rotation + values[3] * tan_skew_y * sin_rotation;
+    let dx = values[0] + values[7] - (xx * values[7] + yx * values[8]);
+    let dy = values[1] + values[8] - (xy * values[7] + yy * values[8]);
+    return Affine(vec4<f32>(xx, xy, yx, yy), vec2<f32>(dx, dy), vec2<f32>(0.0));
+}
+
+fn anchor_point(source_start: u32, source_count: u32) -> vec2<f32> {
+    var result = vec2<f32>(0.0);
+    for (var source_offset = 0u; source_offset < source_count; source_offset += 1u) {
+        let source = anchor_sources[source_start + source_offset];
+        result += vec2<f32>(source.x, source.y) * source_weights[source.weight_index];
+    }
+    return result;
+}
+
+fn transform_scratch_start(instance_index: u32) -> u32 {
+    var result = 0u;
+    for (var prior_instance = 0u; prior_instance < instance_index; prior_instance += 1u) {
+        let glyph = variable_glyphs[instances[prior_instance].glyph.x];
+        if (glyph.source_start & 0x80000000u) != 0u {
+            let descriptor = component_glyphs[glyph.source_start & 0x7fffffffu];
+            result += descriptor.component_count * 2u;
+        }
+    }
+    return result;
+}
+
 @compute @workgroup_size(64)
 fn resolve_visible_curves(
     @builtin(workgroup_id) workgroup_id: vec3<u32>,
@@ -113,71 +318,101 @@ fn resolve_visible_curves(
 
     let instance = instances[instance_index];
     let glyph = variable_glyphs[instance.glyph.x];
-    var weight_sum = 0.0;
-    var glyph_advance = 0.0;
-    for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
-        let source_index = glyph.source_start + source_offset;
-        let source = variable_sources[source_index];
-        let weight = source_weights[source.weight_index];
-        weight_sum += weight;
-        glyph_advance += source_advances[source_index] * weight;
-    }
-
+    let is_component_glyph = (glyph.source_start & 0x80000000u) != 0u;
     let maximum_f32 = 3.402823466e+38;
     var local_min = vec2<f32>(maximum_f32);
     var local_max = vec2<f32>(-maximum_f32);
-    var local_curve = local_id.x;
-    while local_curve < glyph.curve_count {
-        let source_index = glyph.curve_start + local_curve;
-        var curve = scale_curve(base_curves[source_index], weight_sum);
-        for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
-            let source = variable_sources[glyph.source_start + source_offset];
-            if source.delta_start == 0xffffffffu {
-                continue;
-            }
+    var glyph_advance = 0.0;
 
-            var delta_start = source.delta_start;
-            var delta_offset = local_curve;
-            if (source.delta_start & 0x80000000u) != 0u {
-                let descriptor_start = source.delta_start & 0x7fffffffu;
-                delta_start = sparse_deltas[descriptor_start];
-                let delta_count = sparse_deltas[descriptor_start + 1u];
-                let index_start = descriptor_start + 2u;
-                delta_offset = 0xffffffffu;
-                var lower = 0u;
-                var upper = delta_count;
-                while lower < upper {
-                    let middle = lower + (upper - lower) / 2u;
-                    let candidate = sparse_deltas[index_start + middle];
-                    if candidate < local_curve {
-                        lower = middle + 1u;
-                    } else {
-                        upper = middle;
-                    }
+    if is_component_glyph {
+        let descriptor = component_glyphs[glyph.source_start & 0x7fffffffu];
+        let root_glyph = variable_glyphs[descriptor.root_glyph_index];
+        glyph_advance = direct_advance(root_glyph);
+        if local_id.x == 0u {
+            workgroup_transform_start = transform_scratch_start(instance_index);
+        }
+        workgroupBarrier();
+
+        if local_id.x == 0u {
+            let local_start = workgroup_transform_start;
+            let resolved_start = local_start + descriptor.component_count;
+            for (var component_index = 0u; component_index < descriptor.component_count; component_index += 1u) {
+                let component = components[descriptor.component_start + component_index];
+                var local_transform = component_affine(component);
+                if component.target_component != 0xffffffffu {
+                    let source_anchor = anchor_point(
+                        component.source_anchor_start,
+                        component.source_anchor_count,
+                    );
+                    let target_anchor = anchor_point(
+                        component.target_anchor_start,
+                        component.target_anchor_count,
+                    );
+                    let source = transform_point(local_transform, source_anchor);
+                    let target_transform = resolved_component_transforms[
+                        local_start + component.target_component
+                    ];
+                    let target_point = transform_point(target_transform, target_anchor);
+                    local_transform.translation += target_point - source;
                 }
-                if lower < delta_count
-                    && sparse_deltas[index_start + lower] == local_curve
-                {
-                    delta_offset = lower;
+                var parent_transform = identity_affine();
+                if component.parent_component != 0xffffffffu {
+                    parent_transform = resolved_component_transforms[
+                        resolved_start + component.parent_component
+                    ];
                 }
-            }
-            if delta_offset != 0xffffffffu {
-                curve = add_scaled_curve(
-                    curve,
-                    curve_deltas[delta_start + delta_offset],
-                    source_weights[source.weight_index],
+                resolved_component_transforms[local_start + component_index] = local_transform;
+                resolved_component_transforms[resolved_start + component_index] = compose_affine(
+                    parent_transform,
+                    local_transform,
                 );
             }
         }
-        let line_word = line_bits[source_index / 32u];
-        if (line_word & (1u << (source_index % 32u))) != 0u {
-            curve = regenerate_line_control(curve);
+        storageBarrier();
+        workgroupBarrier();
+
+        let resolved_start = workgroup_transform_start + descriptor.component_count;
+        for (var part_offset = 0u; part_offset < descriptor.part_count; part_offset += 1u) {
+            let part = component_parts[descriptor.part_start + part_offset];
+            let direct_glyph = variable_glyphs[part.glyph_index];
+            let weight_sum = direct_weight_sum(direct_glyph);
+            var transform = identity_affine();
+            if part.component_index != 0xffffffffu {
+                transform = resolved_component_transforms[resolved_start + part.component_index];
+            }
+            var part_curve = local_id.x;
+            while part_curve < direct_glyph.curve_count {
+                var curve = transform_curve(
+                    transform,
+                    resolve_direct_curve(direct_glyph, part_curve, weight_sum),
+                );
+                if direct_curve_is_line(direct_glyph, part_curve) {
+                    curve = regenerate_line_control(curve);
+                }
+                let bounds = curve_bounds(curve);
+                local_min = min(local_min, bounds.xy);
+                local_max = max(local_max, bounds.zw);
+                resolved_curves[
+                    instance.glyph.y + part.output_curve_start + part_curve
+                ] = curve;
+                part_curve += 64u;
+            }
         }
-        let bounds = curve_bounds(curve);
-        local_min = min(local_min, bounds.xy);
-        local_max = max(local_max, bounds.zw);
-        resolved_curves[instance.glyph.y + local_curve] = curve;
-        local_curve += 64u;
+    } else {
+        let weight_sum = direct_weight_sum(glyph);
+        glyph_advance = direct_advance(glyph);
+        var local_curve = local_id.x;
+        while local_curve < glyph.curve_count {
+            var curve = resolve_direct_curve(glyph, local_curve, weight_sum);
+            if direct_curve_is_line(glyph, local_curve) {
+                curve = regenerate_line_control(curve);
+            }
+            let bounds = curve_bounds(curve);
+            local_min = min(local_min, bounds.xy);
+            local_max = max(local_max, bounds.zw);
+            resolved_curves[instance.glyph.y + local_curve] = curve;
+            local_curve += 64u;
+        }
     }
 
     workgroup_curve_bounds[local_id.x] = vec4<f32>(local_min, local_max);

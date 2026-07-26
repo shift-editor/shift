@@ -15,9 +15,11 @@ mod variable;
 
 pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};
 pub use authored::{
-    add_authored_component_projection_glyph, add_authored_glyph, add_authored_projection_glyph,
-    authored_glyph_requirements, curves_from_resolved_contours, AuthoredCurveRecipe, AuthoredGlyph,
-    AuthoredGlyphRequirements, AuthoredSlugError, AuthoredSourceGlyph,
+    add_authored_component_projection_glyph, add_authored_glyph,
+    add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
+    authored_glyph_requirements, curves_from_resolved_contours, AuthoredAtlasBuilder,
+    AuthoredCurveRecipe, AuthoredGlyph, AuthoredGlyphRequirements, AuthoredSlugError,
+    AuthoredSourceGlyph, AuthoredWeightSet,
 };
 pub use curve::{Bounds, Curve, Point, LINE_EPSILON};
 pub use error::SlugError;
@@ -27,8 +29,10 @@ pub use render::{
     RENDER_PARAMS_BYTES,
 };
 pub use variable::{
-    PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks, VariableAtlas,
-    VariableAtlasBuilder, VariableGlyph, VariableLayout, VariableSource, VariableStatistics,
+    PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks, VariableAnchorSource,
+    VariableAtlas, VariableAtlasBuilder, VariableComponent, VariableComponentGlyph,
+    VariableComponentPart, VariableComponentSource, VariableGlyph, VariableLayout, VariableSource,
+    VariableStatistics,
 };
 
 /// Shader source shared by native `wgpu` and Electron WebGPU consumers.

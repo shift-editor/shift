@@ -81,6 +81,7 @@ struct ScratchLayout {
     band_count: usize,
     index_count: usize,
     glyph_count: usize,
+    component_transform_count: usize,
 }
 
 fn main() -> Result<()> {
@@ -143,7 +144,7 @@ fn main() -> Result<()> {
         upload_chunk_count,
     );
     println!(
-        "axis={:?} base={} source={} weight={} visible={} scratch_curves={} scratch_bands={} scratch_indices={} scratch_bytes={}",
+        "axis={:?} base={} source={} weight={} visible={} scratch_curves={} scratch_bands={} scratch_indices={} scratch_component_transforms={} scratch_bytes={}",
         arguments.axis,
         arguments.base,
         arguments.source,
@@ -152,6 +153,7 @@ fn main() -> Result<()> {
         scratch.curve_count,
         scratch.band_count,
         scratch.index_count,
+        scratch.component_transform_count,
         scratch_bytes(scratch)?,
     );
     let statistics = atlas.statistics();
@@ -175,12 +177,18 @@ fn main() -> Result<()> {
         .max(layout.glyphs.length)
         .max(layout.sources.length)
         .max(layout.source_advances.length)
+        .max(layout.component_glyphs.length)
+        .max(layout.component_parts.length)
+        .max(layout.components.length)
+        .max(layout.component_sources.length)
+        .max(layout.anchor_sources.length)
         .max(layout.line_bits.length)
         .max(scratch.curve_count * 24)
         .max(scratch.band_count * 8)
         .max(scratch.index_count * 4)
         .max(scratch.glyph_count * 16)
-        .max(scratch.glyph_count * 4);
+        .max(scratch.glyph_count * 4)
+        .max(scratch.component_transform_count * 32);
     let mut required_limits = wgpu::Limits::default();
     required_limits.max_buffer_size = required_limits
         .max_buffer_size
@@ -190,7 +198,7 @@ fn main() -> Result<()> {
         .max_storage_buffer_binding_size
         .max(u64::try_from(largest_binding)?);
     required_limits.max_storage_buffers_per_shader_stage =
-        required_limits.max_storage_buffers_per_shader_stage.max(12);
+        required_limits.max_storage_buffers_per_shader_stage.max(18);
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("shift-slug variable benchmark device"),
         required_features: wgpu::Features::empty(),
@@ -265,6 +273,12 @@ fn main() -> Result<()> {
         scratch.glyph_count * 4,
         BufferUsages::COPY_SRC,
     )?;
+    let resolved_component_transform_buffer = storage_buffer(
+        &device,
+        "shift-slug resolved component transforms",
+        scratch.component_transform_count.max(1) * 32,
+        BufferUsages::empty(),
+    )?;
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("shift-slug variable shared shader"),
@@ -323,6 +337,7 @@ fn main() -> Result<()> {
         &resolved_curve_buffer,
         &resolved_bounds_buffer,
         &resolved_advance_buffer,
+        &resolved_component_transform_buffer,
     );
     let band_groups = create_band_groups(
         &device,
@@ -659,6 +674,7 @@ fn build_instances(
     let mut curve_count = 0_usize;
     let mut band_count = 0_usize;
     let mut index_count = 0_usize;
+    let mut component_transform_count = 0_usize;
     let bands_per_glyph = usize::try_from(atlas.band_count() * 2)?;
 
     for (instance_index, glyph_index) in glyph_indices.iter().copied().enumerate() {
@@ -696,6 +712,15 @@ fn build_instances(
                     .ok_or("scratch index count overflow")?,
             )
             .ok_or("scratch index count overflow")?;
+        if glyph.source_start & (1 << 31) != 0 {
+            let descriptor = atlas
+                .component_glyphs()
+                .get((glyph.source_start & !(1 << 31)) as usize)
+                .ok_or("component glyph descriptor is out of range")?;
+            component_transform_count = component_transform_count
+                .checked_add(descriptor.component_count as usize * 2)
+                .ok_or("scratch component transform count overflow")?;
+        }
     }
 
     Ok((
@@ -705,6 +730,7 @@ fn build_instances(
             band_count,
             index_count,
             glyph_count: glyph_indices.len(),
+            component_transform_count,
         },
     ))
 }
@@ -868,6 +894,7 @@ fn create_resolve_groups(
     resolved_curve_buffer: &wgpu::Buffer,
     resolved_bounds_buffer: &wgpu::Buffer,
     resolved_advance_buffer: &wgpu::Buffer,
+    resolved_component_transform_buffer: &wgpu::Buffer,
 ) -> [wgpu::BindGroup; 3] {
     let group0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug resolve globals"),
@@ -896,6 +923,11 @@ fn create_resolve_groups(
             atlas_entry(6, atlas_buffer, layout.line_bits),
             atlas_entry(7, atlas_buffer, layout.sparse_deltas),
             atlas_entry(8, atlas_buffer, layout.source_advances),
+            atlas_entry(9, atlas_buffer, layout.component_glyphs),
+            atlas_entry(10, atlas_buffer, layout.component_parts),
+            atlas_entry(11, atlas_buffer, layout.components),
+            atlas_entry(12, atlas_buffer, layout.component_sources),
+            atlas_entry(13, atlas_buffer, layout.anchor_sources),
         ],
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -913,6 +945,10 @@ fn create_resolve_groups(
             BindGroupEntry {
                 binding: 4,
                 resource: resolved_advance_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 5,
+                resource: resolved_component_transform_buffer.as_entire_binding(),
             },
         ],
     });
@@ -1056,6 +1092,7 @@ fn scratch_bytes(layout: ScratchLayout) -> Result<usize> {
         .and_then(|bytes| bytes.checked_add(layout.index_count * 4))
         .and_then(|bytes| bytes.checked_add(layout.glyph_count * 16))
         .and_then(|bytes| bytes.checked_add(layout.glyph_count * 4))
+        .and_then(|bytes| bytes.checked_add(layout.component_transform_count * 32))
         .ok_or_else(|| "scratch byte count overflow".into())
 }
 
