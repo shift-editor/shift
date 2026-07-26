@@ -21,7 +21,6 @@
     "test:lint": "pnpm --filter @shift/desktop run lint:check",
     "test:typecheck": "pnpm typecheck",
     "test:perf": "pnpm --filter @shift/desktop exec vitest bench --run",
-    "benchmark:glyph-outline": "pnpm --filter @shift/desktop exec tsx e2e/benchmark-glyph-outlines.mts",
     "test:playwright": "pnpm --filter @shift/desktop test:e2e",
     "test:watch": "turbo run test:watch",
     "test:ci": "pnpm test:lint && pnpm format:check && pnpm test:typecheck && pnpm test:unit && pnpm test:native && cargo test --workspace && pnpm deadcode:strict",

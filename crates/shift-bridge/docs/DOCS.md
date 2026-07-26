@@ -16,8 +16,6 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
-**Architecture Invariant:** Editable glyph projections remain location-independent. The explicit preview siblings may resolve a requested location because they return derived SVG or `shift.glyph-outline.v1` bytes only; neither path is editable state or a bridge cache. **WHY:** Scrolling can use lightweight geometry without weakening the retained projection boundary or confusing flattened f32 outlines with authored layers.
-
 **Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
 
 ## Codemap
@@ -47,7 +45,6 @@ crates/shift-bridge/
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
 - `NapiGlyphProjection` -- compact location-independent glyph backing with reusable interpolation, exact-source exceptions, and Rust-owned `GlyphComponents` relationships.
-- `NapiPackedGlyphPreview` -- one glyph id, advance, and canonical packed outline-v1 `Uint8Array`; SVG previews remain the default fallback during the spike.
 - `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
 
 ## How it works
@@ -85,7 +82,7 @@ crates/shift-bridge/
 2. Return native NAPI DTOs rather than serialized JSON.
 3. Keep editor/rendering concerns out of Rust; TypeScript owns canvas-specific interpretation.
 
-Keep full/editable glyph reads location-independent. The two preview-only queries are the narrow exception: `getGlyphPreviews` returns SVG fallback text and `getPackedGlyphPreviews` returns derived outline-v1 bytes at a supplied internal location. Do not add a location-keyed bridge cache, return authored structure from these calls, or write packed outline bytes back into a glyph layer.
+Glyph preview reads must stay location-independent. Do not add resolved SVG/path queries or location-keyed bridge caches: the renderer evaluates retained projections through its reactive location signals.
 
 ## Verification
 
@@ -93,7 +90,6 @@ Keep full/editable glyph reads location-independent. The two preview-only querie
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo test -p shift-glyph-codec -p shift-wire
 pnpm --filter shift-bridge run build:debug
 pnpm generate:bridge-types
 ```
@@ -101,8 +97,7 @@ pnpm generate:bridge-types
 ## Related
 
 - `shift-font` -- font/glyph/layer data model and model-level mutation logic.
-- `shift-glyph-codec` -- packed glyph framing and strict outline validation.
-- `shift-wire` -- canonical bridge DTOs, resolved-contour adapter, and NAPI adapters.
+- `shift-wire` -- canonical bridge DTOs and NAPI adapters.
 - `shift-workspace` -- open editable font workspace and source/store coordination.
 - `shift-backends` -- imported font loading and font export.
 - `packages/types/src/bridge` -- generated TypeScript bridge facade.

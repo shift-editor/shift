@@ -16,7 +16,6 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** Numeric authored edits flow through the existing `GlyphLayerState` signal graph. Do not add a revision signal, invalidate projections to `null`, or refetch native variation data for point, component-transform, advance, or metric value changes.
 - **Architecture Invariant:** Structural glyph, source, or axis changes rebuild retained native projections behind the workspace FIFO and publish replacements atomically. The previous projection remains usable until its replacement arrives.
 - **Architecture Invariant:** The grid requests projections by glyph identity with virtualized overscan. Scrubbing is local signal evaluation, never a bridge request or a TanStack Query location key.
-- **Architecture Invariant:** Preview-cache outlines are derived transport values, never editable layer state. SVG remains the default; `?packedGlyphPreviews=1` selects the packed sibling for spike measurements. Packed cache accounting counts canonical bytes, while lazy debug SVG and `Path2D` are renderer-owned memoized outputs.
 
 ## Codemap
 
@@ -27,7 +26,6 @@ lib/model/
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
   GlyphLayerState.ts         -- reactive authored structure and numeric buffers
-  GlyphPreviewCache.ts       -- location-keyed SVG/packed preview byte-budget LRU
 lib/graphics/
   ContourPath.ts             -- canonical transformed commands and lazy path outputs
 lib/interpolation/
@@ -49,7 +47,6 @@ components/home/
 - `ComponentGlyph` -- one ordered component occurrence with a full `ComponentId[]` ancestry, current local/resolved transforms, direct contours, children, and bounds.
 - `GlyphContour` -- one displayed contour occurrence over a source contour, a current transform, and optional owning `ComponentGlyph`; it replaces a `ContourPath` when reactive geometry changes.
 - `ContourPath` -- non-reactive commands plus independently lazy SVG, Canvas path, and bounds for one transformed contour occurrence.
-- `PackedGlyphOutline` -- codec-owned validated f32 drawing stream retained by preview entries; it is unrelated to authored `GlyphLayer` persistence.
 
 ## Resolution and loading
 
@@ -79,8 +76,6 @@ layer-only/background sources never participate.
 `Glyph.renderModelAt()` retains one render model per live location signal through a `WeakMap`. Changing a signal reevaluates the same model; historical location values are not retained as cache keys.
 
 Only observed render output is evaluated. Virtualized offscreen models do not subscribe to paths, and no sequence of scrubbed locations increases retained geometry. Component occurrence objects are reused by their Rust-supplied paths.
-
-The lightweight preview lane can request either SVG or packed outline-v1 payloads at the current internal location. The packed path is selected only by the `packedGlyphPreviews=1` URL flag during the spike. `GlyphPreviewCache.fillPacked` validates a whole response before publishing any entries, retains packed bytes under the existing byte budget, and derives debug SVG only when the current SVG grid asks for it. `PackedOutlinePath.path` constructs one memoized `Path2D`; full canvas-grid rendering remains separate work.
 
 ## Boundaries
 

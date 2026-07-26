@@ -1,21 +1,9 @@
-import { packOutline } from "@shift/glyph-codec";
 import { describe, expect, it } from "vitest";
-import { mintGlyphId, type GlyphPreview, type PackedGlyphPreview } from "@shift/types";
+import { mintGlyphId, type GlyphPreview } from "@shift/types";
 import { GlyphPreviewCache } from "./GlyphPreviewCache";
 
 function preview(pathLength: number): GlyphPreview {
   return { glyphId: mintGlyphId(), svgPath: "M".repeat(pathLength), xAdvance: 500 };
-}
-
-function packedPreview(): PackedGlyphPreview {
-  return {
-    glyphId: mintGlyphId(),
-    data: packOutline([
-      { kind: "move", x: 0, y: 0 },
-      { kind: "line", x: 10, y: 20 },
-    ]).toUint8Array(),
-    xAdvance: 500,
-  };
 }
 
 describe("GlyphPreviewCache", () => {
@@ -75,17 +63,5 @@ describe("GlyphPreviewCache", () => {
     cache.fill([preview(420)]);
 
     expect(cache.nearBudget()).toBe(true);
-  });
-
-  it("accounts packed transport bytes and derives SVG only at the renderer boundary", () => {
-    const cache = new GlyphPreviewCache(1_000);
-    const preview = packedPreview();
-
-    cache.fillPacked([preview]);
-    const value = cache.get(preview.glyphId);
-
-    expect(cache.bytes).toBe(preview.data.byteLength + 64);
-    expect(value?.packedByteLength).toBe(preview.data.byteLength);
-    expect(value?.svgPath).toBe("M 0 0 L 10 20");
   });
 });

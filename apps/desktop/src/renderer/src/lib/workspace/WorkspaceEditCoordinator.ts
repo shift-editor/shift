@@ -3,7 +3,6 @@ import type {
   FontIntent,
   GlyphId,
   GlyphPreview,
-  PackedGlyphPreview,
   GlyphProjection,
   Location,
 } from "@shift/types";
@@ -188,16 +187,6 @@ export class WorkspaceEditCoordinator {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#workspace.glyphPreviews(glyphIds, location));
-  }
-
-  /** Pulls packed outline-v1 previews behind pending edits. */
-  async readPackedGlyphPreviews(
-    glyphIds: readonly GlyphId[],
-    location: Location,
-  ): Promise<PackedGlyphPreview[]> {
-    if (glyphIds.length === 0) return [];
-
-    return this.#withFlush(() => this.#workspace.packedGlyphPreviews(glyphIds, location));
   }
 
   /**

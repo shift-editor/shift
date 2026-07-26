@@ -41,10 +41,6 @@ const SETTLE_MS = 120;
 const WARMUP_CHUNK = 400;
 /** Byte budget for resident previews (~full 65k CJK font at one location). */
 const PREVIEW_BUDGET_BYTES = 256 * 1024 * 1024;
-/** Spike flag: SVG remains the default fallback until packed-path measurements land. */
-const USE_PACKED_GLYPH_PREVIEWS =
-  typeof location !== "undefined" &&
-  new URLSearchParams(location.search).get("packedGlyphPreviews") === "1";
 
 export function createGlyphGridFrameCell(
   glyphs: readonly Glyph[],
@@ -149,20 +145,11 @@ export function useGlyphGridFrame({
           }
 
           if (wanted.length > 0) {
-            if (USE_PACKED_GLYPH_PREVIEWS) {
-              const results = await font.packedGlyphPreviews(wanted, locationValue);
-              if (!mountedRef.current) return;
-              if (previewCache.key === key && results.length > 0) {
-                previewCache.fillPacked(results);
-                setPrefetched({ key, version: previewCache.version });
-              }
-            } else {
-              const results = await font.glyphPreviews(wanted, locationValue);
-              if (!mountedRef.current) return;
-              if (previewCache.key === key && results.length > 0) {
-                previewCache.fill(results);
-                setPrefetched({ key, version: previewCache.version });
-              }
+            const results = await font.glyphPreviews(wanted, locationValue);
+            if (!mountedRef.current) return;
+            if (previewCache.key === key && results.length > 0) {
+              previewCache.fill(results);
+              setPrefetched({ key, version: previewCache.version });
             }
             continue;
           }

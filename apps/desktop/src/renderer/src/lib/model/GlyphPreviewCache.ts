@@ -1,24 +1,15 @@
-import type { GlyphId, GlyphPreview, PackedGlyphPreview } from "@shift/types";
-import { PackedOutlinePath } from "@/lib/graphics/PackedOutlinePath";
+import type { GlyphId, GlyphPreview } from "@shift/types";
 
 /** Drawable preview payload retained per glyph. */
 export interface GlyphPreviewValue {
   readonly svgPath: string;
   readonly xAdvance: number;
-  /** Present only for packed entries; constructed lazily and memoized. */
-  readonly path?: Path2D;
-  /** Canonical payload bytes retained by a packed entry. */
-  readonly packedByteLength?: number;
 }
 
-/** Fixed per-entry overhead added to the payload in the byte ledger. */
+/** Fixed per-entry overhead added to the string payload in the byte ledger. */
 const ENTRY_OVERHEAD_BYTES = 64;
 
 function entryBytes(value: GlyphPreviewValue): number {
-  if (value.packedByteLength !== undefined) {
-    return value.packedByteLength + ENTRY_OVERHEAD_BYTES;
-  }
-
   return value.svgPath.length * 2 + ENTRY_OVERHEAD_BYTES;
 }
 
@@ -29,9 +20,9 @@ function entryBytes(value: GlyphPreviewValue): number {
  * Previews are only valid at one design location, so `rekey` empties the
  * cache whenever the location moves. Reads touch recency, keeping visible
  * glyphs hot; fills evict least-recently-used entries until the ledger fits
- * the budget again. SVG entries count `svgPath.length × 2` (UTF-16); packed
- * entries count canonical payload bytes. The fixed overhead covers the cache
- * record. Memoized renderer objects are a separate accounting concern.
+ * the budget again. `svgPath.length × 2` (UTF-16) plus a fixed overhead is
+ * the byte proxy — the constraint being managed is renderer memory, not
+ * entry count.
  */
 export class GlyphPreviewCache {
   readonly #budgetBytes: number;
@@ -91,62 +82,31 @@ export class GlyphPreviewCache {
     if (previews.length === 0) return;
 
     for (const preview of previews) {
-      this.#insert(preview.glyphId, {
+      const value: GlyphPreviewValue = {
         svgPath: preview.svgPath,
         xAdvance: preview.xAdvance,
-      });
+      };
+      const existing = this.#entries.get(preview.glyphId);
+      if (existing) {
+        this.#bytes -= entryBytes(existing);
+        this.#entries.delete(preview.glyphId);
+      }
+      this.#entries.set(preview.glyphId, value);
+      this.#bytes += entryBytes(value);
     }
 
-    this.#evict();
-    this.#version += 1;
-  }
-
-  /** Validates and retains packed bytes without eagerly creating renderer objects. */
-  fillPacked(previews: readonly PackedGlyphPreview[]): void {
-    if (previews.length === 0) return;
-
-    // Validate the complete response before publishing any part of the batch.
-    const paths = previews.map((preview) => PackedOutlinePath.fromBytes(preview.data));
-    for (const [index, preview] of previews.entries()) {
-      const rendererPath = paths[index];
-      this.#insert(preview.glyphId, {
-        get svgPath() {
-          return rendererPath.svgPath;
-        },
-        get path() {
-          return rendererPath.path;
-        },
-        packedByteLength: rendererPath.outline.byteLength,
-        xAdvance: preview.xAdvance,
-      });
-    }
-
-    this.#evict();
-    this.#version += 1;
-  }
-
-  /** Whether idle warm-up should stop rather than churn evictions. */
-  nearBudget(): boolean {
-    return this.#bytes >= this.#budgetBytes * 0.9;
-  }
-
-  #insert(glyphId: GlyphId, value: GlyphPreviewValue): void {
-    const existing = this.#entries.get(glyphId);
-    if (existing) {
-      this.#bytes -= entryBytes(existing);
-      this.#entries.delete(glyphId);
-    }
-
-    this.#entries.set(glyphId, value);
-    this.#bytes += entryBytes(value);
-  }
-
-  #evict(): void {
     for (const [glyphId, value] of this.#entries) {
       if (this.#bytes <= this.#budgetBytes) break;
 
       this.#entries.delete(glyphId);
       this.#bytes -= entryBytes(value);
     }
+
+    this.#version += 1;
+  }
+
+  /** Whether idle warm-up should stop rather than churn evictions. */
+  nearBudget(): boolean {
+    return this.#bytes >= this.#budgetBytes * 0.9;
   }
 }

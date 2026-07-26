@@ -118,8 +118,6 @@ export class WorkspaceHost {
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
       "workspace.glyphPreviews": ({ glyphIds, location }) =>
         this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location)),
-      "workspace.packedGlyphPreviews": ({ glyphIds, location }) =>
-        this.#serialize(() => this.#bridge.getPackedGlyphPreviews(glyphIds, location)),
       "workspace.mapLocation": (location) =>
         this.#serialize(() => this.#bridge.mapLocation(location)),
     });

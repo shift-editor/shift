@@ -9,7 +9,6 @@ import type {
   Source,
   GlyphId,
   GlyphPreview,
-  PackedGlyphPreview,
   GlyphRecord,
   GlyphName,
   SourceId,
@@ -975,19 +974,6 @@ export class Font {
     if (!this.#editCoordinator) return [];
 
     return this.#editCoordinator.readGlyphPreviews(glyphIds, locationFromAxisLocation(location));
-  }
-
-  /** Resolves packed outline-v1 previews without acquiring editable glyph models. */
-  async packedGlyphPreviews(
-    glyphIds: readonly GlyphId[],
-    location: AxisLocation,
-  ): Promise<readonly PackedGlyphPreview[]> {
-    if (!this.#editCoordinator) return [];
-
-    return this.#editCoordinator.readPackedGlyphPreviews(
-      glyphIds,
-      locationFromAxisLocation(location),
-    );
   }
 
   async #readGlyphSnapshots(glyphIds: readonly GlyphId[]): Promise<readonly GlyphId[]> {

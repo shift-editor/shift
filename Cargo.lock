@@ -1847,7 +1847,6 @@ dependencies = [
  "serde_json",
  "shift-backends",
  "shift-font",
- "shift-glyph-codec",
  "shift-wire",
  "shift-workspace",
  "thiserror",
@@ -1920,7 +1919,6 @@ dependencies = [
  "napi-derive",
  "serde",
  "shift-font",
- "shift-glyph-codec",
 ]
 
 [[package]]

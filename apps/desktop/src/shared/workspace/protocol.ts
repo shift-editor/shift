@@ -7,7 +7,6 @@ import type {
   FontMetrics,
   GlyphId,
   GlyphPreview,
-  PackedGlyphPreview,
   GlyphProjection,
   GlyphRecord,
   GlyphState,
@@ -179,11 +178,6 @@ export type SyncCallMap = {
   "workspace.glyphPreviews": {
     request: { glyphIds: GlyphId[]; location: Location };
     response: GlyphPreview[];
-  };
-  /** Resolves canonical packed outline-v1 previews at one internal location. */
-  "workspace.packedGlyphPreviews": {
-    request: { glyphIds: GlyphId[]; location: Location };
-    response: PackedGlyphPreview[];
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };

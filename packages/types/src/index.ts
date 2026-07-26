@@ -120,7 +120,6 @@ export type {
   GlyphInterpolation,
   GlyphLayerShape,
   GlyphPreview,
-  PackedGlyphPreview,
   GlyphProjection,
   GlyphRecord,
   GlyphSourceComponents,

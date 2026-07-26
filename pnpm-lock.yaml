@@ -51,9 +51,6 @@ importers:
       '@shift/geo':
         specifier: workspace:*
         version: link:../../packages/geo
-      '@shift/glyph-codec':
-        specifier: workspace:*
-        version: link:../../packages/glyph-codec
       '@shift/glyph-info':
         specifier: workspace:*
         version: link:../../packages/glyph-info

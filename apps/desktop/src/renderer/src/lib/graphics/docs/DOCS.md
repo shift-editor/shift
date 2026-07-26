@@ -6,8 +6,6 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 
 - **Architecture Invariant:** `ContourPath` is a non-reactive value for one transformed contour. It owns canonical path commands and independently lazy tight bounds, SVG text, and Canvas `Path2D`; glyph identity, component provenance, locations, and signal ownership remain in the model layer.
 
-- **Architecture Invariant:** `PackedOutlinePath` is the DOM boundary for a codec-validated packed outline. It memoizes debug SVG and `Path2D` independently and never turns flattened f32 preview geometry into editable glyph state.
-
 - **Architecture Invariant:** `Renderer` owns the `MarkerLayer` lifecycle. `CanvasContextProvider` only reports DOM canvas mount, resize, and unmount events.
 
 - **Architecture Invariant:** **CRITICAL**: The instance buffer layout (attribute offsets in the draw command) must exactly match the packing order in `MarkerHandleRenderer.#writeInstance`. If either side changes stride/offset, handles render garbage with no error.
@@ -23,7 +21,6 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 ```
 graphics/
   ContourPath.ts            — transformed contour commands with lazy path outputs
-  PackedOutlinePath.ts      — packed outline-v1 to lazy SVG/Path2D outputs
   backends/
     MarkerLayer.ts   — WebGL context: REGL init, instance buffer management, draw command
 ```
@@ -46,8 +43,6 @@ editor/rendering/markers/
 
 - `ContourPath` -- immutable transformed contour output shared by SVG rendering, Canvas rendering, and bounds checks. Commands are eager; each representation is cached only after its first read.
 
-- `PackedOutlinePath` -- renderer adapter over one opaque validated payload; iterates commands without allocating a point graph and memoizes only representations that are read.
-
 - `MarkerLayer` -- WebGL context wrapper. Manages REGL instance, instance buffer, and draw command. Provides `resizeCanvas`, `draw`, `clear`, `destroy`, and `isAvailable`.
 
 - `MarkerInstance` -- logical representation of one marker shape. The current marker path packs directly into a `Float32Array` for zero steady-state allocation.
@@ -63,8 +58,6 @@ editor/rendering/markers/
 ### Contour paths
 
 `GlyphContour` owns the reactive boundary for a contour occurrence. When source points or its placement matrix change, it replaces the current `ContourPath`. SVG previews read only `svgPath`; Canvas rendering reads only `path`; bounds and sidebearings read only `bounds`. Every output is derived from the same transformed command stream, so these consumers cannot disagree about component placement or curve geometry.
-
-Packed previews take a parallel derived path: `@shift/glyph-codec` validates common framing, command state, padding, finite f32 values, and total length without any DOM dependency; `PackedOutlinePath` then replays that validated stream into browser APIs. The existing SVG preview remains available as fallback.
 
 ### Initialization
 
@@ -115,7 +108,7 @@ Set a breakpoint or add logging in `MarkerLayer.draw`. Check `isAvailable()` ret
 
 ## Verification
 
-- Run `pnpm test:desktop src/renderer/src/lib/graphics/ContourPath.test.ts src/renderer/src/lib/graphics/PackedOutlinePath.test.ts` after changing contour command, transform, SVG, Canvas, or bounds behavior.
+- Run `pnpm test:desktop apps/desktop/src/renderer/src/lib/graphics/ContourPath.test.ts` after changing contour command, transform, SVG, Canvas, or bounds behavior.
 - No dedicated tests exist for `MarkerLayer`. Verify GPU markers visually: open a glyph with mixed point types (corner, smooth, off-curve), hover and select points, confirm correct shapes and state colors.
 - Check CPU fallback: in `MarkerLayer.#initialize`, temporarily throw before `this.#available = true`. Handles should still render via Canvas 2D.
 - After shader changes, test on both high-DPI and 1x displays -- the `fwidth`-based AA is sensitive to pixel ratio.

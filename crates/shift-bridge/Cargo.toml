@@ -10,7 +10,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 shift-font = { workspace = true }
-shift-glyph-codec = { workspace = true }
 shift-wire = { workspace = true, features = ["napi"] }
 shift-backends = { workspace = true }
 shift-workspace = { workspace = true }

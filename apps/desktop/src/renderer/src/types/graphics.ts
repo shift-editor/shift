@@ -23,9 +23,6 @@ export type PathCommand =
     }
   | { readonly type: "close" };
 
-/** Factory seam for lazily constructed DOM-owned canvas paths. */
-export type Path2DFactory = () => Path2D;
-
 /** RGBA colour as a four-element tuple (0-255 per channel). */
 export type Colour = [number, number, number, number];
 
