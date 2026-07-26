@@ -2,8 +2,8 @@ use std::{env, error::Error, fs, num::NonZeroU64, path::PathBuf, sync::mpsc, tim
 
 use shift_glyph_codec::OutlineCommand;
 use shift_slug::{
-    pack_render_instances, Curve, RenderInstance, VariableAtlas, VariableAtlasBuilder,
-    DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
+    pack_render_instances, pack_render_params, Bounds, Curve, RenderInstance, RenderParams,
+    VariableAtlas, VariableAtlasBuilder, DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
 };
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
@@ -12,16 +12,23 @@ use skrifa::{
 };
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroupEntry, BindingResource, BufferBinding, BufferDescriptor, BufferUsages,
-    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
-    DeviceDescriptor, MemoryHints, PipelineCompilationOptions, PollType, PowerPreference,
-    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource,
+    BindGroupEntry, BindingResource, BufferBinding, BufferDescriptor, BufferUsages, Color,
+    ColorTargetState, ColorWrites, CommandEncoderDescriptor, ComputePassDescriptor,
+    ComputePipelineDescriptor, Device, DeviceDescriptor, Extent3d, FragmentState, LoadOp,
+    MemoryHints, Operations, Origin3d, PipelineCompilationOptions, PollType, PowerPreference,
+    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, StoreOp, TexelCopyBufferInfo,
+    TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, VertexState,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const COPY_ALIGNMENT: u32 = 256;
 const DEFAULT_VISIBLE_GLYPHS: usize = 150;
+const GRID_COLUMNS: usize = 15;
+const CELL_SIZE: u32 = 64;
+const CELL_PADDING: f32 = 4.0;
 
 #[derive(Default)]
 struct CommandPen(Vec<OutlineCommand<f32>>);
@@ -167,6 +174,21 @@ fn main() -> Result<()> {
         contents: &variable_params,
         usage: BufferUsages::UNIFORM,
     });
+    let viewport_width = (GRID_COLUMNS as u32) * CELL_SIZE;
+    let viewport_height = u32::try_from(instances.len().div_ceil(GRID_COLUMNS))?
+        .max(1)
+        .checked_mul(CELL_SIZE)
+        .ok_or("viewport height overflow")?;
+    let global_bytes = pack_render_params(RenderParams {
+        viewport_width: viewport_width as f32,
+        viewport_height: viewport_height as f32,
+        cell_padding: CELL_PADDING,
+    });
+    let global_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("shift-slug variable render params"),
+        contents: &global_bytes,
+        usage: BufferUsages::UNIFORM,
+    });
     let resolved_curve_buffer = storage_buffer(
         &device,
         "shift-slug resolved curves",
@@ -206,6 +228,31 @@ fn main() -> Result<()> {
         compilation_options: PipelineCompilationOptions::default(),
         cache: None,
     });
+    let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("shift-slug variable render pipeline"),
+        layout: None,
+        vertex: VertexState {
+            module: &shader,
+            entry_point: Some("vertex_variable"),
+            compilation_options: PipelineCompilationOptions::default(),
+            buffers: &[],
+        },
+        primitive: PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(FragmentState {
+            module: &shader,
+            entry_point: Some("fragment_variable"),
+            compilation_options: PipelineCompilationOptions::default(),
+            targets: &[Some(ColorTargetState {
+                format: TextureFormat::Rgba8Unorm,
+                blend: None,
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
 
     let resolve_groups = create_resolve_groups(
         &device,
@@ -227,6 +274,39 @@ fn main() -> Result<()> {
         &resolved_band_buffer,
         &resolved_index_buffer,
     );
+    let render_groups = create_render_groups(
+        &device,
+        &render_pipeline,
+        &global_buffer,
+        &instance_buffer,
+        &atlas_buffer,
+        layout,
+        &variable_buffer,
+        &resolved_curve_buffer,
+        &resolved_band_buffer,
+        &resolved_index_buffer,
+    );
+    let target = device.create_texture(&TextureDescriptor {
+        label: Some("shift-slug variable target"),
+        size: Extent3d {
+            width: viewport_width,
+            height: viewport_height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: TextureFormat::Rgba8Unorm,
+        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let target_view = target.create_view(&TextureViewDescriptor::default());
+    let padded_bytes_per_row = (viewport_width * 4).div_ceil(COPY_ALIGNMENT) * COPY_ALIGNMENT;
+    let pixel_readback = readback_buffer(
+        &device,
+        "shift-slug variable pixel readback",
+        padded_bytes_per_row as usize * viewport_height as usize,
+    )?;
 
     let curve_readback = readback_buffer(
         &device,
@@ -271,6 +351,29 @@ fn main() -> Result<()> {
             1,
         );
     }
+    {
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("shift-slug variable render pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &target_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::TRANSPARENT),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&render_pipeline);
+        for (index, group) in render_groups.iter().enumerate() {
+            pass.set_bind_group(index as u32, group, &[]);
+        }
+        pass.draw(0..6, 0..u32::try_from(instances.len())?);
+    }
     encoder.copy_buffer_to_buffer(
         &resolved_curve_buffer,
         0,
@@ -292,12 +395,34 @@ fn main() -> Result<()> {
         0,
         u64::try_from(scratch.index_count * 4)?,
     );
+    encoder.copy_texture_to_buffer(
+        TexelCopyTextureInfo {
+            texture: &target,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: TextureAspect::All,
+        },
+        TexelCopyBufferInfo {
+            buffer: &pixel_readback,
+            layout: TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded_bytes_per_row),
+                rows_per_image: Some(viewport_height),
+            },
+        },
+        Extent3d {
+            width: viewport_width,
+            height: viewport_height,
+            depth_or_array_layers: 1,
+        },
+    );
 
     let gpu_started = Instant::now();
     queue.submit([encoder.finish()]);
     let curve_bytes = read_buffer(&device, &curve_readback)?;
     let band_bytes = read_buffer(&device, &band_readback)?;
     let index_bytes = read_buffer(&device, &index_readback)?;
+    let pixel_bytes = read_buffer(&device, &pixel_readback)?;
     let gpu_elapsed = gpu_started.elapsed();
     let maximum_error = validate_curves(&atlas, &instances, arguments.weight, &curve_bytes)?;
     validate_bands(
@@ -310,10 +435,22 @@ fn main() -> Result<()> {
         &index_bytes,
     )?;
 
+    let pixels = unpack_rows(
+        &pixel_bytes,
+        viewport_width,
+        viewport_height,
+        padded_bytes_per_row,
+    );
+    let alpha = pixels
+        .chunks_exact(4)
+        .map(|pixel| pixel[3])
+        .collect::<Vec<_>>();
     println!(
-        "gpu_submit_to_readback_ms={:.3} max_curve_error={} curve_validation=pass band_validation=pass",
+        "gpu_submit_to_readback_ms={:.3} max_curve_error={} curve_validation=pass band_validation=pass pixel_checksum={:016x} nonzero_alpha={}",
         gpu_elapsed.as_secs_f64() * 1_000.0,
         maximum_error,
+        fnv1a(&alpha),
+        alpha.iter().filter(|value| **value != 0).count(),
     );
 
     Ok(())
@@ -372,17 +509,27 @@ fn build_instances(
     let mut index_count = 0_usize;
     let bands_per_glyph = usize::try_from(atlas.band_count() * 2)?;
 
-    for glyph_index in glyph_indices.iter().copied() {
+    for (instance_index, glyph_index) in glyph_indices.iter().copied().enumerate() {
         let glyph = atlas
             .glyphs()
             .get(glyph_index as usize)
             .ok_or("sampled glyph index is out of range")?;
+        let column = instance_index % GRID_COLUMNS;
+        let row = instance_index / GRID_COLUMNS;
+        let cell_rect = [
+            (column as u32 * CELL_SIZE) as f32,
+            (row as u32 * CELL_SIZE) as f32,
+            ((column as u32 + 1) * CELL_SIZE) as f32,
+            ((row as u32 + 1) * CELL_SIZE) as f32,
+        ];
+        let fitted_bounds = aspect_fitted_bounds(glyph.bounds, CELL_SIZE as f32, CELL_SIZE as f32);
         instances.push(RenderInstance {
+            pixel_rect: cell_rect,
+            em_transform: pixel_to_em_transform(cell_rect, fitted_bounds),
             glyph_index,
             scratch_curve_start: u32::try_from(curve_count)?,
             scratch_band_start: u32::try_from(band_count)?,
             scratch_index_start: u32::try_from(index_count)?,
-            ..Default::default()
         });
         curve_count = curve_count
             .checked_add(glyph.curve_count as usize)
@@ -407,6 +554,46 @@ fn build_instances(
             index_count,
         },
     ))
+}
+
+fn aspect_fitted_bounds(bounds: Bounds, pixel_width: f32, pixel_height: f32) -> [f32; 4] {
+    let width = bounds.width();
+    let height = bounds.height();
+    if width <= f32::EPSILON || height <= f32::EPSILON {
+        return [0.0, 0.0, 1.0, 1.0];
+    }
+
+    let center_x = (bounds.min_x + bounds.max_x) * 0.5;
+    let center_y = (bounds.min_y + bounds.max_y) * 0.5;
+    let target_aspect = pixel_width / pixel_height;
+    let (fitted_width, fitted_height) = if width / height < target_aspect {
+        (height * target_aspect, height)
+    } else {
+        (width, width / target_aspect)
+    };
+    [
+        center_x - fitted_width * 0.5,
+        center_y - fitted_height * 0.5,
+        center_x + fitted_width * 0.5,
+        center_y + fitted_height * 0.5,
+    ]
+}
+
+fn pixel_to_em_transform(cell_rect: [f32; 4], fitted_bounds: [f32; 4]) -> [f32; 4] {
+    let drawable = [
+        cell_rect[0] + CELL_PADDING,
+        cell_rect[1] + CELL_PADDING,
+        cell_rect[2] - CELL_PADDING,
+        cell_rect[3] - CELL_PADDING,
+    ];
+    let scale_x = (fitted_bounds[2] - fitted_bounds[0]) / (drawable[2] - drawable[0]);
+    let scale_y = -(fitted_bounds[3] - fitted_bounds[1]) / (drawable[3] - drawable[1]);
+    [
+        scale_x,
+        scale_y,
+        fitted_bounds[0] - drawable[0] * scale_x,
+        fitted_bounds[3] - drawable[1] * scale_y,
+    ]
 }
 
 fn variable_params(weight: f32, instances: usize, band_count: u32) -> Result<[u8; 16]> {
@@ -518,6 +705,65 @@ fn create_band_groups(
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug band scratch"),
+        layout: &pipeline.get_bind_group_layout(2),
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: resolved_curve_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: resolved_band_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 2,
+                resource: resolved_index_buffer.as_entire_binding(),
+            },
+        ],
+    });
+    [group0, group1, group2]
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_render_groups(
+    device: &Device,
+    pipeline: &wgpu::RenderPipeline,
+    global_buffer: &wgpu::Buffer,
+    instance_buffer: &wgpu::Buffer,
+    atlas_buffer: &wgpu::Buffer,
+    layout: shift_slug::VariableLayout,
+    variable_buffer: &wgpu::Buffer,
+    resolved_curve_buffer: &wgpu::Buffer,
+    resolved_band_buffer: &wgpu::Buffer,
+    resolved_index_buffer: &wgpu::Buffer,
+) -> [wgpu::BindGroup; 3] {
+    let group0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("shift-slug variable render globals"),
+        layout: &pipeline.get_bind_group_layout(0),
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: global_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: instance_buffer.as_entire_binding(),
+            },
+        ],
+    });
+    let group1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("shift-slug variable render model"),
+        layout: &pipeline.get_bind_group_layout(1),
+        entries: &[
+            atlas_entry(2, atlas_buffer, layout.glyphs),
+            BindGroupEntry {
+                binding: 3,
+                resource: variable_buffer.as_entire_binding(),
+            },
+        ],
+    });
+    let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("shift-slug variable render scratch"),
         layout: &pipeline.get_bind_group_layout(2),
         entries: &[
             BindGroupEntry {
@@ -683,6 +929,22 @@ fn curve_values(curve: Curve) -> impl Iterator<Item = f32> {
         curve.p0.x, curve.p0.y, curve.p1.x, curve.p1.y, curve.p2.x, curve.p2.y,
     ]
     .into_iter()
+}
+
+fn unpack_rows(bytes: &[u8], width: u32, height: u32, padded_bytes_per_row: u32) -> Vec<u8> {
+    let row_bytes = width as usize * 4;
+    let padded = padded_bytes_per_row as usize;
+    let mut output = Vec::with_capacity(row_bytes * height as usize);
+    for row in bytes.chunks_exact(padded).take(height as usize) {
+        output.extend_from_slice(&row[..row_bytes]);
+    }
+    output
+}
+
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
 }
 
 fn read_buffer(device: &Device, buffer: &wgpu::Buffer) -> Result<Vec<u8>> {

@@ -57,7 +57,7 @@ For 150 uniformly sampled Source Han glyphs, worst-case scratch reservation is b
 
 Curve correspondence must come from stable authored/raw point topology. `VariableAtlasBuilder::add_glyph` compares command topology and exists for compatible fixtures; production adapters should derive corresponding curves from one shared segment recipe and call `add_curve_glyph`. Source Han glyph 1663 demonstrated why: skrifa emitted different resolved pen command kinds at `wght=100` and `wght=900`, even though compiled-font point variation may remain valid. Pairing independently resolved callback streams would silently associate unrelated curves, so the builder rejects it.
 
-MutatorSans currently passes base, midpoint, and source native compute validation with zero curve-coordinate error. GPU-generated band membership also matches the CPU oracle exactly. This proves the resident delta and visible re-banding path, not yet complete product variation semantics.
+The authored `shift-font` variable fixture matches native midpoint projection within 0.001 font units. The real Host Grotesk variable UI font exercises 448 glyphs / 9,481 curves across `wght=100..900`: base, midpoint, and source GPU scratch readback have zero coordinate error, generated band membership matches the CPU oracle exactly, and endpoint/midpoint fragment checksums differ as expected. A 150-glyph llvmpipe correctness pass uses about 289 KiB of visible scratch. This proves the resident delta, visible re-banding, and fragment mechanics, not yet complete product variation semantics.
 
 ## Reference implementation
 
