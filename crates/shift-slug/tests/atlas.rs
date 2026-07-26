@@ -284,10 +284,16 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
     assert_eq!(layout.curve_deltas.offset % 256, 0);
     assert_eq!(layout.glyphs.offset % 256, 0);
     assert_eq!(layout.sources.offset % 256, 0);
+    assert_eq!(layout.line_bits.offset % 256, 0);
     assert_eq!(&first.as_bytes()[..4], &1.5_f32.to_le_bytes());
     assert_eq!(
         &first.as_bytes()[layout.curve_deltas.offset..layout.curve_deltas.offset + 4],
         &1.0_f32.to_le_bytes()
+    );
+    assert_eq!(atlas.line_bits(), &[0b11]);
+    assert_eq!(
+        &first.as_bytes()[layout.line_bits.offset..layout.line_bits.offset + 4],
+        &3_u32.to_le_bytes()
     );
 }
 

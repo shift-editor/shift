@@ -141,6 +141,7 @@ fn main() -> Result<()> {
         .max(layout.curve_deltas.length)
         .max(layout.glyphs.length)
         .max(layout.sources.length)
+        .max(layout.line_bits.length)
         .max(scratch.curve_count * 24)
         .max(scratch.band_count * 8)
         .max(scratch.index_count * 4);
@@ -153,7 +154,7 @@ fn main() -> Result<()> {
         .max_storage_buffer_binding_size
         .max(u64::try_from(largest_binding)?);
     required_limits.max_storage_buffers_per_shader_stage =
-        required_limits.max_storage_buffers_per_shader_stage.max(7);
+        required_limits.max_storage_buffers_per_shader_stage.max(8);
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("shift-slug variable benchmark device"),
         required_features: wgpu::Features::empty(),
@@ -784,6 +785,7 @@ fn create_resolve_groups(
                 binding: 5,
                 resource: variable_buffer.as_entire_binding(),
             },
+            atlas_entry(6, atlas_buffer, layout.line_bits),
         ],
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {

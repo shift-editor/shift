@@ -1,16 +1,19 @@
 use shift_glyph_codec::OutlineCommand;
 
-use crate::{curve::curves_from_commands, Bounds, Curve, Point, Section, SlugError};
+use crate::{
+    curve::curves_and_line_flags_from_commands, Bounds, Curve, Point, Section, SlugError,
+    LINE_EPSILON,
+};
 
 const CURVE_BYTES: usize = 24;
 const VARIABLE_GLYPH_BYTES: usize = 32;
 const VARIABLE_SOURCE_BYTES: usize = 8;
 const BASE_SOURCE_DELTA: u32 = u32::MAX;
 
-/// One glyph in a two-source resident variable atlas.
+/// One glyph in a resident variable atlas.
 ///
-/// `bounds` encloses both source curve control hulls, so every interpolation in
-/// between the supplied sources can use the same grid while GPU compute rebuilds exact band membership.
+/// `bounds` encloses every source control hull. Glyphs containing synthetic
+/// Slug line controls are padded for controls regenerated at intermediate locations.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct VariableGlyph {
@@ -38,6 +41,7 @@ pub struct VariableLayout {
     pub curve_deltas: Section,
     pub glyphs: Section,
     pub sources: Section,
+    pub line_bits: Section,
     pub total_length: usize,
 }
 
@@ -53,6 +57,7 @@ pub struct VariableAtlas {
     curve_deltas: Vec<Curve>,
     glyphs: Vec<VariableGlyph>,
     sources: Vec<VariableSource>,
+    line_bits: Vec<u32>,
 }
 
 impl VariableAtlas {
@@ -76,12 +81,27 @@ impl VariableAtlas {
         &self.sources
     }
 
+    pub fn line_bits(&self) -> &[u32] {
+        &self.line_bits
+    }
+
+    pub fn curve_is_line(&self, curve_index: usize) -> bool {
+        self.line_bits
+            .get(curve_index / 32)
+            .is_some_and(|word| word & (1 << (curve_index % 32)) != 0)
+    }
+
     pub fn statistics(&self) -> VariableStatistics {
         VariableStatistics {
             glyph_count: self.glyphs.len(),
             curve_count: self.base_curves.len(),
             delta_curve_count: self.curve_deltas.len(),
             source_count: self.sources.len(),
+            line_curve_count: self
+                .line_bits
+                .iter()
+                .map(|word| word.count_ones() as usize)
+                .sum(),
             bands_per_direction: self.band_count,
             max_curves_per_glyph: self
                 .glyphs
@@ -157,6 +177,11 @@ impl VariableAtlas {
                 *curve = add_scaled_curve(*curve, *delta, weight);
             }
         }
+        for (local_index, curve) in curves.iter_mut().enumerate() {
+            if self.curve_is_line(curve_start + local_index) {
+                *curve = Curve::from_line(curve.p0, curve.p2);
+            }
+        }
         Ok(curves)
     }
 
@@ -178,9 +203,15 @@ impl VariableAtlas {
             alignment,
         )?;
         let sources = next_section(glyphs, self.sources.len(), VARIABLE_SOURCE_BYTES, alignment)?;
-        let total_length = sources
+        let line_bits = next_section(
+            sources,
+            self.line_bits.len(),
+            std::mem::size_of::<u32>(),
+            alignment,
+        )?;
+        let total_length = line_bits
             .offset
-            .checked_add(sources.length)
+            .checked_add(line_bits.length)
             .ok_or(SlugError::LengthOverflow)?;
 
         Ok(VariableLayout {
@@ -188,6 +219,7 @@ impl VariableAtlas {
             curve_deltas,
             glyphs,
             sources,
+            line_bits,
             total_length,
         })
     }
@@ -225,6 +257,11 @@ impl VariableAtlas {
             write(&mut bytes, &mut offset, &source.weight_index.to_le_bytes());
         }
 
+        offset = layout.line_bits.offset;
+        for word in &self.line_bits {
+            write(&mut bytes, &mut offset, &word.to_le_bytes());
+        }
+
         Ok(PackedVariableAtlas { bytes, layout })
     }
 }
@@ -236,6 +273,7 @@ pub struct VariableStatistics {
     pub curve_count: usize,
     pub delta_curve_count: usize,
     pub source_count: usize,
+    pub line_curve_count: usize,
     pub bands_per_direction: u32,
     pub max_curves_per_glyph: u32,
 }
@@ -273,17 +311,26 @@ impl VariableAtlasBuilder {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
         }
 
-        let base_curves = curves_from_commands(base_commands)?;
-        let source_curves = curves_from_commands(source_commands)?;
-        self.add_curve_glyph(base_curves, source_curves)
+        let (base_curves, line_flags) = curves_and_line_flags_from_commands(base_commands)?;
+        let (source_curves, source_line_flags) =
+            curves_and_line_flags_from_commands(source_commands)?;
+        if line_flags != source_line_flags {
+            return Err(SlugError::VariableTopologyMismatch { glyph_index });
+        }
+        self.add_curve_glyph_with_sources_and_lines(
+            base_curves,
+            line_flags,
+            0,
+            [(1, source_curves)],
+        )
     }
 
     /// Adds curves whose correspondence was established from stable source topology.
     ///
-    /// Production adapters should prefer this boundary after deriving both
-    /// sources from the same authored point/segment recipe. Comparing two
-    /// location-resolved pen streams is only a fixture convenience because a
-    /// binary outline drawer may change emitted command kinds at degeneracies.
+    /// Comparing two location-resolved pen streams is only a fixture convenience
+    /// because a binary outline drawer may change emitted command kinds at
+    /// degeneracies. Production adapters must use the authored recipe boundary,
+    /// including line flags for controls regenerated after interpolation.
     pub fn add_curve_glyph(
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
@@ -296,14 +343,33 @@ impl VariableAtlasBuilder {
         )
     }
 
-    /// Adds any number of compatible sources and their global weight indexes.
+    /// Adds compatible curves that contain no synthetic Slug line controls.
     pub fn add_curve_glyph_with_sources(
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
         base_weight_index: u32,
         source_curves: impl IntoIterator<Item = (u32, Vec<Curve>)>,
     ) -> Result<u32, SlugError> {
+        let base_curves = base_curves.into_iter().collect::<Vec<_>>();
+        let line_flags = vec![false; base_curves.len()];
+        self.add_curve_glyph_with_sources_and_lines(
+            base_curves,
+            line_flags,
+            base_weight_index,
+            source_curves,
+        )
+    }
+
+    /// Adds stable source curves and marks controls regenerated from line endpoints.
+    pub fn add_curve_glyph_with_sources_and_lines(
+        &mut self,
+        base_curves: impl IntoIterator<Item = Curve>,
+        line_flags: impl IntoIterator<Item = bool>,
+        base_weight_index: u32,
+        source_curves: impl IntoIterator<Item = (u32, Vec<Curve>)>,
+    ) -> Result<u32, SlugError> {
         let base_curves: Vec<_> = base_curves.into_iter().collect();
+        let line_flags: Vec<_> = line_flags.into_iter().collect();
         let source_curves: Vec<_> = source_curves.into_iter().collect();
         let glyph_index = as_u32(self.atlas.glyphs.len())?;
         if source_curves
@@ -311,6 +377,9 @@ impl VariableAtlasBuilder {
             .any(|(_, curves)| curves.len() != base_curves.len())
         {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
+        }
+        if line_flags.len() != base_curves.len() {
+            return Err(SlugError::VariableLineFlagMismatch { glyph_index });
         }
 
         let curve_start = as_u32(self.atlas.base_curves.len())?;
@@ -322,11 +391,17 @@ impl VariableAtlasBuilder {
                 .checked_add(1)
                 .ok_or(SlugError::LengthOverflow)?,
         )?;
-        let bounds = variable_bounds(
+        let mut bounds = variable_bounds(
             base_curves
                 .iter()
                 .chain(source_curves.iter().flat_map(|(_, curves)| curves)),
         );
+        if line_flags.iter().any(|is_line| *is_line) && !base_curves.is_empty() {
+            bounds.min_x -= LINE_EPSILON;
+            bounds.min_y -= LINE_EPSILON;
+            bounds.max_x += LINE_EPSILON;
+            bounds.max_y += LINE_EPSILON;
+        }
         let mut curve_deltas = Vec::new();
         let mut sources = Vec::with_capacity(source_curves.len() + 1);
         sources.push(VariableSource {
@@ -357,7 +432,20 @@ impl VariableAtlasBuilder {
         ensure_total(self.atlas.curve_deltas.len(), curve_deltas.len())?;
         ensure_total(self.atlas.sources.len(), sources.len())?;
         ensure_total(self.atlas.glyphs.len(), 1)?;
+        let total_curves = self
+            .atlas
+            .base_curves
+            .len()
+            .checked_add(base_curves.len())
+            .ok_or(SlugError::LengthOverflow)?;
+        let required_line_words = total_curves.div_ceil(32);
+        as_u32(required_line_words)?;
 
+        append_line_flags(
+            &mut self.atlas.line_bits,
+            self.atlas.base_curves.len(),
+            &line_flags,
+        );
         self.atlas.base_curves.extend(base_curves);
         self.atlas.curve_deltas.extend(curve_deltas);
         self.atlas.sources.extend(sources);
@@ -424,6 +512,16 @@ fn command_topology(commands: &[OutlineCommand<f32>]) -> Vec<CommandKind> {
             OutlineCommand::Close => CommandKind::Close,
         })
         .collect()
+}
+
+fn append_line_flags(words: &mut Vec<u32>, curve_start: usize, line_flags: &[bool]) {
+    words.resize((curve_start + line_flags.len()).div_ceil(32), 0);
+    for (local_index, is_line) in line_flags.iter().enumerate() {
+        if *is_line {
+            let curve_index = curve_start + local_index;
+            words[curve_index / 32] |= 1 << (curve_index % 32);
+        }
+    }
 }
 
 fn variable_bounds<'a>(curves: impl IntoIterator<Item = &'a Curve>) -> Bounds {

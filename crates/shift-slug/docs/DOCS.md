@@ -19,6 +19,7 @@ src/
   lib.rs       public boundary
   curve.rs     outline commands -> quadratic curves
   atlas.rs     glyph bounds, horizontal/vertical bands, atlas assembly
+  authored.rs  stable shift-font point/segment recipes and source derivation
   pack.rs      aligned little-endian GPU upload layout
   render.rs    shared uniform and visible-instance byte layouts
   variable.rs  multi-source resident base/delta model and aligned packing
@@ -28,6 +29,7 @@ shaders/
   slug-variable.wgsl  visible curve resolve, GPU re-banding, and variable renderer
 examples/
   analyze_font.rs          CPU-only TTF/OTF curve/band sizing harness
+  analyze_authored.rs      authored source coverage and random-location validator
   benchmark_wgpu.rs        adapter probe plus native offscreen render/readback benchmark
   benchmark_variable_wgpu.rs variable compute scratch/readback validator
 tests/
@@ -51,13 +53,15 @@ Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical
 
 ## Resident variable execution
 
-The variable model keeps one base quadratic array plus one dense `f32` delta block per additional compatible source. Each glyph references source descriptors whose global weight indexes allow equal interpolation bases to share a small per-frame weight vector. Compute preserves the full weighted-source equation as `base × sum(weights) + Σ(weight × delta)`, rather than assuming weights always sum to one. One workgroup per visible glyph resolves curves into scratch; a second pass rebuilds the eight horizontal and vertical bands for only those resolved curves. Fragment rendering therefore sees exact current-location membership without uploading geometry or retaining all-location conservative indexes.
+The variable model keeps one base quadratic array plus one dense `f32` delta block per additional compatible source. Each glyph references source descriptors whose global weight indexes allow equal interpolation bases to share a small per-frame weight vector. Compute preserves the full weighted-source equation as `base × sum(weights) + Σ(weight × delta)`, rather than assuming weights always sum to one. A one-bit-per-curve resident mask marks controls generated from authored lines: after endpoint interpolation, compute regenerates those controls with Slug's normalized perpendicular epsilon because that operation is nonlinear and cannot be represented exactly by source control deltas. One workgroup per visible glyph resolves curves into scratch; a second pass rebuilds the eight horizontal and vertical bands for only those resolved curves. Fragment rendering therefore sees exact current-location membership without uploading geometry or retaining all-location conservative indexes.
 
 For 150 uniformly sampled Source Han glyphs, worst-case scratch reservation is bounded by the visible curves and `curve_count × 16` temporary band-index slots rather than all 65,535 glyphs. Multi-source sparse deltas, component evaluation, attachments, and exact-source topology variants remain subsequent model layers.
 
-Curve correspondence must come from stable authored/raw point topology. `VariableAtlasBuilder::add_glyph` compares command topology and exists for compatible fixtures; production adapters should derive corresponding curves from one shared segment recipe and call `add_curve_glyph`. Source Han glyph 1663 demonstrated why: skrifa emitted different resolved pen command kinds at `wght=100` and `wght=900`, even though compiled-font point variation may remain valid. Pairing independently resolved callback streams would silently associate unrelated curves, so the builder rejects it.
+Curve correspondence comes from stable authored/raw point topology. `AuthoredCurveRecipe` captures contour IDs, point IDs and kinds, and segment-to-point indexes once from `GlyphInterpolation::reference_layer`; every compatible source applies its ordered numeric values to a clone of that same structure. Degenerate lines therefore retain correspondence instead of disappearing from one callback stream. `VariableAtlasBuilder::add_glyph` remains only a compatible-fixture convenience. Source Han glyph 1663 demonstrated why: skrifa emitted different resolved pen command kinds at `wght=100` and `wght=900`, even though compiled-font point variation may remain valid. Pairing those callbacks would silently associate unrelated curves.
 
-The authored `shift-font` variable fixture matches native midpoint projection within 0.001 font units. The real Host Grotesk variable UI font exercises 448 glyphs / 9,481 curves across `wght=100..900`: base, midpoint, and source GPU scratch readback have zero coordinate error, generated band membership matches the CPU oracle exactly, and endpoint/midpoint fragment checksums differ as expected. A 150-glyph pass uses about 289 KiB of visible scratch.
+The authored `shift-font` variable fixture matches native midpoint projection within 0.001 font units. The real MutatorSans designspace has 49 glyphs: the contour adapter accepts 39, explicitly reports the remaining 10 glyphs / 20 component occurrences, deduplicates the accepted glyphs to four interpolation bases / 21 weight slots, and packs 550 base plus 1,833 delta curves into 60,232 bytes. Across all seven authored source locations plus 17 deterministic multi-axis locations, maximum curve error is 0.000183 font units. Components, attachments, and exact-source topology variants remain explicit unsupported requirements rather than flattened callback correspondence.
+
+The real Host Grotesk variable UI font exercises 448 glyphs / 9,481 curves across `wght=100..900`: base, midpoint, and source GPU scratch readback have zero coordinate error, generated band membership matches the CPU oracle exactly, and endpoint/midpoint fragment checksums differ as expected. A 150-glyph pass uses about 289 KiB of visible scratch.
 
 Apple M4 / Metal measurements use 120 serialized frames that each change weights, resolve visible curves, rebuild visible bands, render, submit, and wait for completion:
 
@@ -67,6 +71,8 @@ Apple M4 / Metal measurements use 120 serialized frames that each change weights
 | `ff6ab527` indexed multi-source weights | 8 B/frame | 476,672 B | 0.754 ms | 1.640 ms | 1.967 ms | 3.441 ms |
 
 The generalized run observed 19.3% lower p50, 22.6% lower p95, and 53.8% lower p99 while halving weight traffic to 960 bytes total. Its packed Host atlas grew by 7,168 bytes (1.53%) for source descriptors and alignment. Geometry uploads and geometry-upload bytes remained zero, GPU submit/readback took 6.474 ms, scratch curve error was zero, curve and band validation passed, and the validation frame checksum remained `bb147484ca434754`. The improvement is an observed run-to-run comparison, not yet an isolated causal attribution. This proves the resident delta, indexed-weight, visible re-banding, and fragment mechanics, not yet complete product variation semantics.
+
+That Metal baseline predates exact post-interpolation line-control regeneration. The corrected Host atlas is 477,860 bytes; llvmpipe validates zero GPU/CPU curve error, exact bands, and checksum `6ce8d5ad25d480f2`. The changed WGSL needs a new serialized Metal run before its performance baseline is carried forward.
 
 ## Reference implementation
 

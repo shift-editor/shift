@@ -138,7 +138,14 @@ struct Contour {
 pub(crate) fn curves_from_commands(
     commands: impl IntoIterator<Item = OutlineCommand<f32>>,
 ) -> Result<Vec<Curve>, SlugError> {
+    curves_and_line_flags_from_commands(commands).map(|(curves, _)| curves)
+}
+
+pub(crate) fn curves_and_line_flags_from_commands(
+    commands: impl IntoIterator<Item = OutlineCommand<f32>>,
+) -> Result<(Vec<Curve>, Vec<bool>), SlugError> {
     let mut curves = Vec::new();
+    let mut line_flags = Vec::new();
     let mut contour = None;
 
     for (command_index, command) in commands.into_iter().enumerate() {
@@ -146,7 +153,7 @@ pub(crate) fn curves_from_commands(
 
         match command {
             OutlineCommand::Move { x, y } => {
-                close_open_contour(&mut contour, &mut curves);
+                close_open_contour(&mut contour, &mut curves, &mut line_flags);
                 let point = Point::new(x, y);
                 contour = Some(Contour {
                     start: point,
@@ -159,7 +166,7 @@ pub(crate) fn curves_from_commands(
                     .as_mut()
                     .ok_or(SlugError::DrawingCommandWithoutContour { command_index })?;
                 let next = Point::new(x, y);
-                push_line(&mut curves, contour.current, next);
+                push_line(&mut curves, &mut line_flags, contour.current, next);
                 contour.current = next;
                 contour.has_segment = true;
             }
@@ -173,6 +180,7 @@ pub(crate) fn curves_from_commands(
                     p1: Point::new(cx, cy),
                     p2: next,
                 });
+                line_flags.push(false);
                 contour.current = next;
                 contour.has_segment = true;
             }
@@ -194,6 +202,7 @@ pub(crate) fn curves_from_commands(
                     Point::new(c2x, c2y),
                     next,
                 ));
+                line_flags.extend([false, false]);
                 contour.current = next;
                 contour.has_segment = true;
             }
@@ -202,28 +211,34 @@ pub(crate) fn curves_from_commands(
                 if !active.has_segment {
                     return Err(SlugError::CloseWithoutDrawingSegment { command_index });
                 }
-                push_line(&mut curves, active.current, active.start);
+                push_line(&mut curves, &mut line_flags, active.current, active.start);
                 contour = None;
             }
         }
     }
 
-    close_open_contour(&mut contour, &mut curves);
-    Ok(curves)
+    close_open_contour(&mut contour, &mut curves, &mut line_flags);
+    debug_assert_eq!(curves.len(), line_flags.len());
+    Ok((curves, line_flags))
 }
 
-fn close_open_contour(contour: &mut Option<Contour>, curves: &mut Vec<Curve>) {
+fn close_open_contour(
+    contour: &mut Option<Contour>,
+    curves: &mut Vec<Curve>,
+    line_flags: &mut Vec<bool>,
+) {
     let Some(active) = contour.take() else {
         return;
     };
     if active.has_segment {
-        push_line(curves, active.current, active.start);
+        push_line(curves, line_flags, active.current, active.start);
     }
 }
 
-fn push_line(curves: &mut Vec<Curve>, start: Point, end: Point) {
+fn push_line(curves: &mut Vec<Curve>, line_flags: &mut Vec<bool>, start: Point, end: Point) {
     if start != end {
         curves.push(Curve::from_line(start, end));
+        line_flags.push(true);
     }
 }
 

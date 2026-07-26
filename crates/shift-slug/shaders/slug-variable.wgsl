@@ -1,5 +1,5 @@
 // Derived from the MIT-licensed Slug implementation described in THIRD_PARTY.md.
-// This variant resolves a resident two-source model and rebuilds visible bands on GPU.
+// This variant resolves resident multi-source geometry and rebuilds visible bands on GPU.
 
 struct GlobalParams {
     viewport_size: vec2<f32>,
@@ -59,6 +59,7 @@ struct VertexOutput {
 @group(1) @binding(3) var<storage, read> variable_sources: array<VariableSource>;
 @group(1) @binding(4) var<storage, read> source_weights: array<f32>;
 @group(1) @binding(5) var<uniform> variable: VariableParams;
+@group(1) @binding(6) var<storage, read> line_bits: array<u32>;
 @group(2) @binding(0) var<storage, read_write> resolved_curves: array<Curve>;
 @group(2) @binding(1) var<storage, read_write> resolved_bands: array<Band>;
 @group(2) @binding(2) var<storage, read_write> resolved_indices: array<u32>;
@@ -77,6 +78,21 @@ fn add_scaled_curve(base: Curve, delta: Curve, weight: f32) -> Curve {
     curve.p1 = base.p1 + delta.p1 * weight;
     curve.p2 = base.p2 + delta.p2 * weight;
     return curve;
+}
+
+fn regenerate_line_control(curve: Curve) -> Curve {
+    var result = curve;
+    let delta = curve.p2 - curve.p0;
+    result.p1 = (curve.p0 + curve.p2) * 0.5;
+    if abs(delta.x) > 0.1 && abs(delta.y) > 0.1 {
+        let segment_length = length(delta);
+        if segment_length > 0.0 {
+            let scale = 0.125 / segment_length;
+            result.p1.x -= delta.y * scale;
+            result.p1.y += delta.x * scale;
+        }
+    }
+    return result;
 }
 
 @compute @workgroup_size(64)
@@ -110,6 +126,10 @@ fn resolve_visible_curves(
                     source_weights[source.weight_index],
                 );
             }
+        }
+        let line_word = line_bits[source_index / 32u];
+        if (line_word & (1u << (source_index % 32u))) != 0u {
+            curve = regenerate_line_control(curve);
         }
         resolved_curves[instance.glyph.y + local_curve] = curve;
         local_curve += 64u;

@@ -6,6 +6,7 @@
 //! GPU device and contains no canonical authored font state.
 
 mod atlas;
+mod authored;
 mod curve;
 mod error;
 mod pack;
@@ -13,6 +14,10 @@ mod render;
 mod variable;
 
 pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};
+pub use authored::{
+    add_authored_projection_glyph, authored_glyph_requirements, AuthoredCurveRecipe,
+    AuthoredGlyphRequirements, AuthoredSlugError,
+};
 pub use curve::{Bounds, Curve, Point, LINE_EPSILON};
 pub use error::SlugError;
 pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
@@ -28,5 +33,5 @@ pub use variable::{
 /// Shader source shared by native `wgpu` and Electron WebGPU consumers.
 pub const SLUG_WGSL: &str = include_str!("../shaders/slug.wgsl");
 
-/// Two-source compute/re-band/render shader shared by native and Electron.
+/// Multi-source compute/re-band/render shader shared by native and Electron.
 pub const VARIABLE_SLUG_WGSL: &str = include_str!("../shaders/slug-variable.wgsl");

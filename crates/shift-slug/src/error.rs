@@ -11,6 +11,7 @@ pub enum SlugError {
     CloseWithoutDrawingSegment { command_index: usize },
     CompactIndexOverflow { glyph_index: u32, curve_count: u32 },
     VariableTopologyMismatch { glyph_index: u32 },
+    VariableLineFlagMismatch { glyph_index: u32 },
     GlyphIndexOutOfRange(u32),
     VariableWeightIndexOutOfRange(u32),
     NonFiniteVariableWeight,
@@ -53,6 +54,10 @@ impl fmt::Display for SlugError {
             Self::VariableTopologyMismatch { glyph_index } => write!(
                 formatter,
                 "glyph {glyph_index} has incompatible command topology between variable sources"
+            ),
+            Self::VariableLineFlagMismatch { glyph_index } => write!(
+                formatter,
+                "glyph {glyph_index} has line flags that do not match its curve recipe"
             ),
             Self::GlyphIndexOutOfRange(glyph_index) => {
                 write!(formatter, "Slug glyph index {glyph_index} is out of range")
