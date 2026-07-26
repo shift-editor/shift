@@ -8,8 +8,8 @@
 use std::{error::Error, fmt};
 
 use shift_font::{
-    ContourId, CoreError, CurveSegment, CurveSegmentIter, GlyphLayer, GlyphProjection,
-    Point as FontPoint, PointId, PointType,
+    composite::ResolvedContour, ContourId, CoreError, CurveSegment, CurveSegmentIter, Font,
+    GlyphLayer, GlyphProjection, Point as FontPoint, PointId, PointType, SourceId,
 };
 
 use crate::{Curve, Point, SlugError, VariableAtlasBuilder};
@@ -34,6 +34,12 @@ impl AuthoredGlyphRequirements {
 pub enum AuthoredSlugError {
     UnsupportedGlyph(AuthoredGlyphRequirements),
     MissingInterpolationSources,
+    MissingSourceLocation(SourceId),
+    ComponentBasisMismatch,
+    ComponentExactSourceTopology,
+    VariableComponentLinearTransform {
+        component_index: usize,
+    },
     WeightCountMismatch {
         expected: usize,
         actual: usize,
@@ -67,6 +73,19 @@ impl fmt::Display for AuthoredSlugError {
             Self::MissingInterpolationSources => {
                 formatter.write_str("authored glyph interpolation has no compatible sources")
             }
+            Self::MissingSourceLocation(source_id) => {
+                write!(formatter, "authored source {source_id} has no font location")
+            }
+            Self::ComponentBasisMismatch => formatter.write_str(
+                "component interpolation basis differs from the root glyph basis",
+            ),
+            Self::ComponentExactSourceTopology => formatter.write_str(
+                "a component glyph has exact-source topology that needs a resident variant",
+            ),
+            Self::VariableComponentLinearTransform { component_index } => write!(
+                formatter,
+                "component occurrence {component_index} varies rotation, scale, skew, or center"
+            ),
             Self::WeightCountMismatch { expected, actual } => write!(
                 formatter,
                 "authored glyph needs {expected} source weight indexes, got {actual}"
@@ -128,6 +147,19 @@ struct ContourRecipe {
     point_ids: Vec<PointId>,
     point_types: Vec<PointType>,
     segments: Vec<SegmentRecipe>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ResolvedContourRecipe {
+    closed: bool,
+    point_types: Vec<PointType>,
+    segments: Vec<SegmentRecipe>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ResolvedCurveRecipe {
+    contours: Vec<ResolvedContourRecipe>,
+    curve_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -202,18 +234,7 @@ impl AuthoredCurveRecipe {
 
     /// Returns one flag per output quadratic whose control is derived from a line.
     pub fn line_flags(&self) -> Vec<bool> {
-        self.contours
-            .iter()
-            .flat_map(|contour| &contour.segments)
-            .flat_map(|segment| {
-                let (is_line, count) = match segment {
-                    SegmentRecipe::Line(_) => (true, 1),
-                    SegmentRecipe::Quad(_) => (false, 1),
-                    SegmentRecipe::Cubic(_) => (false, 2),
-                };
-                std::iter::repeat_n(is_line, count)
-            })
-            .collect()
+        line_flags(self.contours.iter().flat_map(|contour| &contour.segments))
     }
 
     /// Evaluates this exact recipe against a topology-compatible layer.
@@ -259,6 +280,89 @@ impl AuthoredCurveRecipe {
         debug_assert_eq!(curves.len(), self.curve_count);
         Ok(curves)
     }
+}
+
+impl ResolvedCurveRecipe {
+    fn from_contours(contours: &[ResolvedContour]) -> Self {
+        let contours = contours
+            .iter()
+            .map(|contour| {
+                let points = &contour.points;
+                let mut segments = CurveSegmentIter::new(points, contour.closed)
+                    .map(|segment| segment_recipe(points, segment))
+                    .collect::<Vec<_>>();
+                if let (Some(first), Some(last)) =
+                    (segments.first().copied(), segments.last().copied())
+                {
+                    let start = segment_start(first);
+                    let end = last.end();
+                    if start != end {
+                        segments.push(SegmentRecipe::Line([end, start]));
+                    }
+                }
+                ResolvedContourRecipe {
+                    closed: contour.closed,
+                    point_types: points.iter().map(FontPoint::point_type).collect(),
+                    segments,
+                }
+            })
+            .collect::<Vec<_>>();
+        let curve_count = contours
+            .iter()
+            .flat_map(|contour| &contour.segments)
+            .map(|segment| segment.curve_count())
+            .sum();
+        Self {
+            contours,
+            curve_count,
+        }
+    }
+
+    fn line_flags(&self) -> Vec<bool> {
+        line_flags(self.contours.iter().flat_map(|contour| &contour.segments))
+    }
+
+    fn curves_from_contours(
+        &self,
+        contours: &[ResolvedContour],
+    ) -> Result<Vec<Curve>, AuthoredSlugError> {
+        if contours.len() != self.contours.len() {
+            return Err(AuthoredSlugError::ContourCountMismatch {
+                expected: self.contours.len(),
+                actual: contours.len(),
+            });
+        }
+        let mut curves = Vec::with_capacity(self.curve_count);
+        for (contour_index, (recipe, contour)) in self.contours.iter().zip(contours).enumerate() {
+            let point_types = contour
+                .points
+                .iter()
+                .map(FontPoint::point_type)
+                .collect::<Vec<_>>();
+            if contour.closed != recipe.closed || point_types != recipe.point_types {
+                return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
+            }
+            let points = contour
+                .points
+                .iter()
+                .enumerate()
+                .map(|(point_index, point)| slug_point(point, contour_index, point_index))
+                .collect::<Result<Vec<_>, _>>()?;
+            for segment in &recipe.segments {
+                append_segment(&mut curves, *segment, &points);
+            }
+        }
+        debug_assert_eq!(curves.len(), self.curve_count);
+        Ok(curves)
+    }
+}
+
+/// Converts one already-resolved contour set for CPU-oracle comparison.
+pub fn curves_from_resolved_contours(
+    contours: &[ResolvedContour],
+) -> Result<Vec<Curve>, AuthoredSlugError> {
+    let recipe = ResolvedCurveRecipe::from_contours(contours);
+    recipe.curves_from_contours(contours)
 }
 
 /// Returns unsupported authored semantics before atlas construction mutates state.
@@ -351,6 +455,154 @@ pub fn add_authored_projection_glyph(
             source_curves.into_iter().skip(1),
         )
         .map_err(Into::into)
+}
+
+/// Adds a component glyph when its flattened result remains in the root basis.
+///
+/// This exact fast path supports nested components with source-varying
+/// translations and constant linear matrices. Attachments, exact-source
+/// relationship variants, and varying rotation/scale/skew remain explicit
+/// requirements for the general GPU component evaluator.
+pub fn add_authored_component_projection_glyph(
+    builder: &mut VariableAtlasBuilder,
+    font: &Font,
+    projection: &GlyphProjection,
+    source_weight_indices: &[u32],
+) -> Result<u32, AuthoredSlugError> {
+    let requirements = authored_glyph_requirements(projection);
+    if requirements.component_occurrences == 0 {
+        return add_authored_projection_glyph(builder, projection, source_weight_indices, 0);
+    }
+    if requirements.attachment_count != 0
+        || requirements.exact_source_shapes != 0
+        || requirements.exact_component_variants != 0
+    {
+        return Err(AuthoredSlugError::UnsupportedGlyph(requirements));
+    }
+
+    let interpolation = projection
+        .interpolation()
+        .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
+    if source_weight_indices.len() != interpolation.sources().len() {
+        return Err(AuthoredSlugError::WeightCountMismatch {
+            expected: interpolation.sources().len(),
+            actual: source_weight_indices.len(),
+        });
+    }
+    let root_source_ids = interpolation.basis().source_ids();
+    for component_glyph_id in projection.component_glyph_ids() {
+        let component_projection = font
+            .glyph_projection(component_glyph_id)?
+            .ok_or_else(|| CoreError::GlyphNotFound(component_glyph_id.clone()))?;
+        if !component_projection.exact_source_shapes().is_empty()
+            || !component_projection.exact_source_components().is_empty()
+        {
+            return Err(AuthoredSlugError::ComponentExactSourceTopology);
+        }
+        if component_projection
+            .interpolation()
+            .is_some_and(|component_interpolation| {
+                component_interpolation.basis() != interpolation.basis()
+            })
+        {
+            return Err(AuthoredSlugError::ComponentBasisMismatch);
+        }
+    }
+    validate_component_linear_transforms(font, projection, root_source_ids)?;
+
+    let mut recipe = None;
+    let mut source_curves = Vec::with_capacity(root_source_ids.len());
+    for (source_id, weight_index) in root_source_ids.iter().zip(source_weight_indices) {
+        let location = source_location(font, source_id)?;
+        let mut font_projection = font.projection(location);
+        let resolved = font_projection
+            .glyph(&projection.glyph_id())?
+            .ok_or_else(|| CoreError::GlyphNotFound(projection.glyph_id()))?;
+        let recipe =
+            recipe.get_or_insert_with(|| ResolvedCurveRecipe::from_contours(resolved.contours()));
+        source_curves.push((
+            *weight_index,
+            recipe.curves_from_contours(resolved.contours())?,
+        ));
+    }
+
+    let recipe = recipe.ok_or(AuthoredSlugError::MissingInterpolationSources)?;
+    let (base_weight_index, base_curves) = source_curves
+        .first()
+        .cloned()
+        .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
+    builder
+        .add_curve_glyph_with_sources_and_lines(
+            base_curves,
+            recipe.line_flags(),
+            base_weight_index,
+            source_curves.into_iter().skip(1),
+        )
+        .map_err(Into::into)
+}
+
+fn validate_component_linear_transforms(
+    font: &Font,
+    projection: &GlyphProjection,
+    source_ids: &[SourceId],
+) -> Result<(), AuthoredSlugError> {
+    for (component_index, occurrence) in projection.components().components().iter().enumerate() {
+        let mut expected: Option<[f64; 4]> = None;
+        for source_id in source_ids {
+            let location = source_location(font, source_id)?;
+            let parent_projection = font
+                .glyph_projection(&occurrence.parent_glyph_id())?
+                .ok_or_else(|| CoreError::GlyphNotFound(occurrence.parent_glyph_id()))?;
+            let parent_layer = parent_projection.resolve(location, font.axes(), font.sources())?;
+            let component = parent_layer
+                .components_iter()
+                .find(|component| component.id() == occurrence.component_id())
+                .ok_or_else(|| {
+                    CoreError::InvalidComponentId(occurrence.component_id().to_string())
+                })?;
+            let matrix = component.matrix();
+            let linear = [matrix.xx, matrix.xy, matrix.yx, matrix.yy];
+            if let Some(expected) = expected {
+                if linear
+                    .iter()
+                    .zip(expected)
+                    .any(|(actual, expected)| (actual - expected).abs() > 1e-9)
+                {
+                    return Err(AuthoredSlugError::VariableComponentLinearTransform {
+                        component_index,
+                    });
+                }
+            } else {
+                expected = Some(linear);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn source_location<'a>(
+    font: &'a Font,
+    source_id: &SourceId,
+) -> Result<&'a shift_font::Location, AuthoredSlugError> {
+    font.sources()
+        .iter()
+        .find(|source| source.id() == *source_id)
+        .map(shift_font::Source::location)
+        .ok_or_else(|| AuthoredSlugError::MissingSourceLocation(source_id.clone()))
+}
+
+fn line_flags<'a>(segments: impl IntoIterator<Item = &'a SegmentRecipe>) -> Vec<bool> {
+    segments
+        .into_iter()
+        .flat_map(|segment| {
+            let (is_line, count) = match segment {
+                SegmentRecipe::Line(_) => (true, 1),
+                SegmentRecipe::Quad(_) => (false, 1),
+                SegmentRecipe::Cubic(_) => (false, 2),
+            };
+            std::iter::repeat_n(is_line, count)
+        })
+        .collect()
 }
 
 fn segment_recipe(points: &[FontPoint], segment: CurveSegment<'_>) -> SegmentRecipe {

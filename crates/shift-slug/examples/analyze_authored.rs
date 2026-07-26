@@ -3,7 +3,8 @@ use std::{env, error::Error};
 use shift_backends::font_loader::FontLoader;
 use shift_font::{GlyphId, InterpolationBasis, Location};
 use shift_slug::{
-    add_authored_projection_glyph, authored_glyph_requirements, AuthoredSlugError,
+    add_authored_component_projection_glyph, add_authored_projection_glyph,
+    authored_glyph_requirements, curves_from_resolved_contours, AuthoredSlugError,
     VariableAtlasBuilder,
 };
 
@@ -25,12 +26,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             continue;
         };
         let requirements = authored_glyph_requirements(&projection);
-        if !requirements.is_supported() {
+        report.component_occurrences += requirements.component_occurrences;
+        report.attachments += requirements.attachment_count;
+        report.exact_source_shapes += requirements.exact_source_shapes;
+        report.exact_component_variants += requirements.exact_component_variants;
+        if requirements.attachment_count != 0
+            || requirements.exact_source_shapes != 0
+            || requirements.exact_component_variants != 0
+        {
             report.unsupported_glyphs += 1;
-            report.component_occurrences += requirements.component_occurrences;
-            report.attachments += requirements.attachment_count;
-            report.exact_source_shapes += requirements.exact_source_shapes;
-            report.exact_component_variants += requirements.exact_component_variants;
             continue;
         }
 
@@ -56,13 +60,26 @@ fn main() -> Result<(), Box<dyn Error>> {
             Vec::new()
         };
 
-        match add_authored_projection_glyph(&mut builder, &projection, &weight_indices, 0) {
+        let component_glyph = requirements.component_occurrences != 0;
+        let result = if component_glyph {
+            add_authored_component_projection_glyph(
+                &mut builder,
+                &font,
+                &projection,
+                &weight_indices,
+            )
+        } else {
+            add_authored_projection_glyph(&mut builder, &projection, &weight_indices, 0)
+        };
+        match result {
             Ok(atlas_index) => {
                 report.supported_glyphs += 1;
+                report.supported_component_glyphs += usize::from(component_glyph);
                 validation_glyphs.push(ValidationGlyph {
                     glyph_id: glyph.id(),
                     atlas_index,
                     weight_indices,
+                    component_glyph,
                 });
             }
             Err(AuthoredSlugError::UnsupportedGlyph(_)) => {
@@ -99,7 +116,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         next_weight_index,
     );
     println!(
-        "component_occurrences={} attachments={} exact_source_shapes={} exact_component_variants={}",
+        "component_glyphs_supported={} component_occurrences={} attachments={} exact_source_shapes={} exact_component_variants={}",
+        report.supported_component_glyphs,
         report.component_occurrences,
         report.attachments,
         report.exact_source_shapes,
@@ -124,6 +142,7 @@ struct ValidationGlyph {
     glyph_id: GlyphId,
     atlas_index: u32,
     weight_indices: Vec<u32>,
+    component_glyph: bool,
 }
 
 fn validation_locations(font: &shift_font::Font) -> Vec<Location> {
@@ -175,10 +194,18 @@ fn validate_locations(
                 weights[*weight_index as usize] = weight as f32;
             }
             let actual = atlas.resolve_glyph_with_weights(glyph.atlas_index, &weights)?;
-            let expected_layer = interpolation.resolve(location, font.axes())?;
-            let expected = recipe.curves_from_layer(&expected_layer)?;
-            for (actual, expected) in actual.iter().zip(expected) {
-                for (actual, expected) in curve_values(*actual).zip(curve_values(expected)) {
+            let expected = if glyph.component_glyph {
+                let mut font_projection = font.projection(location);
+                let resolved = font_projection
+                    .glyph(&glyph.glyph_id)?
+                    .ok_or("missing resolved glyph")?;
+                curves_from_resolved_contours(resolved.contours())?
+            } else {
+                let expected_layer = interpolation.resolve(location, font.axes())?;
+                recipe.curves_from_layer(&expected_layer)?
+            };
+            for (actual, expected) in actual.iter().zip(&expected) {
+                for (actual, expected) in curve_values(*actual).zip(curve_values(*expected)) {
                     maximum_error = maximum_error.max((actual - expected).abs());
                 }
             }
@@ -202,6 +229,7 @@ struct Report {
     missing_projection: usize,
     variable_glyphs: usize,
     static_glyphs: usize,
+    supported_component_glyphs: usize,
     component_occurrences: usize,
     attachments: usize,
     exact_source_shapes: usize,

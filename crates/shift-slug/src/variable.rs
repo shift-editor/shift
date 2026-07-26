@@ -12,8 +12,9 @@ const BASE_SOURCE_DELTA: u32 = u32::MAX;
 
 /// One glyph in a resident variable atlas.
 ///
-/// `bounds` encloses every source control hull. Glyphs containing synthetic
-/// Slug line controls are padded for controls regenerated at intermediate locations.
+/// `bounds` is a source-envelope fallback for empty geometry and diagnostics.
+/// Non-empty visible glyphs reduce exact current-location bounds into scratch
+/// before band construction and fragment selection.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct VariableGlyph {
@@ -48,8 +49,8 @@ pub struct VariableLayout {
 /// CPU-owned resident Slug variation model.
 ///
 /// Compatible curve topology is required, and each non-base source curve is
-/// stored as a delta from the base. No location-resolved bands or curve indexes are resident;
-/// those are generated only for visible glyphs by GPU compute.
+/// stored as a delta from the base. No location-resolved bounds, bands, or curve
+/// indexes are resident; those are generated only for visible glyphs by GPU compute.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VariableAtlas {
     band_count: u32,

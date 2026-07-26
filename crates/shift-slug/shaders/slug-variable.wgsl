@@ -63,6 +63,9 @@ struct VertexOutput {
 @group(2) @binding(0) var<storage, read_write> resolved_curves: array<Curve>;
 @group(2) @binding(1) var<storage, read_write> resolved_bands: array<Band>;
 @group(2) @binding(2) var<storage, read_write> resolved_indices: array<u32>;
+@group(2) @binding(3) var<storage, read_write> resolved_glyph_bounds: array<vec4<f32>>;
+
+var<workgroup> workgroup_curve_bounds: array<vec4<f32>, 64>;
 
 fn scale_curve(curve: Curve, scale: f32) -> Curve {
     var result: Curve;
@@ -113,6 +116,9 @@ fn resolve_visible_curves(
         weight_sum += source_weights[source.weight_index];
     }
 
+    let maximum_f32 = 3.402823466e+38;
+    var local_min = vec2<f32>(maximum_f32);
+    var local_max = vec2<f32>(-maximum_f32);
     var local_curve = local_id.x;
     while local_curve < glyph.curve_count {
         let source_index = glyph.curve_start + local_curve;
@@ -131,8 +137,32 @@ fn resolve_visible_curves(
         if (line_word & (1u << (source_index % 32u))) != 0u {
             curve = regenerate_line_control(curve);
         }
+        let bounds = curve_bounds(curve);
+        local_min = min(local_min, bounds.xy);
+        local_max = max(local_max, bounds.zw);
         resolved_curves[instance.glyph.y + local_curve] = curve;
         local_curve += 64u;
+    }
+
+    workgroup_curve_bounds[local_id.x] = vec4<f32>(local_min, local_max);
+    workgroupBarrier();
+    for (var stride = 32u; stride > 0u; stride /= 2u) {
+        if local_id.x < stride {
+            let other = workgroup_curve_bounds[local_id.x + stride];
+            let current = workgroup_curve_bounds[local_id.x];
+            workgroup_curve_bounds[local_id.x] = vec4<f32>(
+                min(current.xy, other.xy),
+                max(current.zw, other.zw),
+            );
+        }
+        workgroupBarrier();
+    }
+    if local_id.x == 0u {
+        resolved_glyph_bounds[instance_index] = select(
+            workgroup_curve_bounds[0],
+            glyph.bounds,
+            glyph.curve_count == 0u,
+        );
     }
 }
 
@@ -158,8 +188,9 @@ fn rebuild_visible_bands(@builtin(workgroup_id) workgroup_id: vec3<u32>) {
     let glyph = variable_glyphs[instance.glyph.x];
     let horizontal = local_band < variable.band_count;
     let direction_band = select(local_band - variable.band_count, local_band, horizontal);
-    let glyph_size = max(glyph.bounds.zw - glyph.bounds.xy, vec2<f32>(0.0001));
-    let axis_min = select(glyph.bounds.x, glyph.bounds.y, horizontal);
+    let glyph_bounds = resolved_glyph_bounds[instance_index];
+    let glyph_size = max(glyph_bounds.zw - glyph_bounds.xy, vec2<f32>(0.0001));
+    let axis_min = select(glyph_bounds.x, glyph_bounds.y, horizontal);
     let axis_size = select(glyph_size.x, glyph_size.y, horizontal);
     let band_min = axis_min + axis_size * f32(direction_band) / f32(variable.band_count);
     let band_max = axis_min + axis_size * f32(direction_band + 1u) / f32(variable.band_count);
@@ -272,9 +303,9 @@ fn calculate_coverage(x_coverage: f32, y_coverage: f32, x_weight: f32, y_weight:
 
 fn variable_curve_ranges(position_em: vec2<f32>, instance_index: u32) -> vec4<u32> {
     let instance = instances[instance_index];
-    let glyph = variable_glyphs[instance.glyph.x];
-    let glyph_size = max(glyph.bounds.zw - glyph.bounds.xy, vec2<f32>(0.0001));
-    let band_position = (position_em - glyph.bounds.xy) * f32(variable.band_count) / glyph_size;
+    let glyph_bounds = resolved_glyph_bounds[instance_index];
+    let glyph_size = max(glyph_bounds.zw - glyph_bounds.xy, vec2<f32>(0.0001));
+    let band_position = (position_em - glyph_bounds.xy) * f32(variable.band_count) / glyph_size;
     let maximum_band = f32(variable.band_count - 1u);
     let selected = vec2<u32>(clamp(band_position, vec2<f32>(0.0), vec2<f32>(maximum_band)));
     let horizontal = resolved_bands[instance.glyph.z + selected.y];

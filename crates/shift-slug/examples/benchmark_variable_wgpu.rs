@@ -79,6 +79,7 @@ struct ScratchLayout {
     curve_count: usize,
     band_count: usize,
     index_count: usize,
+    glyph_count: usize,
 }
 
 fn main() -> Result<()> {
@@ -144,7 +145,8 @@ fn main() -> Result<()> {
         .max(layout.line_bits.length)
         .max(scratch.curve_count * 24)
         .max(scratch.band_count * 8)
-        .max(scratch.index_count * 4);
+        .max(scratch.index_count * 4)
+        .max(scratch.glyph_count * 16);
     let mut required_limits = wgpu::Limits::default();
     required_limits.max_buffer_size = required_limits
         .max_buffer_size
@@ -154,7 +156,7 @@ fn main() -> Result<()> {
         .max_storage_buffer_binding_size
         .max(u64::try_from(largest_binding)?);
     required_limits.max_storage_buffers_per_shader_stage =
-        required_limits.max_storage_buffers_per_shader_stage.max(8);
+        required_limits.max_storage_buffers_per_shader_stage.max(9);
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("shift-slug variable benchmark device"),
         required_features: wgpu::Features::empty(),
@@ -217,6 +219,12 @@ fn main() -> Result<()> {
         scratch.index_count * 4,
         BufferUsages::COPY_SRC,
     )?;
+    let resolved_bounds_buffer = storage_buffer(
+        &device,
+        "shift-slug resolved glyph bounds",
+        scratch.glyph_count * 16,
+        BufferUsages::COPY_SRC,
+    )?;
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("shift-slug variable shared shader"),
@@ -273,6 +281,7 @@ fn main() -> Result<()> {
         &weight_buffer,
         &variable_buffer,
         &resolved_curve_buffer,
+        &resolved_bounds_buffer,
     );
     let band_groups = create_band_groups(
         &device,
@@ -284,18 +293,18 @@ fn main() -> Result<()> {
         &resolved_curve_buffer,
         &resolved_band_buffer,
         &resolved_index_buffer,
+        &resolved_bounds_buffer,
     );
     let render_groups = create_render_groups(
         &device,
         &render_pipeline,
         &global_buffer,
         &instance_buffer,
-        &atlas_buffer,
-        layout,
         &variable_buffer,
         &resolved_curve_buffer,
         &resolved_band_buffer,
         &resolved_index_buffer,
+        &resolved_bounds_buffer,
     );
     let target = device.create_texture(&TextureDescriptor {
         label: Some("shift-slug variable target"),
@@ -330,6 +339,11 @@ fn main() -> Result<()> {
         &device,
         "shift-slug index readback",
         scratch.index_count * 4,
+    )?;
+    let bounds_readback = readback_buffer(
+        &device,
+        "shift-slug bounds readback",
+        scratch.glyph_count * 16,
     )?;
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("shift-slug variable validation encoder"),
@@ -406,6 +420,13 @@ fn main() -> Result<()> {
         0,
         u64::try_from(scratch.index_count * 4)?,
     );
+    encoder.copy_buffer_to_buffer(
+        &resolved_bounds_buffer,
+        0,
+        &bounds_readback,
+        0,
+        u64::try_from(scratch.glyph_count * 16)?,
+    );
     encoder.copy_texture_to_buffer(
         TexelCopyTextureInfo {
             texture: &target,
@@ -433,6 +454,7 @@ fn main() -> Result<()> {
     let curve_bytes = read_buffer(&device, &curve_readback)?;
     let band_bytes = read_buffer(&device, &band_readback)?;
     let index_bytes = read_buffer(&device, &index_readback)?;
+    let bounds_bytes = read_buffer(&device, &bounds_readback)?;
     let pixel_bytes = read_buffer(&device, &pixel_readback)?;
     let gpu_elapsed = gpu_started.elapsed();
     let maximum_error = validate_curves(&atlas, &instances, arguments.weight, &curve_bytes)?;
@@ -444,6 +466,7 @@ fn main() -> Result<()> {
         &curve_bytes,
         &band_bytes,
         &index_bytes,
+        &bounds_bytes,
     )?;
 
     let pixels = unpack_rows(
@@ -599,6 +622,7 @@ fn build_instances(
             curve_count,
             band_count,
             index_count,
+            glyph_count: glyph_indices.len(),
         },
     ))
 }
@@ -760,6 +784,7 @@ fn create_resolve_groups(
     weight_buffer: &wgpu::Buffer,
     variable_buffer: &wgpu::Buffer,
     resolved_curve_buffer: &wgpu::Buffer,
+    resolved_bounds_buffer: &wgpu::Buffer,
 ) -> [wgpu::BindGroup; 3] {
     let group0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug resolve globals"),
@@ -791,10 +816,16 @@ fn create_resolve_groups(
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug resolve scratch"),
         layout: &pipeline.get_bind_group_layout(2),
-        entries: &[BindGroupEntry {
-            binding: 0,
-            resource: resolved_curve_buffer.as_entire_binding(),
-        }],
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: resolved_curve_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: resolved_bounds_buffer.as_entire_binding(),
+            },
+        ],
     });
     [group0, group1, group2]
 }
@@ -810,6 +841,7 @@ fn create_band_groups(
     resolved_curve_buffer: &wgpu::Buffer,
     resolved_band_buffer: &wgpu::Buffer,
     resolved_index_buffer: &wgpu::Buffer,
+    resolved_bounds_buffer: &wgpu::Buffer,
 ) -> [wgpu::BindGroup; 3] {
     let group0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug band instances"),
@@ -846,6 +878,10 @@ fn create_band_groups(
                 binding: 2,
                 resource: resolved_index_buffer.as_entire_binding(),
             },
+            BindGroupEntry {
+                binding: 3,
+                resource: resolved_bounds_buffer.as_entire_binding(),
+            },
         ],
     });
     [group0, group1, group2]
@@ -857,12 +893,11 @@ fn create_render_groups(
     pipeline: &wgpu::RenderPipeline,
     global_buffer: &wgpu::Buffer,
     instance_buffer: &wgpu::Buffer,
-    atlas_buffer: &wgpu::Buffer,
-    layout: shift_slug::VariableLayout,
     variable_buffer: &wgpu::Buffer,
     resolved_curve_buffer: &wgpu::Buffer,
     resolved_band_buffer: &wgpu::Buffer,
     resolved_index_buffer: &wgpu::Buffer,
+    resolved_bounds_buffer: &wgpu::Buffer,
 ) -> [wgpu::BindGroup; 3] {
     let group0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug variable render globals"),
@@ -881,13 +916,10 @@ fn create_render_groups(
     let group1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug variable render model"),
         layout: &pipeline.get_bind_group_layout(1),
-        entries: &[
-            atlas_entry(2, atlas_buffer, layout.glyphs),
-            BindGroupEntry {
-                binding: 5,
-                resource: variable_buffer.as_entire_binding(),
-            },
-        ],
+        entries: &[BindGroupEntry {
+            binding: 5,
+            resource: variable_buffer.as_entire_binding(),
+        }],
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug variable render scratch"),
@@ -904,6 +936,10 @@ fn create_render_groups(
             BindGroupEntry {
                 binding: 2,
                 resource: resolved_index_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: resolved_bounds_buffer.as_entire_binding(),
             },
         ],
     });
@@ -929,6 +965,7 @@ fn scratch_bytes(layout: ScratchLayout) -> Result<usize> {
     (layout.curve_count * 24)
         .checked_add(layout.band_count * 8)
         .and_then(|bytes| bytes.checked_add(layout.index_count * 4))
+        .and_then(|bytes| bytes.checked_add(layout.glyph_count * 16))
         .ok_or_else(|| "scratch byte count overflow".into())
 }
 
@@ -955,6 +992,7 @@ fn validate_curves(
     Ok(maximum_error)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn validate_bands(
     atlas: &VariableAtlas,
     instances: &[RenderInstance],
@@ -963,12 +1001,30 @@ fn validate_bands(
     curve_bytes: &[u8],
     band_bytes: &[u8],
     index_bytes: &[u8],
+    bounds_bytes: &[u8],
 ) -> Result<()> {
-    for instance in instances {
+    for (instance_index, instance) in instances.iter().enumerate() {
         let glyph = atlas.glyphs()[instance.glyph_index as usize];
         let expected_curves = atlas.resolve_glyph(instance.glyph_index, weight)?;
-        let width = (glyph.bounds.max_x - glyph.bounds.min_x).max(0.0001);
-        let height = (glyph.bounds.max_y - glyph.bounds.min_y).max(0.0001);
+        let expected_bounds = curve_set_bounds(&expected_curves).unwrap_or(glyph.bounds);
+        let bounds = read_bounds(bounds_bytes, instance_index)?;
+        let bounds_error = [
+            (bounds.min_x - expected_bounds.min_x).abs(),
+            (bounds.min_y - expected_bounds.min_y).abs(),
+            (bounds.max_x - expected_bounds.max_x).abs(),
+            (bounds.max_y - expected_bounds.max_y).abs(),
+        ]
+        .into_iter()
+        .fold(0.0, f32::max);
+        if bounds_error > 0.001 {
+            return Err(format!(
+                "glyph {} resolved bounds error {bounds_error} exceeds 0.001",
+                instance.glyph_index
+            )
+            .into());
+        }
+        let width = bounds.width().max(0.0001);
+        let height = bounds.height().max(0.0001);
         for local_band in 0..band_count * 2 {
             let horizontal = local_band < band_count;
             let direction_band = if horizontal {
@@ -977,9 +1033,9 @@ fn validate_bands(
                 local_band - band_count
             };
             let (axis_min, axis_size) = if horizontal {
-                (glyph.bounds.min_y, height)
+                (bounds.min_y, height)
             } else {
-                (glyph.bounds.min_x, width)
+                (bounds.min_x, width)
             };
             let band_min = axis_min + axis_size * direction_band as f32 / band_count as f32;
             let band_max = axis_min + axis_size * (direction_band + 1) as f32 / band_count as f32;
@@ -1019,6 +1075,28 @@ fn validate_bands(
         }
     }
     Ok(())
+}
+
+fn curve_set_bounds(curves: &[Curve]) -> Option<Bounds> {
+    let mut curves = curves.iter();
+    let mut bounds = curves.next()?.bounds();
+    for curve in curves {
+        let curve_bounds = curve.bounds();
+        bounds.min_x = bounds.min_x.min(curve_bounds.min_x);
+        bounds.min_y = bounds.min_y.min(curve_bounds.min_y);
+        bounds.max_x = bounds.max_x.max(curve_bounds.max_x);
+        bounds.max_y = bounds.max_y.max(curve_bounds.max_y);
+    }
+    Some(bounds)
+}
+
+fn read_bounds(bytes: &[u8], index: usize) -> Result<Bounds> {
+    Ok(Bounds {
+        min_x: read_f32(bytes, index * 4)?,
+        min_y: read_f32(bytes, index * 4 + 1)?,
+        max_x: read_f32(bytes, index * 4 + 2)?,
+        max_y: read_f32(bytes, index * 4 + 3)?,
+    })
 }
 
 fn read_curve(bytes: &[u8], index: usize) -> Result<Curve> {

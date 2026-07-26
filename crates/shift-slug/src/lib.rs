@@ -15,7 +15,8 @@ mod variable;
 
 pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};
 pub use authored::{
-    add_authored_projection_glyph, authored_glyph_requirements, AuthoredCurveRecipe,
+    add_authored_component_projection_glyph, add_authored_projection_glyph,
+    authored_glyph_requirements, curves_from_resolved_contours, AuthoredCurveRecipe,
     AuthoredGlyphRequirements, AuthoredSlugError,
 };
 pub use curve::{Bounds, Curve, Point, LINE_EPSILON};
