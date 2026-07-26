@@ -44,7 +44,7 @@ Band[]        u32 start + u32 count                        8 bytes each
 
 Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical ranges. Empty glyphs have zero curves and empty ranges but retain a descriptor, so dense glyph indexing remains stable.
 
-`CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses compact indexes by default and retains `--wide-indices` as the pixel/performance control.
+`CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses wide indexes by default and exposes compact indexes through `--compact-indices`.
 
 ## Reference implementation
 
@@ -99,7 +99,7 @@ Timestamp pairs with `end < start` are excluded and reported as `non_monotonic_p
 
 On llvmpipe, tight quads reduced MutatorSans GPU latency from 6.36 ms to 3.68 ms while producing the same checksum. The uniformly sampled Source Han workload produced the same checksum but no meaningful timing change because CJK bounds occupy nearly the complete cell. Tight quads remain useful for Latin and sparse glyphs without regressing CJK correctness.
 
-Eight-band compact Source Han indexes reduce the atlas from 205.8 MiB to 170.7 MiB. Wide and compact shader entry points are intentionally static and share one WGSL file. An override branch or helper call inside the dynamic curve loop caused llvmpipe's first submission not to complete; inline decoding in a dedicated compact fragment path avoids that driver/compiler boundary and preserves identical pixels.
+Eight-band compact Source Han indexes reduce the atlas from 205.8 MiB to 170.7 MiB. On Apple M4 / Metal they preserved byte-identical pixels but increased serialized GPU latency p50 from 0.508 ms to 0.675 ms, outside the five-percent retention gate; wide indexes therefore remain the default. Wide and compact shader entry points are intentionally static and share one WGSL file. An override branch or helper call inside the dynamic curve loop caused llvmpipe's first submission not to complete; inline decoding in a dedicated compact fragment path avoids that driver/compiler boundary.
 
 A full Source Han `wght=900` llvmpipe correctness run rendered 192 visible instances at 1024×768:
 

@@ -84,7 +84,7 @@ struct Arguments {
     iterations: u32,
     output: Option<PathBuf>,
     full_cell_quads: bool,
-    wide_indices: bool,
+    compact_indices: bool,
 }
 
 struct TimestampResources {
@@ -123,24 +123,26 @@ fn main() -> Result<()> {
             .min_storage_buffer_offset_alignment
             .max(COPY_ALIGNMENT),
     )?;
-    let index_encoding = if arguments.wide_indices {
-        CurveIndexEncoding::GlobalU32
-    } else {
+    let index_encoding = if arguments.compact_indices {
         CurveIndexEncoding::GlyphLocalU16
+    } else {
+        CurveIndexEncoding::GlobalU32
     };
     let pack_started = Instant::now();
     let packed = atlas.pack_with_encoding(alignment, index_encoding)?;
+    let pack_elapsed = pack_started.elapsed();
     let layout = packed.layout();
     validate_adapter_limits(&adapter, layout)?;
+    let validation_started = Instant::now();
     if index_encoding == CurveIndexEncoding::GlyphLocalU16 {
         validate_compact_indices(&atlas, &packed)?;
     }
-    let pack_elapsed = pack_started.elapsed();
+    let validation_elapsed = validation_started.elapsed();
 
     let statistics = atlas.statistics();
     println!("source={}", font_path.display());
     println!(
-        "source_bytes={} glyphs={} curves={} curve_indices={} atlas_bytes={} index_encoding={} build_ms={:.3} pack_ms={:.3}",
+        "source_bytes={} glyphs={} curves={} curve_indices={} atlas_bytes={} index_encoding={} build_ms={:.3} pack_ms={:.3} validation_ms={:.3}",
         source_bytes,
         statistics.glyph_count,
         statistics.curve_count,
@@ -152,6 +154,7 @@ fn main() -> Result<()> {
         },
         milliseconds(build_elapsed),
         milliseconds(pack_elapsed),
+        milliseconds(validation_elapsed),
     );
 
     let required_features = adapter.features() & Features::TIMESTAMP_QUERY;
@@ -980,7 +983,7 @@ fn arguments() -> Result<Arguments> {
         iterations: DEFAULT_ITERATIONS,
         output: None,
         full_cell_quads: false,
-        wide_indices: false,
+        compact_indices: false,
     };
 
     while let Some(value) = values.next() {
@@ -995,7 +998,7 @@ fn arguments() -> Result<Arguments> {
                 arguments.iterations = required_value(&mut values, "--iterations")?.parse()?
             }
             "--full-cell-quads" => arguments.full_cell_quads = true,
-            "--wide-indices" => arguments.wide_indices = true,
+            "--compact-indices" => arguments.compact_indices = true,
             "--output" => {
                 arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?))
             }
