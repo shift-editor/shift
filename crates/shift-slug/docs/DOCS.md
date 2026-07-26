@@ -84,7 +84,14 @@ Eight bands remain the initial static-render candidate. The 5.49 million curves 
 
 ## Native offscreen baseline
 
-The native harness uses `SLUG_WGSL` and the exact `PackedAtlas` bytes exposed for Electron. It renders a uniformly sampled visible grid to `Rgba8Unorm`, reads pixels back, emits a checksum, and measures render-pass boundaries when timestamp queries are available.
+The native harness uses `SLUG_WGSL` and the exact `PackedAtlas` bytes exposed for Electron. It renders a uniformly sampled visible grid to `Rgba8Unorm`, reads pixels back, emits a checksum, and measures render-pass boundaries when timestamp queries are available. Its default 960×640 workload contains 150 visible 64-pixel cells.
+
+Two measurements are reported separately:
+
+- **Latency:** one encoder, submission, and completion wait per pass. `latency_submit_to_completion_ms_*` is the serialized native upper bound; `latency_gpu_pass_ms_*` is the corresponding GPU timestamp interval.
+- **Throughput:** every pass is encoded into one saturated batch. `throughput_batch_wall_ms` and `wall_ms_per_pass` describe batch throughput, not individual-frame latency.
+
+Timestamp pairs with `end < start` are excluded and reported as `non_monotonic_pairs`; they are never converted with wrapping subtraction. Electron presentation timing is still a separate product measurement.
 
 A full Source Han `wght=900` llvmpipe correctness run rendered 192 visible instances at 1024×768:
 

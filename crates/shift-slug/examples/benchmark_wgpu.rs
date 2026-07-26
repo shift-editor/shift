@@ -34,8 +34,8 @@ use wgpu::{
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const COPY_ALIGNMENT: u32 = 256;
-const DEFAULT_WIDTH: u32 = 1024;
-const DEFAULT_HEIGHT: u32 = 768;
+const DEFAULT_WIDTH: u32 = 960;
+const DEFAULT_HEIGHT: u32 = 640;
 const DEFAULT_CELL_SIZE: u32 = 64;
 const DEFAULT_ITERATIONS: u32 = 120;
 
@@ -87,6 +87,11 @@ struct TimestampResources {
     resolve_buffer: wgpu::Buffer,
     readback_buffer: wgpu::Buffer,
     query_count: u32,
+}
+
+struct TimestampMeasurements {
+    durations_ms: Vec<f64>,
+    non_monotonic_pairs: usize,
 }
 
 fn main() -> Result<()> {
@@ -258,7 +263,14 @@ fn main() -> Result<()> {
         usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
-    let timestamps = timestamp_resources(&device, required_features, arguments.iterations)?;
+    let latency_timestamps =
+        timestamp_resources(&device, required_features, arguments.iterations, "latency")?;
+    let throughput_timestamps = timestamp_resources(
+        &device,
+        required_features,
+        arguments.iterations,
+        "throughput",
+    )?;
 
     let warm_started = Instant::now();
     let mut warm_encoder = device.create_command_encoder(&CommandEncoderDescriptor {
@@ -277,12 +289,13 @@ fn main() -> Result<()> {
     device.poll(PollType::wait_indefinitely())?;
     let warm_elapsed = warm_started.elapsed();
 
-    let benchmark_started = Instant::now();
-    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-        label: Some("shift-slug measured encoder"),
-    });
+    let mut latency_wall_ms = Vec::with_capacity(arguments.iterations as usize);
     for iteration in 0..arguments.iterations {
-        let writes = timestamps.as_ref().map(|timestamps| {
+        let started = Instant::now();
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("shift-slug latency encoder"),
+        });
+        let writes = latency_timestamps.as_ref().map(|timestamps| {
             let start = iteration * 2;
             RenderPassTimestampWrites {
                 query_set: &timestamps.query_set,
@@ -299,23 +312,55 @@ fn main() -> Result<()> {
             instance_count,
             writes,
         );
+        queue.submit([encoder.finish()]);
+        device.poll(PollType::wait_indefinitely())?;
+        latency_wall_ms.push(milliseconds(started.elapsed()));
     }
-    if let Some(timestamps) = &timestamps {
-        encoder.resolve_query_set(
-            &timestamps.query_set,
-            0..timestamps.query_count,
-            &timestamps.resolve_buffer,
-            0,
-        );
-        encoder.copy_buffer_to_buffer(
-            &timestamps.resolve_buffer,
-            0,
-            &timestamps.readback_buffer,
-            0,
-            u64::from(timestamps.query_count) * 8,
+    latency_wall_ms.sort_by(f64::total_cmp);
+    let latency_gpu = read_timestamps(
+        &device,
+        &queue,
+        latency_timestamps.as_ref(),
+        queue.get_timestamp_period(),
+    )?;
+
+    let throughput_started = Instant::now();
+    let mut throughput_encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+        label: Some("shift-slug throughput encoder"),
+    });
+    for iteration in 0..arguments.iterations {
+        let writes = throughput_timestamps.as_ref().map(|timestamps| {
+            let start = iteration * 2;
+            RenderPassTimestampWrites {
+                query_set: &timestamps.query_set,
+                beginning_of_pass_write_index: Some(start),
+                end_of_pass_write_index: Some(start + 1),
+            }
+        });
+        encode_render_pass(
+            &mut throughput_encoder,
+            &view,
+            &pipeline,
+            &globals,
+            &atlas_bindings,
+            instance_count,
+            writes,
         );
     }
-    encoder.copy_texture_to_buffer(
+    queue.submit([throughput_encoder.finish()]);
+    device.poll(PollType::wait_indefinitely())?;
+    let throughput_elapsed = throughput_started.elapsed();
+    let throughput_gpu = read_timestamps(
+        &device,
+        &queue,
+        throughput_timestamps.as_ref(),
+        queue.get_timestamp_period(),
+    )?;
+
+    let mut readback_encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+        label: Some("shift-slug image readback encoder"),
+    });
+    readback_encoder.copy_texture_to_buffer(
         TexelCopyTextureInfo {
             texture: &texture,
             mip_level: 0,
@@ -336,9 +381,8 @@ fn main() -> Result<()> {
             depth_or_array_layers: 1,
         },
     );
-    queue.submit([encoder.finish()]);
+    queue.submit([readback_encoder.finish()]);
     device.poll(PollType::wait_indefinitely())?;
-    let benchmark_elapsed = benchmark_started.elapsed();
 
     let image_bytes = read_buffer(&device, &image_readback)?;
     let rgba = unpack_rows(
@@ -371,29 +415,25 @@ fn main() -> Result<()> {
         milliseconds(warm_elapsed),
     );
     println!(
-        "measured_submit_ms={:.3} cpu_ms_per_pass={:.3}",
-        milliseconds(benchmark_elapsed),
-        milliseconds(benchmark_elapsed) / f64::from(arguments.iterations),
+        "latency_submit_to_completion_ms_p50={:.3} p95={:.3} p99={:.3} max={:.3}",
+        percentile(&latency_wall_ms, 0.50),
+        percentile(&latency_wall_ms, 0.95),
+        percentile(&latency_wall_ms, 0.99),
+        latency_wall_ms.last().copied().unwrap_or(0.0),
     );
+    print_timestamp_measurements("latency", latency_gpu.as_ref())?;
+    println!(
+        "throughput_batch_wall_ms={:.3} wall_ms_per_pass={:.3}",
+        milliseconds(throughput_elapsed),
+        milliseconds(throughput_elapsed) / f64::from(arguments.iterations),
+    );
+    print_timestamp_measurements("throughput", throughput_gpu.as_ref())?;
     println!(
         "pixel_checksum={:016x} nonzero_alpha={} alpha_sum={}",
         fnv1a(&rgba),
         nonzero_alpha,
         alpha.iter().map(|value| u64::from(*value)).sum::<u64>(),
     );
-    if let Some(timestamps) = &timestamps {
-        let bytes = read_buffer(&device, &timestamps.readback_buffer)?;
-        let timings = timestamp_milliseconds(&bytes, queue.get_timestamp_period());
-        println!(
-            "gpu_pass_ms_p50={:.3} p95={:.3} p99={:.3} max={:.3}",
-            percentile(&timings, 0.50),
-            percentile(&timings, 0.95),
-            percentile(&timings, 0.99),
-            timings.last().copied().unwrap_or(0.0),
-        );
-    } else {
-        println!("gpu_timestamps=unsupported");
-    }
 
     Ok(())
 }
@@ -583,6 +623,7 @@ fn timestamp_resources(
     device: &Device,
     features: Features,
     iterations: u32,
+    mode: &str,
 ) -> Result<Option<TimestampResources>> {
     if !features.contains(Features::TIMESTAMP_QUERY) {
         return Ok(None);
@@ -599,26 +640,84 @@ fn timestamp_resources(
         .into());
     }
     let byte_length = u64::from(query_count) * 8;
+    let query_label = format!("shift-slug {mode} timestamps");
+    let resolve_label = format!("shift-slug {mode} timestamp resolve");
+    let readback_label = format!("shift-slug {mode} timestamp readback");
     Ok(Some(TimestampResources {
         query_set: device.create_query_set(&QuerySetDescriptor {
-            label: Some("shift-slug render timestamps"),
+            label: Some(&query_label),
             ty: QueryType::Timestamp,
             count: query_count,
         }),
         resolve_buffer: device.create_buffer(&BufferDescriptor {
-            label: Some("shift-slug timestamp resolve"),
+            label: Some(&resolve_label),
             size: byte_length,
             usage: BufferUsages::QUERY_RESOLVE | BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         }),
         readback_buffer: device.create_buffer(&BufferDescriptor {
-            label: Some("shift-slug timestamp readback"),
+            label: Some(&readback_label),
             size: byte_length,
             usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
             mapped_at_creation: false,
         }),
         query_count,
     }))
+}
+
+fn read_timestamps(
+    device: &Device,
+    queue: &wgpu::Queue,
+    resources: Option<&TimestampResources>,
+    period_nanoseconds: f32,
+) -> Result<Option<TimestampMeasurements>> {
+    let Some(resources) = resources else {
+        return Ok(None);
+    };
+    let byte_length = u64::from(resources.query_count) * 8;
+    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+        label: Some("shift-slug timestamp readback encoder"),
+    });
+    encoder.resolve_query_set(
+        &resources.query_set,
+        0..resources.query_count,
+        &resources.resolve_buffer,
+        0,
+    );
+    encoder.copy_buffer_to_buffer(
+        &resources.resolve_buffer,
+        0,
+        &resources.readback_buffer,
+        0,
+        byte_length,
+    );
+    queue.submit([encoder.finish()]);
+    device.poll(PollType::wait_indefinitely())?;
+    let bytes = read_buffer(device, &resources.readback_buffer)?;
+    Ok(Some(timestamp_milliseconds(&bytes, period_nanoseconds)))
+}
+
+fn print_timestamp_measurements(
+    mode: &str,
+    measurements: Option<&TimestampMeasurements>,
+) -> Result<()> {
+    let Some(measurements) = measurements else {
+        println!("{mode}_gpu_timestamps=unsupported");
+        return Ok(());
+    };
+    if measurements.durations_ms.is_empty() {
+        return Err(format!("all {mode} GPU timestamp pairs were non-monotonic").into());
+    }
+    println!(
+        "{mode}_gpu_pass_ms_p50={:.3} p95={:.3} p99={:.3} max={:.3} valid_pairs={} non_monotonic_pairs={}",
+        percentile(&measurements.durations_ms, 0.50),
+        percentile(&measurements.durations_ms, 0.95),
+        percentile(&measurements.durations_ms, 0.99),
+        measurements.durations_ms.last().copied().unwrap_or(0.0),
+        measurements.durations_ms.len(),
+        measurements.non_monotonic_pairs,
+    );
+    Ok(())
 }
 
 fn encode_render_pass(
@@ -679,19 +778,27 @@ fn unpack_rows(bytes: &[u8], width: u32, height: u32, padded_bytes_per_row: u32)
     output
 }
 
-fn timestamp_milliseconds(bytes: &[u8], period_nanoseconds: f32) -> Vec<f64> {
+fn timestamp_milliseconds(bytes: &[u8], period_nanoseconds: f32) -> TimestampMeasurements {
     let timestamps: Vec<_> = bytes
         .chunks_exact(8)
         .map(|bytes| u64::from_le_bytes(bytes.try_into().expect("timestamp is eight bytes")))
         .collect();
-    let mut durations: Vec<_> = timestamps
+    let mut non_monotonic_pairs = 0;
+    let mut durations_ms: Vec<_> = timestamps
         .chunks_exact(2)
-        .map(|pair| {
-            pair[1].wrapping_sub(pair[0]) as f64 * f64::from(period_nanoseconds) / 1_000_000.0
+        .filter_map(|pair| {
+            let ticks = pair[1].checked_sub(pair[0]);
+            if ticks.is_none() {
+                non_monotonic_pairs += 1;
+            }
+            ticks.map(|ticks| ticks as f64 * f64::from(period_nanoseconds) / 1_000_000.0)
         })
         .collect();
-    durations.sort_by(f64::total_cmp);
-    durations
+    durations_ms.sort_by(f64::total_cmp);
+    TimestampMeasurements {
+        durations_ms,
+        non_monotonic_pairs,
+    }
 }
 
 fn percentile(values: &[f64], quantile: f64) -> f64 {
@@ -781,4 +888,31 @@ fn parse_setting(value: &str) -> Result<(Tag, f32)> {
         .try_into()
         .map_err(|_| "axis tag must contain exactly four ASCII bytes")?;
     Ok((Tag::new(&tag), coordinate.parse()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_workload_has_150_visible_instances() {
+        assert_eq!(
+            (DEFAULT_WIDTH / DEFAULT_CELL_SIZE) * (DEFAULT_HEIGHT / DEFAULT_CELL_SIZE),
+            150
+        );
+    }
+
+    #[test]
+    fn non_monotonic_timestamp_pairs_are_reported_not_wrapped() {
+        let bytes: Vec<_> = [100_u64, 120, 50, 40, 1, 1]
+            .into_iter()
+            .flat_map(u64::to_le_bytes)
+            .collect();
+        let measurements = timestamp_milliseconds(&bytes, 2.0);
+
+        assert_eq!(measurements.non_monotonic_pairs, 1);
+        assert_eq!(measurements.durations_ms.len(), 2);
+        assert_eq!(measurements.durations_ms[0], 0.0);
+        assert!((measurements.durations_ms[1] - 0.000_04).abs() < f64::EPSILON);
+    }
 }
