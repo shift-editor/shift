@@ -26,6 +26,7 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const COPY_ALIGNMENT: u32 = 256;
 const DEFAULT_VISIBLE_GLYPHS: usize = 150;
+const DEFAULT_ITERATIONS: u32 = 120;
 const GRID_COLUMNS: usize = 15;
 const CELL_SIZE: u32 = 64;
 const CELL_PADDING: f32 = 4.0;
@@ -70,6 +71,7 @@ struct Arguments {
     weight: f32,
     visible_glyphs: usize,
     band_count: u32,
+    iterations: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -108,7 +110,8 @@ fn main() -> Result<()> {
     let glyph_indices = sampled_glyph_indices(atlas.glyphs().len(), arguments.visible_glyphs);
     let (instances, scratch) = build_instances(&atlas, &glyph_indices)?;
     let instance_bytes = pack_render_instances(&instances)?;
-    let variable_params = variable_params(arguments.weight, instances.len(), arguments.band_count)?;
+    let initial_variable_params =
+        variable_params(arguments.weight, instances.len(), arguments.band_count)?;
 
     println!(
         "source={} source_bytes={} glyphs={} curves={} variable_bytes={} build_ms={:.3}",
@@ -171,8 +174,8 @@ fn main() -> Result<()> {
     });
     let variable_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("shift-slug variable params"),
-        contents: &variable_params,
-        usage: BufferUsages::UNIFORM,
+        contents: &initial_variable_params,
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
     });
     let viewport_width = (GRID_COLUMNS as u32) * CELL_SIZE;
     let viewport_height = u32::try_from(instances.len().div_ceil(GRID_COLUMNS))?
@@ -453,6 +456,42 @@ fn main() -> Result<()> {
         alpha.iter().filter(|value| **value != 0).count(),
     );
 
+    let mut frame_milliseconds = Vec::with_capacity(arguments.iterations as usize);
+    for iteration in 0..arguments.iterations {
+        let weight = ((iteration * 37) % 101) as f32 / 100.0;
+        let frame_params = variable_params(weight, instances.len(), arguments.band_count)?;
+        let frame_started = Instant::now();
+        queue.write_buffer(&variable_buffer, 0, &frame_params);
+        let mut frame_encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("shift-slug variable frame encoder"),
+        });
+        encode_variable_frame(
+            &mut frame_encoder,
+            &resolve_pipeline,
+            &resolve_groups,
+            &band_pipeline,
+            &band_groups,
+            &render_pipeline,
+            &render_groups,
+            &target_view,
+            instances.len(),
+            arguments.band_count,
+        )?;
+        queue.submit([frame_encoder.finish()]);
+        device.poll(PollType::wait_indefinitely())?;
+        frame_milliseconds.push(frame_started.elapsed().as_secs_f64() * 1_000.0);
+    }
+    frame_milliseconds.sort_by(f64::total_cmp);
+    println!(
+        "serialized_frame_ms_p50={:.3} p95={:.3} p99={:.3} max={:.3} iterations={} geometry_uploads=0 geometry_upload_bytes=0 weight_upload_bytes={}",
+        percentile(&frame_milliseconds, 0.50),
+        percentile(&frame_milliseconds, 0.95),
+        percentile(&frame_milliseconds, 0.99),
+        frame_milliseconds.last().copied().unwrap_or(0.0),
+        arguments.iterations,
+        arguments.iterations * 16,
+    );
+
     Ok(())
 }
 
@@ -628,6 +667,73 @@ fn readback_buffer(device: &Device, label: &'static str, size: usize) -> Result<
         usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         mapped_at_creation: false,
     }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn encode_variable_frame(
+    encoder: &mut wgpu::CommandEncoder,
+    resolve_pipeline: &wgpu::ComputePipeline,
+    resolve_groups: &[wgpu::BindGroup; 3],
+    band_pipeline: &wgpu::ComputePipeline,
+    band_groups: &[wgpu::BindGroup; 3],
+    render_pipeline: &wgpu::RenderPipeline,
+    render_groups: &[wgpu::BindGroup; 3],
+    target_view: &wgpu::TextureView,
+    instance_count: usize,
+    band_count: u32,
+) -> Result<()> {
+    {
+        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("shift-slug variable frame resolve"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(resolve_pipeline);
+        for (index, group) in resolve_groups.iter().enumerate() {
+            pass.set_bind_group(index as u32, group, &[]);
+        }
+        pass.dispatch_workgroups(u32::try_from(instance_count)?, 1, 1);
+    }
+    {
+        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("shift-slug variable frame bands"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(band_pipeline);
+        for (index, group) in band_groups.iter().enumerate() {
+            pass.set_bind_group(index as u32, group, &[]);
+        }
+        pass.dispatch_workgroups(
+            u32::try_from(instance_count)?
+                .checked_mul(band_count * 2)
+                .ok_or("band dispatch overflow")?,
+            1,
+            1,
+        );
+    }
+    {
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("shift-slug variable frame render"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: target_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::TRANSPARENT),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(render_pipeline);
+        for (index, group) in render_groups.iter().enumerate() {
+            pass.set_bind_group(index as u32, group, &[]);
+        }
+        pass.draw(0..6, 0..u32::try_from(instance_count)?);
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -947,6 +1053,13 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     })
 }
 
+fn percentile(values: &[f64], quantile: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values[((values.len() - 1) as f64 * quantile).round() as usize]
+}
+
 fn read_buffer(device: &Device, buffer: &wgpu::Buffer) -> Result<Vec<u8>> {
     let (sender, receiver) = mpsc::channel();
     buffer.map_async(wgpu::MapMode::Read, .., move |result| {
@@ -964,7 +1077,7 @@ fn arguments() -> Result<Arguments> {
     let font = values
         .next()
         .map(PathBuf::from)
-        .ok_or("usage: benchmark_variable_wgpu FONT TAG=BASE,SOURCE [--weight VALUE] [--visible COUNT] [--bands COUNT]")?;
+        .ok_or("usage: benchmark_variable_wgpu FONT TAG=BASE,SOURCE [--weight VALUE] [--visible COUNT] [--bands COUNT] [--iterations COUNT]")?;
     let axis = values
         .next()
         .ok_or("axis endpoints must have TAG=BASE,SOURCE form")?;
@@ -986,6 +1099,7 @@ fn arguments() -> Result<Arguments> {
         weight: 0.5,
         visible_glyphs: DEFAULT_VISIBLE_GLYPHS,
         band_count: DEFAULT_BAND_COUNT,
+        iterations: DEFAULT_ITERATIONS,
     };
 
     while let Some(option) = values.next() {
@@ -1000,6 +1114,12 @@ fn arguments() -> Result<Arguments> {
             "--bands" => {
                 arguments.band_count = values.next().ok_or("--bands requires a count")?.parse()?
             }
+            "--iterations" => {
+                arguments.iterations = values
+                    .next()
+                    .ok_or("--iterations requires a count")?
+                    .parse()?
+            }
             _ => return Err(format!("unknown option {option}").into()),
         }
     }
@@ -1009,6 +1129,9 @@ fn arguments() -> Result<Arguments> {
     }
     if arguments.visible_glyphs == 0 {
         return Err("--visible must be greater than zero".into());
+    }
+    if arguments.iterations == 0 {
+        return Err("--iterations must be greater than zero".into());
     }
     Ok(arguments)
 }
