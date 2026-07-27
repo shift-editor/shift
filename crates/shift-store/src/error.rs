@@ -9,6 +9,21 @@ pub enum StoreError {
     #[error(transparent)]
     Font(#[from] shift_font::error::CoreError),
 
+    #[error(transparent)]
+    PackedLayer(#[from] shift_font::PackedLayerError),
+
+    #[error("unsupported glyph layer payload format: {0}")]
+    UnsupportedLayerFormat(String),
+
+    #[error("glyph layer payload has {bytes} bytes; limit is {limit}")]
+    LayerPayloadTooLarge { bytes: u64, limit: u64 },
+
+    #[error("glyph layer {layer_id} payload disagrees with its directory: {detail}")]
+    LayerDirectoryMismatch { layer_id: String, detail: String },
+
+    #[error("glyph layer {layer_id} has a stale component/reference index")]
+    StaleLayerReferenceIndex { layer_id: String },
+
     #[error("unknown source kind: {0}")]
     UnknownSourceKind(String),
 

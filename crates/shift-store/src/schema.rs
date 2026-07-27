@@ -112,51 +112,18 @@ ON glyph_layers(glyph_id);
 CREATE INDEX IF NOT EXISTS glyph_layers_source_id_idx
 ON glyph_layers(source_id);
 
-CREATE TABLE IF NOT EXISTS glyph_layer_contours (
-    id TEXT PRIMARY KEY,
-    layer_id TEXT NOT NULL,
-    closed INTEGER NOT NULL DEFAULT 0 CHECK (closed IN (0, 1)),
-    order_index INTEGER NOT NULL,
+CREATE TABLE IF NOT EXISTS glyph_layer_payloads (
+    layer_id TEXT PRIMARY KEY,
+    format TEXT NOT NULL,
+    payload BLOB NOT NULL,
+    byte_length INTEGER NOT NULL CHECK (byte_length >= 0 AND byte_length = length(payload)),
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS glyph_layer_contours_layer_order_unique
-ON glyph_layer_contours(layer_id, order_index);
-
-CREATE INDEX IF NOT EXISTS glyph_layer_contours_layer_id_idx
-ON glyph_layer_contours(layer_id);
-
-CREATE TABLE IF NOT EXISTS glyph_layer_points (
-    id TEXT PRIMARY KEY,
-    contour_id TEXT NOT NULL,
-    order_index INTEGER NOT NULL,
-    x REAL NOT NULL,
-    y REAL NOT NULL,
-    point_type TEXT NOT NULL,
-    smooth INTEGER NOT NULL DEFAULT 0 CHECK (smooth IN (0, 1)),
-    FOREIGN KEY (contour_id) REFERENCES glyph_layer_contours(id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS glyph_layer_points_contour_order_unique
-ON glyph_layer_points(contour_id, order_index);
-
-CREATE INDEX IF NOT EXISTS glyph_layer_points_contour_id_idx
-ON glyph_layer_points(contour_id);
 
 CREATE TABLE IF NOT EXISTS glyph_components (
     id TEXT PRIMARY KEY,
     layer_id TEXT NOT NULL,
     base_glyph_id TEXT NOT NULL,
-    base_glyph_name TEXT NOT NULL,
-    translate_x REAL NOT NULL DEFAULT 0,
-    translate_y REAL NOT NULL DEFAULT 0,
-    rotation REAL NOT NULL DEFAULT 0,
-    scale_x REAL NOT NULL DEFAULT 1,
-    scale_y REAL NOT NULL DEFAULT 1,
-    skew_x REAL NOT NULL DEFAULT 0,
-    skew_y REAL NOT NULL DEFAULT 0,
-    t_center_x REAL NOT NULL DEFAULT 0,
-    t_center_y REAL NOT NULL DEFAULT 0,
     order_index INTEGER NOT NULL,
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
@@ -170,22 +137,6 @@ ON glyph_components(layer_id);
 CREATE INDEX IF NOT EXISTS glyph_components_base_glyph_id_idx
 ON glyph_components(base_glyph_id);
 
-CREATE TABLE IF NOT EXISTS glyph_layer_anchors (
-    id TEXT PRIMARY KEY,
-    layer_id TEXT NOT NULL,
-    name TEXT,
-    x REAL NOT NULL,
-    y REAL NOT NULL,
-    order_index INTEGER NOT NULL,
-    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS glyph_layer_anchors_layer_order_unique
-ON glyph_layer_anchors(layer_id, order_index);
-
-CREATE INDEX IF NOT EXISTS glyph_layer_anchors_layer_id_idx
-ON glyph_layer_anchors(layer_id);
-
 CREATE TABLE IF NOT EXISTS font_guidelines (
     id TEXT PRIMARY KEY,
     x REAL,
@@ -195,21 +146,6 @@ CREATE TABLE IF NOT EXISTS font_guidelines (
     color TEXT,
     order_index INTEGER NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS glyph_layer_guidelines (
-    id TEXT PRIMARY KEY,
-    layer_id TEXT NOT NULL,
-    x REAL,
-    y REAL,
-    angle REAL,
-    name TEXT,
-    color TEXT,
-    order_index INTEGER NOT NULL,
-    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS glyph_layer_guidelines_layer_id_idx
-ON glyph_layer_guidelines(layer_id);
 
 CREATE TABLE IF NOT EXISTS source_locations (
     source_id TEXT NOT NULL,
@@ -283,14 +219,6 @@ CREATE TABLE IF NOT EXISTS glyph_lib (
     value_json TEXT NOT NULL,
     PRIMARY KEY (glyph_id, key),
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS glyph_layer_lib (
-    layer_id TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value_json TEXT NOT NULL,
-    PRIMARY KEY (layer_id, key),
-    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS font_binaries (

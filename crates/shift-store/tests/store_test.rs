@@ -700,7 +700,7 @@ fn rejects_layer_edit_for_missing_layer_row() {
 }
 
 fn create_glyph_a(store: &mut ShiftStore) -> GlyphId {
-    let glyph_id = GlyphId::new("glyph-A");
+    let glyph_id = GlyphId::new(shift_font::GlyphId::from_raw("A").to_string());
 
     store
         .create_glyph(NewGlyph {
@@ -769,7 +769,7 @@ fn empty_font_info() -> FontInfo {
 }
 
 fn create_glyph_b(store: &mut ShiftStore) -> GlyphId {
-    let glyph_id = GlyphId::new("glyph-B");
+    let glyph_id = GlyphId::new(shift_font::GlyphId::from_raw("B").to_string());
 
     store
         .create_glyph(NewGlyph {
@@ -786,7 +786,7 @@ fn create_default_glyph_layer(
     glyph_id: &GlyphId,
     source_id: &SourceId,
 ) -> LayerId {
-    let layer_id = LayerId::new("layer-A-regular");
+    let layer_id = LayerId::new(shift_font::LayerId::from_raw("A-regular").to_string());
 
     store
         .create_glyph_layer(NewGlyphLayer {
@@ -805,7 +805,7 @@ fn create_default_component(
     layer_id: &LayerId,
     base_glyph_id: &GlyphId,
 ) -> ComponentId {
-    let component_id = ComponentId::new("component-A-B");
+    let component_id = ComponentId::new(shift_font::ComponentId::from_raw("A-B").to_string());
 
     store
         .create_glyph_component(NewGlyphComponent {
@@ -840,7 +840,7 @@ fn create_weight_axis(store: &mut ShiftStore) -> AxisId {
 }
 
 fn create_regular_source(store: &mut ShiftStore) -> SourceId {
-    let source_id = SourceId::new("source-regular");
+    let source_id = SourceId::new(shift_font::SourceId::from_raw("regular").to_string());
 
     store
         .create_source(NewSource {

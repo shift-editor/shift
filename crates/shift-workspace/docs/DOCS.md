@@ -4,7 +4,9 @@ Backend runtime object for an open Shift font workspace.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `FontWorkspace` composes the live `shift-font::Font`, the user-selected `shift-source` package, and the working `shift-store` database.
+- **Architecture Invariant:** `FontWorkspace` composes a directory-complete, payload-lazy `shift-font::Font`, the user-selected `shift-source` package, and the working `shift-store` database.
+- **Architecture Invariant:** Resuming SQLite loads metadata and glyph/layer directory facts only. `acquire_glyphs` performs explicit bounded payload I/O; synchronous `font()` reads never initiate I/O.
+- **Architecture Invariant:** A loaded layer is only a cache of already-committed authored state. `evict_glyphs` replaces it with a directory placeholder and cannot lose an edit.
 - **Architecture Invariant:** The `.shift` source package path and SQLite working store path are separate inputs.
 - **Architecture Invariant:** Package recovery policy is not ranked in Rust. `FontWorkspace` exposes package and working-store inspection primitives; the utility process owns binding and lifecycle decisions.
 - **Architecture Invariant:** The workspace is the domain object future bridge or utility-process transports should wrap.
@@ -42,6 +44,8 @@ crates/shift-workspace/src/
 `FontWorkspace::inspect_package(path)` reads a `.shift` package without opening it as the live workspace. It returns the stable package id, canonical path, and fingerprint used by the utility process to address a package instance.
 
 `FontWorkspace::inspect_package_draft(store_path)` reads the working-store package ownership record without resuming it. It returns the package id, source path, base fingerprint, document id, and dirty flag so the utility process can choose an explicit open transition.
+
+`FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, include_references)` fetches requested layers and can expand component closure from the relational reference index. Acquisition decodes one layer at a time into a COW candidate font, so peak temporary memory is bounded and a malformed batch does not replace the live cache. Save/export explicitly acquire all layers before creating their complete snapshots.
 
 ## Verification
 

@@ -19,24 +19,21 @@ pub struct GlyphLayerRecord {
 
 impl ShiftStore {
     pub fn create_glyph_layer(&mut self, layer: NewGlyphLayer) -> Result<(), StoreError> {
-        self.conn.execute(
-            "
-            INSERT INTO glyph_layers (
-                id,
-                glyph_id,
-                source_id,
-                name
-            )
-            VALUES (?1, ?2, ?3, ?4)
-            ",
-            rusqlite::params![
-                layer.id.as_str(),
-                layer.glyph_id.as_str(),
-                layer.source_id.as_str(),
-                layer.name,
-            ],
+        let tx = self.conn.transaction()?;
+        crate::packed_layer::create_empty_layer_in_tx(
+            &tx,
+            &shift_font::GlyphId::from_raw(layer.glyph_id.as_str()),
+            layer
+                .name
+                .as_deref()
+                .map(shift_font::GlyphName::from)
+                .as_ref(),
+            shift_font::LayerId::from_raw(layer.id.as_str()),
+            shift_font::SourceId::from_raw(layer.source_id.as_str()),
+            0.0,
+            None,
         )?;
-
+        tx.commit()?;
         Ok(())
     }
 

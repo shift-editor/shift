@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use rusqlite::params;
 use shift_font as font;
@@ -7,7 +6,19 @@ use shift_font as font;
 use crate::{FontInfo, ShiftStore, StoreError, source::SourceKind};
 
 impl ShiftStore {
+    /// Materializes the complete font. Use only for export/save boundaries;
+    /// interactive open should use [`Self::load_font_directory`].
     pub fn load_font_state(&self) -> Result<font::Font, StoreError> {
+        self.load_font(true)
+    }
+
+    /// Loads eager font metadata and the glyph/layer directory without
+    /// reading any layer payload BLOB.
+    pub fn load_font_directory(&self) -> Result<font::Font, StoreError> {
+        self.load_font(false)
+    }
+
+    fn load_font(&self, include_layer_payloads: bool) -> Result<font::Font, StoreError> {
         let mut font = font::Font::empty();
 
         if let Some(info) = self.get_font_info()? {
@@ -43,7 +54,7 @@ impl ShiftStore {
             font.set_default_source_id(default_source_id);
         }
 
-        for glyph in load_glyphs(&self.conn)? {
+        for glyph in load_glyphs(&self.conn, include_layer_payloads)? {
             font.insert_glyph(glyph).map_err(StoreError::from)?;
         }
 
@@ -297,257 +308,114 @@ fn load_source_location(
     Ok(location)
 }
 
-fn load_glyphs(conn: &rusqlite::Connection) -> Result<Vec<font::Glyph>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT id, name
-        FROM glyphs
-        ORDER BY order_index, id
-        ",
-    )?;
+fn load_glyphs(
+    conn: &rusqlite::Connection,
+    include_layer_payloads: bool,
+) -> Result<Vec<font::Glyph>, StoreError> {
+    let glyph_rows = {
+        let mut stmt = conn.prepare("SELECT id, name FROM glyphs ORDER BY order_index, id")?;
+        stmt.query_map([], |row| {
+            Ok((
+                font::GlyphId::from_raw(row.get::<_, String>(0)?),
+                row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?
+    };
 
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            font::GlyphId::from_raw(row.get::<_, String>(0)?),
-            row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-        ))
-    })?;
+    let mut unicodes: HashMap<font::GlyphId, Vec<(i64, u32)>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT glyph_id, unicode, order_index FROM glyph_unicodes ORDER BY glyph_id, order_index",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                font::GlyphId::from_raw(row.get::<_, String>(0)?),
+                row.get::<_, i64>(1)? as u32,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (glyph_id, unicode, order_index) = row?;
+            unicodes
+                .entry(glyph_id)
+                .or_default()
+                .push((order_index, unicode));
+        }
+    }
 
-    let mut glyphs = Vec::new();
-    for row in rows {
-        let (glyph_id, name) = row?;
+    let mut libs: HashMap<font::GlyphId, HashMap<String, font::LibValue>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare("SELECT glyph_id, key, value_json FROM glyph_lib")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                font::GlyphId::from_raw(row.get::<_, String>(0)?),
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (glyph_id, key, value_json) = row?;
+            libs.entry(glyph_id)
+                .or_default()
+                .insert(key, lib_value_from_json(&value_json)?);
+        }
+    }
+
+    let layer_rows = {
+        let mut stmt = conn.prepare(
+            "
+            SELECT id, glyph_id, source_id, width, height
+            FROM glyph_layers
+            ORDER BY glyph_id, source_id, id
+            ",
+        )?;
+        stmt.query_map([], |row| {
+            Ok((
+                font::LayerId::from_raw(row.get::<_, String>(0)?),
+                font::GlyphId::from_raw(row.get::<_, String>(1)?),
+                font::SourceId::from_raw(row.get::<_, String>(2)?),
+                row.get::<_, f64>(3)?,
+                row.get::<_, Option<f64>>(4)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?
+    };
+    let mut layers: HashMap<font::GlyphId, Vec<font::GlyphLayer>> = HashMap::new();
+    for (layer_id, glyph_id, source_id, width, height) in layer_rows {
+        let layer = if include_layer_payloads {
+            crate::packed_layer::load_glyph_layer_from_conn(conn, &layer_id)?.ok_or_else(|| {
+                StoreError::MissingEntity {
+                    kind: "glyph layer payload",
+                    id: layer_id.to_string(),
+                }
+            })?
+        } else {
+            let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
+            layer.set_height(height);
+            layer
+        };
+        layers.entry(glyph_id).or_default().push(layer);
+    }
+
+    let mut glyphs = Vec::with_capacity(glyph_rows.len());
+    for (glyph_id, name) in glyph_rows {
         let mut glyph = font::Glyph::with_id(glyph_id.clone(), name);
-        glyph.set_unicodes(load_glyph_unicodes(conn, &glyph_id)?);
-        *glyph.lib_mut() =
-            load_lib_data(conn, "glyph_lib", Some(("glyph_id", &glyph_id.to_string())))?;
-
-        for layer in load_layers_for_glyph(conn, &glyph_id)? {
+        let mut glyph_unicodes = unicodes.remove(&glyph_id).unwrap_or_default();
+        glyph_unicodes.sort_by_key(|(order_index, _)| *order_index);
+        glyph.set_unicodes(
+            glyph_unicodes
+                .into_iter()
+                .map(|(_, unicode)| unicode)
+                .collect(),
+        );
+        *glyph.lib_mut() = font::LibData::from_map(libs.remove(&glyph_id).unwrap_or_default());
+        for layer in layers.remove(&glyph_id).unwrap_or_default() {
             glyph.set_layer(layer);
         }
-
         glyphs.push(glyph);
     }
-
     Ok(glyphs)
-}
-
-fn load_glyph_unicodes(
-    conn: &rusqlite::Connection,
-    glyph_id: &font::GlyphId,
-) -> Result<Vec<u32>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT unicode
-        FROM glyph_unicodes
-        WHERE glyph_id = ?1
-        ORDER BY order_index
-        ",
-    )?;
-    let rows = stmt.query_map([glyph_id.to_string()], |row| row.get::<_, i64>(0))?;
-    rows.map(|row| row.map(|value| value as u32))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)
-}
-
-fn load_layers_for_glyph(
-    conn: &rusqlite::Connection,
-    glyph_id: &font::GlyphId,
-) -> Result<Vec<font::GlyphLayer>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT id, source_id, width, height
-        FROM glyph_layers
-        WHERE glyph_id = ?1
-        ORDER BY id
-        ",
-    )?;
-
-    let rows = stmt.query_map([glyph_id.to_string()], |row| {
-        Ok((
-            font::LayerId::from_raw(row.get::<_, String>(0)?),
-            font::SourceId::from_raw(row.get::<_, String>(1)?),
-            row.get::<_, f64>(2)?,
-            row.get::<_, Option<f64>>(3)?,
-        ))
-    })?;
-
-    let mut layers = Vec::new();
-    for row in rows {
-        let (layer_id, source_id, width, height) = row?;
-        let mut layer = font::GlyphLayer::with_width(layer_id.clone(), source_id, width);
-        layer.set_height(height);
-
-        for contour in load_contours_for_layer(conn, &layer_id)? {
-            layer.add_contour(contour);
-        }
-        for component in load_components_for_layer(conn, &layer_id)? {
-            layer.add_component(component);
-        }
-        for anchor in load_anchors_for_layer(conn, &layer_id)? {
-            layer.add_anchor(anchor);
-        }
-        for guideline in load_layer_guidelines(conn, &layer_id)? {
-            layer.add_guideline(guideline);
-        }
-        *layer.lib_mut() = load_lib_data(
-            conn,
-            "glyph_layer_lib",
-            Some(("layer_id", &layer_id.to_string())),
-        )?;
-
-        layers.push(layer);
-    }
-
-    Ok(layers)
-}
-
-fn load_contours_for_layer(
-    conn: &rusqlite::Connection,
-    layer_id: &font::LayerId,
-) -> Result<Vec<font::Contour>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT id, closed
-        FROM glyph_layer_contours
-        WHERE layer_id = ?1
-        ORDER BY order_index
-        ",
-    )?;
-
-    let rows = stmt.query_map([layer_id.to_string()], |row| {
-        Ok((
-            font::ContourId::from_raw(row.get::<_, String>(0)?),
-            row.get::<_, bool>(1)?,
-        ))
-    })?;
-
-    let mut contours = Vec::new();
-    for row in rows {
-        let (contour_id, closed) = row?;
-        let mut contour = font::Contour::with_id(contour_id.clone());
-        for point in load_points_for_contour(conn, &contour_id)? {
-            contour.push_point(point);
-        }
-        if closed {
-            contour.close();
-        }
-        contours.push(contour);
-    }
-
-    Ok(contours)
-}
-
-fn load_points_for_contour(
-    conn: &rusqlite::Connection,
-    contour_id: &font::ContourId,
-) -> Result<Vec<font::Point>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT id, x, y, point_type, smooth
-        FROM glyph_layer_points
-        WHERE contour_id = ?1
-        ORDER BY order_index
-        ",
-    )?;
-
-    let rows = stmt.query_map([contour_id.to_string()], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, f64>(1)?,
-            row.get::<_, f64>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, bool>(4)?,
-        ))
-    })?;
-
-    let mut points = Vec::new();
-    for row in rows {
-        let (id, x, y, point_type, smooth) = row?;
-        let point_type =
-            font::PointType::from_str(&point_type).map_err(StoreError::InvalidPointType)?;
-        points.push(font::Point::new(
-            font::PointId::from_raw(id),
-            x,
-            y,
-            point_type,
-            smooth,
-        ));
-    }
-    Ok(points)
-}
-
-fn load_components_for_layer(
-    conn: &rusqlite::Connection,
-    layer_id: &font::LayerId,
-) -> Result<Vec<font::Component>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT
-            id,
-            base_glyph_id,
-            base_glyph_name,
-            translate_x,
-            translate_y,
-            rotation,
-            scale_x,
-            scale_y,
-            skew_x,
-            skew_y,
-            t_center_x,
-            t_center_y
-        FROM glyph_components
-        WHERE layer_id = ?1
-        ORDER BY order_index, id
-        ",
-    )?;
-
-    let rows = stmt.query_map([layer_id.to_string()], |row| {
-        Ok(font::Component::with_id(
-            font::ComponentId::from_raw(row.get::<_, String>(0)?),
-            font::GlyphId::from_raw(row.get::<_, String>(1)?),
-            row.get::<_, String>(2)?,
-            font::DecomposedTransform {
-                translate_x: row.get(3)?,
-                translate_y: row.get(4)?,
-                rotation: row.get(5)?,
-                scale_x: row.get(6)?,
-                scale_y: row.get(7)?,
-                skew_x: row.get(8)?,
-                skew_y: row.get(9)?,
-                t_center_x: row.get(10)?,
-                t_center_y: row.get(11)?,
-            },
-        ))
-    })?;
-
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)
-}
-
-fn load_anchors_for_layer(
-    conn: &rusqlite::Connection,
-    layer_id: &font::LayerId,
-) -> Result<Vec<font::Anchor>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT id, name, x, y
-        FROM glyph_layer_anchors
-        WHERE layer_id = ?1
-        ORDER BY order_index
-        ",
-    )?;
-
-    let rows = stmt.query_map([layer_id.to_string()], |row| {
-        Ok(font::Anchor::with_id(
-            font::AnchorId::from_raw(row.get::<_, String>(0)?),
-            row.get::<_, Option<String>>(1)?,
-            row.get(2)?,
-            row.get(3)?,
-        ))
-    })?;
-
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)
 }
 
 fn load_font_guidelines(conn: &rusqlite::Connection) -> Result<Vec<font::Guideline>, StoreError> {
@@ -559,24 +427,6 @@ fn load_font_guidelines(conn: &rusqlite::Connection) -> Result<Vec<font::Guideli
         ",
     )?;
     let rows = stmt.query_map([], map_guideline_row)?;
-
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)
-}
-
-fn load_layer_guidelines(
-    conn: &rusqlite::Connection,
-    layer_id: &font::LayerId,
-) -> Result<Vec<font::Guideline>, StoreError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT id, x, y, angle, name, color
-        FROM glyph_layer_guidelines
-        WHERE layer_id = ?1
-        ORDER BY order_index
-        ",
-    )?;
-    let rows = stmt.query_map([layer_id.to_string()], map_guideline_row)?;
 
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(StoreError::from)

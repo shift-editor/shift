@@ -1,16 +1,51 @@
+use std::collections::HashSet;
+
 use rusqlite::{Transaction, params};
 use shift_font as font;
 
 use crate::{
-    ShiftStore, StoreError, source::SourceKind, workspace_state::mark_workspace_dirty_in_tx,
+    ShiftStore, StoreError,
+    packed_layer::{create_empty_layer_in_tx, rewrite_layer_in_tx, write_layer_in_tx},
+    source::SourceKind,
+    workspace_state::mark_workspace_dirty_in_tx,
 };
 
 impl ShiftStore {
     pub fn apply_change_set(&mut self, change_set: &font::FontChangeSet) -> Result<(), StoreError> {
+        self.apply_change_set_inner(change_set, None)
+    }
+
+    /// Applies relational changes and takes touched layer payloads from the
+    /// committed post-edit font. This preserves complete clone/materialize
+    /// results even when a compact change record only carries directory facts.
+    pub fn apply_change_set_with_font(
+        &mut self,
+        change_set: &font::FontChangeSet,
+        post_font: &font::Font,
+    ) -> Result<(), StoreError> {
+        self.apply_change_set_inner(change_set, Some(post_font))
+    }
+
+    fn apply_change_set_inner(
+        &mut self,
+        change_set: &font::FontChangeSet,
+        post_font: Option<&font::Font>,
+    ) -> Result<(), StoreError> {
         let tx = self.conn.transaction()?;
+        let mut touched_layer_ids = HashSet::new();
 
         for change in &change_set.changes {
             apply_change(&tx, change)?;
+            if let Some(layer_id) = changed_layer_id(change) {
+                touched_layer_ids.insert(layer_id.clone());
+            }
+        }
+        if let Some(post_font) = post_font {
+            for layer_id in touched_layer_ids {
+                if let Some(layer) = post_font.layer(layer_id) {
+                    rewrite_layer_in_tx(&tx, layer)?;
+                }
+            }
         }
         mark_workspace_dirty_in_tx(&tx)?;
 
@@ -21,7 +56,6 @@ impl ShiftStore {
     pub fn replace_font_state(&mut self, font: &font::Font) -> Result<(), StoreError> {
         let tx = self.conn.transaction()?;
 
-        tx.execute("DELETE FROM glyph_layer_lib", [])?;
         tx.execute("DELETE FROM glyph_lib", [])?;
         tx.execute("DELETE FROM font_lib", [])?;
         tx.execute("DELETE FROM fontinfo_remainder", [])?;
@@ -30,12 +64,9 @@ impl ShiftStore {
         tx.execute("DELETE FROM kerning_group_members", [])?;
         tx.execute("DELETE FROM kerning_groups", [])?;
         tx.execute("DELETE FROM feature_text", [])?;
-        tx.execute("DELETE FROM glyph_layer_guidelines", [])?;
         tx.execute("DELETE FROM font_guidelines", [])?;
-        tx.execute("DELETE FROM glyph_layer_points", [])?;
-        tx.execute("DELETE FROM glyph_layer_contours", [])?;
-        tx.execute("DELETE FROM glyph_layer_anchors", [])?;
         tx.execute("DELETE FROM glyph_components", [])?;
+        tx.execute("DELETE FROM glyph_layer_payloads", [])?;
         tx.execute("DELETE FROM glyph_layers", [])?;
         tx.execute("DELETE FROM glyph_unicodes", [])?;
         tx.execute("DELETE FROM glyphs", [])?;
@@ -116,16 +147,7 @@ impl ShiftStore {
             )?;
 
             for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
-                upsert_layer(
-                    &tx,
-                    &layer.id(),
-                    &glyph.id(),
-                    &layer.source_id(),
-                    Some(glyph.glyph_name()),
-                    layer.width(),
-                    layer.height(),
-                )?;
-                replace_full_layer_state(&tx, layer)?;
+                write_layer_in_tx(&tx, &glyph.id(), Some(glyph.glyph_name()), layer)?;
             }
         }
 
@@ -254,12 +276,12 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             upsert_glyph(tx, &change.glyph_id, &change.to_name, 0)?;
             replace_glyph_unicodes(tx, &change.glyph_id, &change.to_unicodes)
         }
-        font::FontChange::GlyphLayerCreated(change) => upsert_layer(
+        font::FontChange::GlyphLayerCreated(change) => create_empty_layer_in_tx(
             tx,
-            &change.layer_id,
             &change.glyph_id,
-            &change.source_id,
             change.name.as_ref(),
+            change.layer_id.clone(),
+            change.source_id.clone(),
             change.width,
             change.height,
         ),
@@ -272,90 +294,168 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::LayerMetricsChanged(change) => {
-            let rows_changed = tx.execute(
-                "
-                UPDATE glyph_layers
-                SET width = ?2, height = ?3
-                WHERE id = ?1
-                ",
-                params![layer_row_id(&change.layer_id), change.width, change.height,],
-            )?;
-            require_changed(rows_changed, "glyph layer", layer_row_id(&change.layer_id))?;
-            Ok(())
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                layer.set_width(change.width);
+                layer.set_height(change.height);
+                Ok(())
+            })
         }
         font::FontChange::ContourAdded(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            replace_contour(tx, &change.layer_id, &change.contour)
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                layer.add_contour(contour_from_value(&change.contour));
+                Ok(())
+            })
         }
         font::FontChange::ContourOpenClosedChanged(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            let rows_changed = tx.execute(
-                "
-                UPDATE glyph_layer_contours
-                SET closed = ?2
-                WHERE id = ?1
-                ",
-                params![change.contour_id.to_string(), change.closed],
-            )?;
-            require_changed(rows_changed, "contour", change.contour_id.to_string())?;
-            Ok(())
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                let contour = layer
+                    .contour_mut(change.contour_id.clone())
+                    .ok_or_else(|| StoreError::MissingEntity {
+                        kind: "contour",
+                        id: change.contour_id.to_string(),
+                    })?;
+                if change.closed {
+                    contour.close();
+                } else {
+                    contour.open();
+                }
+                Ok(())
+            })
         }
         font::FontChange::PointsAdded(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            replace_contour(tx, &change.layer_id, &change.contour)
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                layer.add_contour(contour_from_value(&change.contour));
+                Ok(())
+            })
         }
         font::FontChange::PointsDeleted(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            replace_contour(tx, &change.layer_id, &change.contour)
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                layer.add_contour(contour_from_value(&change.contour));
+                Ok(())
+            })
         }
         font::FontChange::PointSmoothChanged(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            let rows_changed = tx.execute(
-                "
-                UPDATE glyph_layer_points
-                SET smooth = ?2
-                WHERE id = ?1
-                ",
-                params![change.point_id.to_string(), change.smooth],
-            )?;
-            require_changed(rows_changed, "point", change.point_id.to_string())?;
-            Ok(())
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                let point = layer
+                    .contours_iter_mut()
+                    .flat_map(|contour| contour.points_mut())
+                    .find(|point| point.id() == change.point_id)
+                    .ok_or_else(|| StoreError::MissingEntity {
+                        kind: "point",
+                        id: change.point_id.to_string(),
+                    })?;
+                point.set_smooth(change.smooth);
+                Ok(())
+            })
         }
         font::FontChange::PointPositionsChanged(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            for point in &change.points {
-                let rows_changed = tx.execute(
-                    "
-                    UPDATE glyph_layer_points
-                    SET x = ?2, y = ?3
-                    WHERE id = ?1
-                    ",
-                    params![point.point_id.to_string(), point.x, point.y],
-                )?;
-                require_changed(rows_changed, "point", point.point_id.to_string())?;
-            }
-            Ok(())
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                for position in &change.points {
+                    let point = layer
+                        .contours_iter_mut()
+                        .flat_map(|contour| contour.points_mut())
+                        .find(|point| point.id() == position.point_id)
+                        .ok_or_else(|| StoreError::MissingEntity {
+                            kind: "point",
+                            id: position.point_id.to_string(),
+                        })?;
+                    point.set_position(position.x, position.y);
+                }
+                Ok(())
+            })
         }
         font::FontChange::AnchorPositionsChanged(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            for anchor in &change.anchors {
-                let rows_changed = tx.execute(
-                    "
-                    UPDATE glyph_layer_anchors
-                    SET x = ?2, y = ?3
-                    WHERE id = ?1
-                    ",
-                    params![anchor.anchor_id.to_string(), anchor.x, anchor.y],
-                )?;
-                require_changed(rows_changed, "anchor", anchor.anchor_id.to_string())?;
-            }
-            Ok(())
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                for position in &change.anchors {
+                    if !layer.set_anchor_position(
+                        position.anchor_id.clone(),
+                        position.x,
+                        position.y,
+                    ) {
+                        return Err(StoreError::MissingEntity {
+                            kind: "anchor",
+                            id: position.anchor_id.to_string(),
+                        });
+                    }
+                }
+                Ok(())
+            })
         }
         font::FontChange::LayerGeometryReplaced(change) => {
-            require_layer_exists(tx, &change.layer_id)?;
-            replace_layer_geometry(tx, &change.layer_id, &change.layer)
+            update_packed_layer(tx, &change.layer_id, |layer| {
+                layer.set_width(change.layer.width);
+                layer.set_height(change.layer.height);
+                layer.clear_contours();
+                for contour in &change.layer.contours {
+                    layer.add_contour(contour_from_value(contour));
+                }
+                layer.clear_anchors();
+                let mut anchors = change.layer.anchors.iter().collect::<Vec<_>>();
+                anchors.sort_by_key(|anchor| anchor.order_index);
+                for anchor in anchors {
+                    layer.add_anchor(font::Anchor::with_id(
+                        anchor.id.clone(),
+                        anchor.name.clone(),
+                        anchor.x,
+                        anchor.y,
+                    ));
+                }
+                Ok(())
+            })
         }
     }
+}
+
+fn changed_layer_id(change: &font::FontChange) -> Option<&font::LayerId> {
+    match change {
+        font::FontChange::GlyphLayerCreated(change) => Some(&change.layer_id),
+        font::FontChange::GlyphLayerDeleted(change) => Some(&change.layer_id),
+        font::FontChange::LayerMetricsChanged(change) => Some(&change.layer_id),
+        font::FontChange::ContourAdded(change) => Some(&change.layer_id),
+        font::FontChange::ContourOpenClosedChanged(change) => Some(&change.layer_id),
+        font::FontChange::PointsAdded(change) => Some(&change.layer_id),
+        font::FontChange::PointsDeleted(change) => Some(&change.layer_id),
+        font::FontChange::PointSmoothChanged(change) => Some(&change.layer_id),
+        font::FontChange::PointPositionsChanged(change) => Some(&change.layer_id),
+        font::FontChange::AnchorPositionsChanged(change) => Some(&change.layer_id),
+        font::FontChange::LayerGeometryReplaced(change) => Some(&change.layer_id),
+        _ => None,
+    }
+}
+
+fn update_packed_layer(
+    tx: &Transaction<'_>,
+    layer_id: &font::LayerId,
+    update: impl FnOnce(&mut font::GlyphLayer) -> Result<(), StoreError>,
+) -> Result<(), StoreError> {
+    let mut layer =
+        crate::packed_layer::load_glyph_layer_from_conn(tx, layer_id)?.ok_or_else(|| {
+            StoreError::MissingEntity {
+                kind: "glyph layer",
+                id: layer_id.to_string(),
+            }
+        })?;
+    update(&mut layer)?;
+    rewrite_layer_in_tx(tx, &layer)
+}
+
+fn contour_from_value(value: &font::ContourValue) -> font::Contour {
+    let mut contour = font::Contour::with_id(value.id.clone());
+    let mut points = value.points.iter().collect::<Vec<_>>();
+    points.sort_by_key(|point| point.order_index);
+    for point in points {
+        contour.push_point(font::Point::new(
+            point.id.clone(),
+            point.x,
+            point.y,
+            point.point_type,
+            point.smooth,
+        ));
+    }
+    if value.closed {
+        contour.close();
+    }
+    contour
 }
 
 fn upsert_axis_with_order(
@@ -611,107 +711,6 @@ fn replace_glyph_unicodes(
     Ok(())
 }
 
-fn upsert_layer(
-    tx: &Transaction<'_>,
-    layer_id: &font::LayerId,
-    glyph_id: &font::GlyphId,
-    source_id: &font::SourceId,
-    name: Option<&font::GlyphName>,
-    width: f64,
-    height: Option<f64>,
-) -> Result<(), StoreError> {
-    tx.execute(
-        "
-        INSERT INTO glyph_layers (id, glyph_id, source_id, name, width, height)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-        ON CONFLICT(id) DO UPDATE SET
-            glyph_id = excluded.glyph_id,
-            source_id = excluded.source_id,
-            name = excluded.name
-        ",
-        params![
-            layer_row_id(layer_id),
-            glyph_id.to_string(),
-            source_id.to_string(),
-            name.map(font::GlyphName::as_str),
-            width,
-            height,
-        ],
-    )?;
-    Ok(())
-}
-
-fn replace_layer_geometry(
-    tx: &Transaction<'_>,
-    layer_id: &font::LayerId,
-    layer: &font::GlyphLayerValue,
-) -> Result<(), StoreError> {
-    let rows_changed = tx.execute(
-        "
-        UPDATE glyph_layers
-        SET width = ?2, height = ?3
-        WHERE id = ?1
-        ",
-        params![layer_row_id(layer_id), layer.width, layer.height],
-    )?;
-    require_changed(rows_changed, "glyph layer", layer_row_id(layer_id))?;
-    tx.execute(
-        "
-        DELETE FROM glyph_layer_contours
-        WHERE layer_id = ?1
-        ",
-        [layer_row_id(layer_id)],
-    )?;
-
-    for (order_index, contour) in layer.contours.iter().enumerate() {
-        insert_contour(tx, layer_id, order_index, contour)?;
-    }
-
-    tx.execute(
-        "
-        DELETE FROM glyph_layer_anchors
-        WHERE layer_id = ?1
-        ",
-        [layer_row_id(layer_id)],
-    )?;
-
-    for anchor in &layer.anchors {
-        insert_anchor(tx, layer_id, anchor)?;
-    }
-
-    Ok(())
-}
-
-fn replace_full_layer_state(
-    tx: &Transaction<'_>,
-    layer: &font::GlyphLayer,
-) -> Result<(), StoreError> {
-    replace_layer_geometry(tx, &layer.id(), &font::GlyphLayerValue::from(layer))?;
-
-    tx.execute(
-        "
-        DELETE FROM glyph_components
-        WHERE layer_id = ?1
-        ",
-        [layer_row_id(&layer.id())],
-    )?;
-
-    for (order_index, component) in layer.components_iter().enumerate() {
-        insert_component(tx, &layer.id(), component, order_index)?;
-    }
-
-    replace_layer_guidelines(tx, &layer.id(), layer.guidelines())?;
-    replace_lib_data(
-        tx,
-        "glyph_layer_lib",
-        "layer_id",
-        Some(&layer.id().to_string()),
-        layer.lib(),
-    )?;
-
-    Ok(())
-}
-
 /// Updates only authored metadata columns, preserving metrics and store-only fields.
 fn update_font_metadata(
     tx: &Transaction<'_>,
@@ -846,135 +845,26 @@ fn replace_font_guidelines(
 ) -> Result<(), StoreError> {
     tx.execute("DELETE FROM font_guidelines", [])?;
     for (order_index, guideline) in guidelines.iter().enumerate() {
-        insert_guideline(tx, "font_guidelines", None, guideline, order_index)?;
-    }
-    Ok(())
-}
-
-fn replace_layer_guidelines(
-    tx: &Transaction<'_>,
-    layer_id: &font::LayerId,
-    guidelines: &[font::Guideline],
-) -> Result<(), StoreError> {
-    tx.execute(
-        "
-        DELETE FROM glyph_layer_guidelines
-        WHERE layer_id = ?1
-        ",
-        [layer_row_id(layer_id)],
-    )?;
-    for (order_index, guideline) in guidelines.iter().enumerate() {
-        insert_guideline(
-            tx,
-            "glyph_layer_guidelines",
-            Some(&layer_row_id(layer_id)),
-            guideline,
-            order_index,
+        tx.execute(
+            "
+            INSERT INTO font_guidelines (
+                id, x, y, angle, name, color, order_index
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ",
+            params![
+                guideline.id().to_string(),
+                guideline.x(),
+                guideline.y(),
+                guideline.angle(),
+                guideline.name(),
+                guideline.color(),
+                order_index as i64,
+            ],
         )?;
     }
     Ok(())
 }
-
-fn insert_guideline(
-    tx: &Transaction<'_>,
-    table: &'static str,
-    layer_id: Option<&str>,
-    guideline: &font::Guideline,
-    order_index: usize,
-) -> Result<(), StoreError> {
-    match layer_id {
-        Some(layer_id) => {
-            debug_assert_eq!(table, "glyph_layer_guidelines");
-            tx.execute(
-                "
-                INSERT INTO glyph_layer_guidelines (
-                    id, layer_id, x, y, angle, name, color, order_index
-                )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-                ",
-                params![
-                    guideline.id().to_string(),
-                    layer_id,
-                    guideline.x(),
-                    guideline.y(),
-                    guideline.angle(),
-                    guideline.name(),
-                    guideline.color(),
-                    order_index as i64,
-                ],
-            )?;
-        }
-        None => {
-            debug_assert_eq!(table, "font_guidelines");
-            tx.execute(
-                "
-                INSERT INTO font_guidelines (
-                    id, x, y, angle, name, color, order_index
-                )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ",
-                params![
-                    guideline.id().to_string(),
-                    guideline.x(),
-                    guideline.y(),
-                    guideline.angle(),
-                    guideline.name(),
-                    guideline.color(),
-                    order_index as i64,
-                ],
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn insert_component(
-    tx: &Transaction<'_>,
-    layer_id: &font::LayerId,
-    component: &font::Component,
-    order_index: usize,
-) -> Result<(), StoreError> {
-    let transform = component.transform();
-    tx.execute(
-        "
-        INSERT INTO glyph_components (
-            id,
-            layer_id,
-            base_glyph_id,
-            base_glyph_name,
-            translate_x,
-            translate_y,
-            rotation,
-            scale_x,
-            scale_y,
-            skew_x,
-            skew_y,
-            t_center_x,
-            t_center_y,
-            order_index
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
-        ",
-        params![
-            component.id().to_string(),
-            layer_row_id(layer_id),
-            component.base_glyph_id().to_string(),
-            component.base_glyph_name().as_str(),
-            transform.translate_x,
-            transform.translate_y,
-            transform.rotation,
-            transform.scale_x,
-            transform.scale_y,
-            transform.skew_x,
-            transform.skew_y,
-            transform.t_center_x,
-            transform.t_center_y,
-            order_index as i64,
-        ],
-    )?;
-    Ok(())
-}
-
 fn replace_kerning(tx: &Transaction<'_>, kerning: &font::KerningData) -> Result<(), StoreError> {
     tx.execute("DELETE FROM kerning_pairs", [])?;
     tx.execute("DELETE FROM kerning_group_members", [])?;
@@ -1134,155 +1024,11 @@ fn typed_json(kind: &'static str, value: serde_json::Value) -> serde_json::Value
     })
 }
 
-fn replace_contour(
-    tx: &Transaction<'_>,
-    layer_id: &font::LayerId,
-    contour: &font::ContourValue,
-) -> Result<(), StoreError> {
-    tx.execute(
-        "
-        INSERT INTO glyph_layer_contours (id, layer_id, closed, order_index)
-        VALUES (?1, ?2, ?3, COALESCE(
-            (SELECT order_index FROM glyph_layer_contours WHERE id = ?1),
-            (SELECT COUNT(*) FROM glyph_layer_contours WHERE layer_id = ?2)
-        ))
-        ON CONFLICT(id) DO UPDATE SET
-            closed = excluded.closed,
-            layer_id = excluded.layer_id
-        ",
-        params![
-            contour.id.to_string(),
-            layer_row_id(layer_id),
-            contour.closed,
-        ],
-    )?;
-    tx.execute(
-        "DELETE FROM glyph_layer_points WHERE contour_id = ?1",
-        [contour.id.to_string()],
-    )?;
-
-    for point in &contour.points {
-        insert_point(tx, &contour.id, point)?;
-    }
-
-    Ok(())
-}
-
-fn insert_contour(
-    tx: &Transaction<'_>,
-    layer_id: &font::LayerId,
-    order_index: usize,
-    contour: &font::ContourValue,
-) -> Result<(), StoreError> {
-    tx.execute(
-        "
-        INSERT INTO glyph_layer_contours (id, layer_id, closed, order_index)
-        VALUES (?1, ?2, ?3, ?4)
-        ",
-        params![
-            contour.id.to_string(),
-            layer_row_id(layer_id),
-            contour.closed,
-            order_index as i64,
-        ],
-    )?;
-
-    for point in &contour.points {
-        insert_point(tx, &contour.id, point)?;
-    }
-
-    Ok(())
-}
-
-fn insert_point(
-    tx: &Transaction<'_>,
-    contour_id: &font::ContourId,
-    point: &font::PointValue,
-) -> Result<(), StoreError> {
-    tx.execute(
-        "
-        INSERT INTO glyph_layer_points (
-            id,
-            contour_id,
-            order_index,
-            x,
-            y,
-            point_type,
-            smooth
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-        ",
-        params![
-            point.id.to_string(),
-            contour_id.to_string(),
-            point.order_index as i64,
-            point.x,
-            point.y,
-            point_type_name(point.point_type),
-            point.smooth,
-        ],
-    )?;
-    Ok(())
-}
-
-fn insert_anchor(
-    tx: &Transaction<'_>,
-    layer_id: &font::LayerId,
-    anchor: &font::AnchorValue,
-) -> Result<(), StoreError> {
-    tx.execute(
-        "
-        INSERT INTO glyph_layer_anchors (
-            id,
-            layer_id,
-            name,
-            x,
-            y,
-            order_index
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-        ",
-        params![
-            anchor.id.to_string(),
-            layer_row_id(layer_id),
-            anchor.name,
-            anchor.x,
-            anchor.y,
-            anchor.order_index as i64,
-        ],
-    )?;
-    Ok(())
-}
-
-fn point_type_name(point_type: font::PointType) -> &'static str {
-    match point_type {
-        font::PointType::OnCurve => "onCurve",
-        font::PointType::OffCurve => "offCurve",
-        font::PointType::QCurve => "qCurve",
-    }
-}
-
 fn require_changed(rows_changed: usize, kind: &'static str, id: String) -> Result<(), StoreError> {
     if rows_changed == 0 {
         Err(StoreError::MissingEntity { kind, id })
     } else {
         Ok(())
-    }
-}
-
-fn require_layer_exists(tx: &Transaction<'_>, layer_id: &font::LayerId) -> Result<(), StoreError> {
-    let exists: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM glyph_layers WHERE id = ?1)",
-        [layer_row_id(layer_id)],
-        |row| row.get(0),
-    )?;
-    if exists {
-        Ok(())
-    } else {
-        Err(StoreError::MissingEntity {
-            kind: "glyph layer",
-            id: layer_row_id(layer_id),
-        })
     }
 }
 

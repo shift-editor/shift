@@ -34,85 +34,83 @@ impl ShiftStore {
         &self,
         layer_id: &LayerId,
     ) -> Result<Vec<ContourRecord>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT id, layer_id, closed, order_index
-            FROM glyph_layer_contours
-            WHERE layer_id = ?1
-            ORDER BY order_index
-            ",
-        )?;
-
-        let rows = stmt.query_map([layer_id.as_str()], map_contour_row)?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(StoreError::from)
+        let layer_id = shift_font::LayerId::from_raw(layer_id.as_str());
+        let Some(layer) = self.load_glyph_layer(&layer_id)? else {
+            return Ok(Vec::new());
+        };
+        Ok(layer
+            .contours_iter()
+            .enumerate()
+            .map(|(order_index, contour)| ContourRecord {
+                id: contour.id().to_string(),
+                layer_id: LayerId::new(layer.id().to_string()),
+                closed: contour.is_closed(),
+                order_index: order_index as i64,
+            })
+            .collect())
     }
 
+    /// Compatibility lookup for callers that only retain a contour id.
+    /// Interactive acquisition should address a layer directly.
     pub fn list_points_for_contour(
         &self,
         contour_id: &str,
     ) -> Result<Vec<PointRecord>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT id, contour_id, order_index, x, y, point_type, smooth
-            FROM glyph_layer_points
-            WHERE contour_id = ?1
-            ORDER BY order_index
-            ",
-        )?;
-
-        let rows = stmt.query_map([contour_id], map_point_row)?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(StoreError::from)
+        for entry in self.list_glyph_layer_directory()? {
+            let Some(layer) = self.load_glyph_layer(&entry.layer_id)? else {
+                continue;
+            };
+            let Some(contour) = layer
+                .contours_iter()
+                .find(|contour| contour.id().as_str() == contour_id)
+            else {
+                continue;
+            };
+            return Ok(contour
+                .points()
+                .iter()
+                .enumerate()
+                .map(|(order_index, point)| PointRecord {
+                    id: point.id().to_string(),
+                    contour_id: contour_id.to_owned(),
+                    order_index: order_index as i64,
+                    x: point.x(),
+                    y: point.y(),
+                    point_type: point_type_name(point.point_type()).to_owned(),
+                    smooth: point.is_smooth(),
+                })
+                .collect());
+        }
+        Ok(Vec::new())
     }
 
     pub fn list_anchors_for_layer(
         &self,
         layer_id: &LayerId,
     ) -> Result<Vec<AnchorRecord>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT id, layer_id, name, x, y, order_index
-            FROM glyph_layer_anchors
-            WHERE layer_id = ?1
-            ORDER BY order_index
-            ",
-        )?;
-
-        let rows = stmt.query_map([layer_id.as_str()], map_anchor_row)?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(StoreError::from)
+        let layer_id = shift_font::LayerId::from_raw(layer_id.as_str());
+        let Some(layer) = self.load_glyph_layer(&layer_id)? else {
+            return Ok(Vec::new());
+        };
+        Ok(layer
+            .anchors_iter()
+            .enumerate()
+            .map(|(order_index, anchor)| AnchorRecord {
+                id: anchor.id().to_string(),
+                layer_id: LayerId::new(layer.id().to_string()),
+                name: anchor.name().map(str::to_owned),
+                x: anchor.x(),
+                y: anchor.y(),
+                order_index: order_index as i64,
+            })
+            .collect())
     }
 }
 
-fn map_contour_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ContourRecord> {
-    Ok(ContourRecord {
-        id: row.get(0)?,
-        layer_id: LayerId::new(row.get::<_, String>(1)?),
-        closed: row.get(2)?,
-        order_index: row.get(3)?,
-    })
-}
-
-fn map_point_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PointRecord> {
-    Ok(PointRecord {
-        id: row.get(0)?,
-        contour_id: row.get(1)?,
-        order_index: row.get(2)?,
-        x: row.get(3)?,
-        y: row.get(4)?,
-        point_type: row.get(5)?,
-        smooth: row.get(6)?,
-    })
-}
-
-fn map_anchor_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AnchorRecord> {
-    Ok(AnchorRecord {
-        id: row.get(0)?,
-        layer_id: LayerId::new(row.get::<_, String>(1)?),
-        name: row.get(2)?,
-        x: row.get(3)?,
-        y: row.get(4)?,
-        order_index: row.get(5)?,
-    })
+fn point_type_name(point_type: shift_font::PointType) -> &'static str {
+    match point_type {
+        shift_font::PointType::OnCurve => "onCurve",
+        shift_font::PointType::OffCurve => "offCurve",
+        shift_font::PointType::QCurve => "qCurve",
+    }
 }

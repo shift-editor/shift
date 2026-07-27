@@ -12,7 +12,9 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Bulk position updates use `Float64Array` values plus typed node descriptors. **WHY:** Drag updates keep the hot path in flat numeric buffers while IDs remain branded strings at the API boundary.
 
-**Architecture Invariant:** Export uses a clone/COW `FontSaveSnapshot` of the current workspace font. **WHY:** Async export can run from a stable view without coupling output generation to renderer focus state.
+**Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW `FontSaveSnapshot`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
+
+**Architecture Invariant:** Glyph snapshot, projection, and preview methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans.
 
 **Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
@@ -57,7 +59,7 @@ crates/shift-bridge/
 2. JS calls a mutation such as `closeContour(layerId, contourId)`.
 3. `Bridge` parses boundary strings and asks `FontWorkspace` to run the edit against that layer.
 4. The bridge returns a `shift-wire` change DTO and bumps the live version.
-5. Full glyph snapshots include authored layer state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` batches roots and transitive component projections without resolving a design location. Source reads expose master sources only; layer-only/background sources remain native authoring details and never enter renderer interpolation.
+5. Full glyph snapshots first acquire requested layer payloads, then include authored state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` and previews expand transitive component identities through SQLite indexes, acquire those layers, and only then project without further I/O. Source reads expose master sources only; layer-only/background sources remain native authoring details and never enter renderer interpolation.
 6. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.

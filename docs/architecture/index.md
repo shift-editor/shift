@@ -20,6 +20,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `crates/shift-glyph-codec/**` | [`crates/shift-glyph-codec/SPECIFICATION.md`](../../crates/shift-glyph-codec/SPECIFICATION.md) | Packed glyph framing, validation, and compatibility |
 | `crates/shift-slug/**`        | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)             | GPU-independent Slug curves, bands, and atlas packing          |
 | `crates/shift-source/**`    | [`crates/shift-source/docs/DOCS.md`](../../crates/shift-source/docs/DOCS.md)       | User-authored `.shift` source package layout                  |
+| `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | SQLite directory, packed layer payloads, and reference indexes |
 | `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font      |
 | `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                 |
 

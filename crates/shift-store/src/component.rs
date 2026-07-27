@@ -1,3 +1,5 @@
+use rusqlite::OptionalExtension;
+
 use crate::{ComponentId, GlyphId, LayerId, ShiftStore, StoreError};
 
 pub struct NewGlyphComponent {
@@ -24,130 +26,81 @@ impl ShiftStore {
         &mut self,
         component: NewGlyphComponent,
     ) -> Result<(), StoreError> {
-        self.conn.execute(
-            "
-            INSERT INTO glyph_components (
-                id,
-                layer_id,
-                base_glyph_id,
-                base_glyph_name,
-                translate_x,
-                translate_y,
-                rotation,
-                scale_x,
-                scale_y,
-                skew_x,
-                skew_y,
-                t_center_x,
-                t_center_y,
-                order_index
-            )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
-            ",
-            rusqlite::params![
-                component.id.as_str(),
-                component.layer_id.as_str(),
-                component.base_glyph_id.as_str(),
-                component.base_glyph_name,
-                component.transform.translate_x,
-                component.transform.translate_y,
-                component.transform.rotation,
-                component.transform.scale_x,
-                component.transform.scale_y,
-                component.transform.skew_x,
-                component.transform.skew_y,
-                component.transform.t_center_x,
-                component.transform.t_center_y,
-                component.order_index,
-            ],
-        )?;
-
-        Ok(())
+        let layer_id = shift_font::LayerId::from_raw(component.layer_id.as_str());
+        let mut layer =
+            self.load_glyph_layer(&layer_id)?
+                .ok_or_else(|| StoreError::MissingEntity {
+                    kind: "glyph layer",
+                    id: layer_id.to_string(),
+                })?;
+        if component.order_index != layer.components().len() as i64 {
+            return Err(StoreError::InvalidWorkspaceState(format!(
+                "component order {} does not append to layer {}",
+                component.order_index, layer_id
+            )));
+        }
+        layer.add_component(shift_font::Component::with_id(
+            shift_font::ComponentId::from_raw(component.id.as_str()),
+            shift_font::GlyphId::from_raw(component.base_glyph_id.as_str()),
+            component.base_glyph_name,
+            component.transform,
+        ));
+        self.replace_glyph_layer(&layer)
     }
 
     pub fn get_glyph_component(
         &self,
         id: &ComponentId,
     ) -> Result<Option<GlyphComponentRecord>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT
-                id,
-                layer_id,
-                base_glyph_id,
-                base_glyph_name,
-                translate_x,
-                translate_y,
-                rotation,
-                scale_x,
-                scale_y,
-                skew_x,
-                skew_y,
-                t_center_x,
-                t_center_y,
-                order_index
-            FROM glyph_components
-            WHERE id = ?1
-            ",
-        )?;
-
-        match stmt.query_row([id.as_str()], map_glyph_component_row) {
-            Ok(component) => Ok(Some(component)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(err) => Err(err.into()),
-        }
+        let layer_id = self
+            .conn
+            .query_row(
+                "SELECT layer_id FROM glyph_components WHERE id = ?1",
+                [id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        let Some(layer_id) = layer_id else {
+            return Ok(None);
+        };
+        let layer_id = shift_font::LayerId::from_raw(layer_id);
+        let Some(layer) = self.load_glyph_layer(&layer_id)? else {
+            return Ok(None);
+        };
+        Ok(layer
+            .components_iter()
+            .enumerate()
+            .find(|(_, component)| component.id().as_str() == id.as_str())
+            .map(|(order_index, component)| component_record(&layer, component, order_index)))
     }
 
     pub fn list_glyph_components_for_layer(
         &self,
         layer_id: &LayerId,
     ) -> Result<Vec<GlyphComponentRecord>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT
-                id,
-                layer_id,
-                base_glyph_id,
-                base_glyph_name,
-                translate_x,
-                translate_y,
-                rotation,
-                scale_x,
-                scale_y,
-                skew_x,
-                skew_y,
-                t_center_x,
-                t_center_y,
-                order_index
-            FROM glyph_components
-            WHERE layer_id = ?1
-            ORDER BY order_index, id
-            ",
-        )?;
-
-        let rows = stmt.query_map([layer_id.as_str()], map_glyph_component_row)?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(StoreError::from)
+        let layer_id = shift_font::LayerId::from_raw(layer_id.as_str());
+        let Some(layer) = self.load_glyph_layer(&layer_id)? else {
+            return Ok(Vec::new());
+        };
+        Ok(layer
+            .components_iter()
+            .enumerate()
+            .map(|(order_index, component)| component_record(&layer, component, order_index))
+            .collect())
     }
 }
 
-fn map_glyph_component_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GlyphComponentRecord> {
-    Ok(GlyphComponentRecord {
-        id: ComponentId::new(row.get::<_, String>(0)?),
-        layer_id: LayerId::new(row.get::<_, String>(1)?),
-        base_glyph_id: GlyphId::new(row.get::<_, String>(2)?),
-        base_glyph_name: row.get(3)?,
-        transform: shift_font::DecomposedTransform {
-            translate_x: row.get(4)?,
-            translate_y: row.get(5)?,
-            rotation: row.get(6)?,
-            scale_x: row.get(7)?,
-            scale_y: row.get(8)?,
-            skew_x: row.get(9)?,
-            skew_y: row.get(10)?,
-            t_center_x: row.get(11)?,
-            t_center_y: row.get(12)?,
-        },
-        order_index: row.get(13)?,
-    })
+fn component_record(
+    layer: &shift_font::GlyphLayer,
+    component: &shift_font::Component,
+    order_index: usize,
+) -> GlyphComponentRecord {
+    GlyphComponentRecord {
+        id: ComponentId::new(component.id().to_string()),
+        layer_id: LayerId::new(layer.id().to_string()),
+        base_glyph_id: GlyphId::new(component.base_glyph_id().to_string()),
+        base_glyph_name: component.base_glyph_name().to_string(),
+        transform: *component.transform(),
+        order_index: order_index as i64,
+    }
 }

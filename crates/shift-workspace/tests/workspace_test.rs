@@ -238,6 +238,40 @@ fn resume_rebuilds_dirty_untitled_workspace_from_store() {
 }
 
 #[test]
+fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
+    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    drop(workspace);
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), false)
+        .unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 1);
+    let authored = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    assert_eq!(authored.contours_iter().next().unwrap().points().len(), 4);
+
+    workspace
+        .evict_glyphs(std::slice::from_ref(&glyph_id))
+        .unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), false)
+        .unwrap();
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &authored);
+}
+
+#[test]
 fn resume_package_workspace_can_save_unsaved_store_state() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

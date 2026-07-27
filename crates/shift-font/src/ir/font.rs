@@ -1106,6 +1106,42 @@ impl Font {
         Ok(())
     }
 
+    /// Replaces an existing layer with the same identity. Used by bounded
+    /// storage acquisition to hydrate a directory placeholder without
+    /// changing glyph/layer ownership.
+    pub fn replace_glyph_layer(&mut self, layer: GlyphLayer) -> CoreResult<()> {
+        let layer_id = layer.id();
+        let glyph_id = self
+            .glyph_id_by_layer(layer_id.clone())
+            .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+        let previous = self
+            .layer(layer_id.clone())
+            .ok_or(CoreError::LayerNotFound(layer_id.clone()))?
+            .clone();
+        if layer.source_id() != previous.source_id() {
+            return Err(CoreError::LayerSourceMismatch {
+                layer_id,
+                expected_source_id: previous.source_id(),
+                actual_source_id: layer.source_id(),
+            });
+        }
+
+        let mut next_index = self.index().clone();
+        next_index.remove_layer(glyph_id.clone(), &previous);
+        next_index.validate_layer_insert(&glyph_id, &layer)?;
+        next_index.insert_layer(glyph_id.clone(), &layer);
+
+        let state = self.state_mut();
+        let glyph = state
+            .data
+            .glyphs
+            .get_mut(&glyph_id)
+            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+        Arc::make_mut(glyph).set_layer(layer);
+        state.index = next_index;
+        Ok(())
+    }
+
     pub fn remove_glyph_layer(&mut self, layer_id: LayerId) -> CoreResult<GlyphLayer> {
         let glyph_id = self
             .glyph_id_by_layer(layer_id.clone())
