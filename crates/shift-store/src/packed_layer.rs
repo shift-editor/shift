@@ -460,6 +460,46 @@ mod tests {
     }
 
     #[test]
+    fn sqlite_payload_matches_shared_canonical_golden_bytes() {
+        let golden = include_bytes!("../../../fixtures/glyph-codec/layer-v1/full.bin");
+        let layer = font::unpack_glyph_layer(golden).unwrap();
+        let glyph_id = font::GlyphId::from_raw("storage_golden");
+        let glyph_name = font::GlyphName::from("storageGolden");
+        let mut store = ShiftStore::open_memory_for_test().unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO sources (id, name, kind, order_index) VALUES (?1, 'Golden', 'master', 0)",
+                [layer.source_id().to_string()],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, 0)",
+                params![glyph_id.to_string(), glyph_name.as_str()],
+            )
+            .unwrap();
+
+        store
+            .layer_stream_writer()
+            .write_layer(&glyph_id, Some(&glyph_name), &layer)
+            .unwrap();
+
+        let stored: Vec<u8> = store
+            .conn
+            .query_row(
+                "SELECT payload FROM glyph_layer_payloads WHERE layer_id = ?1",
+                [layer.id().to_string()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored.as_slice(), golden);
+        let decoded = store.load_glyph_layer(&layer.id()).unwrap().unwrap();
+        assert_eq!(font::pack_glyph_layer(&decoded).unwrap().as_bytes(), golden);
+    }
+
+    #[test]
     fn directory_open_never_reads_malformed_payloads() {
         let (store, font) = populated_store();
         let layer_id = font

@@ -148,6 +148,146 @@ fn imports_external_fonts_without_a_save_target() {
 }
 
 #[test]
+fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("apps/desktop/src/renderer/src/assets/fonts/Inter-VariableFont.ttf");
+    let store_path = temp.path().join("inter.sqlite");
+
+    let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_count = workspace.font().glyph_count();
+    let total_layers = workspace
+        .font()
+        .glyphs()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+    assert!(
+        glyph_count > 2_000,
+        "fixture should exercise a large glyph directory"
+    );
+    assert!(total_layers >= glyph_count);
+
+    let requested = workspace
+        .font()
+        .glyphs()
+        .filter(|glyph| !glyph.layers().is_empty())
+        .take(8)
+        .map(|glyph| glyph.id())
+        .collect::<Vec<_>>();
+    let expected = requested
+        .iter()
+        .flat_map(|glyph_id| {
+            workspace
+                .font()
+                .glyph(glyph_id.clone())
+                .unwrap()
+                .layers()
+                .values()
+                .map(|layer| {
+                    (
+                        layer.id(),
+                        shift_font::pack_glyph_layer(layer).unwrap().into_bytes(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.font().glyph_count(), glyph_count);
+    assert_eq!(resumed.loaded_layer_count(), 0);
+
+    resumed.acquire_glyphs(&requested, false).unwrap();
+
+    assert_eq!(resumed.loaded_layer_count(), expected.len());
+    assert!(resumed.loaded_layer_count() < total_layers);
+    for (layer_id, bytes) in expected {
+        assert_eq!(
+            shift_font::pack_glyph_layer(resumed.font().layer(layer_id).unwrap())
+                .unwrap()
+                .as_bytes(),
+            bytes
+        );
+    }
+}
+
+#[test]
+fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let store_path = temp.path().join("mutatorsans.sqlite");
+
+    let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_count = workspace.font().glyph_count();
+    let total_layers = workspace
+        .font()
+        .glyphs()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+    assert!(workspace.font().sources().len() >= 4);
+    assert!(total_layers >= glyph_count * 4);
+
+    let root = workspace
+        .font()
+        .glyphs()
+        .find(|glyph| {
+            glyph
+                .layers()
+                .values()
+                .any(|layer| !layer.components().is_empty())
+        })
+        .expect("fixture should contain a composite glyph")
+        .id();
+    let closure = workspace
+        .store()
+        .referenced_glyph_closure([root.clone()])
+        .unwrap();
+    assert!(closure.len() > 1);
+    let closure_layer_count = closure
+        .iter()
+        .map(|glyph_id| {
+            workspace
+                .font()
+                .glyph(glyph_id.clone())
+                .unwrap()
+                .layers()
+                .len()
+        })
+        .sum::<usize>();
+    let expected_root_layers = workspace
+        .font()
+        .glyph(root.clone())
+        .unwrap()
+        .layers()
+        .values()
+        .map(|layer| {
+            (
+                layer.id(),
+                shift_font::pack_glyph_layer(layer).unwrap().into_bytes(),
+            )
+        })
+        .collect::<Vec<_>>();
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.loaded_layer_count(), 0);
+    resumed
+        .acquire_glyphs(std::slice::from_ref(&root), true)
+        .unwrap();
+
+    assert_eq!(resumed.loaded_layer_count(), closure_layer_count);
+    assert!(resumed.loaded_layer_count() < total_layers);
+    for (layer_id, bytes) in expected_root_layers {
+        assert_eq!(
+            shift_font::pack_glyph_layer(resumed.font().layer(layer_id).unwrap())
+                .unwrap()
+                .as_bytes(),
+            bytes
+        );
+    }
+}
+
+#[test]
 fn save_requires_save_as_for_untitled_workspaces() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");
