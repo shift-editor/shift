@@ -1,4 +1,7 @@
-import type { GlyphCodecErrorCode, OutlineCommand } from "./types";
+import { fail } from "./error";
+import type { OutlineCommand } from "./types";
+
+export { GlyphCodecError } from "./error";
 
 const MAGIC = [0x53, 0x48, 0x46, 0x54] as const;
 const OUTLINE_KIND = 0x01;
@@ -8,16 +11,6 @@ const HEADER_LENGTH = 16;
 export const MAX_COMMAND_COUNT = 1_000_000;
 export const MAX_COORDINATE_COUNT = 6_000_000;
 export const MAX_PAYLOAD_BYTES = 32 * 1024 * 1024;
-
-export class GlyphCodecError extends Error {
-  readonly code: GlyphCodecErrorCode;
-
-  constructor(code: GlyphCodecErrorCode, message: string) {
-    super(message);
-    this.name = "GlyphCodecError";
-    this.code = code;
-  }
-}
 
 type Header = {
   readonly commandCount: number;
@@ -393,8 +386,4 @@ function checkLimit(field: string, actual: number, limit: number): void {
 
 function hex(value: number, width = 2): string {
   return `0x${value.toString(16).padStart(width, "0")}`;
-}
-
-function fail(code: GlyphCodecErrorCode, message: string): never {
-  throw new GlyphCodecError(code, message);
 }

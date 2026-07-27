@@ -2243,6 +2243,7 @@ dependencies = [
  "linesweeper",
  "serde",
  "serde_json",
+ "shift-glyph-codec",
  "thiserror",
 ]
 

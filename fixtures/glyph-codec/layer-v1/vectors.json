@@ -1,0 +1,17 @@
+{
+  "format": "shift.glyph-layer.v1",
+  "vectors": [
+    {
+      "file": "empty.bin",
+      "description": "Empty layer with absent height and empty lib",
+      "bytes": 113,
+      "sha256": "87863431c162f63bedfb5a0790bae4f67d09a5eb924c22046fc199d8efb16edb"
+    },
+    {
+      "file": "full.bin",
+      "description": "All point types, closure states, identity-bearing entities, optional fields, transforms, and lib value tags",
+      "bytes": 945,
+      "sha256": "1cc4172f22a4cd01682b8f328cc9df5e091c9ab143fff173ebdba0d32c7afc8f"
+    }
+  ]
+}

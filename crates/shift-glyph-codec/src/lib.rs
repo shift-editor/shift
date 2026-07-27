@@ -6,6 +6,10 @@
 
 use std::{error::Error, fmt};
 
+mod layer;
+
+pub use layer::*;
+
 const MAGIC: &[u8; 4] = b"SHFT";
 const OUTLINE_KIND: u8 = 0x01;
 const OUTLINE_VERSION: u8 = 0x01;

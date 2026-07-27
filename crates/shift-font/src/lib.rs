@@ -37,6 +37,7 @@ pub mod intents;
 pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
+pub mod packed_layer;
 pub mod projection;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
@@ -51,4 +52,5 @@ pub use ir::{
     glyph_name, guideline, kerning, lib_data, metrics, named_instance, point, segment, source,
     variation,
 };
+pub use packed_layer::*;
 pub use projection::*;

@@ -17,6 +17,7 @@ indexmap = { version = "2", features = ["serde"] }
 kurbo = "0.13.0"
 linesweeper = "0.3.0"
 serde = { version = "1.0", features = ["derive", "rc"] }
+shift-glyph-codec = { workspace = true }
 thiserror = "2.0.18"
 getrandom = "0.3.3"
 

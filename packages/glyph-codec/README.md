@@ -2,8 +2,45 @@
 
 DOM-free TypeScript implementation of Shift's packed glyph payload family.
 
-The normative byte layout and compatibility rules live in
+The normative byte layouts and compatibility rules live in
 [`crates/shift-glyph-codec/SPECIFICATION.md`](../../crates/shift-glyph-codec/SPECIFICATION.md).
-This package owns strict validation and the opaque `PackedGlyphOutline` value;
-transport, persistence, `Path2D`, SVG debugging, and Slug transformations belong
-to their respective consumers.
+
+The package owns:
+
+- strict `shift.glyph-outline.v1` validation and `PackedGlyphOutline`;
+- strict, lossless `shift.glyph-layer.v1` validation and `PackedGlyphLayer`;
+- canonical encoders shared with Rust golden vectors;
+- iterable layer/contour views that avoid constructing a complete font.
+
+`PackedGlyphOutline` is flattened, derived `f32` rendering data.
+`PackedGlyphLayer` is canonical authored `f64` state with stable identities,
+point semantics, components, anchors, guidelines, and lib values. They are not
+interchangeable.
+
+Transport, persistence, `Path2D`, SVG debugging, SQLite, and Slug/GPU
+transformations belong to their respective consumers. Rust adaptation to the
+editable object model lives in `shift-font::packed_layer`, keeping the codec
+independent of font semantics.
+
+```ts
+import { decodeLayer, packLayer } from "@shift/glyph-codec";
+
+const packed = packLayer(layer);
+for (const contour of packed.contours()) {
+  for (const point of contour.points()) {
+    // Build a bounded derived projection without materializing every layer.
+  }
+}
+
+const validated = decodeLayer(bytes);
+const editableLayer = validated.unpack();
+```
+
+Verification:
+
+```bash
+pnpm --filter @shift/glyph-codec typecheck
+pnpm --filter @shift/glyph-codec test
+cargo test -p shift-glyph-codec
+cargo run --release -p shift-glyph-codec --example layer_benchmark
+```
