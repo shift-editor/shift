@@ -1,59 +1,74 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import type { GlyphName } from "@shift/types";
 import { Input } from "@shift/ui";
-import type { GlyphCatalogItem } from "@/context/GlyphCatalogContext";
+import type { GlyphNameInputProps } from "@/types/glyphCatalog";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 
-export function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
-  const editor = useEditor();
-  const glyphInfo = getGlyphInfo();
-  const glyphName = glyph.name;
-  const [draft, setDraft] = useState(glyphName);
+export const GlyphNameInput = forwardRef<HTMLInputElement, GlyphNameInputProps>(
+  function GlyphNameInput({ glyph, onFinished }, ref) {
+    const editor = useEditor();
+    const glyphInfo = getGlyphInfo();
+    const glyphName = glyph.name;
+    const [draft, setDraft] = useState(glyphName);
+    const draftRef = useRef(glyphName);
 
-  useEffect(() => {
-    setDraft(glyphName);
-  }, [glyphName]);
-
-  const commit = () => {
-    const next = draft.trim() as GlyphName;
-    if (next === glyphName) {
+    useEffect(() => {
+      draftRef.current = glyphName;
       setDraft(glyphName);
-      return;
-    }
+    }, [glyphName]);
 
-    if (!next || editor.font.recordForName(next)) {
-      setDraft(glyphName);
-      return;
-    }
+    const updateDraft = (next: GlyphName): void => {
+      draftRef.current = next;
+      setDraft(next);
+    };
 
-    const resolved = glyphInfo.getGlyphByName(next);
-    editor.font.updateGlyphIdentity(glyph.id, next, resolved ? [resolved.codepoint] : []);
-  };
+    const commit = (): void => {
+      const next = draftRef.current.trim() as GlyphName;
+      if (next === glyphName) {
+        updateDraft(glyphName);
+        return;
+      }
 
-  return (
-    <Input
-      value={draft}
-      onChange={(event) => setDraft(event.currentTarget.value as GlyphName)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        event.nativeEvent.stopImmediatePropagation();
+      if (!next || editor.font.recordForName(next)) {
+        updateDraft(glyphName);
+        return;
+      }
 
-        switch (event.key) {
-          case "Enter":
-            event.currentTarget.blur();
-            return;
-          case "Escape":
-            setDraft(glyphName);
-            event.currentTarget.blur();
-            return;
-        }
+      const resolved = glyphInfo.getGlyphByName(next);
+      editor.font.updateGlyphIdentity(glyph.id, next, resolved ? [resolved.codepoint] : []);
+    };
 
-        if (event.metaKey && event.key === "a") {
-          event.currentTarget.select();
-        }
-      }}
-      className="h-7 w-full truncate text-center text-xs text-muted-foreground focus:ring-inset read-only:cursor-default read-only:bg-transparent read-only:focus:ring-0"
-    />
-  );
-}
+    return (
+      <Input
+        ref={ref}
+        value={draft}
+        onChange={(event) => updateDraft(event.currentTarget.value as GlyphName)}
+        onBlur={() => {
+          commit();
+          onFinished();
+        }}
+        onKeyDown={(event) => {
+          event.nativeEvent.stopImmediatePropagation();
+
+          switch (event.key) {
+            case "Enter":
+              event.currentTarget.blur();
+              return;
+            case "Escape":
+              updateDraft(glyphName);
+              event.currentTarget.blur();
+              return;
+          }
+
+          if (event.metaKey && event.key === "a") {
+            event.currentTarget.select();
+          }
+        }}
+        className="h-7 w-full truncate bg-input text-center font-ui text-xs font-normal text-muted focus:ring-inset"
+      />
+    );
+  },
+);
+
+GlyphNameInput.displayName = "GlyphNameInput";

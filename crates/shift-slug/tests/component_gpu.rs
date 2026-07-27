@@ -1,21 +1,22 @@
 #![cfg(feature = "wgpu-benchmark")]
 
-use std::{num::NonZeroU64, sync::mpsc};
+use std::sync::mpsc;
 
 use shift_font::{
     test_support::sample_variable_font, Anchor, Component, Contour, DecomposedTransform, Glyph,
     GlyphId, GlyphLayer, LayerId, Location, PointType,
 };
 use shift_slug::{
-    add_authored_glyph_with_weight_sets, pack_render_instances, AuthoredWeightSet, Curve,
-    RenderInstance, Section, VariableAtlasBuilder, VariableLayout, VARIABLE_SLUG_WGSL,
+    add_authored_glyph_with_weight_sets, pack_render_instances, pack_variable_params,
+    AuthoredWeightSet, Curve, RenderInstance, VariableAtlasBuilder, VariableParams,
+    VARIABLE_SLUG_WGSL,
 };
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroupEntry, BindingResource, BufferBinding, BufferDescriptor, BufferUsages,
-    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, DeviceDescriptor,
-    MapMode, MemoryHints, PipelineCompilationOptions, PollType, PowerPreference,
-    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource,
+    BindGroupEntry, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
+    ComputePassDescriptor, ComputePipelineDescriptor, DeviceDescriptor, MapMode, MemoryHints,
+    PipelineCompilationOptions, PollType, PowerPreference, RequestAdapterOptions,
+    ShaderModuleDescriptor, ShaderSource,
 };
 
 #[test]
@@ -62,9 +63,16 @@ fn gpu_resolves_varying_component_transforms_and_attachments() {
         scratch_index_start: 0,
     };
     let instance_bytes = pack_render_instances(&[instance]).unwrap();
-    let mut variable_params = [0_u8; 16];
-    variable_params[0..4].copy_from_slice(&1_u32.to_le_bytes());
-    variable_params[4..8].copy_from_slice(&atlas.band_count().to_le_bytes());
+    let atlas_split_offset = (packed.as_bytes().len() / 2) / 4 * 4;
+    assert!(atlas_split_offset > 0);
+    assert!(atlas_split_offset < packed.as_bytes().len());
+    let variable_params = pack_variable_params(VariableParams {
+        instance_count: 1,
+        band_count: atlas.band_count(),
+        atlas_split_offset: u32::try_from(atlas_split_offset).unwrap(),
+        layout,
+    })
+    .unwrap();
     let weight_bytes = weights
         .iter()
         .flat_map(|weight| weight.to_le_bytes())
@@ -81,18 +89,11 @@ fn gpu_resolves_varying_component_transforms_and_attachments() {
             })
             .await
             .ok()?;
-        if adapter.limits().max_storage_buffers_per_shader_stage < 18 {
-            return None;
-        }
-        let limits = wgpu::Limits {
-            max_storage_buffers_per_shader_stage: 18,
-            ..Default::default()
-        };
         adapter
             .request_device(&DeviceDescriptor {
                 label: Some("shift-slug component test device"),
                 required_features: wgpu::Features::empty(),
-                required_limits: limits,
+                required_limits: wgpu::Limits::default(),
                 experimental_features: Default::default(),
                 memory_hints: MemoryHints::Performance,
                 trace: wgpu::Trace::Off,
@@ -101,13 +102,18 @@ fn gpu_resolves_varying_component_transforms_and_attachments() {
             .ok()
     });
     let Some((device, queue)) = gpu else {
-        eprintln!("skipping component GPU test: no adapter with 18 storage bindings");
+        eprintln!("skipping component GPU test: no baseline WebGPU adapter");
         return;
     };
 
-    let atlas_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("shift-slug component test atlas"),
-        contents: packed.as_bytes(),
+    let atlas_first_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("shift-slug component test atlas first"),
+        contents: &packed.as_bytes()[..atlas_split_offset],
+        usage: BufferUsages::STORAGE,
+    });
+    let atlas_second_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("shift-slug component test atlas second"),
+        contents: &packed.as_bytes()[atlas_split_offset..],
         usage: BufferUsages::STORAGE,
     });
     let instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -173,7 +179,24 @@ fn gpu_resolves_varying_component_transforms_and_attachments() {
     let group1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug component test resident model"),
         layout: &pipeline.get_bind_group_layout(1),
-        entries: &resident_entries(&atlas_buffer, layout, &weight_buffer, &variable_buffer),
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: atlas_first_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: weight_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 2,
+                resource: variable_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: atlas_second_buffer.as_entire_binding(),
+            },
+        ],
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shift-slug component test scratch"),
@@ -324,47 +347,6 @@ fn storage_buffer(device: &wgpu::Device, label: &'static str, size: usize) -> wg
         usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         mapped_at_creation: false,
     })
-}
-
-fn resident_entries<'a>(
-    atlas_buffer: &'a wgpu::Buffer,
-    layout: VariableLayout,
-    weight_buffer: &'a wgpu::Buffer,
-    variable_buffer: &'a wgpu::Buffer,
-) -> [BindGroupEntry<'a>; 14] {
-    [
-        atlas_entry(0, atlas_buffer, layout.base_curves),
-        atlas_entry(1, atlas_buffer, layout.curve_deltas),
-        atlas_entry(2, atlas_buffer, layout.glyphs),
-        atlas_entry(3, atlas_buffer, layout.sources),
-        BindGroupEntry {
-            binding: 4,
-            resource: weight_buffer.as_entire_binding(),
-        },
-        BindGroupEntry {
-            binding: 5,
-            resource: variable_buffer.as_entire_binding(),
-        },
-        atlas_entry(6, atlas_buffer, layout.line_bits),
-        atlas_entry(7, atlas_buffer, layout.sparse_deltas),
-        atlas_entry(8, atlas_buffer, layout.source_advances),
-        atlas_entry(9, atlas_buffer, layout.component_glyphs),
-        atlas_entry(10, atlas_buffer, layout.component_parts),
-        atlas_entry(11, atlas_buffer, layout.components),
-        atlas_entry(12, atlas_buffer, layout.component_sources),
-        atlas_entry(13, atlas_buffer, layout.anchor_sources),
-    ]
-}
-
-fn atlas_entry(binding: u32, buffer: &wgpu::Buffer, section: Section) -> BindGroupEntry<'_> {
-    BindGroupEntry {
-        binding,
-        resource: BindingResource::Buffer(BufferBinding {
-            buffer,
-            offset: section.offset as u64,
-            size: NonZeroU64::new(section.length as u64),
-        }),
-    }
 }
 
 fn read_buffer(device: &wgpu::Device, buffer: &wgpu::Buffer) -> Vec<u8> {

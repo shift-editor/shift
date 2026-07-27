@@ -1,8 +1,11 @@
 use shift_glyph_codec::OutlineCommand;
 
 use crate::{
-    curve::curves_and_line_flags_from_commands, Bounds, Curve, Point, Section, SlugError,
-    LINE_EPSILON,
+    curve::{
+        cubic_subdivision_counts_from_commands,
+        curves_and_line_flags_from_commands_with_subdivisions,
+    },
+    Bounds, Curve, Point, Section, SlugError, LINE_EPSILON,
 };
 
 const CURVE_BYTES: usize = 24;
@@ -14,6 +17,7 @@ const SPARSE_SOURCE_FLAG: u32 = 1 << 31;
 const SOURCE_OFFSET_MASK: u32 = !SPARSE_SOURCE_FLAG;
 const COMPONENT_GLYPH_FLAG: u32 = 1 << 31;
 const GLYPH_OFFSET_MASK: u32 = !COMPONENT_GLYPH_FLAG;
+pub const VARIABLE_PARAMS_BYTES: usize = 64;
 
 mod component;
 pub(crate) use component::ROOT_COMPONENT;
@@ -63,6 +67,45 @@ pub struct VariableLayout {
     pub anchor_sources: Section,
     pub line_bits: Section,
     pub total_length: usize,
+}
+
+/// Inputs and resident section offsets consumed by the variable shader.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct VariableParams {
+    pub instance_count: u32,
+    pub band_count: u32,
+    pub atlas_split_offset: u32,
+    pub layout: VariableLayout,
+}
+
+/// Packs the variable shader uniform as sixteen little-endian `u32` words.
+pub fn pack_variable_params(
+    params: VariableParams,
+) -> Result<[u8; VARIABLE_PARAMS_BYTES], SlugError> {
+    let words = [
+        params.instance_count,
+        params.band_count,
+        params.atlas_split_offset,
+        0,
+        as_u32(params.layout.base_curves.offset)?,
+        as_u32(params.layout.curve_deltas.offset)?,
+        as_u32(params.layout.sparse_deltas.offset)?,
+        as_u32(params.layout.glyphs.offset)?,
+        as_u32(params.layout.sources.offset)?,
+        as_u32(params.layout.source_advances.offset)?,
+        as_u32(params.layout.component_glyphs.offset)?,
+        as_u32(params.layout.component_parts.offset)?,
+        as_u32(params.layout.components.offset)?,
+        as_u32(params.layout.component_sources.offset)?,
+        as_u32(params.layout.anchor_sources.offset)?,
+        as_u32(params.layout.line_bits.offset)?,
+    ];
+    let mut bytes = [0; VARIABLE_PARAMS_BYTES];
+    for (index, word) in words.into_iter().enumerate() {
+        let start = index * std::mem::size_of::<u32>();
+        bytes[start..start + std::mem::size_of::<u32>()].copy_from_slice(&word.to_le_bytes());
+    }
+    Ok(bytes)
 }
 
 /// CPU-owned resident Slug variation model.
@@ -589,9 +632,27 @@ impl VariableAtlasBuilder {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
         }
 
-        let (base_curves, line_flags) = curves_and_line_flags_from_commands(base_commands)?;
+        let base_subdivision_counts =
+            cubic_subdivision_counts_from_commands(base_commands.iter().copied())?;
+        let source_subdivision_counts =
+            cubic_subdivision_counts_from_commands(source_commands.iter().copied())?;
+        if base_subdivision_counts.len() != source_subdivision_counts.len() {
+            return Err(SlugError::VariableTopologyMismatch { glyph_index });
+        }
+        let shared_subdivision_counts = base_subdivision_counts
+            .into_iter()
+            .zip(source_subdivision_counts)
+            .map(|(base, source)| base.max(source))
+            .collect::<Vec<_>>();
+        let (base_curves, line_flags) = curves_and_line_flags_from_commands_with_subdivisions(
+            base_commands,
+            &shared_subdivision_counts,
+        )?;
         let (source_curves, source_line_flags) =
-            curves_and_line_flags_from_commands(source_commands)?;
+            curves_and_line_flags_from_commands_with_subdivisions(
+                source_commands,
+                &shared_subdivision_counts,
+            )?;
         if line_flags != source_line_flags {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
         }
@@ -607,7 +668,7 @@ impl VariableAtlasBuilder {
     ///
     /// Comparing two location-resolved pen streams is only a fixture convenience
     /// because a binary outline drawer may change emitted command kinds at
-    /// degeneracies. Production adapters must use the authored recipe boundary,
+    /// degeneracies. Production adapters must use the authored topology boundary,
     /// including line flags for controls regenerated after interpolation.
     pub fn add_curve_glyph(
         &mut self,

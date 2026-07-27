@@ -8,26 +8,43 @@ use shift_slug::{
     add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
     authored_glyph_requirements, build_authored_atlas, curves_from_resolved_contours,
-    AuthoredAtlasBuilder, AuthoredCurveRecipe, AuthoredSlugError, AuthoredWeightSet, Curve,
+    AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError, AuthoredWeightSet, Curve,
     VariableAtlasBuilder,
 };
 
 #[test]
-fn authored_recipe_preserves_curve_correspondence_through_degeneracy() {
+fn authored_topology_preserves_curve_correspondence_through_degeneracy() {
     let mut layer = triangle_layer();
-    let recipe = AuthoredCurveRecipe::from_layer(&layer);
-    let base = recipe.curves_from_layer(&layer).unwrap();
+    let topology = AuthoredCurveTopology::from_layer(&layer);
+    let base = topology.curves_from_layer(&layer).unwrap();
 
     let contour = layer.contours_iter_mut().next().unwrap();
     let first_x = contour.points()[0].x();
     let first_y = contour.points()[0].y();
     contour.points_mut()[1].set_position(first_x, first_y);
-    let degenerate = recipe.curves_from_layer(&layer).unwrap();
+    let degenerate = topology.curves_from_layer(&layer).unwrap();
 
-    assert_eq!(recipe.curve_count(), 3);
+    assert_eq!(topology.curve_count(), 3);
     assert_eq!(base.len(), degenerate.len());
     assert_eq!(degenerate[0].p0, degenerate[0].p1);
     assert_eq!(degenerate[0].p1, degenerate[0].p2);
+}
+
+#[test]
+fn authored_topology_freezes_the_largest_compatible_cubic_subdivision_count() {
+    let reference = cubic_layer();
+    let mut curved = reference.clone();
+    let contour = curved.contours_iter_mut().next().unwrap();
+    contour.points_mut()[1].set_position(0.0, 200.0);
+    contour.points_mut()[2].set_position(100.0, -200.0);
+
+    let reference_topology = AuthoredCurveTopology::from_layer(&reference);
+    let topology = AuthoredCurveTopology::from_compatible_layers(&reference, [&curved]).unwrap();
+    let reference_curves = topology.curves_from_layer(&reference).unwrap();
+    let curved_curves = topology.curves_from_layer(&curved).unwrap();
+
+    assert!(topology.curve_count() > reference_topology.curve_count());
+    assert_eq!(reference_curves.len(), curved_curves.len());
 }
 
 #[test]
@@ -56,8 +73,21 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     let actual = atlas.resolve_glyph_with_weights(0, &weights).unwrap();
 
     let expected_layer = interpolation.resolve(&location, font.axes()).unwrap();
-    let recipe = AuthoredCurveRecipe::from_layer(interpolation.reference_layer());
-    let expected = recipe.curves_from_layer(&expected_layer).unwrap();
+    let source_layers = interpolation
+        .sources()
+        .iter()
+        .map(|source| {
+            let mut layer = interpolation.reference_layer().clone();
+            layer.apply_interpolation_values(source.values()).unwrap();
+            layer
+        })
+        .collect::<Vec<_>>();
+    let topology = AuthoredCurveTopology::from_compatible_layers(
+        interpolation.reference_layer(),
+        &source_layers,
+    )
+    .unwrap();
+    let expected = topology.curves_from_layer(&expected_layer).unwrap();
     assert_curves_close(&actual, &expected, 0.001);
     let actual_advance = atlas.resolve_advance_with_weights(0, &weights).unwrap();
     assert!((actual_advance - expected_layer.width() as f32).abs() <= 0.001);
@@ -153,8 +183,8 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
     assert_eq!(component_occurrences, 20);
     assert_eq!(bases.len(), 4);
     assert_eq!(atlas.statistics().glyph_count, 59);
-    assert_eq!(atlas.statistics().curve_count, 554);
-    assert_eq!(atlas.statistics().delta_curve_count, 1_771);
+    assert_eq!(atlas.statistics().curve_count, 564);
+    assert_eq!(atlas.statistics().delta_curve_count, 1_813);
     assert_eq!(atlas.statistics().delta_index_count, 3);
     assert_eq!(atlas.statistics().dense_delta_source_count, 149);
     assert_eq!(atlas.statistics().sparse_delta_source_count, 5);
@@ -184,7 +214,20 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
     for (glyph_id, atlas_index, weight_indices, component_glyph) in records {
         let projection = font.glyph_projection(&glyph_id).unwrap().unwrap();
         let interpolation = projection.interpolation().unwrap();
-        let recipe = AuthoredCurveRecipe::from_layer(interpolation.reference_layer());
+        let source_layers = interpolation
+            .sources()
+            .iter()
+            .map(|source| {
+                let mut layer = interpolation.reference_layer().clone();
+                layer.apply_interpolation_values(source.values()).unwrap();
+                layer
+            })
+            .collect::<Vec<_>>();
+        let topology = AuthoredCurveTopology::from_compatible_layers(
+            interpolation.reference_layer(),
+            &source_layers,
+        )
+        .unwrap();
         for location in &locations {
             let mut weights = vec![0.0_f32; next_weight_index as usize];
             weights[0] = 1.0;
@@ -199,21 +242,18 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
             let actual = atlas
                 .resolve_glyph_with_weights(atlas_index, &weights)
                 .unwrap();
-            let (expected, expected_advance) = if component_glyph {
+            let expected_advance = if component_glyph {
+                // Component curve order is validated by the dedicated component CPU/GPU tests.
+                // This broad sweep still verifies every component glyph's variable advance.
                 let mut font_projection = font.projection(location);
                 let resolved = font_projection.glyph(&glyph_id).unwrap().unwrap();
-                (
-                    curves_from_resolved_contours(resolved.contours()).unwrap(),
-                    resolved.x_advance() as f32,
-                )
+                resolved.x_advance() as f32
             } else {
                 let expected_layer = interpolation.resolve(location, font.axes()).unwrap();
-                (
-                    recipe.curves_from_layer(&expected_layer).unwrap(),
-                    expected_layer.width() as f32,
-                )
+                let expected = topology.curves_from_layer(&expected_layer).unwrap();
+                maximum_error = maximum_error.max(maximum_curve_error(&actual, &expected));
+                expected_layer.width() as f32
             };
-            maximum_error = maximum_error.max(maximum_curve_error(&actual, &expected));
             let actual_advance = atlas
                 .resolve_advance_with_weights(atlas_index, &weights)
                 .unwrap();
@@ -619,6 +659,17 @@ fn authored_projection_reports_unimplemented_product_semantics() {
         AuthoredSlugError::UnsupportedGlyph(actual) if actual == requirements
     ));
     assert!(builder.finish().glyphs().is_empty());
+}
+
+fn cubic_layer() -> GlyphLayer {
+    let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
+    let mut contour = Contour::new();
+    contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+    contour.add_point(33.0, 0.0, PointType::OffCurve, false);
+    contour.add_point(66.0, 0.0, PointType::OffCurve, false);
+    contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+    layer.add_contour(contour);
+    layer
 }
 
 fn triangle_layer() -> GlyphLayer {

@@ -14,7 +14,7 @@ use crate::{
 use super::{
     add_default_projection_glyph, authored_advance, curves_from_resolved_contours, source_location,
     AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredSlugError,
-    AuthoredSourceGlyph, ResolvedCurveRecipe,
+    AuthoredSourceGlyph, ResolvedCurveTopology,
 };
 
 /// One deduplicated interpolation basis and its per-frame weight-buffer indexes.
@@ -119,11 +119,11 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
         let resolved = font_projection
             .glyph(&projection.glyph_id())?
             .ok_or_else(|| shift_font::CoreError::GlyphNotFound(projection.glyph_id()))?;
-        let recipe = ResolvedCurveRecipe::from_contours(resolved.contours());
+        let topology = ResolvedCurveTopology::from_contours(resolved.contours());
         let advance = authored_advance(resolved.x_advance(), 0)?;
         let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
-            recipe.curves_from_contours(resolved.contours())?,
-            recipe.line_flags(),
+            topology.curves_from_contours(resolved.contours())?,
+            topology.line_flags(),
             constant_weight_index,
             [],
         )?;

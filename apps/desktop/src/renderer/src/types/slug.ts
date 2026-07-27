@@ -1,10 +1,20 @@
-import type { Axis, GlyphId, SlugAtlas, SlugGlyph, SourceId, SourceMetrics } from "@shift/types";
-import type { RefObject } from "react";
-import type { AxisLocation } from "./variation";
+import type { GlyphId, SlugAtlas, SlugGlyph, SourceId } from "@shift/types";
 
 export interface SlugAtlasSections {
   readonly glyphs: Uint8Array<ArrayBuffer>;
   readonly componentGlyphs: Uint8Array<ArrayBuffer>;
+}
+
+export interface SlugAtlasSplit {
+  readonly splitOffset: number;
+  readonly firstLength: number;
+  readonly secondLength: number;
+}
+
+export interface SlugResidentAtlas {
+  readonly firstBuffer: GPUBuffer;
+  readonly secondBuffer: GPUBuffer;
+  readonly splitOffset: number;
 }
 
 export type SlugGlyphMap = ReadonlyMap<GlyphId, SlugGlyph>;
@@ -39,7 +49,7 @@ export interface SlugDraw {
 
 export interface SlugRendererOptions {
   readonly atlas: SlugAtlas;
-  readonly atlasBuffer: GPUBuffer;
+  readonly residentAtlas: SlugResidentAtlas;
   readonly sections: SlugAtlasSections;
   readonly device: GPUDevice;
   readonly context: GPUCanvasContext;
@@ -53,19 +63,6 @@ export interface SlugPreviewStyle {
   readonly previewHeight: number;
   readonly sideMargin: number;
   readonly color: readonly [number, number, number, number];
-}
-
-export interface SlugGlyphGridProps {
-  readonly containerRef: RefObject<HTMLElement | null>;
-  readonly glyphIds: readonly GlyphId[];
-  readonly location: AxisLocation;
-  readonly axes: readonly Axis[];
-  readonly metrics: SourceMetrics;
-  readonly sourceId: SourceId | null;
-  readonly atlasRevision: unknown;
-  readonly visible: boolean;
-  readonly onFirstFrame: () => void;
-  readonly onUnavailable: () => void;
 }
 
 export interface SlugDiagnostics {

@@ -1,8 +1,8 @@
-//! Stable `shift-font` point/segment recipes for resident Slug geometry.
+//! Stable `shift-font` point/segment topologies for resident Slug geometry.
 //!
 //! Production variation must not pair independently resolved outline callbacks:
 //! command kinds can change when geometry becomes degenerate. This module builds
-//! one recipe from the interpolation reference layer, then evaluates every
+//! one topology from the interpolation reference layer, then evaluates every
 //! compatible source through the same contour, point, and segment indexes.
 
 use std::{collections::HashMap, error::Error, fmt};
@@ -211,11 +211,11 @@ impl fmt::Display for AuthoredSlugError {
             ),
             Self::ContourCountMismatch { expected, actual } => write!(
                 formatter,
-                "authored Slug recipe needs {expected} contours, got {actual}"
+                "authored Slug topology needs {expected} contours, got {actual}"
             ),
             Self::ContourTopologyMismatch { contour_index } => write!(
                 formatter,
-                "authored contour {contour_index} no longer matches its Slug point/segment recipe"
+                "authored contour {contour_index} no longer matches its Slug point/segment topology"
             ),
             Self::NonFiniteCoordinate {
                 contour_index,
@@ -256,60 +256,65 @@ impl From<SlugError> for AuthoredSlugError {
     }
 }
 
-/// A location-independent quadratic conversion recipe tied to authored topology.
+/// A location-independent quadratic conversion topology tied to authored points.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuthoredCurveRecipe {
-    contours: Vec<ContourRecipe>,
+pub struct AuthoredCurveTopology {
+    contours: Vec<ContourTopology>,
     curve_count: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ContourRecipe {
+struct ContourTopology {
     contour_id: ContourId,
     closed: bool,
     point_ids: Vec<PointId>,
     point_types: Vec<PointType>,
-    segments: Vec<SegmentRecipe>,
+    segments: Vec<SegmentTopology>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ResolvedContourRecipe {
+struct ResolvedContourTopology {
     closed: bool,
     point_types: Vec<PointType>,
-    segments: Vec<SegmentRecipe>,
+    segments: Vec<SegmentTopology>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ResolvedCurveRecipe {
-    contours: Vec<ResolvedContourRecipe>,
+struct ResolvedCurveTopology {
+    contours: Vec<ResolvedContourTopology>,
     curve_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SegmentRecipe {
+enum SegmentTopology {
     Line([usize; 2]),
     Quad([usize; 3]),
-    Cubic([usize; 4]),
+    Cubic {
+        points: [usize; 4],
+        subdivision_count: usize,
+    },
 }
 
-impl SegmentRecipe {
+impl SegmentTopology {
     fn end(self) -> usize {
         match self {
             Self::Line(points) => points[1],
             Self::Quad(points) => points[2],
-            Self::Cubic(points) => points[3],
+            Self::Cubic { points, .. } => points[3],
         }
     }
 
     fn curve_count(self) -> usize {
         match self {
-            Self::Cubic(_) => 2,
+            Self::Cubic {
+                subdivision_count, ..
+            } => subdivision_count,
             Self::Line(_) | Self::Quad(_) => 1,
         }
     }
 }
 
-impl AuthoredCurveRecipe {
+impl AuthoredCurveTopology {
     /// Captures contour order, point kinds, and segment-to-point correspondence.
     pub fn from_layer(layer: &GlyphLayer) -> Self {
         let contours = layer
@@ -317,7 +322,7 @@ impl AuthoredCurveRecipe {
             .map(|contour| {
                 let points = contour.points();
                 let mut segments = CurveSegmentIter::new(points, contour.is_closed())
-                    .map(|segment| segment_recipe(points, segment))
+                    .map(|segment| segment_topology(points, segment))
                     .collect::<Vec<_>>();
 
                 if let (Some(first), Some(last)) =
@@ -326,11 +331,11 @@ impl AuthoredCurveRecipe {
                     let start = segment_start(first);
                     let end = last.end();
                     if start != end {
-                        segments.push(SegmentRecipe::Line([end, start]));
+                        segments.push(SegmentTopology::Line([end, start]));
                     }
                 }
 
-                ContourRecipe {
+                ContourTopology {
                     contour_id: contour.id(),
                     closed: contour.is_closed(),
                     point_ids: points.iter().map(FontPoint::id).collect(),
@@ -351,17 +356,22 @@ impl AuthoredCurveRecipe {
         }
     }
 
-    pub fn curve_count(&self) -> usize {
-        self.curve_count
+    /// Freezes one cubic subdivision count large enough for every compatible layer.
+    pub fn from_compatible_layers<'a>(
+        reference_layer: &GlyphLayer,
+        compatible_layers: impl IntoIterator<Item = &'a GlyphLayer>,
+    ) -> Result<Self, AuthoredSlugError> {
+        let mut topology = Self::from_layer(reference_layer);
+        for layer in compatible_layers {
+            topology.include_layer_cubic_subdivisions(layer)?;
+        }
+        Ok(topology)
     }
 
-    /// Returns one flag per output quadratic whose control is derived from a line.
-    pub fn line_flags(&self) -> Vec<bool> {
-        line_flags(self.contours.iter().flat_map(|contour| &contour.segments))
-    }
-
-    /// Evaluates this exact recipe against a topology-compatible layer.
-    pub fn curves_from_layer(&self, layer: &GlyphLayer) -> Result<Vec<Curve>, AuthoredSlugError> {
+    fn include_layer_cubic_subdivisions(
+        &mut self,
+        layer: &GlyphLayer,
+    ) -> Result<(), AuthoredSlugError> {
         let contours = layer.contours_iter().collect::<Vec<_>>();
         if contours.len() != self.contours.len() {
             return Err(AuthoredSlugError::ContourCountMismatch {
@@ -370,8 +380,9 @@ impl AuthoredCurveRecipe {
             });
         }
 
-        let mut curves = Vec::with_capacity(self.curve_count);
-        for (contour_index, (recipe, contour)) in self.contours.iter().zip(contours).enumerate() {
+        for (contour_index, (topology, contour)) in
+            self.contours.iter_mut().zip(contours).enumerate()
+        {
             let point_ids = contour
                 .points()
                 .iter()
@@ -382,10 +393,10 @@ impl AuthoredCurveRecipe {
                 .iter()
                 .map(FontPoint::point_type)
                 .collect::<Vec<_>>();
-            if contour.id() != recipe.contour_id
-                || contour.is_closed() != recipe.closed
-                || point_ids != recipe.point_ids
-                || point_types != recipe.point_types
+            if contour.id() != topology.contour_id
+                || contour.is_closed() != topology.closed
+                || point_ids != topology.point_ids
+                || point_types != topology.point_types
             {
                 return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
             }
@@ -396,7 +407,77 @@ impl AuthoredCurveRecipe {
                 .enumerate()
                 .map(|(point_index, point)| slug_point(point, contour_index, point_index))
                 .collect::<Result<Vec<_>, _>>()?;
-            for segment in &recipe.segments {
+            for segment in &mut topology.segments {
+                let SegmentTopology::Cubic {
+                    points: [p0, p1, p2, p3],
+                    subdivision_count,
+                } = segment
+                else {
+                    continue;
+                };
+                *subdivision_count = (*subdivision_count).max(Curve::cubic_subdivision_count(
+                    points[*p0],
+                    points[*p1],
+                    points[*p2],
+                    points[*p3],
+                ));
+            }
+        }
+        self.curve_count = self
+            .contours
+            .iter()
+            .flat_map(|contour| &contour.segments)
+            .map(|segment| segment.curve_count())
+            .sum();
+        Ok(())
+    }
+
+    pub fn curve_count(&self) -> usize {
+        self.curve_count
+    }
+
+    /// Returns one flag per output quadratic whose control is derived from a line.
+    pub fn line_flags(&self) -> Vec<bool> {
+        line_flags(self.contours.iter().flat_map(|contour| &contour.segments))
+    }
+
+    /// Evaluates this exact topology against a topology-compatible layer.
+    pub fn curves_from_layer(&self, layer: &GlyphLayer) -> Result<Vec<Curve>, AuthoredSlugError> {
+        let contours = layer.contours_iter().collect::<Vec<_>>();
+        if contours.len() != self.contours.len() {
+            return Err(AuthoredSlugError::ContourCountMismatch {
+                expected: self.contours.len(),
+                actual: contours.len(),
+            });
+        }
+
+        let mut curves = Vec::with_capacity(self.curve_count);
+        for (contour_index, (topology, contour)) in self.contours.iter().zip(contours).enumerate() {
+            let point_ids = contour
+                .points()
+                .iter()
+                .map(FontPoint::id)
+                .collect::<Vec<_>>();
+            let point_types = contour
+                .points()
+                .iter()
+                .map(FontPoint::point_type)
+                .collect::<Vec<_>>();
+            if contour.id() != topology.contour_id
+                || contour.is_closed() != topology.closed
+                || point_ids != topology.point_ids
+                || point_types != topology.point_types
+            {
+                return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
+            }
+
+            let points = contour
+                .points()
+                .iter()
+                .enumerate()
+                .map(|(point_index, point)| slug_point(point, contour_index, point_index))
+                .collect::<Result<Vec<_>, _>>()?;
+            for segment in &topology.segments {
                 append_segment(&mut curves, *segment, &points);
             }
         }
@@ -405,14 +486,14 @@ impl AuthoredCurveRecipe {
     }
 }
 
-impl ResolvedCurveRecipe {
+impl ResolvedCurveTopology {
     fn from_contours(contours: &[ResolvedContour]) -> Self {
         let contours = contours
             .iter()
             .map(|contour| {
                 let points = &contour.points;
                 let mut segments = CurveSegmentIter::new(points, contour.closed)
-                    .map(|segment| segment_recipe(points, segment))
+                    .map(|segment| segment_topology(points, segment))
                     .collect::<Vec<_>>();
                 if let (Some(first), Some(last)) =
                     (segments.first().copied(), segments.last().copied())
@@ -420,10 +501,10 @@ impl ResolvedCurveRecipe {
                     let start = segment_start(first);
                     let end = last.end();
                     if start != end {
-                        segments.push(SegmentRecipe::Line([end, start]));
+                        segments.push(SegmentTopology::Line([end, start]));
                     }
                 }
-                ResolvedContourRecipe {
+                ResolvedContourTopology {
                     closed: contour.closed,
                     point_types: points.iter().map(FontPoint::point_type).collect(),
                     segments,
@@ -456,13 +537,13 @@ impl ResolvedCurveRecipe {
             });
         }
         let mut curves = Vec::with_capacity(self.curve_count);
-        for (contour_index, (recipe, contour)) in self.contours.iter().zip(contours).enumerate() {
+        for (contour_index, (topology, contour)) in self.contours.iter().zip(contours).enumerate() {
             let point_types = contour
                 .points
                 .iter()
                 .map(FontPoint::point_type)
                 .collect::<Vec<_>>();
-            if contour.closed != recipe.closed || point_types != recipe.point_types {
+            if contour.closed != topology.closed || point_types != topology.point_types {
                 return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
             }
             let points = contour
@@ -471,7 +552,7 @@ impl ResolvedCurveRecipe {
                 .enumerate()
                 .map(|(point_index, point)| slug_point(point, contour_index, point_index))
                 .collect::<Result<Vec<_>, _>>()?;
-            for segment in &recipe.segments {
+            for segment in &topology.segments {
                 append_segment(&mut curves, *segment, &points);
             }
         }
@@ -484,8 +565,8 @@ impl ResolvedCurveRecipe {
 pub fn curves_from_resolved_contours(
     contours: &[ResolvedContour],
 ) -> Result<Vec<Curve>, AuthoredSlugError> {
-    let recipe = ResolvedCurveRecipe::from_contours(contours);
-    recipe.curves_from_contours(contours)
+    let topology = ResolvedCurveTopology::from_contours(contours);
+    topology.curves_from_contours(contours)
 }
 
 /// Returns unsupported authored semantics before atlas construction mutates state.
@@ -562,12 +643,12 @@ fn add_default_projection_glyph(
                 actual: source_weight_indices.len(),
             });
         }
-        let recipe = AuthoredCurveRecipe::from_layer(projection.fallback());
-        let curves = recipe.curves_from_layer(projection.fallback())?;
+        let topology = AuthoredCurveTopology::from_layer(projection.fallback());
+        let curves = topology.curves_from_layer(projection.fallback())?;
         let advance = authored_advance(projection.fallback().width(), 0)?;
         let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
             curves,
-            recipe.line_flags(),
+            topology.line_flags(),
             constant_weight_index,
             [],
         )?;
@@ -588,8 +669,7 @@ fn add_default_projection_glyph(
         });
     }
 
-    let recipe = AuthoredCurveRecipe::from_layer(interpolation.reference_layer());
-    let mut source_curves = Vec::with_capacity(sources.len());
+    let mut source_layers = Vec::with_capacity(sources.len());
     let mut source_advances = Vec::with_capacity(sources.len());
     for (source_index, (source, weight_index)) in
         sources.iter().zip(source_weight_indices).enumerate()
@@ -597,8 +677,17 @@ fn add_default_projection_glyph(
         let mut layer = interpolation.reference_layer().clone();
         layer.apply_interpolation_values(source.values())?;
         source_advances.push(authored_advance(layer.width(), source_index)?);
-        source_curves.push((*weight_index, recipe.curves_from_layer(&layer)?));
+        source_layers.push((*weight_index, layer));
     }
+
+    let topology = AuthoredCurveTopology::from_compatible_layers(
+        interpolation.reference_layer(),
+        source_layers.iter().map(|(_, layer)| layer),
+    )?;
+    let source_curves = source_layers
+        .iter()
+        .map(|(weight_index, layer)| Ok((*weight_index, topology.curves_from_layer(layer)?)))
+        .collect::<Result<Vec<_>, AuthoredSlugError>>()?;
 
     let (base_weight_index, base_curves) = source_curves
         .first()
@@ -606,7 +695,7 @@ fn add_default_projection_glyph(
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
     let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
         base_curves,
-        recipe.line_flags(),
+        topology.line_flags(),
         base_weight_index,
         source_curves.into_iter().skip(1),
     )?;
@@ -705,36 +794,49 @@ fn source_location<'a>(
         .ok_or_else(|| AuthoredSlugError::MissingSourceLocation(source_id.clone()))
 }
 
-fn line_flags<'a>(segments: impl IntoIterator<Item = &'a SegmentRecipe>) -> Vec<bool> {
+fn line_flags<'a>(segments: impl IntoIterator<Item = &'a SegmentTopology>) -> Vec<bool> {
     segments
         .into_iter()
         .flat_map(|segment| {
             let (is_line, count) = match segment {
-                SegmentRecipe::Line(_) => (true, 1),
-                SegmentRecipe::Quad(_) => (false, 1),
-                SegmentRecipe::Cubic(_) => (false, 2),
+                SegmentTopology::Line(_) => (true, 1),
+                SegmentTopology::Quad(_) => (false, 1),
+                SegmentTopology::Cubic {
+                    subdivision_count, ..
+                } => (false, *subdivision_count),
             };
             std::iter::repeat_n(is_line, count)
         })
         .collect()
 }
 
-fn segment_recipe(points: &[FontPoint], segment: CurveSegment<'_>) -> SegmentRecipe {
+fn segment_topology(points: &[FontPoint], segment: CurveSegment<'_>) -> SegmentTopology {
     match segment {
         CurveSegment::Line(p0, p1) => {
-            SegmentRecipe::Line([point_index(points, p0), point_index(points, p1)])
+            SegmentTopology::Line([point_index(points, p0), point_index(points, p1)])
         }
-        CurveSegment::Quad(p0, p1, p2) => SegmentRecipe::Quad([
+        CurveSegment::Quad(p0, p1, p2) => SegmentTopology::Quad([
             point_index(points, p0),
             point_index(points, p1),
             point_index(points, p2),
         ]),
-        CurveSegment::Cubic(p0, p1, p2, p3) => SegmentRecipe::Cubic([
-            point_index(points, p0),
-            point_index(points, p1),
-            point_index(points, p2),
-            point_index(points, p3),
-        ]),
+        CurveSegment::Cubic(p0, p1, p2, p3) => {
+            let points = [
+                point_index(points, p0),
+                point_index(points, p1),
+                point_index(points, p2),
+                point_index(points, p3),
+            ];
+            SegmentTopology::Cubic {
+                subdivision_count: Curve::cubic_subdivision_count(
+                    slug_point_unchecked(p0),
+                    slug_point_unchecked(p1),
+                    slug_point_unchecked(p2),
+                    slug_point_unchecked(p3),
+                ),
+                points,
+            }
+        }
     }
 }
 
@@ -745,11 +847,11 @@ fn point_index(points: &[FontPoint], target: &FontPoint) -> usize {
         .expect("curve segment points borrow their source contour")
 }
 
-fn segment_start(segment: SegmentRecipe) -> usize {
+fn segment_start(segment: SegmentTopology) -> usize {
     match segment {
-        SegmentRecipe::Line(points) => points[0],
-        SegmentRecipe::Quad(points) => points[0],
-        SegmentRecipe::Cubic(points) => points[0],
+        SegmentTopology::Line(points) => points[0],
+        SegmentTopology::Quad(points) => points[0],
+        SegmentTopology::Cubic { points, .. } => points[0],
     }
 }
 
@@ -760,6 +862,10 @@ fn authored_advance(value: f64, source_index: usize) -> Result<f32, AuthoredSlug
     } else {
         Err(AuthoredSlugError::NonFiniteAdvance { source_index })
     }
+}
+
+fn slug_point_unchecked(point: &FontPoint) -> Point {
+    Point::new(point.x() as f32, point.y() as f32)
 }
 
 fn slug_point(
@@ -779,18 +885,25 @@ fn slug_point(
     }
 }
 
-fn append_segment(curves: &mut Vec<Curve>, segment: SegmentRecipe, points: &[Point]) {
+fn append_segment(curves: &mut Vec<Curve>, segment: SegmentTopology, points: &[Point]) {
     match segment {
-        SegmentRecipe::Line([p0, p1]) => {
+        SegmentTopology::Line([p0, p1]) => {
             curves.push(Curve::from_line(points[p0], points[p1]));
         }
-        SegmentRecipe::Quad([p0, p1, p2]) => curves.push(Curve {
+        SegmentTopology::Quad([p0, p1, p2]) => curves.push(Curve {
             p0: points[p0],
             p1: points[p1],
             p2: points[p2],
         }),
-        SegmentRecipe::Cubic([p0, p1, p2, p3]) => curves.extend(Curve::from_cubic(
-            points[p0], points[p1], points[p2], points[p3],
+        SegmentTopology::Cubic {
+            points: [p0, p1, p2, p3],
+            subdivision_count,
+        } => curves.extend(Curve::from_cubic_with_subdivisions(
+            points[p0],
+            points[p1],
+            points[p2],
+            points[p3],
+            subdivision_count,
         )),
     }
 }

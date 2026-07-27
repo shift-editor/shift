@@ -19,10 +19,10 @@ pub use authored::{
     add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
     authored_glyph_requirements, curves_from_resolved_contours, AuthoredAtlasBuilder,
-    AuthoredCurveRecipe, AuthoredGlyph, AuthoredGlyphRequirements, AuthoredSlugError,
+    AuthoredCurveTopology, AuthoredGlyph, AuthoredGlyphRequirements, AuthoredSlugError,
     AuthoredSourceGlyph, AuthoredWeightSet,
 };
-pub use curve::{Bounds, Curve, Point, LINE_EPSILON};
+pub use curve::{Bounds, Curve, Point, CUBIC_APPROXIMATION_ACCURACY, LINE_EPSILON};
 pub use error::SlugError;
 pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
 pub use render::{
@@ -31,10 +31,10 @@ pub use render::{
 };
 pub use resident::{build_authored_atlas, AuthoredAtlas, AuthoredAtlasGlyph};
 pub use variable::{
-    PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks, VariableAnchorSource,
-    VariableAtlas, VariableAtlasBuilder, VariableComponent, VariableComponentGlyph,
-    VariableComponentPart, VariableComponentSource, VariableGlyph, VariableLayout, VariableSource,
-    VariableStatistics,
+    pack_variable_params, PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks,
+    VariableAnchorSource, VariableAtlas, VariableAtlasBuilder, VariableComponent,
+    VariableComponentGlyph, VariableComponentPart, VariableComponentSource, VariableGlyph,
+    VariableLayout, VariableParams, VariableSource, VariableStatistics, VARIABLE_PARAMS_BYTES,
 };
 
 /// Shader source shared by native `wgpu` and Electron WebGPU consumers.

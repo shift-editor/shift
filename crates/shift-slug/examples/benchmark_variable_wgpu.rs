@@ -1,9 +1,10 @@
-use std::{env, error::Error, fs, num::NonZeroU64, path::PathBuf, sync::mpsc, time::Instant};
+use std::{env, error::Error, fs, path::PathBuf, sync::mpsc, time::Instant};
 
 use shift_glyph_codec::OutlineCommand;
 use shift_slug::{
-    pack_render_instances, pack_render_params, Bounds, Curve, RenderInstance, RenderParams,
-    SlugError, VariableAtlas, VariableAtlasBuilder, DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
+    pack_render_instances, pack_render_params, pack_variable_params, Bounds, Curve, RenderInstance,
+    RenderParams, SlugError, VariableAtlas, VariableAtlasBuilder, VariableParams,
+    DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
 };
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
@@ -12,11 +13,11 @@ use skrifa::{
 };
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroupEntry, BindingResource, BufferBinding, BufferDescriptor, BufferUsages, Color,
-    ColorTargetState, ColorWrites, CommandEncoderDescriptor, ComputePassDescriptor,
-    ComputePipelineDescriptor, Device, DeviceDescriptor, Extent3d, FragmentState, LoadOp,
-    MemoryHints, Operations, Origin3d, PipelineCompilationOptions, PollType, PowerPreference,
-    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+    BindGroupEntry, BufferDescriptor, BufferUsages, Color, ColorTargetState, ColorWrites,
+    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
+    DeviceDescriptor, Extent3d, FragmentState, LoadOp, MemoryHints, Operations, Origin3d,
+    PipelineCompilationOptions, PollType, PowerPreference, PrimitiveState,
+    RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
     RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, StoreOp, TexelCopyBufferInfo,
     TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect, TextureDescriptor,
     TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, VertexState,
@@ -128,7 +129,6 @@ fn main() -> Result<()> {
     let glyph_indices = sampled_glyph_indices(atlas.glyphs().len(), arguments.visible_glyphs);
     let (instances, scratch) = build_instances(&atlas, &glyph_indices)?;
     let instance_bytes = pack_render_instances(&instances)?;
-    let variable_params = variable_params(instances.len(), arguments.band_count)?;
     let initial_weights = source_weights(arguments.weight)?;
 
     println!(
@@ -168,21 +168,41 @@ fn main() -> Result<()> {
         return Ok(());
     }
     let packed = packed.expect("non-build-only execution creates contiguous benchmark bytes");
+    let maximum_resident_binding = usize::try_from(
+        adapter
+            .limits()
+            .max_storage_buffer_binding_size
+            .min(adapter.limits().max_buffer_size),
+    )? / 4
+        * 4;
+    let atlas_split_offset = packed.as_bytes().len().min(maximum_resident_binding);
+    let second_atlas_length = packed.as_bytes().len() - atlas_split_offset;
+    if second_atlas_length > maximum_resident_binding {
+        return Err("variable atlas exceeds two storage buffer bindings".into());
+    }
+    let placeholder = [0_u8; 4];
+    let first_atlas_bytes = &packed.as_bytes()[..atlas_split_offset];
+    let second_atlas_bytes = &packed.as_bytes()[atlas_split_offset..];
+    let first_atlas_contents = if first_atlas_bytes.is_empty() {
+        &placeholder
+    } else {
+        first_atlas_bytes
+    };
+    let second_atlas_contents = if second_atlas_bytes.is_empty() {
+        &placeholder
+    } else {
+        second_atlas_bytes
+    };
+    let variable_params = pack_variable_params(VariableParams {
+        instance_count: u32::try_from(instances.len())?,
+        band_count: arguments.band_count,
+        atlas_split_offset: u32::try_from(atlas_split_offset)?,
+        layout,
+    })?;
 
-    let largest_binding = layout
-        .base_curves
-        .length
-        .max(layout.curve_deltas.length)
-        .max(layout.sparse_deltas.length)
-        .max(layout.glyphs.length)
-        .max(layout.sources.length)
-        .max(layout.source_advances.length)
-        .max(layout.component_glyphs.length)
-        .max(layout.component_parts.length)
-        .max(layout.components.length)
-        .max(layout.component_sources.length)
-        .max(layout.anchor_sources.length)
-        .max(layout.line_bits.length)
+    let largest_binding = first_atlas_contents
+        .len()
+        .max(second_atlas_contents.len())
         .max(scratch.curve_count * 24)
         .max(scratch.band_count * 8)
         .max(scratch.index_count * 4)
@@ -192,13 +212,10 @@ fn main() -> Result<()> {
     let mut required_limits = wgpu::Limits::default();
     required_limits.max_buffer_size = required_limits
         .max_buffer_size
-        .max(u64::try_from(layout.total_length)?)
-        .max(u64::try_from(scratch_bytes(scratch)?)?);
+        .max(u64::try_from(largest_binding)?);
     required_limits.max_storage_buffer_binding_size = required_limits
         .max_storage_buffer_binding_size
         .max(u64::try_from(largest_binding)?);
-    required_limits.max_storage_buffers_per_shader_stage =
-        required_limits.max_storage_buffers_per_shader_stage.max(18);
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("shift-slug variable benchmark device"),
         required_features: wgpu::Features::empty(),
@@ -208,9 +225,14 @@ fn main() -> Result<()> {
         trace: wgpu::Trace::Off,
     }))?;
 
-    let atlas_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("shift-slug variable atlas"),
-        contents: packed.as_bytes(),
+    let atlas_first_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("shift-slug variable atlas first"),
+        contents: first_atlas_contents,
+        usage: BufferUsages::STORAGE,
+    });
+    let atlas_second_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("shift-slug variable atlas second"),
+        contents: second_atlas_contents,
         usage: BufferUsages::STORAGE,
     });
     let instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -330,8 +352,8 @@ fn main() -> Result<()> {
         &device,
         &resolve_pipeline,
         &instance_buffer,
-        &atlas_buffer,
-        layout,
+        &atlas_first_buffer,
+        &atlas_second_buffer,
         &weight_buffer,
         &variable_buffer,
         &resolved_curve_buffer,
@@ -343,8 +365,8 @@ fn main() -> Result<()> {
         &device,
         &band_pipeline,
         &instance_buffer,
-        &atlas_buffer,
-        layout,
+        &atlas_first_buffer,
+        &atlas_second_buffer,
         &variable_buffer,
         &resolved_curve_buffer,
         &resolved_band_buffer,
@@ -775,13 +797,6 @@ fn pixel_to_em_transform(cell_rect: [f32; 4], fitted_bounds: [f32; 4]) -> [f32; 
     ]
 }
 
-fn variable_params(instances: usize, band_count: u32) -> Result<[u8; 16]> {
-    let mut bytes = [0; 16];
-    bytes[0..4].copy_from_slice(&u32::try_from(instances)?.to_le_bytes());
-    bytes[4..8].copy_from_slice(&band_count.to_le_bytes());
-    Ok(bytes)
-}
-
 fn source_weights(source_weight: f32) -> Result<[u8; 8]> {
     if !source_weight.is_finite() {
         return Err("weight must be finite".into());
@@ -887,8 +902,8 @@ fn create_resolve_groups(
     device: &Device,
     pipeline: &wgpu::ComputePipeline,
     instance_buffer: &wgpu::Buffer,
-    atlas_buffer: &wgpu::Buffer,
-    layout: shift_slug::VariableLayout,
+    atlas_first_buffer: &wgpu::Buffer,
+    atlas_second_buffer: &wgpu::Buffer,
     weight_buffer: &wgpu::Buffer,
     variable_buffer: &wgpu::Buffer,
     resolved_curve_buffer: &wgpu::Buffer,
@@ -908,26 +923,22 @@ fn create_resolve_groups(
         label: Some("shift-slug resolve resident model"),
         layout: &pipeline.get_bind_group_layout(1),
         entries: &[
-            atlas_entry(0, atlas_buffer, layout.base_curves),
-            atlas_entry(1, atlas_buffer, layout.curve_deltas),
-            atlas_entry(2, atlas_buffer, layout.glyphs),
-            atlas_entry(3, atlas_buffer, layout.sources),
             BindGroupEntry {
-                binding: 4,
+                binding: 0,
+                resource: atlas_first_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
                 resource: weight_buffer.as_entire_binding(),
             },
             BindGroupEntry {
-                binding: 5,
+                binding: 2,
                 resource: variable_buffer.as_entire_binding(),
             },
-            atlas_entry(6, atlas_buffer, layout.line_bits),
-            atlas_entry(7, atlas_buffer, layout.sparse_deltas),
-            atlas_entry(8, atlas_buffer, layout.source_advances),
-            atlas_entry(9, atlas_buffer, layout.component_glyphs),
-            atlas_entry(10, atlas_buffer, layout.component_parts),
-            atlas_entry(11, atlas_buffer, layout.components),
-            atlas_entry(12, atlas_buffer, layout.component_sources),
-            atlas_entry(13, atlas_buffer, layout.anchor_sources),
+            BindGroupEntry {
+                binding: 3,
+                resource: atlas_second_buffer.as_entire_binding(),
+            },
         ],
     });
     let group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -960,8 +971,8 @@ fn create_band_groups(
     device: &Device,
     pipeline: &wgpu::ComputePipeline,
     instance_buffer: &wgpu::Buffer,
-    atlas_buffer: &wgpu::Buffer,
-    layout: shift_slug::VariableLayout,
+    atlas_first_buffer: &wgpu::Buffer,
+    atlas_second_buffer: &wgpu::Buffer,
     variable_buffer: &wgpu::Buffer,
     resolved_curve_buffer: &wgpu::Buffer,
     resolved_band_buffer: &wgpu::Buffer,
@@ -980,10 +991,17 @@ fn create_band_groups(
         label: Some("shift-slug band resident model"),
         layout: &pipeline.get_bind_group_layout(1),
         entries: &[
-            atlas_entry(2, atlas_buffer, layout.glyphs),
             BindGroupEntry {
-                binding: 5,
+                binding: 0,
+                resource: atlas_first_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 2,
                 resource: variable_buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: atlas_second_buffer.as_entire_binding(),
             },
         ],
     });
@@ -1042,7 +1060,7 @@ fn create_render_groups(
         label: Some("shift-slug variable render model"),
         layout: &pipeline.get_bind_group_layout(1),
         entries: &[BindGroupEntry {
-            binding: 5,
+            binding: 2,
             resource: variable_buffer.as_entire_binding(),
         }],
     });
@@ -1069,21 +1087,6 @@ fn create_render_groups(
         ],
     });
     [group0, group1, group2]
-}
-
-fn atlas_entry(
-    binding: u32,
-    buffer: &wgpu::Buffer,
-    section: shift_slug::Section,
-) -> BindGroupEntry<'_> {
-    BindGroupEntry {
-        binding,
-        resource: BindingResource::Buffer(BufferBinding {
-            buffer,
-            offset: section.offset as u64,
-            size: NonZeroU64::new(section.length as u64),
-        }),
-    }
 }
 
 fn scratch_bytes(layout: ScratchLayout) -> Result<usize> {

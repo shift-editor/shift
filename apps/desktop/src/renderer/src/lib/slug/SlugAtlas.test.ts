@@ -3,8 +3,11 @@ import type { GlyphId, SlugAtlas, SlugSection, SourceId } from "@shift/types";
 import {
   captureSlugAtlasSections,
   createSlugAtlasSections,
+  createSlugAtlasSplit,
   createSlugFrame,
   createSlugGlyphMap,
+  createSlugVariableParams,
+  writeSlugAtlasChunk,
 } from "./SlugAtlas";
 
 const emptySection = (): SlugSection => ({ offset: 0, length: 0 });
@@ -52,7 +55,64 @@ function residentFixture(): { atlas: SlugAtlas; bytes: Uint8Array<ArrayBuffer> }
   return { atlas, bytes };
 }
 
+describe("resident Slug atlas splitting", () => {
+  it("uses one real partition and one placeholder below the binding limit", () => {
+    expect(createSlugAtlasSplit(12, 16)).toEqual({
+      splitOffset: 12,
+      firstLength: 12,
+      secondLength: 4,
+    });
+    expect(createSlugAtlasSplit(16, 16)).toEqual({
+      splitOffset: 16,
+      firstLength: 16,
+      secondLength: 4,
+    });
+  });
+
+  it("splits an atlas that crosses the binding limit", () => {
+    expect(createSlugAtlasSplit(24, 16)).toEqual({
+      splitOffset: 16,
+      firstLength: 16,
+      secondLength: 8,
+    });
+    expect(() => createSlugAtlasSplit(36, 16)).toThrow(
+      "resident Slug atlas exceeds two storage buffer bindings",
+    );
+  });
+
+  it("routes a streaming chunk across the split without changing bytes", () => {
+    const firstBuffer = {} as GPUBuffer;
+    const secondBuffer = {} as GPUBuffer;
+    const writes: { buffer: GPUBuffer; offset: number; bytes: number[] }[] = [];
+    const queue = {
+      writeBuffer(buffer: GPUBuffer, offset: number, bytes: Uint8Array<ArrayBuffer>) {
+        writes.push({ buffer, offset, bytes: Array.from(bytes) });
+      },
+    } as unknown as GPUQueue;
+
+    writeSlugAtlasChunk(
+      queue,
+      { firstBuffer, secondBuffer, splitOffset: 16 },
+      12,
+      new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
+    );
+
+    expect(writes).toEqual([
+      { buffer: firstBuffer, offset: 12, bytes: [1, 2, 3, 4] },
+      { buffer: secondBuffer, offset: 0, bytes: [5, 6, 7, 8] },
+    ]);
+  });
+});
+
 describe("resident Slug frame planning", () => {
+  it("packs counts, the split, and resident atlas offsets for the shared shader", () => {
+    const { atlas } = residentFixture();
+
+    expect(Array.from(createSlugVariableParams(atlas, 3, 128))).toEqual([
+      3, 8, 128, 0, 0, 0, 0, 256, 0, 0, 512, 0, 0, 0, 0, 0,
+    ]);
+  });
+
   it("captures split descriptors and plans an exact component variant", () => {
     const { atlas, bytes } = residentFixture();
     const sections = createSlugAtlasSections(atlas);

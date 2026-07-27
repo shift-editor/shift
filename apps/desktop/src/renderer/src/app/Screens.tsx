@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { Landing } from "@/views/Landing";
 import { Home } from "@/views/Home";
@@ -31,7 +31,7 @@ export const Screens = () => {
           </WorkspaceProvider>
         }
       >
-        <Route path="/home" element={<Home />} />
+        <Route path="/home" />
         <Route path="/editor/:glyphId" element={<Editor />} />
       </Route>
       <Route path="*" element={<Navigate to="/launcher" replace />} />
@@ -43,6 +43,7 @@ const WorkspaceScreens = () => {
   const workspace = useWorkspace();
   const font = useFont();
   const editor = useEditor();
+  const location = useLocation();
   const documentLoaded = useSignalState(font.loadedCell);
   const [connectionError, setConnectionError] = useState<unknown>(null);
 
@@ -81,8 +82,15 @@ const WorkspaceScreens = () => {
 
   if (!documentLoaded) return null;
 
+  // Preserve the resident catalog atlas across screen navigation. Route visibility
+  // must not own the WebGPU device or trigger another complete atlas upload.
+  const catalogVisible = location.pathname === "/home";
+
   return (
     <SettingsNavigationProvider>
+      <div hidden={!catalogVisible}>
+        <Home />
+      </div>
       <Outlet />
     </SettingsNavigationProvider>
   );

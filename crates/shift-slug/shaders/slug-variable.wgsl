@@ -10,7 +10,20 @@ struct GlobalParams {
 struct VariableParams {
     instance_count: u32,
     band_count: u32,
-    _padding: vec2<u32>,
+    atlas_split_offset: u32,
+    _padding: u32,
+    base_curves_offset: u32,
+    curve_deltas_offset: u32,
+    sparse_deltas_offset: u32,
+    glyphs_offset: u32,
+    sources_offset: u32,
+    source_advances_offset: u32,
+    component_glyphs_offset: u32,
+    component_parts_offset: u32,
+    components_offset: u32,
+    component_sources_offset: u32,
+    anchor_sources_offset: u32,
+    line_bits_offset: u32,
 };
 
 struct PreviewParams {
@@ -111,20 +124,10 @@ struct VertexOutput {
 
 @group(0) @binding(0) var<uniform> params: GlobalParams;
 @group(0) @binding(1) var<storage, read> instances: array<Instance>;
-@group(1) @binding(0) var<storage, read> base_curves: array<Curve>;
-@group(1) @binding(1) var<storage, read> curve_deltas: array<Curve>;
-@group(1) @binding(2) var<storage, read> variable_glyphs: array<VariableGlyph>;
-@group(1) @binding(3) var<storage, read> variable_sources: array<VariableSource>;
-@group(1) @binding(4) var<storage, read> source_weights: array<f32>;
-@group(1) @binding(5) var<uniform> variable: VariableParams;
-@group(1) @binding(6) var<storage, read> line_bits: array<u32>;
-@group(1) @binding(7) var<storage, read> sparse_deltas: array<u32>;
-@group(1) @binding(8) var<storage, read> source_advances: array<f32>;
-@group(1) @binding(9) var<storage, read> component_glyphs: array<VariableComponentGlyph>;
-@group(1) @binding(10) var<storage, read> component_parts: array<VariableComponentPart>;
-@group(1) @binding(11) var<storage, read> components: array<VariableComponent>;
-@group(1) @binding(12) var<storage, read> component_sources: array<VariableComponentSource>;
-@group(1) @binding(13) var<storage, read> anchor_sources: array<VariableAnchorSource>;
+@group(1) @binding(0) var<storage, read> resident_atlas_first: array<u32>;
+@group(1) @binding(1) var<storage, read> source_weights: array<f32>;
+@group(1) @binding(2) var<uniform> variable: VariableParams;
+@group(1) @binding(3) var<storage, read> resident_atlas_second: array<u32>;
 @group(2) @binding(0) var<storage, read_write> resolved_curves: array<Curve>;
 @group(2) @binding(1) var<storage, read_write> resolved_bands: array<Band>;
 @group(2) @binding(2) var<storage, read_write> resolved_indices: array<u32>;
@@ -136,6 +139,107 @@ struct VertexOutput {
 
 var<workgroup> workgroup_curve_bounds: array<vec4<f32>, 64>;
 var<workgroup> workgroup_transform_start: u32;
+
+fn atlas_u32(byte_offset: u32) -> u32 {
+    if byte_offset < variable.atlas_split_offset {
+        return resident_atlas_first[byte_offset / 4u];
+    }
+    return resident_atlas_second[(byte_offset - variable.atlas_split_offset) / 4u];
+}
+
+fn atlas_f32(byte_offset: u32) -> f32 {
+    return bitcast<f32>(atlas_u32(byte_offset));
+}
+
+fn read_curve(byte_offset: u32) -> Curve {
+    return Curve(
+        vec2<f32>(atlas_f32(byte_offset), atlas_f32(byte_offset + 4u)),
+        vec2<f32>(atlas_f32(byte_offset + 8u), atlas_f32(byte_offset + 12u)),
+        vec2<f32>(atlas_f32(byte_offset + 16u), atlas_f32(byte_offset + 20u)),
+    );
+}
+
+fn read_variable_glyph(index: u32) -> VariableGlyph {
+    let offset = variable.glyphs_offset + index * 32u;
+    return VariableGlyph(
+        vec4<f32>(
+            atlas_f32(offset),
+            atlas_f32(offset + 4u),
+            atlas_f32(offset + 8u),
+            atlas_f32(offset + 12u),
+        ),
+        atlas_u32(offset + 16u),
+        atlas_u32(offset + 20u),
+        atlas_u32(offset + 24u),
+        atlas_u32(offset + 28u),
+    );
+}
+
+fn read_variable_source(index: u32) -> VariableSource {
+    let offset = variable.sources_offset + index * 8u;
+    return VariableSource(atlas_u32(offset), atlas_u32(offset + 4u));
+}
+
+fn read_component_glyph(index: u32) -> VariableComponentGlyph {
+    let offset = variable.component_glyphs_offset + index * 24u;
+    return VariableComponentGlyph(
+        atlas_u32(offset),
+        atlas_u32(offset + 4u),
+        atlas_u32(offset + 8u),
+        atlas_u32(offset + 12u),
+        atlas_u32(offset + 16u),
+        atlas_u32(offset + 20u),
+    );
+}
+
+fn read_component_part(index: u32) -> VariableComponentPart {
+    let offset = variable.component_parts_offset + index * 16u;
+    return VariableComponentPart(
+        atlas_u32(offset),
+        atlas_u32(offset + 4u),
+        atlas_u32(offset + 8u),
+        atlas_u32(offset + 12u),
+    );
+}
+
+fn read_component(index: u32) -> VariableComponent {
+    let offset = variable.components_offset + index * 32u;
+    return VariableComponent(
+        atlas_u32(offset),
+        atlas_u32(offset + 4u),
+        atlas_u32(offset + 8u),
+        atlas_u32(offset + 12u),
+        atlas_u32(offset + 16u),
+        atlas_u32(offset + 20u),
+        atlas_u32(offset + 24u),
+        atlas_u32(offset + 28u),
+    );
+}
+
+fn read_component_source(index: u32) -> VariableComponentSource {
+    let offset = variable.component_sources_offset + index * 40u;
+    return VariableComponentSource(
+        atlas_u32(offset),
+        atlas_f32(offset + 4u),
+        atlas_f32(offset + 8u),
+        atlas_f32(offset + 12u),
+        atlas_f32(offset + 16u),
+        atlas_f32(offset + 20u),
+        atlas_f32(offset + 24u),
+        atlas_f32(offset + 28u),
+        atlas_f32(offset + 32u),
+        atlas_f32(offset + 36u),
+    );
+}
+
+fn read_anchor_source(index: u32) -> VariableAnchorSource {
+    let offset = variable.anchor_sources_offset + index * 12u;
+    return VariableAnchorSource(
+        atlas_u32(offset),
+        atlas_f32(offset + 4u),
+        atlas_f32(offset + 8u),
+    );
+}
 
 fn scale_curve(curve: Curve, scale: f32) -> Curve {
     var result: Curve;
@@ -171,7 +275,7 @@ fn regenerate_line_control(curve: Curve) -> Curve {
 fn direct_weight_sum(glyph: VariableGlyph) -> f32 {
     var result = 0.0;
     for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
-        let source = variable_sources[glyph.source_start + source_offset];
+        let source = read_variable_source(glyph.source_start + source_offset);
         result += source_weights[source.weight_index];
     }
     return result;
@@ -181,17 +285,19 @@ fn direct_advance(glyph: VariableGlyph) -> f32 {
     var result = 0.0;
     for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
         let source_index = glyph.source_start + source_offset;
-        let source = variable_sources[source_index];
-        result += source_advances[source_index] * source_weights[source.weight_index];
+        let source = read_variable_source(source_index);
+        let advance = atlas_f32(variable.source_advances_offset + source_index * 4u);
+        result += advance * source_weights[source.weight_index];
     }
     return result;
 }
 
 fn resolve_direct_curve(glyph: VariableGlyph, local_curve: u32, weight_sum: f32) -> Curve {
     let curve_index = glyph.curve_start + local_curve;
-    var curve = scale_curve(base_curves[curve_index], weight_sum);
+    let base_offset = variable.base_curves_offset + curve_index * 24u;
+    var curve = scale_curve(read_curve(base_offset), weight_sum);
     for (var source_offset = 0u; source_offset < glyph.source_count; source_offset += 1u) {
-        let source = variable_sources[glyph.source_start + source_offset];
+        let source = read_variable_source(glyph.source_start + source_offset);
         if source.delta_start == 0xffffffffu {
             continue;
         }
@@ -200,29 +306,40 @@ fn resolve_direct_curve(glyph: VariableGlyph, local_curve: u32, weight_sum: f32)
         var delta_offset = local_curve;
         if (source.delta_start & 0x80000000u) != 0u {
             let descriptor_start = source.delta_start & 0x7fffffffu;
-            delta_start = sparse_deltas[descriptor_start];
-            let delta_count = sparse_deltas[descriptor_start + 1u];
+            delta_start = atlas_u32(variable.sparse_deltas_offset + descriptor_start * 4u);
+            let delta_count = atlas_u32(
+                variable.sparse_deltas_offset + (descriptor_start + 1u) * 4u,
+            );
             let index_start = descriptor_start + 2u;
             delta_offset = 0xffffffffu;
             var lower = 0u;
             var upper = delta_count;
             while lower < upper {
                 let middle = lower + (upper - lower) / 2u;
-                let candidate = sparse_deltas[index_start + middle];
+                let candidate = atlas_u32(
+                    variable.sparse_deltas_offset + (index_start + middle) * 4u,
+                );
                 if candidate < local_curve {
                     lower = middle + 1u;
                 } else {
                     upper = middle;
                 }
             }
-            if lower < delta_count && sparse_deltas[index_start + lower] == local_curve {
-                delta_offset = lower;
+            if lower < delta_count {
+                let candidate = atlas_u32(
+                    variable.sparse_deltas_offset + (index_start + lower) * 4u,
+                );
+                if candidate == local_curve {
+                    delta_offset = lower;
+                }
             }
         }
         if delta_offset != 0xffffffffu {
+            let delta_offset_bytes = variable.curve_deltas_offset
+                + (delta_start + delta_offset) * 24u;
             curve = add_scaled_curve(
                 curve,
-                curve_deltas[delta_start + delta_offset],
+                read_curve(delta_offset_bytes),
                 source_weights[source.weight_index],
             );
         }
@@ -232,7 +349,8 @@ fn resolve_direct_curve(glyph: VariableGlyph, local_curve: u32, weight_sum: f32)
 
 fn direct_curve_is_line(glyph: VariableGlyph, local_curve: u32) -> bool {
     let curve_index = glyph.curve_start + local_curve;
-    return (line_bits[curve_index / 32u] & (1u << (curve_index % 32u))) != 0u;
+    let word = atlas_u32(variable.line_bits_offset + (curve_index / 32u) * 4u);
+    return (word & (1u << (curve_index % 32u))) != 0u;
 }
 
 fn identity_affine() -> Affine {
@@ -266,7 +384,7 @@ fn compose_affine(outer: Affine, inner: Affine) -> Affine {
 fn component_affine(component: VariableComponent) -> Affine {
     var values = array<f32, 9>();
     for (var source_offset = 0u; source_offset < component.source_count; source_offset += 1u) {
-        let source = component_sources[component.source_start + source_offset];
+        let source = read_component_source(component.source_start + source_offset);
         let weight = source_weights[source.weight_index];
         values[0] += source.translate_x * weight;
         values[1] += source.translate_y * weight;
@@ -296,7 +414,7 @@ fn component_affine(component: VariableComponent) -> Affine {
 fn anchor_point(source_start: u32, source_count: u32) -> vec2<f32> {
     var result = vec2<f32>(0.0);
     for (var source_offset = 0u; source_offset < source_count; source_offset += 1u) {
-        let source = anchor_sources[source_start + source_offset];
+        let source = read_anchor_source(source_start + source_offset);
         result += vec2<f32>(source.x, source.y) * source_weights[source.weight_index];
     }
     return result;
@@ -305,9 +423,9 @@ fn anchor_point(source_start: u32, source_count: u32) -> vec2<f32> {
 fn transform_scratch_start(instance_index: u32) -> u32 {
     var result = 0u;
     for (var prior_instance = 0u; prior_instance < instance_index; prior_instance += 1u) {
-        let glyph = variable_glyphs[instances[prior_instance].glyph.x];
+        let glyph = read_variable_glyph(instances[prior_instance].glyph.x);
         if (glyph.source_start & 0x80000000u) != 0u {
-            let descriptor = component_glyphs[glyph.source_start & 0x7fffffffu];
+            let descriptor = read_component_glyph(glyph.source_start & 0x7fffffffu);
             result += descriptor.component_count * 2u;
         }
     }
@@ -325,7 +443,7 @@ fn resolve_visible_curves(
     }
 
     let instance = instances[instance_index];
-    let glyph = variable_glyphs[instance.glyph.x];
+    let glyph = read_variable_glyph(instance.glyph.x);
     let is_component_glyph = (glyph.source_start & 0x80000000u) != 0u;
     let maximum_f32 = 3.402823466e+38;
     var local_min = vec2<f32>(maximum_f32);
@@ -333,8 +451,8 @@ fn resolve_visible_curves(
     var glyph_advance = 0.0;
 
     if is_component_glyph {
-        let descriptor = component_glyphs[glyph.source_start & 0x7fffffffu];
-        let root_glyph = variable_glyphs[descriptor.root_glyph_index];
+        let descriptor = read_component_glyph(glyph.source_start & 0x7fffffffu);
+        let root_glyph = read_variable_glyph(descriptor.root_glyph_index);
         glyph_advance = direct_advance(root_glyph);
         if local_id.x == 0u {
             workgroup_transform_start = transform_scratch_start(instance_index);
@@ -345,7 +463,7 @@ fn resolve_visible_curves(
             let local_start = workgroup_transform_start;
             let resolved_start = local_start + descriptor.component_count;
             for (var component_index = 0u; component_index < descriptor.component_count; component_index += 1u) {
-                let component = components[descriptor.component_start + component_index];
+                let component = read_component(descriptor.component_start + component_index);
                 var local_transform = component_affine(component);
                 if component.target_component != 0xffffffffu {
                     let source_anchor = anchor_point(
@@ -381,8 +499,8 @@ fn resolve_visible_curves(
 
         let resolved_start = workgroup_transform_start + descriptor.component_count;
         for (var part_offset = 0u; part_offset < descriptor.part_count; part_offset += 1u) {
-            let part = component_parts[descriptor.part_start + part_offset];
-            let direct_glyph = variable_glyphs[part.glyph_index];
+            let part = read_component_part(descriptor.part_start + part_offset);
+            let direct_glyph = read_variable_glyph(part.glyph_index);
             let weight_sum = direct_weight_sum(direct_glyph);
             var transform = identity_affine();
             if part.component_index != 0xffffffffu {
@@ -465,7 +583,7 @@ fn rebuild_visible_bands(@builtin(workgroup_id) workgroup_id: vec3<u32>) {
 
     let local_band = workgroup_id.x % bands_per_glyph;
     let instance = instances[instance_index];
-    let glyph = variable_glyphs[instance.glyph.x];
+    let glyph = read_variable_glyph(instance.glyph.x);
     let horizontal = local_band < variable.band_count;
     let direction_band = select(local_band - variable.band_count, local_band, horizontal);
     let glyph_bounds = resolved_glyph_bounds[instance_index];
@@ -539,26 +657,30 @@ fn vertex_variable_preview(
     let advance = preview_resolved_advances[instance_index];
     let side_margin = preview.geometry.w;
     let view_width = max(advance + 2.0 * side_margin, 1.0);
+    let preview_height = max(preview.geometry.z, 1.0);
     let requested_size = vec2<f32>(
-        max(preview.geometry.z, preview.geometry.z * view_width / view_height),
-        preview.geometry.z,
+        max(preview_height, preview_height * view_width / view_height),
+        preview_height,
     );
     let preview_size = min(content_size, requested_size);
-    let preview_min = (instance.pixel_rect.xy + instance.pixel_rect.zw - preview_size) * 0.5;
-    let preview_max = preview_min + preview_size;
-    let pixel_position = mix(preview_min, preview_max, quad_coordinate(vertex_index));
+    let pixels_per_em = min(preview_size.x / view_width, preview_size.y / view_height);
+    let render_size = vec2<f32>(view_width, view_height) * pixels_per_em;
+    let render_min = (instance.pixel_rect.xy + instance.pixel_rect.zw - render_size) * 0.5;
+    let render_max = render_min + render_size;
+    let pixel_position = mix(render_min, render_max, quad_coordinate(vertex_index));
     let clip_position = vec2<f32>(
         pixel_position.x / params.viewport_size.x * 2.0 - 1.0,
         1.0 - pixel_position.y / params.viewport_size.y * 2.0,
     );
-    let em_scale = vec2<f32>(view_width / preview_size.x, -view_height / preview_size.y);
+    let ems_per_pixel = 1.0 / max(pixels_per_em, 1.0 / 65536.0);
+    let em_scale = vec2<f32>(ems_per_pixel, -ems_per_pixel);
 
     var output: VertexOutput;
     output.position = vec4<f32>(clip_position, 0.0, 1.0);
     output.em_scale = em_scale;
     output.em_offset = vec2<f32>(
-        -side_margin - preview_min.x * em_scale.x,
-        preview.geometry.y - preview_min.y * em_scale.y,
+        -side_margin - render_min.x * em_scale.x,
+        preview.geometry.y - render_min.y * em_scale.y,
     );
     output.instance_index = instance_index;
     return output;

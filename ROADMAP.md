@@ -989,7 +989,7 @@ The authoritative milestone plan is the release roadmap at the top of this file.
 - [ ] WebGL/GPU path rendering
 - [ ] Off-screen canvas for grid thumbnails
 - [ ] Web Workers for computation
-- [ ] Virtual scrolling for large glyph sets
+- [x] Virtual scrolling for large glyph sets
 - [ ] Snapshot diffing for minimal redraws
 
 **Developer Experience**

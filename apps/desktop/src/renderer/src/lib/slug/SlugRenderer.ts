@@ -1,4 +1,4 @@
-import type { Axis, SlugAtlas, SlugSection } from "@shift/types";
+import type { Axis, SlugAtlas } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type {
   SlugAtlasSections,
@@ -7,9 +7,15 @@ import type {
   SlugRendererOptions,
   SlugScratch,
 } from "@/types/slug";
-import { createSlugFrame, createSlugGlyphMap, slugWeights } from "./SlugAtlas";
+import {
+  createSlugFrame,
+  createSlugGlyphMap,
+  createSlugVariableParams,
+  slugWeights,
+} from "./SlugAtlas";
 import variableShader from "../../../../../../../crates/shift-slug/shaders/slug-variable.wgsl?raw";
 
+const INSTANCE_BYTES = 48;
 const CURVE_BYTES = 24;
 const BAND_BYTES = 8;
 const INDEX_BYTES = 4;
@@ -17,12 +23,13 @@ const BOUNDS_BYTES = 16;
 const ADVANCE_BYTES = 4;
 const COMPONENT_TRANSFORM_BYTES = 32;
 const PREVIEW_BYTES = 32;
-const PARAM_BYTES = 16;
+const GLOBAL_PARAM_BYTES = 16;
+const VARIABLE_PARAM_BYTES = 64;
 
-/** Owns one WebGPU generation for the home-grid Slug fill. */
+/** Owns one WebGPU generation for Slug catalog previews. */
 export class SlugRenderer {
   readonly #atlas: SlugAtlas;
-  readonly #atlasBuffer: GPUBuffer;
+  readonly #residentAtlas: SlugRendererOptions["residentAtlas"];
   readonly #sections: SlugAtlasSections;
   readonly #device: GPUDevice;
   readonly #context: GPUCanvasContext;
@@ -47,13 +54,13 @@ export class SlugRenderer {
   #resolveGroups: readonly GPUBindGroup[] = [];
   #bandGroups: readonly GPUBindGroup[] = [];
   #renderGroups: readonly GPUBindGroup[] = [];
-  #instanceCapacity = 0;
+  #instanceCapacity = INSTANCE_BYTES;
   #scratchCapacity: SlugScratch = {
-    curveCount: 0,
-    bandCount: 0,
-    indexCount: 0,
-    glyphCount: 0,
-    componentTransformCount: 0,
+    curveCount: 1,
+    bandCount: 1,
+    indexCount: 1,
+    glyphCount: 1,
+    componentTransformCount: 1,
   };
   #disposed = false;
   #atlasUploadBytes = 0;
@@ -64,7 +71,7 @@ export class SlugRenderer {
 
   constructor(options: SlugRendererOptions) {
     this.#atlas = options.atlas;
-    this.#atlasBuffer = options.atlasBuffer;
+    this.#residentAtlas = options.residentAtlas;
     this.#sections = options.sections;
     this.#device = options.device;
     this.#context = options.context;
@@ -98,8 +105,12 @@ export class SlugRenderer {
       primitive: { topology: "triangle-list" },
     });
 
-    this.#globalBuffer = uniformBuffer(this.#device, "shift Slug globals", PARAM_BYTES);
-    this.#variableBuffer = uniformBuffer(this.#device, "shift Slug variable params", PARAM_BYTES);
+    this.#globalBuffer = uniformBuffer(this.#device, "shift Slug globals", GLOBAL_PARAM_BYTES);
+    this.#variableBuffer = uniformBuffer(
+      this.#device,
+      "shift Slug variable params",
+      VARIABLE_PARAM_BYTES,
+    );
     this.#previewBuffer = uniformBuffer(this.#device, "shift Slug preview params", PREVIEW_BYTES);
     this.#weightBuffer = storageBuffer(
       this.#device,
@@ -107,16 +118,16 @@ export class SlugRenderer {
       this.#atlas.weightCount * 4,
       GPUBufferUsage.COPY_DST,
     );
-    this.#instanceBuffer = storageBuffer(this.#device, "shift Slug instances", 4);
-    this.#resolvedCurveBuffer = storageBuffer(this.#device, "shift Slug curves", 4);
-    this.#resolvedBandBuffer = storageBuffer(this.#device, "shift Slug bands", 4);
-    this.#resolvedIndexBuffer = storageBuffer(this.#device, "shift Slug indexes", 4);
-    this.#resolvedBoundsBuffer = storageBuffer(this.#device, "shift Slug bounds", 4);
-    this.#resolvedAdvanceBuffer = storageBuffer(this.#device, "shift Slug advances", 4);
+    this.#instanceBuffer = storageBuffer(this.#device, "shift Slug instances", INSTANCE_BYTES);
+    this.#resolvedCurveBuffer = storageBuffer(this.#device, "shift Slug curves", CURVE_BYTES);
+    this.#resolvedBandBuffer = storageBuffer(this.#device, "shift Slug bands", BAND_BYTES);
+    this.#resolvedIndexBuffer = storageBuffer(this.#device, "shift Slug indexes", INDEX_BYTES);
+    this.#resolvedBoundsBuffer = storageBuffer(this.#device, "shift Slug bounds", BOUNDS_BYTES);
+    this.#resolvedAdvanceBuffer = storageBuffer(this.#device, "shift Slug advances", ADVANCE_BYTES);
     this.#resolvedComponentTransformBuffer = storageBuffer(
       this.#device,
       "shift Slug component transforms",
-      4,
+      COMPONENT_TRANSFORM_BYTES,
     );
     this.#createBindGroups();
 
@@ -150,7 +161,8 @@ export class SlugRenderer {
       Math.max(4, this.#atlas.weightCount * 4) +
       Math.max(4, this.#instanceCapacity) +
       PREVIEW_BYTES +
-      PARAM_BYTES * 2;
+      GLOBAL_PARAM_BYTES +
+      VARIABLE_PARAM_BYTES;
     return {
       atlasUploadBytes: this.#atlasUploadBytes,
       residentBufferBytes,
@@ -171,7 +183,8 @@ export class SlugRenderer {
     const packed = createSlugFrame(this.#atlas, this.#sections, this.#glyphs, frame.selections);
     this.#ensureCapacity(packed.instances.byteLength, packed.scratch);
     if (packed.instanceCount === 0) {
-      this.#clear();
+      if (frame.selections.length === 0) this.#clear();
+
       return;
     }
 
@@ -185,7 +198,7 @@ export class SlugRenderer {
     this.#device.queue.writeBuffer(
       this.#variableBuffer,
       0,
-      new Uint32Array([packed.instanceCount, this.#atlas.bandCount, 0, 0]),
+      createSlugVariableParams(this.#atlas, packed.instanceCount, this.#residentAtlas.splitOffset),
     );
     this.#device.queue.writeBuffer(
       this.#previewBuffer,
@@ -246,7 +259,8 @@ export class SlugRenderer {
     this.#disposed = true;
     this.#context.unconfigure();
     this.#device.destroy();
-    this.#atlasBuffer.destroy();
+    this.#residentAtlas.firstBuffer.destroy();
+    this.#residentAtlas.secondBuffer.destroy();
   }
 
   #ensureCapacity(instanceBytes: number, scratch: SlugScratch): void {
@@ -332,20 +346,10 @@ export class SlugRenderer {
         label: "shift Slug resident atlas",
         layout: this.#resolvePipeline.getBindGroupLayout(1),
         entries: [
-          atlasEntry(0, this.#atlasBuffer, this.#atlas.layout.baseCurves),
-          atlasEntry(1, this.#atlasBuffer, this.#atlas.layout.curveDeltas),
-          atlasEntry(2, this.#atlasBuffer, this.#atlas.layout.glyphs),
-          atlasEntry(3, this.#atlasBuffer, this.#atlas.layout.sources),
-          { binding: 4, resource: { buffer: this.#weightBuffer } },
-          { binding: 5, resource: { buffer: this.#variableBuffer } },
-          atlasEntry(6, this.#atlasBuffer, this.#atlas.layout.lineBits),
-          atlasEntry(7, this.#atlasBuffer, this.#atlas.layout.sparseDeltas),
-          atlasEntry(8, this.#atlasBuffer, this.#atlas.layout.sourceAdvances),
-          atlasEntry(9, this.#atlasBuffer, this.#atlas.layout.componentGlyphs),
-          atlasEntry(10, this.#atlasBuffer, this.#atlas.layout.componentParts),
-          atlasEntry(11, this.#atlasBuffer, this.#atlas.layout.components),
-          atlasEntry(12, this.#atlasBuffer, this.#atlas.layout.componentSources),
-          atlasEntry(13, this.#atlasBuffer, this.#atlas.layout.anchorSources),
+          { binding: 0, resource: { buffer: this.#residentAtlas.firstBuffer } },
+          { binding: 1, resource: { buffer: this.#weightBuffer } },
+          { binding: 2, resource: { buffer: this.#variableBuffer } },
+          { binding: 3, resource: { buffer: this.#residentAtlas.secondBuffer } },
         ],
       }),
       this.#device.createBindGroup({
@@ -369,8 +373,9 @@ export class SlugRenderer {
         label: "shift Slug band atlas",
         layout: this.#bandPipeline.getBindGroupLayout(1),
         entries: [
-          atlasEntry(2, this.#atlasBuffer, this.#atlas.layout.glyphs),
-          { binding: 5, resource: { buffer: this.#variableBuffer } },
+          { binding: 0, resource: { buffer: this.#residentAtlas.firstBuffer } },
+          { binding: 2, resource: { buffer: this.#variableBuffer } },
+          { binding: 3, resource: { buffer: this.#residentAtlas.secondBuffer } },
         ],
       }),
       this.#device.createBindGroup({
@@ -396,7 +401,7 @@ export class SlugRenderer {
       this.#device.createBindGroup({
         label: "shift Slug render variable params",
         layout: this.#renderPipeline.getBindGroupLayout(1),
-        entries: [{ binding: 5, resource: { buffer: this.#variableBuffer } }],
+        entries: [{ binding: 2, resource: { buffer: this.#variableBuffer } }],
       }),
       this.#device.createBindGroup({
         label: "shift Slug render scratch",
@@ -452,27 +457,10 @@ export class SlugRenderer {
     this.#disposed = true;
     this.#context.unconfigure();
     this.#device.destroy();
-    this.#atlasBuffer.destroy();
+    this.#residentAtlas.firstBuffer.destroy();
+    this.#residentAtlas.secondBuffer.destroy();
     this.#onDeviceLost(reason);
   }
-}
-
-export function largestSlugBinding(atlas: SlugAtlas): number {
-  return Math.max(
-    4,
-    atlas.layout.baseCurves.length,
-    atlas.layout.curveDeltas.length,
-    atlas.layout.sparseDeltas.length,
-    atlas.layout.glyphs.length,
-    atlas.layout.sources.length,
-    atlas.layout.sourceAdvances.length,
-    atlas.layout.componentGlyphs.length,
-    atlas.layout.componentParts.length,
-    atlas.layout.components.length,
-    atlas.layout.componentSources.length,
-    atlas.layout.anchorSources.length,
-    atlas.layout.lineBits.length,
-  );
 }
 
 function uniformBuffer(device: GPUDevice, label: string, size: number): GPUBuffer {
@@ -489,16 +477,6 @@ function storageBuffer(device: GPUDevice, label: string, size: number, extraUsag
     size: Math.max(4, size),
     usage: GPUBufferUsage.STORAGE | extraUsage,
   });
-}
-
-function atlasEntry(binding: number, buffer: GPUBuffer, section: SlugSection): GPUBindGroupEntry {
-  return {
-    binding,
-    resource:
-      section.length === 0
-        ? { buffer, offset: 0, size: 4 }
-        : { buffer, offset: section.offset, size: section.length },
-  };
 }
 
 function setGroups(

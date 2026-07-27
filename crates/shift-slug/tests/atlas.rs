@@ -2,9 +2,10 @@ use shift_glyph_codec::OutlineCommand;
 #[cfg(feature = "wgpu-benchmark")]
 use shift_slug::SLUG_WGSL;
 use shift_slug::{
-    pack_render_instances, pack_render_params, AtlasBuilder, Curve, CurveIndexEncoding, Point,
-    RenderInstance, RenderParams, SlugError, VariableAtlasBuilder, LINE_EPSILON,
-    RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES,
+    pack_render_instances, pack_render_params, pack_variable_params, AtlasBuilder, Curve,
+    CurveIndexEncoding, Point, RenderInstance, RenderParams, Section, SlugError,
+    VariableAtlasBuilder, VariableLayout, VariableParams, CUBIC_APPROXIMATION_ACCURACY,
+    LINE_EPSILON, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, VARIABLE_PARAMS_BYTES,
 };
 
 #[test]
@@ -25,18 +26,53 @@ fn open_contours_are_closed_for_fill_rendering() {
 }
 
 #[test]
-fn cubic_conversion_is_deterministic_and_continuous() {
-    let curves = Curve::from_cubic(
+fn cubic_conversion_is_error_bounded_deterministic_and_continuous() {
+    let points = [
         Point::new(0.0, 0.0),
         Point::new(0.0, 100.0),
         Point::new(100.0, 100.0),
         Point::new(100.0, 0.0),
-    );
+    ];
+    let curves = Curve::from_cubic(points[0], points[1], points[2], points[3]);
 
-    assert_eq!(curves[0].p0, Point::new(0.0, 0.0));
-    assert_eq!(curves[0].p2, curves[1].p0);
-    assert_eq!(curves[1].p2, Point::new(100.0, 0.0));
-    assert_eq!(curves[0].p2, Point::new(50.0, 75.0));
+    assert_eq!(curves.len(), 3);
+    assert_eq!(curves[0].p0, points[0]);
+    assert_eq!(curves.last().unwrap().p2, points[3]);
+    assert!(curves.windows(2).all(|curves| curves[0].p2 == curves[1].p0));
+
+    let evaluate_cubic = |t: f32| {
+        let inverse = 1.0 - t;
+        let inverse_squared = inverse * inverse;
+        let t_squared = t * t;
+        Point::new(
+            points[0].x * inverse_squared * inverse
+                + 3.0 * points[1].x * inverse_squared * t
+                + 3.0 * points[2].x * inverse * t_squared
+                + points[3].x * t_squared * t,
+            points[0].y * inverse_squared * inverse
+                + 3.0 * points[1].y * inverse_squared * t
+                + 3.0 * points[2].y * inverse * t_squared
+                + points[3].y * t_squared * t,
+        )
+    };
+    let mut maximum_error = 0.0_f32;
+    for (index, curve) in curves.iter().enumerate() {
+        for sample in 0..=100 {
+            let local = sample as f32 / 100.0;
+            let inverse = 1.0 - local;
+            let quadratic = Point::new(
+                curve.p0.x * inverse * inverse
+                    + 2.0 * curve.p1.x * inverse * local
+                    + curve.p2.x * local * local,
+                curve.p0.y * inverse * inverse
+                    + 2.0 * curve.p1.y * inverse * local
+                    + curve.p2.y * local * local,
+            );
+            let cubic = evaluate_cubic((index as f32 + local) / curves.len() as f32);
+            maximum_error = maximum_error.max((quadratic.x - cubic.x).hypot(quadratic.y - cubic.y));
+        }
+    }
+    assert!(maximum_error <= CUBIC_APPROXIMATION_ACCURACY);
 }
 
 #[test]
@@ -195,6 +231,56 @@ fn variable_atlas_resolves_source_deltas_and_union_bounds() {
     assert!(glyph.bounds.min_y <= -10.0);
     assert!(glyph.bounds.max_x >= 140.0);
     assert!(glyph.bounds.max_y >= 160.0);
+}
+
+#[test]
+fn variable_cubics_share_the_largest_source_subdivision_count() {
+    let base = [
+        OutlineCommand::Move { x: 0.0, y: 0.0 },
+        OutlineCommand::Cubic {
+            c1x: 33.0,
+            c1y: 0.0,
+            c2x: 66.0,
+            c2y: 0.0,
+            x: 100.0,
+            y: 0.0,
+        },
+        OutlineCommand::Close,
+    ];
+    let source = [
+        OutlineCommand::Move { x: 0.0, y: 0.0 },
+        OutlineCommand::Cubic {
+            c1x: 0.0,
+            c1y: 200.0,
+            c2x: 100.0,
+            c2y: 200.0,
+            x: 100.0,
+            y: 0.0,
+        },
+        OutlineCommand::Close,
+    ];
+    let expected_subdivisions = Curve::cubic_subdivision_count(
+        Point::new(0.0, 0.0),
+        Point::new(0.0, 200.0),
+        Point::new(100.0, 200.0),
+        Point::new(100.0, 0.0),
+    );
+    let mut builder = VariableAtlasBuilder::default();
+    builder.add_glyph(base, source).unwrap();
+    let atlas = builder.finish();
+
+    assert_eq!(
+        atlas.glyphs()[0].curve_count as usize,
+        expected_subdivisions + 1
+    );
+    assert_eq!(
+        atlas.resolve_glyph(0, 0.0).unwrap().len(),
+        expected_subdivisions + 1
+    );
+    assert_eq!(
+        atlas.resolve_glyph(0, 1.0).unwrap().len(),
+        expected_subdivisions + 1
+    );
 }
 
 #[test]
@@ -380,6 +466,43 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
 }
 
 #[test]
+fn variable_params_pack_every_resident_section_offset() {
+    let section = |offset| Section { offset, length: 4 };
+    let layout = VariableLayout {
+        base_curves: section(4),
+        curve_deltas: section(8),
+        sparse_deltas: section(12),
+        glyphs: section(16),
+        sources: section(20),
+        source_advances: section(24),
+        component_glyphs: section(28),
+        component_parts: section(32),
+        components: section(36),
+        component_sources: section(40),
+        anchor_sources: section(44),
+        line_bits: section(48),
+        total_length: 52,
+    };
+    let bytes = pack_variable_params(VariableParams {
+        instance_count: 3,
+        band_count: 8,
+        atlas_split_offset: 28,
+        layout,
+    })
+    .unwrap();
+    let words = bytes
+        .chunks_exact(4)
+        .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(bytes.len(), VARIABLE_PARAMS_BYTES);
+    assert_eq!(
+        words,
+        [3, 8, 28, 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
+    );
+}
+
+#[test]
 fn invalid_inputs_fail_without_partial_glyphs() {
     let mut builder = AtlasBuilder::default();
     let error = builder
@@ -438,12 +561,32 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
     .validate(&module)
     .unwrap();
     let variable_module = naga::front::wgsl::parse_str(shift_slug::VARIABLE_SLUG_WGSL).unwrap();
-    naga::valid::Validator::new(
+    let variable_info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::all(),
     )
     .validate(&variable_module)
     .unwrap();
+
+    for (entry_index, entry_point) in variable_module.entry_points.iter().enumerate() {
+        let entry_info = variable_info.get_entry_point(entry_index);
+        let storage_count = variable_module
+            .global_variables
+            .iter()
+            .filter(|(handle, variable)| {
+                matches!(variable.space, naga::AddressSpace::Storage { .. })
+                    && !entry_info[*handle].is_empty()
+            })
+            .count();
+        assert!(
+            storage_count <= 8,
+            "{} uses {storage_count} storage buffers",
+            entry_point.name
+        );
+        if entry_point.name == "resolve_visible_curves" {
+            assert_eq!(storage_count, 8);
+        }
+    }
 
     for (name, expected_span) in [
         ("GlobalParams", 16),
@@ -465,7 +608,7 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
     }
 
     for (name, expected_span) in [
-        ("VariableParams", 16),
+        ("VariableParams", 64),
         ("PreviewParams", 32),
         ("Instance", 48),
         ("Curve", 24),

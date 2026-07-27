@@ -1,7 +1,14 @@
 import type { Axis, SlugAtlas, SlugGlyph, SlugSection, SourceId } from "@shift/types";
 import { interpolationWeights } from "@/lib/interpolation/InterpolationBasis";
 import type { AxisLocation } from "@/types/variation";
-import type { SlugAtlasSections, SlugFrame, SlugGlyphMap, SlugGlyphSelection } from "@/types/slug";
+import type {
+  SlugAtlasSections,
+  SlugAtlasSplit,
+  SlugFrame,
+  SlugGlyphMap,
+  SlugGlyphSelection,
+  SlugResidentAtlas,
+} from "@/types/slug";
 
 const VARIABLE_GLYPH_BYTES = 32;
 const COMPONENT_GLYPH_BYTES = 24;
@@ -38,6 +45,83 @@ export function createSlugAtlasSections(atlas: SlugAtlas): SlugAtlasSections {
     glyphs: new Uint8Array(atlas.layout.glyphs.length),
     componentGlyphs: new Uint8Array(atlas.layout.componentGlyphs.length),
   };
+}
+
+export function createSlugAtlasSplit(
+  totalLength: number,
+  maximumBindingSize: number,
+): SlugAtlasSplit {
+  const alignedMaximum = Math.floor(maximumBindingSize / 4) * 4;
+  if (!Number.isSafeInteger(totalLength) || totalLength < 0 || totalLength % 4 !== 0) {
+    throw new Error("resident Slug atlas length must be a non-negative multiple of four");
+  }
+  if (!Number.isSafeInteger(alignedMaximum) || alignedMaximum < 4) {
+    throw new Error("resident Slug binding limit is smaller than four bytes");
+  }
+
+  const splitOffset = Math.min(totalLength, alignedMaximum);
+  const remainingLength = totalLength - splitOffset;
+  if (remainingLength > alignedMaximum) {
+    throw new Error("resident Slug atlas exceeds two storage buffer bindings");
+  }
+
+  return {
+    splitOffset,
+    firstLength: Math.max(4, splitOffset),
+    secondLength: Math.max(4, remainingLength),
+  };
+}
+
+export function writeSlugAtlasChunk(
+  queue: GPUQueue,
+  residentAtlas: SlugResidentAtlas,
+  chunkOffset: number,
+  bytes: Uint8Array<ArrayBuffer>,
+): void {
+  const firstLength = Math.max(
+    0,
+    Math.min(bytes.byteLength, residentAtlas.splitOffset - chunkOffset),
+  );
+  if (firstLength > 0) {
+    queue.writeBuffer(residentAtlas.firstBuffer, chunkOffset, bytes.subarray(0, firstLength));
+  }
+
+  if (firstLength === bytes.byteLength) return;
+
+  const secondSourceOffset = firstLength;
+  const secondBufferOffset = chunkOffset + secondSourceOffset - residentAtlas.splitOffset;
+  queue.writeBuffer(
+    residentAtlas.secondBuffer,
+    secondBufferOffset,
+    bytes.subarray(secondSourceOffset),
+  );
+}
+
+export function createSlugVariableParams(
+  atlas: SlugAtlas,
+  instanceCount: number,
+  atlasSplitOffset: number,
+): Uint32Array<ArrayBuffer> {
+  return new Uint32Array(
+    [
+      checkedU32(instanceCount, "instance count"),
+      atlas.bandCount,
+      checkedU32(atlasSplitOffset, "resident atlas split offset"),
+      0,
+      atlas.layout.baseCurves.offset,
+      atlas.layout.curveDeltas.offset,
+      atlas.layout.sparseDeltas.offset,
+      atlas.layout.glyphs.offset,
+      atlas.layout.sources.offset,
+      atlas.layout.sourceAdvances.offset,
+      atlas.layout.componentGlyphs.offset,
+      atlas.layout.componentParts.offset,
+      atlas.layout.components.offset,
+      atlas.layout.componentSources.offset,
+      atlas.layout.anchorSources.offset,
+      atlas.layout.lineBits.offset,
+    ].map((value) => checkedU32(value, "resident atlas offset")),
+  );
 }
 
 export function captureSlugAtlasSections(
@@ -172,17 +256,17 @@ function copyOverlap(
 }
 
 function checkedAdd(left: number, right: number, kind: string): number {
-  const result = left + right;
-  if (!Number.isSafeInteger(result) || result > 0xffff_ffff) {
-    throw new Error(`${kind} exceeds u32`);
-  }
-  return result;
+  return checkedU32(left + right, kind);
 }
 
 function checkedMultiply(left: number, right: number, kind: string): number {
-  const result = left * right;
-  if (!Number.isSafeInteger(result) || result > 0xffff_ffff) {
+  return checkedU32(left * right, kind);
+}
+
+function checkedU32(value: number, kind: string): number {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 0xffff_ffff) {
     throw new Error(`${kind} exceeds u32`);
   }
-  return result;
+
+  return value;
 }

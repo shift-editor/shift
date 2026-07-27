@@ -11,14 +11,14 @@ use std::{
 use shift_glyph_codec::OutlineCommand;
 use shift_slug::{
     pack_render_instances, pack_render_params, Atlas, AtlasBuilder, Bounds, CurveIndexEncoding,
-    Layout, RenderInstance, RenderParams, Section, DEFAULT_BAND_COUNT, RENDER_INSTANCE_BYTES,
-    SLUG_WGSL,
+    Layout, RenderInstance, RenderParams, Section, DEFAULT_BAND_COUNT, SLUG_WGSL,
 };
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
     FontRef, GlyphId, MetadataProvider, Tag,
 };
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroupEntry, BindingResource, BufferBinding, BufferDescriptor, BufferUsages,
@@ -83,6 +83,7 @@ struct Arguments {
     cell_size: u32,
     iterations: u32,
     output: Option<PathBuf>,
+    comparison_output: Option<PathBuf>,
     full_cell_quads: bool,
     compact_indices: bool,
 }
@@ -184,14 +185,15 @@ fn main() -> Result<()> {
     });
     let upload_cpu_elapsed = upload_started.elapsed();
 
-    let instance_bytes = build_instances(
+    let instances = build_instances(
         &atlas,
         arguments.width,
         arguments.height,
         arguments.cell_size,
         arguments.full_cell_quads,
     )?;
-    let instance_count = u32::try_from(instance_bytes.len() / RENDER_INSTANCE_BYTES)?;
+    let instance_bytes = pack_render_instances(&instances)?;
+    let instance_count = u32::try_from(instances.len())?;
     let uniform_bytes = pack_render_params(RenderParams {
         viewport_width: arguments.width as f32,
         viewport_height: arguments.height as f32,
@@ -430,6 +432,26 @@ fn main() -> Result<()> {
     if let Some(path) = &arguments.output {
         write_pgm(path, arguments.width, arguments.height, &alpha)?;
     }
+    if let Some(path) = &arguments.comparison_output {
+        let font_path = arguments
+            .font
+            .as_deref()
+            .ok_or("comparison output requires a font")?;
+        let cpu_alpha = render_cpu_alpha(
+            font_path,
+            &arguments.settings,
+            &instances,
+            arguments.width,
+            arguments.height,
+        )?;
+        let (intersection_over_union, normalized_alpha_error) =
+            compare_alpha_masks(&cpu_alpha, &alpha)?;
+        write_comparison_png(path, arguments.width, arguments.height, &cpu_alpha, &alpha)?;
+        println!(
+            "comparison_output={} rows=cpu,slug,difference intersection_over_union={intersection_over_union:.6} normalized_alpha_error={normalized_alpha_error:.6}",
+            path.display()
+        );
+    }
 
     println!(
         "viewport={}x{} cell_size={} visible_instances={} iterations={} quad_mode={}",
@@ -652,7 +674,7 @@ fn build_instances(
     height: u32,
     cell_size: u32,
     full_cell_quads: bool,
-) -> Result<Vec<u8>> {
+) -> Result<Vec<RenderInstance>> {
     let columns = width / cell_size;
     let rows = height / cell_size;
     if columns == 0 || rows == 0 {
@@ -691,7 +713,7 @@ fn build_instances(
             ..Default::default()
         });
     }
-    Ok(pack_render_instances(&instances)?)
+    Ok(instances)
 }
 
 fn aspect_fitted_bounds(bounds: Bounds, pixel_width: f32, pixel_height: f32) -> [f32; 4] {
@@ -952,6 +974,134 @@ fn percentile(values: &[f64], quantile: f64) -> f64 {
     values[((values.len() - 1) as f64 * quantile).round() as usize]
 }
 
+fn render_cpu_alpha(
+    path: &std::path::Path,
+    settings: &[(Tag, f32)],
+    instances: &[RenderInstance],
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>> {
+    let bytes = fs::read(path)?;
+    let font = FontRef::new(&bytes)?;
+    let location = font.axes().location(settings.iter().copied());
+    let outlines = font.outline_glyphs();
+    let mut pixmap = Pixmap::new(width, height).ok_or("CPU comparison pixmap is too large")?;
+    let mut paint = Paint::default();
+    paint.set_color_rgba8(0, 0, 0, 255);
+    paint.anti_alias = true;
+
+    for instance in instances {
+        let Some(outline) = outlines.get(GlyphId::new(instance.glyph_index)) else {
+            continue;
+        };
+        let mut pen = CommandPen::default();
+        outline.draw(
+            DrawSettings::unhinted(Size::unscaled(), &location),
+            &mut pen,
+        )?;
+        let Some(path) = cpu_path(&pen.0) else {
+            continue;
+        };
+        let [scale_x, scale_y, offset_x, offset_y] = instance.em_transform;
+        let transform = Transform::from_row(
+            1.0 / scale_x,
+            0.0,
+            0.0,
+            1.0 / scale_y,
+            -offset_x / scale_x,
+            -offset_y / scale_y,
+        );
+        pixmap.fill_path(&path, &paint, FillRule::Winding, transform, None);
+    }
+
+    Ok(pixmap
+        .data()
+        .chunks_exact(4)
+        .map(|pixel| pixel[3])
+        .collect())
+}
+
+fn cpu_path(commands: &[OutlineCommand<f32>]) -> Option<tiny_skia::Path> {
+    let mut builder = PathBuilder::new();
+    for command in commands {
+        match *command {
+            OutlineCommand::Move { x, y } => builder.move_to(x, y),
+            OutlineCommand::Line { x, y } => builder.line_to(x, y),
+            OutlineCommand::Quad { cx, cy, x, y } => builder.quad_to(cx, cy, x, y),
+            OutlineCommand::Cubic {
+                c1x,
+                c1y,
+                c2x,
+                c2y,
+                x,
+                y,
+            } => builder.cubic_to(c1x, c1y, c2x, c2y, x, y),
+            OutlineCommand::Close => builder.close(),
+        }
+    }
+    builder.finish()
+}
+
+fn compare_alpha_masks(cpu: &[u8], slug: &[u8]) -> Result<(f64, f64)> {
+    if cpu.len() != slug.len() {
+        return Err("CPU and Slug masks have different dimensions".into());
+    }
+
+    let mut intersection = 0_u64;
+    let mut union = 0_u64;
+    let mut absolute_error = 0_u64;
+    for (&cpu_alpha, &slug_alpha) in cpu.iter().zip(slug) {
+        intersection += u64::from(cpu_alpha.min(slug_alpha));
+        union += u64::from(cpu_alpha.max(slug_alpha));
+        absolute_error += u64::from(cpu_alpha.abs_diff(slug_alpha));
+    }
+    if union == 0 {
+        return Ok((1.0, 0.0));
+    }
+
+    Ok((
+        intersection as f64 / union as f64,
+        absolute_error as f64 / union as f64,
+    ))
+}
+
+fn write_comparison_png(
+    path: &std::path::Path,
+    width: u32,
+    height: u32,
+    cpu: &[u8],
+    slug: &[u8],
+) -> Result<()> {
+    let mut comparison = Pixmap::new(width, height * 3).ok_or("comparison pixmap is too large")?;
+    let row_pixels = usize::try_from(width)? * usize::try_from(height)?;
+    if cpu.len() != row_pixels || slug.len() != row_pixels {
+        return Err("comparison masks do not match the requested dimensions".into());
+    }
+
+    for index in 0..row_pixels {
+        let cpu_alpha = cpu[index];
+        let slug_alpha = slug[index];
+        let difference = cpu_alpha.abs_diff(slug_alpha);
+        for (row, rgba) in [
+            [255 - cpu_alpha, 255 - cpu_alpha, 255 - cpu_alpha, 255],
+            [255 - slug_alpha, 255 - slug_alpha, 255 - slug_alpha, 255],
+            [255, 255 - difference, 255 - difference, 255],
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let offset = (row * row_pixels + index) * 4;
+            comparison.data_mut()[offset..offset + 4].copy_from_slice(&rgba);
+        }
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    comparison.save_png(path)?;
+    Ok(())
+}
+
 fn write_pgm(path: &std::path::Path, width: u32, height: u32, alpha: &[u8]) -> Result<()> {
     let mut bytes = format!("P5\n{width} {height}\n255\n").into_bytes();
     bytes.extend_from_slice(alpha);
@@ -983,6 +1133,7 @@ fn arguments() -> Result<Arguments> {
         cell_size: DEFAULT_CELL_SIZE,
         iterations: DEFAULT_ITERATIONS,
         output: None,
+        comparison_output: None,
         full_cell_quads: false,
         compact_indices: false,
     };
@@ -1003,6 +1154,12 @@ fn arguments() -> Result<Arguments> {
             "--output" => {
                 arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?))
             }
+            "--comparison-output" => {
+                arguments.comparison_output = Some(PathBuf::from(required_value(
+                    &mut values,
+                    "--comparison-output",
+                )?))
+            }
             _ => arguments.settings.push(parse_setting(&value)?),
         }
     }
@@ -1016,7 +1173,11 @@ fn arguments() -> Result<Arguments> {
             "width, height, iterations, and cell size above eight pixels are required".into(),
         );
     }
-    if arguments.font.is_none() && (arguments.output.is_some() || !arguments.settings.is_empty()) {
+    if arguments.font.is_none()
+        && (arguments.output.is_some()
+            || arguments.comparison_output.is_some()
+            || !arguments.settings.is_empty())
+    {
         return Err("font-dependent options require a FONT argument".into());
     }
 

@@ -86,7 +86,7 @@ impl fmt::Display for SlugError {
             ),
             Self::VariableLineFlagMismatch { glyph_index } => write!(
                 formatter,
-                "glyph {glyph_index} has line flags that do not match its curve recipe"
+                "glyph {glyph_index} has line flags that do not match its curve topology"
             ),
             Self::VariableAdvanceCountMismatch {
                 glyph_index,
