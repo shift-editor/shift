@@ -6,13 +6,13 @@ use std::{
 
 use norad::designspace::DesignSpaceDocument;
 use rayon::prelude::*;
-use shift_font::{Axis, AxisId, Font, Glyph, GlyphId, LayerId, Location, Source, SourceId};
+use shift_font::{Axis, AxisId, Font, GlyphId, LayerId, Location, Source, SourceId};
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
-    import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
+    import::{GlifGlyph, GlifGlyphStream, GlifLayer},
     metrics::copy_source_metrics,
-    ufo::{load_header, read_glyph_paths, UfoReader},
+    ufo::{load_header, read_glyph_paths},
 };
 
 use super::{
@@ -30,33 +30,11 @@ struct SourceDirectory {
     glyphs: BTreeMap<String, PathBuf>,
 }
 
-#[derive(Clone)]
-struct SourceGlyph {
-    source_id: SourceId,
-    layer_id: LayerId,
-    path: PathBuf,
-}
-
-#[derive(Clone)]
-struct GlyphRecord {
-    id: GlyphId,
-    name: String,
-    layers: Vec<SourceGlyph>,
-}
-
-pub(crate) struct DesignspaceGlyphStream {
-    glyph_ids: HashMap<String, GlyphId>,
-    glyphs: Vec<GlyphRecord>,
-    next_glyph: usize,
-}
-
-pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, DesignspaceGlyphStream)> {
+pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlifGlyphStream)> {
     stream_designspace(Path::new(path)).map_err(FormatBackendError::from)
 }
 
-fn stream_designspace(
-    designspace_path: &Path,
-) -> DesignspaceResult<(Font, DesignspaceGlyphStream)> {
+fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifGlyphStream)> {
     let designspace_dir =
         designspace_path
             .parent()
@@ -161,15 +139,8 @@ fn stream_designspace(
         directories.push(SourceDirectory { source_id, glyphs });
     }
 
-    let (glyph_ids, glyphs) = build_glyph_directory(&directories, 0);
-    Ok((
-        header,
-        DesignspaceGlyphStream {
-            glyph_ids,
-            glyphs,
-            next_glyph: 0,
-        },
-    ))
+    let (glyph_ids, glyphs) = build_glyph_directory(&directories);
+    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
 }
 
 fn stream_axisless_designspace(
@@ -177,7 +148,7 @@ fn stream_axisless_designspace(
     designspace_dir: &Path,
     xml: &str,
     original_error: &str,
-) -> DesignspaceResult<(Font, DesignspaceGlyphStream)> {
+) -> DesignspaceResult<(Font, GlifGlyphStream)> {
     let sources = parse_axisless_sources(xml).map_err(|fallback_error| {
         DesignspaceError::LoadDesignspace {
             path: designspace_path.to_path_buf(),
@@ -271,54 +242,8 @@ fn stream_axisless_designspace(
         directories.push(SourceDirectory { source_id, glyphs });
     }
 
-    let (glyph_ids, glyphs) = build_glyph_directory(&directories, 0);
-    Ok((
-        header,
-        DesignspaceGlyphStream {
-            glyph_ids,
-            glyphs,
-            next_glyph: 0,
-        },
-    ))
-}
-
-impl GlyphStream for DesignspaceGlyphStream {
-    fn directory(&self) -> Vec<GlyphDirectoryEntry> {
-        self.glyphs
-            .iter()
-            .map(|glyph| GlyphDirectoryEntry {
-                glyph_id: glyph.id.clone(),
-                name: glyph.name.clone().into(),
-            })
-            .collect()
-    }
-
-    fn glyph_count(&self) -> usize {
-        self.glyphs.len()
-    }
-
-    fn next_batch(&mut self, limit: ImportBatchLimit) -> FormatBackendResult<Vec<Glyph>> {
-        if self.next_glyph == self.glyphs.len() {
-            return Ok(Vec::new());
-        }
-        let mut end = self.next_glyph;
-        let mut layer_count = 0;
-        while end < self.glyphs.len() && end - self.next_glyph < limit.max_glyphs() {
-            let next_layers = self.glyphs[end].layers.len();
-            if end > self.next_glyph && layer_count + next_layers > limit.max_layers() {
-                break;
-            }
-            layer_count += next_layers;
-            end += 1;
-        }
-        let glyph_ids = &self.glyph_ids;
-        let glyphs = self.glyphs[self.next_glyph..end]
-            .par_iter()
-            .map(|record| load_glyph(record, glyph_ids))
-            .collect::<FormatBackendResult<Vec<_>>>()?;
-        self.next_glyph = end;
-        Ok(glyphs)
-    }
+    let (glyph_ids, glyphs) = build_glyph_directory(&directories);
+    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
 }
 
 fn add_axes(
@@ -361,13 +286,8 @@ fn add_axes(
 
 fn build_glyph_directory(
     directories: &[SourceDirectory],
-    default_index: usize,
-) -> (HashMap<String, GlyphId>, Vec<GlyphRecord>) {
-    let names = directories[default_index]
-        .glyphs
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
+) -> (HashMap<String, GlyphId>, Vec<GlifGlyph>) {
+    let names = directories[0].glyphs.keys().cloned().collect::<Vec<_>>();
     let glyph_ids = names
         .iter()
         .map(|name| (name.clone(), GlyphId::new()))
@@ -376,26 +296,23 @@ fn build_glyph_directory(
         .into_iter()
         .map(|name| {
             let mut layers = Vec::new();
-            if let Some(path) = directories[default_index].glyphs.get(&name) {
-                layers.push(SourceGlyph {
-                    source_id: directories[default_index].source_id.clone(),
+            if let Some(path) = directories[0].glyphs.get(&name) {
+                layers.push(GlifLayer {
+                    source_id: directories[0].source_id.clone(),
                     layer_id: LayerId::new(),
                     path: path.clone(),
                 });
             }
-            for (index, directory) in directories.iter().enumerate() {
-                if index == default_index {
-                    continue;
-                }
+            for directory in directories.iter().skip(1) {
                 if let Some(path) = directory.glyphs.get(&name) {
-                    layers.push(SourceGlyph {
+                    layers.push(GlifLayer {
                         source_id: directory.source_id.clone(),
                         layer_id: LayerId::new(),
                         path: path.clone(),
                     });
                 }
             }
-            GlyphRecord {
+            GlifGlyph {
                 id: glyph_ids[&name].clone(),
                 name,
                 layers,
@@ -403,33 +320,4 @@ fn build_glyph_directory(
         })
         .collect();
     (glyph_ids, glyphs)
-}
-
-fn load_glyph(
-    record: &GlyphRecord,
-    glyph_ids: &HashMap<String, GlyphId>,
-) -> FormatBackendResult<Glyph> {
-    let mut glyph = Glyph::with_id(record.id.clone(), record.name.clone());
-    for (index, source) in record.layers.iter().enumerate() {
-        let norad_glyph = norad::Glyph::load(&source.path).map_err(|error| {
-            FormatBackendError::Ufo(format!(
-                "failed to read glyph {:?} from {}: {error}",
-                record.name,
-                source.path.display()
-            ))
-        })?;
-        if index == 0 {
-            glyph.set_unicodes(norad_glyph.codepoints.iter().map(u32::from).collect());
-            if !norad_glyph.lib.is_empty() {
-                *glyph.lib_mut() = UfoReader::convert_lib(&norad_glyph.lib);
-            }
-        }
-        glyph.set_layer(UfoReader::convert_stream_layer(
-            &norad_glyph,
-            source.layer_id.clone(),
-            source.source_id.clone(),
-            glyph_ids,
-        )?);
-    }
-    Ok(glyph)
 }

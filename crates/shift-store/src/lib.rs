@@ -14,6 +14,7 @@ mod store;
 mod stream_writer;
 mod types;
 mod workspace_state;
+mod write_mode;
 
 pub use component::{GlyphComponentRecord, NewGlyphComponent};
 pub use error::StoreError;

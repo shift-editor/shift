@@ -8,6 +8,7 @@ use crate::{
     packed_layer::{create_empty_layer_in_tx, rewrite_layer_in_tx, write_layer_in_tx},
     source::SourceKind,
     workspace_state::mark_workspace_dirty_in_tx,
+    write_mode::WriteMode,
 };
 
 impl ShiftStore {
@@ -157,38 +158,10 @@ pub(crate) fn write_glyph_in_tx(
     glyph: &font::Glyph,
     order_index: i64,
 ) -> Result<(), StoreError> {
-    write_glyph_directory_in_tx(tx, glyph, order_index)?;
+    write_glyph_directory_in_tx(tx, glyph, order_index, WriteMode::Upsert)?;
 
     for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
         write_layer_in_tx(tx, &glyph.id(), Some(glyph.glyph_name()), layer)?;
-    }
-    Ok(())
-}
-
-pub(crate) fn insert_glyph_directory_in_tx(
-    tx: &Transaction<'_>,
-    glyph: &font::Glyph,
-    order_index: i64,
-) -> Result<(), StoreError> {
-    tx.prepare_cached("INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, ?3)")?
-        .execute(params![
-            glyph.id().to_string(),
-            glyph.glyph_name().as_str(),
-            order_index
-        ])?;
-    for (unicode_order, unicode) in glyph.unicodes().iter().enumerate() {
-        tx.prepare_cached(
-            "INSERT INTO glyph_unicodes (glyph_id, unicode, order_index) VALUES (?1, ?2, ?3)",
-        )?
-        .execute(params![
-            glyph.id().to_string(),
-            i64::from(*unicode),
-            unicode_order as i64
-        ])?;
-    }
-    for (key, value) in glyph.lib().iter() {
-        tx.prepare_cached("INSERT INTO glyph_lib (glyph_id, key, value_json) VALUES (?1, ?2, ?3)")?
-            .execute(params![glyph.id().to_string(), key, lib_value_json(value)?])?;
     }
     Ok(())
 }
@@ -197,16 +170,50 @@ pub(crate) fn write_glyph_directory_in_tx(
     tx: &Transaction<'_>,
     glyph: &font::Glyph,
     order_index: i64,
+    mode: WriteMode,
 ) -> Result<(), StoreError> {
-    upsert_glyph(tx, &glyph.id(), glyph.glyph_name(), order_index)?;
-    replace_glyph_unicodes(tx, &glyph.id(), glyph.unicodes())?;
-    replace_lib_data(
-        tx,
-        "glyph_lib",
-        "glyph_id",
-        Some(&glyph.id().to_string()),
-        glyph.lib(),
-    )
+    match mode {
+        WriteMode::Insert => {
+            tx.prepare_cached("INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, ?3)")?
+                .execute(params![
+                    glyph.id().to_string(),
+                    glyph.glyph_name().as_str(),
+                    order_index
+                ])?;
+            for (unicode_order, unicode) in glyph.unicodes().iter().enumerate() {
+                tx.prepare_cached(
+                    "INSERT INTO glyph_unicodes (glyph_id, unicode, order_index) VALUES (?1, ?2, ?3)",
+                )?
+                .execute(params![
+                    glyph.id().to_string(),
+                    i64::from(*unicode),
+                    unicode_order as i64
+                ])?;
+            }
+            for (key, value) in glyph.lib().iter() {
+                tx.prepare_cached(
+                    "INSERT INTO glyph_lib (glyph_id, key, value_json) VALUES (?1, ?2, ?3)",
+                )?
+                .execute(params![
+                    glyph.id().to_string(),
+                    key,
+                    lib_value_json(value)?
+                ])?;
+            }
+            Ok(())
+        }
+        WriteMode::Upsert => {
+            upsert_glyph(tx, &glyph.id(), glyph.glyph_name(), order_index)?;
+            replace_glyph_unicodes(tx, &glyph.id(), glyph.unicodes())?;
+            replace_lib_data(
+                tx,
+                "glyph_lib",
+                "glyph_id",
+                Some(&glyph.id().to_string()),
+                glyph.lib(),
+            )
+        }
+    }
 }
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {

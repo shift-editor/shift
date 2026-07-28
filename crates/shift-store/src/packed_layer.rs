@@ -3,7 +3,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shift_font as font;
 
-use crate::{ShiftStore, StoreError, workspace_state::mark_workspace_dirty_in_tx};
+use crate::{
+    ShiftStore, StoreError, workspace_state::mark_workspace_dirty_in_tx, write_mode::WriteMode,
+};
 
 pub const GLYPH_LAYER_FORMAT: &str = "shift.glyph-layer.v1";
 pub const MAX_LAYER_READ_BATCH_COUNT: usize = 512;
@@ -443,25 +445,37 @@ pub(crate) fn write_layer_in_tx(
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
     let packed = font::pack_glyph_layer(layer)?;
-    write_packed_layer_in_tx(tx, glyph_id, name, layer, &packed)
+    store_packed_layer_in_tx(tx, glyph_id, name, layer, &packed, WriteMode::Upsert)
 }
 
-pub(crate) fn insert_packed_layer_in_tx(
+pub(crate) fn store_packed_layer_in_tx(
     tx: &Transaction<'_>,
     glyph_id: &font::GlyphId,
     name: Option<&font::GlyphName>,
     layer: &font::GlyphLayer,
     packed: &shift_glyph_codec::PackedGlyphLayer,
+    mode: WriteMode,
 ) -> Result<(), StoreError> {
     let bytes = packed.as_bytes();
-    let byte_length = i64::try_from(bytes.len()).map_err(|_| StoreError::LayerPayloadTooLarge {
-        bytes: bytes.len() as u64,
-        limit: MAX_LAYER_PAYLOAD_BYTES as u64,
-    })?;
-    tx.prepare_cached(
-        "INSERT INTO glyph_layers (id, glyph_id, source_id, name, width, height) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-    )?
-    .execute(params![
+    let byte_length = encoded_len(bytes)?;
+    let layer_sql = match mode {
+        WriteMode::Insert => {
+            "INSERT INTO glyph_layers (id, glyph_id, source_id, name, width, height) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        }
+        WriteMode::Upsert => {
+            "
+            INSERT INTO glyph_layers (id, glyph_id, source_id, name, width, height)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(id) DO UPDATE SET
+                glyph_id = excluded.glyph_id,
+                source_id = excluded.source_id,
+                name = excluded.name,
+                width = excluded.width,
+                height = excluded.height
+            "
+        }
+    };
+    tx.prepare_cached(layer_sql)?.execute(params![
         layer.id().to_string(),
         glyph_id.to_string(),
         layer.source_id().to_string(),
@@ -469,81 +483,36 @@ pub(crate) fn insert_packed_layer_in_tx(
         layer.width(),
         layer.height(),
     ])?;
-    tx.prepare_cached(
-        "INSERT INTO glyph_layer_payloads (layer_id, format, payload, byte_length) VALUES (?1, ?2, ?3, ?4)",
-    )?
-    .execute(params![
+
+    let payload_sql = match mode {
+        WriteMode::Insert => {
+            "INSERT INTO glyph_layer_payloads (layer_id, format, payload, byte_length) VALUES (?1, ?2, ?3, ?4)"
+        }
+        WriteMode::Upsert => {
+            "
+            INSERT INTO glyph_layer_payloads (layer_id, format, payload, byte_length)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(layer_id) DO UPDATE SET
+                format = excluded.format,
+                payload = excluded.payload,
+                byte_length = excluded.byte_length
+            "
+        }
+    };
+    tx.prepare_cached(payload_sql)?.execute(params![
         layer.id().to_string(),
         GLYPH_LAYER_FORMAT,
         bytes,
         byte_length,
     ])?;
-    for (order_index, component) in layer.components_iter().enumerate() {
-        tx.prepare_cached(
-            "INSERT INTO glyph_components (id, layer_id, base_glyph_id, order_index) VALUES (?1, ?2, ?3, ?4)",
-        )?
-        .execute(params![
-            component.id().to_string(),
-            layer.id().to_string(),
-            component.base_glyph_id().to_string(),
-            order_index as i64,
-        ])?;
-    }
-    Ok(())
+    write_component_index(tx, layer, mode)
 }
 
-pub(crate) fn write_packed_layer_in_tx(
-    tx: &Transaction<'_>,
-    glyph_id: &font::GlyphId,
-    name: Option<&font::GlyphName>,
-    layer: &font::GlyphLayer,
-    packed: &shift_glyph_codec::PackedGlyphLayer,
-) -> Result<(), StoreError> {
-    let bytes = packed.as_bytes();
-
-    tx.prepare_cached(
-        "
-        INSERT INTO glyph_layers (id, glyph_id, source_id, name, width, height)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-        ON CONFLICT(id) DO UPDATE SET
-            glyph_id = excluded.glyph_id,
-            source_id = excluded.source_id,
-            name = excluded.name,
-            width = excluded.width,
-            height = excluded.height
-        ",
-    )?
-    .execute(params![
-        layer.id().to_string(),
-        glyph_id.to_string(),
-        layer.source_id().to_string(),
-        name.map(font::GlyphName::as_str),
-        layer.width(),
-        layer.height(),
-    ])?;
-    tx.prepare_cached(
-        "
-        INSERT INTO glyph_layer_payloads (
-            layer_id, format, payload, byte_length
-        )
-        VALUES (?1, ?2, ?3, ?4)
-        ON CONFLICT(layer_id) DO UPDATE SET
-            format = excluded.format,
-            payload = excluded.payload,
-            byte_length = excluded.byte_length
-        ",
-    )?
-    .execute(params![
-        layer.id().to_string(),
-        GLYPH_LAYER_FORMAT,
-        bytes,
-        i64::try_from(bytes.len()).map_err(|_| StoreError::LayerPayloadTooLarge {
-            bytes: bytes.len() as u64,
-            limit: MAX_LAYER_PAYLOAD_BYTES as u64,
-        })?,
-    ])?;
-    replace_component_index(tx, layer)?;
-    Ok(())
+fn encoded_len(bytes: &[u8]) -> Result<i64, StoreError> {
+    i64::try_from(bytes.len()).map_err(|_| StoreError::LayerPayloadTooLarge {
+        bytes: bytes.len() as u64,
+        limit: MAX_LAYER_PAYLOAD_BYTES as u64,
+    })
 }
 
 pub(crate) fn rewrite_layer_in_tx(
@@ -571,12 +540,15 @@ pub(crate) fn create_empty_layer_in_tx(
     write_layer_in_tx(tx, glyph_id, name, &layer)
 }
 
-fn replace_component_index(
+fn write_component_index(
     tx: &Transaction<'_>,
     layer: &font::GlyphLayer,
+    mode: WriteMode,
 ) -> Result<(), StoreError> {
-    tx.prepare_cached("DELETE FROM glyph_components WHERE layer_id = ?1")?
-        .execute([layer.id().to_string()])?;
+    if mode == WriteMode::Upsert {
+        tx.prepare_cached("DELETE FROM glyph_components WHERE layer_id = ?1")?
+            .execute([layer.id().to_string()])?;
+    }
     for (order_index, component) in layer.components_iter().enumerate() {
         tx.prepare_cached(
             "

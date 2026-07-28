@@ -4,10 +4,10 @@ use shift_font as font;
 
 use crate::{
     ShiftStore, StoreError,
-    change_set::{
-        insert_glyph_directory_in_tx, replace_font_header_in_tx, write_glyph_directory_in_tx,
-    },
+    change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
+    packed_layer::store_packed_layer_in_tx,
     workspace_state::mark_workspace_dirty_in_tx,
+    write_mode::WriteMode,
 };
 
 /// Bounded transactional sink for format-specific importers.
@@ -25,6 +25,15 @@ pub struct LayerStreamWriter<'store> {
 enum StreamMode {
     Update,
     Replacement,
+}
+
+impl StreamMode {
+    fn write_mode(self) -> WriteMode {
+        match self {
+            Self::Update => WriteMode::Upsert,
+            Self::Replacement => WriteMode::Insert,
+        }
+    }
 }
 
 impl ShiftStore {
@@ -77,15 +86,9 @@ impl LayerStreamWriter<'_> {
             })
             .collect::<Result<Vec<_>, font::PackedLayerError>>()?;
 
+        let write_mode = self.mode.write_mode();
         for (glyph, packed_layers) in glyphs.iter().zip(packed_layers) {
-            match self.mode {
-                StreamMode::Update => {
-                    write_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order)?;
-                }
-                StreamMode::Replacement => {
-                    insert_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order)?;
-                }
-            }
+            write_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order, write_mode)?;
             for (layer_id, packed) in packed_layers {
                 let layer =
                     glyph
@@ -95,22 +98,14 @@ impl LayerStreamWriter<'_> {
                             kind: "glyph layer",
                             id: layer_id.to_string(),
                         })?;
-                match self.mode {
-                    StreamMode::Update => crate::packed_layer::write_packed_layer_in_tx(
-                        &self.tx,
-                        &glyph.id(),
-                        Some(glyph.glyph_name()),
-                        layer,
-                        &packed,
-                    )?,
-                    StreamMode::Replacement => crate::packed_layer::insert_packed_layer_in_tx(
-                        &self.tx,
-                        &glyph.id(),
-                        Some(glyph.glyph_name()),
-                        layer,
-                        &packed,
-                    )?,
-                }
+                store_packed_layer_in_tx(
+                    &self.tx,
+                    &glyph.id(),
+                    Some(glyph.glyph_name()),
+                    layer,
+                    &packed,
+                    write_mode,
+                )?;
             }
             self.next_glyph_order += 1;
         }
