@@ -36,8 +36,10 @@ impl ShiftStore {
         let mut touched_layer_ids = HashSet::new();
 
         for change in &change_set.changes {
-            apply_change(&tx, change)?;
-            if let Some(layer_id) = changed_layer_id(change) {
+            if post_font.is_none() || !post_font_supersedes_incremental_layer_write(change) {
+                apply_change(&tx, change)?;
+            }
+            if let Some(layer_id) = change.layer_id() {
                 touched_layer_ids.insert(layer_id.clone());
             }
         }
@@ -466,21 +468,19 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
     }
 }
 
-fn changed_layer_id(change: &font::FontChange) -> Option<&font::LayerId> {
-    match change {
-        font::FontChange::GlyphLayerCreated(change) => Some(&change.layer_id),
-        font::FontChange::GlyphLayerDeleted(change) => Some(&change.layer_id),
-        font::FontChange::LayerMetricsChanged(change) => Some(&change.layer_id),
-        font::FontChange::ContourAdded(change) => Some(&change.layer_id),
-        font::FontChange::ContourOpenClosedChanged(change) => Some(&change.layer_id),
-        font::FontChange::PointsAdded(change) => Some(&change.layer_id),
-        font::FontChange::PointsDeleted(change) => Some(&change.layer_id),
-        font::FontChange::PointSmoothChanged(change) => Some(&change.layer_id),
-        font::FontChange::PointPositionsChanged(change) => Some(&change.layer_id),
-        font::FontChange::AnchorPositionsChanged(change) => Some(&change.layer_id),
-        font::FontChange::LayerGeometryReplaced(change) => Some(&change.layer_id),
-        _ => None,
-    }
+fn post_font_supersedes_incremental_layer_write(change: &font::FontChange) -> bool {
+    matches!(
+        change,
+        font::FontChange::LayerMetricsChanged(_)
+            | font::FontChange::ContourAdded(_)
+            | font::FontChange::ContourOpenClosedChanged(_)
+            | font::FontChange::PointsAdded(_)
+            | font::FontChange::PointsDeleted(_)
+            | font::FontChange::PointSmoothChanged(_)
+            | font::FontChange::PointPositionsChanged(_)
+            | font::FontChange::AnchorPositionsChanged(_)
+            | font::FontChange::LayerGeometryReplaced(_)
+    )
 }
 
 fn update_packed_layer(

@@ -195,52 +195,73 @@ impl ShiftStore {
     }
 }
 
+struct DirectoryFacts {
+    layer_id: String,
+    source_id: String,
+    width: f64,
+    height: Option<f64>,
+    format: String,
+    declared_len: i64,
+    actual_len: i64,
+}
+
+impl DirectoryFacts {
+    fn validate(&self) -> Result<u64, StoreError> {
+        if self.format != GLYPH_LAYER_FORMAT {
+            return Err(StoreError::UnsupportedLayerFormat(self.format.clone()));
+        }
+        if self.declared_len != self.actual_len {
+            return Err(StoreError::LayerDirectoryMismatch {
+                layer_id: self.layer_id.clone(),
+                detail: format!(
+                    "declared byte length {} != actual {}",
+                    self.declared_len, self.actual_len
+                ),
+            });
+        }
+        if !(0..=MAX_LAYER_PAYLOAD_BYTES).contains(&self.actual_len) {
+            return Err(StoreError::LayerPayloadTooLarge {
+                bytes: u64::try_from(self.actual_len).unwrap_or(u64::MAX),
+                limit: MAX_LAYER_PAYLOAD_BYTES as u64,
+            });
+        }
+        Ok(self.actual_len as u64)
+    }
+}
+
+fn map_directory_facts_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<DirectoryFacts> {
+    Ok(DirectoryFacts {
+        layer_id: row.get(0)?,
+        source_id: row.get(1)?,
+        width: row.get(2)?,
+        height: row.get(3)?,
+        format: row.get(4)?,
+        declared_len: row.get(5)?,
+        actual_len: row.get(6)?,
+    })
+}
+
 pub(crate) fn load_glyph_layer_from_conn(
     conn: &Connection,
     layer_id: &font::LayerId,
 ) -> Result<Option<font::GlyphLayer>, StoreError> {
     let mut directory_stmt = conn.prepare_cached(
         "
-        SELECT l.glyph_id, l.source_id, l.width, l.height,
+        SELECT l.id, l.source_id, l.width, l.height,
                p.format, p.byte_length, length(p.payload)
         FROM glyph_layers AS l
         JOIN glyph_layer_payloads AS p ON p.layer_id = l.id
         WHERE l.id = ?1
         ",
     )?;
-    let row = directory_stmt
-        .query_row([layer_id.to_string()], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, f64>(2)?,
-                row.get::<_, Option<f64>>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, i64>(5)?,
-                row.get::<_, i64>(6)?,
-            ))
-        })
+    let facts = directory_stmt
+        .query_row([layer_id.to_string()], map_directory_facts_row)
         .optional()?;
     drop(directory_stmt);
-    let Some((_glyph_id, source_id, width, height, format, declared_len, actual_len)) = row else {
+    let Some(facts) = facts else {
         return Ok(None);
     };
-
-    if format != GLYPH_LAYER_FORMAT {
-        return Err(StoreError::UnsupportedLayerFormat(format));
-    }
-    if declared_len != actual_len {
-        return Err(StoreError::LayerDirectoryMismatch {
-            layer_id: layer_id.to_string(),
-            detail: format!("declared byte length {declared_len} != actual {actual_len}"),
-        });
-    }
-    if !(0..=MAX_LAYER_PAYLOAD_BYTES).contains(&actual_len) {
-        return Err(StoreError::LayerPayloadTooLarge {
-            bytes: u64::try_from(actual_len).unwrap_or(u64::MAX),
-            limit: MAX_LAYER_PAYLOAD_BYTES as u64,
-        });
-    }
+    facts.validate()?;
 
     // The length gate is deliberately a separate query so SQLite cannot
     // allocate an unbounded Vec before the store applies its limit.
@@ -255,7 +276,11 @@ pub(crate) fn load_glyph_layer_from_conn(
     )?;
     let payload: Vec<u8> = payload_stmt
         .query_row(
-            params![layer_id.to_string(), actual_len, MAX_LAYER_PAYLOAD_BYTES],
+            params![
+                layer_id.to_string(),
+                facts.actual_len,
+                MAX_LAYER_PAYLOAD_BYTES
+            ],
             |row| row.get(0),
         )
         .optional()?
@@ -264,12 +289,18 @@ pub(crate) fn load_glyph_layer_from_conn(
             detail: "payload changed during bounded read".to_string(),
         })?;
     let layer = font::unpack_glyph_layer(&payload)?;
-    validate_directory_facts(layer_id, &source_id, width, height, &layer)?;
+    validate_directory_facts(
+        layer_id,
+        &facts.source_id,
+        facts.width,
+        facts.height,
+        &layer,
+    )?;
     validate_component_index(conn, &layer)?;
     Ok(Some(layer))
 }
 
-fn load_glyph_layers_from_conn(
+pub(crate) fn load_glyph_layers_from_conn(
     conn: &Connection,
     layer_ids: &[font::LayerId],
 ) -> Result<Vec<font::GlyphLayer>, StoreError> {
@@ -300,40 +331,17 @@ fn load_glyph_layers_from_conn(
         ORDER BY l.id
         "
     );
-    let mut directory_stmt = conn.prepare_cached(&directory_sql)?;
-    let directory_rows =
-        directory_stmt.query_map(rusqlite::params_from_iter(keys.iter()), |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, f64>(2)?,
-                row.get::<_, Option<f64>>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, i64>(5)?,
-                row.get::<_, i64>(6)?,
-            ))
-        })?;
+    let mut directory_stmt = conn.prepare(&directory_sql)?;
+    let directory_rows = directory_stmt.query_map(
+        rusqlite::params_from_iter(keys.iter()),
+        map_directory_facts_row,
+    )?;
     let mut facts = HashMap::with_capacity(keys.len());
     let mut batch_payload_bytes = 0_u64;
     for row in directory_rows {
-        let (layer_id, source_id, width, height, format, declared_len, actual_len) = row?;
-        if format != GLYPH_LAYER_FORMAT {
-            return Err(StoreError::UnsupportedLayerFormat(format));
-        }
-        if declared_len != actual_len {
-            return Err(StoreError::LayerDirectoryMismatch {
-                layer_id,
-                detail: format!("declared byte length {declared_len} != actual {actual_len}"),
-            });
-        }
-        if !(0..=MAX_LAYER_PAYLOAD_BYTES).contains(&actual_len) {
-            return Err(StoreError::LayerPayloadTooLarge {
-                bytes: u64::try_from(actual_len).unwrap_or(u64::MAX),
-                limit: MAX_LAYER_PAYLOAD_BYTES as u64,
-            });
-        }
-        batch_payload_bytes = batch_payload_bytes.saturating_add(actual_len as u64);
-        facts.insert(layer_id, (source_id, width, height, actual_len));
+        let facts_row = row?;
+        batch_payload_bytes = batch_payload_bytes.saturating_add(facts_row.validate()?);
+        facts.insert(facts_row.layer_id.clone(), facts_row);
     }
     drop(directory_stmt);
 
@@ -357,30 +365,36 @@ fn load_glyph_layers_from_conn(
         SELECT layer_id, payload, length(payload)
         FROM glyph_layer_payloads
         WHERE layer_id IN ({placeholders})
-          AND length(payload) <= {MAX_LAYER_PAYLOAD_BYTES}
+          AND length(payload) <= ?
         ORDER BY layer_id
         "
     );
-    let mut payload_stmt = conn.prepare_cached(&payload_sql)?;
-    let payload_rows = payload_stmt.query_map(rusqlite::params_from_iter(keys.iter()), |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, Vec<u8>>(1)?,
-            row.get::<_, i64>(2)?,
-        ))
-    })?;
+    let mut payload_params = keys
+        .iter()
+        .cloned()
+        .map(rusqlite::types::Value::Text)
+        .collect::<Vec<_>>();
+    payload_params.push(rusqlite::types::Value::Integer(MAX_LAYER_PAYLOAD_BYTES));
+    let mut payload_stmt = conn.prepare(&payload_sql)?;
+    let payload_rows =
+        payload_stmt.query_map(rusqlite::params_from_iter(payload_params), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Vec<u8>>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
     let mut layers = Vec::with_capacity(keys.len());
     let mut loaded = HashSet::with_capacity(keys.len());
     for row in payload_rows {
         let (layer_id, payload, actual_len) = row?;
-        let (source_id, width, height, expected_len) =
-            facts
-                .get(&layer_id)
-                .ok_or_else(|| StoreError::LayerDirectoryMismatch {
-                    layer_id: layer_id.clone(),
-                    detail: "payload has no directory row".to_string(),
-                })?;
-        if actual_len != *expected_len || payload.len() as i64 != *expected_len {
+        let facts = facts
+            .get(&layer_id)
+            .ok_or_else(|| StoreError::LayerDirectoryMismatch {
+                layer_id: layer_id.clone(),
+                detail: "payload has no directory row".to_string(),
+            })?;
+        if actual_len != facts.actual_len || payload.len() as i64 != facts.actual_len {
             return Err(StoreError::LayerDirectoryMismatch {
                 layer_id,
                 detail: "payload changed during bounded batch read".to_string(),
@@ -388,7 +402,13 @@ fn load_glyph_layers_from_conn(
         }
         let layer = font::unpack_glyph_layer(&payload)?;
         let expected_id = font::LayerId::from_raw(layer_id.clone());
-        validate_directory_facts(&expected_id, source_id, *width, *height, &layer)?;
+        validate_directory_facts(
+            &expected_id,
+            &facts.source_id,
+            facts.width,
+            facts.height,
+            &layer,
+        )?;
         loaded.insert(layer_id);
         layers.push(layer);
     }
@@ -411,7 +431,7 @@ fn load_glyph_layers_from_conn(
         ORDER BY layer_id, order_index, id
         "
     );
-    let mut component_stmt = conn.prepare_cached(&component_sql)?;
+    let mut component_stmt = conn.prepare(&component_sql)?;
     let component_rows =
         component_stmt.query_map(rusqlite::params_from_iter(keys.iter()), |row| {
             Ok((
@@ -805,6 +825,31 @@ mod tests {
     }
 
     #[test]
+    fn directory_retains_layer_when_payload_row_is_missing() {
+        let (store, font) = populated_store();
+        let layer_id = font
+            .glyphs()
+            .next()
+            .unwrap()
+            .layers()
+            .keys()
+            .next()
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "DELETE FROM glyph_layer_payloads WHERE layer_id = ?1",
+                [layer_id.to_string()],
+            )
+            .unwrap();
+
+        let directory = store.load_font_directory().unwrap();
+
+        assert!(directory.layer(layer_id.clone()).is_some());
+        assert!(store.load_font_state().is_err());
+    }
+
+    #[test]
     fn stale_reference_index_is_rejected() {
         let (store, font) = populated_store();
         let layer = font
@@ -914,6 +959,35 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(store.workspace_state().unwrap().unwrap().revision, 1);
+    }
+
+    #[test]
+    fn post_font_change_set_rewrites_touched_layer_without_decoding_old_payload() {
+        let (mut store, mut post_font) = populated_store();
+        let mut layer = post_font
+            .glyphs()
+            .flat_map(|glyph| glyph.layers().values())
+            .next()
+            .unwrap()
+            .as_ref()
+            .clone();
+        layer.set_width(layer.width() + 41.0);
+        post_font.replace_glyph_layers(vec![layer.clone()]).unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE glyph_layer_payloads SET payload = X'00', byte_length = 1 WHERE layer_id = ?1",
+                [layer.id().to_string()],
+            )
+            .unwrap();
+        let changes =
+            font::FontChangeSet::new(vec![font::FontChange::layer_metrics_changed(&layer)]);
+
+        store
+            .apply_change_set_with_font(&changes, &post_font)
+            .unwrap();
+
+        assert_eq!(store.load_glyph_layer(&layer.id()).unwrap(), Some(layer));
     }
 
     #[test]

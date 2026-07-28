@@ -1,8 +1,7 @@
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
-    AxisId, ComponentId, Evidence, FileIdentity, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph,
-    NewGlyphComponent, NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceIdentitySnapshot,
-    SourceKind, WorkspaceState,
+    AxisId, Evidence, FileIdentity, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, ShiftStore,
+    SourceId, SourceIdentitySnapshot, SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -283,27 +282,38 @@ fn creates_and_reads_glyph_layer() {
     let source_id = create_regular_source(&mut store);
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
 
-    let layer = store
-        .get_glyph_layer(&layer_id)
-        .expect("glyph layer query should succeed")
+    let directory = store
+        .list_glyph_layer_directory()
+        .expect("glyph layer directory query should succeed");
+    let layer = directory
+        .iter()
+        .find(|entry| entry.layer_id == layer_id)
         .expect("glyph layer should exist");
 
-    assert_eq!(layer.id, layer_id);
-    assert_eq!(layer.glyph_id, glyph_id);
-    assert_eq!(layer.source_id, source_id);
-    assert_eq!(layer.name.as_deref(), Some("Regular"));
+    assert_eq!(layer.glyph_id.as_str(), glyph_id.as_str());
+    assert_eq!(layer.source_id.as_str(), source_id.as_str());
+    assert_eq!(
+        layer.name.as_ref().map(|name| name.as_str()),
+        Some("Regular")
+    );
 }
 
 #[test]
 fn glyph_layer_requires_existing_glyph_and_source() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
-    let result = store.create_glyph_layer(NewGlyphLayer {
-        id: LayerId::new("layer-A-regular"),
-        glyph_id: GlyphId::new("glyph-missing"),
-        source_id: SourceId::new("source-missing"),
-        name: Some("Regular".to_string()),
-    });
+    let layer = shift_font::GlyphLayer::with_width(
+        shift_font::LayerId::from_raw("layer-A-regular"),
+        shift_font::SourceId::from_raw("source-missing"),
+        0.0,
+    );
+    let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::glyph_layer_created(
+            shift_font::GlyphId::from_raw("glyph-missing"),
+            Some(shift_font::GlyphName::from("Regular")),
+            &layer,
+        ),
+    ]));
 
     assert!(result.is_err());
 }
@@ -316,13 +326,15 @@ fn lists_glyph_layers_for_glyph() {
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
 
     let layers = store
-        .list_glyph_layers_for_glyph(&glyph_id)
-        .expect("glyph layers query should succeed");
+        .list_glyph_layer_directory()
+        .expect("glyph layers query should succeed")
+        .into_iter()
+        .filter(|entry| entry.glyph_id.as_str() == glyph_id.as_str())
+        .collect::<Vec<_>>();
 
     assert_eq!(layers.len(), 1);
-    assert_eq!(layers[0].id, layer_id);
-    assert_eq!(layers[0].glyph_id, glyph_id);
-    assert_eq!(layers[0].source_id, source_id);
+    assert_eq!(layers[0].layer_id, layer_id);
+    assert_eq!(layers[0].source_id.as_str(), source_id.as_str());
 }
 
 #[test]
@@ -334,29 +346,35 @@ fn creates_and_reads_glyph_component() {
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
     let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
 
-    let component = store
-        .get_glyph_component(&component_id)
-        .expect("glyph component query should succeed")
+    let layer = store
+        .load_glyph_layer(&layer_id)
+        .expect("glyph layer query should succeed")
+        .expect("glyph layer should exist");
+    let component = layer
+        .components_iter()
+        .next()
         .expect("glyph component should exist");
 
-    assert_eq!(component.id, component_id);
-    assert_eq!(component.layer_id, layer_id);
-    assert_eq!(component.base_glyph_id, base_glyph_id);
-    assert_eq!(component.order_index, 0);
+    assert_eq!(component.id(), component_id);
+    assert_eq!(component.base_glyph_id().as_str(), base_glyph_id.as_str());
 }
 
 #[test]
-fn glyph_component_requires_existing_layer_and_base_glyph() {
+fn glyph_component_replacement_requires_existing_layer() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let mut layer = shift_font::GlyphLayer::with_width(
+        shift_font::LayerId::from_raw("layer-missing"),
+        shift_font::SourceId::from_raw("source-missing"),
+        0.0,
+    );
+    layer.add_component(shift_font::Component::with_id(
+        shift_font::ComponentId::from_raw("component-A-missing"),
+        shift_font::GlyphId::from_raw("glyph-missing"),
+        "Missing",
+        shift_font::DecomposedTransform::identity(),
+    ));
 
-    let result = store.create_glyph_component(NewGlyphComponent {
-        id: ComponentId::new("component-A-B"),
-        layer_id: LayerId::new("layer-missing"),
-        base_glyph_id: GlyphId::new("glyph-missing"),
-        base_glyph_name: "Missing".to_string(),
-        transform: shift_font::DecomposedTransform::identity(),
-        order_index: 0,
-    });
+    let result = store.replace_glyph_layer(&layer);
 
     assert!(result.is_err());
 }
@@ -370,15 +388,16 @@ fn lists_glyph_components_for_layer() {
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
     let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
 
-    let components = store
-        .list_glyph_components_for_layer(&layer_id)
-        .expect("glyph components query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer_id)
+        .expect("glyph layer query should succeed")
+        .expect("glyph layer should exist");
+    let components = layer.components();
+    let (_, component) = components.iter().next().expect("component should exist");
 
     assert_eq!(components.len(), 1);
-    assert_eq!(components[0].id, component_id);
-    assert_eq!(components[0].layer_id, layer_id);
-    assert_eq!(components[0].base_glyph_id, base_glyph_id);
-    assert_eq!(components[0].order_index, 0);
+    assert_eq!(component.id(), component_id);
+    assert_eq!(component.base_glyph_id().as_str(), base_glyph_id.as_str());
 }
 
 #[test]
@@ -438,8 +457,11 @@ fn applies_glyph_delete_change_set_and_cascades_layers() {
         .get_glyph(&GlyphId::new(glyph_id.to_string()))
         .expect("glyph query should succeed");
     let layers = store
-        .list_glyph_layers_for_glyph(&GlyphId::new(glyph_id.to_string()))
-        .expect("layer query should succeed");
+        .list_glyph_layer_directory()
+        .expect("layer query should succeed")
+        .into_iter()
+        .filter(|entry| entry.glyph_id == glyph_id)
+        .collect::<Vec<_>>();
     let unicodes = store
         .list_glyph_unicodes(&GlyphId::new(glyph_id.to_string()))
         .expect("unicode query should succeed");
@@ -484,23 +506,20 @@ fn applies_layer_metrics_and_contour_point_changes() {
         .expect("change set should apply");
 
     let layer = store
-        .get_glyph_layer(&LayerId::new(layer.id().to_string()))
+        .load_glyph_layer(&layer.id())
         .expect("layer query should succeed")
         .expect("layer should exist");
-    let contours = store
-        .list_contours_for_layer(&layer.id)
-        .expect("contour query should succeed");
-    let points = store
-        .list_points_for_contour(&contours[0].id)
-        .expect("point query should succeed");
+    let contours = layer.contours();
+    let (_, contour) = contours.iter().next().expect("contour should exist");
+    let points = contour.points();
 
-    assert_eq!(layer.width, 720.0);
+    assert_eq!(layer.width(), 720.0);
     assert_eq!(contours.len(), 1);
-    assert!(!contours[0].closed);
+    assert!(!contour.is_closed());
     assert_eq!(points.len(), 1);
-    assert_eq!(points[0].id, point_id.to_string());
-    assert_eq!((points[0].x, points[0].y), (40.0, 50.0));
-    assert_eq!(points[0].point_type, "onCurve");
+    assert_eq!(points[0].id(), point_id);
+    assert_eq!((points[0].x(), points[0].y()), (40.0, 50.0));
+    assert_eq!(points[0].point_type(), shift_font::PointType::OnCurve);
 }
 
 #[test]
@@ -530,16 +549,17 @@ fn applies_layer_geometry_replacement() {
         ]))
         .expect("change set should apply");
 
-    let contours = store
-        .list_contours_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("contour query should succeed");
-    let points = store
-        .list_points_for_contour(&contours[0].id)
-        .expect("point query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("layer query should succeed")
+        .expect("layer should exist");
+    let contours = layer.contours();
+    let (_, contour) = contours.iter().next().expect("contour should exist");
+    let points = contour.points();
 
     assert_eq!(contours.len(), 1);
     assert_eq!(points.len(), 1);
-    assert_eq!((points[0].x, points[0].y), (10.0, 20.0));
+    assert_eq!((points[0].x(), points[0].y()), (10.0, 20.0));
 }
 
 #[test]
@@ -552,15 +572,16 @@ fn layer_geometry_replacement_round_trips_anchors() {
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
 
-    let anchors = store
-        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("anchor query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("anchor query should succeed")
+        .expect("layer should exist");
+    let anchors = layer.anchors();
 
     assert_eq!(anchors.len(), 1);
-    assert_eq!(anchors[0].id, anchor_id.to_string());
-    assert_eq!(anchors[0].name.as_deref(), Some("top"));
-    assert_eq!((anchors[0].x, anchors[0].y), (250.0, 700.0));
-    assert_eq!(anchors[0].order_index, 0);
+    assert_eq!(anchors[0].id(), anchor_id);
+    assert_eq!(anchors[0].name(), Some("top"));
+    assert_eq!((anchors[0].x(), anchors[0].y()), (250.0, 700.0));
 }
 
 #[test]
@@ -585,10 +606,12 @@ fn applies_anchor_position_changes() {
         ]))
         .expect("anchor positions should apply");
 
-    let anchors = store
-        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("anchor query should succeed");
-    assert_eq!((anchors[0].x, anchors[0].y), (300.0, 650.0));
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("anchor query should succeed")
+        .expect("layer should exist");
+    let anchors = layer.anchors();
+    assert_eq!((anchors[0].x(), anchors[0].y()), (300.0, 650.0));
 }
 
 #[test]
@@ -634,14 +657,16 @@ fn reopen_preserves_layer_anchors() {
     }
 
     let store = ShiftStore::open(&path).expect("reopen");
-    let anchors = store
-        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("anchor query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("anchor query should succeed")
+        .expect("layer should exist");
+    let anchors = layer.anchors();
 
     assert_eq!(anchors.len(), 1);
-    assert_eq!(anchors[0].id, anchor_id.to_string());
-    assert_eq!(anchors[0].name.as_deref(), Some("top"));
-    assert_eq!((anchors[0].x, anchors[0].y), (250.0, 700.0));
+    assert_eq!(anchors[0].id(), anchor_id);
+    assert_eq!(anchors[0].name(), Some("top"));
+    assert_eq!((anchors[0].x(), anchors[0].y()), (250.0, 700.0));
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }
@@ -785,37 +810,45 @@ fn create_default_glyph_layer(
     store: &mut ShiftStore,
     glyph_id: &GlyphId,
     source_id: &SourceId,
-) -> LayerId {
-    let layer_id = LayerId::new(shift_font::LayerId::from_raw("A-regular").to_string());
+) -> shift_font::LayerId {
+    let layer = shift_font::GlyphLayer::with_width(
+        shift_font::LayerId::from_raw("A-regular"),
+        shift_font::SourceId::from_raw(source_id.as_str()),
+        0.0,
+    );
 
     store
-        .create_glyph_layer(NewGlyphLayer {
-            id: layer_id.clone(),
-            glyph_id: glyph_id.clone(),
-            source_id: source_id.clone(),
-            name: Some("Regular".to_string()),
-        })
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::glyph_layer_created(
+                shift_font::GlyphId::from_raw(glyph_id.as_str()),
+                Some(shift_font::GlyphName::from("Regular")),
+                &layer,
+            ),
+        ]))
         .expect("glyph layer should be created");
 
-    layer_id
+    layer.id()
 }
 
 fn create_default_component(
     store: &mut ShiftStore,
-    layer_id: &LayerId,
+    layer_id: &shift_font::LayerId,
     base_glyph_id: &GlyphId,
-) -> ComponentId {
-    let component_id = ComponentId::new(shift_font::ComponentId::from_raw("A-B").to_string());
+) -> shift_font::ComponentId {
+    let component_id = shift_font::ComponentId::from_raw("A-B");
+    let mut layer = store
+        .load_glyph_layer(layer_id)
+        .expect("glyph layer query should succeed")
+        .expect("glyph layer should exist");
+    layer.add_component(shift_font::Component::with_id(
+        component_id.clone(),
+        shift_font::GlyphId::from_raw(base_glyph_id.as_str()),
+        "B",
+        shift_font::DecomposedTransform::identity(),
+    ));
 
     store
-        .create_glyph_component(NewGlyphComponent {
-            id: component_id.clone(),
-            layer_id: layer_id.clone(),
-            base_glyph_id: base_glyph_id.clone(),
-            base_glyph_name: "B".to_string(),
-            transform: shift_font::DecomposedTransform::identity(),
-            order_index: 0,
-        })
+        .replace_glyph_layer(&layer)
         .expect("glyph component should be created");
 
     component_id
