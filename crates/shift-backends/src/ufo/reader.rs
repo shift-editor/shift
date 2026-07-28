@@ -1,11 +1,12 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
+use crate::import::collect_streamed_font;
 use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Guideline,
     KerningData, KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType,
-    Source, SourceId, Transform,
+    SourceId, Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -45,7 +46,6 @@ pub(crate) const MAPPED_FONTINFO_KEYS: &[&str] = &[
 ];
 
 struct PendingComponent {
-    layer_id: LayerId,
     base_glyph_name: String,
     matrix: Transform,
 }
@@ -81,9 +81,8 @@ impl UfoReader {
         shift_contour
     }
 
-    fn convert_component(layer_id: LayerId, component: &norad::Component) -> PendingComponent {
+    fn convert_component(component: &norad::Component) -> PendingComponent {
         PendingComponent {
-            layer_id,
             base_glyph_name: component.base.to_string(),
             matrix: Transform {
                 xx: component.transform.x_scale,
@@ -191,7 +190,6 @@ impl UfoReader {
         source_id: SourceId,
     ) -> (Glyph, Vec<PendingComponent>) {
         let mut glyph_layer = GlyphLayer::with_width(layer_id, source_id, norad_glyph.width);
-        let layer_id = glyph_layer.id();
         let mut pending_components = Vec::new();
         if norad_glyph.height != 0.0 {
             glyph_layer.set_height(Some(norad_glyph.height));
@@ -202,7 +200,7 @@ impl UfoReader {
         }
 
         for component in &norad_glyph.components {
-            pending_components.push(Self::convert_component(layer_id.clone(), component));
+            pending_components.push(Self::convert_component(component));
         }
 
         for anchor in &norad_glyph.anchors {
@@ -416,35 +414,6 @@ impl UfoReader {
         }
         Ok(font)
     }
-
-    fn resolve_components(
-        font: &mut Font,
-        pending_components: Vec<PendingComponent>,
-    ) -> FormatBackendResult<()> {
-        for pending in pending_components {
-            let base_glyph_id =
-                font.glyph_id_by_name(&pending.base_glyph_name)
-                    .ok_or_else(|| {
-                        FormatBackendError::Ufo(format!(
-                            "component base glyph {:?} does not exist",
-                            pending.base_glyph_name
-                        ))
-                    })?;
-            let layer = font.layer_mut(pending.layer_id.clone()).ok_or_else(|| {
-                FormatBackendError::Ufo(format!(
-                    "component target layer {} does not exist",
-                    pending.layer_id
-                ))
-            })?;
-            layer.add_component(Component::with_matrix(
-                base_glyph_id,
-                pending.base_glyph_name,
-                &pending.matrix,
-            ));
-        }
-
-        Ok(())
-    }
 }
 
 impl Default for UfoReader {
@@ -455,49 +424,7 @@ impl Default for UfoReader {
 
 impl FontReader for UfoReader {
     fn load(&self, path: &str) -> FormatBackendResult<Font> {
-        let norad_font =
-            NoradFont::load(path).map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
-        let ufo_path = Path::new(path);
-
-        let mut font = Self::convert_header(&norad_font, ufo_path)?;
-        let default_source_id = font
-            .default_source_id()
-            .expect("new font should have a default source");
-
-        let norad_default_layer_name = norad_font.layers.default_layer().name().clone();
-        let mut pending_components = Vec::new();
-        for layer in norad_font.layers.iter() {
-            let source_id = if layer.name() == &norad_default_layer_name {
-                default_source_id.clone()
-            } else {
-                // Non-default UFO layers are carried as layer-only sources:
-                // they are not designspace masters and must not gain
-                // `<source>` entries if the font is saved as a designspace.
-                font.add_source(Source::layer(layer.name().to_string()))
-            };
-
-            if let Some(source) = font.source_mut(source_id.clone()) {
-                source.set_color(layer.color.as_ref().map(|color| color.to_rgba_string()));
-                if !layer.lib.is_empty() {
-                    *source.lib_mut() = Self::convert_lib(&layer.lib);
-                }
-            }
-
-            for norad_glyph in layer.iter() {
-                let (glyph, glyph_components) =
-                    Self::convert_glyph_layer(norad_glyph, LayerId::new(), source_id.clone());
-                pending_components.extend(glyph_components);
-
-                if let Some(glyph_id) = font.glyph_id_by_name(glyph.name()) {
-                    for layer_data in glyph.layers().values() {
-                        font.insert_glyph_layer(glyph_id.clone(), layer_data.as_ref().clone())?;
-                    }
-                } else {
-                    font.insert_glyph(glyph)?;
-                }
-            }
-        }
-        Self::resolve_components(&mut font, pending_components)?;
-        Ok(font)
+        let (header, mut stream) = super::stream_font(path)?;
+        collect_streamed_font(header, &mut stream)
     }
 }

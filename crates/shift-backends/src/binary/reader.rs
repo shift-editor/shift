@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
-    import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
+    import::{collect_streamed_font, GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
 };
 use rayon::prelude::*;
 use shift_font::{
@@ -20,11 +20,8 @@ use skrifa::{
 use crate::metrics::set_metric_position;
 
 pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| FormatBackendError::Binary(format!("failed to read '{path}': {e}")))?;
-    let font = FontRef::new(&bytes)
-        .map_err(|e| FormatBackendError::Binary(format!("failed to parse '{path}': {e}")))?;
-    font_from_skrifa(&font)
+    let (header, mut stream) = stream_font_file(path)?;
+    collect_streamed_font(header, &mut stream)
 }
 
 #[derive(Default)]
@@ -153,60 +150,6 @@ fn detect_smooth_points(contours: &mut [Contour]) {
             }
         }
     }
-}
-
-fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
-    let outlines = font.outline_glyphs();
-    let char_map = font.charmap();
-    let hmtx = font
-        .hmtx()
-        .map_err(|e| FormatBackendError::Binary(format!("failed to read hmtx table: {e}")))?;
-
-    let mut ir_font = font_header_from_skrifa(font)?;
-    let default_source_id = ir_font
-        .default_source_id()
-        .expect("new font should have a default source");
-
-    for (unicode, glyph_id) in char_map.mappings() {
-        let outline = outlines.get(glyph_id).ok_or_else(|| {
-            FormatBackendError::Binary(format!(
-                "missing outline for glyph {glyph_id} (U+{unicode:04X})"
-            ))
-        })?;
-        let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
-        let mut pen = ShiftPen::default();
-        outline.draw(settings, &mut pen).map_err(|e| {
-            FormatBackendError::Binary(format!(
-                "failed to draw outline for glyph {glyph_id} (U+{unicode:04X}): {e}"
-            ))
-        })?;
-
-        let advance_width = hmtx.advance(glyph_id).ok_or_else(|| {
-            FormatBackendError::Binary(format!(
-                "missing advance width for glyph {glyph_id} (U+{unicode:04X})"
-            ))
-        })?;
-
-        let glyph_name = char::from_u32(unicode)
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| format!("uni{unicode:04X}"));
-
-        let mut glyph = Glyph::with_unicode(glyph_name, unicode);
-        let mut layer = GlyphLayer::with_width(
-            LayerId::new(),
-            default_source_id.clone(),
-            advance_width as f64,
-        );
-        let mut contours = pen.contours();
-        detect_smooth_points(&mut contours);
-        for contour in contours {
-            layer.add_contour(contour);
-        }
-        glyph.set_layer(layer);
-        ir_font.insert_glyph(glyph)?;
-    }
-
-    Ok(ir_font)
 }
 
 fn font_header_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
@@ -636,7 +579,7 @@ mod tests {
             )
             .unwrap();
 
-        let font = font_from_skrifa(&font_ref).unwrap();
+        let font = read_font_file(path.to_str().unwrap()).unwrap();
         let glyph = font
             .glyphs_by_unicode('O' as u32)
             .next()

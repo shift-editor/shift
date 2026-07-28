@@ -53,25 +53,14 @@ fn load_font(path: &Path) -> Font {
 }
 
 fn stream_font(path: &Path) -> Font {
-    let mut import = FontLoader::new()
+    let import = FontLoader::new()
         .stream_font(path.to_str().unwrap())
         .unwrap_or_else(|error| panic!("failed to stream {}: {error}", path.display()));
     assert_eq!(import.header().glyph_count(), 0);
     let directory = import.directory();
     let expected_count = import.glyph_count();
     assert_eq!(directory.len(), expected_count);
-    let mut font = import.header().clone();
-    loop {
-        let glyphs = import
-            .next_batch(shift_backends::ImportBatchLimit::new(8, 64))
-            .unwrap();
-        if glyphs.is_empty() {
-            break;
-        }
-        for glyph in glyphs {
-            font.insert_glyph(glyph).unwrap();
-        }
-    }
+    let font = import.collect_font().unwrap();
     assert_eq!(font.glyph_count(), expected_count);
     for entry in directory {
         assert_eq!(
@@ -220,7 +209,7 @@ fn streams_binary_ufo_and_designspace_without_eager_glyphs() {
     for path in [binary_path, mutatorsans_ufo_path()] {
         let eager = load_font(&path);
         let streamed = stream_font(&path);
-        assert!(streamed.glyph_count() >= eager.glyph_count());
+        assert_eq!(streamed.glyph_count(), eager.glyph_count());
         let glyph_a = streamed
             .glyphs_by_unicode(65)
             .next()

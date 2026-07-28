@@ -20,6 +20,9 @@ pub enum BackendError {
     #[error("unsupported font format for writing: {extension}")]
     UnsupportedWriteFormat { extension: String },
 
+    #[error("streaming import is not supported for {} fonts", format.name())]
+    StreamingUnsupported { format: FontFormat },
+
     #[error("font format adaptor is not registered: {}", format.name())]
     MissingAdaptor { format: FontFormat },
 

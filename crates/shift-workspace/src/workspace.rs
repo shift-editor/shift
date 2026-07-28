@@ -734,38 +734,36 @@ impl FontWorkspace {
         let import_path_str = import_path
             .to_str()
             .ok_or_else(|| WorkspaceError::InvalidPathUtf8(import_path.to_path_buf()))?;
-        let extension = import_path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
+        let loader = FontLoader::new();
+        match loader.stream_font(import_path_str) {
+            Ok(import) => {
+                let mut store = ShiftStore::open_for_import(store_path)?;
+                let mut writer = store.font_stream_writer(import.header())?;
+                write_import_batches(import, &mut writer, ImportBatchLimit::default())?;
+                writer.finish()?;
+                store.finish_import()?;
+                store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
+                let font = store.load_font_directory()?;
+                let residency = LayerResidency::with_unloaded(
+                    font.glyphs()
+                        .flat_map(|glyph| glyph.layers().keys().cloned()),
+                );
 
-        if matches!(extension.as_str(), "ttf" | "otf" | "ufo" | "designspace") {
-            let import = FontLoader::new().stream_font(import_path_str)?;
-            let mut store = ShiftStore::open_for_import(store_path)?;
-            let mut writer = store.font_stream_writer(import.header())?;
-            write_import_batches(import, &mut writer, ImportBatchLimit::default())?;
-            writer.finish()?;
-            store.finish_import()?;
-            store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
-            let font = store.load_font_directory()?;
-            let residency = LayerResidency::with_unloaded(
-                font.glyphs()
-                    .flat_map(|glyph| glyph.layers().keys().cloned()),
-            );
-
-            return Ok(Self {
-                font,
-                source: WorkspaceSource::Imported {
-                    original_path: import_path.to_path_buf(),
-                },
-                store,
-                ledger: Ledger::default(),
-                residency,
-            });
+                return Ok(Self {
+                    font,
+                    source: WorkspaceSource::Imported {
+                        original_path: import_path.to_path_buf(),
+                    },
+                    store,
+                    ledger: Ledger::default(),
+                    residency,
+                });
+            }
+            Err(shift_backends::BackendError::StreamingUnsupported { .. }) => {}
+            Err(error) => return Err(error.into()),
         }
 
-        let font = FontLoader::new().read_font(import_path_str)?;
+        let font = loader.read_font(import_path_str)?;
         let mut store = ShiftStore::open(store_path)?;
         store.set_font_info(font_info_from_font(&font))?;
         store.replace_font_state(&font)?;
