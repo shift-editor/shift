@@ -3,9 +3,9 @@ use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
-    Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphLayer, Guideline, KerningData,
-    KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType, Source, SourceId,
-    Transform,
+    Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Guideline,
+    KerningData, KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType,
+    Source, SourceId, Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -65,7 +65,7 @@ impl UfoReader {
         }
     }
 
-    fn convert_contour(contour: &norad::Contour) -> Contour {
+    pub(crate) fn convert_contour(contour: &norad::Contour) -> Contour {
         let mut shift_contour = Contour::new();
         let is_closed = contour.is_closed();
 
@@ -96,7 +96,7 @@ impl UfoReader {
         }
     }
 
-    fn convert_anchor(anchor: &norad::Anchor) -> Anchor {
+    pub(crate) fn convert_anchor(anchor: &norad::Anchor) -> Anchor {
         Anchor::new(
             anchor.name.as_ref().map(|name| name.to_string()),
             anchor.x,
@@ -104,7 +104,7 @@ impl UfoReader {
         )
     }
 
-    fn convert_guideline(guideline: &norad::Guideline) -> Guideline {
+    pub(crate) fn convert_guideline(guideline: &norad::Guideline) -> Guideline {
         let mut converted = match guideline.line {
             Line::Horizontal(y) => Guideline::horizontal(y),
             Line::Vertical(x) => Guideline::vertical(x),
@@ -177,7 +177,7 @@ impl UfoReader {
         }
     }
 
-    fn convert_lib(lib: &plist::Dictionary) -> LibData {
+    pub(crate) fn convert_lib(lib: &plist::Dictionary) -> LibData {
         let mut data = HashMap::new();
         for (k, v) in lib.iter() {
             data.insert(k.clone(), Self::convert_plist_to_lib_value(v));
@@ -228,6 +228,37 @@ impl UfoReader {
 
         glyph.set_layer(glyph_layer);
         (glyph, pending_components)
+    }
+
+    pub(crate) fn convert_stream_layer(
+        norad_glyph: &norad::Glyph,
+        layer_id: LayerId,
+        source_id: SourceId,
+        glyph_ids: &HashMap<String, GlyphId>,
+    ) -> FormatBackendResult<GlyphLayer> {
+        let (glyph, pending_components) =
+            Self::convert_glyph_layer(norad_glyph, layer_id, source_id);
+        let mut layer = glyph
+            .layers()
+            .values()
+            .next()
+            .expect("converted glyph should contain its layer")
+            .as_ref()
+            .clone();
+        for pending in pending_components {
+            let base_glyph_id = glyph_ids.get(&pending.base_glyph_name).ok_or_else(|| {
+                FormatBackendError::Ufo(format!(
+                    "component base glyph {:?} does not exist",
+                    pending.base_glyph_name
+                ))
+            })?;
+            layer.add_component(Component::with_matrix(
+                base_glyph_id.clone(),
+                pending.base_glyph_name,
+                &pending.matrix,
+            ));
+        }
+        Ok(layer)
     }
 
     fn convert_kerning(norad_font: &NoradFont) -> KerningData {
@@ -283,6 +314,109 @@ impl UfoReader {
         }
     }
 
+    pub(crate) fn convert_header(
+        norad_font: &NoradFont,
+        ufo_path: &Path,
+    ) -> FormatBackendResult<Font> {
+        let mut font = Font::new();
+        let default_source_id = font
+            .default_source_id()
+            .expect("new font should have a default source");
+
+        if let Some(family) = &norad_font.font_info.family_name {
+            font.metadata_mut().family_name = Some(family.clone());
+        }
+        if let Some(style) = &norad_font.font_info.style_name {
+            font.metadata_mut().style_name = Some(style.clone());
+        }
+        font.metadata_mut().version_major = norad_font.font_info.version_major;
+        font.metadata_mut().version_minor = norad_font.font_info.version_minor.map(|v| v as i32);
+        font.metadata_mut().copyright = norad_font.font_info.copyright.clone();
+        font.metadata_mut().trademark = norad_font.font_info.trademark.clone();
+        font.metadata_mut().designer = norad_font.font_info.open_type_name_designer.clone();
+        font.metadata_mut().designer_url = norad_font.font_info.open_type_name_designer_url.clone();
+        font.metadata_mut().manufacturer = norad_font.font_info.open_type_name_manufacturer.clone();
+        font.metadata_mut().manufacturer_url =
+            norad_font.font_info.open_type_name_manufacturer_url.clone();
+        font.metadata_mut().license = norad_font.font_info.open_type_name_license.clone();
+        font.metadata_mut().license_url = norad_font.font_info.open_type_name_license_url.clone();
+        font.metadata_mut().description = norad_font.font_info.open_type_name_description.clone();
+        font.metadata_mut().note = norad_font.font_info.note.clone();
+
+        font.metrics_mut().units_per_em = norad_font
+            .font_info
+            .units_per_em
+            .map(|value| *value)
+            .unwrap_or(1000.0);
+        let metric_definitions = font.metric_definitions().to_vec();
+        let default_source = font
+            .source_mut(default_source_id)
+            .expect("new font should contain its default source");
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::Ascender,
+            norad_font.font_info.ascender,
+        );
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::Descender,
+            norad_font.font_info.descender,
+        );
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::CapHeight,
+            norad_font.font_info.cap_height,
+        );
+        set_metric_position(
+            &metric_definitions,
+            default_source,
+            MetricKind::XHeight,
+            norad_font.font_info.x_height,
+        );
+        default_source.set_italic_angle(norad_font.font_info.italic_angle);
+        default_source.set_line_gap(
+            norad_font
+                .font_info
+                .open_type_hhea_line_gap
+                .or(norad_font.font_info.open_type_os2_typo_line_gap)
+                .map(f64::from),
+        );
+        default_source.set_underline_position(norad_font.font_info.postscript_underline_position);
+        default_source.set_underline_thickness(norad_font.font_info.postscript_underline_thickness);
+
+        if let Some(remainder) = Self::convert_fontinfo_remainder(&norad_font.font_info)? {
+            *font.fontinfo_remainder_mut() = remainder;
+        }
+        *font.kerning_mut() = Self::convert_kerning(norad_font);
+        *font.features_mut() = Self::load_features(ufo_path);
+        for guideline in norad_font.guidelines() {
+            font.add_guideline(Self::convert_guideline(guideline));
+        }
+        if !norad_font.lib.is_empty() {
+            *font.lib_mut() = Self::convert_lib(&norad_font.lib);
+        }
+        for (data_path, contents) in norad_font.data.iter() {
+            let bytes = contents.map_err(|error| {
+                FormatBackendError::Ufo(format!("failed to read data file {data_path:?}: {error}"))
+            })?;
+            font.data_files_mut()
+                .insert(data_path.to_string_lossy().into_owned(), bytes.to_vec());
+        }
+        for (image_path, contents) in norad_font.images.iter() {
+            let bytes = contents.map_err(|error| {
+                FormatBackendError::Ufo(format!(
+                    "failed to read image file {image_path:?}: {error}"
+                ))
+            })?;
+            font.images_mut()
+                .insert(image_path.to_string_lossy().into_owned(), bytes.to_vec());
+        }
+        Ok(font)
+    }
+
     fn resolve_components(
         font: &mut Font,
         pending_components: Vec<PendingComponent>,
@@ -325,79 +459,10 @@ impl FontReader for UfoReader {
             NoradFont::load(path).map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
         let ufo_path = Path::new(path);
 
-        let mut font = Font::new();
+        let mut font = Self::convert_header(&norad_font, ufo_path)?;
         let default_source_id = font
             .default_source_id()
             .expect("new font should have a default source");
-
-        if let Some(family) = &norad_font.font_info.family_name {
-            font.metadata_mut().family_name = Some(family.clone());
-        }
-        if let Some(style) = &norad_font.font_info.style_name {
-            font.metadata_mut().style_name = Some(style.clone());
-        }
-        font.metadata_mut().version_major = norad_font.font_info.version_major;
-        font.metadata_mut().version_minor = norad_font.font_info.version_minor.map(|v| v as i32);
-        font.metadata_mut().copyright = norad_font.font_info.copyright.clone();
-        font.metadata_mut().trademark = norad_font.font_info.trademark.clone();
-        font.metadata_mut().designer = norad_font.font_info.open_type_name_designer.clone();
-        font.metadata_mut().designer_url = norad_font.font_info.open_type_name_designer_url.clone();
-        font.metadata_mut().manufacturer = norad_font.font_info.open_type_name_manufacturer.clone();
-        font.metadata_mut().manufacturer_url =
-            norad_font.font_info.open_type_name_manufacturer_url.clone();
-        font.metadata_mut().license = norad_font.font_info.open_type_name_license.clone();
-        font.metadata_mut().license_url = norad_font.font_info.open_type_name_license_url.clone();
-        font.metadata_mut().description = norad_font.font_info.open_type_name_description.clone();
-        font.metadata_mut().note = norad_font.font_info.note.clone();
-
-        let upm = norad_font
-            .font_info
-            .units_per_em
-            .map(|n| *n)
-            .unwrap_or(1000.0);
-        font.metrics_mut().units_per_em = upm;
-        let metric_definitions = font.metric_definitions().to_vec();
-        let default_source = font
-            .source_mut(default_source_id.clone())
-            .expect("new font should contain its default source");
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::Ascender,
-            norad_font.font_info.ascender,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::Descender,
-            norad_font.font_info.descender,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::CapHeight,
-            norad_font.font_info.cap_height,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::XHeight,
-            norad_font.font_info.x_height,
-        );
-        default_source.set_italic_angle(norad_font.font_info.italic_angle);
-        default_source.set_line_gap(
-            norad_font
-                .font_info
-                .open_type_hhea_line_gap
-                .or(norad_font.font_info.open_type_os2_typo_line_gap)
-                .map(f64::from),
-        );
-        default_source.set_underline_position(norad_font.font_info.postscript_underline_position);
-        default_source.set_underline_thickness(norad_font.font_info.postscript_underline_thickness);
-
-        if let Some(remainder) = Self::convert_fontinfo_remainder(&norad_font.font_info)? {
-            *font.fontinfo_remainder_mut() = remainder;
-        }
 
         let norad_default_layer_name = norad_font.layers.default_layer().name().clone();
         let mut pending_components = Vec::new();
@@ -433,34 +498,6 @@ impl FontReader for UfoReader {
             }
         }
         Self::resolve_components(&mut font, pending_components)?;
-
-        *font.kerning_mut() = Self::convert_kerning(&norad_font);
-        *font.features_mut() = Self::load_features(ufo_path);
-
-        for guideline in norad_font.guidelines() {
-            font.add_guideline(Self::convert_guideline(guideline));
-        }
-
-        if !norad_font.lib.is_empty() {
-            *font.lib_mut() = Self::convert_lib(&norad_font.lib);
-        }
-
-        for (data_path, contents) in norad_font.data.iter() {
-            let bytes = contents.map_err(|e| {
-                FormatBackendError::Ufo(format!("failed to read data file {data_path:?}: {e}"))
-            })?;
-            font.data_files_mut()
-                .insert(data_path.to_string_lossy().into_owned(), bytes.to_vec());
-        }
-
-        for (image_path, contents) in norad_font.images.iter() {
-            let bytes = contents.map_err(|e| {
-                FormatBackendError::Ufo(format!("failed to read image file {image_path:?}: {e}"))
-            })?;
-            font.images_mut()
-                .insert(image_path.to_string_lossy().into_owned(), bytes.to_vec());
-        }
-
         Ok(font)
     }
 }

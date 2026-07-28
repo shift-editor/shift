@@ -70,7 +70,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 - Own font authoring data structures such as `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Source`, and `Axis`.
 - Keep object-level mutation behavior near the objects it mutates.
-- Provide model-native helpers for layer editing, component resolution, variation behavior, axis mapping evaluation, and geometry-derived behavior.
+- Provide model-native helpers for layer editing, component resolution, variation behavior, axis mapping evaluation, and geometry-derived behavior. `Font::replace_glyph_layers` atomically hydrates or evicts a bounded layer batch with one copy-on-write index rebuild.
 - Own canonical glyph and source-metric interpolation value ordering, variation-model construction, interpolation evaluation, and location-bound glyph resolution.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 

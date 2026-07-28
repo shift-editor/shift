@@ -8,6 +8,7 @@ use crate::designspace::{DesignspaceReader, DesignspaceWriter};
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 use crate::format::FontFormat;
 use crate::glyphs::GlyphsReader;
+use crate::import::FontImport;
 use crate::traits::{FontReader, FontWriter};
 use crate::ufo::{UfoReader, UfoWriter};
 
@@ -116,6 +117,35 @@ impl FontLoader {
 
     pub fn available_formats(&self) -> Vec<&FontFormat> {
         self.adaptors.keys().collect()
+    }
+
+    pub fn stream_font(&self, path: &str) -> BackendResult<FontImport> {
+        let path = Path::new(path);
+        let ext = extension_from_path(path)?;
+        let format = format_from_extension(ext)?;
+        let path_buf = path.to_path_buf();
+        let path = path.to_str().ok_or_else(|| BackendError::InvalidPathUtf8 {
+            path: path_buf.clone(),
+        })?;
+
+        match format {
+            FontFormat::Ttf | FontFormat::Otf => {
+                let (header, stream) = crate::binary::stream_font_file(path)
+                    .map_err(|source| BackendError::load(format, path_buf.clone(), source))?;
+                Ok(FontImport::new(header, stream, format, path_buf))
+            }
+            FontFormat::Ufo => {
+                let (header, stream) = crate::ufo::stream_font(path)
+                    .map_err(|source| BackendError::load(format, path_buf.clone(), source))?;
+                Ok(FontImport::new(header, stream, format, path_buf))
+            }
+            FontFormat::Designspace => {
+                let (header, stream) = crate::designspace::stream_font(path)
+                    .map_err(|source| BackendError::load(format, path_buf.clone(), source))?;
+                Ok(FontImport::new(header, stream, format, path_buf))
+            }
+            _ => Err(BackendError::MissingAdaptor { format }),
+        }
     }
 
     pub fn read_font(&self, path: &str) -> BackendResult<Font> {

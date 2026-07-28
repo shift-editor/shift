@@ -1110,35 +1110,57 @@ impl Font {
     /// storage acquisition to hydrate a directory placeholder without
     /// changing glyph/layer ownership.
     pub fn replace_glyph_layer(&mut self, layer: GlyphLayer) -> CoreResult<()> {
-        let layer_id = layer.id();
-        let glyph_id = self
-            .glyph_id_by_layer(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
-        let previous = self
-            .layer(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id.clone()))?
-            .clone();
-        if layer.source_id() != previous.source_id() {
-            return Err(CoreError::LayerSourceMismatch {
-                layer_id,
-                expected_source_id: previous.source_id(),
-                actual_source_id: layer.source_id(),
-            });
+        self.replace_glyph_layers(vec![layer])
+    }
+
+    /// Atomically replaces existing layers while cloning and validating the
+    /// font index only once for the complete batch.
+    pub fn replace_glyph_layers(&mut self, layers: Vec<GlyphLayer>) -> CoreResult<()> {
+        if layers.is_empty() {
+            return Ok(());
         }
 
-        let mut next_index = self.index().clone();
-        next_index.remove_layer(glyph_id.clone(), &previous);
-        next_index.validate_layer_insert(&glyph_id, &layer)?;
-        next_index.insert_layer(glyph_id.clone(), &layer);
+        let mut seen_layer_ids = HashSet::with_capacity(layers.len());
+        let mut replacements = Vec::with_capacity(layers.len());
+        for layer in layers {
+            let layer_id = layer.id();
+            if !seen_layer_ids.insert(layer_id.clone()) {
+                return Err(CoreError::DuplicateLayerId(layer_id));
+            }
 
-        let state = self.state_mut();
-        let glyph = state
-            .data
-            .glyphs
-            .get_mut(&glyph_id)
-            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
-        Arc::make_mut(glyph).set_layer(layer);
-        state.index = next_index;
+            let glyph_id = self
+                .glyph_id_by_layer(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+            let previous = self
+                .layer(layer_id.clone())
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?
+                .clone();
+            if layer.source_id() != previous.source_id() {
+                return Err(CoreError::LayerSourceMismatch {
+                    layer_id,
+                    expected_source_id: previous.source_id(),
+                    actual_source_id: layer.source_id(),
+                });
+            }
+            replacements.push((glyph_id, previous, layer));
+        }
+
+        let mut next_state = self.state.as_ref().clone();
+        for (glyph_id, previous, _) in &replacements {
+            next_state.index.remove_layer(glyph_id.clone(), previous);
+        }
+        for (glyph_id, _, layer) in replacements {
+            next_state.index.validate_layer_insert(&glyph_id, &layer)?;
+            next_state.index.insert_layer(glyph_id.clone(), &layer);
+            let glyph = next_state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+            Arc::make_mut(glyph).set_layer(layer);
+        }
+
+        self.state = Arc::new(next_state);
         Ok(())
     }
 
@@ -1697,6 +1719,51 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![glyph_id.clone()]
         );
+    }
+
+    #[test]
+    fn glyph_layer_batch_replacement_is_atomic() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let first_layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 500.0);
+        let first_layer_id = first_layer.id();
+        let mut first_glyph = Glyph::new("A");
+        first_glyph.set_layer(first_layer);
+        font.insert_glyph(first_glyph).unwrap();
+
+        let second_layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 600.0);
+        let second_layer_id = second_layer.id();
+        let mut second_glyph = Glyph::new("B");
+        second_glyph.set_layer(second_layer);
+        font.insert_glyph(second_glyph).unwrap();
+
+        let contour_id = ContourId::new();
+        let mut first_contour = Contour::with_id(contour_id.clone());
+        first_contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+        let mut first_replacement =
+            GlyphLayer::with_width(first_layer_id.clone(), source_id.clone(), 700.0);
+        first_replacement.add_contour(first_contour);
+
+        let mut second_contour = Contour::with_id(contour_id.clone());
+        second_contour.add_point(10.0, 10.0, PointType::OnCurve, false);
+        let mut second_replacement =
+            GlyphLayer::with_width(second_layer_id.clone(), source_id.clone(), 800.0);
+        second_replacement.add_contour(second_contour);
+
+        assert!(matches!(
+            font.replace_glyph_layers(vec![first_replacement, second_replacement]),
+            Err(CoreError::DuplicateContourId(id)) if id == contour_id
+        ));
+        assert_eq!(font.layer(first_layer_id.clone()).unwrap().width(), 500.0);
+        assert_eq!(font.layer(second_layer_id.clone()).unwrap().width(), 600.0);
+
+        font.replace_glyph_layers(vec![
+            GlyphLayer::with_width(first_layer_id.clone(), source_id.clone(), 700.0),
+            GlyphLayer::with_width(second_layer_id.clone(), source_id, 800.0),
+        ])
+        .unwrap();
+        assert_eq!(font.layer(first_layer_id).unwrap().width(), 700.0);
+        assert_eq!(font.layer(second_layer_id).unwrap().width(), 800.0);
     }
 
     #[test]

@@ -2187,6 +2187,7 @@ dependencies = [
  "ordered-float",
  "plist",
  "quick-xml 0.37.5",
+ "rayon",
  "serde",
  "shift-font",
  "shift-source",
@@ -2282,6 +2283,7 @@ dependencies = [
 name = "shift-store"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "rusqlite",
  "serde_json",
  "shift-font",

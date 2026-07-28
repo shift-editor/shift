@@ -1,5 +1,7 @@
 mod reader;
 
+pub(crate) use reader::stream_font_file;
+
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::font_loader::FontAdaptor;
 use shift_font::Font;

@@ -4,14 +4,20 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use shift_backends::{FontExportRequest, FontExportResult, FontExporter, font_loader::FontLoader};
+use shift_backends::{
+    FontExportRequest, FontExportResult, FontExporter, FontImport, ImportBatchLimit,
+    font_loader::FontLoader,
+};
 use shift_font::{
     AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
     FontMetadata, Glyph, GlyphId, GlyphLayer, MetricDefinition, NamedInstance, Source, SourceId,
     TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
-use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
+use shift_store::{
+    LayerStreamWriter, MAX_LAYER_READ_BATCH_COUNT, ShiftStore, SourceIdentitySnapshot,
+    WorkspaceSourceKind, WorkspaceState,
+};
 
 use crate::NewWorkspace;
 use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
@@ -729,6 +735,37 @@ impl FontWorkspace {
         let import_path_str = import_path
             .to_str()
             .ok_or_else(|| WorkspaceError::InvalidPathUtf8(import_path.to_path_buf()))?;
+        let extension = import_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+
+        if matches!(extension.as_str(), "ttf" | "otf" | "ufo" | "designspace") {
+            let import = FontLoader::new().stream_font(import_path_str)?;
+            let mut store = ShiftStore::open_for_import(store_path)?;
+            let mut writer = store.font_stream_writer(import.header())?;
+            write_import_batches(import, &mut writer, ImportBatchLimit::default())?;
+            writer.finish()?;
+            store.finish_import()?;
+            store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
+            let font = store.load_font_directory()?;
+            let unloaded_layer_ids = font
+                .glyphs()
+                .flat_map(|glyph| glyph.layers().keys().cloned())
+                .collect();
+
+            return Ok(Self {
+                font,
+                source: WorkspaceSource::Imported {
+                    original_path: import_path.to_path_buf(),
+                },
+                store,
+                ledger: Ledger::default(),
+                unloaded_layer_ids,
+            });
+        }
+
         let font = FontLoader::new().read_font(import_path_str)?;
         let mut store = ShiftStore::open(store_path)?;
         store.set_font_info(font_info_from_font(&font))?;
@@ -782,27 +819,29 @@ impl FontWorkspace {
         &mut self,
         layer_ids: impl IntoIterator<Item = shift_font::LayerId>,
     ) -> Result<(), WorkspaceError> {
-        let layer_ids = layer_ids
+        let mut layer_ids = layer_ids
             .into_iter()
             .filter(|layer_id| self.unloaded_layer_ids.contains(layer_id))
-            .collect::<HashSet<_>>();
+            .collect::<Vec<_>>();
+        layer_ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        layer_ids.dedup();
         if layer_ids.is_empty() {
             return Ok(());
         }
 
-        // Decode and install one layer at a time into a COW font clone. Peak
-        // temporary memory is one payload, while malformed bytes or a
-        // cross-layer identity collision still leave the live cache unchanged.
+        // Decode and install bounded batches into a COW font clone. A malformed
+        // payload or cross-layer identity collision still leaves the live cache
+        // unchanged, while SQLite and the font index each process one batch.
         let mut next_font = self.font.clone();
-        for layer_id in &layer_ids {
-            let layer = self.store.load_glyph_layer(layer_id)?.ok_or_else(|| {
-                WorkspaceError::CorruptWorkingStore(format!("missing payload for layer {layer_id}"))
-            })?;
-            next_font.replace_glyph_layer(layer)?;
+        for layer_ids in layer_ids.chunks(MAX_LAYER_READ_BATCH_COUNT) {
+            let layers = self.store.load_glyph_layers(layer_ids)?;
+            next_font.replace_glyph_layers(layers)?;
         }
+
         self.font = next_font;
-        self.unloaded_layer_ids
-            .retain(|layer_id| !layer_ids.contains(layer_id));
+        for layer_id in layer_ids {
+            self.unloaded_layer_ids.remove(&layer_id);
+        }
         Ok(())
     }
 
@@ -810,23 +849,37 @@ impl FontWorkspace {
     /// authored edit is committed before the live font swap, so eviction can
     /// never discard unpersisted state.
     pub fn evict_glyphs(&mut self, glyph_ids: &[GlyphId]) -> Result<(), WorkspaceError> {
-        let mut next_font = self.font.clone();
+        let mut placeholders = Vec::new();
         let mut evicted = Vec::new();
+        let mut seen_layer_ids = HashSet::new();
         for glyph_id in glyph_ids {
             let Some(glyph) = self.font.glyph(glyph_id.clone()) else {
                 continue;
             };
             for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
-                if self.unloaded_layer_ids.contains(&layer.id()) {
+                if self.unloaded_layer_ids.contains(&layer.id())
+                    || !seen_layer_ids.insert(layer.id())
+                {
                     continue;
                 }
                 let mut placeholder =
                     GlyphLayer::with_width(layer.id(), layer.source_id(), layer.width());
                 placeholder.set_height(layer.height());
-                next_font.replace_glyph_layer(placeholder)?;
+                placeholders.push(placeholder);
                 evicted.push(layer.id());
             }
         }
+
+        let mut next_font = self.font.clone();
+        let mut batch = Vec::with_capacity(MAX_LAYER_READ_BATCH_COUNT);
+        for placeholder in placeholders {
+            batch.push(placeholder);
+            if batch.len() == MAX_LAYER_READ_BATCH_COUNT {
+                next_font.replace_glyph_layers(std::mem::take(&mut batch))?;
+            }
+        }
+        next_font.replace_glyph_layers(batch)?;
+
         self.font = next_font;
         self.unloaded_layer_ids.extend(evicted);
         Ok(())
@@ -1275,6 +1328,37 @@ fn replay_glyph_layer(
     }
 
     Ok(())
+}
+
+fn write_import_batches(
+    mut import: FontImport,
+    writer: &mut LayerStreamWriter<'_>,
+    batch_limit: ImportBatchLimit,
+) -> Result<(), WorkspaceError> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+    std::thread::scope(|scope| -> Result<(), WorkspaceError> {
+        scope.spawn(move || {
+            loop {
+                match import.next_batch(batch_limit) {
+                    Ok(glyphs) if glyphs.is_empty() => break,
+                    Ok(glyphs) => {
+                        if sender.send(Ok(glyphs)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = sender.send(Err(error));
+                        break;
+                    }
+                }
+            }
+        });
+
+        for glyphs in receiver {
+            writer.write_glyph_batch(&glyphs?)?;
+        }
+        Ok(())
+    })
 }
 
 fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {

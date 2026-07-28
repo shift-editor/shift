@@ -242,7 +242,7 @@ impl DesignspaceReader {
     }
 }
 
-fn named_instances_from_designspace(
+pub(super) fn named_instances_from_designspace(
     doc: &DesignSpaceDocument,
     axes: &[Axis],
 ) -> DesignspaceResult<Vec<NamedInstance>> {
@@ -361,7 +361,7 @@ fn unmap_axis_value(axis: &norad::designspace::Axis, value: f64) -> f64 {
     value + last_user - last_design
 }
 
-fn axis_mappings_from_designspace(
+pub(super) fn axis_mappings_from_designspace(
     doc: &DesignSpaceDocument,
     axes: &[Axis],
 ) -> DesignspaceResult<Vec<AxisMapping>> {
@@ -463,12 +463,12 @@ fn extend_axis_ids(target: &mut Vec<AxisId>, location: &Location) {
 }
 
 #[derive(Clone, Debug)]
-struct AxislessSource {
-    filename: String,
-    familyname: Option<String>,
-    stylename: Option<String>,
-    name: Option<String>,
-    layer: Option<String>,
+pub(super) struct AxislessSource {
+    pub(super) filename: String,
+    pub(super) familyname: Option<String>,
+    pub(super) stylename: Option<String>,
+    pub(super) name: Option<String>,
+    pub(super) layer: Option<String>,
 }
 
 fn load_axisless_designspace(
@@ -625,7 +625,7 @@ fn load_axisless_designspace(
     Ok(font)
 }
 
-fn axisless_source_name(
+pub(super) fn axisless_source_name(
     source: &AxislessSource,
     ufo_style_name: Option<&str>,
     used_names: &HashSet<String>,
@@ -641,7 +641,7 @@ fn axisless_source_name(
     )
 }
 
-fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<AxislessSource>> {
+pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<AxislessSource>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut sources = Vec::new();
@@ -702,7 +702,7 @@ fn xml_attr(
     Ok(None)
 }
 
-fn source_name(
+pub(super) fn source_name(
     source: &norad::designspace::Source,
     ufo_style_name: Option<&str>,
     used_names: &HashSet<String>,
@@ -763,7 +763,7 @@ fn imported_source_name(
     }
 }
 
-fn location_from_dimensions(
+pub(super) fn location_from_dimensions(
     dimensions: &[norad::designspace::Dimension],
     doc: &DesignSpaceDocument,
     axes: &[Axis],
@@ -847,7 +847,7 @@ fn map_axis_value(axis: &norad::designspace::Axis, user_value: f64) -> f64 {
 // design-space locations to the mapped user-space defaults. Layer-backed
 // sources remain eligible because `layer` describes storage, not source role.
 // https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.DesignSpaceDocument.findDefault
-fn find_default_source_index(doc: &DesignSpaceDocument) -> Option<usize> {
+pub(super) fn find_default_source_index(doc: &DesignSpaceDocument) -> Option<usize> {
     doc.sources.iter().position(|source| {
         doc.axes.iter().all(|axis| {
             let source_value = source_axis_design_value(&source.location, axis);
@@ -970,7 +970,7 @@ fn remove_glyph_layers_without_source(font: &mut Font) -> DesignspaceResult<()> 
 /// - **One-sided** (only min OR max specified): the missing side falls back
 ///   to `default`. Common with slant axes (`min=-15, default=0, max=0`).
 /// - **Degenerate** (no min/max/values): all three collapse to default.
-fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
+pub(super) fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
     let values_range = || {
         ds_axis
             .values

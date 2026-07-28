@@ -52,6 +52,36 @@ fn load_font(path: &Path) -> Font {
         .unwrap_or_else(|error| panic!("failed to load {}: {error}", path.display()))
 }
 
+fn stream_font(path: &Path) -> Font {
+    let mut import = FontLoader::new()
+        .stream_font(path.to_str().unwrap())
+        .unwrap_or_else(|error| panic!("failed to stream {}: {error}", path.display()));
+    assert_eq!(import.header().glyph_count(), 0);
+    let directory = import.directory();
+    let expected_count = import.glyph_count();
+    assert_eq!(directory.len(), expected_count);
+    let mut font = import.header().clone();
+    loop {
+        let glyphs = import
+            .next_batch(shift_backends::ImportBatchLimit::new(8, 64))
+            .unwrap();
+        if glyphs.is_empty() {
+            break;
+        }
+        for glyph in glyphs {
+            font.insert_glyph(glyph).unwrap();
+        }
+    }
+    assert_eq!(font.glyph_count(), expected_count);
+    for entry in directory {
+        assert_eq!(
+            font.glyph(entry.glyph_id).map(Glyph::glyph_name),
+            Some(&entry.name)
+        );
+    }
+    font
+}
+
 fn main_layer(glyph: &Glyph) -> &GlyphLayer {
     glyph
         .layers()
@@ -174,6 +204,65 @@ fn loads_binary_fonts_with_contours() {
         assert!(font.glyph_count() > 0);
         assert!(!main_layer(glyph_a).contours().is_empty());
     }
+}
+
+#[test]
+fn streams_binary_ufo_and_designspace_without_eager_glyphs() {
+    let binary_path = mutatorsans_ttf_path();
+    let binary_bytes = std::fs::read(&binary_path).unwrap();
+    let binary = skrifa::FontRef::new(&binary_bytes).unwrap();
+    let expected_binary_glyphs = skrifa::raw::TableProvider::maxp(&binary)
+        .unwrap()
+        .num_glyphs() as usize;
+    let streamed_binary = stream_font(&binary_path);
+    assert_eq!(streamed_binary.glyph_count(), expected_binary_glyphs);
+
+    for path in [binary_path, mutatorsans_ufo_path()] {
+        let eager = load_font(&path);
+        let streamed = stream_font(&path);
+        assert!(streamed.glyph_count() >= eager.glyph_count());
+        let glyph_a = streamed
+            .glyphs_by_unicode(65)
+            .next()
+            .unwrap_or_else(|| panic!("{} should stream U+0041", path.display()));
+        assert!(!main_layer(glyph_a).contours().is_empty());
+    }
+
+    let path = mutatorsans_designspace_path();
+    let eager = load_font(&path);
+    let streamed = stream_font(&path);
+    assert_eq!(streamed.glyph_count(), eager.glyph_count());
+    assert_eq!(streamed.axes().len(), eager.axes().len());
+    assert_eq!(streamed.sources().len(), eager.sources().len());
+    assert_eq!(
+        streamed
+            .glyphs()
+            .map(Glyph::name)
+            .collect::<std::collections::BTreeSet<_>>(),
+        eager
+            .glyphs()
+            .map(Glyph::name)
+            .collect::<std::collections::BTreeSet<_>>()
+    );
+}
+
+#[test]
+fn streaming_batches_bound_authored_layers_across_sources() {
+    let path = mutatorsans_designspace_path();
+    let mut import = FontLoader::new()
+        .stream_font(path.to_str().unwrap())
+        .unwrap();
+    let glyphs = import
+        .next_batch(shift_backends::ImportBatchLimit::new(512, 4))
+        .unwrap();
+    let layer_count = glyphs
+        .iter()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+
+    assert!(!glyphs.is_empty());
+    assert!(glyphs.len() < import.glyph_count());
+    assert!(layer_count <= 4 || glyphs.len() == 1);
 }
 
 #[test]

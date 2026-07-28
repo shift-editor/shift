@@ -954,6 +954,53 @@ fn file_stores_run_wal_with_verified_pragmas() {
 }
 
 #[test]
+fn completed_import_store_restores_durable_wal_mode() {
+    let path = temp_store_path("import-pragmas");
+    let font = shift_font::test_support::sample_font();
+    let mut store = ShiftStore::open_for_import(&path).expect("open import store");
+    let mut writer = store.font_stream_writer(&font).expect("begin import");
+    for glyph in font.glyphs() {
+        writer.write_glyph(glyph).expect("write glyph");
+    }
+    writer.finish().expect("commit import");
+    store.finish_import().expect("finish import");
+    drop(store);
+
+    let conn = rusqlite::Connection::open(&path).expect("reopen raw");
+    let journal: String = conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .expect("journal_mode");
+    assert_eq!(journal, "wal");
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .expect("integrity_check");
+    assert_eq!(integrity, "ok");
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn import_mode_refuses_a_published_workspace_destination() {
+    let path = temp_store_path("occupied-import");
+    let mut store = ShiftStore::open(&path).expect("open");
+    store
+        .set_workspace_state(WorkspaceState::untitled(None))
+        .expect("publish workspace");
+    drop(store);
+
+    let error = match ShiftStore::open_for_import(&path) {
+        Ok(_) => panic!("published store must be retained"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        shift_store::StoreError::ImportDestinationNotEmpty(existing) if existing == path
+    ));
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
 fn reopen_preserves_written_contents_and_integrity() {
     let path = temp_store_path("reopen");
 

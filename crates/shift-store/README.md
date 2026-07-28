@@ -12,11 +12,13 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.
 - Payload replacement, directory facts, component rows, and workspace revision state commit in one transaction.
 
-`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds and validates one payload and cross-checks its directory and reference-index facts. `FontWorkspace` uses those APIs for explicit glyph acquisition and safe cache eviction.
+`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds and validates one payload; `load_glyph_layers` scans directory facts, bounded payloads, and reference rows once for a deduplicated batch of at most 512 layers and 256 MiB of packed bytes. Both paths cross-check canonical bytes against relational facts. `FontWorkspace` uses the batch path for explicit glyph acquisition and safe cache eviction.
 
 ## Import boundary
 
-`LayerStreamWriter` accepts one parsed `GlyphLayer` at a time. A successful call encodes, indexes, commits, and releases that layer before the caller supplies the next one; no complete in-memory `Font` is required. Format-specific bounded parsers, progress/cancellation, and atomic staging installation belong to the foreign-import layer.
+`LayerStreamWriter` accepts one glyph/layer or a bounded glyph batch without requiring a complete in-memory `Font`. `write_glyph_batch` canonical-encodes layers with Rayon, then writes directory rows, BLOBs, and component indexes in stable order through one SQLite transaction. `finish` is the only commit point; dropping an unfinished writer rolls the complete stream back.
+
+`ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the foreign source remains authoritative and the destination is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL before workspace state is published. Normal edits never use import pragmas. Progress, cancellation, source fingerprinting, and final atomic destination installation remain workspace responsibilities.
 
 ## Schema policy
 
@@ -24,7 +26,7 @@ Shift has not shipped this working-store schema. Schema changes therefore update
 
 ## Responsibilities
 
-- configure SQLite for WAL-backed transactional work;
+- configure SQLite for WAL-backed transactional work and a separately finalized disposable-import mode;
 - own the baseline schema and raw SQL;
 - preserve stable authored IDs and exact values;
 - provide directory-first and bounded payload APIs;
@@ -35,11 +37,11 @@ Shift has not shipped this working-store schema. Schema changes therefore update
 
 ```text
 src/
-  connection.rs    # SQLite opening, WAL, limits, foreign keys
+  connection.rs    # normal WAL opening plus disposable import/finalization posture
   schema.rs        # pre-release version-1 baseline
   font_state.rs    # eager metadata/directory and explicit full materialization
   packed_layer.rs  # bounded BLOB fetch/replace and reference-index checks
-  stream_writer.rs # one-layer-at-a-time import sink
+  stream_writer.rs # bounded Rayon pack plus single-transaction SQLite sink
   change_set.rs    # transactional workspace changes
   workspace_state.rs
 ```

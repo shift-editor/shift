@@ -1,5 +1,8 @@
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
+    #[error("store file-system error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
@@ -18,6 +21,12 @@ pub enum StoreError {
     #[error("glyph layer payload has {bytes} bytes; limit is {limit}")]
     LayerPayloadTooLarge { bytes: u64, limit: u64 },
 
+    #[error("glyph layer read batch has {layers} layers; limit is {limit}")]
+    LayerReadBatchTooLarge { layers: usize, limit: usize },
+
+    #[error("glyph layer read batch has {bytes} payload bytes; limit is {limit}")]
+    LayerReadBatchPayloadTooLarge { bytes: u64, limit: u64 },
+
     #[error("glyph layer {layer_id} payload disagrees with its directory: {detail}")]
     LayerDirectoryMismatch { layer_id: String, detail: String },
 
@@ -35,6 +44,9 @@ pub enum StoreError {
 
     #[error("invalid workspace state: {0}")]
     InvalidWorkspaceState(String),
+
+    #[error("import destination already contains published workspace state: {0}")]
+    ImportDestinationNotEmpty(std::path::PathBuf),
 
     #[error("missing {kind}: {id}")]
     MissingEntity { kind: &'static str, id: String },

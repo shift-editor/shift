@@ -1,11 +1,18 @@
-use crate::errors::{FormatBackendError, FormatBackendResult};
+use std::sync::Arc;
+
+use crate::{
+    errors::{FormatBackendError, FormatBackendResult},
+    import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
+};
+use rayon::prelude::*;
 use shift_font::{
-    Axis, Contour, Font, Glyph, GlyphLayer, LayerId, Location, MetricKind, NamedInstance, PointType,
+    Axis, Contour, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, LayerId, Location,
+    MetricKind, NamedInstance, PointType, SourceId,
 };
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
-    raw::{ReadError, TableProvider},
+    raw::{types::GlyphId, ReadError, TableProvider},
     string::StringId,
     FontRef, MetadataProvider,
 };
@@ -155,50 +162,10 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
         .hmtx()
         .map_err(|e| FormatBackendError::Binary(format!("failed to read hmtx table: {e}")))?;
 
-    let metrics = font.metrics(Size::unscaled(), LocationRef::default());
-    let mut ir_font = Font::new();
+    let mut ir_font = font_header_from_skrifa(font)?;
     let default_source_id = ir_font
         .default_source_id()
         .expect("new font should have a default source");
-
-    ir_font.metrics_mut().units_per_em = metrics.units_per_em as f64;
-    let metric_definitions = ir_font.metric_definitions().to_vec();
-    let default_source = ir_font
-        .source_mut(default_source_id.clone())
-        .expect("new font should contain its default source");
-    set_metric_position(
-        &metric_definitions,
-        default_source,
-        MetricKind::Ascender,
-        Some(metrics.ascent as f64),
-    );
-    set_metric_position(
-        &metric_definitions,
-        default_source,
-        MetricKind::Descender,
-        Some(metrics.descent as f64),
-    );
-    set_metric_position(
-        &metric_definitions,
-        default_source,
-        MetricKind::CapHeight,
-        metrics.cap_height.map(|value| value as f64),
-    );
-    set_metric_position(
-        &metric_definitions,
-        default_source,
-        MetricKind::XHeight,
-        metrics.x_height.map(|value| value as f64),
-    );
-
-    if let Some(family_name) = localized_string(font, StringId::FAMILY_NAME) {
-        ir_font.metadata_mut().family_name = Some(family_name);
-    }
-    if let Some(style_name) = localized_string(font, StringId::SUBFAMILY_NAME) {
-        ir_font.metadata_mut().style_name = Some(style_name);
-    }
-
-    load_variation_metadata(font, &mut ir_font)?;
 
     for (unicode, glyph_id) in char_map.mappings() {
         let outline = outlines.get(glyph_id).ok_or_else(|| {
@@ -240,6 +207,200 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     }
 
     Ok(ir_font)
+}
+
+fn font_header_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
+    let metrics = font.metrics(Size::unscaled(), LocationRef::default());
+    let mut ir_font = Font::new();
+    let default_source_id = ir_font
+        .default_source_id()
+        .expect("new font should have a default source");
+
+    ir_font.metrics_mut().units_per_em = metrics.units_per_em as f64;
+    let metric_definitions = ir_font.metric_definitions().to_vec();
+    let default_source = ir_font
+        .source_mut(default_source_id)
+        .expect("new font should contain its default source");
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::Ascender,
+        Some(metrics.ascent as f64),
+    );
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::Descender,
+        Some(metrics.descent as f64),
+    );
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::CapHeight,
+        metrics.cap_height.map(|value| value as f64),
+    );
+    set_metric_position(
+        &metric_definitions,
+        default_source,
+        MetricKind::XHeight,
+        metrics.x_height.map(|value| value as f64),
+    );
+
+    if let Some(family_name) = localized_string(font, StringId::FAMILY_NAME) {
+        ir_font.metadata_mut().family_name = Some(family_name);
+    }
+    if let Some(style_name) = localized_string(font, StringId::SUBFAMILY_NAME) {
+        ir_font.metadata_mut().style_name = Some(style_name);
+    }
+
+    load_variation_metadata(font, &mut ir_font)?;
+    Ok(ir_font)
+}
+
+#[derive(Clone)]
+struct BinaryGlyphRecord {
+    raw_id: GlyphId,
+    shift_id: ShiftGlyphId,
+    name: GlyphName,
+    unicodes: Vec<u32>,
+}
+
+pub(crate) struct BinaryGlyphStream {
+    bytes: Arc<[u8]>,
+    source_id: SourceId,
+    glyphs: Vec<BinaryGlyphRecord>,
+    next_glyph: usize,
+}
+
+pub(crate) fn stream_font_file(path: &str) -> FormatBackendResult<(Font, BinaryGlyphStream)> {
+    let bytes: Arc<[u8]> = std::fs::read(path)
+        .map_err(|error| FormatBackendError::Binary(format!("failed to read '{path}': {error}")))?
+        .into();
+    let font = FontRef::new(bytes.as_ref()).map_err(|error| {
+        FormatBackendError::Binary(format!("failed to parse '{path}': {error}"))
+    })?;
+    font.hmtx().map_err(|error| {
+        FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
+    })?;
+    let header = font_header_from_skrifa(&font)?;
+    let source_id = header
+        .default_source_id()
+        .expect("binary font header should have a default source");
+    let glyph_count = font
+        .maxp()
+        .map_err(|error| FormatBackendError::Binary(format!("failed to read maxp table: {error}")))?
+        .num_glyphs() as usize;
+    let mut unicodes = vec![Vec::new(); glyph_count];
+    for (unicode, glyph_id) in font.charmap().mappings() {
+        if let Some(values) = unicodes.get_mut(glyph_id.to_u32() as usize) {
+            values.push(unicode);
+        }
+    }
+    let names = font.glyph_names();
+    let glyphs = unicodes
+        .into_iter()
+        .enumerate()
+        .map(|(index, unicodes)| {
+            let raw_id = GlyphId::new(index as u32);
+            let name = names
+                .get(raw_id)
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("gid{index}"));
+            BinaryGlyphRecord {
+                raw_id,
+                shift_id: ShiftGlyphId::from_raw(format!("binary{index}")),
+                name: GlyphName::from(name),
+                unicodes,
+            }
+        })
+        .collect();
+
+    Ok((
+        header,
+        BinaryGlyphStream {
+            bytes,
+            source_id,
+            glyphs,
+            next_glyph: 0,
+        },
+    ))
+}
+
+impl GlyphStream for BinaryGlyphStream {
+    fn directory(&self) -> Vec<GlyphDirectoryEntry> {
+        self.glyphs
+            .iter()
+            .map(|glyph| GlyphDirectoryEntry {
+                glyph_id: glyph.shift_id.clone(),
+                name: glyph.name.clone(),
+            })
+            .collect()
+    }
+
+    fn glyph_count(&self) -> usize {
+        self.glyphs.len()
+    }
+
+    fn next_batch(&mut self, limit: ImportBatchLimit) -> FormatBackendResult<Vec<Glyph>> {
+        if self.next_glyph == self.glyphs.len() {
+            return Ok(Vec::new());
+        }
+
+        let batch_glyphs = limit.max_glyphs().min(limit.max_layers());
+        let end = self
+            .next_glyph
+            .saturating_add(batch_glyphs)
+            .min(self.glyphs.len());
+        let font = FontRef::new(self.bytes.as_ref()).map_err(|error| {
+            FormatBackendError::Binary(format!("failed to reopen resident font: {error}"))
+        })?;
+        let source_id = &self.source_id;
+        let glyphs = self.glyphs[self.next_glyph..end]
+            .par_iter()
+            .map(|record| glyph_from_skrifa(&font, source_id, record))
+            .collect::<FormatBackendResult<Vec<_>>>()?;
+        self.next_glyph = end;
+        Ok(glyphs)
+    }
+}
+
+fn glyph_from_skrifa(
+    font: &FontRef<'_>,
+    source_id: &SourceId,
+    record: &BinaryGlyphRecord,
+) -> FormatBackendResult<Glyph> {
+    let hmtx = font.hmtx().map_err(|error| {
+        FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
+    })?;
+    let advance_width = hmtx.advance(record.raw_id).ok_or_else(|| {
+        FormatBackendError::Binary(format!("missing advance width for glyph {}", record.raw_id))
+    })?;
+    let mut layer = GlyphLayer::with_width(
+        LayerId::from_raw(format!("binary{}", record.raw_id.to_u32())),
+        source_id.clone(),
+        advance_width as f64,
+    );
+
+    if let Some(outline) = font.outline_glyphs().get(record.raw_id) {
+        let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
+        let mut pen = ShiftPen::default();
+        outline.draw(settings, &mut pen).map_err(|error| {
+            FormatBackendError::Binary(format!(
+                "failed to draw outline for glyph {}: {error}",
+                record.raw_id
+            ))
+        })?;
+        let mut contours = pen.contours();
+        detect_smooth_points(&mut contours);
+        for contour in contours {
+            layer.add_contour(contour);
+        }
+    }
+
+    let mut glyph = Glyph::with_id(record.shift_id.clone(), record.name.clone());
+    glyph.set_unicodes(record.unicodes.clone());
+    glyph.set_layer(layer);
+    Ok(glyph)
 }
 
 fn load_variation_metadata(font: &FontRef<'_>, ir_font: &mut Font) -> FormatBackendResult<()> {

@@ -21,7 +21,10 @@ pub use font::FontInfo;
 pub use glyph::{GlyphRecord, NewGlyph};
 pub use layer::{GlyphLayerRecord, NewGlyphLayer};
 pub use outline::{AnchorRecord, ContourRecord, PointRecord};
-pub use packed_layer::{GLYPH_LAYER_FORMAT, GlyphLayerDirectoryEntry};
+pub use packed_layer::{
+    GLYPH_LAYER_FORMAT, GlyphLayerDirectoryEntry, MAX_LAYER_READ_BATCH_COUNT,
+    MAX_LAYER_READ_BATCH_PAYLOAD_BYTES,
+};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};
 pub use store::ShiftStore;
 pub use stream_writer::LayerStreamWriter;

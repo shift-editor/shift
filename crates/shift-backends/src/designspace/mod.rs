@@ -1,9 +1,11 @@
 mod axis_labels;
 mod error;
+mod import;
 mod reader;
 mod writer;
 
 pub use error::DesignspaceError;
+pub(crate) use import::stream_font;
 pub use reader::DesignspaceReader;
 pub use writer::DesignspaceWriter;
 

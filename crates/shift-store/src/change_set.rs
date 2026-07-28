@@ -55,105 +55,158 @@ impl ShiftStore {
 
     pub fn replace_font_state(&mut self, font: &font::Font) -> Result<(), StoreError> {
         let tx = self.conn.transaction()?;
-
-        tx.execute("DELETE FROM glyph_lib", [])?;
-        tx.execute("DELETE FROM font_lib", [])?;
-        tx.execute("DELETE FROM fontinfo_remainder", [])?;
-        tx.execute("DELETE FROM font_binaries", [])?;
-        tx.execute("DELETE FROM kerning_pairs", [])?;
-        tx.execute("DELETE FROM kerning_group_members", [])?;
-        tx.execute("DELETE FROM kerning_groups", [])?;
-        tx.execute("DELETE FROM feature_text", [])?;
-        tx.execute("DELETE FROM font_guidelines", [])?;
-        tx.execute("DELETE FROM glyph_components", [])?;
-        tx.execute("DELETE FROM glyph_layer_payloads", [])?;
-        tx.execute("DELETE FROM glyph_layers", [])?;
-        tx.execute("DELETE FROM glyph_unicodes", [])?;
-        tx.execute("DELETE FROM glyphs", [])?;
-        tx.execute("DELETE FROM source_locations", [])?;
-        tx.execute("DELETE FROM source_metric_values", [])?;
-        tx.execute("DELETE FROM source_lib", [])?;
-        tx.execute("DELETE FROM sources", [])?;
-        tx.execute("DELETE FROM metric_definitions", [])?;
-        tx.execute("DELETE FROM axis_mappings", [])?;
-        tx.execute("DELETE FROM named_instances", [])?;
-        tx.execute("DELETE FROM axes", [])?;
-
-        upsert_font_info(&tx, font)?;
-        replace_feature_text(&tx, font.features().fea_source())?;
-        replace_font_guidelines(&tx, font.guidelines())?;
-        replace_lib_data(&tx, "font_lib", "key", None, font.lib())?;
-        replace_lib_data(
-            &tx,
-            "fontinfo_remainder",
-            "key",
-            None,
-            font.fontinfo_remainder(),
-        )?;
-        replace_font_binaries(&tx, "data", font.data_files())?;
-        replace_font_binaries(&tx, "image", font.images())?;
-        replace_kerning(&tx, font.kerning())?;
-
-        for (order_index, axis) in font.axes().iter().enumerate() {
-            insert_axis(&tx, axis, order_index as i64, false)?;
-        }
-        replace_axis_mappings(&tx, font.axis_mappings())?;
-        replace_named_instances(&tx, font.named_instances())?;
-        replace_metric_definitions(&tx, font.metric_definitions())?;
-
-        for (order_index, source) in font.sources().iter().enumerate() {
-            upsert_source(
-                &tx,
-                &source.id(),
-                SourceRow {
-                    name: Some(source.name()),
-                    filename: source.filename(),
-                    color: source.color(),
-                    kind: SourceKind::from(source.role()),
-                    layer_name: source.layer_name(),
-                    italic_angle: source.italic_angle(),
-                    line_gap: source.line_gap(),
-                    underline_position: source.underline_position(),
-                    underline_thickness: source.underline_thickness(),
-                    order_index: order_index as i64,
-                },
-            )?;
-            replace_source_metric_values(&tx, source.id(), source.metric_values().iter())?;
-            replace_lib_data(
-                &tx,
-                "source_lib",
-                "source_id",
-                Some(&source.id().to_string()),
-                source.lib(),
-            )?;
-
-            for (axis_id, value) in source.location().iter() {
-                // Location entries on undefined axes have no row to reference.
-                if font.axes().iter().any(|axis| axis.id() == *axis_id) {
-                    upsert_source_location(&tx, &source.id(), axis_id, *value)?;
-                }
-            }
-        }
+        replace_font_header_in_tx(&tx, font)?;
 
         for (order_index, glyph) in font.glyphs().enumerate() {
-            upsert_glyph(&tx, &glyph.id(), glyph.glyph_name(), order_index as i64)?;
-            replace_glyph_unicodes(&tx, &glyph.id(), glyph.unicodes())?;
-            replace_lib_data(
-                &tx,
-                "glyph_lib",
-                "glyph_id",
-                Some(&glyph.id().to_string()),
-                glyph.lib(),
-            )?;
-
-            for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
-                write_layer_in_tx(&tx, &glyph.id(), Some(glyph.glyph_name()), layer)?;
-            }
+            write_glyph_in_tx(&tx, glyph, order_index as i64)?;
         }
 
         tx.commit()?;
         Ok(())
     }
+}
+
+pub(crate) fn replace_font_header_in_tx(
+    tx: &Transaction<'_>,
+    font: &font::Font,
+) -> Result<(), StoreError> {
+    tx.execute("DELETE FROM glyph_lib", [])?;
+    tx.execute("DELETE FROM font_lib", [])?;
+    tx.execute("DELETE FROM fontinfo_remainder", [])?;
+    tx.execute("DELETE FROM font_binaries", [])?;
+    tx.execute("DELETE FROM kerning_pairs", [])?;
+    tx.execute("DELETE FROM kerning_group_members", [])?;
+    tx.execute("DELETE FROM kerning_groups", [])?;
+    tx.execute("DELETE FROM feature_text", [])?;
+    tx.execute("DELETE FROM font_guidelines", [])?;
+    tx.execute("DELETE FROM glyph_components", [])?;
+    tx.execute("DELETE FROM glyph_layer_payloads", [])?;
+    tx.execute("DELETE FROM glyph_layers", [])?;
+    tx.execute("DELETE FROM glyph_unicodes", [])?;
+    tx.execute("DELETE FROM glyphs", [])?;
+    tx.execute("DELETE FROM source_locations", [])?;
+    tx.execute("DELETE FROM source_metric_values", [])?;
+    tx.execute("DELETE FROM source_lib", [])?;
+    tx.execute("DELETE FROM sources", [])?;
+    tx.execute("DELETE FROM metric_definitions", [])?;
+    tx.execute("DELETE FROM axis_mappings", [])?;
+    tx.execute("DELETE FROM named_instances", [])?;
+    tx.execute("DELETE FROM axes", [])?;
+
+    upsert_font_info(tx, font)?;
+    replace_feature_text(tx, font.features().fea_source())?;
+    replace_font_guidelines(tx, font.guidelines())?;
+    replace_lib_data(tx, "font_lib", "key", None, font.lib())?;
+    replace_lib_data(
+        tx,
+        "fontinfo_remainder",
+        "key",
+        None,
+        font.fontinfo_remainder(),
+    )?;
+    replace_font_binaries(tx, "data", font.data_files())?;
+    replace_font_binaries(tx, "image", font.images())?;
+    replace_kerning(tx, font.kerning())?;
+
+    for (order_index, axis) in font.axes().iter().enumerate() {
+        insert_axis(tx, axis, order_index as i64, false)?;
+    }
+    replace_axis_mappings(tx, font.axis_mappings())?;
+    replace_named_instances(tx, font.named_instances())?;
+    replace_metric_definitions(tx, font.metric_definitions())?;
+
+    for (order_index, source) in font.sources().iter().enumerate() {
+        upsert_source(
+            tx,
+            &source.id(),
+            SourceRow {
+                name: Some(source.name()),
+                filename: source.filename(),
+                color: source.color(),
+                kind: SourceKind::from(source.role()),
+                layer_name: source.layer_name(),
+                italic_angle: source.italic_angle(),
+                line_gap: source.line_gap(),
+                underline_position: source.underline_position(),
+                underline_thickness: source.underline_thickness(),
+                order_index: order_index as i64,
+            },
+        )?;
+        replace_source_metric_values(tx, source.id(), source.metric_values().iter())?;
+        replace_lib_data(
+            tx,
+            "source_lib",
+            "source_id",
+            Some(&source.id().to_string()),
+            source.lib(),
+        )?;
+
+        for (axis_id, value) in source.location().iter() {
+            // Location entries on undefined axes have no row to reference.
+            if font.axes().iter().any(|axis| axis.id() == *axis_id) {
+                upsert_source_location(tx, &source.id(), axis_id, *value)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) fn write_glyph_in_tx(
+    tx: &Transaction<'_>,
+    glyph: &font::Glyph,
+    order_index: i64,
+) -> Result<(), StoreError> {
+    write_glyph_directory_in_tx(tx, glyph, order_index)?;
+
+    for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
+        write_layer_in_tx(tx, &glyph.id(), Some(glyph.glyph_name()), layer)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn insert_glyph_directory_in_tx(
+    tx: &Transaction<'_>,
+    glyph: &font::Glyph,
+    order_index: i64,
+) -> Result<(), StoreError> {
+    tx.prepare_cached("INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, ?3)")?
+        .execute(params![
+            glyph.id().to_string(),
+            glyph.glyph_name().as_str(),
+            order_index
+        ])?;
+    for (unicode_order, unicode) in glyph.unicodes().iter().enumerate() {
+        tx.prepare_cached(
+            "INSERT INTO glyph_unicodes (glyph_id, unicode, order_index) VALUES (?1, ?2, ?3)",
+        )?
+        .execute(params![
+            glyph.id().to_string(),
+            i64::from(*unicode),
+            unicode_order as i64
+        ])?;
+    }
+    for (key, value) in glyph.lib().iter() {
+        tx.prepare_cached("INSERT INTO glyph_lib (glyph_id, key, value_json) VALUES (?1, ?2, ?3)")?
+            .execute(params![glyph.id().to_string(), key, lib_value_json(value)?])?;
+    }
+    Ok(())
+}
+
+pub(crate) fn write_glyph_directory_in_tx(
+    tx: &Transaction<'_>,
+    glyph: &font::Glyph,
+    order_index: i64,
+) -> Result<(), StoreError> {
+    upsert_glyph(tx, &glyph.id(), glyph.glyph_name(), order_index)?;
+    replace_glyph_unicodes(tx, &glyph.id(), glyph.unicodes())?;
+    replace_lib_data(
+        tx,
+        "glyph_lib",
+        "glyph_id",
+        Some(&glyph.id().to_string()),
+        glyph.lib(),
+    )
 }
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
@@ -675,7 +728,7 @@ fn upsert_glyph(
     name: &font::GlyphName,
     order_index: i64,
 ) -> Result<(), StoreError> {
-    tx.execute(
+    tx.prepare_cached(
         "
         INSERT INTO glyphs (id, name, order_index)
         VALUES (?1, ?2, ?3)
@@ -683,8 +736,8 @@ fn upsert_glyph(
             name = excluded.name,
             order_index = excluded.order_index
         ",
-        params![glyph_id.to_string(), name.as_str(), order_index],
-    )?;
+    )?
+    .execute(params![glyph_id.to_string(), name.as_str(), order_index])?;
     Ok(())
 }
 
@@ -693,19 +746,21 @@ fn replace_glyph_unicodes(
     glyph_id: &font::GlyphId,
     unicodes: &[u32],
 ) -> Result<(), StoreError> {
-    tx.execute(
-        "DELETE FROM glyph_unicodes WHERE glyph_id = ?1",
-        [glyph_id.to_string()],
-    )?;
+    tx.prepare_cached("DELETE FROM glyph_unicodes WHERE glyph_id = ?1")?
+        .execute([glyph_id.to_string()])?;
 
     for (order_index, unicode) in unicodes.iter().enumerate() {
-        tx.execute(
+        tx.prepare_cached(
             "
             INSERT INTO glyph_unicodes (glyph_id, unicode, order_index)
             VALUES (?1, ?2, ?3)
             ",
-            params![glyph_id.to_string(), *unicode as i64, order_index as i64],
-        )?;
+        )?
+        .execute(params![
+            glyph_id.to_string(),
+            *unicode as i64,
+            order_index as i64
+        ])?;
     }
 
     Ok(())
@@ -946,12 +1001,16 @@ fn replace_lib_data(
     match owner_id {
         Some(owner_id) => {
             let delete_sql = format!("DELETE FROM {table} WHERE {owner_column} = ?1");
-            tx.execute(&delete_sql, [owner_id])?;
+            tx.prepare_cached(&delete_sql)?.execute([owner_id])?;
             let insert_sql = format!(
                 "INSERT INTO {table} ({owner_column}, key, value_json) VALUES (?1, ?2, ?3)"
             );
             for (key, value) in lib.iter() {
-                tx.execute(&insert_sql, params![owner_id, key, lib_value_json(value)?])?;
+                tx.prepare_cached(&insert_sql)?.execute(params![
+                    owner_id,
+                    key,
+                    lib_value_json(value)?
+                ])?;
             }
         }
         None => {

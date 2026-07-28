@@ -153,7 +153,7 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
     let source_path = fixture("apps/desktop/src/renderer/src/assets/fonts/Inter-VariableFont.ttf");
     let store_path = temp.path().join("inter.sqlite");
 
-    let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
     let glyph_count = workspace.font().glyph_count();
     let total_layers = workspace
         .font()
@@ -173,6 +173,8 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
         .take(8)
         .map(|glyph| glyph.id())
         .collect::<Vec<_>>();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace.acquire_glyphs(&requested, false).unwrap();
     let expected = requested
         .iter()
         .flat_map(|glyph_id| {
@@ -217,7 +219,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
     let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
     let store_path = temp.path().join("mutatorsans.sqlite");
 
-    let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
     let glyph_count = workspace.font().glyph_count();
     let total_layers = workspace
         .font()
@@ -231,10 +233,11 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
         .font()
         .glyphs()
         .find(|glyph| {
-            glyph
-                .layers()
-                .values()
-                .any(|layer| !layer.components().is_empty())
+            !workspace
+                .store()
+                .referenced_glyph_ids_for_glyph(&glyph.id())
+                .unwrap()
+                .is_empty()
         })
         .expect("fixture should contain a composite glyph")
         .id();
@@ -254,6 +257,10 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
                 .len()
         })
         .sum::<usize>();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&root), true)
+        .unwrap();
     let expected_root_layers = workspace
         .font()
         .glyph(root.clone())
@@ -400,7 +407,7 @@ fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
     assert_eq!(authored.contours_iter().next().unwrap().points().len(), 4);
 
     workspace
-        .evict_glyphs(std::slice::from_ref(&glyph_id))
+        .evict_glyphs(&[glyph_id.clone(), glyph_id.clone()])
         .unwrap();
     assert_eq!(workspace.loaded_layer_count(), 0);
     assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
