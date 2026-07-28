@@ -1029,7 +1029,33 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
     })?;
     check_limit("point count", point_count, MAX_LAYER_POINT_COUNT)?;
 
-    let mut strings = StringPool::default();
+    let string_capacity = [
+        layer.contours.len(),
+        point_count,
+        layer
+            .components
+            .len()
+            .checked_mul(3)
+            .ok_or(LayerCodecError::LengthOverflow)?,
+        layer
+            .anchors
+            .len()
+            .checked_mul(2)
+            .ok_or(LayerCodecError::LengthOverflow)?,
+        layer
+            .guidelines
+            .len()
+            .checked_mul(3)
+            .ok_or(LayerCodecError::LengthOverflow)?,
+    ]
+    .into_iter()
+    .try_fold(2usize, |total, count| {
+        total
+            .checked_add(count)
+            .ok_or(LayerCodecError::LengthOverflow)
+    })?;
+    check_limit("string count", string_capacity, MAX_LAYER_STRING_COUNT)?;
+    let mut strings = StringPool::with_capacity(string_capacity);
     strings.intern(&layer.id)?;
     strings.intern(&layer.source_id)?;
     for contour in &layer.contours {
@@ -1422,12 +1448,19 @@ pub fn decode_layer(bytes: &[u8]) -> Result<GlyphLayerView<'_>, LayerCodecError>
 }
 
 #[derive(Default)]
-struct StringPool {
-    values: Vec<String>,
-    indexes: HashMap<String, u32>,
+struct StringPool<'a> {
+    values: Vec<&'a str>,
+    indexes: HashMap<&'a str, u32>,
 }
-impl StringPool {
-    fn intern(&mut self, value: &str) -> Result<u32, LayerCodecError> {
+impl<'a> StringPool<'a> {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            values: Vec::with_capacity(capacity),
+            indexes: HashMap::with_capacity(capacity),
+        }
+    }
+
+    fn intern(&mut self, value: &'a str) -> Result<u32, LayerCodecError> {
         if let Some(index) = self.indexes.get(value) {
             return Ok(*index);
         }
@@ -1438,8 +1471,8 @@ impl StringPool {
         )?;
         let index =
             u32::try_from(self.values.len()).map_err(|_| LayerCodecError::LengthOverflow)?;
-        self.values.push(value.to_owned());
-        self.indexes.insert(value.to_owned(), index);
+        self.values.push(value);
+        self.indexes.insert(value, index);
         Ok(index)
     }
     fn index(&self, value: &str) -> u32 {
@@ -1676,9 +1709,9 @@ fn decode_lib_value(
     }
 }
 
-fn gather_map_strings(
-    values: &BTreeMap<String, LayerLibValue>,
-    strings: &mut StringPool,
+fn gather_map_strings<'a>(
+    values: &'a BTreeMap<String, LayerLibValue>,
+    strings: &mut StringPool<'a>,
     depth: usize,
     count: &mut usize,
 ) -> Result<(), LayerCodecError> {
@@ -1690,9 +1723,9 @@ fn gather_map_strings(
     }
     Ok(())
 }
-fn gather_value_strings(
-    value: &LayerLibValue,
-    strings: &mut StringPool,
+fn gather_value_strings<'a>(
+    value: &'a LayerLibValue,
+    strings: &mut StringPool<'a>,
     depth: usize,
     count: &mut usize,
 ) -> Result<(), LayerCodecError> {
@@ -1724,7 +1757,7 @@ fn gather_value_strings(
 fn encode_map(
     bytes: &mut Vec<u8>,
     values: &BTreeMap<String, LayerLibValue>,
-    strings: &StringPool,
+    strings: &StringPool<'_>,
     depth: usize,
     count: &mut usize,
 ) -> Result<(), LayerCodecError> {
@@ -1739,7 +1772,7 @@ fn encode_map(
 fn encode_lib_value(
     bytes: &mut Vec<u8>,
     value: &LayerLibValue,
-    strings: &StringPool,
+    strings: &StringPool<'_>,
     depth: usize,
     count: &mut usize,
 ) -> Result<(), LayerCodecError> {
