@@ -55,25 +55,14 @@ impl OutlinePen for ShiftPen {
             .add_point(x as f64, y as f64, PointType::OnCurve, false);
     }
 
-    /// Binary imports produce cubic-only IR: the wire and renderer layers do
-    /// not support quadratic segments, so every TrueType quadratic is lifted
-    /// to its exact cubic equivalent (mathematically lossless — every
-    /// quadratic is a cubic with c1 = q0 + 2/3(q1 - q0), c2 = q2 + 2/3(q1 - q2)).
+    /// Preserves the source quadratic as one control and one qcurve endpoint.
+    /// The canonical layer codec retains this distinction; the wire projects
+    /// the endpoint as on-curve, which still lets clients infer one-control
+    /// quadratic segments without cubic expansion.
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
         let contour = self.current_contour();
-        let q0 = contour
-            .last_point()
-            .expect("quad_to requires a current point");
-        let (q0x, q0y) = (q0.x(), q0.y());
-        let (q1x, q1y) = (cx0 as f64, cy0 as f64);
-        let (q2x, q2y) = (x as f64, y as f64);
-        let c1x = q0x + 2.0 / 3.0 * (q1x - q0x);
-        let c1y = q0y + 2.0 / 3.0 * (q1y - q0y);
-        let c2x = q2x + 2.0 / 3.0 * (q1x - q2x);
-        let c2y = q2y + 2.0 / 3.0 * (q1y - q2y);
-        contour.add_point(c1x, c1y, PointType::OffCurve, false);
-        contour.add_point(c2x, c2y, PointType::OffCurve, false);
-        contour.add_point(q2x, q2y, PointType::OnCurve, false);
+        contour.add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
+        contour.add_point(x as f64, y as f64, PointType::QCurve, false);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
@@ -95,7 +84,11 @@ impl OutlinePen for ShiftPen {
                 let first = contour.first_point().expect("contour is non-empty");
                 let last = contour.last_point().expect("contour is non-empty");
                 if last.is_on_curve() && last.x() == first.x() && last.y() == first.y() {
+                    let closes_quadratic = last.point_type() == PointType::QCurve;
                     contour.points_mut().pop();
+                    if closes_quadratic {
+                        contour.points_mut()[0].set_point_type(PointType::QCurve);
+                    }
                 }
             }
             contour.close();
@@ -432,7 +425,7 @@ fn localized_string(font: &FontRef<'_>, id: StringId) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::Point;
+    use shift_font::CurveSegment;
     use skrifa::outline::pen::PathElement;
     use std::path::PathBuf;
 
@@ -445,34 +438,12 @@ mod tests {
             .join("fixtures/fonts/mutatorsans/MutatorSans.ttf")
     }
 
-    fn quad_at(q0: (f64, f64), q1: (f64, f64), q2: (f64, f64), t: f64) -> (f64, f64) {
-        let u = 1.0 - t;
-        (
-            u * u * q0.0 + 2.0 * u * t * q1.0 + t * t * q2.0,
-            u * u * q0.1 + 2.0 * u * t * q1.1 + t * t * q2.1,
-        )
-    }
-
-    fn cubic_at(
-        p0: (f64, f64),
-        c1: (f64, f64),
-        c2: (f64, f64),
-        p3: (f64, f64),
-        t: f64,
-    ) -> (f64, f64) {
-        let u = 1.0 - t;
-        (
-            u * u * u * p0.0 + 3.0 * u * u * t * c1.0 + 3.0 * u * t * t * c2.0 + t * t * t * p3.0,
-            u * u * u * p0.1 + 3.0 * u * u * t * c1.1 + 3.0 * u * t * t * c2.1 + t * t * t * p3.1,
-        )
-    }
-
     fn point_types(contour: &Contour) -> Vec<PointType> {
         contour.points().iter().map(|p| p.point_type()).collect()
     }
 
     #[test]
-    fn quad_lifted_to_geometrically_identical_cubic() {
+    fn quad_preserves_control_and_endpoint() {
         let mut pen = ShiftPen::default();
         pen.move_to(10.0, 20.0);
         pen.quad_to(50.0, 90.0, 100.0, 20.0);
@@ -481,28 +452,10 @@ mod tests {
         let points = contours[0].points();
         assert_eq!(
             point_types(&contours[0]),
-            vec![
-                PointType::OnCurve,
-                PointType::OffCurve,
-                PointType::OffCurve,
-                PointType::OnCurve
-            ]
+            vec![PointType::OnCurve, PointType::OffCurve, PointType::QCurve]
         );
-
-        let q0 = (10.0, 20.0);
-        let q1 = (50.0, 90.0);
-        let q2 = (100.0, 20.0);
-        let c1 = (points[1].x(), points[1].y());
-        let c2 = (points[2].x(), points[2].y());
-        for step in 0..=20 {
-            let t = step as f64 / 20.0;
-            let expected = quad_at(q0, q1, q2, t);
-            let actual = cubic_at(q0, c1, c2, q2, t);
-            assert!(
-                (expected.0 - actual.0).abs() < 1e-9 && (expected.1 - actual.1).abs() < 1e-9,
-                "lifted cubic diverges from quad at t={t}: {expected:?} vs {actual:?}"
-            );
-        }
+        assert_eq!((points[1].x(), points[1].y()), (50.0, 90.0));
+        assert_eq!((points[2].x(), points[2].y()), (100.0, 20.0));
     }
 
     #[test]
@@ -518,13 +471,8 @@ mod tests {
         assert!(contour.is_closed());
         assert_eq!(
             point_types(contour),
-            vec![
-                PointType::OnCurve,
-                PointType::OnCurve,
-                PointType::OffCurve,
-                PointType::OffCurve
-            ],
-            "closing curve's explicit end point should be dropped; the closed contour wraps to the start"
+            vec![PointType::QCurve, PointType::OnCurve, PointType::OffCurve],
+            "closing qcurve endpoint should move to the wrapped start point"
         );
     }
 
@@ -555,15 +503,14 @@ mod tests {
             vec![
                 PointType::OnCurve,
                 PointType::OffCurve,
-                PointType::OffCurve,
-                PointType::OnCurve,
+                PointType::QCurve,
                 PointType::OnCurve
             ]
         );
     }
 
     #[test]
-    fn imported_cubics_match_source_quadratics() {
+    fn imported_quadratics_match_source_segments() {
         let path = mutatorsans_ttf_path();
         let bytes = std::fs::read(&path).expect("MutatorSans.ttf fixture should exist");
         let font_ref = FontRef::new(&bytes).unwrap();
@@ -594,21 +541,18 @@ mod tests {
             .next()
             .expect("glyph should have a layer");
 
-        let mut cubic_segments: Vec<[(f64, f64); 4]> = Vec::new();
-        for contour in layer.contours_iter() {
-            let points: Vec<&Point> = contour.points().iter().collect();
-            let len = points.len();
-            for i in 0..len {
-                let window: Vec<&Point> = (0..4).map(|offset| points[(i + offset) % len]).collect();
-                if window[0].is_on_curve()
-                    && window[1].point_type() == PointType::OffCurve
-                    && window[2].point_type() == PointType::OffCurve
-                    && window[3].is_on_curve()
-                {
-                    cubic_segments.push([0, 1, 2, 3].map(|p| (window[p].x(), window[p].y())));
-                }
-            }
-        }
+        let quadratics = layer
+            .contours_iter()
+            .flat_map(|contour| contour.segments())
+            .filter_map(|segment| match segment {
+                CurveSegment::Quad(start, control, end) => Some([
+                    (start.x(), start.y()),
+                    (control.x(), control.y()),
+                    (end.x(), end.y()),
+                ]),
+                CurveSegment::Line(..) | CurveSegment::Cubic(..) => None,
+            })
+            .collect::<Vec<_>>();
 
         let mut current = (0.0, 0.0);
         let mut quads_checked = 0;
@@ -618,27 +562,13 @@ mod tests {
                     current = (x as f64, y as f64);
                 }
                 PathElement::QuadTo { cx0, cy0, x, y } => {
-                    let q0 = current;
-                    let q1 = (cx0 as f64, cy0 as f64);
-                    let q2 = (x as f64, y as f64);
-                    let segment = cubic_segments
-                        .iter()
-                        .find(|[p0, _, _, p3]| *p0 == q0 && *p3 == q2)
-                        .unwrap_or_else(|| {
-                            panic!("no imported cubic segment from {q0:?} to {q2:?}")
-                        });
-                    for step in 1..8 {
-                        let t = step as f64 / 8.0;
-                        let expected = quad_at(q0, q1, q2, t);
-                        let actual = cubic_at(segment[0], segment[1], segment[2], segment[3], t);
-                        assert!(
-                            (expected.0 - actual.0).abs() < 1e-9
-                                && (expected.1 - actual.1).abs() < 1e-9,
-                            "imported cubic diverges from source quad at t={t}"
-                        );
-                    }
+                    let expected = [current, (cx0 as f64, cy0 as f64), (x as f64, y as f64)];
+                    assert!(
+                        quadratics.contains(&expected),
+                        "missing imported quadratic {expected:?}"
+                    );
                     quads_checked += 1;
-                    current = q2;
+                    current = expected[2];
                 }
                 PathElement::CurveTo { x, y, .. } => {
                     current = (x as f64, y as f64);

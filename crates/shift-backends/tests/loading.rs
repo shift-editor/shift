@@ -285,7 +285,7 @@ fn loads_binary_variable_axes_and_named_instances() {
     assert_eq!(regular.postscript_name(), Some("HostGrotesk-Regular"));
 }
 
-fn assert_cubic_point_runs(contour: &Contour, context: &str) {
+fn assert_curve_point_runs(contour: &Contour, context: &str) {
     let points = contour.points();
     assert!(!points.is_empty(), "empty contour in {context}");
     assert!(
@@ -304,16 +304,29 @@ fn assert_cubic_point_runs(contour: &Contour, context: &str) {
                 );
                 off_run = 0;
             }
-            other => panic!("unexpected point type {other:?} in {context}"),
+            PointType::QCurve => {
+                assert_eq!(
+                    off_run, 1,
+                    "qcurve point preceded by {off_run} off-curves in {context}"
+                );
+                off_run = 0;
+            }
         }
     }
 
     if contour.is_closed() {
-        assert!(
-            off_run == 0 || off_run == 2,
-            "closing segment has {off_run} off-curves in {context}"
-        );
         let first = &points[0];
+        match first.point_type() {
+            PointType::QCurve => assert_eq!(
+                off_run, 1,
+                "closing qcurve has {off_run} off-curves in {context}"
+            ),
+            PointType::OnCurve => assert!(
+                off_run == 0 || off_run == 2,
+                "closing segment has {off_run} off-curves in {context}"
+            ),
+            PointType::OffCurve => unreachable!("first point is known to be on-curve"),
+        }
         let last = &points[points.len() - 1];
         assert!(
             points.len() == 1
@@ -329,7 +342,7 @@ fn assert_cubic_point_runs(contour: &Contour, context: &str) {
 }
 
 #[test]
-fn binary_import_produces_valid_cubic_point_runs() {
+fn binary_import_produces_valid_curve_point_runs() {
     for path in [mutatorsans_ttf_path(), mutatorsans_otf_path()] {
         let font = load_font(&path);
         let mut curve_contours = 0;
@@ -337,7 +350,7 @@ fn binary_import_produces_valid_cubic_point_runs() {
             for layer in glyph.layers().values() {
                 for contour in layer.contours_iter() {
                     let context = format!("glyph '{}' in {}", glyph.name(), path.display());
-                    assert_cubic_point_runs(contour, &context);
+                    assert_curve_point_runs(contour, &context);
                     if contour
                         .points()
                         .iter()

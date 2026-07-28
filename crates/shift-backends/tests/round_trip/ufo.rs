@@ -532,7 +532,8 @@ fn ttf_import_saves_spec_valid_ufo_curves() {
     let norad_font = norad::Font::load(&output_path)
         .expect("norad should parse every glif written from a TTF import");
 
-    let mut curve_points = 0;
+    let mut cubic_points = 0;
+    let mut quadratic_points = 0;
     for layer in norad_font.layers.iter() {
         for glyph in layer.iter() {
             for contour in &glyph.contours {
@@ -556,24 +557,32 @@ fn ttf_import_saves_spec_valid_ufo_curves() {
                                 "curve point in glyph '{}' is not preceded by exactly two off-curves",
                                 glyph.name()
                             );
-                            curve_points += 1;
+                            cubic_points += 1;
                         }
                         norad::PointType::OffCurve => {
                             let next = &points[(index + 1) % points.len()];
                             assert!(
                                 matches!(
                                     next.typ,
-                                    norad::PointType::OffCurve | norad::PointType::Curve
+                                    norad::PointType::OffCurve
+                                        | norad::PointType::Curve
+                                        | norad::PointType::QCurve
                                 ),
-                                "off-curve in glyph '{}' is not part of a cubic curve segment",
+                                "off-curve in glyph '{}' is not part of a curve segment",
                                 glyph.name()
                             );
                         }
                         norad::PointType::QCurve => {
-                            panic!(
-                                "TTF import should not produce qcurve points (glyph '{}')",
+                            let len = points.len();
+                            let prev = &points[(index + len - 1) % len];
+                            let prev_prev = &points[(index + len - 2) % len];
+                            assert!(
+                                prev.typ == norad::PointType::OffCurve
+                                    && prev_prev.typ != norad::PointType::OffCurve,
+                                "qcurve point in glyph '{}' is not preceded by exactly one off-curve",
                                 glyph.name()
                             );
+                            quadratic_points += 1;
                         }
                         norad::PointType::Line | norad::PointType::Move => {}
                     }
@@ -582,7 +591,11 @@ fn ttf_import_saves_spec_valid_ufo_curves() {
         }
     }
     assert!(
-        curve_points > 0,
+        cubic_points + quadratic_points > 0,
         "TTF import round trip should contain curve segments"
+    );
+    assert!(
+        quadratic_points > 0,
+        "TrueType quadratic segments should remain qcurves after UFO export"
     );
 }
