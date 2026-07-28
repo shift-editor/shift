@@ -10,9 +10,9 @@ use shift_font::{
     MetricKind, NamedInstance, PointType, SourceId,
 };
 use skrifa::{
-    outline::{DrawSettings, OutlinePen},
+    outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
     prelude::{LocationRef, Size},
-    raw::{types::GlyphId, ReadError, TableProvider},
+    raw::{tables::hmtx::Hmtx, types::GlyphId, ReadError, TableProvider},
     string::StringId,
     FontRef, MetadataProvider,
 };
@@ -226,9 +226,9 @@ pub(crate) fn stream_font_file(path: &str) -> FormatBackendResult<(Font, BinaryG
         FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
     })?;
     let header = font_header_from_skrifa(&font)?;
-    let source_id = header
-        .default_source_id()
-        .expect("binary font header should have a default source");
+    let source_id = header.default_source_id().ok_or_else(|| {
+        FormatBackendError::Binary("binary font header is missing its default source".into())
+    })?;
     let glyph_count = font
         .maxp()
         .map_err(|error| FormatBackendError::Binary(format!("failed to read maxp table: {error}")))?
@@ -251,6 +251,8 @@ pub(crate) fn stream_font_file(path: &str) -> FormatBackendResult<(Font, BinaryG
                 .unwrap_or_else(|| format!("gid{index}"));
             BinaryGlyphRecord {
                 raw_id,
+                // Compiled fonts carry stable glyph order but no Shift IDs, so
+                // deterministic GID-derived identities make re-import repeatable.
                 shift_id: ShiftGlyphId::from_raw(format!("binary{index}")),
                 name: GlyphName::from(name),
                 unicodes,
@@ -297,10 +299,14 @@ impl GlyphStream for BinaryGlyphStream {
         let font = FontRef::new(self.bytes.as_ref()).map_err(|error| {
             FormatBackendError::Binary(format!("failed to reopen resident font: {error}"))
         })?;
+        let hmtx = font.hmtx().map_err(|error| {
+            FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
+        })?;
+        let outlines = font.outline_glyphs();
         let source_id = &self.source_id;
         let glyphs = self.glyphs[self.next_glyph..end]
             .par_iter()
-            .map(|record| glyph_from_skrifa(&font, source_id, record))
+            .map(|record| glyph_from_skrifa(&hmtx, &outlines, source_id, record))
             .collect::<FormatBackendResult<Vec<_>>>()?;
         self.next_glyph = end;
         Ok(glyphs)
@@ -308,13 +314,11 @@ impl GlyphStream for BinaryGlyphStream {
 }
 
 fn glyph_from_skrifa(
-    font: &FontRef<'_>,
+    hmtx: &Hmtx<'_>,
+    outlines: &OutlineGlyphCollection<'_>,
     source_id: &SourceId,
     record: &BinaryGlyphRecord,
 ) -> FormatBackendResult<Glyph> {
-    let hmtx = font.hmtx().map_err(|error| {
-        FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
-    })?;
     let advance_width = hmtx.advance(record.raw_id).ok_or_else(|| {
         FormatBackendError::Binary(format!("missing advance width for glyph {}", record.raw_id))
     })?;
@@ -324,7 +328,7 @@ fn glyph_from_skrifa(
         advance_width as f64,
     );
 
-    if let Some(outline) = font.outline_glyphs().get(record.raw_id) {
+    if let Some(outline) = outlines.get(record.raw_id) {
         let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
         let mut pen = ShiftPen::default();
         outline.draw(settings, &mut pen).map_err(|error| {

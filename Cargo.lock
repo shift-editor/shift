@@ -2351,7 +2351,6 @@ dependencies = [
  "rusqlite",
  "serde_json",
  "shift-font",
- "shift-glyph-codec",
  "tempfile",
  "thiserror",
 ]

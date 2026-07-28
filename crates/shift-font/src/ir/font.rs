@@ -1106,13 +1106,6 @@ impl Font {
         Ok(())
     }
 
-    /// Replaces an existing layer with the same identity. Used by bounded
-    /// storage acquisition to hydrate a directory placeholder without
-    /// changing glyph/layer ownership.
-    pub fn replace_glyph_layer(&mut self, layer: GlyphLayer) -> CoreResult<()> {
-        self.replace_glyph_layers(vec![layer])
-    }
-
     /// Atomically replaces existing layers while cloning and validating the
     /// font index only once for the complete batch.
     pub fn replace_glyph_layers(&mut self, layers: Vec<GlyphLayer>) -> CoreResult<()> {

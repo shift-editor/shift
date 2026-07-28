@@ -6,7 +6,7 @@ use shift_font::{
     PointSeed, PointType, SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
-use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
+use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 fn create_glyph_intent(name: &str, unicodes: Vec<u32>) -> FontIntent {
     FontIntent::CreateGlyph {
@@ -174,7 +174,9 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
         .map(|glyph| glyph.id())
         .collect::<Vec<_>>();
     assert_eq!(workspace.loaded_layer_count(), 0);
-    workspace.acquire_glyphs(&requested, false).unwrap();
+    workspace
+        .acquire_glyphs(&requested, AcquireScope::Glyphs)
+        .unwrap();
     let expected = requested
         .iter()
         .flat_map(|glyph_id| {
@@ -199,7 +201,9 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
     assert_eq!(resumed.font().glyph_count(), glyph_count);
     assert_eq!(resumed.loaded_layer_count(), 0);
 
-    resumed.acquire_glyphs(&requested, false).unwrap();
+    resumed
+        .acquire_glyphs(&requested, AcquireScope::Glyphs)
+        .unwrap();
 
     assert_eq!(resumed.loaded_layer_count(), expected.len());
     assert!(resumed.loaded_layer_count() < total_layers);
@@ -211,6 +215,64 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
             bytes
         );
     }
+}
+
+/// Manual corpus gate for large fonts that cannot live in the repository.
+///
+/// Run with, for example:
+/// `SHIFT_STRESS_FONT=/path/to/SourceHanSans-VF.ttf SHIFT_STRESS_MIN_GLYPHS=65000 SHIFT_STRESS_MIN_LAYERS=65000 cargo test -p shift-workspace configured_large_corpus_streams_resumes_and_acquires -- --ignored --nocapture`.
+#[test]
+#[ignore = "requires SHIFT_STRESS_FONT and explicit corpus expectations"]
+fn configured_large_corpus_streams_resumes_and_acquires() {
+    let source_path = PathBuf::from(
+        std::env::var_os("SHIFT_STRESS_FONT").expect("SHIFT_STRESS_FONT must name a font source"),
+    );
+    let min_glyphs = std::env::var("SHIFT_STRESS_MIN_GLYPHS")
+        .expect("SHIFT_STRESS_MIN_GLYPHS must document the selected corpus")
+        .parse::<usize>()
+        .expect("SHIFT_STRESS_MIN_GLYPHS must be an integer");
+    let min_layers = std::env::var("SHIFT_STRESS_MIN_LAYERS")
+        .expect("SHIFT_STRESS_MIN_LAYERS must document the selected corpus")
+        .parse::<usize>()
+        .expect("SHIFT_STRESS_MIN_LAYERS must be an integer");
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("corpus.sqlite");
+    let started = std::time::Instant::now();
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_count = workspace.font().glyph_count();
+    let layer_count = workspace
+        .font()
+        .glyphs()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+    assert!(glyph_count >= min_glyphs, "got {glyph_count} glyphs");
+    assert!(layer_count >= min_layers, "got {layer_count} layers");
+    assert_eq!(workspace.loaded_layer_count(), 0);
+
+    let glyph_ids = workspace
+        .font()
+        .glyphs()
+        .filter(|glyph| !glyph.layers().is_empty())
+        .take(16)
+        .map(|glyph| glyph.id())
+        .collect::<Vec<_>>();
+    workspace
+        .acquire_glyphs(&glyph_ids, AcquireScope::Glyphs)
+        .unwrap();
+    assert!(workspace.loaded_layer_count() > 0);
+    assert!(workspace.loaded_layer_count() < layer_count);
+    drop(workspace);
+
+    let resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.font().glyph_count(), glyph_count);
+    assert_eq!(resumed.loaded_layer_count(), 0);
+    eprintln!(
+        "corpus={} glyphs={glyph_count} layers={layer_count} store_bytes={} elapsed_ms={:.3}",
+        source_path.display(),
+        fs::metadata(&store_path).unwrap().len(),
+        started.elapsed().as_secs_f64() * 1_000.0
+    );
 }
 
 #[test]
@@ -259,7 +321,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
         .sum::<usize>();
     assert_eq!(workspace.loaded_layer_count(), 0);
     workspace
-        .acquire_glyphs(std::slice::from_ref(&root), true)
+        .acquire_glyphs(std::slice::from_ref(&root), AcquireScope::ComponentClosure)
         .unwrap();
     let expected_root_layers = workspace
         .font()
@@ -279,7 +341,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
     let mut resumed = FontWorkspace::resume(&store_path).unwrap();
     assert_eq!(resumed.loaded_layer_count(), 0);
     resumed
-        .acquire_glyphs(std::slice::from_ref(&root), true)
+        .acquire_glyphs(std::slice::from_ref(&root), AcquireScope::ComponentClosure)
         .unwrap();
 
     assert_eq!(resumed.loaded_layer_count(), closure_layer_count);
@@ -400,7 +462,7 @@ fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
     assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
 
     workspace
-        .acquire_glyphs(std::slice::from_ref(&glyph_id), false)
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
     assert_eq!(workspace.loaded_layer_count(), 1);
     let authored = workspace.font().layer(layer_id.clone()).unwrap().clone();
@@ -413,7 +475,7 @@ fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
     assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
 
     workspace
-        .acquire_glyphs(std::slice::from_ref(&glyph_id), false)
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
     assert_eq!(workspace.font().layer(layer_id).unwrap(), &authored);
 }
@@ -451,7 +513,7 @@ fn intent_on_directory_layer_acquires_before_persisting() {
 
     let mut resumed = FontWorkspace::resume(&store_path).unwrap();
     resumed
-        .acquire_glyphs(std::slice::from_ref(&glyph_id), false)
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
     let layer = resumed.font().layer(layer_id).unwrap();
     assert_eq!(layer.width(), 777.0);

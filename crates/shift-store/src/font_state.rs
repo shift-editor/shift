@@ -400,7 +400,7 @@ fn load_glyphs(
             if !batch.is_empty()
                 && (batch.len() == crate::MAX_LAYER_READ_BATCH_COUNT
                     || batch_bytes.saturating_add(byte_length)
-                        > crate::MAX_LAYER_READ_BATCH_PAYLOAD_BYTES)
+                        > crate::packed_layer::MAX_LAYER_READ_BATCH_PAYLOAD_BYTES)
             {
                 load_layer_batch(conn, &mut batch, &mut loaded_layers)?;
                 batch_bytes = 0;

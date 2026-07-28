@@ -1175,40 +1175,6 @@ impl Font {
         }
     }
 
-    /// Ids of glyphs whose components reference the glyphs owning the
-    /// given layers — the composites a renderer must re-render after an
-    /// edit. Stable ids (not names): references survive renames. Sorted,
-    /// deduplicated, excludes the touched glyphs themselves.
-    pub fn dependents_of_layers(&self, layer_ids: &[LayerId]) -> Vec<GlyphId> {
-        let touched: Vec<GlyphId> = self
-            .glyphs()
-            .filter(|glyph| {
-                glyph
-                    .layers()
-                    .keys()
-                    .any(|layer_id| layer_ids.contains(layer_id))
-            })
-            .map(|glyph| glyph.id())
-            .collect();
-
-        let mut dependents: Vec<GlyphId> = self
-            .glyphs()
-            .filter(|glyph| !touched.contains(&glyph.id()))
-            .filter(|glyph| {
-                glyph.layers().values().any(|layer| {
-                    layer
-                        .components_iter()
-                        .any(|component| touched.contains(&component.base_glyph_id()))
-                })
-            })
-            .map(|glyph| glyph.id())
-            .collect();
-
-        dependents.sort();
-        dependents.dedup();
-        dependents
-    }
-
     fn layer_mut_or_err(&mut self, layer_id: &LayerId) -> CoreResult<&mut GlyphLayer> {
         self.layer_mut(layer_id.clone())
             .ok_or(CoreError::LayerNotFound(layer_id.clone()))

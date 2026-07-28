@@ -21,9 +21,9 @@ struct LayerDirectory {
 pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlifGlyphStream)> {
     let ufo_path = Path::new(path);
     let mut header = load_header(ufo_path)?;
-    let default_source_id = header
-        .default_source_id()
-        .expect("UFO header should contain its default source");
+    let default_source_id = header.default_source_id().ok_or_else(|| {
+        FormatBackendError::Ufo("UFO header is missing its default source".into())
+    })?;
     let layers = load_layer_directories(ufo_path, &mut header, default_source_id)?;
     let (glyph_ids, glyphs) = build_glyph_directory(layers);
 
@@ -46,22 +46,16 @@ fn load_layer_directories(
     for (index, (name, relative_path)) in layer_paths.into_iter().enumerate() {
         let layer_path = ufo_path.join(&relative_path);
         let contents_path = layer_path.join("contents.plist");
-        let glyphs: BTreeMap<String, PathBuf> =
-            plist::from_file(&contents_path).map_err(|error| {
-                FormatBackendError::Ufo(format!(
-                    "failed to read {}: {error}",
-                    contents_path.display()
-                ))
-            })?;
+        let glyphs: BTreeMap<String, PathBuf> = plist_file(&contents_path)?;
         let (color, lib) = read_layer_info(&layer_path)?;
         let source_id = if index == 0 {
             default_source_id.clone()
         } else {
             header.add_source(Source::layer(name))
         };
-        let source = header
-            .source_mut(source_id.clone())
-            .expect("newly registered UFO source should exist");
+        let source = header.source_mut(source_id.clone()).ok_or_else(|| {
+            FormatBackendError::Ufo("newly registered UFO source is missing".into())
+        })?;
         source.set_color(color);
         if !lib.is_empty() {
             *source.lib_mut() = UfoReader::convert_lib(&lib);
@@ -108,12 +102,7 @@ pub(crate) fn read_glyph_paths(
     })?;
     let layer_path = ufo_path.join(relative_path);
     let contents_path = layer_path.join("contents.plist");
-    let glyphs: BTreeMap<String, PathBuf> = plist::from_file(&contents_path).map_err(|error| {
-        FormatBackendError::Ufo(format!(
-            "failed to read {}: {error}",
-            contents_path.display()
-        ))
-    })?;
+    let glyphs: BTreeMap<String, PathBuf> = plist_file(&contents_path)?;
     Ok(glyphs
         .into_iter()
         .map(|(name, path)| (name, layer_path.join(path)))
@@ -123,9 +112,16 @@ pub(crate) fn read_glyph_paths(
 fn read_layer_paths(ufo_path: &Path) -> FormatBackendResult<Vec<(String, PathBuf)>> {
     let path = ufo_path.join("layercontents.plist");
     if !path.exists() {
+        // UFO 2 predates layercontents.plist and defines only glyphs/ as the
+        // default layer. Avoid loading a complete norad::Font just to discover
+        // this standard legacy layout.
         return Ok(vec![("public.default".into(), PathBuf::from("glyphs"))]);
     }
-    plist::from_file(&path).map_err(|error| {
+    plist_file(&path)
+}
+
+fn plist_file<T: serde::de::DeserializeOwned>(path: &Path) -> FormatBackendResult<T> {
+    plist::from_file(path).map_err(|error| {
         FormatBackendError::Ufo(format!("failed to read {}: {error}", path.display()))
     })
 }

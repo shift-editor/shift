@@ -9,8 +9,8 @@ use crate::{
 
 pub const GLYPH_LAYER_FORMAT: &str = "shift.glyph-layer.v1";
 pub const MAX_LAYER_READ_BATCH_COUNT: usize = 512;
-pub const MAX_LAYER_READ_BATCH_PAYLOAD_BYTES: u64 = 256 * 1024 * 1024;
-const MAX_LAYER_PAYLOAD_BYTES: i64 = shift_glyph_codec::MAX_LAYER_PAYLOAD_BYTES as i64;
+pub(crate) const MAX_LAYER_READ_BATCH_PAYLOAD_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_LAYER_PAYLOAD_BYTES: i64 = font::MAX_LAYER_PAYLOAD_BYTES as i64;
 
 /// Relational facts needed to locate a layer without reading its payload.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,29 +56,6 @@ impl ShiftStore {
         mark_workspace_dirty_in_tx(&tx)?;
         tx.commit()?;
         Ok(())
-    }
-
-    /// Validates caller-provided canonical bytes before atomically replacing
-    /// directory facts, payload, reference rows, and revision state.
-    pub fn replace_glyph_layer_payload(
-        &mut self,
-        expected_layer_id: &font::LayerId,
-        payload: &[u8],
-    ) -> Result<(), StoreError> {
-        if payload.len() as i64 > MAX_LAYER_PAYLOAD_BYTES {
-            return Err(StoreError::LayerPayloadTooLarge {
-                bytes: payload.len() as u64,
-                limit: MAX_LAYER_PAYLOAD_BYTES as u64,
-            });
-        }
-        let layer = font::unpack_glyph_layer(payload)?;
-        if layer.id() != *expected_layer_id {
-            return Err(StoreError::LayerDirectoryMismatch {
-                layer_id: expected_layer_id.to_string(),
-                detail: format!("payload id is {}", layer.id()),
-            });
-        }
-        self.replace_glyph_layer(&layer)
     }
 
     pub fn list_glyph_layer_directory(&self) -> Result<Vec<GlyphLayerDirectoryEntry>, StoreError> {
@@ -473,7 +450,7 @@ pub(crate) fn store_packed_layer_in_tx(
     glyph_id: &font::GlyphId,
     name: Option<&font::GlyphName>,
     layer: &font::GlyphLayer,
-    packed: &shift_glyph_codec::PackedGlyphLayer,
+    packed: &font::PackedGlyphLayer,
     mode: WriteMode,
 ) -> Result<(), StoreError> {
     let bytes = packed.as_bytes();
@@ -745,11 +722,9 @@ mod tests {
             )
             .unwrap();
 
-        let mut writer = store.layer_stream_writer().unwrap();
-        writer
-            .write_layer(&glyph_id, Some(&glyph_name), &layer)
-            .unwrap();
-        writer.finish().unwrap();
+        let tx = store.conn.transaction().unwrap();
+        write_layer_in_tx(&tx, &glyph_id, Some(&glyph_name), &layer).unwrap();
+        tx.commit().unwrap();
 
         let stored: Vec<u8> = store
             .conn
@@ -1016,52 +991,6 @@ mod tests {
 
         let reopened = ShiftStore::open(&path).unwrap();
         assert_eq!(reopened.load_glyph_layer(&layer.id()).unwrap(), Some(layer));
-    }
-
-    #[test]
-    fn malformed_replacement_commits_nothing() {
-        let (mut store, font) = populated_store();
-        let layer_id = font
-            .glyphs()
-            .next()
-            .unwrap()
-            .layers()
-            .keys()
-            .next()
-            .unwrap();
-        let before = store.list_glyph_layer_directory().unwrap();
-        let before_revision = store.workspace_state().unwrap().unwrap().revision;
-
-        assert!(
-            store
-                .replace_glyph_layer_payload(layer_id, b"not a layer")
-                .is_err()
-        );
-
-        assert_eq!(store.list_glyph_layer_directory().unwrap(), before);
-        assert_eq!(
-            store.workspace_state().unwrap().unwrap().revision,
-            before_revision
-        );
-    }
-
-    #[test]
-    fn stream_writer_commits_one_standalone_layer() {
-        let (mut store, font) = populated_store();
-        let glyph = font.glyphs().next().unwrap();
-        let mut layer = glyph.layers().values().next().unwrap().as_ref().clone();
-        layer.set_width(layer.width() + 17.0);
-        let glyph_id = glyph.id();
-        let glyph_name = glyph.glyph_name().clone();
-        drop(font);
-
-        let mut writer = store.layer_stream_writer().unwrap();
-        writer
-            .write_layer(&glyph_id, Some(&glyph_name), &layer)
-            .unwrap();
-        writer.finish().unwrap();
-
-        assert_eq!(store.load_glyph_layer(&layer.id()).unwrap(), Some(layer));
     }
 
     #[test]

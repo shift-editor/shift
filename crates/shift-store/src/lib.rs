@@ -16,10 +16,7 @@ mod write_mode;
 pub use error::StoreError;
 pub use font::FontInfo;
 pub use glyph::{GlyphRecord, NewGlyph};
-pub use packed_layer::{
-    GLYPH_LAYER_FORMAT, GlyphLayerDirectoryEntry, MAX_LAYER_READ_BATCH_COUNT,
-    MAX_LAYER_READ_BATCH_PAYLOAD_BYTES,
-};
+pub use packed_layer::{GLYPH_LAYER_FORMAT, GlyphLayerDirectoryEntry, MAX_LAYER_READ_BATCH_COUNT};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};
 pub use store::ShiftStore;
 pub use stream_writer::LayerStreamWriter;

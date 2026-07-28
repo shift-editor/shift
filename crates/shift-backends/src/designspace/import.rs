@@ -67,7 +67,7 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
     let default_path = designspace_dir.join(&default_descriptor.filename);
     let mut header = load_header(&default_path).map_err(|error| DesignspaceError::LoadUfo {
         path: default_path.clone(),
-        details: error.to_string(),
+        source: Box::new(error),
     })?;
     let default_metrics = header
         .default_source()
@@ -97,7 +97,7 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
                 let ufo_header =
                     load_header(&ufo_path).map_err(|error| DesignspaceError::LoadUfo {
                         path: ufo_path.clone(),
-                        details: error.to_string(),
+                        source: Box::new(error),
                     })?;
                 let metrics = ufo_header
                     .default_source()
@@ -109,7 +109,7 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
                 read_glyph_paths(&ufo_path, descriptor.layer.as_deref()).map_err(|error| {
                     DesignspaceError::LoadUfo {
                         path: ufo_path,
-                        details: error.to_string(),
+                        source: Box::new(error),
                     }
                 })?;
             Ok((index, style_name, imported_metrics, glyphs))
@@ -164,7 +164,7 @@ fn stream_axisless_designspace(
     let default_path = designspace_dir.join(&sources[0].filename);
     let mut header = load_header(&default_path).map_err(|error| DesignspaceError::LoadUfo {
         path: default_path,
-        details: error.to_string(),
+        source: Box::new(error),
     })?;
     if let Some(family_name) = &sources[0].familyname {
         header.metadata_mut().family_name = Some(family_name.clone());
@@ -192,7 +192,7 @@ fn stream_axisless_designspace(
                 let ufo_header =
                     load_header(&ufo_path).map_err(|error| DesignspaceError::LoadUfo {
                         path: ufo_path.clone(),
-                        details: error.to_string(),
+                        source: Box::new(error),
                     })?;
                 let metrics = ufo_header
                     .default_source()
@@ -208,7 +208,7 @@ fn stream_axisless_designspace(
                 read_glyph_paths(&ufo_path, descriptor.layer.as_deref()).map_err(|error| {
                     DesignspaceError::LoadUfo {
                         path: ufo_path,
-                        details: error.to_string(),
+                        source: Box::new(error),
                     }
                 })?;
             Ok((

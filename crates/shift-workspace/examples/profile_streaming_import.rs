@@ -6,7 +6,7 @@ use std::{
 
 use shift_backends::{ImportBatchLimit, font_loader::FontLoader};
 use shift_store::{ShiftStore, WorkspaceState};
-use shift_workspace::FontWorkspace;
+use shift_workspace::{AcquireScope, FontWorkspace, stream_into};
 
 fn ms(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1_000.0
@@ -24,6 +24,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|value| *value > 0)
         .unwrap_or(1_024);
     let batch_limit = ImportBatchLimit::new(batch_glyphs, batch_layers);
+    let progress_batches = env::var("SHIFT_IMPORT_PROGRESS_BATCHES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(32);
 
     let source = PathBuf::from(env::args_os().nth(1).ok_or("missing source path")?);
     let store_path = PathBuf::from(env::args_os().nth(2).ok_or("missing store path")?);
@@ -32,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total_started = Instant::now();
 
     let started = Instant::now();
-    let mut import = FontLoader::new().stream_font(source_str)?;
+    let import = FontLoader::new().stream_font(source_str)?;
     println!("directory_ms={:.3}", ms(started.elapsed()));
     let started = Instant::now();
     let directory = import.directory();
@@ -42,6 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(directory);
     println!("batch_glyph_limit={batch_glyphs}");
     println!("batch_layer_limit={batch_layers}");
+    println!("progress_batch_interval={progress_batches}");
 
     let started = Instant::now();
     let mut store = ShiftStore::open_for_import(&store_path)?;
@@ -49,47 +55,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("store_setup_ms={:.3}", ms(started.elapsed()));
 
     let pipeline_started = Instant::now();
-    let (sender, receiver) = std::sync::mpsc::sync_channel(2);
     let mut parse = Duration::ZERO;
     let mut pack_and_write = Duration::ZERO;
     let mut glyph_count = 0;
+    let mut layer_count = 0;
     let mut batches = 0;
-    std::thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
-        scope.spawn(move || {
-            loop {
-                let started = Instant::now();
-                match import.next_batch(batch_limit) {
-                    Ok(glyphs) if glyphs.is_empty() => break,
-                    Ok(glyphs) => {
-                        if sender.send(Ok((glyphs, started.elapsed()))).is_err() {
-                            break;
-                        }
-                    }
-                    Err(error) => {
-                        let _ = sender.send(Err(error));
-                        break;
-                    }
-                }
-            }
-        });
+    stream_into(import, &mut writer, batch_limit, |batch| {
+        parse += batch.parse_elapsed;
+        pack_and_write += batch.write_elapsed;
+        glyph_count += batch.glyph_count;
+        layer_count += batch.layer_count;
+        batches += 1;
 
-        for result in receiver {
-            let (glyphs, parse_elapsed) = result?;
-            parse += parse_elapsed;
-            glyph_count += glyphs.len();
-            batches += 1;
-
-            let started = Instant::now();
-            writer.write_glyph_batch(&glyphs)?;
-            pack_and_write += started.elapsed();
+        if batches % progress_batches == 0 {
+            let wall = pipeline_started.elapsed();
+            println!(
+                "progress batches={batches} glyphs={glyph_count} layers={layer_count} parse_ms={:.3} pack_and_write_ms={:.3} wall_ms={:.3} glyphs_per_sec={:.1}",
+                ms(parse),
+                ms(pack_and_write),
+                ms(wall),
+                glyph_count as f64 / wall.as_secs_f64()
+            );
         }
-        Ok(())
     })?;
     println!("parse_ms={:.3}", ms(parse));
     println!("pack_and_write_ms={:.3}", ms(pack_and_write));
     println!("pipeline_wall_ms={:.3}", ms(pipeline_started.elapsed()));
     println!("batch_count={batches}");
     println!("glyph_count={glyph_count}");
+    println!("streamed_layer_count={layer_count}");
 
     let started = Instant::now();
     writer.finish()?;
@@ -138,7 +132,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cloned()
             .collect::<Vec<_>>();
         let started = Instant::now();
-        workspace.acquire_glyphs(std::slice::from_ref(&glyph_id), false)?;
+        workspace.acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)?;
         println!("one_glyph_acquire_ms={:.3}", ms(started.elapsed()));
         println!("one_glyph_loaded_layers={}", workspace.loaded_layer_count());
 

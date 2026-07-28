@@ -12,11 +12,11 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.
 - Payload replacement, directory facts, component rows, and workspace revision state commit in one transaction.
 
-`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds and validates one payload; `load_glyph_layers` scans directory facts, bounded payloads, and reference rows once for a deduplicated batch of at most 512 layers and 256 MiB of packed bytes. Both paths cross-check canonical bytes against relational facts. `FontWorkspace` uses the batch path for explicit glyph acquisition and safe cache eviction.
+`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds and validates one payload; `load_glyph_layers` scans directory facts, bounded payloads, and reference rows once for a deduplicated batch of at most 512 layers and 256 MiB of packed bytes. Explicit full-font materialization partitions the directory through that same bounded loader instead of issuing one query sequence per layer. All payload paths cross-check canonical bytes against relational facts. `FontWorkspace` uses the batch path for explicit glyph acquisition and safe cache eviction.
 
 ## Import boundary
 
-`LayerStreamWriter` accepts one glyph/layer or a bounded glyph batch without requiring a complete in-memory `Font`. `write_glyph_batch` canonical-encodes layers with Rayon, then writes directory rows, BLOBs, and component indexes in stable order through one SQLite transaction. `finish` is the only commit point; dropping an unfinished writer rolls the complete stream back.
+`LayerStreamWriter` accepts bounded replacement glyph batches without requiring a complete in-memory `Font`. `write_glyph_batch` canonical-encodes layers with Rayon, then writes directory rows, BLOBs, and component indexes in stable order through one SQLite transaction. Streaming inserts, full-state replacement, and change-set replacement share one write implementation parameterized only by insert/upsert mode. Change sets supplied with a committed post-edit font skip incremental decode/re-encode for touched existing layers and write each final layer once. `finish` is the only stream commit point; dropping an unfinished writer rolls the complete stream back.
 
 `ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the foreign source remains authoritative and the destination is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL before workspace state is published. Normal edits never use import pragmas. Progress, cancellation, source fingerprinting, and final atomic destination installation remain workspace responsibilities.
 
@@ -29,7 +29,7 @@ Shift has not shipped this working-store schema. Schema changes therefore update
 - configure SQLite for WAL-backed transactional work and a separately finalized disposable-import mode;
 - own the baseline schema and raw SQL;
 - preserve stable authored IDs and exact values;
-- provide directory-first and bounded payload APIs;
+- provide directory-first and bounded canonical payload APIs rather than row-level outline/component compatibility models;
 - keep canonical payloads and relational query indexes atomic;
 - support CJK-scale directories without BLOB scans.
 
@@ -42,6 +42,7 @@ src/
   font_state.rs    # eager metadata/directory and explicit full materialization
   packed_layer.rs  # bounded BLOB fetch/replace and reference-index checks
   stream_writer.rs # bounded Rayon pack plus single-transaction SQLite sink
-  change_set.rs    # transactional workspace changes
+  write_mode.rs    # shared insert/upsert policy for canonical write paths
+  change_set.rs    # transactional workspace changes and one final touched-layer write
   workspace_state.rs
 ```

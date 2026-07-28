@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 shift-font = { workspace = true }
-shift-glyph-codec = { workspace = true }
 rusqlite = { version = "0.37.0", features = ["blob", "backup", "limits"] }
 rayon = "1.10"
 serde_json = "1.0"

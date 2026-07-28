@@ -32,7 +32,8 @@ use shift_wire::{
   SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
-  FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError, WorkspaceSource,
+  AcquireScope, FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError,
+  WorkspaceSource,
 };
 use std::{
   collections::{HashSet, VecDeque},
@@ -731,9 +732,7 @@ impl Bridge {
       .iter()
       .map(|request| request.glyph_id.clone())
       .collect::<Vec<_>>();
-    self.workspace_mut()?.acquire_glyphs(&glyph_ids, false)?;
-
-    let font = self.font()?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
     let mut snapshots = Vec::new();
     for request in requests {
       let glyph_id = request.glyph_id;
@@ -778,9 +777,7 @@ impl Bridge {
       .iter()
       .map(|glyph_id| parse::<GlyphId>(glyph_id))
       .collect::<errors::Result<Vec<_>>>()?;
-    self.workspace_mut()?.acquire_glyphs(&glyph_ids, true)?;
-
-    let font = self.font()?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let mut projections = Vec::new();
     let mut pending = glyph_ids.into_iter().collect::<VecDeque<_>>();
     let mut seen = HashSet::new();
@@ -822,9 +819,7 @@ impl Bridge {
       .map(|glyph_id| parse::<GlyphId>(glyph_id))
       .collect::<errors::Result<Vec<_>>>()?;
     let location = map_location(location)?;
-    self.workspace_mut()?.acquire_glyphs(&glyph_ids, true)?;
-
-    let font = self.font()?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let mut projection = font.projection(&location);
     let previews = projection
       .glyphs(&glyph_ids)?
@@ -1094,6 +1089,15 @@ impl Bridge {
         kind: "workspace",
         value: "no workspace is open".to_string(),
       })
+  }
+
+  fn acquire_and_font(
+    &mut self,
+    glyph_ids: &[GlyphId],
+    scope: AcquireScope,
+  ) -> BridgeResult<&Font> {
+    self.workspace_mut()?.acquire_glyphs(glyph_ids, scope)?;
+    self.font()
   }
 
   fn font(&self) -> BridgeResult<&Font> {

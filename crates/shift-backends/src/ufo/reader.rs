@@ -240,7 +240,7 @@ impl UfoReader {
             .layers()
             .values()
             .next()
-            .expect("converted glyph should contain its layer")
+            .ok_or_else(|| FormatBackendError::Ufo("converted glyph is missing its layer".into()))?
             .as_ref()
             .clone();
         for pending in pending_components {

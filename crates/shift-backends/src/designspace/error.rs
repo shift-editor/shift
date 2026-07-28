@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::errors::FormatBackendError;
+
 pub type DesignspaceResult<T> = Result<T, DesignspaceError>;
 
 #[derive(Debug, thiserror::Error)]
@@ -49,8 +51,12 @@ pub enum DesignspaceError {
     #[error("failed to save designspace '{path}': {details}")]
     SaveDesignspace { path: PathBuf, details: String },
 
-    #[error("failed to load UFO '{path}': {details}")]
-    LoadUfo { path: PathBuf, details: String },
+    #[error("failed to load UFO '{path}': {source}")]
+    LoadUfo {
+        path: PathBuf,
+        #[source]
+        source: Box<FormatBackendError>,
+    },
 
     #[error("failed to save UFO '{path}': {details}")]
     SaveUfo { path: PathBuf, details: String },

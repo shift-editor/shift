@@ -22,7 +22,7 @@ crates/shift-font/src/
   intents.rs       -- atomic authoring intents and semantic application
   changes.rs       -- replace-grade semantic change records
   layer_edit.rs    -- glyph-layer geometry mutations
-  packed_layer.rs  -- lossless shift.glyph-layer.v1 domain adapter
+  codec_adapter.rs -- lossless shift.glyph-layer.v1 domain adapter
   variation.rs     -- external-to-design mapping evaluation
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
@@ -92,7 +92,7 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 
 `shift-wire` may translate native bases, source values, and projections into transport DTOs, but it must not rebuild source samples, define value ordering or topology compatibility, or evaluate variation models.
 
-`shift-font` should not perform SQLite persistence. Durable working-store reads and writes belong in `shift-store`. The `packed_layer` module only adapts one domain layer to codec-owned bytes/views; it does not choose storage, caching, transactions, or loading policy.
+`shift-font` should not perform SQLite persistence. Durable working-store reads and writes belong in `shift-store`. The private `codec_adapter` module only adapts one domain layer to codec-owned bytes/views; it does not choose storage, caching, transactions, or loading policy.
 
 `shift-font` should not own Electron, NAPI, or editor state. The TypeScript editor owns UI interaction, selection, hover, camera, tools, and command history.
 

@@ -8,6 +8,8 @@ use std::str::FromStr;
 
 use shift_glyph_codec as codec;
 
+pub use codec::{PackedGlyphLayer, MAX_LAYER_PAYLOAD_BYTES};
+
 use crate::{
     Anchor, AnchorId, Component, ComponentId, Contour, ContourId, DecomposedTransform, GlyphId,
     GlyphLayer, GlyphName, Guideline, GuidelineId, LayerId, LibData, LibValue, Point, PointId,
@@ -27,7 +29,7 @@ pub enum PackedLayerError {
 }
 
 /// Encodes one editable authored layer without involving SQLite or transport.
-pub fn pack_glyph_layer(layer: &GlyphLayer) -> Result<codec::PackedGlyphLayer, PackedLayerError> {
+pub fn pack_glyph_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, PackedLayerError> {
     codec::pack_layer(&to_codec_layer(layer)).map_err(Into::into)
 }
 
@@ -37,9 +39,7 @@ pub fn unpack_glyph_layer(bytes: &[u8]) -> Result<GlyphLayer, PackedLayerError> 
 }
 
 /// Materializes one layer from an already-validated borrowed payload view.
-pub fn glyph_layer_from_view(
-    view: codec::GlyphLayerView<'_>,
-) -> Result<GlyphLayer, PackedLayerError> {
+fn glyph_layer_from_view(view: codec::GlyphLayerView<'_>) -> Result<GlyphLayer, PackedLayerError> {
     let layer_id = parse_id::<LayerId>("layer id", view.id())?;
     let source_id = parse_id::<SourceId>("source id", view.source_id())?;
     let mut layer = GlyphLayer::with_width(layer_id, source_id, view.width());

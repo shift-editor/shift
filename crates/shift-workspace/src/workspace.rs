@@ -5,8 +5,7 @@ use std::{
 };
 
 use shift_backends::{
-    FontExportRequest, FontExportResult, FontExporter, FontImport, ImportBatchLimit,
-    font_loader::FontLoader,
+    FontExportRequest, FontExportResult, FontExporter, ImportBatchLimit, font_loader::FontLoader,
 };
 use shift_font::{
     AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
@@ -15,17 +14,17 @@ use shift_font::{
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::{
-    LayerStreamWriter, MAX_LAYER_READ_BATCH_COUNT, ShiftStore, SourceIdentitySnapshot,
-    WorkspaceSourceKind, WorkspaceState,
+    MAX_LAYER_READ_BATCH_COUNT, ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind,
+    WorkspaceState,
 };
 
-use crate::NewWorkspace;
 use crate::layer_residency::LayerResidency;
 use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
 use crate::source_identity::{
     PackageDraft, PackageIdentity, package_identity, source_identity_snapshot,
     validate_source_identity_for_save,
 };
+use crate::{NewWorkspace, stream_into};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
@@ -76,6 +75,12 @@ pub enum WorkspaceSource {
     Imported { original_path: PathBuf },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcquireScope {
+    Glyphs,
+    ComponentClosure,
+}
+
 pub struct FontWorkspace {
     font: shift_font::Font,
     source: WorkspaceSource,
@@ -85,6 +90,21 @@ pub struct FontWorkspace {
 }
 
 impl FontWorkspace {
+    fn from_store(
+        font: shift_font::Font,
+        source: WorkspaceSource,
+        store: ShiftStore,
+        residency: LayerResidency,
+    ) -> Self {
+        Self {
+            font,
+            source,
+            store,
+            ledger: Ledger::default(),
+            residency,
+        }
+    }
+
     pub fn create_untitled(
         store_path: impl AsRef<Path>,
         new_workspace: NewWorkspace,
@@ -96,13 +116,12 @@ impl FontWorkspace {
         store.replace_font_state(&font)?;
         store.set_workspace_state(WorkspaceState::untitled(None))?;
 
-        Ok(Self {
+        Ok(Self::from_store(
             font,
-            source: WorkspaceSource::Untitled,
+            WorkspaceSource::Untitled,
             store,
-            ledger: Ledger::default(),
-            residency: LayerResidency::default(),
-        })
+            LayerResidency::default(),
+        ))
     }
 
     pub fn create_package(
@@ -167,13 +186,7 @@ impl FontWorkspace {
         );
         let source = source_from_workspace_state(&state)?;
 
-        Ok(Self {
-            font,
-            source,
-            store,
-            ledger: Ledger::default(),
-            residency,
-        })
+        Ok(Self::from_store(font, source, store, residency))
     }
 
     pub fn resume_for_source(
@@ -715,15 +728,14 @@ impl FontWorkspace {
         let identity = source_identity_snapshot(source_package.path())?;
         store.set_workspace_state(WorkspaceState::package(identity, None))?;
 
-        Ok(Self {
+        Ok(Self::from_store(
             font,
-            source: WorkspaceSource::Package {
+            WorkspaceSource::Package {
                 path: source_package.path().to_path_buf(),
             },
             store,
-            ledger: Ledger::default(),
-            residency: LayerResidency::default(),
-        })
+            LayerResidency::default(),
+        ))
     }
 
     fn import_font(
@@ -739,7 +751,7 @@ impl FontWorkspace {
             Ok(import) => {
                 let mut store = ShiftStore::open_for_import(store_path)?;
                 let mut writer = store.font_stream_writer(import.header())?;
-                write_import_batches(import, &mut writer, ImportBatchLimit::default())?;
+                stream_into(import, &mut writer, ImportBatchLimit::default(), |_| {})?;
                 writer.finish()?;
                 store.finish_import()?;
                 store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
@@ -749,15 +761,14 @@ impl FontWorkspace {
                         .flat_map(|glyph| glyph.layers().keys().cloned()),
                 );
 
-                return Ok(Self {
+                return Ok(Self::from_store(
                     font,
-                    source: WorkspaceSource::Imported {
+                    WorkspaceSource::Imported {
                         original_path: import_path.to_path_buf(),
                     },
                     store,
-                    ledger: Ledger::default(),
                     residency,
-                });
+                ));
             }
             Err(shift_backends::BackendError::StreamingUnsupported { .. }) => {}
             Err(error) => return Err(error.into()),
@@ -769,26 +780,24 @@ impl FontWorkspace {
         store.replace_font_state(&font)?;
         store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
 
-        Ok(Self {
+        Ok(Self::from_store(
             font,
-            source: WorkspaceSource::Imported {
+            WorkspaceSource::Imported {
                 original_path: import_path.to_path_buf(),
             },
             store,
-            ledger: Ledger::default(),
-            residency: LayerResidency::default(),
-        })
+            LayerResidency::default(),
+        ))
     }
 
-    /// Explicitly acquires requested glyph payloads. When `include_references`
-    /// is true, component dependencies are expanded from relational indexes
-    /// before any BLOB is read.
+    /// Explicitly acquires requested glyph payloads. Component closure expands
+    /// dependencies from relational indexes before any BLOB is read.
     pub fn acquire_glyphs(
         &mut self,
         glyph_ids: &[GlyphId],
-        include_references: bool,
+        scope: AcquireScope,
     ) -> Result<(), WorkspaceError> {
-        let glyph_ids = if include_references {
+        let glyph_ids = if scope == AcquireScope::ComponentClosure {
             self.store
                 .referenced_glyph_closure(glyph_ids.iter().cloned())?
         } else {
@@ -827,14 +836,14 @@ impl FontWorkspace {
             return Ok(());
         }
 
-        // Decode and install bounded batches into a COW font clone. A malformed
-        // payload or cross-layer identity collision still leaves the live cache
-        // unchanged, while SQLite and the font index each process one batch.
-        let mut next_font = self.font.clone();
+        // Decode through bounded SQLite reads, then clone and validate the font
+        // index once so any malformed batch leaves the live cache unchanged.
+        let mut layers = Vec::with_capacity(layer_ids.len());
         for layer_ids in layer_ids.chunks(MAX_LAYER_READ_BATCH_COUNT) {
-            let layers = self.store.load_glyph_layers(layer_ids)?;
-            next_font.replace_glyph_layers(layers)?;
+            layers.extend(self.store.load_glyph_layers(layer_ids)?);
         }
+        let mut next_font = self.font.clone();
+        next_font.replace_glyph_layers(layers)?;
 
         self.font = next_font;
         self.residency.mark_loaded(layer_ids);
@@ -844,6 +853,9 @@ impl FontWorkspace {
     /// Drops clean in-memory payloads back to directory placeholders. Every
     /// authored edit is committed before the live font swap, so eviction can
     /// never discard unpersisted state.
+    ///
+    /// This is currently a test/profiler surface; the bridge does not yet own
+    /// a production eviction policy.
     pub fn evict_glyphs(&mut self, glyph_ids: &[GlyphId]) -> Result<(), WorkspaceError> {
         let mut placeholders = Vec::new();
         let mut evicted = Vec::new();
@@ -865,20 +877,14 @@ impl FontWorkspace {
         }
 
         let mut next_font = self.font.clone();
-        let mut batch = Vec::with_capacity(MAX_LAYER_READ_BATCH_COUNT);
-        for placeholder in placeholders {
-            batch.push(placeholder);
-            if batch.len() == MAX_LAYER_READ_BATCH_COUNT {
-                next_font.replace_glyph_layers(std::mem::take(&mut batch))?;
-            }
-        }
-        next_font.replace_glyph_layers(batch)?;
+        next_font.replace_glyph_layers(placeholders)?;
 
         self.font = next_font;
         self.residency.mark_unloaded(evicted);
         Ok(())
     }
 
+    /// Residency instrumentation for tests and import profiling.
     pub fn loaded_layer_count(&self) -> usize {
         let directory_layer_count = self.font.glyphs().map(|glyph| glyph.layers().len()).sum();
         self.residency.loaded_count(directory_layer_count)
@@ -1334,37 +1340,6 @@ fn replay_glyph_layer(
     }
 
     Ok(())
-}
-
-fn write_import_batches(
-    mut import: FontImport,
-    writer: &mut LayerStreamWriter<'_>,
-    batch_limit: ImportBatchLimit,
-) -> Result<(), WorkspaceError> {
-    let (sender, receiver) = std::sync::mpsc::sync_channel(2);
-    std::thread::scope(|scope| -> Result<(), WorkspaceError> {
-        scope.spawn(move || {
-            loop {
-                match import.next_batch(batch_limit) {
-                    Ok(glyphs) if glyphs.is_empty() => break,
-                    Ok(glyphs) => {
-                        if sender.send(Ok(glyphs)).is_err() {
-                            break;
-                        }
-                    }
-                    Err(error) => {
-                        let _ = sender.send(Err(error));
-                        break;
-                    }
-                }
-            }
-        });
-
-        for glyphs in receiver {
-            writer.write_glyph_batch(&glyphs?)?;
-        }
-        Ok(())
-    })
 }
 
 fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
