@@ -23,7 +23,7 @@ crates/shift-workspace/src/
   lib.rs           -- public API barrel
   new_workspace.rs -- creation options for a fresh workspace
   source_identity.rs -- package identity snapshots and source-save validation
-  import_pipeline.rs -- shared two-batch parser/single-writer pipeline and progress observer
+  import_pipeline.rs -- bounded parser/parallel-packer/single-writer pipeline and progress observer
   layer_residency.rs -- complete read sets, bounded acquisition, and safe eviction
   ledger.rs        -- bounded snapshot-pair undo/redo entries
   workspace.rs     -- `FontWorkspace` orchestration and workspace errors
@@ -56,7 +56,7 @@ crates/shift-workspace/examples/
 
 ## Profiling
 
-`profile_streaming_import` uses the same public `stream_into` two-batch pipeline as the workspace and reports foreign-directory, parse, pack/write, commit, durable-finalization, native-directory materialization, reopen, BLOB, and database measurements without putting machine-specific timing assertions in tests:
+`profile_streaming_import` uses the same public `stream_into` three-stage pipeline as the workspace and reports foreign-directory, parse, canonical pack, SQLite write, commit, durable-finalization, native-directory materialization, reopen, BLOB, and database measurements without putting machine-specific timing assertions in tests:
 
 ```bash
 cargo build --release -p shift-workspace --example profile_streaming_import
@@ -64,7 +64,7 @@ cargo build --release -p shift-workspace --example profile_streaming_import
   /path/to/font-or-project /tmp/import.sqlite
 ```
 
-Use `RAYON_NUM_THREADS`, `SHIFT_IMPORT_BATCH_GLYPHS`, and `SHIFT_IMPORT_BATCH_LAYERS` to compare worker and bounded-batch limits. `SHIFT_IMPORT_PROGRESS_BATCHES` controls machine-readable periodic lines containing cumulative batches, glyphs, layers, parse/write time, wall time, and throughput. The SQLite writer remains single-threaded.
+Use `RAYON_NUM_THREADS`, `SHIFT_IMPORT_BATCH_GLYPHS`, and `SHIFT_IMPORT_BATCH_LAYERS` to compare worker and bounded-batch limits. `SHIFT_IMPORT_PROGRESS_BATCHES` controls machine-readable periodic lines containing cumulative batches, glyphs, layers, parse, pack, SQLite, wall time, and throughput. Canonical packing uses Rayon; the SQLite writer remains single-threaded.
 
 A repeatable ignored corpus gate exercises streaming import, directory-only
 resume, and bounded acquisition without checking large fonts into Git:

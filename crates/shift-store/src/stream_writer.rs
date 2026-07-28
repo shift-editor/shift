@@ -1,11 +1,14 @@
+use std::time::Instant;
+
 use rayon::prelude::*;
 use rusqlite::Transaction;
 use shift_font as font;
 
 use crate::{
-    ShiftStore, StoreError,
+    LayerBatchTiming, PackedGlyphBatch, ShiftStore, StoreError,
     change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
     packed_layer::store_packed_layer_in_tx,
+    types::PackedGlyph,
     write_mode::WriteMode,
 };
 
@@ -34,47 +37,87 @@ impl ShiftStore {
     }
 }
 
+/// Packs an owned bounded glyph batch in parallel without touching SQLite.
+/// The returned batch retains glyph directory facts for the single writer.
+pub fn pack_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<PackedGlyphBatch, StoreError> {
+    let started = Instant::now();
+    let layers = pack_glyph_layers(&glyphs)?;
+    let pack_elapsed = started.elapsed();
+    let glyphs = glyphs
+        .into_iter()
+        .zip(layers)
+        .map(|(glyph, layers)| PackedGlyph { glyph, layers })
+        .collect();
+
+    Ok(PackedGlyphBatch {
+        glyphs,
+        pack_elapsed,
+    })
+}
+
 impl LayerStreamWriter<'_> {
     /// Writes one complete glyph and all of its currently authored layers.
     pub fn write_glyph(&mut self, glyph: &font::Glyph) -> Result<(), StoreError> {
-        self.write_glyph_batch(std::slice::from_ref(glyph))
+        self.write_glyph_batch(std::slice::from_ref(glyph))?;
+        Ok(())
     }
 
     /// Packs a bounded glyph batch in parallel, then writes it in stable order.
-    pub fn write_glyph_batch(&mut self, glyphs: &[font::Glyph]) -> Result<(), StoreError> {
-        let packed_layers = glyphs
-            .par_iter()
-            .map(|glyph| {
-                glyph
-                    .layers()
-                    .values()
-                    .map(|layer| font::pack_glyph_layer(layer).map(|packed| (layer.id(), packed)))
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, font::PackedLayerError>>()?;
+    pub fn write_glyph_batch(
+        &mut self,
+        glyphs: &[font::Glyph],
+    ) -> Result<LayerBatchTiming, StoreError> {
+        let started = Instant::now();
+        let layers = pack_glyph_layers(glyphs)?;
+        let pack_elapsed = started.elapsed();
 
-        for (glyph, packed_layers) in glyphs.iter().zip(packed_layers) {
-            write_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order, WriteMode::Insert)?;
-            for (layer_id, packed) in packed_layers {
-                let layer =
-                    glyph
-                        .layers()
-                        .get(&layer_id)
-                        .ok_or_else(|| StoreError::MissingEntity {
-                            kind: "glyph layer",
-                            id: layer_id.to_string(),
-                        })?;
-                store_packed_layer_in_tx(
-                    &self.tx,
-                    &glyph.id(),
-                    Some(glyph.glyph_name()),
-                    layer,
-                    &packed,
-                    WriteMode::Insert,
-                )?;
-            }
-            self.next_glyph_order += 1;
+        let started = Instant::now();
+        for (glyph, layers) in glyphs.iter().zip(&layers) {
+            self.write_packed_glyph(glyph, layers)?;
         }
+
+        Ok(LayerBatchTiming {
+            pack_elapsed,
+            sqlite_elapsed: started.elapsed(),
+        })
+    }
+
+    /// Writes a pre-packed batch in stable order through the owned transaction.
+    pub fn write_packed_glyph_batch(
+        &mut self,
+        batch: PackedGlyphBatch,
+    ) -> Result<std::time::Duration, StoreError> {
+        let started = Instant::now();
+        for glyph in &batch.glyphs {
+            self.write_packed_glyph(&glyph.glyph, &glyph.layers)?;
+        }
+        Ok(started.elapsed())
+    }
+
+    fn write_packed_glyph(
+        &mut self,
+        glyph: &font::Glyph,
+        layers: &[(font::LayerId, font::PackedGlyphLayer)],
+    ) -> Result<(), StoreError> {
+        write_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order, WriteMode::Insert)?;
+        for (layer_id, packed) in layers {
+            let layer = glyph
+                .layers()
+                .get(layer_id)
+                .ok_or_else(|| StoreError::MissingEntity {
+                    kind: "glyph layer",
+                    id: layer_id.to_string(),
+                })?;
+            store_packed_layer_in_tx(
+                &self.tx,
+                &glyph.id(),
+                Some(glyph.glyph_name()),
+                layer,
+                packed,
+                WriteMode::Insert,
+            )?;
+        }
+        self.next_glyph_order += 1;
         Ok(())
     }
 
@@ -83,4 +126,20 @@ impl LayerStreamWriter<'_> {
         self.tx.commit()?;
         Ok(())
     }
+}
+
+fn pack_glyph_layers(
+    glyphs: &[font::Glyph],
+) -> Result<Vec<Vec<(font::LayerId, font::PackedGlyphLayer)>>, StoreError> {
+    glyphs
+        .par_iter()
+        .map(|glyph| {
+            glyph
+                .layers()
+                .values()
+                .map(|layer| font::pack_glyph_layer(layer).map(|packed| (layer.id(), packed)))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, font::PackedLayerError>>()
+        .map_err(Into::into)
 }

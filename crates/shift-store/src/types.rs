@@ -1,3 +1,29 @@
+use std::time::Duration;
+
+use shift_font::{Glyph, LayerId, PackedGlyphLayer};
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LayerBatchTiming {
+    pub pack_elapsed: Duration,
+    pub sqlite_elapsed: Duration,
+}
+
+pub struct PackedGlyphBatch {
+    pub(crate) glyphs: Vec<PackedGlyph>,
+    pub(crate) pack_elapsed: Duration,
+}
+
+impl PackedGlyphBatch {
+    pub fn pack_elapsed(&self) -> Duration {
+        self.pack_elapsed
+    }
+}
+
+pub(crate) struct PackedGlyph {
+    pub(crate) glyph: Glyph,
+    pub(crate) layers: Vec<(LayerId, PackedGlyphLayer)>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct AxisId(String);
 

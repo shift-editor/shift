@@ -19,8 +19,8 @@ pub use glyph::{GlyphRecord, NewGlyph};
 pub use packed_layer::{GLYPH_LAYER_FORMAT, GlyphLayerDirectoryEntry, MAX_LAYER_READ_BATCH_COUNT};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};
 pub use store::ShiftStore;
-pub use stream_writer::LayerStreamWriter;
-pub use types::{AxisId, GlyphId, RevisionId, SourceId};
+pub use stream_writer::{LayerStreamWriter, pack_glyph_batch};
+pub use types::{AxisId, GlyphId, LayerBatchTiming, PackedGlyphBatch, RevisionId, SourceId};
 pub use workspace_state::{
     Evidence, FileIdentity, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState,
 };

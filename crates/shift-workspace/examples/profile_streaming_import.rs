@@ -56,13 +56,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let pipeline_started = Instant::now();
     let mut parse = Duration::ZERO;
-    let mut pack_and_write = Duration::ZERO;
+    let mut pack = Duration::ZERO;
+    let mut sqlite = Duration::ZERO;
     let mut glyph_count = 0;
     let mut layer_count = 0;
     let mut batches = 0;
     stream_into(import, &mut writer, batch_limit, |batch| {
         parse += batch.parse_elapsed;
-        pack_and_write += batch.write_elapsed;
+        pack += batch.pack_elapsed;
+        sqlite += batch.sqlite_elapsed;
         glyph_count += batch.glyph_count;
         layer_count += batch.layer_count;
         batches += 1;
@@ -70,16 +72,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if batches % progress_batches == 0 {
             let wall = pipeline_started.elapsed();
             println!(
-                "progress batches={batches} glyphs={glyph_count} layers={layer_count} parse_ms={:.3} pack_and_write_ms={:.3} wall_ms={:.3} glyphs_per_sec={:.1}",
+                "progress batches={batches} glyphs={glyph_count} layers={layer_count} parse_ms={:.3} pack_ms={:.3} sqlite_ms={:.3} wall_ms={:.3} glyphs_per_sec={:.1}",
                 ms(parse),
-                ms(pack_and_write),
+                ms(pack),
+                ms(sqlite),
                 ms(wall),
                 glyph_count as f64 / wall.as_secs_f64()
             );
         }
     })?;
     println!("parse_ms={:.3}", ms(parse));
-    println!("pack_and_write_ms={:.3}", ms(pack_and_write));
+    println!("pack_ms={:.3}", ms(pack));
+    println!("sqlite_ms={:.3}", ms(sqlite));
     println!("pipeline_wall_ms={:.3}", ms(pipeline_started.elapsed()));
     println!("batch_count={batches}");
     println!("glyph_count={glyph_count}");
