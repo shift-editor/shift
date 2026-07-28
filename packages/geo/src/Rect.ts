@@ -10,6 +10,20 @@ import type { Point2D, Rect2D } from "./types";
 import { Vec2 } from "./Vec2";
 
 export const Rect = {
+  /** Create a rectangle from an origin and non-negative dimensions. */
+  fromXYWH(x: number, y: number, width: number, height: number): Rect2D {
+    return {
+      x,
+      y,
+      width,
+      height,
+      left: x,
+      top: y,
+      right: x + width,
+      bottom: y + height,
+    };
+  },
+
   /**
    * Create a normalized rectangle spanning two points.
    *

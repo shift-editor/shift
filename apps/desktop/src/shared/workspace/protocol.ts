@@ -53,16 +53,27 @@ export type WorkspaceGlyphSnapshot = {
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
 
-/** Bounded resident-atlas delivery over a dedicated transferred port. */
-export type SlugAtlasStreamMessage =
+/** Bounded byte delivery over a dedicated transferred port. */
+export type ByteStreamMessage =
   | { kind: "chunk"; offset: number; bytes: Uint8Array<ArrayBuffer> }
   | { kind: "complete"; totalLength: number }
   | { kind: "error"; message: string };
 
-/** Renderer backpressure for the dedicated resident-atlas stream. */
-export type SlugAtlasStreamControl =
+/** Receiver backpressure for a dedicated bounded byte stream. */
+export type ByteStreamControl =
   | { kind: "ack"; nextOffset: number }
   | { kind: "cancel"; message: string };
+
+/** Minimal readable-stream contract shared by native and web streams. */
+export interface ByteReadableStream<T> {
+  getReader(): ByteReadableStreamReader<T>;
+}
+
+export interface ByteReadableStreamReader<T> {
+  read(): Promise<{ done: false; value: T } | { done: true; value: undefined }>;
+  cancel(reason?: unknown): Promise<void>;
+  releaseLock(): void;
+}
 
 /** Identifies one concrete `.shift` package instance on disk. */
 export type WorkspacePackageIdentity = {

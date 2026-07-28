@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GlyphCatalogCanvas } from "./GlyphCatalogCanvas";
-import { deriveGlyphCatalogLayout } from "./glyphCatalogLayout";
+import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@/lib/signals";
@@ -14,18 +14,14 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const editor = useEditor();
   const font = editor.font;
   const { filteredGlyphs } = useGlyphCatalog();
-  const atlasRevision = useSignalState(font.slugAtlasRevisionCell);
   const location = useSignalState(editor.designLocationCell);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [[viewportWidth, viewportHeight], setViewportSize] = useState<
     readonly [width: number, height: number]
   >([0, 0]);
-  const [readyAtlasRevision, setReadyAtlasRevision] = useState<{
-    revision: unknown;
-  } | null>(null);
-  const slugReady = readyAtlasRevision?.revision === atlasRevision;
+  const [catalogReady, setCatalogReady] = useState(false);
   const layout = useMemo(
-    () => deriveGlyphCatalogLayout(viewportWidth, viewportHeight, filteredGlyphs.length),
+    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, filteredGlyphs.length),
     [filteredGlyphs.length, viewportHeight, viewportWidth],
   );
   const metrics = useMemo(() => font.metricsAtLocation(location), [font, location]);
@@ -66,17 +62,14 @@ export const GlyphGrid = memo(function GlyphGrid() {
   }, []);
 
   useEffect(() => {
-    if (viewportWidth <= 0 || (!slugReady && filteredGlyphs.length > 0)) return;
+    if (viewportWidth <= 0 || (!catalogReady && filteredGlyphs.length > 0)) return;
 
     void showMeasuredWorkspace();
-  }, [filteredGlyphs.length, showMeasuredWorkspace, slugReady, viewportWidth]);
+  }, [catalogReady, filteredGlyphs.length, showMeasuredWorkspace, viewportWidth]);
 
-  const handleSlugReady = useCallback(
-    () => setReadyAtlasRevision({ revision: atlasRevision }),
-    [atlasRevision],
-  );
-  const handleSlugUnavailable = useCallback(() => {
-    setReadyAtlasRevision(null);
+  const handleCatalogReady = useCallback(() => setCatalogReady(true), []);
+  const handleCatalogUnavailable = useCallback(() => {
+    setCatalogReady(false);
     void showMeasuredWorkspace();
   }, [showMeasuredWorkspace]);
 
@@ -108,11 +101,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
         axes={axes}
         metrics={metrics}
         sourceId={sourceId}
-        atlasRevision={atlasRevision}
-        visible={slugReady}
+        visible={catalogReady}
         openGlyph={handleCellClick}
-        onFirstFrame={handleSlugReady}
-        onUnavailable={handleSlugUnavailable}
+        onFirstFrame={handleCatalogReady}
+        onUnavailable={handleCatalogUnavailable}
       />
     </section>
   );

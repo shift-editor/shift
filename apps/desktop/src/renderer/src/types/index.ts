@@ -8,7 +8,7 @@ export type {
   GlyphCatalogCellArea,
   GlyphCatalogFrame,
   GlyphCatalogItem,
-  GlyphCatalogLayout,
+  GlyphCatalogLayoutMetrics,
   GlyphCatalogState,
   GlyphNameInputProps,
 } from "./glyphCatalog";

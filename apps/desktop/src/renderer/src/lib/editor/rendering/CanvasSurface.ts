@@ -1,4 +1,4 @@
-import type { Rect2D } from "@shift/geo";
+import type { Point2D, Rect2D } from "@shift/geo";
 
 /**
  * Immutable snapshot of a canvas element's current layout surface.
@@ -39,6 +39,22 @@ export class CanvasSurface {
       bottom: rect.bottom,
     };
   }
+
+  /** Resizes a canvas backing store to its current CSS size. */
+  static resize(canvas: HTMLCanvasElement, dpr = window.devicePixelRatio): Rect2D {
+    const rect = CanvasSurface.readRect(canvas);
+    const width = Math.max(1, Math.floor(rect.width * dpr));
+    const height = Math.max(1, Math.floor(rect.height * dpr));
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    return rect;
+  }
+
+  /** Converts a client-space point into coordinates local to an element. */
+  static localPoint(element: Element, point: Point2D): Point2D {
+    const rect = element.getBoundingClientRect();
+    return { x: point.x - rect.left, y: point.y - rect.top };
+  }
 }
 
 /** Current 2D canvas surface, including a scaled rendering context. */
@@ -60,7 +76,6 @@ export class Canvas2DSurface extends CanvasSurface {
     const rect = CanvasSurface.readRect(canvas);
     const width = Math.floor(rect.width * dpr);
     const height = Math.floor(rect.height * dpr);
-
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;

@@ -1,7 +1,6 @@
 import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
+import { PortByteStream } from "@shared/workspace/PortByteStream";
 import type {
-  SlugAtlasStreamControl,
-  SlugAtlasStreamMessage,
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentState,
@@ -211,50 +210,18 @@ export class WorkspaceClient {
     await this.connect();
 
     const ports = new MessageChannel();
-    const completion = new Promise<{ totalLength: number; error: Error | null }>((resolve) => {
-      ports.port1.onmessage = (event: MessageEvent<SlugAtlasStreamMessage>) => {
-        const message = event.data;
-        switch (message.kind) {
-          case "chunk":
-            try {
-              write(message.offset, message.bytes);
-              ports.port1.postMessage({
-                kind: "ack",
-                nextOffset: message.offset + message.bytes.byteLength,
-              } satisfies SlugAtlasStreamControl);
-            } catch (error) {
-              const streamError = error instanceof Error ? error : new Error(String(error));
-              try {
-                ports.port1.postMessage({
-                  kind: "cancel",
-                  message: streamError.message,
-                } satisfies SlugAtlasStreamControl);
-              } catch (cancelError) {
-                console.error("failed to cancel resident Slug stream", cancelError);
-              }
-              resolve({ totalLength: message.offset, error: streamError });
-              ports.port1.close();
-            }
-            return;
-          case "complete":
-            resolve({ totalLength: message.totalLength, error: null });
-            return;
-          case "error":
-            resolve({ totalLength: 0, error: new Error(message.message) });
-        }
-      };
-    });
-    ports.port1.start();
+    const stream = new PortByteStream(domPortTransport(ports.port1));
 
     try {
-      await this.#require().call("workspace.slugAtlasStream", { generation, maximumLength }, [
-        ports.port2,
+      const [, totalLength] = await Promise.all([
+        this.#require().call("workspace.slugAtlasStream", { generation, maximumLength }, [
+          ports.port2,
+        ]),
+        stream.receive(write),
       ]);
-      const result = await completion;
-      if (result.error) throw result.error;
-      return result.totalLength;
+      return totalLength;
     } finally {
-      ports.port1.close();
+      stream.close();
     }
   }
 

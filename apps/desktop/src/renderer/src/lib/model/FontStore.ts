@@ -46,6 +46,7 @@ type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
  */
 export class FontStore {
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
+  readonly #committedFont: WritableSignal<FontStore>;
 
   /**
    * Object ownership lookups over concrete layer structure.
@@ -74,11 +75,21 @@ export class FontStore {
 
   constructor(workspace: WorkspaceSnapshot | null = null) {
     this.#workspace = signal(workspace, { name: "fontStore.workspace" });
+    this.#committedFont = signal(this, {
+      name: "fontStore.committedFont",
+      // The store is a stable mutable font owner; every committed write invalidates dependents.
+      equals: () => false,
+    });
     if (workspace) this.#indexWorkspace(workspace);
   }
 
   get workspaceCell(): Signal<WorkspaceSnapshot | null> {
     return this.#workspace;
+  }
+
+  /** Lightweight dependency for every committed native font change. */
+  get committedFontCell(): Signal<FontStore> {
+    return this.#committedFont;
   }
 
   layerIdForPoint(pointId: PointId): LayerId | null {
@@ -118,6 +129,7 @@ export class FontStore {
       this.#interpolationBases.clear();
       this.#glyphs.clear();
     });
+    this.#committedFont.set(this);
   }
 
   applyGlyphSnapshots(snapshots: readonly WorkspaceGlyphSnapshot[]): void {
@@ -257,6 +269,8 @@ export class FontStore {
         }
       }
     });
+
+    this.#committedFont.set(this);
 
     if (applied.next?.axes || applied.next?.sources) {
       return this.#residentProjectionGlyphIds();

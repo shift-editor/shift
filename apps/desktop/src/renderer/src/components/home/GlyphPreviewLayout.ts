@@ -21,12 +21,12 @@ export class GlyphPreviewLayout {
     this.viewBox = `${viewBoxX} ${-fontTop} ${viewBoxWidth} ${viewBoxHeight}`;
   }
 
-  /** Shared horizontal margin used by SVG and resident Slug previews. */
+  /** Shared horizontal margin used by fallback and resident previews. */
   static sideMargin(metrics: SourceMetrics): number {
     return metrics.unitsPerEm * MARGIN_SIDE_RATIO;
   }
 
-  /** Shared font-space viewport used by SVG and resident Slug previews. */
+  /** Shared font-space viewport used by fallback and resident previews. */
   static fontViewport(metrics: SourceMetrics): readonly [viewHeight: number, fontTop: number] {
     const marginTop = metrics.unitsPerEm * MARGIN_TOP_RATIO;
     const marginBottom = metrics.unitsPerEm * MARGIN_BOTTOM_RATIO;

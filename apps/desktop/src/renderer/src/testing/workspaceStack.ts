@@ -32,7 +32,7 @@ export function createWorkspaceStack(): WorkspaceStack {
   new WorkspaceHost({
     documentsRoot,
     shell: nodePortTransport(shellLane.port2),
-    syncTransport: (port) => nodePortTransport(port as NodeMessagePort),
+    portTransport: (port) => nodePortTransport(port as NodeMessagePort),
   }).start();
   const shell = new Channel<ShellCallMap, ShellEventMap>(nodePortTransport(shellLane.port1));
 

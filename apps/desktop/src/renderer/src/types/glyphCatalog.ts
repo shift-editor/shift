@@ -26,7 +26,7 @@ export interface GlyphCatalogState {
   selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
 }
 
-export interface GlyphCatalogLayout {
+export interface GlyphCatalogLayoutMetrics {
   readonly viewportWidth: number;
   readonly viewportHeight: number;
   readonly glyphCount: number;
@@ -56,9 +56,20 @@ export interface GlyphCatalogCell {
 }
 
 export interface GlyphCatalogFrame {
-  readonly layout: GlyphCatalogLayout;
+  readonly layout: GlyphCatalogLayoutMetrics;
   readonly scrollTop: number;
   readonly cells: readonly GlyphCatalogCell[];
+}
+
+/** Mutable catalog inputs replaced atomically before the next scheduled frame. */
+export interface GlyphCatalogControllerFrame {
+  readonly glyphs: readonly GlyphCatalogItem[];
+  readonly location: AxisLocation;
+  readonly axes: readonly Axis[];
+  readonly metrics: SourceMetrics;
+  readonly sourceId: SourceId | null;
+  readonly visible: boolean;
+  readonly editingGlyphId: GlyphId | null;
 }
 
 export interface GlyphNameInputProps {
@@ -73,7 +84,6 @@ export interface GlyphCatalogCanvasProps {
   readonly axes: readonly Axis[];
   readonly metrics: SourceMetrics;
   readonly sourceId: SourceId | null;
-  readonly atlasRevision: unknown;
   readonly visible: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;

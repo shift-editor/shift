@@ -189,14 +189,17 @@ pub(super) fn add_default_component_projection_glyph(
         let parent_projection = projection_for(&projections, &occurrence.parent_glyph_id())?;
         let source_start =
             u32::try_from(component_sources.len()).map_err(|_| crate::SlugError::LengthOverflow)?;
+        let source_context = AuthoredComponentSourceContext {
+            weight_sets,
+            constant_weight_index,
+            component_index,
+        };
         append_component_sources(
             &mut component_sources,
             parent_projection,
             occurrence.component_id(),
             occurrence.base_glyph_id(),
-            weight_sets,
-            constant_weight_index,
-            component_index,
+            &source_context,
         )?;
         let source_count = u32::try_from(component_sources.len())
             .map_err(|_| crate::SlugError::LengthOverflow)?
@@ -220,18 +223,14 @@ pub(super) fn add_default_component_projection_glyph(
                 &mut anchor_sources,
                 projection_for(&projections, &attachment.source().glyph_id())?,
                 attachment.source(),
-                weight_sets,
-                constant_weight_index,
-                component_index,
+                &source_context,
                 "source anchor",
             )?;
             let target_range = append_anchor_sources(
                 &mut anchor_sources,
                 projection_for(&projections, &attachment.target().glyph_id())?,
                 attachment.target(),
-                weight_sets,
-                constant_weight_index,
-                component_index,
+                &source_context,
                 "target anchor",
             )?;
             component.source_anchor_start = source_range.0;
@@ -319,38 +318,45 @@ fn projection_weight_indices<'a>(
         .ok_or_else(|| AuthoredSlugError::MissingWeightBasis(projection.glyph_id()))
 }
 
-fn weighted_layers(
-    projection: &GlyphProjection,
-    weight_sets: &[AuthoredWeightSet],
+struct AuthoredComponentSourceContext<'a> {
+    weight_sets: &'a [AuthoredWeightSet],
     constant_weight_index: u32,
-) -> Result<Vec<(u32, GlyphLayer)>, AuthoredSlugError> {
-    let Some(interpolation) = projection.interpolation() else {
-        return Ok(vec![(constant_weight_index, projection.fallback().clone())]);
-    };
-    let weight_indices = projection_weight_indices(projection, weight_sets)?;
-    let mut layers = Vec::with_capacity(interpolation.sources().len());
-    for (source, weight_index) in interpolation.sources().iter().zip(weight_indices) {
-        let mut layer = interpolation.reference_layer().clone();
-        layer.apply_interpolation_values(source.values())?;
-        layers.push((*weight_index, layer));
-    }
-    Ok(layers)
+    component_index: usize,
 }
 
-#[allow(clippy::too_many_arguments)]
+impl AuthoredComponentSourceContext<'_> {
+    fn weighted_layers(
+        &self,
+        projection: &GlyphProjection,
+    ) -> Result<Vec<(u32, GlyphLayer)>, AuthoredSlugError> {
+        let Some(interpolation) = projection.interpolation() else {
+            return Ok(vec![(
+                self.constant_weight_index,
+                projection.fallback().clone(),
+            )]);
+        };
+        let weight_indices = projection_weight_indices(projection, self.weight_sets)?;
+        let mut layers = Vec::with_capacity(interpolation.sources().len());
+        for (source, weight_index) in interpolation.sources().iter().zip(weight_indices) {
+            let mut layer = interpolation.reference_layer().clone();
+            layer.apply_interpolation_values(source.values())?;
+            layers.push((*weight_index, layer));
+        }
+        Ok(layers)
+    }
+}
+
 fn append_component_sources(
     output: &mut Vec<VariableComponentSource>,
     parent_projection: &GlyphProjection,
     component_id: ComponentId,
     base_glyph_id: GlyphId,
-    weight_sets: &[AuthoredWeightSet],
-    constant_weight_index: u32,
-    component_index: usize,
+    context: &AuthoredComponentSourceContext<'_>,
 ) -> Result<(), AuthoredSlugError> {
-    for (source_index, (weight_index, layer)) in
-        weighted_layers(parent_projection, weight_sets, constant_weight_index)?
-            .into_iter()
-            .enumerate()
+    for (source_index, (weight_index, layer)) in context
+        .weighted_layers(parent_projection)?
+        .into_iter()
+        .enumerate()
     {
         let component = layer
             .components_iter()
@@ -374,7 +380,7 @@ fn append_component_sources(
             .any(|value| !value.is_finite() || !(*value as f32).is_finite())
         {
             return Err(AuthoredSlugError::NonFiniteComponentValue {
-                component_index,
+                component_index: context.component_index,
                 source_index,
                 kind: "transform",
             });
@@ -399,16 +405,12 @@ fn append_anchor_sources(
     output: &mut Vec<VariableAnchorSource>,
     projection: &GlyphProjection,
     reference: &ComponentAnchorReference,
-    weight_sets: &[AuthoredWeightSet],
-    constant_weight_index: u32,
-    component_index: usize,
+    context: &AuthoredComponentSourceContext<'_>,
     kind: &'static str,
 ) -> Result<(u32, u32), AuthoredSlugError> {
     let start = u32::try_from(output.len()).map_err(|_| crate::SlugError::LengthOverflow)?;
     for (source_index, (weight_index, layer)) in
-        weighted_layers(projection, weight_sets, constant_weight_index)?
-            .into_iter()
-            .enumerate()
+        context.weighted_layers(projection)?.into_iter().enumerate()
     {
         let anchor = layer
             .anchors_iter()
@@ -418,7 +420,7 @@ fn append_anchor_sources(
         let y = anchor.y() as f32;
         if !anchor.x().is_finite() || !anchor.y().is_finite() || !x.is_finite() || !y.is_finite() {
             return Err(AuthoredSlugError::NonFiniteComponentValue {
-                component_index,
+                component_index: context.component_index,
                 source_index,
                 kind,
             });

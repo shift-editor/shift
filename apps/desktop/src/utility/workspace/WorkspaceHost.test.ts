@@ -19,10 +19,10 @@ import {
   type Unicode,
 } from "@shift/types";
 import type {
+  ByteStreamControl,
+  ByteStreamMessage,
   ShellCallMap,
   ShellEventMap,
-  SlugAtlasStreamControl,
-  SlugAtlasStreamMessage,
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentState,
@@ -81,7 +81,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     new WorkspaceHost({
       documentsRoot: tmpRoot,
       shell: shellTransport,
-      syncTransport: (port) => nodePortTransport(port as NodeMessagePort),
+      portTransport: (port) => nodePortTransport(port as NodeMessagePort),
     }).start();
   }
 
@@ -122,7 +122,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const chunks: Uint8Array[] = [];
     let receivedLength = 0;
     const complete = new Promise<number>((resolve, reject) => {
-      lane.port2.onmessage = (event: MessageEvent<SlugAtlasStreamMessage>) => {
+      lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
         switch (event.data.kind) {
           case "chunk":
             if (event.data.offset !== receivedLength) {
@@ -142,7 +142,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
             lane.port2.postMessage({
               kind: "ack",
               nextOffset: receivedLength,
-            } satisfies SlugAtlasStreamControl);
+            } satisfies ByteStreamControl);
             return;
           case "complete":
             if (event.data.totalLength !== receivedLength) {
@@ -244,7 +244,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
     const atlas = await sync.call("workspace.slugAtlasPrepare", { alignment: 256 });
     const lane = new MessageChannel();
-    lane.port2.onmessage = (event: MessageEvent<SlugAtlasStreamMessage>) => {
+    lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
       if (event.data.kind !== "chunk") return;
       lane.port2.postMessage({ kind: "cancel", message: "GPU upload rejected" });
     };

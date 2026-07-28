@@ -8,6 +8,8 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 
 - **Architecture Invariant:** `Renderer` owns the `MarkerLayer` lifecycle. `CanvasContextProvider` only reports DOM canvas mount, resize, and unmount events.
 
+- **Architecture Invariant:** `ResidentGlyphLayer` is the generic catalog-preview boundary. It owns WebGPU adapter/device/context and atlas lifetime; Slug names and packed-layout knowledge remain behind that backend rather than entering React or catalog frame types.
+
 - **Architecture Invariant:** **CRITICAL**: The instance buffer layout (attribute offsets in the draw command) must exactly match the packing order in `MarkerHandleRenderer.#writeInstance`. If either side changes stride/offset, handles render garbage with no error.
 
 - **Architecture Invariant:** **CRITICAL**: `MARKER_INSTANCE_FLOATS` (currently 25) defines both the Float32Array packing stride in `MarkerHandleRenderer` and the byte stride in REGL attribute bindings (`stride = MARKER_INSTANCE_FLOATS * 4`). Changing this constant requires updating both sides simultaneously.
@@ -20,9 +22,11 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 
 ```
 graphics/
-  ContourPath.ts            — transformed contour commands with lazy path outputs
+  ContourPath.ts              — transformed contour commands with lazy path outputs
+  canvasText.ts               — width-constrained Canvas2D label fitting
   backends/
-    MarkerLayer.ts   — WebGL context: REGL init, instance buffer management, draw command
+    MarkerLayer.ts            — WebGL context: REGL init, instance buffer management, draw command
+    ResidentGlyphLayer.ts     — WebGPU catalog device, atlas upload, draw, and teardown boundary
 ```
 
 Supporting files live in the editor rendering module:
@@ -45,6 +49,8 @@ editor/rendering/markers/
 
 - `MarkerLayer` -- WebGL context wrapper. Manages REGL instance, instance buffer, and draw command. Provides `resizeCanvas`, `draw`, `clear`, `destroy`, and `isAvailable`.
 
+- `ResidentGlyphLayer` -- algorithm-neutral surface used by the catalog controller. The current implementation prepares and streams a native Slug atlas, requests adapter-derived limits, and delegates packed rendering to the internal Slug backend.
+
 - `MarkerInstance` -- logical representation of one marker shape. The current marker path packs directly into a `Float32Array` for zero steady-state allocation.
 
 - `CachedInstanceStyle` -- pre-computed GPU-ready style for a shape+state combination (shapeId, size, lineWidth, colors as `GpuColor`, extent). Built once at module load by `buildStyleByState`.
@@ -62,6 +68,10 @@ editor/rendering/markers/
 ### Initialization
 
 `CanvasContextProvider` reports the marker canvas to `Editor`, which forwards the DOM canvas lifecycle to `Renderer`. `Renderer` owns the `MarkerLayer` backend and exposes that stable backend to `Handles`. REGL is initialized lazily on the first `resizeCanvas` call. If WebGL init fails (missing extensions, context lost), `#available` stays `false` and `Handles.draw` uses its CPU fallback path.
+
+### Resident catalog lifecycle
+
+`GlyphCatalogController` tracks the committed-font signal and replaces its `ResidentGlyphLayer` after each native change. The layer requests WebGPU resources, streams one bounded native atlas generation directly into adapter-sized storage bindings, and owns cleanup on cancellation, validation failure, device loss, or unmount. React owns only DOM refs, rename state, and ready/fallback callbacks.
 
 ### Per-frame draw pipeline
 
@@ -121,4 +131,6 @@ Set a breakpoint or add logging in `MarkerLayer.draw`. Check `isAvailable()` ret
 - `Editor` -- temporarily forwards canvas lifecycle from `CanvasContextProvider` to `Renderer`
 - `CanvasContextProvider` -- React context that reports canvas DOM lifecycle to `Editor`
 - `MarkerHandleRenderer` -- packs reusable point handle items into the Float32Array consumed by `MarkerLayer.draw`
+- `GlyphCatalogController` -- screen-space catalog RAF, interaction, and layout owner
+- `SlugAtlas` / `SlugRenderer` -- internal packed-atlas and shader implementation behind `ResidentGlyphLayer`
 - `DEFAULT_THEME` -- theme object whose handle styles feed into `STYLES` at load time
