@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::{error::Error, fmt};
 
-const MAGIC: &[u8; 4] = b"SHFT";
+use crate::frame::{validate_frame, write_frame, FrameError};
 const LAYER_KIND: u8 = 0x02;
 const LAYER_VERSION: u8 = 0x01;
 const HEADER_LEN: usize = 72;
@@ -332,6 +332,18 @@ impl fmt::Display for LayerCodecError {
 }
 
 impl Error for LayerCodecError {}
+
+impl From<FrameError> for LayerCodecError {
+    fn from(error: FrameError) -> Self {
+        match error {
+            FrameError::HeaderTruncated { actual } => Self::HeaderTruncated { actual },
+            FrameError::WrongMagic => Self::WrongMagic,
+            FrameError::UnsupportedPayloadKind(kind) => Self::UnsupportedPayloadKind(kind),
+            FrameError::UnsupportedVersion(version) => Self::UnsupportedVersion(version),
+            FrameError::UnknownFlags(flags) => Self::UnknownFlags(flags),
+        }
+    }
+}
 
 /// Owned canonical `shift.glyph-layer.v1` bytes.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -971,10 +983,7 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
         .ok_or(LayerCodecError::LengthOverflow)?;
     check_limit("payload byte length", bytes.len(), MAX_LAYER_PAYLOAD_BYTES)?;
 
-    bytes[..4].copy_from_slice(MAGIC);
-    bytes[4] = LAYER_KIND;
-    bytes[5] = LAYER_VERSION;
-    write_u16(&mut bytes, 6, 0);
+    write_frame(&mut bytes, LAYER_KIND, LAYER_VERSION);
     let payload_len = bytes.len();
     write_u32(&mut bytes, 8, payload_len)?;
     write_u32(&mut bytes, 12, strings.values.len())?;
@@ -997,25 +1006,8 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
 
 /// Strictly validates one canonical authored layer and returns borrowed streams.
 pub fn decode_layer(bytes: &[u8]) -> Result<GlyphLayerView<'_>, LayerCodecError> {
-    if bytes.len() < HEADER_LEN {
-        return Err(LayerCodecError::HeaderTruncated {
-            actual: bytes.len(),
-        });
-    }
+    validate_frame(bytes, HEADER_LEN, LAYER_KIND, LAYER_VERSION).map_err(LayerCodecError::from)?;
     check_limit("payload byte length", bytes.len(), MAX_LAYER_PAYLOAD_BYTES)?;
-    if &bytes[..4] != MAGIC {
-        return Err(LayerCodecError::WrongMagic);
-    }
-    if bytes[4] != LAYER_KIND {
-        return Err(LayerCodecError::UnsupportedPayloadKind(bytes[4]));
-    }
-    if bytes[5] != LAYER_VERSION {
-        return Err(LayerCodecError::UnsupportedVersion(bytes[5]));
-    }
-    let frame_flags = read_u16(bytes, 6);
-    if frame_flags != 0 {
-        return Err(LayerCodecError::UnknownFlags(frame_flags));
-    }
     let declared_len = read_u32(bytes, 8) as usize;
     if declared_len != bytes.len() {
         return Err(LayerCodecError::LengthMismatch {
@@ -1697,9 +1689,6 @@ where
     bytes.extend_from_slice(&value.to_le_bytes());
     Ok(())
 }
-fn write_u16(bytes: &mut [u8], offset: usize, value: u16) {
-    bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
-}
 fn write_u32<T>(bytes: &mut [u8], offset: usize, value: T) -> Result<(), LayerCodecError>
 where
     T: TryInto<u32>,
@@ -1710,9 +1699,6 @@ where
         .ok_or(LayerCodecError::LengthOverflow)?;
     bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
     Ok(())
-}
-fn read_u16(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes(bytes[offset..offset + 2].try_into().expect("fixed width"))
 }
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("fixed width"))

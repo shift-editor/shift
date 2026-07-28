@@ -1,9 +1,9 @@
 import { fail } from "./error";
+import { validateFrame, writeFrame } from "./frame";
 import type { OutlineCommand } from "./types";
 
 export { GlyphCodecError } from "./error";
 
-const MAGIC = [0x53, 0x48, 0x46, 0x54] as const;
 const OUTLINE_KIND = 0x01;
 const OUTLINE_VERSION = 0x01;
 const HEADER_LENGTH = 16;
@@ -63,11 +63,8 @@ export class PackedGlyphOutline implements Iterable<OutlineCommand> {
     checkLimit("payload byte length", byteLength, MAX_PAYLOAD_BYTES);
 
     const bytes = new Uint8Array(byteLength);
-    bytes.set(MAGIC, 0);
-    bytes[4] = OUTLINE_KIND;
-    bytes[5] = OUTLINE_VERSION;
+    writeFrame(bytes, OUTLINE_KIND, OUTLINE_VERSION);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    view.setUint16(6, 0, true);
     view.setUint32(8, commands.length, true);
     view.setUint32(12, coordinateCount, true);
 
@@ -176,29 +173,17 @@ export function decodeOutline(data: Uint8Array): PackedGlyphOutline {
 }
 
 function validate(bytes: Uint8Array): Header {
-  if (bytes.byteLength < HEADER_LENGTH) {
-    fail(
-      "header-truncated",
-      `outline header is truncated: ${bytes.byteLength} of ${HEADER_LENGTH} bytes`,
-    );
-  }
+  validateFrame(bytes, {
+    headerLength: HEADER_LENGTH,
+    kind: OUTLINE_KIND,
+    version: OUTLINE_VERSION,
+    headerName: "outline",
+    versionName: "glyph-outline",
+    flagsName: "glyph-outline",
+  });
   checkLimit("payload byte length", bytes.byteLength, MAX_PAYLOAD_BYTES);
 
-  if (MAGIC.some((byte, index) => bytes[index] !== byte)) {
-    fail("wrong-magic", "wrong glyph-codec magic");
-  }
-  if (bytes[4] !== OUTLINE_KIND) {
-    fail("unsupported-kind", `unsupported glyph-codec payload kind ${hex(bytes[4])}`);
-  }
-  if (bytes[5] !== OUTLINE_VERSION) {
-    fail("unsupported-version", `unsupported glyph-outline version ${bytes[5]}`);
-  }
-
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const flags = view.getUint16(6, true);
-  if (flags !== 0) {
-    fail("unknown-flags", `unknown glyph-outline flags ${hex(flags, 4)}`);
-  }
 
   const commandCount = view.getUint32(8, true);
   const coordinateCount = view.getUint32(12, true);

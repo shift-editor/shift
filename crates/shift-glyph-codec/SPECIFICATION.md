@@ -313,6 +313,14 @@ The Rust borrowed view and TypeScript iterable view expose one layer's structure
 incrementally. Consumers can build derived projections one contour/entity at a
 time without constructing a complete font or retaining every editable layer.
 
+## Implementation structure
+
+Both implementations share one frame parser/writer across payload kinds. Rust
+keeps outline and layer codecs in separate modules. TypeScript separates frame,
+binary cursor/writer, string-table, lib-value, and limit handling from the
+layer views. Successful TypeScript encoding constructs its validated offsets as
+it writes; only externally supplied bytes run the complete decoder.
+
 ## Golden vectors
 
 Canonical binary vectors are checked in at:
@@ -320,6 +328,8 @@ Canonical binary vectors are checked in at:
 - `fixtures/glyph-codec/outline-v1/`
 - `fixtures/glyph-codec/layer-v1/`
 
-Rust and TypeScript tests consume the same files, compare semantic decode, and
-require re-encoding to reproduce every byte. Any accepted canonical payload must
-round-trip byte-for-byte.
+Each fixture directory includes a `vectors.json` manifest. Dedicated Rust and
+TypeScript fixture tests parse those manifests, verify every declared byte
+length and SHA-256 digest, decode the bytes, and require canonical re-encoding
+to reproduce every byte. Format behavior tests remain separate. Any accepted
+canonical payload must round-trip byte-for-byte.

@@ -22,6 +22,12 @@ transformations belong to their respective consumers. Rust adaptation to the
 editable object model lives in `shift-font::packed_layer`, keeping the codec
 independent of font semantics.
 
+Implementation modules keep responsibilities narrow: `frame.ts` owns the common
+frame, `layer-binary.ts` owns bounded byte access, `layer-strings.ts` owns the
+canonical first-use string table, `layer-lib.ts` owns nested lib values, and
+`layer.ts` owns layer framing and iterable views. Packing retains writer-derived
+offsets rather than decoding its own output a second time.
+
 ```ts
 import { decodeLayer, packLayer } from "@shift/glyph-codec";
 

@@ -1,4 +1,26 @@
 import { fail } from "./error";
+import { validateFrame, writeFrame } from "./frame";
+import {
+  checkedAdd,
+  checkedMultiply,
+  Cursor,
+  dataView,
+  hex,
+  requireRange,
+  Writer,
+} from "./layer-binary";
+import { decodeMap, encodeMap, gatherMapStrings, mapByteLength } from "./layer-lib";
+import {
+  checkLayerLimit as checkLimit,
+  MAX_LAYER_CONTOUR_COUNT,
+  MAX_LAYER_ENTITY_COUNT,
+  MAX_LAYER_PAYLOAD_BYTES,
+  MAX_LAYER_POINT_COUNT,
+  MAX_LAYER_STRING_BYTES,
+  MAX_LAYER_STRING_COUNT,
+  validateFinite,
+} from "./layer-limits";
+import { DecodeState, NONE_STRING, StringPool, validateStrings } from "./layer-strings";
 import type {
   GlyphLayer,
   LayerAnchor,
@@ -12,29 +34,25 @@ import type {
 } from "./types";
 
 export { GlyphCodecError } from "./error";
+export {
+  MAX_LAYER_CONTOUR_COUNT,
+  MAX_LAYER_ENTITY_COUNT,
+  MAX_LAYER_LIB_DEPTH,
+  MAX_LAYER_LIB_VALUES,
+  MAX_LAYER_PAYLOAD_BYTES,
+  MAX_LAYER_POINT_COUNT,
+  MAX_LAYER_STRING_BYTES,
+  MAX_LAYER_STRING_COUNT,
+} from "./layer-limits";
 
-const MAGIC = [0x53, 0x48, 0x46, 0x54] as const;
 const LAYER_KIND = 0x02;
 const LAYER_VERSION = 0x01;
 const HEADER_LENGTH = 72;
-const NONE_STRING = 0xffff_ffff;
 const CONTOUR_LENGTH = 12;
 const POINT_LENGTH = 24;
 const COMPONENT_LENGTH = 88;
 const ANCHOR_LENGTH = 24;
 const GUIDELINE_LENGTH = 40;
-const MIN_I64 = -(1n << 63n);
-const MAX_I64 = (1n << 63n) - 1n;
-const MAX_U64 = (1n << 64n) - 1n;
-
-export const MAX_LAYER_CONTOUR_COUNT = 1_000_000;
-export const MAX_LAYER_POINT_COUNT = 4_000_000;
-export const MAX_LAYER_ENTITY_COUNT = 1_000_000;
-export const MAX_LAYER_STRING_COUNT = 4_000_000;
-export const MAX_LAYER_STRING_BYTES = 64 * 1024 * 1024;
-export const MAX_LAYER_LIB_VALUES = 1_000_000;
-export const MAX_LAYER_LIB_DEPTH = 64;
-export const MAX_LAYER_PAYLOAD_BYTES = 256 * 1024 * 1024;
 
 type Header = {
   readonly strings: readonly string[];
@@ -59,6 +77,7 @@ type Header = {
 /** One contour backed by validated packed bytes. */
 export class LayerContourView {
   readonly #bytes: Uint8Array;
+  readonly #view: DataView;
   readonly #strings: readonly string[];
   readonly #pointsOffset: number;
   readonly id: string;
@@ -67,6 +86,7 @@ export class LayerContourView {
 
   constructor(
     bytes: Uint8Array,
+    view: DataView,
     strings: readonly string[],
     id: string,
     closed: boolean,
@@ -74,6 +94,7 @@ export class LayerContourView {
     pointsOffset: number,
   ) {
     this.#bytes = bytes;
+    this.#view = view;
     this.#strings = strings;
     this.#pointsOffset = pointsOffset;
     this.id = id;
@@ -82,15 +103,14 @@ export class LayerContourView {
   }
 
   *points(): IterableIterator<LayerPoint> {
-    const view = dataView(this.#bytes);
     let offset = this.#pointsOffset;
     for (let index = 0; index < this.pointCount; index += 1) {
       yield {
-        id: this.#strings[view.getUint32(offset, true)],
+        id: this.#strings[this.#view.getUint32(offset, true)],
         type: pointTypeFromByte(this.#bytes[offset + 4], index),
         smooth: (this.#bytes[offset + 5] & 1) !== 0,
-        x: view.getFloat64(offset + 8, true),
-        y: view.getFloat64(offset + 16, true),
+        x: this.#view.getFloat64(offset + 8, true),
+        y: this.#view.getFloat64(offset + 16, true),
       };
       offset += POINT_LENGTH;
     }
@@ -109,10 +129,12 @@ export class LayerContourView {
  */
 export class PackedGlyphLayer {
   readonly #bytes: Uint8Array;
+  readonly #view: DataView;
   readonly #header: Header;
 
   private constructor(bytes: Uint8Array, header: Header) {
     this.#bytes = bytes;
+    this.#view = dataView(bytes);
     this.#header = header;
   }
 
@@ -172,16 +194,16 @@ export class PackedGlyphLayer {
   }
 
   *contours(): IterableIterator<LayerContourView> {
-    const view = dataView(this.#bytes);
     let offset = this.#header.contoursOffset;
     for (let index = 0; index < this.#header.contourCount; index += 1) {
-      const pointCount = view.getUint32(offset + 4, true);
+      const pointCount = this.#view.getUint32(offset + 4, true);
       const pointsOffset = offset + CONTOUR_LENGTH;
       yield new LayerContourView(
         this.#bytes,
+        this.#view,
         this.#header.strings,
-        this.#header.strings[view.getUint32(offset, true)],
-        (view.getUint32(offset + 8, true) & 1) !== 0,
+        this.#header.strings[this.#view.getUint32(offset, true)],
+        (this.#view.getUint32(offset + 8, true) & 1) !== 0,
         pointCount,
         pointsOffset,
       );
@@ -190,45 +212,42 @@ export class PackedGlyphLayer {
   }
 
   *components(): IterableIterator<LayerComponent> {
-    const view = dataView(this.#bytes);
     let offset = this.#header.componentsOffset;
     for (let index = 0; index < this.#header.componentCount; index += 1) {
       yield {
-        id: this.#header.strings[view.getUint32(offset, true)],
-        baseGlyphId: this.#header.strings[view.getUint32(offset + 4, true)],
-        baseGlyphName: this.#header.strings[view.getUint32(offset + 8, true)],
-        transform: readTransform(view, offset + 16),
+        id: this.#header.strings[this.#view.getUint32(offset, true)],
+        baseGlyphId: this.#header.strings[this.#view.getUint32(offset + 4, true)],
+        baseGlyphName: this.#header.strings[this.#view.getUint32(offset + 8, true)],
+        transform: readTransform(this.#view, offset + 16),
       };
       offset += COMPONENT_LENGTH;
     }
   }
 
   *anchors(): IterableIterator<LayerAnchor> {
-    const view = dataView(this.#bytes);
     let offset = this.#header.anchorsOffset;
     for (let index = 0; index < this.#header.anchorCount; index += 1) {
       yield {
-        id: this.#header.strings[view.getUint32(offset, true)],
-        name: optionalString(this.#header.strings, view.getUint32(offset + 4, true)),
-        x: view.getFloat64(offset + 8, true),
-        y: view.getFloat64(offset + 16, true),
+        id: this.#header.strings[this.#view.getUint32(offset, true)],
+        name: optionalString(this.#header.strings, this.#view.getUint32(offset + 4, true)),
+        x: this.#view.getFloat64(offset + 8, true),
+        y: this.#view.getFloat64(offset + 16, true),
       };
       offset += ANCHOR_LENGTH;
     }
   }
 
   *guidelines(): IterableIterator<LayerGuideline> {
-    const view = dataView(this.#bytes);
     let offset = this.#header.guidelinesOffset;
     for (let index = 0; index < this.#header.guidelineCount; index += 1) {
-      const flags = view.getUint32(offset + 12, true);
+      const flags = this.#view.getUint32(offset + 12, true);
       yield {
-        id: this.#header.strings[view.getUint32(offset, true)],
-        name: optionalString(this.#header.strings, view.getUint32(offset + 4, true)),
-        color: optionalString(this.#header.strings, view.getUint32(offset + 8, true)),
-        x: (flags & 1) === 0 ? null : view.getFloat64(offset + 16, true),
-        y: (flags & 2) === 0 ? null : view.getFloat64(offset + 24, true),
-        angle: (flags & 4) === 0 ? null : view.getFloat64(offset + 32, true),
+        id: this.#header.strings[this.#view.getUint32(offset, true)],
+        name: optionalString(this.#header.strings, this.#view.getUint32(offset + 4, true)),
+        color: optionalString(this.#header.strings, this.#view.getUint32(offset + 8, true)),
+        x: (flags & 1) === 0 ? null : this.#view.getFloat64(offset + 16, true),
+        y: (flags & 2) === 0 ? null : this.#view.getFloat64(offset + 24, true),
+        angle: (flags & 4) === 0 ? null : this.#view.getFloat64(offset + 32, true),
       };
       offset += GUIDELINE_LENGTH;
     }
@@ -263,6 +282,7 @@ export function decodeLayer(data: Uint8Array): PackedGlyphLayer {
 }
 
 function encode(layer: GlyphLayer): readonly [Uint8Array, Header] {
+  validateLayerInput(layer);
   checkLimit("contour count", layer.contours.length, MAX_LAYER_CONTOUR_COUNT);
   checkLimit("component count", layer.components.length, MAX_LAYER_ENTITY_COUNT);
   checkLimit("anchor count", layer.anchors.length, MAX_LAYER_ENTITY_COUNT);
@@ -307,24 +327,30 @@ function encode(layer: GlyphLayer): readonly [Uint8Array, Header] {
       ),
     0,
   );
-  const byteLength = [
-    HEADER_LENGTH,
-    checkedMultiply(strings.count + 1, 4),
+  const stringOffsetsBytes = checkedMultiply(strings.count + 1, 4);
+  const contoursOffset = checkedAdd(
+    checkedAdd(HEADER_LENGTH, stringOffsetsBytes),
     strings.byteLength,
-    contoursBytes,
+  );
+  const componentsOffset = checkedAdd(contoursOffset, contoursBytes);
+  const anchorsOffset = checkedAdd(
+    componentsOffset,
     checkedMultiply(layer.components.length, COMPONENT_LENGTH),
+  );
+  const guidelinesOffset = checkedAdd(
+    anchorsOffset,
     checkedMultiply(layer.anchors.length, ANCHOR_LENGTH),
+  );
+  const libOffset = checkedAdd(
+    guidelinesOffset,
     checkedMultiply(layer.guidelines.length, GUIDELINE_LENGTH),
-    libBytes,
-  ].reduce(checkedAdd, 0);
+  );
+  const byteLength = checkedAdd(libOffset, libBytes);
   checkLimit("payload byte length", byteLength, MAX_LAYER_PAYLOAD_BYTES);
 
   const bytes = new Uint8Array(byteLength);
   const view = dataView(bytes);
-  bytes.set(MAGIC, 0);
-  bytes[4] = LAYER_KIND;
-  bytes[5] = LAYER_VERSION;
-  view.setUint16(6, 0, true);
+  writeFrame(bytes, LAYER_KIND, LAYER_VERSION);
   view.setUint32(8, byteLength, true);
   view.setUint32(12, strings.count, true);
   view.setUint32(16, strings.byteLength, true);
@@ -392,28 +418,72 @@ function encode(layer: GlyphLayer): readonly [Uint8Array, Header] {
   if (writer.offset !== byteLength)
     fail("length-mismatch", "internal glyph-layer encoder length mismatch");
 
-  return [bytes, validate(bytes)];
+  return [
+    bytes,
+    {
+      strings: strings.values,
+      stringCount: strings.count,
+      contourCount: layer.contours.length,
+      pointCount,
+      componentCount: layer.components.length,
+      anchorCount: layer.anchors.length,
+      guidelineCount: layer.guidelines.length,
+      idIndex: strings.index(layer.id),
+      sourceIdIndex: strings.index(layer.sourceId),
+      width: layer.width,
+      height: layer.height,
+      contoursOffset,
+      componentsOffset,
+      anchorsOffset,
+      guidelinesOffset,
+      libOffset,
+      libEnd: byteLength,
+    },
+  ];
+}
+
+function validateLayerInput(layer: GlyphLayer): void {
+  validateFinite(layer.width, "width", 0);
+  if (layer.height !== null) validateFinite(layer.height, "height", 0);
+
+  const identities = new Map<string, Set<string>>();
+  const unique = (kind: string, index: number, id: string): void => {
+    let values = identities.get(kind);
+    if (!values) {
+      values = new Set();
+      identities.set(kind, values);
+    }
+    if (values.has(id)) fail("duplicate-identity", `duplicate ${kind} identity at index ${index}`);
+    values.add(id);
+  };
+
+  let pointIndex = 0;
+  for (const [contourIndex, contour] of layer.contours.entries()) {
+    unique("contour", contourIndex, contour.id);
+    for (const point of contour.points) {
+      unique("point", pointIndex, point.id);
+      pointIndex += 1;
+    }
+  }
+  for (const [index, component] of layer.components.entries())
+    unique("component", index, component.id);
+  for (const [index, anchor] of layer.anchors.entries()) unique("anchor", index, anchor.id);
+  for (const [index, guideline] of layer.guidelines.entries())
+    unique("guideline", index, guideline.id);
 }
 
 function validate(bytes: Uint8Array): Header {
-  if (bytes.byteLength < HEADER_LENGTH) {
-    fail(
-      "header-truncated",
-      `glyph-layer header is truncated: ${bytes.byteLength} of ${HEADER_LENGTH} bytes`,
-    );
-  }
+  validateFrame(bytes, {
+    headerLength: HEADER_LENGTH,
+    kind: LAYER_KIND,
+    version: LAYER_VERSION,
+    headerName: "glyph-layer",
+    versionName: "glyph-layer",
+    flagsName: "glyph-layer frame",
+  });
   checkLimit("payload byte length", bytes.byteLength, MAX_LAYER_PAYLOAD_BYTES);
-  if (MAGIC.some((byte, index) => bytes[index] !== byte))
-    fail("wrong-magic", "wrong glyph-codec magic");
-  if (bytes[4] !== LAYER_KIND)
-    fail("unsupported-kind", `unsupported glyph-codec payload kind ${hex(bytes[4])}`);
-  if (bytes[5] !== LAYER_VERSION)
-    fail("unsupported-version", `unsupported glyph-layer version ${bytes[5]}`);
 
   const view = dataView(bytes);
-  const frameFlags = view.getUint16(6, true);
-  if (frameFlags !== 0)
-    fail("unknown-flags", `unknown glyph-layer frame flags ${hex(frameFlags, 4)}`);
   const declaredLength = view.getUint32(8, true);
   if (declaredLength !== bytes.byteLength)
     fail(
@@ -454,7 +524,7 @@ function validate(bytes: Uint8Array): Header {
   const valuesOffset = checkedAdd(HEADER_LENGTH, offsetsBytes);
   const stringsEnd = checkedAdd(valuesOffset, stringBytes);
   requireRange(bytes, HEADER_LENGTH, checkedAdd(offsetsBytes, stringBytes));
-  const strings = validateStrings(bytes, stringCount, stringBytes, valuesOffset);
+  const strings = validateStrings(bytes, stringCount, stringBytes, HEADER_LENGTH, valuesOffset);
   const state = new DecodeState(strings, true);
   state.reference(idIndex);
   state.reference(sourceIdIndex);
@@ -571,474 +641,6 @@ function validate(bytes: Uint8Array): Header {
   };
 }
 
-class StringPool {
-  readonly #indexes = new Map<string, number>();
-  readonly #values: string[] = [];
-  readonly #encoded: Uint8Array[] = [];
-  #byteLength = 0;
-
-  get count(): number {
-    return this.#values.length;
-  }
-  get byteLength(): number {
-    return this.#byteLength;
-  }
-  get encodedValues(): readonly Uint8Array[] {
-    return this.#encoded;
-  }
-
-  intern(value: string): number {
-    const existing = this.#indexes.get(value);
-    if (existing !== undefined) return existing;
-    checkLimit("string count", this.#values.length + 1, MAX_LAYER_STRING_COUNT);
-    const encoded = textEncoder.encode(value);
-    this.#byteLength = checkedAdd(this.#byteLength, encoded.byteLength);
-    checkLimit("string bytes", this.#byteLength, MAX_LAYER_STRING_BYTES);
-    const index = this.#values.length;
-    this.#values.push(value);
-    this.#encoded.push(encoded);
-    this.#indexes.set(value, index);
-    return index;
-  }
-
-  index(value: string): number {
-    const index = this.#indexes.get(value);
-    if (index === undefined) throw new Error("strings must be gathered before encoding");
-    return index;
-  }
-}
-
-class DecodeState {
-  readonly #strings: readonly string[];
-  readonly #validateReferences: boolean;
-  readonly #identities = new Map<string, Set<string>>();
-  nextString = 0;
-  pointIndex = 0;
-  libValues = 0;
-
-  constructor(strings: readonly string[], validateReferences: boolean) {
-    this.#strings = strings;
-    this.#validateReferences = validateReferences;
-  }
-
-  reference(index: number): void {
-    if (index >= this.#strings.length)
-      fail("string-reference-out-of-range", `string reference ${index} is out of range`);
-    if (!this.#validateReferences) return;
-    if (index > this.nextString)
-      fail(
-        "noncanonical-string-reference",
-        `string reference ${index} is out of canonical first-use order; expected at most ${this.nextString}`,
-      );
-    if (index === this.nextString) this.nextString += 1;
-  }
-
-  requiredString(index: number): string {
-    this.reference(index);
-    return this.#strings[index];
-  }
-
-  optionalString(index: number): string | null {
-    return index === NONE_STRING ? null : this.requiredString(index);
-  }
-
-  unique(kind: string, index: number, value: string): void {
-    let identities = this.#identities.get(kind);
-    if (!identities) {
-      identities = new Set();
-      this.#identities.set(kind, identities);
-    }
-    if (identities.has(value))
-      fail("duplicate-identity", `duplicate ${kind} identity at index ${index}`);
-    identities.add(value);
-  }
-
-  countLibValue(): void {
-    this.libValues = checkedAdd(this.libValues, 1);
-    checkLimit("lib value count", this.libValues, MAX_LAYER_LIB_VALUES);
-  }
-}
-
-class Cursor {
-  readonly #bytes: Uint8Array;
-  readonly #view: DataView;
-  offset: number;
-  end: number;
-
-  constructor(bytes: Uint8Array, offset: number, end: number) {
-    this.#bytes = bytes;
-    this.#view = dataView(bytes);
-    this.offset = offset;
-    this.end = end;
-  }
-
-  take(count: number): Uint8Array {
-    const next = checkedAdd(this.offset, count);
-    if (next > this.end)
-      fail(
-        "truncated",
-        `glyph-layer body is truncated at byte ${this.offset}: need ${count} bytes, have ${Math.max(0, this.end - this.offset)}`,
-      );
-    const value = this.#bytes.subarray(this.offset, next);
-    this.offset = next;
-    return value;
-  }
-
-  u8(): number {
-    const offset = this.offset;
-    this.take(1);
-    return this.#view.getUint8(offset);
-  }
-  u16(): number {
-    const offset = this.offset;
-    this.take(2);
-    return this.#view.getUint16(offset, true);
-  }
-  u32(): number {
-    const offset = this.offset;
-    this.take(4);
-    return this.#view.getUint32(offset, true);
-  }
-  i64(): bigint {
-    const offset = this.offset;
-    this.take(8);
-    return this.#view.getBigInt64(offset, true);
-  }
-  u64(): bigint {
-    const offset = this.offset;
-    this.take(8);
-    return this.#view.getBigUint64(offset, true);
-  }
-  f64(): number {
-    const offset = this.offset;
-    this.take(8);
-    return this.#view.getFloat64(offset, true);
-  }
-}
-
-class Writer {
-  readonly #bytes: Uint8Array;
-  readonly #view: DataView;
-  offset: number;
-
-  constructor(bytes: Uint8Array, offset: number) {
-    this.#bytes = bytes;
-    this.#view = dataView(bytes);
-    this.offset = offset;
-  }
-
-  u8(value: number): void {
-    this.#view.setUint8(this.offset, value);
-    this.offset += 1;
-  }
-  u16(value: number): void {
-    this.#view.setUint16(this.offset, value, true);
-    this.offset += 2;
-  }
-  u32(value: number): void {
-    this.#view.setUint32(this.offset, value, true);
-    this.offset += 4;
-  }
-  i64(value: bigint): void {
-    checkInteger(value, MIN_I64, MAX_I64);
-    this.#view.setBigInt64(this.offset, value, true);
-    this.offset += 8;
-  }
-  u64(value: bigint): void {
-    checkInteger(value, 0n, MAX_U64);
-    this.#view.setBigUint64(this.offset, value, true);
-    this.offset += 8;
-  }
-  f64(value: number): void {
-    this.#view.setFloat64(this.offset, value, true);
-    this.offset += 8;
-  }
-  bytes(value: Uint8Array): void {
-    this.#bytes.set(value, this.offset);
-    this.offset += value.byteLength;
-  }
-}
-
-function decodeMap(
-  cursor: Cursor,
-  state: DecodeState,
-  depth: number,
-): ReadonlyMap<string, LayerLibValue> {
-  checkDepth(depth);
-  const count = cursor.u32();
-  checkLimit("lib value count", checkedAdd(state.libValues, count), MAX_LAYER_LIB_VALUES);
-  const values = new Map<string, LayerLibValue>();
-  let previous: string | null = null;
-  for (let index = 0; index < count; index += 1) {
-    const keyOffset = cursor.offset;
-    const key = state.requiredString(cursor.u32());
-    if (previous !== null && compareUtf8(previous, key) >= 0)
-      fail(
-        "noncanonical-map-order",
-        `dictionary keys are not in canonical UTF-8 order at byte ${keyOffset}`,
-      );
-    previous = key;
-    values.set(key, decodeLibValue(cursor, state, depth + 1));
-  }
-  return values;
-}
-
-function decodeLibValue(cursor: Cursor, state: DecodeState, depth: number): LayerLibValue {
-  checkDepth(depth);
-  state.countLibValue();
-  const tagOffset = cursor.offset;
-  const tag = cursor.u8();
-  if (cursor.u8() !== 0 || cursor.u16() !== 0)
-    fail("non-zero-reserved", `non-zero reserved lib value bytes at index ${state.libValues - 1}`);
-  switch (tag) {
-    case 0:
-      return { kind: "string", value: state.requiredString(cursor.u32()) };
-    case 1:
-      return { kind: "integer", value: cursor.i64() };
-    case 2:
-      return { kind: "unsigned-integer", value: cursor.u64() };
-    case 3: {
-      const value = cursor.f64();
-      validateFinite(value, "lib float", state.libValues - 1);
-      return { kind: "float", value };
-    }
-    case 4: {
-      const offset = cursor.offset;
-      const value = cursor.u8();
-      if (cursor.take(3).some((byte) => byte !== 0))
-        fail(
-          "non-zero-reserved",
-          `non-zero reserved lib boolean bytes at index ${state.libValues - 1}`,
-        );
-      if (value !== 0 && value !== 1)
-        fail("invalid-boolean", `invalid boolean ${value} at byte ${offset}`);
-      return { kind: "boolean", value: value === 1 };
-    }
-    case 5: {
-      const count = cursor.u32();
-      checkLimit("lib value count", checkedAdd(state.libValues, count), MAX_LAYER_LIB_VALUES);
-      const value: LayerLibValue[] = [];
-      for (let index = 0; index < count; index += 1)
-        value.push(decodeLibValue(cursor, state, depth + 1));
-      return { kind: "array", value };
-    }
-    case 6:
-      return { kind: "dict", value: decodeMap(cursor, state, depth + 1) };
-    case 7:
-      return { kind: "data", value: Uint8Array.from(cursor.take(cursor.u32())) };
-    case 8:
-      return { kind: "date", value: state.requiredString(cursor.u32()) };
-    case 9:
-      return { kind: "uid", value: cursor.u64() };
-    default:
-      fail("unknown-lib-tag", `unknown lib value tag ${hex(tag)} at byte ${tagOffset}`);
-  }
-}
-
-function gatherMapStrings(
-  values: ReadonlyMap<string, LayerLibValue>,
-  strings: StringPool,
-  depth: number,
-  state: { count: number },
-): void {
-  checkDepth(depth);
-  for (const [key, value] of sortedEntries(values)) {
-    strings.intern(key);
-    gatherValueStrings(value, strings, depth + 1, state);
-  }
-}
-
-function gatherValueStrings(
-  value: LayerLibValue,
-  strings: StringPool,
-  depth: number,
-  state: { count: number },
-): void {
-  checkDepth(depth);
-  state.count = checkedAdd(state.count, 1);
-  checkLimit("lib value count", state.count, MAX_LAYER_LIB_VALUES);
-  switch (value.kind) {
-    case "string":
-    case "date":
-      strings.intern(value.value);
-      break;
-    case "array":
-      for (const item of value.value) gatherValueStrings(item, strings, depth + 1, state);
-      break;
-    case "dict":
-      gatherMapStrings(value.value, strings, depth + 1, state);
-      break;
-  }
-}
-
-function mapByteLength(
-  values: ReadonlyMap<string, LayerLibValue>,
-  depth: number,
-  state: { count: number },
-): number {
-  checkDepth(depth);
-  let length = 4;
-  for (const [, value] of sortedEntries(values))
-    length = checkedAdd(length, checkedAdd(4, valueByteLength(value, depth + 1, state)));
-  return length;
-}
-
-function valueByteLength(value: LayerLibValue, depth: number, state: { count: number }): number {
-  checkDepth(depth);
-  state.count = checkedAdd(state.count, 1);
-  checkLimit("lib value count", state.count, MAX_LAYER_LIB_VALUES);
-  switch (value.kind) {
-    case "string":
-    case "date":
-      return 8;
-    case "integer":
-      checkInteger(value.value, MIN_I64, MAX_I64);
-      return 12;
-    case "unsigned-integer":
-    case "uid":
-      checkInteger(value.value, 0n, MAX_U64);
-      return 12;
-    case "float":
-      return 12;
-    case "boolean":
-      return 8;
-    case "array":
-      return value.value.reduce(
-        (length, item) => checkedAdd(length, valueByteLength(item, depth + 1, state)),
-        8,
-      );
-    case "dict":
-      return checkedAdd(4, mapByteLength(value.value, depth + 1, state));
-    case "data":
-      return checkedAdd(8, value.value.byteLength);
-  }
-}
-
-function encodeMap(
-  writer: Writer,
-  values: ReadonlyMap<string, LayerLibValue>,
-  strings: StringPool,
-  depth: number,
-  state: { count: number },
-): void {
-  checkDepth(depth);
-  writer.u32(values.size);
-  for (const [key, value] of sortedEntries(values)) {
-    writer.u32(strings.index(key));
-    encodeLibValue(writer, value, strings, depth + 1, state);
-  }
-}
-
-function encodeLibValue(
-  writer: Writer,
-  value: LayerLibValue,
-  strings: StringPool,
-  depth: number,
-  state: { count: number },
-): void {
-  checkDepth(depth);
-  state.count = checkedAdd(state.count, 1);
-  checkLimit("lib value count", state.count, MAX_LAYER_LIB_VALUES);
-  const tags: Record<LayerLibValue["kind"], number> = {
-    string: 0,
-    integer: 1,
-    "unsigned-integer": 2,
-    float: 3,
-    boolean: 4,
-    array: 5,
-    dict: 6,
-    data: 7,
-    date: 8,
-    uid: 9,
-  };
-  writer.u8(tags[value.kind]);
-  writer.u8(0);
-  writer.u16(0);
-  switch (value.kind) {
-    case "string":
-    case "date":
-      writer.u32(strings.index(value.value));
-      break;
-    case "integer":
-      writer.i64(value.value);
-      break;
-    case "unsigned-integer":
-    case "uid":
-      writer.u64(value.value);
-      break;
-    case "float":
-      writer.f64(value.value);
-      break;
-    case "boolean":
-      writer.u8(value.value ? 1 : 0);
-      writer.u8(0);
-      writer.u16(0);
-      break;
-    case "array":
-      writer.u32(value.value.length);
-      for (const item of value.value) encodeLibValue(writer, item, strings, depth + 1, state);
-      break;
-    case "dict":
-      encodeMap(writer, value.value, strings, depth + 1, state);
-      break;
-    case "data":
-      writer.u32(value.value.byteLength);
-      writer.bytes(value.value);
-      break;
-  }
-}
-
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder("utf-8", { fatal: true });
-
-function validateStrings(
-  bytes: Uint8Array,
-  count: number,
-  expectedBytes: number,
-  valuesOffset: number,
-): readonly string[] {
-  const view = dataView(bytes);
-  if (view.getUint32(HEADER_LENGTH, true) !== 0)
-    fail("invalid-string-offsets", "non-canonical string offsets at index 0");
-  const strings: string[] = [];
-  const seen = new Set<string>();
-  let previous = 0;
-  for (let index = 0; index < count; index += 1) {
-    const end = view.getUint32(HEADER_LENGTH + (index + 1) * 4, true);
-    if (end < previous || end > expectedBytes)
-      fail("invalid-string-offsets", `non-canonical string offsets at index ${index + 1}`);
-    let value: string;
-    try {
-      value = textDecoder.decode(bytes.subarray(valuesOffset + previous, valuesOffset + end));
-    } catch {
-      fail("invalid-utf8", `invalid UTF-8 in string ${index}`);
-    }
-    if (seen.has(value)) fail("duplicate-string", `duplicate string-table value at index ${index}`);
-    seen.add(value);
-    strings.push(value);
-    previous = end;
-  }
-  if (previous !== expectedBytes)
-    fail("invalid-string-offsets", `non-canonical string offsets at index ${count}`);
-  return strings;
-}
-
-function sortedEntries(
-  values: ReadonlyMap<string, LayerLibValue>,
-): ReadonlyArray<readonly [string, LayerLibValue]> {
-  return [...values.entries()].sort((left, right) => compareUtf8(left[0], right[0]));
-}
-
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = textEncoder.encode(left);
-  const rightBytes = textEncoder.encode(right);
-  const count = Math.min(leftBytes.length, rightBytes.length);
-  for (let index = 0; index < count; index += 1) {
-    if (leftBytes[index] !== rightBytes[index]) return leftBytes[index] - rightBytes[index];
-  }
-  return leftBytes.length - rightBytes.length;
-}
-
 function transformValues(transform: LayerTransform): readonly number[] {
   return [
     transform.translateX,
@@ -1076,6 +678,8 @@ function pointTypeByte(type: LayerPointType): number {
       return 1;
     case "qcurve":
       return 2;
+    default:
+      fail("unknown-point-type", `unknown input point type ${String(type)}`);
   }
 }
 
@@ -1096,67 +700,10 @@ function optionalString(strings: readonly string[], index: number): string | nul
   return index === NONE_STRING ? null : strings[index];
 }
 
-function validateFinite(value: number, field: string, index: number): void {
-  if (!Number.isFinite(value))
-    fail("non-finite-number", `non-finite ${field} value at index ${index}`);
-}
-
 function validateAbsent(view: DataView, offset: number, field: string, index: number): void {
   if (view.getBigUint64(offset, true) !== 0n)
     fail(
       "noncanonical-absent-number",
       `absent ${field} value at index ${index} is not canonical positive zero`,
     );
-}
-
-function checkInteger(value: bigint, minimum: bigint, maximum: bigint): void {
-  if (value < minimum || value > maximum)
-    fail("integer-out-of-range", `integer ${value} is outside the encoded range`);
-}
-
-function checkDepth(depth: number): void {
-  if (depth > MAX_LAYER_LIB_DEPTH)
-    fail(
-      "nesting-limit-exceeded",
-      `layer lib nesting exceeds implementation limit ${MAX_LAYER_LIB_DEPTH}`,
-    );
-}
-
-function checkLimit(field: string, actual: number, limit: number): void {
-  if (actual > limit)
-    fail(
-      "limit-exceeded",
-      `glyph-layer ${field} exceeds implementation limit ${limit}: got ${actual}`,
-    );
-}
-
-function requireRange(bytes: Uint8Array, offset: number, count: number): void {
-  const end = checkedAdd(offset, count);
-  if (end > bytes.byteLength)
-    fail(
-      "truncated",
-      `glyph-layer body is truncated at byte ${offset}: need ${count} bytes, have ${Math.max(0, bytes.byteLength - offset)}`,
-    );
-}
-
-function checkedAdd(left: number, right: number): number {
-  const value = left + right;
-  if (!Number.isSafeInteger(value))
-    fail("length-overflow", "glyph-layer payload length arithmetic overflowed");
-  return value;
-}
-
-function checkedMultiply(left: number, right: number): number {
-  const value = left * right;
-  if (!Number.isSafeInteger(value))
-    fail("length-overflow", "glyph-layer payload length arithmetic overflowed");
-  return value;
-}
-
-function dataView(bytes: Uint8Array): DataView {
-  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-}
-
-function hex(value: number, width = 2): string {
-  return `0x${value.toString(16).padStart(width, "0")}`;
 }
