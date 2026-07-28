@@ -226,7 +226,7 @@ describe("strict layer decoding", () => {
     const bytes = packLayer(emptyLayer()).toUint8Array();
     bytes[71] = 0x80;
 
-    expect(errorCode(() => decodeLayer(bytes))).toBe("noncanonical-absent-number");
+    expect(errorCode(() => decodeLayer(bytes))).toBe("non-canonical-absent-number");
   });
 
   it("rejects non-finite numbers, duplicate identity, and out-of-range integers", () => {

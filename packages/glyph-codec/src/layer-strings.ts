@@ -72,7 +72,7 @@ export class DecodeState {
     if (!this.#validateReferences) return;
     if (index > this.nextString)
       fail(
-        "noncanonical-string-reference",
+        "non-canonical-string-reference",
         `string reference ${index} is out of canonical first-use order; expected at most ${this.nextString}`,
       );
     if (index === this.nextString) this.nextString += 1;
@@ -87,7 +87,7 @@ export class DecodeState {
     return index === NONE_STRING ? null : this.requiredString(index);
   }
 
-  unique(kind: string, index: number, value: string): void {
+  uniqueIdentity(kind: string, index: number, value: string): void {
     let identities = this.#identities.get(kind);
     if (!identities) {
       identities = new Set();

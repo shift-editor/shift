@@ -18,6 +18,19 @@ import {
 import { compareUtf8, DecodeState, StringPool } from "./layer-strings";
 import type { LayerLibValue } from "./types";
 
+const LIB_TAGS: Record<LayerLibValue["kind"], number> = {
+  string: 0,
+  integer: 1,
+  "unsigned-integer": 2,
+  float: 3,
+  boolean: 4,
+  array: 5,
+  dict: 6,
+  data: 7,
+  date: 8,
+  uid: 9,
+};
+
 export function decodeMap(
   cursor: Cursor,
   state: DecodeState,
@@ -33,7 +46,7 @@ export function decodeMap(
     const key = state.requiredString(cursor.u32());
     if (previous !== null && compareUtf8(previous, key) >= 0)
       fail(
-        "noncanonical-map-order",
+        "non-canonical-map-order",
         `dictionary keys are not in canonical UTF-8 order at byte ${keyOffset}`,
       );
     previous = key;
@@ -199,19 +212,7 @@ function encodeLibValue(
   checkLayerDepth(depth);
   state.count = checkedAdd(state.count, 1);
   checkLayerLimit("lib value count", state.count, MAX_LAYER_LIB_VALUES);
-  const tags: Record<LayerLibValue["kind"], number> = {
-    string: 0,
-    integer: 1,
-    "unsigned-integer": 2,
-    float: 3,
-    boolean: 4,
-    array: 5,
-    dict: 6,
-    data: 7,
-    date: 8,
-    uid: 9,
-  };
-  writer.u8(tags[value.kind]);
+  writer.u8(LIB_TAGS[value.kind]);
   writer.u8(0);
   writer.u16(0);
   switch (value.kind) {

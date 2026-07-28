@@ -316,10 +316,11 @@ time without constructing a complete font or retaining every editable layer.
 ## Implementation structure
 
 Both implementations share one frame parser/writer across payload kinds. Rust
-keeps outline and layer codecs in separate modules. TypeScript separates frame,
-binary cursor/writer, string-table, lib-value, and limit handling from the
-layer views. Successful TypeScript encoding constructs its validated offsets as
-it writes; only externally supplied bytes run the complete decoder.
+keeps outline and layer codecs in separate modules and caches validated layer
+offsets in `PackedGlyphLayer`. TypeScript separates frame, binary cursor/writer,
+string-table, lib-value, and limit handling from the layer views. Successful
+encoding validates writer input and constructs its offsets while writing; only
+externally supplied bytes run the complete decoder in release builds.
 
 ## Golden vectors
 

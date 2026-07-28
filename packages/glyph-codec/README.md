@@ -19,7 +19,7 @@ interchangeable.
 
 Transport, persistence, `Path2D`, SVG debugging, SQLite, and Slug/GPU
 transformations belong to their respective consumers. Rust adaptation to the
-editable object model lives in `shift-font::packed_layer`, keeping the codec
+editable object model lives in shift-font's private `codec_adapter`, keeping the codec
 independent of font semantics.
 
 Implementation modules keep responsibilities narrow: `frame.ts` owns the common

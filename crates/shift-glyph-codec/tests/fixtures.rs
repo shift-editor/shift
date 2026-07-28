@@ -18,6 +18,12 @@ struct BinaryVector {
 }
 
 #[derive(Deserialize)]
+struct OutlineManifest {
+    format: String,
+    vectors: Vec<OutlineVector>,
+}
+
+#[derive(Deserialize)]
 struct OutlineVector {
     name: String,
     file: String,
@@ -51,8 +57,10 @@ fn layer_manifest_declares_every_canonical_fixture() {
 #[test]
 fn outline_manifest_declares_every_canonical_fixture() {
     let directory = fixture_directory("outline-v1");
-    let vectors: Vec<OutlineVector> =
+    let manifest: OutlineManifest =
         serde_json::from_slice(&fs::read(directory.join("vectors.json")).unwrap()).unwrap();
+    assert_eq!(manifest.format, "shift.glyph-outline.v1");
+    let vectors = manifest.vectors;
     assert_unique_files(vectors.iter().map(|vector| vector.file.as_str()));
     assert_eq!(
         vectors

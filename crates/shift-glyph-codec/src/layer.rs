@@ -346,31 +346,42 @@ impl From<FrameError> for LayerCodecError {
 }
 
 /// Owned canonical `shift.glyph-layer.v1` bytes.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PackedGlyphLayer(Vec<u8>);
+#[derive(Clone, Debug)]
+pub struct PackedGlyphLayer {
+    bytes: Vec<u8>,
+    header: LayerHeader,
+}
 
 impl PackedGlyphLayer {
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, LayerCodecError> {
-        decode_layer(&bytes)?;
-        Ok(Self(bytes))
+        let header = LayerHeader::from_view(decode_layer(&bytes)?);
+        Ok(Self { bytes, header })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0
+        &self.bytes
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
-        self.0
+        self.bytes
     }
 
     pub fn view(&self) -> GlyphLayerView<'_> {
-        decode_layer(&self.0).expect("PackedGlyphLayer invariant violated")
+        self.header.view(&self.bytes)
     }
 
     pub fn unpack(&self) -> GlyphLayer {
         self.view().unpack()
     }
 }
+
+impl PartialEq for PackedGlyphLayer {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes
+    }
+}
+
+impl Eq for PackedGlyphLayer {}
 
 #[derive(Clone, Copy, Debug)]
 struct Strings<'a> {
@@ -388,6 +399,80 @@ impl<'a> Strings<'a> {
         let end = read_u32(self.bytes, self.offsets_offset + (index + 1) * 4) as usize;
         std::str::from_utf8(&self.bytes[self.values_offset + start..self.values_offset + end])
             .expect("validated UTF-8")
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct LayerHeader {
+    string_count: usize,
+    string_offsets_offset: usize,
+    string_values_offset: usize,
+    id_index: u32,
+    source_id_index: u32,
+    width: f64,
+    height: Option<f64>,
+    contour_count: usize,
+    point_count: usize,
+    component_count: usize,
+    anchor_count: usize,
+    guideline_count: usize,
+    contours_offset: usize,
+    components_offset: usize,
+    anchors_offset: usize,
+    guidelines_offset: usize,
+    lib_offset: usize,
+    lib_end: usize,
+}
+
+impl LayerHeader {
+    fn from_view(view: GlyphLayerView<'_>) -> Self {
+        Self {
+            string_count: view.strings.count,
+            string_offsets_offset: view.strings.offsets_offset,
+            string_values_offset: view.strings.values_offset,
+            id_index: view.id_index,
+            source_id_index: view.source_id_index,
+            width: view.width,
+            height: view.height,
+            contour_count: view.contour_count,
+            point_count: view.point_count,
+            component_count: view.component_count,
+            anchor_count: view.anchor_count,
+            guideline_count: view.guideline_count,
+            contours_offset: view.contours_offset,
+            components_offset: view.components_offset,
+            anchors_offset: view.anchors_offset,
+            guidelines_offset: view.guidelines_offset,
+            lib_offset: view.lib_offset,
+            lib_end: view.lib_end,
+        }
+    }
+
+    fn view<'a>(self, bytes: &'a [u8]) -> GlyphLayerView<'a> {
+        GlyphLayerView {
+            bytes,
+            strings: Strings {
+                bytes,
+                count: self.string_count,
+                offsets_offset: self.string_offsets_offset,
+                values_offset: self.string_values_offset,
+            },
+            id_index: self.id_index,
+            source_id_index: self.source_id_index,
+            width: self.width,
+            height: self.height,
+            contour_count: self.contour_count,
+            point_count: self.point_count,
+            component_count: self.component_count,
+            anchor_count: self.anchor_count,
+            guideline_count: self.guideline_count,
+            contours_offset: self.contours_offset,
+            components_offset: self.components_offset,
+            anchors_offset: self.anchors_offset,
+            guidelines_offset: self.guidelines_offset,
+            lib_offset: self.lib_offset,
+            lib_end: self.lib_end,
+        }
     }
 }
 
@@ -458,7 +543,6 @@ impl<'a> GlyphLayerView<'a> {
             strings: self.strings,
             offset: self.components_offset,
             remaining: self.component_count,
-            index: 0,
         }
     }
 
@@ -680,7 +764,6 @@ pub struct LayerComponentIter<'a> {
     strings: Strings<'a>,
     offset: usize,
     remaining: usize,
-    index: usize,
 }
 impl<'a> Iterator for LayerComponentIter<'a> {
     type Item = LayerComponentView<'a>;
@@ -697,7 +780,6 @@ impl<'a> Iterator for LayerComponentIter<'a> {
         }
         self.offset += COMPONENT_LEN;
         self.remaining -= 1;
-        self.index += 1;
         Some(LayerComponentView {
             id,
             base_glyph_id,
@@ -847,8 +929,83 @@ fn optional_string<'a>(strings: Strings<'a>, index: u32) -> Option<&'a str> {
     (index != NONE_STRING).then(|| strings.get(index))
 }
 
+fn validate_layer_input(layer: &GlyphLayer) -> Result<(), LayerCodecError> {
+    validate_finite(layer.width, "width", 0)?;
+    if let Some(height) = layer.height {
+        validate_finite(height, "height", 0)?;
+    }
+
+    let mut contour_ids = HashSet::new();
+    let mut point_ids = HashSet::new();
+    let mut point_index = 0;
+    for (contour_index, contour) in layer.contours.iter().enumerate() {
+        if !contour_ids.insert(contour.id.as_str()) {
+            return Err(LayerCodecError::DuplicateIdentity {
+                kind: "contour",
+                index: contour_index,
+            });
+        }
+        for point in &contour.points {
+            if !point_ids.insert(point.id.as_str()) {
+                return Err(LayerCodecError::DuplicateIdentity {
+                    kind: "point",
+                    index: point_index,
+                });
+            }
+            validate_finite(point.x, "point coordinate", point_index * 2)?;
+            validate_finite(point.y, "point coordinate", point_index * 2 + 1)?;
+            point_index += 1;
+        }
+    }
+
+    let mut component_ids = HashSet::new();
+    for (index, component) in layer.components.iter().enumerate() {
+        if !component_ids.insert(component.id.as_str()) {
+            return Err(LayerCodecError::DuplicateIdentity {
+                kind: "component",
+                index,
+            });
+        }
+        for (value_index, value) in component.transform.values().into_iter().enumerate() {
+            validate_finite(value, "component transform", index * 9 + value_index)?;
+        }
+    }
+
+    let mut anchor_ids = HashSet::new();
+    for (index, anchor) in layer.anchors.iter().enumerate() {
+        if !anchor_ids.insert(anchor.id.as_str()) {
+            return Err(LayerCodecError::DuplicateIdentity {
+                kind: "anchor",
+                index,
+            });
+        }
+        validate_finite(anchor.x, "anchor coordinate", index * 2)?;
+        validate_finite(anchor.y, "anchor coordinate", index * 2 + 1)?;
+    }
+
+    let mut guideline_ids = HashSet::new();
+    for (index, guideline) in layer.guidelines.iter().enumerate() {
+        if !guideline_ids.insert(guideline.id.as_str()) {
+            return Err(LayerCodecError::DuplicateIdentity {
+                kind: "guideline",
+                index,
+            });
+        }
+        for (value_index, value) in [guideline.x, guideline.y, guideline.angle]
+            .into_iter()
+            .enumerate()
+        {
+            if let Some(value) = value {
+                validate_finite(value, "guideline number", index * 3 + value_index)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Canonically encodes a complete authored layer.
 pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecError> {
+    validate_layer_input(layer)?;
     check_limit(
         "contour count",
         layer.contours.len(),
@@ -917,6 +1074,7 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
         bytes.extend_from_slice(value.as_bytes());
     }
 
+    let contours_offset = bytes.len();
     for contour in &layer.contours {
         push_u32(&mut bytes, strings.index(&contour.id))?;
         push_u32(&mut bytes, contour.points.len())?;
@@ -930,6 +1088,7 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
             bytes.extend_from_slice(&point.y.to_le_bytes());
         }
     }
+    let components_offset = bytes.len();
     for component in &layer.components {
         push_u32(&mut bytes, strings.index(&component.id))?;
         push_u32(&mut bytes, strings.index(&component.base_glyph_id))?;
@@ -939,6 +1098,7 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
             bytes.extend_from_slice(&value.to_le_bytes());
         }
     }
+    let anchors_offset = bytes.len();
     for anchor in &layer.anchors {
         push_u32(&mut bytes, strings.index(&anchor.id))?;
         push_u32(
@@ -951,6 +1111,7 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
         bytes.extend_from_slice(&anchor.x.to_le_bytes());
         bytes.extend_from_slice(&anchor.y.to_le_bytes());
     }
+    let guidelines_offset = bytes.len();
     for guideline in &layer.guidelines {
         push_u32(&mut bytes, strings.index(&guideline.id))?;
         push_u32(
@@ -1000,8 +1161,36 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
     bytes[56..64].copy_from_slice(&layer.width.to_le_bytes());
     bytes[64..72].copy_from_slice(&layer.height.unwrap_or(0.0).to_le_bytes());
 
-    decode_layer(&bytes)?;
-    Ok(PackedGlyphLayer(bytes))
+    let string_offsets_len = strings
+        .values
+        .len()
+        .checked_add(1)
+        .and_then(|count| count.checked_mul(4))
+        .ok_or(LayerCodecError::LengthOverflow)?;
+    let header = LayerHeader {
+        string_count: strings.values.len(),
+        string_offsets_offset: HEADER_LEN,
+        string_values_offset: HEADER_LEN
+            .checked_add(string_offsets_len)
+            .ok_or(LayerCodecError::LengthOverflow)?,
+        id_index: strings.index(&layer.id),
+        source_id_index: strings.index(&layer.source_id),
+        width: layer.width,
+        height: layer.height,
+        contour_count: layer.contours.len(),
+        point_count,
+        component_count: layer.components.len(),
+        anchor_count: layer.anchors.len(),
+        guideline_count: layer.guidelines.len(),
+        contours_offset,
+        components_offset,
+        anchors_offset,
+        guidelines_offset,
+        lib_offset,
+        lib_end: bytes.len(),
+    };
+    debug_assert!(decode_layer(&bytes).is_ok());
+    Ok(PackedGlyphLayer { bytes, header })
 }
 
 /// Strictly validates one canonical authored layer and returns borrowed streams.
@@ -1494,7 +1683,8 @@ fn gather_map_strings(
     count: &mut usize,
 ) -> Result<(), LayerCodecError> {
     check_depth(depth)?;
-    for (key, value) in sorted_map(values) {
+    // BTreeMap's String order is the same lexicographic order as UTF-8 bytes.
+    for (key, value) in values {
         strings.intern(key)?;
         gather_value_strings(value, strings, depth + 1, count)?;
     }
@@ -1521,9 +1711,9 @@ fn gather_value_strings(
             }
         }
         LayerLibValue::Dict(values) => gather_map_strings(values, strings, depth + 1, count)?,
+        LayerLibValue::Float(value) => validate_finite(*value, "lib float", *count - 1)?,
         LayerLibValue::Integer(_)
         | LayerLibValue::UnsignedInteger(_)
-        | LayerLibValue::Float(_)
         | LayerLibValue::Boolean(_)
         | LayerLibValue::Data(_)
         | LayerLibValue::Uid(_) => {}
@@ -1540,7 +1730,7 @@ fn encode_map(
 ) -> Result<(), LayerCodecError> {
     check_depth(depth)?;
     push_u32(bytes, values.len())?;
-    for (key, value) in sorted_map(values) {
+    for (key, value) in values {
         push_u32(bytes, strings.index(key))?;
         encode_lib_value(bytes, value, strings, depth + 1, count)?;
     }
@@ -1594,12 +1784,6 @@ fn encode_lib_value(
         }
     }
     Ok(())
-}
-
-fn sorted_map(values: &BTreeMap<String, LayerLibValue>) -> Vec<(&String, &LayerLibValue)> {
-    let mut values = values.iter().collect::<Vec<_>>();
-    values.sort_unstable_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
-    values
 }
 
 fn validate_strings(strings: Strings<'_>, expected_bytes: usize) -> Result<(), LayerCodecError> {

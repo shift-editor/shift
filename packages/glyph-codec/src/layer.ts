@@ -532,7 +532,7 @@ function validate(bytes: Uint8Array): Header {
   const contoursOffset = cursor.offset;
   let actualPoints = 0;
   for (let contourIndex = 0; contourIndex < contourCount; contourIndex += 1) {
-    state.unique("contour", contourIndex, state.requiredString(cursor.u32()));
+    state.uniqueIdentity("contour", contourIndex, state.requiredString(cursor.u32()));
     const count = cursor.u32();
     actualPoints = checkedAdd(actualPoints, count);
     checkLimit("point count", actualPoints, MAX_LAYER_POINT_COUNT);
@@ -544,7 +544,7 @@ function validate(bytes: Uint8Array): Header {
       );
     for (let localIndex = 0; localIndex < count; localIndex += 1) {
       const pointIndex = state.pointIndex;
-      state.unique("point", pointIndex, state.requiredString(cursor.u32()));
+      state.uniqueIdentity("point", pointIndex, state.requiredString(cursor.u32()));
       pointTypeFromByte(cursor.u8(), pointIndex);
       const pointFlags = cursor.u8();
       if ((pointFlags & ~1) !== 0)
@@ -567,7 +567,7 @@ function validate(bytes: Uint8Array): Header {
 
   const componentsOffset = cursor.offset;
   for (let index = 0; index < componentCount; index += 1) {
-    state.unique("component", index, state.requiredString(cursor.u32()));
+    state.uniqueIdentity("component", index, state.requiredString(cursor.u32()));
     state.requiredString(cursor.u32());
     state.requiredString(cursor.u32());
     if (cursor.u32() !== 0)
@@ -577,14 +577,14 @@ function validate(bytes: Uint8Array): Header {
   }
   const anchorsOffset = cursor.offset;
   for (let index = 0; index < anchorCount; index += 1) {
-    state.unique("anchor", index, state.requiredString(cursor.u32()));
+    state.uniqueIdentity("anchor", index, state.requiredString(cursor.u32()));
     state.optionalString(cursor.u32());
     validateFinite(cursor.f64(), "anchor coordinate", index * 2);
     validateFinite(cursor.f64(), "anchor coordinate", index * 2 + 1);
   }
   const guidelinesOffset = cursor.offset;
   for (let index = 0; index < guidelineCount; index += 1) {
-    state.unique("guideline", index, state.requiredString(cursor.u32()));
+    state.uniqueIdentity("guideline", index, state.requiredString(cursor.u32()));
     state.optionalString(cursor.u32());
     state.optionalString(cursor.u32());
     const flags = cursor.u32();
@@ -703,7 +703,7 @@ function optionalString(strings: readonly string[], index: number): string | nul
 function validateAbsent(view: DataView, offset: number, field: string, index: number): void {
   if (view.getBigUint64(offset, true) !== 0n)
     fail(
-      "noncanonical-absent-number",
+      "non-canonical-absent-number",
       `absent ${field} value at index ${index} is not canonical positive zero`,
     );
 }

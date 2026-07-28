@@ -16,6 +16,11 @@ type LayerManifest = {
   readonly vectors: readonly BinaryVector[];
 };
 
+type OutlineManifest = {
+  readonly format: string;
+  readonly vectors: readonly OutlineVector[];
+};
+
 type OutlineVector = BinaryVector & {
   readonly name: string;
   readonly commands: readonly ManifestCommand[];
@@ -44,7 +49,9 @@ describe("canonical glyph-codec fixtures", () => {
 
   it("declares every outline fixture's commands, length, digest, and canonical bytes", () => {
     const directory = fixtureUrl("outline-v1");
-    const vectors = readJson<readonly OutlineVector[]>(new URL("vectors.json", directory));
+    const manifest = readJson<OutlineManifest>(new URL("vectors.json", directory));
+    expect(manifest.format).toBe("shift.glyph-outline.v1");
+    const vectors = manifest.vectors;
     expect(new Set(vectors.map((vector) => vector.file)).size).toBe(vectors.length);
     expect(new Set(vectors.map((vector) => vector.name)).size).toBe(vectors.length);
 
