@@ -241,6 +241,56 @@ impl FontIntent {
         }
     }
 
+    /// Complete authored-layer read set required before applying this intent.
+    ///
+    /// Keeping this exhaustive match beside the intent vocabulary prevents a
+    /// new operation from accidentally mutating a directory placeholder. The
+    /// workspace still guards the persistence boundary if a dependency is
+    /// ever omitted here.
+    pub fn required_layer_ids(&self, font: &Font) -> Vec<LayerId> {
+        match self {
+            Self::AddPoints { layer_id, .. }
+            | Self::AddContour { layer_id, .. }
+            | Self::SetContourClosed { layer_id, .. }
+            | Self::MovePoints { layer_id, .. }
+            | Self::SetPointSmooth { layer_id, .. }
+            | Self::RemovePoints { layer_id, .. }
+            | Self::AddAnchors { layer_id, .. }
+            | Self::MoveAnchors { layer_id, .. }
+            | Self::RemoveAnchors { layer_id, .. }
+            | Self::ReverseContour { layer_id, .. }
+            | Self::TranslatePoints { layer_id, .. }
+            | Self::SetXAdvance { layer_id, .. }
+            | Self::ApplyBooleanOp { layer_id, .. } => vec![layer_id.clone()],
+            Self::CloneGlyphLayer { from_layer_id, .. }
+            | Self::MaterializeGlyphLayer { from_layer_id, .. } => {
+                vec![from_layer_id.clone()]
+            }
+            Self::DeleteSource { source_id } => font
+                .glyphs()
+                .filter_map(|glyph| {
+                    glyph
+                        .layer_for_source(source_id.clone())
+                        .map(GlyphLayer::id)
+                })
+                .collect(),
+            Self::CreateGlyph { .. }
+            | Self::UpdateGlyph { .. }
+            | Self::UpdateFontMetadata { .. }
+            | Self::CreateAxis { .. }
+            | Self::UpdateAxis { .. }
+            | Self::DeleteAxis { .. }
+            | Self::SetAxisMappings { .. }
+            | Self::SetMetricDefinitions { .. }
+            | Self::CreateNamedInstance { .. }
+            | Self::UpdateNamedInstance { .. }
+            | Self::DeleteNamedInstance { .. }
+            | Self::CreateSource { .. }
+            | Self::UpdateSource { .. }
+            | Self::CreateGlyphLayer { .. } => Vec::new(),
+        }
+    }
+
     /// Whether applying this intent changes layer structure (vs values only).
     /// Smooth flags live in structure, so they count.
     fn structural(&self) -> bool {

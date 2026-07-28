@@ -419,6 +419,81 @@ fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
 }
 
 #[test]
+fn intent_on_directory_layer_acquires_before_persisting() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
+    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    drop(workspace);
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::SetXAdvance {
+                    layer_id: layer_id.clone(),
+                    width: 777.0,
+                }],
+            },
+            None,
+        )
+        .unwrap();
+
+    let layer = workspace.font().layer(layer_id.clone()).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 1);
+    assert_eq!(layer.width(), 777.0);
+    assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    resumed
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), false)
+        .unwrap();
+    let layer = resumed.font().layer(layer_id).unwrap();
+    assert_eq!(layer.width(), 777.0);
+    assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
+}
+
+#[test]
+fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
+    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    let original_width = workspace.font().layer(layer_id.clone()).unwrap().width();
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::SetXAdvance {
+                    layer_id: layer_id.clone(),
+                    width: 777.0,
+                }],
+            },
+            Some("Change advance".to_string()),
+        )
+        .unwrap();
+    workspace
+        .evict_glyphs(std::slice::from_ref(&glyph_id))
+        .unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+
+    workspace.undo().unwrap().expect("advance edit should undo");
+
+    let layer = workspace.font().layer(layer_id).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 1);
+    assert_eq!(layer.width(), original_width);
+    assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
+}
+
+#[test]
 fn resume_package_workspace_can_save_unsaved_store_state() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

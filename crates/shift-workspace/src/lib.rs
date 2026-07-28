@@ -1,3 +1,4 @@
+mod layer_residency;
 mod ledger;
 mod new_workspace;
 mod source_identity;

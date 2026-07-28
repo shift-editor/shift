@@ -8,8 +8,8 @@
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
 use shift_font::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, MetricDefinition,
-    NamedInstance, Source, SourceId,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
+    MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 /// Generous bound so a marathon session cannot grow memory unboundedly;
@@ -93,6 +93,40 @@ pub struct LayerPair {
 pub struct LedgerEntry {
     pub label: Option<String>,
     pub steps: Vec<LedgerStep>,
+}
+
+impl LedgerEntry {
+    /// Layers whose persisted current values may be needed before replay.
+    /// Snapshot-backed replay can then replace loaded authored state without
+    /// leaving workspace residency bookkeeping pointed at a placeholder.
+    pub(crate) fn layer_ids(&self) -> Vec<LayerId> {
+        self.steps
+            .iter()
+            .flat_map(|step| match step {
+                LedgerStep::Layers(pairs) => pairs
+                    .iter()
+                    .flat_map(|pair| [pair.pre.id(), pair.post.id()])
+                    .collect(),
+                LedgerStep::Glyph { pre, post } => pre
+                    .iter()
+                    .chain(post.iter())
+                    .flat_map(|glyph| glyph.layers().keys().cloned())
+                    .collect(),
+                LedgerStep::GlyphLayer { pre, post, .. } => pre
+                    .iter()
+                    .chain(post.iter())
+                    .map(|layer| layer.id())
+                    .collect(),
+                LedgerStep::FontMetadata { .. }
+                | LedgerStep::Axis { .. }
+                | LedgerStep::AxisMappings { .. }
+                | LedgerStep::MetricDefinitions { .. }
+                | LedgerStep::NamedInstances { .. }
+                | LedgerStep::Source { .. }
+                | LedgerStep::GlyphIdentity { .. } => Vec::new(),
+            })
+            .collect()
+    }
 }
 
 #[derive(Default)]

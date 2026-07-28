@@ -93,6 +93,36 @@ impl ShiftStore {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// Returns every direct glyph-component edge from one ordered relational
+    /// scan. Glyphs without components are absent from the map.
+    pub fn glyph_component_references(
+        &self,
+    ) -> Result<HashMap<font::GlyphId, Vec<font::GlyphId>>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "
+            SELECT DISTINCT l.glyph_id, c.base_glyph_id
+            FROM glyph_components AS c
+            JOIN glyph_layers AS l ON l.id = c.layer_id
+            ORDER BY l.glyph_id, c.base_glyph_id
+            ",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                font::GlyphId::from_raw(row.get::<_, String>(0)?),
+                font::GlyphId::from_raw(row.get::<_, String>(1)?),
+            ))
+        })?;
+        let mut references = HashMap::new();
+        for row in rows {
+            let (glyph_id, base_glyph_id) = row?;
+            references
+                .entry(glyph_id)
+                .or_insert_with(Vec::new)
+                .push(base_glyph_id);
+        }
+        Ok(references)
+    }
+
     /// Returns referenced glyph identities entirely from the relational index.
     pub fn referenced_glyph_ids_for_glyph(
         &self,

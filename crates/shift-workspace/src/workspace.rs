@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     io,
     path::{Path, PathBuf},
 };
@@ -10,8 +10,8 @@ use shift_backends::{
 };
 use shift_font::{
     AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
-    FontMetadata, Glyph, GlyphId, GlyphLayer, MetricDefinition, NamedInstance, Source, SourceId,
-    TouchedLayer, error::CoreError,
+    FontMetadata, Glyph, GlyphId, GlyphLayer, LayerId, MetricDefinition, NamedInstance, Source,
+    SourceId, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::{
@@ -20,6 +20,7 @@ use shift_store::{
 };
 
 use crate::NewWorkspace;
+use crate::layer_residency::LayerResidency;
 use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
 use crate::source_identity::{
     PackageDraft, PackageIdentity, package_identity, source_identity_snapshot,
@@ -58,6 +59,9 @@ pub enum WorkspaceError {
     #[error("corrupt working store: {0}")]
     CorruptWorkingStore(String),
 
+    #[error("refusing to persist unloaded glyph layer {0}")]
+    UnloadedLayerMutation(LayerId),
+
     #[error("invalid UTF-8 in workspace path: {0}")]
     InvalidPathUtf8(PathBuf),
 
@@ -77,7 +81,7 @@ pub struct FontWorkspace {
     source: WorkspaceSource,
     store: ShiftStore,
     ledger: Ledger,
-    unloaded_layer_ids: HashSet<shift_font::LayerId>,
+    residency: LayerResidency,
 }
 
 impl FontWorkspace {
@@ -97,7 +101,7 @@ impl FontWorkspace {
             source: WorkspaceSource::Untitled,
             store,
             ledger: Ledger::default(),
-            unloaded_layer_ids: HashSet::new(),
+            residency: LayerResidency::default(),
         })
     }
 
@@ -157,10 +161,10 @@ impl FontWorkspace {
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
         let font = store.load_font_directory()?;
-        let unloaded_layer_ids = font
-            .glyphs()
-            .flat_map(|glyph| glyph.layers().keys().cloned())
-            .collect();
+        let residency = LayerResidency::with_unloaded(
+            font.glyphs()
+                .flat_map(|glyph| glyph.layers().keys().cloned()),
+        );
         let source = source_from_workspace_state(&state)?;
 
         Ok(Self {
@@ -168,7 +172,7 @@ impl FontWorkspace {
             source,
             store,
             ledger: Ledger::default(),
-            unloaded_layer_ids,
+            residency,
         })
     }
 
@@ -239,26 +243,11 @@ impl FontWorkspace {
         set: FontIntentSet,
         label: Option<String>,
     ) -> Result<AppliedIntents, WorkspaceError> {
-        let mut required_layers = Vec::new();
-        for intent in &set.intents {
-            if let Some(layer_id) = intent.layer_id() {
-                required_layers.push(layer_id.clone());
-            }
-            match intent {
-                FontIntent::CloneGlyphLayer { from_layer_id, .. }
-                | FontIntent::MaterializeGlyphLayer { from_layer_id, .. } => {
-                    required_layers.push(from_layer_id.clone());
-                }
-                FontIntent::DeleteSource { source_id } => {
-                    required_layers.extend(self.font.glyphs().filter_map(|glyph| {
-                        glyph
-                            .layer_for_source(source_id.clone())
-                            .map(shift_font::GlyphLayer::id)
-                    }));
-                }
-                _ => {}
-            }
-        }
+        let required_layers = set
+            .intents
+            .iter()
+            .flat_map(|intent| intent.required_layer_ids(&self.font))
+            .collect::<Vec<_>>();
         self.acquire_layers(required_layers)?;
 
         let mut pre = FontLevelPreState::default();
@@ -526,6 +515,8 @@ impl FontWorkspace {
         entry: &LedgerEntry,
         side: ReplaySide,
     ) -> Result<AppliedIntents, WorkspaceError> {
+        self.acquire_layers(entry.layer_ids())?;
+
         let mut named_instances = None;
         let mut metric_definitions = None;
         let mut steps = entry
@@ -635,11 +626,19 @@ impl FontWorkspace {
         next_font: shift_font::Font,
         change_set: FontChangeSet,
     ) -> Result<(), WorkspaceError> {
+        if let Some(layer_id) = change_set
+            .changes
+            .iter()
+            .filter_map(FontChange::layer_id)
+            .find(|layer_id| self.residency.is_unloaded(layer_id))
+        {
+            return Err(WorkspaceError::UnloadedLayerMutation(layer_id.clone()));
+        }
+
         self.store
             .apply_change_set_with_font(&change_set, &next_font)?;
         self.font = next_font;
-        self.unloaded_layer_ids
-            .retain(|layer_id| self.font.layer(layer_id.clone()).is_some());
+        self.residency.retain_directory_layers(&self.font);
         Ok(())
     }
 
@@ -723,7 +722,7 @@ impl FontWorkspace {
             },
             store,
             ledger: Ledger::default(),
-            unloaded_layer_ids: HashSet::new(),
+            residency: LayerResidency::default(),
         })
     }
 
@@ -750,10 +749,10 @@ impl FontWorkspace {
             store.finish_import()?;
             store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
             let font = store.load_font_directory()?;
-            let unloaded_layer_ids = font
-                .glyphs()
-                .flat_map(|glyph| glyph.layers().keys().cloned())
-                .collect();
+            let residency = LayerResidency::with_unloaded(
+                font.glyphs()
+                    .flat_map(|glyph| glyph.layers().keys().cloned()),
+            );
 
             return Ok(Self {
                 font,
@@ -762,7 +761,7 @@ impl FontWorkspace {
                 },
                 store,
                 ledger: Ledger::default(),
-                unloaded_layer_ids,
+                residency,
             });
         }
 
@@ -779,7 +778,7 @@ impl FontWorkspace {
             },
             store,
             ledger: Ledger::default(),
-            unloaded_layer_ids: HashSet::new(),
+            residency: LayerResidency::default(),
         })
     }
 
@@ -811,18 +810,19 @@ impl FontWorkspace {
     }
 
     pub fn acquire_all_layers(&mut self) -> Result<(), WorkspaceError> {
-        let layer_ids = self.unloaded_layer_ids.iter().cloned().collect::<Vec<_>>();
+        let layer_ids = self
+            .residency
+            .unloaded_layer_ids()
+            .cloned()
+            .collect::<Vec<_>>();
         self.acquire_layers(layer_ids)
     }
 
     fn acquire_layers(
         &mut self,
-        layer_ids: impl IntoIterator<Item = shift_font::LayerId>,
+        layer_ids: impl IntoIterator<Item = LayerId>,
     ) -> Result<(), WorkspaceError> {
-        let mut layer_ids = layer_ids
-            .into_iter()
-            .filter(|layer_id| self.unloaded_layer_ids.contains(layer_id))
-            .collect::<Vec<_>>();
+        let mut layer_ids = self.residency.requested_unloaded(layer_ids);
         layer_ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         layer_ids.dedup();
         if layer_ids.is_empty() {
@@ -839,9 +839,7 @@ impl FontWorkspace {
         }
 
         self.font = next_font;
-        for layer_id in layer_ids {
-            self.unloaded_layer_ids.remove(&layer_id);
-        }
+        self.residency.mark_loaded(layer_ids);
         Ok(())
     }
 
@@ -857,9 +855,7 @@ impl FontWorkspace {
                 continue;
             };
             for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
-                if self.unloaded_layer_ids.contains(&layer.id())
-                    || !seen_layer_ids.insert(layer.id())
-                {
+                if self.residency.is_unloaded(&layer.id()) || !seen_layer_ids.insert(layer.id()) {
                     continue;
                 }
                 let mut placeholder =
@@ -881,21 +877,33 @@ impl FontWorkspace {
         next_font.replace_glyph_layers(batch)?;
 
         self.font = next_font;
-        self.unloaded_layer_ids.extend(evicted);
+        self.residency.mark_unloaded(evicted);
         Ok(())
     }
 
     pub fn loaded_layer_count(&self) -> usize {
-        self.font
-            .glyphs()
-            .map(|glyph| glyph.layers().len())
-            .sum::<usize>()
-            .saturating_sub(self.unloaded_layer_ids.len())
+        let directory_layer_count = self.font.glyphs().map(|glyph| glyph.layers().len()).sum();
+        self.residency.loaded_count(directory_layer_count)
+    }
+
+    pub fn glyph_component_references(
+        &self,
+    ) -> Result<HashMap<GlyphId, Vec<GlyphId>>, WorkspaceError> {
+        self.store.glyph_component_references().map_err(Into::into)
+    }
+
+    pub fn referenced_glyph_ids_for_glyph(
+        &self,
+        glyph_id: &GlyphId,
+    ) -> Result<Vec<GlyphId>, WorkspaceError> {
+        self.store
+            .referenced_glyph_ids_for_glyph(glyph_id)
+            .map_err(Into::into)
     }
 
     pub fn dependent_glyph_ids_for_layers(
         &self,
-        layer_ids: &[shift_font::LayerId],
+        layer_ids: &[LayerId],
     ) -> Result<Vec<GlyphId>, WorkspaceError> {
         self.store
             .dependent_glyph_ids_for_layers(layer_ids)

@@ -543,13 +543,19 @@ impl Bridge {
 
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
-    let mut records: Vec<_> = self
-      .font()?
+    let workspace = self.workspace()?;
+    let mut component_references = workspace.glyph_component_references()?;
+    let mut records = workspace
+      .font()
       .glyphs()
-      .map(GlyphRecord::from)
-      .map(Into::into)
-      .collect();
-    records.sort_by(|a: &NapiGlyphRecord, b: &NapiGlyphRecord| a.name.cmp(&b.name));
+      .map(|glyph| {
+        let mut record = GlyphRecord::from(glyph);
+        record.component_base_glyph_ids =
+          component_references.remove(&glyph.id()).unwrap_or_default();
+        NapiGlyphRecord::from(record)
+      })
+      .collect::<Vec<_>>();
+    records.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(records)
   }
 
@@ -2571,6 +2577,28 @@ mod tests {
         .collect::<Vec<_>>(),
       vec!["A".to_string(), "B".to_string()]
     );
+  }
+
+  #[test]
+  fn get_glyphs_reads_component_references_without_payload_acquisition() {
+    let source_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let (_, store_path) = test_paths("component-directory");
+    let mut bridge = Bridge::new();
+    bridge
+      .open_workspace(source_path.to_string_lossy().into_owned(), store_path)
+      .unwrap();
+
+    assert_eq!(bridge.workspace().unwrap().loaded_layer_count(), 0);
+    assert!(
+      bridge
+        .get_glyphs()
+        .unwrap()
+        .iter()
+        .any(|glyph| !glyph.component_base_glyph_ids.is_empty()),
+      "directory records should retain component edges without loading payloads"
+    );
+    assert_eq!(bridge.workspace().unwrap().loaded_layer_count(), 0);
   }
 
   fn default_source_id(bridge: &Bridge) -> String {

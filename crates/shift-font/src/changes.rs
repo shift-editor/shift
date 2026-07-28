@@ -203,6 +203,40 @@ impl FontChange {
             layer: GlyphLayerValue::from(layer),
         })
     }
+
+    /// Layer identity touched by a payload-affecting change.
+    ///
+    /// Workspace persistence uses this exhaustive match as a safety boundary:
+    /// an unloaded directory placeholder must never be written back over its
+    /// canonical payload.
+    pub fn layer_id(&self) -> Option<&LayerId> {
+        match self {
+            Self::GlyphLayerCreated(change) => Some(&change.layer_id),
+            Self::GlyphLayerDeleted(change) => Some(&change.layer_id),
+            Self::LayerMetricsChanged(change) => Some(&change.layer_id),
+            Self::ContourAdded(change) => Some(&change.layer_id),
+            Self::ContourOpenClosedChanged(change) => Some(&change.layer_id),
+            Self::PointsAdded(change) => Some(&change.layer_id),
+            Self::PointsDeleted(change) => Some(&change.layer_id),
+            Self::PointSmoothChanged(change) => Some(&change.layer_id),
+            Self::PointPositionsChanged(change) => Some(&change.layer_id),
+            Self::AnchorPositionsChanged(change) => Some(&change.layer_id),
+            Self::LayerGeometryReplaced(change) => Some(&change.layer_id),
+            Self::FontMetadataUpdated(_)
+            | Self::AxisCreated(_)
+            | Self::AxisUpdated(_)
+            | Self::AxisDeleted(_)
+            | Self::AxisMappingsUpdated(_)
+            | Self::MetricDefinitionsUpdated(_)
+            | Self::NamedInstancesUpdated(_)
+            | Self::SourceCreated(_)
+            | Self::SourceUpdated(_)
+            | Self::SourceDeleted(_)
+            | Self::GlyphCreated(_)
+            | Self::GlyphDeleted(_)
+            | Self::GlyphIdentityChanged(_) => None,
+        }
+    }
 }
 
 /// Complete authored metadata snapshot after one replacement.
