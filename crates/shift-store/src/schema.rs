@@ -1,4 +1,20 @@
+use rusqlite::Transaction;
+
 use crate::StoreError;
+
+const DEFER_IMPORT_INDEXES: &str = r#"
+DROP INDEX IF EXISTS glyphs_name_idx;
+DROP INDEX IF EXISTS glyph_layers_glyph_id_idx;
+DROP INDEX IF EXISTS glyph_layers_source_id_idx;
+DROP INDEX IF EXISTS glyph_components_base_glyph_id_idx;
+"#;
+
+const RESTORE_IMPORT_INDEXES: &str = r#"
+CREATE INDEX glyphs_name_idx ON glyphs(name);
+CREATE INDEX glyph_layers_glyph_id_idx ON glyph_layers(glyph_id);
+CREATE INDEX glyph_layers_source_id_idx ON glyph_layers(source_id);
+CREATE INDEX glyph_components_base_glyph_id_idx ON glyph_components(base_glyph_id);
+"#;
 
 pub(crate) const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS font_info (
@@ -92,9 +108,6 @@ CREATE TABLE IF NOT EXISTS glyph_unicodes (
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS glyph_unicodes_glyph_id_idx
-ON glyph_unicodes(glyph_id);
-
 CREATE TABLE IF NOT EXISTS glyph_layers (
     id TEXT PRIMARY KEY,
     glyph_id TEXT NOT NULL,
@@ -130,9 +143,6 @@ CREATE TABLE IF NOT EXISTS glyph_components (
 
 CREATE UNIQUE INDEX IF NOT EXISTS glyph_components_layer_order_unique
 ON glyph_components(layer_id, order_index);
-
-CREATE INDEX IF NOT EXISTS glyph_components_layer_id_idx
-ON glyph_components(layer_id);
 
 CREATE INDEX IF NOT EXISTS glyph_components_base_glyph_id_idx
 ON glyph_components(base_glyph_id);
@@ -249,6 +259,16 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;
+
+pub(crate) fn defer_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    tx.execute_batch(DEFER_IMPORT_INDEXES)?;
+    Ok(())
+}
+
+pub(crate) fn restore_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    tx.execute_batch(RESTORE_IMPORT_INDEXES)?;
+    Ok(())
+}
 
 /// Creates the baseline schema and stamps `user_version`.
 ///

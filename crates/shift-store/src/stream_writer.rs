@@ -8,6 +8,7 @@ use crate::{
     LayerBatchTiming, PackedGlyphBatch, ShiftStore, StoreError,
     change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
     packed_layer::store_packed_layer_in_tx,
+    schema::{defer_import_indexes, restore_import_indexes},
     types::PackedGlyph,
     write_mode::WriteMode,
 };
@@ -30,6 +31,7 @@ impl ShiftStore {
     ) -> Result<LayerStreamWriter<'_>, StoreError> {
         let tx = self.conn.transaction()?;
         replace_font_header_in_tx(&tx, font_header)?;
+        defer_import_indexes(&tx)?;
         Ok(LayerStreamWriter {
             tx,
             next_glyph_order: 0,
@@ -123,6 +125,7 @@ impl LayerStreamWriter<'_> {
 
     /// Atomically publishes every glyph and layer written by this stream.
     pub fn finish(self) -> Result<(), StoreError> {
+        restore_import_indexes(&self.tx)?;
         self.tx.commit()?;
         Ok(())
     }
@@ -142,4 +145,55 @@ fn pack_glyph_layers(
         })
         .collect::<Result<Vec<_>, font::PackedLayerError>>()
         .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DEFERRED_INDEXES: [&str; 4] = [
+        "glyphs_name_idx",
+        "glyph_layers_glyph_id_idx",
+        "glyph_layers_source_id_idx",
+        "glyph_components_base_glyph_id_idx",
+    ];
+
+    #[test]
+    fn stream_indexes_are_transactionally_deferred_and_restored() {
+        let font = font::test_support::sample_font();
+        let mut store = ShiftStore::open_memory_for_test().unwrap();
+        for name in DEFERRED_INDEXES {
+            assert!(index_exists(&store.conn, name));
+        }
+        assert!(!index_exists(&store.conn, "glyph_unicodes_glyph_id_idx"));
+        assert!(!index_exists(&store.conn, "glyph_components_layer_id_idx"));
+
+        {
+            let writer = store.font_stream_writer(&font).unwrap();
+            for name in DEFERRED_INDEXES {
+                assert!(!index_exists(&writer.tx, name));
+            }
+        }
+        for name in DEFERRED_INDEXES {
+            assert!(index_exists(&store.conn, name));
+        }
+
+        let mut writer = store.font_stream_writer(&font).unwrap();
+        for glyph in font.glyphs() {
+            writer.write_glyph(glyph).unwrap();
+        }
+        writer.finish().unwrap();
+        for name in DEFERRED_INDEXES {
+            assert!(index_exists(&store.conn, name));
+        }
+    }
+
+    fn index_exists(conn: &rusqlite::Connection, name: &str) -> bool {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'index' AND name = ?1)",
+            [name],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
 }

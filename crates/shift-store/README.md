@@ -16,7 +16,7 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 
 ## Import boundary
 
-`LayerStreamWriter` accepts bounded replacement glyph batches without requiring a complete in-memory `Font`. `write_glyph_batch` canonical-encodes layers with Rayon, then writes directory rows, BLOBs, and component indexes in stable order through one SQLite transaction. Streaming inserts, full-state replacement, and change-set replacement share one write implementation parameterized only by insert/upsert mode. Change sets supplied with a committed post-edit font skip incremental decode/re-encode for touched existing layers and write each final layer once. `finish` is the only stream commit point; dropping an unfinished writer rolls the complete stream back.
+`LayerStreamWriter` accepts bounded replacement glyph batches without requiring a complete in-memory `Font`. `pack_glyph_batch` canonical-encodes an owned batch with Rayon without borrowing the SQLite transaction, allowing the workspace to overlap parsing, packing, and one stable-order SQLite writer. Streaming inserts, full-state replacement, and change-set replacement share one write implementation parameterized only by insert/upsert mode. Change sets supplied with a committed post-edit font skip incremental decode/re-encode for touched existing layers and write each final layer once. Secondary query indexes are dropped inside the stream transaction and rebuilt in bulk by `finish`; dropping an unfinished writer restores them with the rest of the rollback. Prefix-redundant Unicode-glyph and component-layer indexes are omitted. `finish` is the only stream commit point.
 
 `ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the foreign source remains authoritative and the destination is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL before workspace state is published. Normal edits never use import pragmas. Progress, cancellation, source fingerprinting, and final atomic destination installation remain workspace responsibilities.
 
@@ -41,7 +41,7 @@ src/
   schema.rs        # pre-release version-1 baseline
   font_state.rs    # eager metadata/directory and explicit full materialization
   packed_layer.rs  # bounded BLOB fetch/replace and reference-index checks
-  stream_writer.rs # bounded Rayon pack plus single-transaction SQLite sink
+  stream_writer.rs # independently pipelined Rayon pack plus single-transaction SQLite sink
   write_mode.rs    # shared insert/upsert policy for canonical write paths
   change_set.rs    # transactional workspace changes and one final touched-layer write
   workspace_state.rs
