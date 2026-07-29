@@ -6,8 +6,8 @@ use crate::{
 };
 use rayon::prelude::*;
 use shift_font::{
-    Axis, Contour, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, LayerId, Location,
-    MetricKind, NamedInstance, PointType, SourceId,
+    Axis, Contour, ContourId, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, LayerId,
+    Location, MetricKind, NamedInstance, PointId, PointType, SourceId,
 };
 use skrifa::{
     outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
@@ -24,12 +24,35 @@ pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
     collect_streamed_font(header, &mut stream)
 }
 
-#[derive(Default)]
 struct ShiftPen {
+    glyph_id: u32,
+    next_contour_index: usize,
+    next_point_index: usize,
     contours: Vec<Contour>,
 }
 
 impl ShiftPen {
+    fn new(glyph_id: GlyphId) -> Self {
+        Self {
+            glyph_id: glyph_id.to_u32(),
+            next_contour_index: 0,
+            next_point_index: 0,
+            contours: Vec::new(),
+        }
+    }
+
+    fn next_contour_id(&mut self) -> ContourId {
+        let index = self.next_contour_index;
+        self.next_contour_index += 1;
+        ContourId::from_raw(format!("b{:x}_{index:x}", self.glyph_id))
+    }
+
+    fn next_point_id(&mut self) -> PointId {
+        let index = self.next_point_index;
+        self.next_point_index += 1;
+        PointId::from_raw(format!("b{:x}_{index:x}", self.glyph_id))
+    }
+
     /// Returns the contour currently being built.
     /// Panics if called before `move_to` — skrifa guarantees `move_to` is called first.
     fn current_contour(&mut self) -> &mut Contour {
@@ -45,14 +68,27 @@ impl ShiftPen {
 
 impl OutlinePen for ShiftPen {
     fn move_to(&mut self, x: f32, y: f32) {
-        self.contours.push(Contour::new());
-        self.current_contour()
-            .add_point(x as f64, y as f64, PointType::OnCurve, false);
+        let contour_id = self.next_contour_id();
+        self.contours.push(Contour::with_id(contour_id));
+        let point_id = self.next_point_id();
+        self.current_contour().add_point_with_id(
+            point_id,
+            x as f64,
+            y as f64,
+            PointType::OnCurve,
+            false,
+        );
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        self.current_contour()
-            .add_point(x as f64, y as f64, PointType::OnCurve, false);
+        let point_id = self.next_point_id();
+        self.current_contour().add_point_with_id(
+            point_id,
+            x as f64,
+            y as f64,
+            PointType::OnCurve,
+            false,
+        );
     }
 
     /// Preserves the source quadratic as one control and one qcurve endpoint.
@@ -60,18 +96,39 @@ impl OutlinePen for ShiftPen {
     /// the endpoint as on-curve, which still lets clients infer one-control
     /// quadratic segments without cubic expansion.
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        let control_id = self.next_point_id();
+        let endpoint_id = self.next_point_id();
         let contour = self.current_contour();
-        contour.add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
-        contour.add_point(x as f64, y as f64, PointType::QCurve, false);
+        contour.add_point_with_id(
+            control_id,
+            cx0 as f64,
+            cy0 as f64,
+            PointType::OffCurve,
+            false,
+        );
+        contour.add_point_with_id(endpoint_id, x as f64, y as f64, PointType::QCurve, false);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.current_contour()
-            .add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
-        self.current_contour()
-            .add_point(cx1 as f64, cy1 as f64, PointType::OffCurve, false);
-        self.current_contour()
-            .add_point(x as f64, y as f64, PointType::OnCurve, false);
+        let control_0_id = self.next_point_id();
+        let control_1_id = self.next_point_id();
+        let endpoint_id = self.next_point_id();
+        let contour = self.current_contour();
+        contour.add_point_with_id(
+            control_0_id,
+            cx0 as f64,
+            cy0 as f64,
+            PointType::OffCurve,
+            false,
+        );
+        contour.add_point_with_id(
+            control_1_id,
+            cx1 as f64,
+            cy1 as f64,
+            PointType::OffCurve,
+            false,
+        );
+        contour.add_point_with_id(endpoint_id, x as f64, y as f64, PointType::OnCurve, false);
     }
 
     /// Closes the current contour. skrifa ends contours whose final segment
@@ -323,7 +380,7 @@ fn glyph_from_skrifa(
 
     if let Some(outline) = outlines.get(record.raw_id) {
         let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(record.raw_id);
         outline.draw(settings, &mut pen).map_err(|error| {
             FormatBackendError::Binary(format!(
                 "failed to draw outline for glyph {}: {error}",
@@ -442,9 +499,35 @@ mod tests {
         contour.points().iter().map(|p| p.point_type()).collect()
     }
 
+    fn deterministic_pen_contours() -> Vec<Contour> {
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
+        pen.move_to(0.0, 0.0);
+        pen.line_to(100.0, 0.0);
+        pen.quad_to(100.0, 100.0, 0.0, 0.0);
+        pen.close();
+        pen.move_to(10.0, 20.0);
+        pen.contours()
+    }
+
+    #[test]
+    fn binary_pen_mints_deterministic_positional_ids() {
+        let contours = deterministic_pen_contours();
+        assert_eq!(contours, deterministic_pen_contours());
+        assert_eq!(contours[0].id().as_str(), "contour_b2a_0");
+        assert_eq!(contours[1].id().as_str(), "contour_b2a_1");
+        assert_eq!(contours[0].points()[0].id().as_str(), "point_b2a_0");
+        assert_eq!(contours[0].points()[1].id().as_str(), "point_b2a_1");
+        assert_eq!(contours[0].points()[2].id().as_str(), "point_b2a_2");
+        assert_eq!(
+            contours[1].points()[0].id().as_str(),
+            "point_b2a_4",
+            "the removed closing endpoint keeps its consumed positional index"
+        );
+    }
+
     #[test]
     fn quad_preserves_control_and_endpoint() {
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(10.0, 20.0);
         pen.quad_to(50.0, 90.0, 100.0, 20.0);
 
@@ -460,7 +543,7 @@ mod tests {
 
     #[test]
     fn close_drops_duplicate_start_point_from_closing_curve() {
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(0.0, 0.0);
         pen.line_to(100.0, 0.0);
         pen.quad_to(100.0, 100.0, 0.0, 0.0);
@@ -478,7 +561,7 @@ mod tests {
 
     #[test]
     fn close_keeps_distinct_last_point() {
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(0.0, 0.0);
         pen.line_to(100.0, 0.0);
         pen.line_to(100.0, 100.0);
@@ -491,7 +574,7 @@ mod tests {
 
     #[test]
     fn line_after_quad_composes() {
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(0.0, 0.0);
         pen.quad_to(50.0, 100.0, 100.0, 0.0);
         pen.line_to(200.0, 0.0);
