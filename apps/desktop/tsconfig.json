@@ -1,5 +1,6 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.json",
+  "files": ["src/renderer/src/types/svg.d.ts"],
   "include": [
     "src/renderer/env.d.ts",
     "src/renderer/**/*",

@@ -122,6 +122,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Cache Typecheck Turbo results
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: typecheck-turbo-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            typecheck-turbo-v1-${{ runner.os }}-
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -156,17 +164,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: shift-rust
-
       - name: Cache native Turbo build
+        id: native-turbo-cache
         uses: actions/cache@v6
         with:
           path: |
             .turbo/cache
             crates/shift-bridge/*.node
           key: native-turbo-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.native-turbo-cache.outputs.cache-hit != 'true'
+        with:
+          shared-key: shift-rust
 
       - name: Run unit tests
         run: pnpm test:unit
