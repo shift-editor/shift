@@ -6,7 +6,7 @@
  * smooth/corner nodes, and off-curve handles — exercising every visual style.
  */
 
-import { test, expect, loadFont, navigateToEditor } from "./fixtures/electronApp";
+import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
 // MutatorSans glyph codepoints (hex).
@@ -20,8 +20,7 @@ const GLYPH_Q = "51"; // Counter with curves
 // ---------------------------------------------------------------------------
 
 test.describe("Glyph rendering — S (cubic curves)", () => {
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
+  test.beforeEach(async ({ page }) => {
     await navigateToEditor(page, GLYPH_S);
   });
 
@@ -33,7 +32,7 @@ test.describe("Glyph rendering — S (cubic curves)", () => {
 
   test("handles layer shows on-curve and off-curve handles", async ({ page }) => {
     const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("gpu-handles-canvas");
+    const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
     await expect(screenshot).toMatchSnapshot("handles-S-idle.png");
   });
 
@@ -55,8 +54,7 @@ test.describe("Glyph rendering — S (cubic curves)", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Glyph rendering — selection states", () => {
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
+  test.beforeEach(async ({ page }) => {
     await navigateToEditor(page, GLYPH_S);
   });
 
@@ -65,7 +63,7 @@ test.describe("Glyph rendering — selection states", () => {
     await page.waitForTimeout(300);
 
     const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("gpu-handles-canvas");
+    const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
     await expect(screenshot).toMatchSnapshot("handles-S-all-selected.png");
   });
 
@@ -84,8 +82,7 @@ test.describe("Glyph rendering — selection states", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Pen tool drawing — segment snapshots", () => {
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
+  test.beforeEach(async ({ page }) => {
     // Use a glyph with space to draw (I is simple — few points).
     await navigateToEditor(page, GLYPH_I);
   });
@@ -193,10 +190,6 @@ test.describe("Pen tool drawing — segment snapshots", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Glyph rendering — multiple glyphs", () => {
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
-  });
-
   test("B glyph — mixed curves and straights", async ({ page }) => {
     await navigateToEditor(page, GLYPH_B);
 

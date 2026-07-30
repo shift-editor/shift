@@ -14,6 +14,7 @@ import type {
   MetricDefinition,
   SourceMetricsInterpolationSnapshot,
   NamedInstance,
+  SlugAtlas,
   Source,
   SourceId,
 } from "@shift/types";
@@ -51,6 +52,28 @@ export type WorkspaceGlyphSnapshot = {
 };
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
+
+/** Bounded byte delivery over a dedicated transferred port. */
+export type ByteStreamMessage =
+  | { kind: "chunk"; offset: number; bytes: Uint8Array<ArrayBuffer> }
+  | { kind: "complete"; totalLength: number }
+  | { kind: "error"; message: string };
+
+/** Receiver backpressure for a dedicated bounded byte stream. */
+export type ByteStreamControl =
+  | { kind: "ack"; nextOffset: number }
+  | { kind: "cancel"; message: string };
+
+/** Minimal readable-stream contract shared by native and web streams. */
+export interface ByteReadableStream<T> {
+  getReader(): ByteReadableStreamReader<T>;
+}
+
+export interface ByteReadableStreamReader<T> {
+  read(): Promise<{ done: false; value: T } | { done: true; value: undefined }>;
+  cancel(reason?: unknown): Promise<void>;
+  releaseLock(): void;
+}
 
 /** Identifies one concrete `.shift` package instance on disk. */
 export type WorkspacePackageIdentity = {
@@ -178,6 +201,36 @@ export type SyncCallMap = {
   "workspace.glyphPreviews": {
     request: { glyphIds: GlyphId[]; location: Location };
     response: GlyphPreview[];
+  };
+  /** Builds one native, location-independent authored Slug generation. */
+  "workspace.slugAtlasPrepare": {
+    request: { alignment: number };
+    response: SlugAtlas;
+  };
+  /** Builds one ordered root-glyph page and its component closure. */
+  "workspace.slugAtlasPagePrepare": {
+    request: { glyphIds: GlyphId[]; alignment: number };
+    response: SlugAtlas;
+  };
+  /** Streams bounded atlas chunks over the transferred response port. */
+  "workspace.slugAtlasStream": {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
+  /** Streams one prepared page over the transferred response port. */
+  "workspace.slugAtlasPageStream": {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
+  /** Releases native CPU residency when adapter initialization is rejected. */
+  "workspace.slugAtlasDiscard": {
+    request: { generation: number };
+    response: null;
+  };
+  /** Releases one rejected prepared page. */
+  "workspace.slugAtlasPageDiscard": {
+    request: { generation: number };
+    response: null;
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };

@@ -5,31 +5,59 @@ on:
     branches: [main]
     paths:
       - "crates/**"
+      - "apps/desktop/src/main/app/App.ts"
+      - "apps/desktop/src/preload/**"
+      - "apps/desktop/src/renderer/src/app/Screens.tsx"
+      - "apps/desktop/src/renderer/src/components/home/**"
+      - "apps/desktop/src/renderer/src/lib/graphics/**"
+      - "apps/desktop/src/renderer/src/lib/slug/**"
+      - "apps/desktop/src/renderer/src/lib/workspace/**"
+      - "apps/desktop/src/renderer/src/workspace/**"
       - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
       - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
       - "apps/desktop/src/renderer/src/lib/editor/hit/**"
       - "apps/desktop/src/renderer/src/lib/editor/managers/**"
       - "apps/desktop/src/renderer/src/lib/tools/**"
-      - "apps/desktop/src/renderer/src/lib/model/Glyph.ts"
+      - "apps/desktop/src/renderer/src/lib/model/**"
       - "apps/desktop/src/renderer/src/bridge/**"
+      - "apps/desktop/src/shared/workspace/**"
+      - "apps/desktop/src/utility/workspace/**"
       - "apps/desktop/src/renderer/src/lib/commands/**"
       - "apps/desktop/src/renderer/src/perf/**"
       - "apps/desktop/e2e/**"
+      - "apps/desktop/playwright.config.ts"
       - ".github/workflows/perf.yml"
   workflow_dispatch:
   pull_request:
     paths:
+      - "apps/desktop/src/main/app/App.ts"
+      - "apps/desktop/src/preload/**"
+      - "apps/desktop/src/renderer/src/app/Screens.tsx"
+      - "apps/desktop/src/renderer/src/components/home/**"
+      - "apps/desktop/src/renderer/src/lib/graphics/**"
+      - "apps/desktop/src/renderer/src/lib/slug/**"
+      - "apps/desktop/src/renderer/src/lib/workspace/**"
+      - "apps/desktop/src/renderer/src/workspace/**"
       - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
       - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
       - "apps/desktop/src/renderer/src/lib/editor/hit/**"
       - "apps/desktop/src/renderer/src/lib/editor/managers/**"
       - "apps/desktop/src/renderer/src/lib/tools/**"
-      - "apps/desktop/src/renderer/src/lib/model/Glyph.ts"
+      - "apps/desktop/src/renderer/src/lib/model/**"
       - "apps/desktop/src/renderer/src/bridge/NativeBridge.ts"
+      - "apps/desktop/src/shared/workspace/**"
+      - "apps/desktop/src/utility/workspace/**"
       - "apps/desktop/src/renderer/src/lib/commands/**"
       - "apps/desktop/src/renderer/src/perf/**"
       - "crates/shift-edit/src/**"
       - "crates/shift-bridge/src/**"
+      - "crates/shift-slug/**"
+      - "crates/shift-wire/**"
+      - "crates/shift-workspace/**"
+      - "packages/types/src/bridge/**"
+      - "apps/desktop/e2e/**"
+      - "apps/desktop/playwright.config.ts"
+      - ".github/workflows/perf.yml"
 
 permissions: {}
 
@@ -90,7 +118,7 @@ jobs:
         run: pnpm test:perf
 
   playwright-perf:
-    name: Playwright Perf (GPU)
+    name: Playwright GPU and Perf
     runs-on: macos-latest
     permissions:
       contents: read
@@ -152,8 +180,16 @@ jobs:
       - name: Build E2E app
         run: pnpm --filter @shift/desktop build:e2e
 
-      - name: Run Playwright perf tests
-        run: pnpm --filter @shift/desktop exec playwright test --project=perf
+      - name: Run Playwright GPU and perf tests
+        run: pnpm --filter @shift/desktop exec playwright test --project=gpu --project=perf
+
+      - name: Upload Playwright failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-gpu-results
+          path: apps/desktop/e2e/test-results/
+          retention-days: 7
 
       - name: Upload perf results
         if: always()

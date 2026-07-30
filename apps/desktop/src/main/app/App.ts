@@ -99,11 +99,11 @@ export class App {
       if (process.platform !== "darwin") app.quit();
     });
 
-    if (!app.isPackaged) {
+    if (!app.isPackaged && !app.commandLine.hasSwitch("user-data-dir")) {
       app.setPath("userData", path.join(app.getPath("appData"), this.applicationName));
     }
 
-    void app.whenReady().then(() => {
+    void app.whenReady().then(async () => {
       this.#log.info("running when ready callback");
 
       this.#documentsRoot = path.join(app.getPath("userData"), "working-documents");
@@ -111,7 +111,24 @@ export class App {
       this.#appIcon.install();
       this.#applicationMenu.install();
 
-      this.#openLauncher();
+      switch (process.env.SHIFT_E2E_FONT_PATH) {
+        case undefined:
+        case "":
+          this.#openLauncher();
+          break;
+        default:
+          try {
+            const session = await this.#workspaces.openPath(process.env.SHIFT_E2E_FONT_PATH);
+            const window = this.#createWindow(false);
+            this.#workspaces.attachWindow(session.workspaceId, window);
+            this.#loadWorkspace(window);
+          } catch (error) {
+            this.#log.error("failed to open E2E workspace", error);
+            this.#openLauncher();
+          }
+          break;
+      }
+
       app.on("activate", () => {
         if (this.#windows.allWindows().length === 0) this.#openLauncher();
       });

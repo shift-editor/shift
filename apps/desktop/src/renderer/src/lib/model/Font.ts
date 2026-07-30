@@ -32,7 +32,15 @@ import {
   mintSourceId,
 } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
-import { batch, computed, effect, track, type Effect, type Signal } from "@/lib/signals/signal";
+import {
+  batch,
+  computed,
+  effect,
+  track,
+  type ComputedSignal,
+  type Effect,
+  type Signal,
+} from "@/lib/signals/signal";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { WorkspaceGlyphSnapshotRequest } from "@shared/workspace/protocol";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -301,6 +309,7 @@ export class Font {
   readonly #unicodesCell: Signal<Unicode[]>;
   readonly #glyphRecordsCell: Signal<readonly GlyphRecord[]>;
   readonly #directoryCell: Signal<GlyphDirectory>;
+  readonly #committedFontCell: ComputedSignal<Font>;
 
   readonly #glyphRequests = createBatchRequest<GlyphId>((glyphIds) =>
     this.#readGlyphsIntoStore(glyphIds),
@@ -323,6 +332,13 @@ export class Font {
 
     const workspaceCell = store.workspaceCell;
 
+    this.#committedFontCell = computed(
+      () => {
+        track(store.committedFontCell);
+        return this;
+      },
+      { name: "font.committed" },
+    );
     this.#loadedCell = computed(() => workspaceCell.value !== null);
 
     this.#metricsCell = computed(() => workspaceCell.value?.metrics ?? DEFAULT_FONT_METRICS);
@@ -450,6 +466,16 @@ export class Font {
   /** Reactive committed glyph directory records for UI lists and grids. */
   get glyphRecordsCell(): Signal<readonly GlyphRecord[]> {
     return this.#glyphRecordsCell;
+  }
+
+  /** Stable font value that invalidates after every committed native change. */
+  get committedFontCell(): Signal<Font> {
+    return this.#committedFontCell;
+  }
+
+  /** Glyph roots whose resident atlas pages no longer match the committed font. */
+  get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
+    return this.#store.invalidGlyphIdsCell;
   }
 
   /** Returns the layer owning a point id, or null when unknown. */
@@ -1408,6 +1434,7 @@ export class Font {
 
   dispose(): void {
     this.#glyphsEffect.dispose();
+    this.#committedFontCell.dispose();
   }
 
   defaultLocation(): AxisLocation {

@@ -54,7 +54,7 @@ src/main/
 
 ### Startup
 
-`main.ts` constructs `App` and calls `start()`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu.
+`main.ts` constructs `App` and calls `start()`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development normally uses `Shift Dev` below Electron's app-data directory, but an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
 
 On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. Windows and Linux keep the conventional quit-on-last-window behavior.
 
@@ -102,6 +102,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm --filter @shift/desktop test src/utility/workspace/WorkspaceHost.test.ts`
 - `pnpm --filter @shift/desktop test src/renderer/src/lib/workspace/WorkspaceEditCoordinator.test.ts`
 - `pnpm typecheck`
+- Electron E2E fixtures copy their startup workspace under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
 - Manual: open the same `.shift` package twice and verify the existing workspace session is reused.
 - Manual: edit a package, close the last window, and verify the save/discard prompt appears.
 

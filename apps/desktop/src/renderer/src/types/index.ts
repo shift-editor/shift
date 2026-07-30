@@ -2,6 +2,16 @@ import type { AnchorId, ContourId, LayerId, PointId } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
 
 export { currentEditingId } from "./editing";
+export type {
+  GlyphCatalogCanvasProps,
+  GlyphCatalogCell,
+  GlyphCatalogCellArea,
+  GlyphCatalogFrame,
+  GlyphCatalogItem,
+  GlyphCatalogLayoutMetrics,
+  GlyphCatalogState,
+  GlyphNameInputProps,
+} from "./glyphCatalog";
 export type { EditingId } from "./editing";
 export type {
   GlyphRenderAnchor,

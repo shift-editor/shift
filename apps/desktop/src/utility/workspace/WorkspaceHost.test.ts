@@ -19,6 +19,8 @@ import {
   type Unicode,
 } from "@shift/types";
 import type {
+  ByteStreamControl,
+  ByteStreamMessage,
   ShellCallMap,
   ShellEventMap,
   SyncCallMap,
@@ -79,7 +81,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     new WorkspaceHost({
       documentsRoot: tmpRoot,
       shell: shellTransport,
-      syncTransport: (port) => nodePortTransport(port as NodeMessagePort),
+      portTransport: (port) => nodePortTransport(port as NodeMessagePort),
     }).start();
   }
 
@@ -109,6 +111,72 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     sync: SyncChannel,
   ): Promise<SyncCallMap["workspace.redo"]["response"]["applied"]> {
     return (await sync.call("workspace.redo", undefined)).applied;
+  }
+
+  async function streamSlugAtlas(
+    sync: SyncChannel,
+    generation: number,
+    maximumLength: number,
+    page = false,
+  ): Promise<Uint8Array> {
+    const lane = new MessageChannel();
+    const chunks: Uint8Array[] = [];
+    let receivedLength = 0;
+    const complete = new Promise<number>((resolve, reject) => {
+      lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
+        switch (event.data.kind) {
+          case "chunk":
+            if (event.data.offset !== receivedLength) {
+              reject(
+                new Error(`Slug chunk started at ${event.data.offset}, not ${receivedLength}`),
+              );
+              lane.port2.close();
+              return;
+            }
+            if (event.data.bytes.byteLength > maximumLength) {
+              reject(new Error(`Slug chunk exceeded ${maximumLength} bytes`));
+              lane.port2.close();
+              return;
+            }
+            chunks.push(event.data.bytes);
+            receivedLength += event.data.bytes.byteLength;
+            lane.port2.postMessage({
+              kind: "ack",
+              nextOffset: receivedLength,
+            } satisfies ByteStreamControl);
+            return;
+          case "complete":
+            if (event.data.totalLength !== receivedLength) {
+              reject(
+                new Error(
+                  `Slug stream completed at ${event.data.totalLength}, not ${receivedLength}`,
+                ),
+              );
+              return;
+            }
+            resolve(event.data.totalLength);
+            return;
+          case "error":
+            reject(new Error(event.data.message));
+        }
+      };
+    });
+    lane.port2.start();
+    if (page) {
+      await sync.call("workspace.slugAtlasPageStream", { generation, maximumLength }, [lane.port1]);
+    } else {
+      await sync.call("workspace.slugAtlasStream", { generation, maximumLength }, [lane.port1]);
+    }
+    const totalLength = await complete;
+    lane.port2.close();
+
+    const bytes = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
   }
 
   async function createWorkspace(
@@ -157,6 +225,93 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
   afterEach(() => {
     for (const channel of channels.splice(0)) channel.dispose();
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("streams one authored Slug generation through bounded native chunks", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const glyph = createGlyphALayer(snapshot.sources[0]!.id);
+    await applyWorkspace(sync, { intents: glyph.intents });
+
+    const atlas = await sync.call("workspace.slugAtlasPrepare", { alignment: 256 });
+    const bytes = await streamSlugAtlas(sync, atlas.generation, 64);
+
+    expect(bytes.byteLength).toBe(atlas.layout.totalLength);
+    expect(atlas.layout.glyphs.length).toBe(32);
+    expect(atlas.glyphs.map((entry) => entry.glyphId)).toEqual([glyph.glyphId]);
+  });
+
+  it("streams only requested roots in one authored Slug page", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const first = createGlyphALayer(snapshot.sources[0]!.id);
+    const secondGlyphId = mintGlyphId();
+    const secondLayerId = mintLayerId();
+    await applyWorkspace(sync, {
+      intents: [
+        ...first.intents,
+        createGlyph("B" as GlyphName, 66 as Unicode, secondGlyphId),
+        createGlyphLayer(secondGlyphId, snapshot.sources[0]!.id, secondLayerId),
+      ],
+    });
+
+    const page = await sync.call("workspace.slugAtlasPagePrepare", {
+      glyphIds: [secondGlyphId],
+      alignment: 256,
+    });
+    const bytes = await streamSlugAtlas(sync, page.generation, 64, true);
+
+    expect(bytes.byteLength).toBe(page.layout.totalLength);
+    expect(page.glyphs.map((entry) => entry.glyphId)).toEqual([secondGlyphId]);
+  });
+
+  it("cancels native Slug production when the renderer rejects a chunk", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    await applyWorkspace(sync, {
+      intents: createGlyphALayer(snapshot.sources[0]!.id).intents,
+    });
+    const atlas = await sync.call("workspace.slugAtlasPrepare", { alignment: 256 });
+    const lane = new MessageChannel();
+    lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
+      if (event.data.kind !== "chunk") return;
+      lane.port2.postMessage({ kind: "cancel", message: "GPU upload rejected" });
+    };
+    lane.port2.start();
+
+    await expect(
+      sync.call("workspace.slugAtlasStream", { generation: atlas.generation, maximumLength: 64 }, [
+        lane.port1,
+      ]),
+    ).rejects.toThrow("GPU upload rejected");
+    lane.port2.close();
+
+    await expect(
+      sync.call("workspace.slugAtlasPrepare", { alignment: 256 }),
+    ).resolves.toMatchObject({ generation: atlas.generation + 1 });
+  });
+
+  it("invalidates a prepared Slug generation after an authored edit", async () => {
+    const sync = await connectSyncLane();
+    await createWorkspace(sync);
+    const stale = await sync.call("workspace.slugAtlasPrepare", { alignment: 256 });
+    const glyphId = mintGlyphId();
+    await applyWorkspace(sync, { intents: [createGlyphA(glyphId)] });
+    const rejectedLane = new MessageChannel();
+    rejectedLane.port2.onmessage = () => undefined;
+
+    await expect(
+      sync.call("workspace.slugAtlasStream", { generation: stale.generation, maximumLength: 64 }, [
+        rejectedLane.port1,
+      ]),
+    ).rejects.toThrow(`unknown Slug atlas generation ${stale.generation}`);
+    rejectedLane.port2.close();
+
+    const current = await sync.call("workspace.slugAtlasPrepare", { alignment: 256 });
+    await expect(streamSlugAtlas(sync, current.generation, 64)).resolves.toHaveLength(
+      current.layout.totalLength,
+    );
+    expect(current.glyphs.map((entry) => entry.glyphId)).toEqual([glyphId]);
   });
 
   it("emits ready after start", async () => {

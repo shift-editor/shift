@@ -10,5 +10,5 @@ if (!documentsRoot) {
 new WorkspaceHost({
   documentsRoot,
   shell: parentPortTransport(),
-  syncTransport: (port) => electronPortTransport(port as MessagePortMain),
+  portTransport: (port) => electronPortTransport(port as MessagePortMain),
 }).start();

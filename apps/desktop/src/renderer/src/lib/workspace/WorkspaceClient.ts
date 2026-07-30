@@ -1,4 +1,5 @@
 import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
+import { PortByteStream } from "@shared/workspace/PortByteStream";
 import type {
   SyncCallMap,
   SyncEventMap,
@@ -16,6 +17,7 @@ import type {
   GlyphPreview,
   GlyphProjection,
   Location,
+  SlugAtlas,
 } from "@shift/types";
 import { signal } from "@/lib/signals/signal";
 
@@ -192,6 +194,85 @@ export class WorkspaceClient {
     });
   }
 
+  /** Builds the current authored font's location-independent Slug generation. */
+  async prepareSlugAtlas(alignment: number): Promise<SlugAtlas> {
+    await this.connect();
+
+    return this.#require().call("workspace.slugAtlasPrepare", { alignment });
+  }
+
+  /** Builds one ordered root-glyph page behind committed workspace edits. */
+  async prepareSlugAtlasPage(glyphIds: readonly GlyphId[], alignment: number): Promise<SlugAtlas> {
+    await this.connect();
+
+    return this.#require().call("workspace.slugAtlasPagePrepare", {
+      glyphIds: [...glyphIds],
+      alignment,
+    });
+  }
+
+  /** Writes one prepared Slug generation through bounded, ordered chunks. */
+  async streamSlugAtlas(
+    generation: number,
+    maximumLength: number,
+    write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
+  ): Promise<number> {
+    await this.connect();
+
+    const ports = new MessageChannel();
+    const stream = new PortByteStream(domPortTransport(ports.port1));
+
+    try {
+      const [, totalLength] = await Promise.all([
+        this.#require().call("workspace.slugAtlasStream", { generation, maximumLength }, [
+          ports.port2,
+        ]),
+        stream.receive(write),
+      ]);
+      return totalLength;
+    } finally {
+      stream.close();
+    }
+  }
+
+  /** Writes one prepared page through bounded, ordered chunks. */
+  async streamSlugAtlasPage(
+    generation: number,
+    maximumLength: number,
+    write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
+  ): Promise<number> {
+    await this.connect();
+
+    const ports = new MessageChannel();
+    const stream = new PortByteStream(domPortTransport(ports.port1));
+
+    try {
+      const [, totalLength] = await Promise.all([
+        this.#require().call("workspace.slugAtlasPageStream", { generation, maximumLength }, [
+          ports.port2,
+        ]),
+        stream.receive(write),
+      ]);
+      return totalLength;
+    } finally {
+      stream.close();
+    }
+  }
+
+  /** Releases a prepared generation that was rejected before streaming. */
+  async discardSlugAtlas(generation: number): Promise<void> {
+    await this.connect();
+
+    await this.#require().call("workspace.slugAtlasDiscard", { generation });
+  }
+
+  /** Releases a prepared page that was rejected before streaming. */
+  async discardSlugAtlasPage(generation: number): Promise<void> {
+    await this.connect();
+
+    await this.#require().call("workspace.slugAtlasPageDiscard", { generation });
+  }
+
   /**
    * Evaluates the current font's axis mappings in the utility process.
    *
@@ -278,7 +359,7 @@ export class WorkspaceClient {
 
     const received = new Promise<MessagePort>((resolve) => {
       const listener = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+        if (event.source !== window) return;
         if ((event.data as { type?: string } | null)?.type !== "workspace.port") return;
 
         const port = event.ports[0];

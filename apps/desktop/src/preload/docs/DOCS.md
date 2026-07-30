@@ -22,7 +22,7 @@ preload/
 - `RendererToMain` -- renderer-to-main request/response channel map.
 - `MainToRenderer` -- main-to-renderer broadcast channel map.
 
-## How It Works
+## How it works
 
 The preload runs once before the renderer loads:
 
@@ -30,12 +30,14 @@ The preload runs once before the renderer loads:
 2. Converts the bridge class instance into a plain method object with `buildContextBridgeApi`.
 3. Exposes that object as `window.shiftBridge`.
 4. Builds the Shift host API and exposes it as `window.shiftHost`.
+5. Relays workspace/document `MessagePort`s into the page. Because packaged `file://` pages have opaque origins, receivers authenticate these relays with `event.source === window` plus the expected message type rather than comparing origin strings.
 
 ## Gotchas
 
 - `buildContextBridgeApi` only wraps prototype methods. If a native method is added as an own property, it will not be exposed.
 - `contextBridge` values must be plain data/functions. Do not expose the native class instance directly.
 - `window.shiftBridge` is the raw bridge boundary. Editor/reactive behavior belongs in renderer-side model code, not preload.
+- Port relays use `"*"` only as the `postMessage` delivery target required by opaque `file://` origins. Renderer listeners must retain the same-window source and message-type checks before accepting transferred ports.
 
 ## Verification
 

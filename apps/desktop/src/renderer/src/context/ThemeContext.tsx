@@ -1,10 +1,10 @@
-import { createContext, useEffect, useState, ReactNode } from "react";
-import { ThemeTokens, lightTheme, applyThemeToCss } from "@/lib/styles/theme";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { lightTheme, applyThemeToCss, type ThemeTokens } from "@/lib/styles/theme";
 
 import type { ThemeName } from "@/types/uiState";
 export type { ThemeName };
 
-interface ThemeContextValue {
+export interface ThemeContextValue {
   themeName: ThemeName;
   theme: ThemeTokens;
   setThemeName: (name: ThemeName) => void;
@@ -34,6 +34,12 @@ function resolveTheme(themeName: ThemeName): ThemeTokens {
 interface ThemeProviderProps {
   children: ReactNode;
   defaultTheme?: ThemeName;
+}
+
+export function useTheme(): ThemeContextValue {
+  const context = useContext(ThemeContext);
+  if (!context) throw new Error("useTheme must be used inside ThemeProvider");
+  return context;
 }
 
 export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProviderProps) {

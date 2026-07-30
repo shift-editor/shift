@@ -3,6 +3,19 @@ import { Rect } from "./Rect";
 
 describe("Rect", () => {
   describe("construction", () => {
+    it("fromXYWH derives edge accessors from its origin and dimensions", () => {
+      expect(Rect.fromXYWH(10, 20, 30, 40)).toEqual({
+        x: 10,
+        y: 20,
+        width: 30,
+        height: 40,
+        left: 10,
+        top: 20,
+        right: 40,
+        bottom: 60,
+      });
+    });
+
     it("fromPoints normalizes opposite corners", () => {
       expect(Rect.fromPoints({ x: 10, y: 20 }, { x: -5, y: 30 })).toEqual({
         x: -5,

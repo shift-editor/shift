@@ -13,6 +13,7 @@ import type {
   WorkspacePackageIdentity,
   WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
+import { PortByteStream } from "../../shared/workspace/PortByteStream";
 import { DocumentStorage } from "./DocumentStorage";
 import { PackageOpener } from "./PackageOpener";
 import { PackageAddress, type DocumentAllocation } from "./types";
@@ -28,8 +29,8 @@ import { PackageAddress, type DocumentAllocation } from "./types";
 export type WorkspaceHostOptions = {
   documentsRoot: string;
   shell: Transport;
-  /** Adapts a port transferred through `workspace.connect` into a transport. */
-  syncTransport: (port: unknown) => Transport;
+  /** Adapts any transferred workspace port into a transport. */
+  portTransport: (port: unknown) => Transport;
 };
 
 /**
@@ -46,7 +47,7 @@ export class WorkspaceHost {
   readonly #documents: DocumentStorage;
   readonly #packageOpener: PackageOpener;
   readonly #shellTransport: Transport;
-  readonly #syncTransport: (port: unknown) => Transport;
+  readonly #portTransport: (port: unknown) => Transport;
   #shell: ChannelServer<ShellEventMap> | null = null;
   #sync: ChannelServer<SyncEventMap> | null = null;
   #documentId: string | null = null;
@@ -58,7 +59,7 @@ export class WorkspaceHost {
     this.#documents = new DocumentStorage(options.documentsRoot);
     this.#packageOpener = new PackageOpener(this.#bridge, this.#documents);
     this.#shellTransport = options.shell;
-    this.#syncTransport = options.syncTransport;
+    this.#portTransport = options.portTransport;
   }
 
   /** Serves the shell lane and announces readiness. Drafts are retained. */
@@ -84,7 +85,7 @@ export class WorkspaceHost {
     }
 
     this.#sync?.dispose();
-    this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#syncTransport(port), {
+    this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#portTransport(port), {
       "workspace.snapshot": () =>
         this.#serialize(() =>
           this.#documentId === null ? null : this.#snapshot(this.#documentId),
@@ -118,9 +119,62 @@ export class WorkspaceHost {
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
       "workspace.glyphPreviews": ({ glyphIds, location }) =>
         this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location)),
+      "workspace.slugAtlasPrepare": ({ alignment }) =>
+        this.#serialize(() => this.#bridge.prepareSlugAtlas(alignment)),
+      "workspace.slugAtlasPagePrepare": ({ glyphIds, alignment }) =>
+        this.#serialize(() => this.#bridge.prepareSlugAtlasPage(glyphIds, alignment)),
+      "workspace.slugAtlasStream": ({ generation, maximumLength }, context) =>
+        this.#serialize(() => this.#streamSlugAtlas(generation, maximumLength, context.ports)),
+      "workspace.slugAtlasPageStream": ({ generation, maximumLength }, context) =>
+        this.#serialize(() => this.#streamSlugAtlasPage(generation, maximumLength, context.ports)),
+      "workspace.slugAtlasDiscard": ({ generation }) =>
+        this.#serialize(() => {
+          this.#bridge.discardSlugAtlas(generation);
+          return null;
+        }),
+      "workspace.slugAtlasPageDiscard": ({ generation }) =>
+        this.#serialize(() => {
+          this.#bridge.discardSlugAtlasPage(generation);
+          return null;
+        }),
       "workspace.mapLocation": (location) =>
         this.#serialize(() => this.#bridge.mapLocation(location)),
     });
+  }
+
+  async #streamSlugAtlas(
+    generation: number,
+    maximumLength: number,
+    ports: readonly unknown[],
+  ): Promise<null> {
+    const port = ports.at(0);
+    if (!port) throw new Error("workspace.slugAtlasStream requires a transferred response port");
+
+    const stream = new PortByteStream(this.#portTransport(port));
+    try {
+      await stream.send(this.#bridge.streamSlugAtlas(generation, maximumLength));
+      return null;
+    } finally {
+      stream.close();
+    }
+  }
+
+  async #streamSlugAtlasPage(
+    generation: number,
+    maximumLength: number,
+    ports: readonly unknown[],
+  ): Promise<null> {
+    const port = ports.at(0);
+    if (!port)
+      throw new Error("workspace.slugAtlasPageStream requires a transferred response port");
+
+    const stream = new PortByteStream(this.#portTransport(port));
+    try {
+      await stream.send(this.#bridge.streamSlugAtlasPage(generation, maximumLength));
+      return null;
+    } finally {
+      stream.close();
+    }
   }
 
   #create(): WorkspaceDocumentState {

@@ -3,6 +3,7 @@ import {
   asAnchorId,
   asContourId,
   asPointId,
+  type AppliedChange,
   type AnchorId,
   type ContourId,
   type GlyphId,
@@ -16,6 +17,7 @@ import {
 } from "@shift/types";
 import { segmentIdFor } from "@shift/glyph-state";
 import type { WorkspaceGlyphSnapshot, WorkspaceSnapshot } from "@shared/workspace/protocol";
+import { effect, track } from "@/lib/signals";
 import { Font } from "./Font";
 import { FontStore } from "./FontStore";
 
@@ -157,6 +159,43 @@ describe("FontStore glyph object ownership", () => {
     expect(store.layerIdForSegment(NEXT_SEGMENT_ID)).toBe(LAYER_B_ID);
   });
 
+  it("invalidates committed font dependents after a values-only native echo", () => {
+    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const font = new Font(store);
+    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
+    let runs = 0;
+    const subscription = effect(() => {
+      track(font.committedFontCell);
+      runs += 1;
+    });
+
+    store.applyWorkspaceChange(valuesOnlyChange());
+
+    expect(runs).toBe(2);
+    subscription.dispose();
+    font.dispose();
+  });
+
+  it("publishes values-only roots and component dependents for atlas invalidation", () => {
+    const dependentGlyphId = "glyph_dependent" as GlyphId;
+    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const font = new Font(store);
+    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
+    let invalidGlyphIds: readonly GlyphId[] | null = null;
+    const subscription = effect(() => {
+      invalidGlyphIds = font.invalidGlyphIdsCell.value;
+    });
+
+    store.applyWorkspaceChange({
+      ...valuesOnlyChange(),
+      dependents: [dependentGlyphId],
+    });
+
+    expect(invalidGlyphIds).toEqual([dependentGlyphId, GLYPH_ID]);
+    subscription.dispose();
+    font.dispose();
+  });
+
   it("forwards ownership queries through Font", () => {
     const store = new FontStore(snapshot("document-a", LAYER_A_ID));
     const font = new Font(store);
@@ -175,6 +214,25 @@ describe("FontStore glyph object ownership", () => {
     ]);
   });
 });
+
+function valuesOnlyChange(): AppliedChange {
+  return {
+    layers: [
+      {
+        layerId: LAYER_A_ID,
+        values: valuesFor(structure()),
+        changed: {
+          pointIds: [POINT_1_ID],
+          contourIds: [],
+          anchorIds: [],
+          guidelineIds: [],
+          componentIds: [],
+        },
+      },
+    ],
+    dependents: [],
+  };
+}
 
 function snapshot(documentId: string, layerId: LayerId): WorkspaceSnapshot {
   return {

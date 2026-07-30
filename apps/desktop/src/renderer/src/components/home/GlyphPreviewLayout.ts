@@ -11,17 +11,28 @@ export class GlyphPreviewLayout {
   readonly viewBox: string;
 
   constructor(metrics: SourceMetrics, xAdvance: number, height: number) {
-    const upm = metrics.unitsPerEm;
-    const marginTop = upm * MARGIN_TOP_RATIO;
-    const marginBottom = upm * MARGIN_BOTTOM_RATIO;
-    const marginSide = upm * MARGIN_SIDE_RATIO;
+    const marginSide = GlyphPreviewLayout.sideMargin(metrics);
     const viewBoxX = -marginSide;
-    const viewBoxY = -(metrics.ascender + marginTop);
     const viewBoxWidth = Math.max(1, xAdvance + 2 * marginSide);
-    const viewBoxHeight = metrics.ascender - metrics.descender + marginTop + marginBottom;
+    const [viewBoxHeight, fontTop] = GlyphPreviewLayout.fontViewport(metrics);
 
     this.width = Math.max(height, (height * viewBoxWidth) / viewBoxHeight);
     this.height = height;
-    this.viewBox = `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`;
+    this.viewBox = `${viewBoxX} ${-fontTop} ${viewBoxWidth} ${viewBoxHeight}`;
+  }
+
+  /** Shared horizontal margin used by fallback and resident previews. */
+  static sideMargin(metrics: SourceMetrics): number {
+    return metrics.unitsPerEm * MARGIN_SIDE_RATIO;
+  }
+
+  /** Shared font-space viewport used by fallback and resident previews. */
+  static fontViewport(metrics: SourceMetrics): readonly [viewHeight: number, fontTop: number] {
+    const marginTop = metrics.unitsPerEm * MARGIN_TOP_RATIO;
+    const marginBottom = metrics.unitsPerEm * MARGIN_BOTTOM_RATIO;
+    return [
+      metrics.ascender - metrics.descender + marginTop + marginBottom,
+      metrics.ascender + marginTop,
+    ];
   }
 }

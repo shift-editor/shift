@@ -4,11 +4,8 @@ import type { GlyphName, GlyphRecord } from "@shift/types";
 import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
-import {
-  GlyphCatalogContext,
-  type GlyphCatalogItem,
-  type GlyphCatalogState,
-} from "./GlyphCatalogContext";
+import { GlyphCatalogContext } from "./GlyphCatalogContext";
+import type { GlyphCatalogItem, GlyphCatalogState } from "@/types/glyphCatalog";
 
 export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
   const value = useGlyphCatalogState();

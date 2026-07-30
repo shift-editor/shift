@@ -314,6 +314,7 @@ export function domPortTransport(port: MessagePort): Transport {
     post: (message, transfer) => port.postMessage(message, (transfer ?? []) as Transferable[]),
     onMessage: (listener) => {
       port.onmessage = (event) => listener({ data: event.data, ports: event.ports });
+      port.start();
     },
     // DOM MessagePort has no remote-close event. Ordered shutdown is delivered
     // through the channel close envelope instead.
