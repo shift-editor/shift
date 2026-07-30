@@ -138,6 +138,21 @@ fn string_section_end(bytes: &[u8]) -> usize {
     72 + (count + 1) * 4 + string_bytes
 }
 
+fn string_ranges(bytes: &[u8]) -> Vec<std::ops::Range<usize>> {
+    let count = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+    let values_offset = 72 + (count + 1) * 4;
+    let mut previous = 0;
+    (0..count)
+        .map(|index| {
+            let offset = 72 + (index + 1) * 4;
+            let end = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            let range = values_offset + previous..values_offset + end;
+            previous = end;
+            range
+        })
+        .collect()
+}
+
 #[test]
 fn shared_golden_vectors_decode_and_reencode_byte_for_byte() {
     let expected = full_layer();
@@ -319,6 +334,69 @@ fn encoder_rejects_nonfinite_numbers_and_duplicate_identity() {
     assert!(matches!(
         pack_layer(&duplicate),
         Err(LayerCodecError::DuplicateIdentity { kind: "point", .. })
+    ));
+}
+
+#[test]
+fn decoder_rejects_deterministic_hostile_string_reference_tag_and_count_cases() {
+    let bytes = pack_layer(&full_layer()).unwrap().into_bytes();
+
+    let mut invalid_utf8 = bytes.clone();
+    let first_string_start = string_ranges(&invalid_utf8)[0].start;
+    invalid_utf8[first_string_start] = 0xff;
+    assert_eq!(
+        decode_layer(&invalid_utf8).unwrap_err(),
+        LayerCodecError::InvalidUtf8 { index: 0 }
+    );
+
+    let ranges = string_ranges(&bytes);
+    let (first, duplicate) = ranges
+        .iter()
+        .enumerate()
+        .flat_map(|(first_index, first)| {
+            ranges
+                .iter()
+                .enumerate()
+                .skip(first_index + 1)
+                .map(move |(_, duplicate)| (first, duplicate))
+        })
+        .find(|(first, duplicate)| first.len() == duplicate.len())
+        .expect("fixture should contain two equally sized strings");
+    let mut duplicate_string = bytes.clone();
+    let first_bytes = duplicate_string[first.clone()].to_vec();
+    duplicate_string[duplicate.clone()].copy_from_slice(&first_bytes);
+    assert!(matches!(
+        decode_layer(&duplicate_string),
+        Err(LayerCodecError::DuplicateString { .. })
+    ));
+
+    let mut noncanonical_reference = bytes.clone();
+    noncanonical_reference[44..48].copy_from_slice(&2_u32.to_le_bytes());
+    assert!(matches!(
+        decode_layer(&noncanonical_reference),
+        Err(LayerCodecError::NonCanonicalStringReference {
+            expected_at_most: 0,
+            actual: 2
+        })
+    ));
+
+    let lib_bytes = u32::from_le_bytes(bytes[40..44].try_into().unwrap()) as usize;
+    let mut unknown_tag = bytes.clone();
+    let lib_offset = unknown_tag.len() - lib_bytes;
+    unknown_tag[lib_offset + 8] = 0xff;
+    assert!(matches!(
+        decode_layer(&unknown_tag),
+        Err(LayerCodecError::UnknownLibTag { value: 0xff, .. })
+    ));
+
+    let mut excessive_points = bytes;
+    excessive_points[24..28].copy_from_slice(&u32::MAX.to_le_bytes());
+    assert!(matches!(
+        decode_layer(&excessive_points),
+        Err(LayerCodecError::LimitExceeded {
+            field: "point count",
+            ..
+        })
     ));
 }
 

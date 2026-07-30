@@ -462,14 +462,26 @@ function validateLayerInput(layer: GlyphLayer): void {
     unique("contour", contourIndex, contour.id);
     for (const point of contour.points) {
       unique("point", pointIndex, point.id);
+      validateFinite(point.x, "point coordinate", pointIndex * 2);
+      validateFinite(point.y, "point coordinate", pointIndex * 2 + 1);
       pointIndex += 1;
     }
   }
-  for (const [index, component] of layer.components.entries())
+  for (const [index, component] of layer.components.entries()) {
     unique("component", index, component.id);
-  for (const [index, anchor] of layer.anchors.entries()) unique("anchor", index, anchor.id);
-  for (const [index, guideline] of layer.guidelines.entries())
+    for (const [valueIndex, value] of transformValues(component.transform).entries())
+      validateFinite(value, "component transform", index * 9 + valueIndex);
+  }
+  for (const [index, anchor] of layer.anchors.entries()) {
+    unique("anchor", index, anchor.id);
+    validateFinite(anchor.x, "anchor coordinate", index * 2);
+    validateFinite(anchor.y, "anchor coordinate", index * 2 + 1);
+  }
+  for (const [index, guideline] of layer.guidelines.entries()) {
     unique("guideline", index, guideline.id);
+    for (const [valueIndex, value] of [guideline.x, guideline.y, guideline.angle].entries())
+      if (value !== null) validateFinite(value, "guideline number", index * 3 + valueIndex);
+  }
 }
 
 function validate(bytes: Uint8Array): Header {

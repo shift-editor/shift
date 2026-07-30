@@ -1054,8 +1054,7 @@ pub fn pack_layer(layer: &GlyphLayer) -> Result<PackedGlyphLayer, LayerCodecErro
             .checked_add(count)
             .ok_or(LayerCodecError::LengthOverflow)
     })?;
-    check_limit("string count", string_capacity, MAX_LAYER_STRING_COUNT)?;
-    let mut strings = StringPool::with_capacity(string_capacity);
+    let mut strings = StringPool::with_capacity(string_capacity.min(MAX_LAYER_STRING_COUNT));
     strings.intern(&layer.id)?;
     strings.intern(&layer.source_id)?;
     for contour in &layer.contours {
@@ -1687,7 +1686,13 @@ fn decode_lib_value(
                 state.lib_values.saturating_add(count),
                 MAX_LAYER_LIB_VALUES,
             )?;
-            let mut values = Vec::with_capacity(count);
+            let minimum_encoded_value_bytes = 4;
+            let verified_capacity = cursor
+                .end
+                .saturating_sub(cursor.offset)
+                .checked_div(minimum_encoded_value_bytes)
+                .unwrap_or_default();
+            let mut values = Vec::with_capacity(count.min(verified_capacity));
             for _ in 0..count {
                 values.push(decode_lib_value(cursor, state, depth + 1)?);
             }
@@ -1813,6 +1818,11 @@ fn encode_lib_value(
         LayerLibValue::Dict(values) => encode_map(bytes, values, strings, depth + 1, count)?,
         LayerLibValue::Data(value) => {
             push_u32(bytes, value.len())?;
+            let payload_len = bytes
+                .len()
+                .checked_add(value.len())
+                .ok_or(LayerCodecError::LengthOverflow)?;
+            check_limit("payload byte length", payload_len, MAX_LAYER_PAYLOAD_BYTES)?;
             bytes.extend_from_slice(value);
         }
     }

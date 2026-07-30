@@ -306,7 +306,7 @@ iteration:
 - 4,000,000 points;
 - 1,000,000 components, anchors, and guidelines each;
 - 4,000,000 distinct strings and 64 MiB combined UTF-8;
-- 1,000,000 nested lib values and nesting depth 64;
+- 1,000,000 nested lib values and recursion depth 64; each value and each dictionary container consumes one recursion level, while an array consumes its value level plus one level per nested value;
 - 256 MiB total payload bytes.
 
 The Rust borrowed view and TypeScript iterable view expose one layer's structure

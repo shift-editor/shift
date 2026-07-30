@@ -182,6 +182,20 @@ describe("shift.glyph-layer.v1", () => {
     expect([...packLayer(first).toUint8Array()]).toEqual([...packLayer(second).toUint8Array()]);
   });
 
+  it("orders dictionary keys by UTF-8 bytes across the BMP boundary", () => {
+    const layer: GlyphLayer = {
+      ...emptyLayer(),
+      lib: new Map([
+        ["\u{10000}", { kind: "string", value: "astral" }],
+        ["\uffff", { kind: "string", value: "bmp" }],
+      ]),
+    };
+
+    const decoded = decodeLayer(packLayer(layer).toUint8Array()).unpack();
+
+    expect([...decoded.lib.keys()]).toEqual(["\uffff", "\u{10000}"]);
+  });
+
   it("does not expose mutable validated storage", () => {
     const source = packLayer(fullLayer()).toUint8Array();
     const layer = decodeLayer(source);
