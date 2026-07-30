@@ -4,7 +4,7 @@
   "private": true,
   "description": "Shift font editor monorepo",
   "scripts": {
-    "prepare": "git submodule update --init --recursive && pnpm generate:glyph-info",
+    "prepare": "pnpm generate:glyph-info",
     "dev": "pnpm run build:native:debug && pnpm --filter @shift/desktop dev",
     "dev:release": "pnpm run build:native && pnpm --filter @shift/desktop dev",
     "dev:watch": "./scripts/watch.sh debug",
