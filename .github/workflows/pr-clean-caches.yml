@@ -8,28 +8,24 @@ permissions: {}
 
 jobs:
   cleanup:
-    name: Clean Branch Caches
+    name: Clean PR Caches
     runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Delete caches for closed PR branch
+      - name: Delete caches for closed PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ github.head_ref }}
+          PR_REF: refs/pull/${{ github.event.pull_request.number }}/merge
         run: |
-          echo "Cleaning caches for branch: $BRANCH"
-          CACHE_KEYS=$(gh cache list --ref "refs/heads/$BRANCH" --json key --jq '.[].key')
-          if [ -z "$CACHE_KEYS" ]; then
-            echo "No caches found for branch $BRANCH"
+          echo "Cleaning caches for $PR_REF"
+          CACHES=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref "$PR_REF" --limit 100 --json id,key --jq '.[] | [.id, .key] | @tsv')
+          if [ -z "$CACHES" ]; then
+            echo "No caches found for $PR_REF"
             exit 0
           fi
-          for key in $CACHE_KEYS; do
-            echo "Deleting cache: $key"
-            gh cache delete "$key" || true
-          done
+          while IFS=$'\t' read -r id key; do
+            echo "Deleting cache: $key ($id)"
+            gh cache delete "$id" --repo "$GITHUB_REPOSITORY"
+          done <<< "$CACHES"
           echo "Done."
