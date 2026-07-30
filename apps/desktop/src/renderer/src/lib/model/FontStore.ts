@@ -47,6 +47,7 @@ type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
 export class FontStore {
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
   readonly #committedFont: WritableSignal<FontStore>;
+  readonly #invalidGlyphIds: WritableSignal<readonly GlyphId[] | null>;
 
   /**
    * Object ownership lookups over concrete layer structure.
@@ -80,6 +81,10 @@ export class FontStore {
       // The store is a stable mutable font owner; every committed write invalidates dependents.
       equals: () => false,
     });
+    this.#invalidGlyphIds = signal<readonly GlyphId[] | null>(null, {
+      name: "fontStore.invalidGlyphIds",
+      equals: () => false,
+    });
     if (workspace) this.#indexWorkspace(workspace);
   }
 
@@ -90,6 +95,11 @@ export class FontStore {
   /** Lightweight dependency for every committed native font change. */
   get committedFontCell(): Signal<FontStore> {
     return this.#committedFont;
+  }
+
+  /** Glyph roots whose resident atlas pages no longer match the committed font. */
+  get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
+    return this.#invalidGlyphIds;
   }
 
   layerIdForPoint(pointId: PointId): LayerId | null {
@@ -129,6 +139,7 @@ export class FontStore {
       this.#interpolationBases.clear();
       this.#glyphs.clear();
     });
+    this.#invalidGlyphIds.set(null);
     this.#committedFont.set(this);
   }
 
@@ -204,11 +215,13 @@ export class FontStore {
       ? glyphIdsWithChangedLayers(current.glyphs, applied.next.glyphs)
       : [];
     const structurallyChangedGlyphIds = new Set(changedGlyphLayers);
+    const invalidGlyphIds = new Set<GlyphId>([...changedGlyphLayers, ...applied.dependents]);
     for (const layer of applied.layers) {
-      if (!layer.structure) continue;
-
       const glyphId = this.#glyphByLayer.get(layer.layerId);
-      if (glyphId) structurallyChangedGlyphIds.add(glyphId);
+      if (!glyphId) continue;
+
+      invalidGlyphIds.add(glyphId);
+      if (layer.structure) structurallyChangedGlyphIds.add(glyphId);
     }
 
     batch(() => {
@@ -270,6 +283,11 @@ export class FontStore {
       }
     });
 
+    if (applied.next?.axes || applied.next?.sources) {
+      this.#invalidGlyphIds.set(null);
+    } else if (invalidGlyphIds.size > 0) {
+      this.#invalidGlyphIds.set([...invalidGlyphIds]);
+    }
     this.#committedFont.set(this);
 
     if (applied.next?.axes || applied.next?.sources) {

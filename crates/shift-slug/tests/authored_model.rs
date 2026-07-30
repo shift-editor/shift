@@ -7,9 +7,9 @@ use shift_font::{
 use shift_slug::{
     add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
-    authored_glyph_requirements, build_authored_atlas, curves_from_resolved_contours,
-    AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError, AuthoredWeightSet, Curve,
-    VariableAtlasBuilder,
+    authored_glyph_requirements, build_authored_atlas, build_authored_atlas_page,
+    curves_from_resolved_contours, AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError,
+    AuthoredWeightSet, Curve, VariableAtlasBuilder,
 };
 
 #[test]
@@ -133,6 +133,43 @@ fn complete_authored_atlas_keeps_font_identity_and_independent_bases() {
             .collect::<Vec<_>>(),
         font.glyphs().map(Glyph::id).collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn authored_atlas_page_compiles_only_ordered_unique_roots_and_component_closures() {
+    let path = format!(
+        "{}/../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let font = FontLoader::new().read_font(&path).unwrap();
+    let roots = font.glyphs().take(3).map(Glyph::id).collect::<Vec<_>>();
+    let requested = [roots[1].clone(), roots[0].clone(), roots[1].clone()];
+
+    let page = build_authored_atlas_page(&font, &requested, 8).unwrap();
+
+    assert_eq!(
+        page.glyphs()
+            .iter()
+            .map(|glyph| glyph.glyph_id.clone())
+            .collect::<Vec<_>>(),
+        vec![roots[1].clone(), roots[0].clone()]
+    );
+    assert!(page.atlas().statistics().glyph_count < font.glyphs().count());
+
+    let component_root = font
+        .glyphs()
+        .map(|glyph| glyph.id())
+        .find(|glyph_id| {
+            font.glyph_projection(glyph_id)
+                .unwrap()
+                .is_some_and(|projection| !projection.components().components().is_empty())
+        })
+        .unwrap();
+    let component_page =
+        build_authored_atlas_page(&font, std::slice::from_ref(&component_root), 8).unwrap();
+
+    assert_eq!(component_page.glyphs()[0].glyph_id, component_root);
+    assert!(component_page.atlas().statistics().component_glyph_count > 0);
 }
 
 #[test]

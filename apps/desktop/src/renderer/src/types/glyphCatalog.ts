@@ -2,6 +2,7 @@ import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
 import type { Axis, GlyphId, GlyphName, SourceId, SourceMetrics } from "@shift/types";
 import type { RefObject } from "react";
+import type { ThemeName } from "./uiState";
 import type { AxisLocation } from "./variation";
 
 export type GlyphCatalogCellArea = "preview" | "name";
@@ -68,7 +69,8 @@ export interface GlyphCatalogControllerFrame {
   readonly axes: readonly Axis[];
   readonly metrics: SourceMetrics;
   readonly sourceId: SourceId | null;
-  readonly visible: boolean;
+  readonly themeName: ThemeName;
+  readonly active: boolean;
   readonly editingGlyphId: GlyphId | null;
 }
 
@@ -84,7 +86,7 @@ export interface GlyphCatalogCanvasProps {
   readonly axes: readonly Axis[];
   readonly metrics: SourceMetrics;
   readonly sourceId: SourceId | null;
-  readonly visible: boolean;
+  readonly active: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;

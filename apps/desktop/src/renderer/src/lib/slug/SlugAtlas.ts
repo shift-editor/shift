@@ -19,6 +19,7 @@ const GLYPH_OFFSET_MASK = 0x7fff_ffff;
 /** One concrete Slug atlas generation resident across two WebGPU bindings. */
 export class SlugAtlas {
   readonly #descriptor: SlugAtlasDescriptor;
+  readonly #glyphIds: readonly GlyphId[];
   readonly #glyphs: ReadonlyMap<GlyphId, SlugGlyph>;
   readonly #glyphBytes: Uint8Array<ArrayBuffer>;
   readonly #componentGlyphBytes: Uint8Array<ArrayBuffer>;
@@ -34,6 +35,7 @@ export class SlugAtlas {
     splitOffset: number,
   ) {
     this.#descriptor = descriptor;
+    this.#glyphIds = descriptor.glyphs.map((glyph) => glyph.glyphId);
     this.#glyphs = new Map(descriptor.glyphs.map((glyph) => [glyph.glyphId, glyph]));
     this.#glyphBytes = new Uint8Array(descriptor.layout.glyphs.length);
     this.#componentGlyphBytes = new Uint8Array(descriptor.layout.componentGlyphs.length);
@@ -90,6 +92,10 @@ export class SlugAtlas {
     }
 
     return [splitOffset, Math.max(4, splitOffset), Math.max(4, remainingLength)];
+  }
+
+  get glyphIds(): readonly GlyphId[] {
+    return this.#glyphIds;
   }
 
   get firstBuffer(): GPUBuffer {

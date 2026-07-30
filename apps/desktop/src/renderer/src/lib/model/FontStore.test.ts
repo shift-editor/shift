@@ -176,6 +176,26 @@ describe("FontStore glyph object ownership", () => {
     font.dispose();
   });
 
+  it("publishes values-only roots and component dependents for atlas invalidation", () => {
+    const dependentGlyphId = "glyph_dependent" as GlyphId;
+    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const font = new Font(store);
+    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
+    let invalidGlyphIds: readonly GlyphId[] | null = null;
+    const subscription = effect(() => {
+      invalidGlyphIds = font.invalidGlyphIdsCell.value;
+    });
+
+    store.applyWorkspaceChange({
+      ...valuesOnlyChange(),
+      dependents: [dependentGlyphId],
+    });
+
+    expect(invalidGlyphIds).toEqual([dependentGlyphId, GLYPH_ID]);
+    subscription.dispose();
+    font.dispose();
+  });
+
   it("forwards ownership queries through Font", () => {
     const store = new FontStore(snapshot("document-a", LAYER_A_ID));
     const font = new Font(store);

@@ -31,9 +31,9 @@ contextBridge.exposeInMainWorld("shiftHost", shiftHost);
 
 // MessagePorts cannot cross the context bridge; relay them into the page.
 ipcRenderer.on("workspace.port", (event: IpcRendererEvent) => {
-  window.postMessage({ type: "workspace.port" }, window.location.origin, event.ports);
+  window.postMessage({ type: "workspace.port" }, "*", event.ports);
 });
 
 ipcRenderer.on("document.port", (event: IpcRendererEvent) => {
-  window.postMessage({ type: "document.port" }, window.location.origin, event.ports);
+  window.postMessage({ type: "document.port" }, "*", event.ports);
 });

@@ -29,7 +29,10 @@ pub use render::{
     pack_render_instances, pack_render_params, RenderInstance, RenderParams, RENDER_INSTANCE_BYTES,
     RENDER_PARAMS_BYTES,
 };
-pub use resident::{build_authored_atlas, AuthoredAtlas, AuthoredAtlasGlyph};
+pub use resident::{
+    build_authored_atlas, build_authored_atlas_page, AuthoredAtlas, AuthoredAtlasGlyph,
+    AuthoredAtlasPage,
+};
 pub use variable::{
     pack_variable_params, PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks,
     VariableAnchorSource, VariableAtlas, VariableAtlasBuilder, VariableComponent,

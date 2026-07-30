@@ -207,13 +207,28 @@ export type SyncCallMap = {
     request: { alignment: number };
     response: SlugAtlas;
   };
+  /** Builds one ordered root-glyph page and its component closure. */
+  "workspace.slugAtlasPagePrepare": {
+    request: { glyphIds: GlyphId[]; alignment: number };
+    response: SlugAtlas;
+  };
   /** Streams bounded atlas chunks over the transferred response port. */
   "workspace.slugAtlasStream": {
     request: { generation: number; maximumLength: number };
     response: null;
   };
+  /** Streams one prepared page over the transferred response port. */
+  "workspace.slugAtlasPageStream": {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
   /** Releases native CPU residency when adapter initialization is rejected. */
   "workspace.slugAtlasDiscard": {
+    request: { generation: number };
+    response: null;
+  };
+  /** Releases one rejected prepared page. */
+  "workspace.slugAtlasPageDiscard": {
     request: { generation: number };
     response: null;
   };

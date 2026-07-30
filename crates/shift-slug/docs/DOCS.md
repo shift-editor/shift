@@ -25,7 +25,7 @@ src/
   render.rs              shared uniform and visible-instance byte layouts
   variable.rs            multi-source resident base/delta model and aligned packing
   variable/component.rs  component records, CPU oracle, and component packing
-  resident.rs            complete-font authored atlas, identity map, and weight-basis deduplication
+  resident.rs            complete-font/page authored atlases, identity maps, and weight-basis deduplication
   error.rs     strict conversion and size failures
 shaders/
   slug.wgsl           shared static native-wgpu/Electron-WebGPU renderer
@@ -56,7 +56,7 @@ Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical
 
 ## Resident variable execution
 
-`build_authored_atlas()` is the product complete-font boundary. It compiles `Font::glyph_projection()` values in authored order, preserves explicit `GlyphId` mapping, deduplicates every independent interpolation basis before insertion, and retains exact-source selectors. Layerless glyph records receive resident zero-curve/zero-advance descriptors so one incomplete draft cannot disable the rest of the grid. The result is location-independent; axis movement changes only the shared weight vector and visible instances.
+`build_authored_atlas()` remains the complete-font diagnostic boundary. Product residency uses `build_authored_atlas_page()`: it compiles an ordered root-glyph batch plus transitive component geometry, preserves explicit `GlyphId` mapping, and deduplicates interpolation bases only across that page closure. Layerless root records receive zero-curve/zero-advance descriptors so one incomplete draft cannot disable the rest of the grid. Pages are location-independent; axis movement changes only each page's shared weight vector and visible instances. Complete-font construction delegates to one page containing every root, so page and diagnostic output share the same compiler and packed layout.
 
 The variable model keeps one base quadratic array plus base-relative `f32` source deltas. Each 8-byte source descriptor remains dense by default; only a source whose unchanged curves make sparse storage strictly smaller receives a tagged offset into a compact side table of sorted glyph-local indexes. Dense fonts therefore pay no sparse metadata tax. Each source references a global weight index so equal interpolation bases share a small per-frame weight vector. The complete packed atlas remains one logical byte stream but may span two `array<u32>` storage bindings. A split offset and every logical section offset fit in the existing 64-byte uniform; one accessor selects the physical buffer without changing packed bytes. Typed WGSL decoders preserve the exact little-endian resident layout while using exactly eight storage bindings in the resolve entry point, matching WebGPU's baseline binding-count and 128 MiB storage-binding limits. Compute preserves the full weighted-source equation as `base × sum(weights) + Σ(weight × delta)`, rather than assuming weights always sum to one. A one-bit-per-curve resident mask marks controls generated from authored lines: after endpoint interpolation, compute regenerates those controls with Slug's normalized perpendicular epsilon because that operation is nonlinear and cannot be represented exactly by source control deltas. One workgroup per visible glyph resolves curves and reduces exact current-location bounds into scratch; a second pass rebuilds the eight horizontal and vertical bands using those bounds. Fragment band selection reads the same scratch bounds. Cell sizing remains a consumer-owned metrics/advance transform, so neither loose all-location bounds nor current-location geometry can shrink or jump the grid layout. Offscreen glyphs perform none of this work until visible.
 
@@ -76,13 +76,13 @@ A diagnostic compiled-outline sweep covers all 65,535 Source Han glyph IDs at `w
 
 Apple M4 / Metal measurements use 120 serialized frames that each change weights, resolve visible curves, rebuild visible bands, render, submit, and wait for completion:
 
-| Commit | Weight update | Packed Host atlas | p50 | p95 | p99 | max |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `f32ebd40` two-source scalar | 16 B/frame | 469,504 B | 0.934 ms | 2.120 ms | 4.257 ms | 5.857 ms |
-| `ff6ab527` indexed multi-source weights | 8 B/frame | 476,672 B | 0.754 ms | 1.640 ms | 1.967 ms | 3.441 ms |
-| `f5dc1281` authored topology + exact lines | 8 B/frame | 477,860 B | 1.048 ms | 2.177 ms | 4.234 ms | 4.302 ms |
-| `9c0b6510` components + exact visible bounds | 8 B/frame | 477,860 B | 1.001 ms | 2.554 ms | 4.761 ms | 4.949 ms |
-| `28bfe2ab` general components, three-run median | 8 B/frame | 481,444 B | 1.794 ms | 2.149 ms | 3.902 ms | 4.033 ms |
+| Commit                                          | Weight update | Packed Host atlas |      p50 |      p95 |      p99 |      max |
+| ----------------------------------------------- | ------------: | ----------------: | -------: | -------: | -------: | -------: |
+| `f32ebd40` two-source scalar                    |    16 B/frame |         469,504 B | 0.934 ms | 2.120 ms | 4.257 ms | 5.857 ms |
+| `ff6ab527` indexed multi-source weights         |     8 B/frame |         476,672 B | 0.754 ms | 1.640 ms | 1.967 ms | 3.441 ms |
+| `f5dc1281` authored topology + exact lines      |     8 B/frame |         477,860 B | 1.048 ms | 2.177 ms | 4.234 ms | 4.302 ms |
+| `9c0b6510` components + exact visible bounds    |     8 B/frame |         477,860 B | 1.001 ms | 2.554 ms | 4.761 ms | 4.949 ms |
+| `28bfe2ab` general components, three-run median |     8 B/frame |         481,444 B | 1.794 ms | 2.149 ms | 3.902 ms | 4.033 ms |
 
 The indexed-weight run observed 19.3% lower p50, 22.6% lower p95, and 53.8% lower p99 than the initial scalar run while halving weight traffic to 960 bytes total. The authored-topology correction then added a one-bit-per-curve line mask and exact post-interpolation line controls. In one run it measured 39.0% higher p50, 32.7% higher p95, and 115.3% higher p99 than `ff6ab527`, while GPU submit/readback improved 11.5% from 6.474 to 5.729 ms. Treat all latency differences as run-to-run observations rather than isolated causal attribution.
 
@@ -119,12 +119,12 @@ The reference 8-bit band count happened to fit this corpus, but its global 24-bi
 
 Band-count tradeoff at `wght=900`:
 
-| Bands/direction | Packed bytes | Occupancy p95 / max | Build |
-| ---: | ---: | ---: | ---: |
-| 4 | 186.3 MiB | 51 / 215 | 1.57 s |
-| 8 | 205.8 MiB | 33 / 153 | 1.78 s |
-| 12 | 224.9 MiB | 27 / 126 | 1.58 s |
-| 16 | 244.2 MiB | 24 / 102 | 2.02 s |
+| Bands/direction | Packed bytes | Occupancy p95 / max |  Build |
+| --------------: | -----------: | ------------------: | -----: |
+|               4 |    186.3 MiB |            51 / 215 | 1.57 s |
+|               8 |    205.8 MiB |            33 / 153 | 1.78 s |
+|              12 |    224.9 MiB |            27 / 126 | 1.58 s |
+|              16 |    244.2 MiB |            24 / 102 | 2.02 s |
 
 Eight bands remain the initial static-render candidate. The 5.49 million curves alone occupy 125.6 MiB at three `vec2<f32>` values each. Variable residency therefore needs base-plus-sparse-delta measurement; duplicating complete curve arrays per source is not acceptable by default. Per-glyph curve counts fit `u16` in this corpus, so packing two glyph-local curve indexes per `u32` is a promising derived optimization to measure without weakening checked CPU ranges.
 

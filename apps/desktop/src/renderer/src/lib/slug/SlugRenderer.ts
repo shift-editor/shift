@@ -1,30 +1,29 @@
-import type { GlyphPreviewFrame } from "@/types/glyphPreview";
+import type { GlyphId } from "@shift/types";
+import type { GlyphPreviewFrame, GlyphPreviewInstance } from "@/types/glyphPreview";
 import { SlugAtlas } from "./SlugAtlas";
-import { SlugRendererBuffers, SlugRendererPipelines } from "./SlugRendererResources";
+import { SlugAtlasPage } from "./SlugAtlasPage";
+import { SlugRendererPipelines } from "./SlugRendererResources";
 
-/** Concrete Slug implementation behind the resident glyph preview layer. */
+/** Concrete paged Slug implementation behind the resident glyph preview layer. */
 export class SlugRenderer {
-  readonly #atlas: SlugAtlas;
   readonly #device: GPUDevice;
   readonly #context: GPUCanvasContext;
   readonly #onDeviceLost: (reason: string) => void;
   readonly #pipelines: SlugRendererPipelines;
-  readonly #buffers: SlugRendererBuffers;
+  readonly #pages = new Set<SlugAtlasPage>();
+  readonly #pageByGlyph = new Map<GlyphId, SlugAtlasPage>();
   #disposed = false;
 
   constructor(
-    atlas: SlugAtlas,
     device: GPUDevice,
     context: GPUCanvasContext,
     format: GPUTextureFormat,
     onDeviceLost: (reason: string) => void,
   ) {
-    this.#atlas = atlas;
     this.#device = device;
     this.#context = context;
     this.#onDeviceLost = onDeviceLost;
     this.#pipelines = new SlugRendererPipelines(device, format);
-    this.#buffers = new SlugRendererBuffers(device, atlas, this.#pipelines);
 
     this.#device.addEventListener("uncapturederror", (event) => {
       if (this.#disposed) return;
@@ -33,34 +32,96 @@ export class SlugRenderer {
     void this.#watchDeviceLoss();
   }
 
-  draw(frame: GlyphPreviewFrame): void {
-    if (this.#disposed) return;
-
-    const packed = this.#atlas.frame(frame.instances);
-    if (packed.instanceCount === 0) {
-      if (frame.instances.length === 0) this.#clear();
+  loadPage(atlas: SlugAtlas): void {
+    if (this.#disposed) {
+      atlas.destroy();
       return;
     }
 
-    this.#buffers.prepare(frame, packed);
+    const page = new SlugAtlasPage(this.#device, atlas, this.#pipelines);
+    const replaced = new Set<SlugAtlasPage>();
+    for (const glyphId of page.glyphIds) {
+      const previous = this.#pageByGlyph.get(glyphId);
+      if (previous) replaced.add(previous);
+      this.#pageByGlyph.set(glyphId, page);
+    }
+    this.#pages.add(page);
+    this.#removeUnusedPages(replaced);
+  }
+
+  invalidate(glyphIds: readonly GlyphId[]): void {
+    const affected = new Set<SlugAtlasPage>();
+    for (const glyphId of glyphIds) {
+      const page = this.#pageByGlyph.get(glyphId);
+      if (page) affected.add(page);
+      this.#pageByGlyph.delete(glyphId);
+    }
+    this.#removeUnusedPages(affected);
+  }
+
+  hasGlyphs(glyphIds: readonly GlyphId[]): boolean {
+    return glyphIds.every((glyphId) => this.#pageByGlyph.has(glyphId));
+  }
+
+  draw(frame: GlyphPreviewFrame): void {
+    if (this.#disposed) return;
+    if (frame.instances.length === 0) {
+      this.#clear();
+      return;
+    }
+
+    const instancesByPage = new Map<SlugAtlasPage, GlyphPreviewInstance[]>();
+    for (const instance of frame.instances) {
+      const page = this.#pageByGlyph.get(instance.glyphId);
+      if (!page) throw new Error(`resident Slug glyph ${instance.glyphId} is not loaded`);
+      const instances = instancesByPage.get(page) ?? [];
+      instances.push(instance);
+      instancesByPage.set(page, instances);
+    }
+
     const encoder = this.#device.createCommandEncoder({ label: "shift Slug frame" });
-    {
-      const pass = encoder.beginComputePass({ label: "shift Slug resolve" });
-      pass.setPipeline(this.#pipelines.resolve);
-      setGroups(pass, this.#buffers.resolveGroups);
-      pass.dispatchWorkgroups(packed.instanceCount);
-      pass.end();
+    let rendered = false;
+    for (const [page, instances] of instancesByPage) {
+      const packed = page.atlas.frame(instances);
+      if (packed.instanceCount === 0) continue;
+
+      page.buffers.prepare(frame, packed);
+      {
+        const pass = encoder.beginComputePass({ label: "shift Slug resolve" });
+        pass.setPipeline(this.#pipelines.resolve);
+        setGroups(pass, page.buffers.resolveGroups);
+        pass.dispatchWorkgroups(packed.instanceCount);
+        pass.end();
+      }
+      {
+        const pass = encoder.beginComputePass({ label: "shift Slug bands" });
+        pass.setPipeline(this.#pipelines.bands);
+        setGroups(pass, page.buffers.bandGroups);
+        pass.dispatchWorkgroups(packed.instanceCount * page.atlas.bandCount * 2);
+        pass.end();
+      }
+      {
+        const pass = encoder.beginRenderPass({
+          label: "shift Slug render",
+          colorAttachments: [
+            {
+              view: this.#context.getCurrentTexture().createView(),
+              loadOp: rendered ? "load" : "clear",
+              clearValue: { r: 0, g: 0, b: 0, a: 0 },
+              storeOp: "store",
+            },
+          ],
+        });
+        pass.setPipeline(this.#pipelines.render);
+        setGroups(pass, page.buffers.renderGroups);
+        pass.draw(6, packed.instanceCount);
+        pass.end();
+      }
+      rendered = true;
     }
-    {
-      const pass = encoder.beginComputePass({ label: "shift Slug bands" });
-      pass.setPipeline(this.#pipelines.bands);
-      setGroups(pass, this.#buffers.bandGroups);
-      pass.dispatchWorkgroups(packed.instanceCount * this.#atlas.bandCount * 2);
-      pass.end();
-    }
-    {
+
+    if (!rendered) {
       const pass = encoder.beginRenderPass({
-        label: "shift Slug render",
         colorAttachments: [
           {
             view: this.#context.getCurrentTexture().createView(),
@@ -70,12 +131,9 @@ export class SlugRenderer {
           },
         ],
       });
-      pass.setPipeline(this.#pipelines.render);
-      setGroups(pass, this.#buffers.renderGroups);
-      pass.draw(6, packed.instanceCount);
       pass.end();
     }
-    this.#device.queue.submit([encoder.finish()]);
+    this.#device.queue.submit([encoder.finish({ label: "shift Slug frame" })]);
   }
 
   async complete(): Promise<void> {
@@ -86,6 +144,15 @@ export class SlugRenderer {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#release();
+  }
+
+  #removeUnusedPages(candidates: ReadonlySet<SlugAtlasPage>): void {
+    const used = new Set(this.#pageByGlyph.values());
+    for (const page of candidates) {
+      if (used.has(page)) continue;
+      this.#pages.delete(page);
+      page.destroy();
+    }
   }
 
   #clear(): void {
@@ -101,7 +168,7 @@ export class SlugRenderer {
       ],
     });
     pass.end();
-    this.#device.queue.submit([encoder.finish()]);
+    this.#device.queue.submit([encoder.finish({ label: "shift Slug clear" })]);
   }
 
   async #watchDeviceLoss(): Promise<void> {
@@ -124,8 +191,9 @@ export class SlugRenderer {
 
   #release(): void {
     this.#context.unconfigure();
-    this.#buffers.destroy();
-    this.#atlas.destroy();
+    for (const page of this.#pages) page.destroy();
+    this.#pages.clear();
+    this.#pageByGlyph.clear();
     this.#device.destroy();
   }
 }

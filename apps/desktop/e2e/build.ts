@@ -42,6 +42,25 @@ async function buildMain() {
   });
 }
 
+async function buildWorkspace() {
+  await build({
+    configFile: path.join(appRoot, "vite.main.config.ts"),
+    build: {
+      lib: {
+        entry: path.join(appRoot, "src/utility/workspace.ts"),
+        formats: ["cjs"],
+        fileName: () => "workspace.js",
+      },
+      outDir: path.join(appRoot, ".vite/build"),
+      emptyOutDir: false,
+      minify: false,
+      rollupOptions: {
+        external: nodeExternals,
+      },
+    },
+  });
+}
+
 async function buildPreload() {
   await build({
     configFile: path.join(appRoot, "vite.preload.config.ts"),
@@ -81,6 +100,7 @@ async function buildRenderer() {
 async function main() {
   console.log("Building Electron app for E2E tests...");
   await buildMain();
+  await buildWorkspace();
   await buildPreload();
   await buildRenderer();
   console.log("E2E build complete.");

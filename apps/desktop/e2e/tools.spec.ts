@@ -1,4 +1,4 @@
-import { test, expect, loadFont, navigateToEditor } from "./fixtures/electronApp";
+import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 
 /** Maps tool id to the aria-label on its toolbar button (set via tooltip). */
 const TOOL_LABELS: Record<string, string> = {
@@ -10,8 +10,7 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 test.describe("Toolbar tools", () => {
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
+  test.beforeEach(async ({ page }) => {
     await navigateToEditor(page, "41");
   });
 

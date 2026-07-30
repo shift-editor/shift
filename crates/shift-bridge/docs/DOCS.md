@@ -18,7 +18,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
 
-**Architecture Invariant:** A prepared Slug atlas remains native and is consumed once through napi-rs `ReadableStream<Buffer>` chunks. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. **WHY:** Product upload must retain one bounded temporary chunk, not an atlas-sized JavaScript copy or an unbounded IPC queue.
+**Architecture Invariant:** A prepared Slug atlas or page remains native and is consumed once through napi-rs `ReadableStream<Buffer>` chunks. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. **WHY:** Product upload must retain one bounded temporary chunk, not an atlas-sized JavaScript copy or an unbounded IPC queue.
 
 ## Codemap
 
@@ -48,8 +48,8 @@ crates/shift-bridge/
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
 - `NapiGlyphProjection` -- compact location-independent glyph backing with reusable interpolation, exact-source exceptions, and Rust-owned `GlyphComponents` relationships.
 - `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
-- `NapiSlugAtlas` -- small generation metadata, explicit authored glyph identities, exact-source selectors, deduplicated weight bases, and aligned resident-section layout.
-- `SlugAtlasGeneration` -- one prepared native atlas consumed by `streamSlugAtlas()` or released by `discardSlugAtlas()`.
+- `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, and aligned resident-section layout.
+- `SlugAtlasGeneration` -- one prepared native atlas or page consumed by its stream API or released by its discard API.
 
 ## How it works
 
@@ -62,7 +62,7 @@ crates/shift-bridge/
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
-10. `prepareSlugAtlas(alignment)` compiles the complete authored font and returns metadata only. `streamSlugAtlas(generation, maximumLength)` moves the packed atlas through a native Web stream and releases CPU residency at completion; every font edit invalidates an unconsumed generation.
+10. `prepareSlugAtlasPage(glyphIds, alignment)` compiles only ordered roots and their component closures; its stream/discard methods retain the bounded complete-atlas transport contract. `prepareSlugAtlas(alignment)` remains the complete-font diagnostic path. Every font edit invalidates an unconsumed generation or page.
 
 ## Type Boundary
 

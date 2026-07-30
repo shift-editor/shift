@@ -4,7 +4,11 @@ import {
   type Page,
   type ElectronApplication,
 } from "@playwright/test";
+import fs from "node:fs";
+import os from "node:os";
 import * as path from "path";
+import { once } from "events";
+import type { Unicode } from "@shift/types";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -23,44 +27,81 @@ type ShiftFixtures = {
   page: Page;
 };
 
-/**
- * Base test fixture — launches Electron, lands on the Landing view.
- */
-export const test = base.extend<ShiftFixtures>({
-  electronApp: async ({}, use) => {
-    const app = await electron.launch({
-      args: [MAIN_JS],
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        // Force software rendering for deterministic GPU-free snapshots.
-        LIBGL_ALWAYS_SOFTWARE: "1",
-      },
-    });
+type ShiftOptions = {
+  startupFontPath: string | undefined;
+};
 
-    // Unmaximize and set a fixed size so snapshots are deterministic.
-    await app.evaluate(
-      async ({ BrowserWindow }, { w, h }) => {
-        const win = BrowserWindow.getAllWindows()[0];
-        if (win) {
-          win.unmaximize();
-          win.setSize(w, h);
-          win.center();
+/** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
+export const test = base.extend<ShiftFixtures & ShiftOptions>({
+  startupFontPath: [undefined, { option: true }],
+
+  electronApp: async ({ startupFontPath }, use) => {
+    const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
+    const userDataDir = path.join(testRoot, "user-data");
+    let workspacePath: string | undefined;
+    let app: ElectronApplication | null = null;
+
+    if (startupFontPath) {
+      const workspaceDirectory = path.join(testRoot, "workspace");
+      if (path.extname(startupFontPath) === ".designspace") {
+        fs.cpSync(path.dirname(startupFontPath), workspaceDirectory, { recursive: true });
+        workspacePath = path.join(workspaceDirectory, path.basename(startupFontPath));
+      } else {
+        fs.mkdirSync(workspaceDirectory, { recursive: true });
+        workspacePath = path.join(workspaceDirectory, path.basename(startupFontPath));
+        if (fs.statSync(startupFontPath).isDirectory()) {
+          fs.cpSync(startupFontPath, workspacePath, { recursive: true });
+        } else {
+          fs.copyFileSync(startupFontPath, workspacePath, fs.constants.COPYFILE_FICLONE);
         }
-      },
-      { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-    );
+      }
+    }
 
-    await use(app);
+    const environment = {
+      ...process.env,
+      NODE_ENV: "test",
+      // Force software rendering for deterministic GPU-free snapshots.
+      LIBGL_ALWAYS_SOFTWARE: "1",
+    };
+    if (workspacePath) environment.SHIFT_E2E_FONT_PATH = workspacePath;
+    else delete environment.SHIFT_E2E_FONT_PATH;
 
-    // Clear dirty state to prevent native save dialog from blocking app.close().
-    // The before-quit handler shows a native dialog when dirty — can't be dismissed by Playwright.
-    const page = await app.firstWindow();
-    await page.evaluate(() => {
-      window.electronAPI?.setDocumentDirty(false);
-    });
+    try {
+      app = await electron.launch({
+        args: [MAIN_JS, `--user-data-dir=${userDataDir}`],
+        env: environment,
+      });
 
-    await app.close();
+      // Wait for the startup window, then set a fixed size for deterministic tests.
+      await app.firstWindow();
+      const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
+        electronApp.getPath("userData"),
+      );
+      if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
+        throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
+      }
+      await app.evaluate(
+        async ({ BrowserWindow }, { w, h }) => {
+          const win = BrowserWindow.getAllWindows()[0];
+          if (win) {
+            win.unmaximize();
+            win.setSize(w, h);
+            win.center();
+          }
+        },
+        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+      );
+
+      await use(app);
+    } finally {
+      const childProcess = app?.process();
+      if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
+        const exited = once(childProcess, "exit");
+        childProcess.kill("SIGKILL");
+        await exited;
+      }
+      fs.rmSync(testRoot, { recursive: true, force: true });
+    }
   },
 
   page: async ({ electronApp }, use) => {
@@ -74,34 +115,46 @@ export const test = base.extend<ShiftFixtures>({
   },
 });
 
-// ---------------------------------------------------------------------------
-// Font-loading helpers
-// ---------------------------------------------------------------------------
+/** Workspace fixture that starts directly with MutatorSans instead of visiting the launcher. */
+export const workspaceTest = test.extend<ShiftOptions>({
+  startupFontPath: FONT_PATH,
 
-/**
- * Open MutatorSans via the `external:open-font` IPC event (same path the OS
- * uses when you double-click a .ttf) and wait for the app to navigate to /home.
- */
-export async function loadFont(electronApp: ElectronApplication, page: Page): Promise<void> {
-  await electronApp.evaluate(async ({ BrowserWindow }, fontPath) => {
-    const win = BrowserWindow.getAllWindows()[0];
-    win.webContents.send("external:open-font", fontPath);
-  }, FONT_PATH);
-
-  // The app navigates to #/home after a successful font load.
-  await page.waitForURL(/#\/home/, { timeout: 10_000 });
-  // Wait for the glyph grid to render.
-  await page.waitForTimeout(500);
-}
+  page: async ({ page }, use) => {
+    await page.waitForURL(/#\/home/, { timeout: 20_000 });
+    await page.getByLabel("Glyph catalog").waitFor({ state: "visible" });
+    await use(page);
+  },
+});
 
 /**
  * Navigate to the editor for Unicode codepoint (hex, e.g. "41" = A).
  * Assumes a font is already loaded.
  */
 export async function navigateToEditor(page: Page, hexCodepoint: string): Promise<void> {
-  await page.evaluate((hex) => {
-    window.location.hash = `#/editor/${hex}`;
-  }, hexCodepoint);
+  const unicode = Number.parseInt(hexCodepoint, 16) as Unicode;
+  await page.waitForFunction(
+    (codepoint) => {
+      const font = window.shift?.font;
+      if (!font) return false;
+
+      const handle = font.glyphHandleForUnicode(codepoint as Unicode);
+      return font.recordForName(handle.name) !== null;
+    },
+    unicode,
+    { timeout: 20_000 },
+  );
+
+  await page.evaluate(async (codepoint) => {
+    const workspace = window.shift;
+    if (!workspace) throw new Error("Expected workspace");
+
+    const handle = workspace.font.glyphHandleForUnicode(codepoint as Unicode);
+    const record = workspace.font.recordForName(handle.name);
+    if (!record) throw new Error(`No glyph found for U+${codepoint.toString(16)}`);
+
+    await workspace.font.loadGlyph(record.id);
+    window.location.hash = `#/editor/${encodeURIComponent(record.id)}`;
+  }, unicode);
 
   // Wait for the editor canvas to mount and render.
   await page.waitForSelector("#scene-canvas", { timeout: 10_000 });

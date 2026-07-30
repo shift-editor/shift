@@ -13,7 +13,7 @@ export function GlyphCatalogCanvas({
   axes,
   metrics,
   sourceId,
-  visible,
+  active,
   openGlyph,
   onFirstFrame,
   onUnavailable,
@@ -67,14 +67,13 @@ export function GlyphCatalogCanvas({
         axes,
         metrics,
         sourceId,
-        visible: ready && visible,
+        themeName,
+        active,
         editingGlyphId: editingGlyph?.id ?? null,
       },
       inputContainerRef.current,
     );
-    // Reading themeName makes theme changes schedule a canvas redraw through update().
-    void themeName;
-  }, [axes, editingGlyph, glyphs, location, metrics, ready, sourceId, themeName, visible]);
+  }, [active, axes, editingGlyph, glyphs, location, metrics, sourceId, themeName]);
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;
@@ -89,6 +88,7 @@ export function GlyphCatalogCanvas({
         ref={glyphCanvasRef}
         aria-hidden="true"
         className="pointer-events-none absolute left-0 top-0 z-[2] h-full w-full bg-transparent"
+        style={{ visibility: ready ? "visible" : "hidden" }}
       />
       <canvas
         ref={overlayCanvasRef}

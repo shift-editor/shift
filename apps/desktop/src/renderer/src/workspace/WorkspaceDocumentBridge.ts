@@ -53,7 +53,7 @@ function nextDocumentPort(): {
 
   const received = new Promise<MessagePort>((resolve) => {
     const listener = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+      if (event.source !== window) return;
       if ((event.data as { type?: string } | null)?.type !== "document.port") return;
 
       const port = event.ports[0];

@@ -17,10 +17,10 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import type { PointId } from "@shift/types";
 import {
   test,
   expect,
-  loadFont,
   navigateToEditor,
   generateContourData,
   computeStats,
@@ -42,9 +42,9 @@ const THRESHOLDS: Record<string, number> = {
   "translate-drag (5 pts)": 5,
   "translate-drag (1K pts)": 5,
   "translate-drag (all pts)": 20,
-  "nudge (all pts)": 60, // Already slow (see #36) — tighten after fix
-  "undo (all pts)": 50,
-  "redo (all pts)": 50,
+  "nudge (all pts)": 60, // Immediate local interaction path; persistence settles asynchronously.
+  "undo (all pts)": 1_000, // Full renderer↔utility ledger replay for a 50K-point patch.
+  "redo (all pts)": 1_000,
   "pen-tool (100 clicks)": 500, // Spiky due to GC — tighten after optimization
   "pan (all selected)": 5,
   "zoom (all selected)": 5,
@@ -106,8 +106,7 @@ test.describe("Performance — 50K points", () => {
     }
   });
 
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
+  test.beforeEach(async ({ page }) => {
     await navigateToEditor(page, "53");
   });
 
@@ -148,16 +147,20 @@ test.describe("Performance — 50K points", () => {
   test("setup: paste 50K points into the glyph", async ({ page }) => {
     const contours = generateContourData(TARGET_POINTS);
 
-    const pointCount = await page.evaluate((data) => {
-      const shift = (window as any).shift;
-      if (!shift) throw new Error("shift runtime API not exposed");
+    const pointCount = await page.evaluate(async (data) => {
+      const workspace = window.shift;
+      if (!workspace) throw new Error("shift runtime API not exposed");
 
-      const editor = shift.editor;
-      const result = editor.bridge.pasteContours(data, 0, 0);
+      const editor = workspace.editor;
+      const inserted = editor.insertContent({ contours: data });
+      if (!inserted) throw new Error("contour insertion failed");
 
-      if (!result.success) throw new Error("pasteContours failed");
+      await editor.font.editCoordinator.settled();
 
-      return editor.editGlyphSource?.allPoints.length ?? 0;
+      const layer = editor.layerForGeometry({ points: inserted as readonly PointId[] });
+      if (!layer) throw new Error("inserted contours have no editable layer");
+
+      return layer.allPoints.length;
     }, contours);
 
     expect(pointCount).toBeGreaterThanOrEqual(TARGET_POINTS);
@@ -168,29 +171,40 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      ({ contours, frames }) => {
-        const editor = (window as any).shift.editor;
-        editor.bridge.pasteContours(contours, 0, 0);
+      async ({ contours, frames }) => {
+        const editor = window.shift!.editor;
+        const inserted = editor.insertContent({ contours });
+        if (!inserted) throw new Error("contour insertion failed");
 
-        const pointIds = editor.editGlyphSource.allPoints.slice(0, 5).map((p: any) => p.id);
-        editor.selection.select(pointIds.map((id: string) => ({ kind: "point", id })));
+        await editor.font.editCoordinator.settled();
+        editor.selectAll();
 
-        const draft = editor.beginSourceEditDraft({ points: pointIds });
+        const pointIds = editor.selection.ids.slice(0, 5) as readonly PointId[];
+        const layer = editor.layerForGeometry({ points: pointIds });
+        if (!layer) throw new Error("selected points have no editable layer");
+
+        let updates = pointIds.map((id, index) => ({
+          kind: "point" as const,
+          id,
+          x: 100 + index,
+          y: 200 + index,
+        }));
         const times: number[] = [];
 
-        for (let i = 0; i < frames; i++) {
+        for (let index = 0; index < frames; index++) {
           const start = performance.now();
-          const updates = pointIds.map((id: string, idx: number) => ({
+          updates = pointIds.map((id, pointIndex) => ({
             kind: "point" as const,
             id,
-            x: 100 + i + idx,
-            y: 200 + i + idx,
+            x: 100 + index + pointIndex,
+            y: 200 + index + pointIndex,
           }));
-          draft.previewPositionPatch(updates);
+          layer.previewPositionPatch(updates);
           times.push(performance.now() - start);
         }
 
-        draft.commit("translate-few");
+        layer.commitPositionPatch(updates);
+        await editor.font.editCoordinator.settled();
         return times;
       },
       { contours, frames: DRAG_FRAMES },
@@ -205,30 +219,40 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      ({ contours, frames }) => {
-        const editor = (window as any).shift.editor;
-        editor.bridge.pasteContours(contours, 0, 0);
+      async ({ contours, frames }) => {
+        const editor = window.shift!.editor;
+        const inserted = editor.insertContent({ contours });
+        if (!inserted) throw new Error("contour insertion failed");
 
-        const allPoints = editor.editGlyphSource.allPoints;
-        const pointIds = allPoints.slice(0, 1000).map((p: any) => p.id);
-        editor.selection.select(pointIds.map((id: string) => ({ kind: "point", id })));
+        await editor.font.editCoordinator.settled();
+        editor.selectAll();
 
-        const draft = editor.beginSourceEditDraft({ points: pointIds });
+        const pointIds = editor.selection.ids.slice(0, 1000) as readonly PointId[];
+        const layer = editor.layerForGeometry({ points: pointIds });
+        if (!layer) throw new Error("selected points have no editable layer");
+
+        let updates = pointIds.map((id, index) => ({
+          kind: "point" as const,
+          id,
+          x: index,
+          y: index,
+        }));
         const times: number[] = [];
 
-        for (let i = 0; i < frames; i++) {
+        for (let index = 0; index < frames; index++) {
           const start = performance.now();
-          const updates = pointIds.map((id: string, idx: number) => ({
+          updates = pointIds.map((id, pointIndex) => ({
             kind: "point" as const,
             id,
-            x: idx + i,
-            y: idx + i,
+            x: pointIndex + index,
+            y: pointIndex + index,
           }));
-          draft.previewPositionPatch(updates);
+          layer.previewPositionPatch(updates);
           times.push(performance.now() - start);
         }
 
-        draft.commit("translate-many");
+        layer.commitPositionPatch(updates);
+        await editor.font.editCoordinator.settled();
         return times;
       },
       { contours, frames: DRAG_FRAMES },
@@ -243,31 +267,40 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      ({ contours, frames }) => {
-        const editor = (window as any).shift.editor;
-        editor.bridge.pasteContours(contours, 0, 0);
+      async ({ contours, frames }) => {
+        const editor = window.shift!.editor;
+        const inserted = editor.insertContent({ contours });
+        if (!inserted) throw new Error("contour insertion failed");
 
+        await editor.font.editCoordinator.settled();
         editor.selectAll();
 
-        const allPoints = editor.editGlyphSource.allPoints;
-        const pointIds = allPoints.map((p: any) => p.id);
+        const pointIds = editor.selection.ids as readonly PointId[];
+        const layer = editor.layerForGeometry({ points: pointIds });
+        if (!layer) throw new Error("selected points have no editable layer");
 
-        const draft = editor.beginSourceEditDraft({ points: pointIds });
+        let updates = pointIds.map((id, index) => ({
+          kind: "point" as const,
+          id,
+          x: index,
+          y: index,
+        }));
         const times: number[] = [];
 
-        for (let i = 0; i < frames; i++) {
+        for (let index = 0; index < frames; index++) {
           const start = performance.now();
-          const updates = pointIds.map((id: string, idx: number) => ({
+          updates = pointIds.map((id, pointIndex) => ({
             kind: "point" as const,
             id,
-            x: idx + i,
-            y: idx + i,
+            x: pointIndex + index,
+            y: pointIndex + index,
           }));
-          draft.previewPositionPatch(updates);
+          layer.previewPositionPatch(updates);
           times.push(performance.now() - start);
         }
 
-        draft.commit("translate-all");
+        layer.commitPositionPatch(updates);
+        await editor.font.editCoordinator.settled();
         return times;
       },
       { contours, frames: DRAG_FRAMES },
@@ -282,19 +315,23 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      ({ contours, frames }) => {
-        const editor = (window as any).shift.editor;
-        editor.bridge.pasteContours(contours, 0, 0);
+      async ({ contours, frames }) => {
+        const editor = window.shift!.editor;
+        const inserted = editor.insertContent({ contours });
+        if (!inserted) throw new Error("contour insertion failed");
+
+        await editor.font.editCoordinator.settled();
         editor.selectAll();
 
-        const allPoints = editor.editGlyphSource.allPoints;
-        const pointIds = allPoints.map((p: any) => p.id);
+        const pointIds = editor.selection.ids as readonly PointId[];
+        const layer = editor.layerForGeometry({ points: pointIds });
+        if (!layer) throw new Error("selected points have no editable layer");
 
         const times: number[] = [];
 
-        for (let i = 0; i < frames; i++) {
+        for (let index = 0; index < frames; index++) {
           const start = performance.now();
-          editor.nudgePoints(pointIds, 1, 0);
+          layer.movePoints(pointIds, { x: 1, y: 0 });
           times.push(performance.now() - start);
         }
 
@@ -312,35 +349,39 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      ({ contours, frames }) => {
-        const editor = (window as any).shift.editor;
-        editor.bridge.pasteContours(contours, 0, 0);
+      async ({ contours, frames }) => {
+        const editor = window.shift!.editor;
+        const inserted = editor.insertContent({ contours });
+        if (!inserted) throw new Error("contour insertion failed");
+
+        await editor.font.editCoordinator.settled();
         editor.selectAll();
 
-        const allPoints = editor.editGlyphSource.allPoints;
-        const pointIds = allPoints.map((p: any) => p.id);
+        const pointIds = editor.selection.ids as readonly PointId[];
+        const layer = editor.layerForGeometry({ points: pointIds });
+        if (!layer) throw new Error("selected points have no editable layer");
 
-        const draft = editor.beginSourceEditDraft({ points: pointIds });
-        const updates = pointIds.map((id: string, idx: number) => ({
+        const updates = pointIds.map((id, index) => ({
           kind: "point" as const,
           id,
-          x: idx + 10,
-          y: idx + 10,
+          x: index + 10,
+          y: index + 10,
         }));
-        draft.previewPositionPatch(updates);
-        draft.commit("pre-undo-translate");
+        layer.previewPositionPatch(updates);
+        layer.commitPositionPatch(updates);
+        await editor.font.editCoordinator.settled();
 
         const undoTimes: number[] = [];
         const redoTimes: number[] = [];
 
-        for (let i = 0; i < frames; i++) {
-          const t0 = performance.now();
-          editor.commandHistory.undo();
-          undoTimes.push(performance.now() - t0);
+        for (let index = 0; index < frames; index++) {
+          const undoStart = performance.now();
+          await editor.font.editCoordinator.undo();
+          undoTimes.push(performance.now() - undoStart);
 
-          const t1 = performance.now();
-          editor.commandHistory.redo();
-          redoTimes.push(performance.now() - t1);
+          const redoStart = performance.now();
+          await editor.font.editCoordinator.redo();
+          redoTimes.push(performance.now() - redoStart);
         }
 
         return { undo: undoTimes, redo: redoTimes };
@@ -359,16 +400,19 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      ({ contours, clickCount }) => {
-        const editor = (window as any).shift.editor;
-        editor.bridge.pasteContours(contours, 0, 0);
+      async ({ contours, clickCount }) => {
+        const editor = window.shift!.editor;
+        const inserted = editor.insertContent({ contours });
+        if (!inserted) throw new Error("contour insertion failed");
+
+        await editor.font.editCoordinator.settled();
         editor.setActiveTool("pen");
 
         const times: number[] = [];
 
-        for (let i = 0; i < clickCount; i++) {
-          const x = 100 + (i % 50) * 10;
-          const y = 100 + Math.floor(i / 50) * 10;
+        for (let index = 0; index < clickCount; index++) {
+          const x = 100 + (index % 50) * 10;
+          const y = 100 + Math.floor(index / 50) * 10;
 
           const start = performance.now();
           editor.toolManager.handlePointerDown(
@@ -379,6 +423,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
+        await editor.font.editCoordinator.settled();
         return times;
       },
       { contours, clickCount: 100 },
@@ -393,22 +438,25 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      ({ contours, frames }) => {
-        const editor = (window as any).shift.editor;
-        editor.bridge.pasteContours(contours, 0, 0);
+      async ({ contours, frames }) => {
+        const editor = window.shift!.editor;
+        const inserted = editor.insertContent({ contours });
+        if (!inserted) throw new Error("contour insertion failed");
+
+        await editor.font.editCoordinator.settled();
         editor.selectAll();
 
         const panTimes: number[] = [];
         const zoomTimes: number[] = [];
 
-        for (let i = 0; i < frames; i++) {
-          const t0 = performance.now();
-          editor.setPan({ x: i * 10, y: i * 5 });
-          panTimes.push(performance.now() - t0);
+        for (let index = 0; index < frames; index++) {
+          const panStart = performance.now();
+          editor.setPan({ x: index * 10, y: index * 5 });
+          panTimes.push(performance.now() - panStart);
 
-          const t1 = performance.now();
+          const zoomStart = performance.now();
           editor.zoomToPoint(640, 400, 0.01);
-          zoomTimes.push(performance.now() - t1);
+          zoomTimes.push(performance.now() - zoomStart);
         }
 
         return { pan: panTimes, zoom: zoomTimes };

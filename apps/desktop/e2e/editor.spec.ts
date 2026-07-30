@@ -1,9 +1,8 @@
-import { test, expect, loadFont, navigateToEditor } from "./fixtures/electronApp";
+import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
 test.describe("Editor view", () => {
-  test.beforeEach(async ({ electronApp, page }) => {
-    await loadFont(electronApp, page);
+  test.beforeEach(async ({ page }) => {
     // Navigate to glyph "A" (U+0041).
     await navigateToEditor(page, "41");
   });
@@ -32,7 +31,7 @@ test.describe("Editor view", () => {
 
   test("GPU handles layer matches snapshot", async ({ page }) => {
     const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("gpu-handles-canvas");
+    const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
     await expect(screenshot).toMatchSnapshot("handles-canvas-A.png");
   });
 });

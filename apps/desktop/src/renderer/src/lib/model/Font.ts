@@ -473,6 +473,11 @@ export class Font {
     return this.#committedFontCell;
   }
 
+  /** Glyph roots whose resident atlas pages no longer match the committed font. */
+  get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
+    return this.#store.invalidGlyphIdsCell;
+  }
+
   /** Returns the layer owning a point id, or null when unknown. */
   layerIdForPoint(pointId: PointId): LayerId | null {
     return this.#store.layerIdForPoint(pointId);

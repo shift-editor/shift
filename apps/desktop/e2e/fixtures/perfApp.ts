@@ -11,11 +11,17 @@ import {
   type Page,
   type ElectronApplication,
 } from "@playwright/test";
+import fs from "node:fs";
+import os from "node:os";
 import * as path from "path";
+import { once } from "events";
+import type { Unicode } from "@shift/types";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
-const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
+const FONT_PATH =
+  process.env.SHIFT_E2E_FONT_PATH ??
+  path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
 
 const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 800;
@@ -30,41 +36,71 @@ type PerfFixtures = {
  */
 export const test = base.extend<PerfFixtures>({
   electronApp: async ({}, use) => {
-    const app = await electron.launch({
-      args: [MAIN_JS],
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        // No LIBGL_ALWAYS_SOFTWARE — use real GPU for perf measurements.
-      },
-    });
+    const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
+    const userDataDir = path.join(testRoot, "user-data");
+    const workspaceDirectory = path.join(testRoot, "workspace");
+    let workspacePath: string;
+    let app: ElectronApplication | null = null;
 
-    await app.evaluate(
-      async ({ BrowserWindow }, { w, h }) => {
-        const win = BrowserWindow.getAllWindows()[0];
-        if (win) {
-          win.unmaximize();
-          win.setSize(w, h);
-          win.center();
-        }
-      },
-      { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-    );
+    if (path.extname(FONT_PATH) === ".designspace") {
+      fs.cpSync(path.dirname(FONT_PATH), workspaceDirectory, { recursive: true });
+      workspacePath = path.join(workspaceDirectory, path.basename(FONT_PATH));
+    } else {
+      fs.mkdirSync(workspaceDirectory, { recursive: true });
+      workspacePath = path.join(workspaceDirectory, path.basename(FONT_PATH));
+      if (fs.statSync(FONT_PATH).isDirectory()) {
+        fs.cpSync(FONT_PATH, workspacePath, { recursive: true });
+      } else {
+        fs.copyFileSync(FONT_PATH, workspacePath, fs.constants.COPYFILE_FICLONE);
+      }
+    }
 
-    await use(app);
+    try {
+      app = await electron.launch({
+        args: [MAIN_JS, `--user-data-dir=${userDataDir}`],
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          SHIFT_E2E_FONT_PATH: workspacePath,
+          // No LIBGL_ALWAYS_SOFTWARE — use real GPU for perf measurements.
+        },
+      });
 
-    // Clear dirty state to prevent native save dialog from blocking app.close().
-    const page = await app.firstWindow();
-    await page.evaluate(() => {
-      window.electronAPI?.setDocumentDirty(false);
-    });
+      await app.firstWindow();
+      const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
+        electronApp.getPath("userData"),
+      );
+      if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
+        throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
+      }
+      await app.evaluate(
+        async ({ BrowserWindow }, { w, h }) => {
+          const win = BrowserWindow.getAllWindows()[0];
+          if (win) {
+            win.unmaximize();
+            win.setSize(w, h);
+            win.center();
+          }
+        },
+        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+      );
 
-    await app.close();
+      await use(app);
+    } finally {
+      const childProcess = app?.process();
+      if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
+        const exited = once(childProcess, "exit");
+        childProcess.kill("SIGKILL");
+        await exited;
+      }
+      fs.rmSync(testRoot, { recursive: true, force: true });
+    }
   },
 
   page: async ({ electronApp }, use) => {
     const page = await electronApp.firstWindow();
     await page.waitForLoadState("domcontentloaded");
+    await page.waitForURL(/#\/home/, { timeout: 20_000 });
 
     // Auto-dismiss native save dialogs that interrupt tests.
     page.on("dialog", (dialog) => dialog.dismiss());
@@ -76,25 +112,33 @@ export const test = base.extend<PerfFixtures>({
 export { expect } from "@playwright/test";
 
 /**
- * Open MutatorSans and wait for the home view.
- */
-export async function loadFont(electronApp: ElectronApplication, page: Page): Promise<void> {
-  await electronApp.evaluate(async ({ BrowserWindow }, fontPath) => {
-    const win = BrowserWindow.getAllWindows()[0];
-    win.webContents.send("external:open-font", fontPath);
-  }, FONT_PATH);
-
-  await page.waitForURL(/#\/home/, { timeout: 10_000 });
-  await page.waitForTimeout(500);
-}
-
-/**
  * Navigate to the editor for a glyph and wait for the canvas.
  */
 export async function navigateToEditor(page: Page, hexCodepoint: string): Promise<void> {
-  await page.evaluate((hex) => {
-    window.location.hash = `#/editor/${hex}`;
-  }, hexCodepoint);
+  const unicode = Number.parseInt(hexCodepoint, 16) as Unicode;
+  await page.waitForFunction(
+    (codepoint) => {
+      const font = window.shift?.font;
+      if (!font) return false;
+
+      const handle = font.glyphHandleForUnicode(codepoint as Unicode);
+      return font.recordForName(handle.name) !== null;
+    },
+    unicode,
+    { timeout: 20_000 },
+  );
+
+  await page.evaluate(async (codepoint) => {
+    const workspace = window.shift;
+    if (!workspace) throw new Error("Expected workspace");
+
+    const handle = workspace.font.glyphHandleForUnicode(codepoint as Unicode);
+    const record = workspace.font.recordForName(handle.name);
+    if (!record) throw new Error(`No glyph found for U+${codepoint.toString(16)}`);
+
+    await workspace.font.loadGlyph(record.id);
+    window.location.hash = `#/editor/${encodeURIComponent(record.id)}`;
+  }, unicode);
 
   await page.waitForSelector("#scene-canvas", { timeout: 10_000 });
   await page.waitForTimeout(1000);

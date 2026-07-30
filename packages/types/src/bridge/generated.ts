@@ -92,6 +92,13 @@ export interface BridgeApi {
    */
   prepareSlugAtlas(alignment: number): SlugAtlas
   /**
+   * Builds one ordered root-glyph page plus its transitive component geometry.
+   *
+   * The page uses the same packed layout as a complete atlas, but excludes
+   * unrelated roots so the renderer can make its viewport resident first.
+   */
+  prepareSlugAtlasPage(glyphIds: Array<GlyphId>, alignment: number): SlugAtlas
+  /**
    * Streams the prepared generation with native Web Stream backpressure.
    *
    * A capacity-one channel bounds temporary memory to one upload chunk. The
@@ -99,8 +106,12 @@ export interface BridgeApi {
    * completes, so GPU residency retains no second atlas-sized CPU copy.
    */
   streamSlugAtlas(generation: number, maximumLength: number): NativeReadableStream<Uint8Array>
+  /** Streams one prepared page with the complete-atlas backpressure contract. */
+  streamSlugAtlasPage(generation: number, maximumLength: number): NativeReadableStream<Uint8Array>
   /** Releases a prepared generation after adapter rejection or initialization failure. */
   discardSlugAtlas(generation: number): void
+  /** Releases one rejected prepared page. */
+  discardSlugAtlasPage(generation: number): void
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>

@@ -121,11 +121,20 @@ export class WorkspaceHost {
         this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location)),
       "workspace.slugAtlasPrepare": ({ alignment }) =>
         this.#serialize(() => this.#bridge.prepareSlugAtlas(alignment)),
+      "workspace.slugAtlasPagePrepare": ({ glyphIds, alignment }) =>
+        this.#serialize(() => this.#bridge.prepareSlugAtlasPage(glyphIds, alignment)),
       "workspace.slugAtlasStream": ({ generation, maximumLength }, context) =>
         this.#serialize(() => this.#streamSlugAtlas(generation, maximumLength, context.ports)),
+      "workspace.slugAtlasPageStream": ({ generation, maximumLength }, context) =>
+        this.#serialize(() => this.#streamSlugAtlasPage(generation, maximumLength, context.ports)),
       "workspace.slugAtlasDiscard": ({ generation }) =>
         this.#serialize(() => {
           this.#bridge.discardSlugAtlas(generation);
+          return null;
+        }),
+      "workspace.slugAtlasPageDiscard": ({ generation }) =>
+        this.#serialize(() => {
+          this.#bridge.discardSlugAtlasPage(generation);
           return null;
         }),
       "workspace.mapLocation": (location) =>
@@ -144,6 +153,24 @@ export class WorkspaceHost {
     const stream = new PortByteStream(this.#portTransport(port));
     try {
       await stream.send(this.#bridge.streamSlugAtlas(generation, maximumLength));
+      return null;
+    } finally {
+      stream.close();
+    }
+  }
+
+  async #streamSlugAtlasPage(
+    generation: number,
+    maximumLength: number,
+    ports: readonly unknown[],
+  ): Promise<null> {
+    const port = ports.at(0);
+    if (!port)
+      throw new Error("workspace.slugAtlasPageStream requires a transferred response port");
+
+    const stream = new PortByteStream(this.#portTransport(port));
+    try {
+      await stream.send(this.#bridge.streamSlugAtlasPage(generation, maximumLength));
       return null;
     } finally {
       stream.close();

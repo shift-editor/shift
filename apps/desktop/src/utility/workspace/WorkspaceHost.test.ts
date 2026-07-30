@@ -117,6 +117,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     sync: SyncChannel,
     generation: number,
     maximumLength: number,
+    page = false,
   ): Promise<Uint8Array> {
     const lane = new MessageChannel();
     const chunks: Uint8Array[] = [];
@@ -161,7 +162,11 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       };
     });
     lane.port2.start();
-    await sync.call("workspace.slugAtlasStream", { generation, maximumLength }, [lane.port1]);
+    if (page) {
+      await sync.call("workspace.slugAtlasPageStream", { generation, maximumLength }, [lane.port1]);
+    } else {
+      await sync.call("workspace.slugAtlasStream", { generation, maximumLength }, [lane.port1]);
+    }
     const totalLength = await complete;
     lane.port2.close();
 
@@ -234,6 +239,30 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(bytes.byteLength).toBe(atlas.layout.totalLength);
     expect(atlas.layout.glyphs.length).toBe(32);
     expect(atlas.glyphs.map((entry) => entry.glyphId)).toEqual([glyph.glyphId]);
+  });
+
+  it("streams only requested roots in one authored Slug page", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const first = createGlyphALayer(snapshot.sources[0]!.id);
+    const secondGlyphId = mintGlyphId();
+    const secondLayerId = mintLayerId();
+    await applyWorkspace(sync, {
+      intents: [
+        ...first.intents,
+        createGlyph("B" as GlyphName, 66 as Unicode, secondGlyphId),
+        createGlyphLayer(secondGlyphId, snapshot.sources[0]!.id, secondLayerId),
+      ],
+    });
+
+    const page = await sync.call("workspace.slugAtlasPagePrepare", {
+      glyphIds: [secondGlyphId],
+      alignment: 256,
+    });
+    const bytes = await streamSlugAtlas(sync, page.generation, 64, true);
+
+    expect(bytes.byteLength).toBe(page.layout.totalLength);
+    expect(page.glyphs.map((entry) => entry.glyphId)).toEqual([secondGlyphId]);
   });
 
   it("cancels native Slug production when the renderer rejects a chunk", async () => {

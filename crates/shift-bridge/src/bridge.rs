@@ -14,7 +14,8 @@ use shift_font::{
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
 };
 use shift_slug::{
-  build_authored_atlas, AuthoredAtlas, Section as SlugSection, VariableAtlas, VariableLayout,
+  build_authored_atlas, build_authored_atlas_page, AuthoredAtlas, Section as SlugSection,
+  VariableAtlas, VariableLayout,
 };
 use shift_wire::{
   bridges::napi::{
@@ -842,6 +843,37 @@ impl Bridge {
     Ok(result)
   }
 
+  /// Builds one ordered root-glyph page plus its transitive component geometry.
+  ///
+  /// The page uses the same packed layout as a complete atlas, but excludes
+  /// unrelated roots so the renderer can make its viewport resident first.
+  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, alignment: number")]
+  pub fn prepare_slug_atlas_page(
+    &mut self,
+    glyph_ids: Vec<String>,
+    alignment: u32,
+  ) -> errors::Result<NapiSlugAtlas> {
+    let glyph_ids = glyph_ids
+      .iter()
+      .map(|glyph_id| parse::<GlyphId>(glyph_id))
+      .collect::<errors::Result<Vec<_>>>()?;
+    let authored =
+      build_authored_atlas_page(self.font()?, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
+    let layout = authored.atlas().layout(alignment as usize)?;
+    self.slug_generation = self
+      .slug_generation
+      .checked_add(1)
+      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    let generation = self.slug_generation;
+    let result = napi_slug_atlas(generation, &authored, layout)?;
+    self.slug_atlas = Some(SlugAtlasGeneration {
+      generation,
+      alignment: alignment as usize,
+      atlas: authored.into_atlas(),
+    });
+    Ok(result)
+  }
+
   /// Streams the prepared generation with native Web Stream backpressure.
   ///
   /// A capacity-one channel bounds temporary memory to one upload chunk. The
@@ -900,6 +932,17 @@ impl Bridge {
     )
   }
 
+  /// Streams one prepared page with the complete-atlas backpressure contract.
+  #[napi]
+  pub fn stream_slug_atlas_page(
+    &mut self,
+    env: &Env,
+    generation: u32,
+    maximum_length: u32,
+  ) -> Result<ReadableStream<'_, BufferSlice<'_>>> {
+    self.stream_slug_atlas(env, generation, maximum_length)
+  }
+
   /// Releases a prepared generation after adapter rejection or initialization failure.
   #[napi]
   pub fn discard_slug_atlas(&mut self, generation: u32) {
@@ -910,6 +953,12 @@ impl Bridge {
     {
       self.slug_atlas = None;
     }
+  }
+
+  /// Releases one rejected prepared page.
+  #[napi]
+  pub fn discard_slug_atlas_page(&mut self, generation: u32) {
+    self.discard_slug_atlas(generation);
   }
 
   #[napi]

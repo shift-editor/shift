@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { GlyphCatalogCanvas } from "./GlyphCatalogCanvas";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
@@ -11,6 +11,9 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 /** Coordinates the native scroll viewport and its two canvas-owned catalog layers. */
 export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  const catalogActive = useLocation().pathname === "/home";
   const editor = useEditor();
   const font = editor.font;
   const { filteredGlyphs } = useGlyphCatalog();
@@ -77,12 +80,12 @@ export const GlyphGrid = memo(function GlyphGrid() {
     async (glyph: GlyphCatalogItem): Promise<void> => {
       try {
         await font.loadGlyph(glyph.id);
-        navigate(`/editor/${encodeURIComponent(glyph.id)}`);
+        navigateRef.current(`/editor/${encodeURIComponent(glyph.id)}`);
       } catch (error) {
         console.error("failed to load Glyph", error);
       }
     },
-    [font, navigate],
+    [font],
   );
 
   return (
@@ -101,7 +104,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
         axes={axes}
         metrics={metrics}
         sourceId={sourceId}
-        visible={catalogReady}
+        active={catalogActive}
         openGlyph={handleCellClick}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}

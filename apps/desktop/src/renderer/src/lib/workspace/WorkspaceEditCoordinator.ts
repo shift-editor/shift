@@ -195,6 +195,11 @@ export class WorkspaceEditCoordinator {
     return this.#withFlush(() => this.#workspace.prepareSlugAtlas(alignment));
   }
 
+  /** Builds one ordered root-glyph page behind every pending edit. */
+  prepareSlugAtlasPage(glyphIds: readonly GlyphId[], alignment: number): Promise<SlugAtlas> {
+    return this.#withFlush(() => this.#workspace.prepareSlugAtlasPage(glyphIds, alignment));
+  }
+
   /** Streams a prepared generation without constructing a contiguous JS atlas. */
   streamSlugAtlas(
     generation: number,
@@ -204,9 +209,25 @@ export class WorkspaceEditCoordinator {
     return this.#withFlush(() => this.#workspace.streamSlugAtlas(generation, maximumLength, write));
   }
 
+  /** Streams one prepared page without constructing a contiguous JS atlas. */
+  streamSlugAtlasPage(
+    generation: number,
+    maximumLength: number,
+    write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
+  ): Promise<number> {
+    return this.#withFlush(() =>
+      this.#workspace.streamSlugAtlasPage(generation, maximumLength, write),
+    );
+  }
+
   /** Releases native atlas residency after device/limit rejection. */
   discardSlugAtlas(generation: number): Promise<void> {
     return this.#withFlush(() => this.#workspace.discardSlugAtlas(generation));
+  }
+
+  /** Releases one rejected prepared page. */
+  discardSlugAtlasPage(generation: number): Promise<void> {
+    return this.#withFlush(() => this.#workspace.discardSlugAtlasPage(generation));
   }
 
   /**

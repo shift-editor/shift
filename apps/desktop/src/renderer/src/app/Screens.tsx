@@ -84,14 +84,20 @@ const WorkspaceScreens = () => {
 
   // Preserve the resident catalog atlas across screen navigation. Route visibility
   // must not own the WebGPU device or trigger another complete atlas upload.
-  const catalogVisible = location.pathname === "/home";
+  const catalogActive = location.pathname === "/home";
 
   return (
     <SettingsNavigationProvider>
-      <div hidden={!catalogVisible}>
+      <div
+        aria-hidden={!catalogActive}
+        className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
+        inert={!catalogActive}
+      >
         <Home />
       </div>
-      <Outlet />
+      <div className={catalogActive ? undefined : "relative z-10"}>
+        <Outlet />
+      </div>
     </SettingsNavigationProvider>
   );
 };

@@ -30,7 +30,11 @@ export default defineConfig({
   projects: [
     {
       name: "visual",
-      testIgnore: /perf\.spec/,
+      testIgnore: /(?:gpu|perf)\.spec/,
+    },
+    {
+      name: "gpu",
+      testMatch: /gpu\.spec/,
     },
     {
       name: "perf",

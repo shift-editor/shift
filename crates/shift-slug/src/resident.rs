@@ -1,4 +1,6 @@
-use shift_font::{Font, GlyphId};
+use std::collections::HashSet;
+
+use shift_font::{CoreError, Font, GlyphId, GlyphProjection};
 
 use crate::{
     AuthoredAtlasBuilder, AuthoredGlyph, AuthoredSlugError, AuthoredWeightSet, SlugError,
@@ -17,14 +19,14 @@ pub struct AuthoredAtlasGlyph {
 /// The atlas owns only rendering data. Glyph identity and exact-source selection
 /// remain explicit so a consumer never relies on authored collection order.
 #[derive(Clone, Debug, PartialEq)]
-pub struct AuthoredAtlas {
+pub struct AuthoredAtlasPage {
     atlas: VariableAtlas,
     glyphs: Vec<AuthoredAtlasGlyph>,
     weight_sets: Vec<AuthoredWeightSet>,
     weight_count: u32,
 }
 
-impl AuthoredAtlas {
+impl AuthoredAtlasPage {
     pub fn atlas(&self) -> &VariableAtlas {
         &self.atlas
     }
@@ -47,21 +49,34 @@ impl AuthoredAtlas {
     }
 }
 
+/// A complete-font atlas is one page containing every authored root glyph.
+pub type AuthoredAtlas = AuthoredAtlasPage;
+
 /// Compiles every authored font glyph into one resident Slug generation.
-///
-/// Interpolation bases are deduplicated over the complete font before any glyph
-/// is appended. This guarantees that roots and transitive components can use
-/// independent bases while sharing one small per-frame weight buffer.
 pub fn build_authored_atlas(
     font: &Font,
     band_count: u32,
 ) -> Result<AuthoredAtlas, AuthoredSlugError> {
-    let (weight_sets, weight_count) = collect_weight_sets(font)?;
-    let mut builder = AuthoredAtlasBuilder::new(band_count)?;
-    let mut glyphs = Vec::new();
+    let glyph_ids = font.glyphs().map(|glyph| glyph.id()).collect::<Vec<_>>();
+    build_authored_atlas_page(font, &glyph_ids, band_count)
+}
 
-    for glyph in font.glyphs() {
-        let glyph_id = glyph.id();
+/// Compiles an ordered root-glyph batch and its transitive component geometry.
+///
+/// Root identities are deduplicated in caller order. Interpolation bases are
+/// collected only from those roots and their component closures, so viewport
+/// work does not scan or compile unrelated glyphs.
+pub fn build_authored_atlas_page(
+    font: &Font,
+    glyph_ids: &[GlyphId],
+    band_count: u32,
+) -> Result<AuthoredAtlasPage, AuthoredSlugError> {
+    let glyph_ids = unique_glyph_ids(font, glyph_ids)?;
+    let (weight_sets, weight_count) = collect_weight_sets(font, &glyph_ids)?;
+    let mut builder = AuthoredAtlasBuilder::new(band_count)?;
+    let mut glyphs = Vec::with_capacity(glyph_ids.len());
+
+    for glyph_id in glyph_ids {
         let authored = match font.glyph_projection(&glyph_id)? {
             Some(projection) => builder.add_glyph(font, &projection, &weight_sets, 0)?,
             None => builder.add_empty_glyph(0)?,
@@ -69,7 +84,7 @@ pub fn build_authored_atlas(
         glyphs.push(AuthoredAtlasGlyph { glyph_id, authored });
     }
 
-    Ok(AuthoredAtlas {
+    Ok(AuthoredAtlasPage {
         atlas: builder.finish(),
         glyphs,
         weight_sets,
@@ -77,14 +92,39 @@ pub fn build_authored_atlas(
     })
 }
 
-fn collect_weight_sets(font: &Font) -> Result<(Vec<AuthoredWeightSet>, u32), AuthoredSlugError> {
-    let mut sets = Vec::new();
-    let mut next_weight_index = 1_u32;
+fn unique_glyph_ids(font: &Font, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, AuthoredSlugError> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::with_capacity(glyph_ids.len());
 
-    for glyph in font.glyphs() {
-        let Some(projection) = font.glyph_projection(&glyph.id())? else {
+    for glyph_id in glyph_ids {
+        if font.glyph(glyph_id.clone()).is_none() {
+            return Err(CoreError::GlyphNotFound(glyph_id.clone()).into());
+        }
+        if seen.insert(glyph_id.clone()) {
+            unique.push(glyph_id.clone());
+        }
+    }
+
+    Ok(unique)
+}
+
+fn collect_weight_sets(
+    font: &Font,
+    glyph_ids: &[GlyphId],
+) -> Result<(Vec<AuthoredWeightSet>, u32), AuthoredSlugError> {
+    let mut projections = Vec::new();
+    let mut seen = HashSet::new();
+
+    for glyph_id in glyph_ids {
+        let Some(root) = font.glyph_projection(glyph_id)? else {
             continue;
         };
+        collect_projection(font, root, &mut seen, &mut projections)?;
+    }
+
+    let mut sets = Vec::new();
+    let mut next_weight_index = 1_u32;
+    for projection in projections {
         let Some(interpolation) = projection.interpolation() else {
             continue;
         };
@@ -108,4 +148,26 @@ fn collect_weight_sets(font: &Font) -> Result<(Vec<AuthoredWeightSet>, u32), Aut
     }
 
     Ok((sets, next_weight_index))
+}
+
+fn collect_projection(
+    font: &Font,
+    root: GlyphProjection,
+    seen: &mut HashSet<GlyphId>,
+    projections: &mut Vec<GlyphProjection>,
+) -> Result<(), AuthoredSlugError> {
+    if !seen.insert(root.glyph_id()) {
+        return Ok(());
+    }
+
+    let component_glyph_ids = root.component_glyph_ids().to_vec();
+    projections.push(root);
+    for glyph_id in component_glyph_ids {
+        let projection = font
+            .glyph_projection(&glyph_id)?
+            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        collect_projection(font, projection, seen, projections)?;
+    }
+
+    Ok(())
 }
