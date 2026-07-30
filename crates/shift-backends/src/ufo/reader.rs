@@ -4,9 +4,9 @@ use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
-    Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Guideline,
-    KerningData, KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType,
-    SourceId, Transform,
+    Anchor, Component, Contour, FeatureData, Font, GlyphId, GlyphLayer, Guideline, KerningData,
+    KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType, SourceId,
+    Transform,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -184,11 +184,11 @@ impl UfoReader {
         LibData::from_map(data)
     }
 
-    fn convert_glyph_layer(
+    fn convert_layer_geometry(
         norad_glyph: &norad::Glyph,
         layer_id: LayerId,
         source_id: SourceId,
-    ) -> (Glyph, Vec<PendingComponent>) {
+    ) -> (GlyphLayer, Vec<PendingComponent>) {
         let mut glyph_layer = GlyphLayer::with_width(layer_id, source_id, norad_glyph.width);
         let mut pending_components = Vec::new();
         if norad_glyph.height != 0.0 {
@@ -215,17 +215,7 @@ impl UfoReader {
             *glyph_layer.lib_mut() = Self::convert_lib(&norad_glyph.lib);
         }
 
-        let mut glyph = Glyph::new(norad_glyph.name().to_string());
-        for codepoint in norad_glyph.codepoints.iter() {
-            glyph.add_unicode(u32::from(codepoint));
-        }
-
-        if !norad_glyph.lib.is_empty() {
-            *glyph.lib_mut() = Self::convert_lib(&norad_glyph.lib);
-        }
-
-        glyph.set_layer(glyph_layer);
-        (glyph, pending_components)
+        (glyph_layer, pending_components)
     }
 
     pub(crate) fn convert_stream_layer(
@@ -234,15 +224,8 @@ impl UfoReader {
         source_id: SourceId,
         glyph_ids: &HashMap<String, GlyphId>,
     ) -> FormatBackendResult<GlyphLayer> {
-        let (glyph, pending_components) =
-            Self::convert_glyph_layer(norad_glyph, layer_id, source_id);
-        let mut layer = glyph
-            .layers()
-            .values()
-            .next()
-            .ok_or_else(|| FormatBackendError::Ufo("converted glyph is missing its layer".into()))?
-            .as_ref()
-            .clone();
+        let (mut layer, pending_components) =
+            Self::convert_layer_geometry(norad_glyph, layer_id, source_id);
         for pending in pending_components {
             let base_glyph_id = glyph_ids.get(&pending.base_glyph_name).ok_or_else(|| {
                 FormatBackendError::Ufo(format!(

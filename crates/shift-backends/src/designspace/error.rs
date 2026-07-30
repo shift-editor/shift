@@ -21,9 +21,6 @@ pub enum DesignspaceError {
     #[error("designspace has no source at the mapped default location")]
     MissingDefaultSource,
 
-    #[error("layer '{layer}' not found in '{filename}'")]
-    MissingLayer { layer: String, filename: String },
-
     #[error("failed to read '{path}': {source}")]
     ReadFile {
         path: PathBuf,

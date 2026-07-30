@@ -6,7 +6,9 @@ use std::{
 
 use norad::designspace::DesignSpaceDocument;
 use rayon::prelude::*;
-use shift_font::{Axis, AxisId, Font, GlyphId, LayerId, Location, Source, SourceId};
+use shift_font::{
+    Axis, AxisId, Font, GlyphId, LayerId, Location, MetricDefinition, Source, SourceId,
+};
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
@@ -27,6 +29,14 @@ use super::{
 
 struct SourceDirectory {
     source_id: SourceId,
+    glyphs: BTreeMap<String, PathBuf>,
+}
+
+struct DesignspaceSourceMaterial {
+    index: usize,
+    style_name: Option<String>,
+    metric_definitions: Vec<MetricDefinition>,
+    metrics: Source,
     glyphs: BTreeMap<String, PathBuf>,
 }
 
@@ -73,6 +83,7 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
         .default_source()
         .cloned()
         .ok_or(DesignspaceError::NoSources)?;
+    let default_metric_definitions = header.metric_definitions().to_vec();
     header.clear_sources();
 
     if let Some(family_name) = &default_descriptor.familyname {
@@ -91,8 +102,12 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
         .map(|index| {
             let descriptor = &document.sources[index];
             let ufo_path = designspace_dir.join(&descriptor.filename);
-            let (style_name, imported_metrics) = if index == default_index {
-                (default_style_name.clone(), default_metrics.clone())
+            let (style_name, metric_definitions, metrics) = if index == default_index {
+                (
+                    default_style_name.clone(),
+                    default_metric_definitions.clone(),
+                    default_metrics.clone(),
+                )
             } else {
                 let ufo_header =
                     load_header(&ufo_path).map_err(|error| DesignspaceError::LoadUfo {
@@ -103,7 +118,11 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
                     .default_source()
                     .cloned()
                     .ok_or(DesignspaceError::NoSources)?;
-                (ufo_header.metadata().style_name.clone(), metrics)
+                (
+                    ufo_header.metadata().style_name.clone(),
+                    ufo_header.metric_definitions().to_vec(),
+                    metrics,
+                )
             };
             let glyphs =
                 read_glyph_paths(&ufo_path, descriptor.layer.as_deref()).map_err(|error| {
@@ -112,32 +131,30 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
                         source: Box::new(error),
                     }
                 })?;
-            Ok((index, style_name, imported_metrics, glyphs))
+            Ok(DesignspaceSourceMaterial {
+                index,
+                style_name,
+                metric_definitions,
+                metrics,
+                glyphs,
+            })
         })
         .collect::<DesignspaceResult<Vec<_>>>()?;
 
-    let mut source_names = HashSet::new();
-    let mut directories = Vec::with_capacity(document.sources.len());
-    for (index, style_name, imported_metrics, glyphs) in source_materials {
-        let descriptor = &document.sources[index];
-        let name = source_name(descriptor, style_name.as_deref(), &source_names, index);
-        source_names.insert(name.clone());
-        let location = location_from_dimensions(&descriptor.location, &document, header.axes());
-        let mut source = Source::with_filename(name, location, descriptor.filename.clone());
-        source.set_layer_name(descriptor.layer.clone());
-        let metric_definitions = header.metric_definitions().to_vec();
-        copy_source_metrics(
-            &metric_definitions,
-            &imported_metrics,
-            &metric_definitions,
-            &mut source,
-        );
-        let source_id = header.add_source(source);
-        if index == default_index {
-            header.set_default_source_id(source_id.clone());
-        }
-        directories.push(SourceDirectory { source_id, glyphs });
-    }
+    let axes = header.axes().to_vec();
+    let directories = register_designspace_sources(
+        &mut header,
+        source_materials,
+        default_index,
+        |index, style_name, source_names| {
+            let descriptor = &document.sources[index];
+            let name = source_name(descriptor, style_name, source_names, index);
+            let location = location_from_dimensions(&descriptor.location, &document, &axes);
+            let mut source = Source::with_filename(name, location, descriptor.filename.clone());
+            source.set_layer_name(descriptor.layer.clone());
+            source
+        },
+    );
 
     let (glyph_ids, glyphs) = build_glyph_directory(&directories);
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
@@ -211,39 +228,66 @@ fn stream_axisless_designspace(
                         source: Box::new(error),
                     }
                 })?;
-            Ok((
+            Ok(DesignspaceSourceMaterial {
                 index,
                 style_name,
                 metric_definitions,
-                imported_metrics,
+                metrics: imported_metrics,
                 glyphs,
-            ))
+            })
         })
         .collect::<DesignspaceResult<Vec<_>>>()?;
 
-    let mut source_names = HashSet::new();
-    let mut directories = Vec::with_capacity(sources.len());
-    for (index, style_name, metric_definitions, imported_metrics, glyphs) in source_materials {
-        let descriptor = &sources[index];
-        let name = axisless_source_name(descriptor, style_name.as_deref(), &source_names, index);
-        source_names.insert(name.clone());
-        let mut source = Source::with_filename(name, Location::new(), descriptor.filename.clone());
-        source.set_layer_name(descriptor.layer.clone());
-        copy_source_metrics(
-            &metric_definitions,
-            &imported_metrics,
-            header.metric_definitions(),
-            &mut source,
-        );
-        let source_id = header.add_source(source);
-        if index == 0 {
-            header.set_default_source_id(source_id.clone());
-        }
-        directories.push(SourceDirectory { source_id, glyphs });
-    }
+    let directories = register_designspace_sources(
+        &mut header,
+        source_materials,
+        0,
+        |index, style_name, source_names| {
+            let descriptor = &sources[index];
+            let name = axisless_source_name(descriptor, style_name, source_names, index);
+            let mut source =
+                Source::with_filename(name, Location::new(), descriptor.filename.clone());
+            source.set_layer_name(descriptor.layer.clone());
+            source
+        },
+    );
 
     let (glyph_ids, glyphs) = build_glyph_directory(&directories);
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
+}
+
+fn register_designspace_sources(
+    header: &mut Font,
+    source_materials: Vec<DesignspaceSourceMaterial>,
+    default_index: usize,
+    mut create_source: impl FnMut(usize, Option<&str>, &HashSet<String>) -> Source,
+) -> Vec<SourceDirectory> {
+    let metric_definitions = header.metric_definitions().to_vec();
+    let mut source_names = HashSet::new();
+    let mut directories = Vec::with_capacity(source_materials.len());
+    for material in source_materials {
+        let mut source = create_source(
+            material.index,
+            material.style_name.as_deref(),
+            &source_names,
+        );
+        source_names.insert(source.name().to_string());
+        copy_source_metrics(
+            &material.metric_definitions,
+            &material.metrics,
+            &metric_definitions,
+            &mut source,
+        );
+        let source_id = header.add_source(source);
+        if material.index == default_index {
+            header.set_default_source_id(source_id.clone());
+        }
+        directories.push(SourceDirectory {
+            source_id,
+            glyphs: material.glyphs,
+        });
+    }
+    directories
 }
 
 fn add_axes(

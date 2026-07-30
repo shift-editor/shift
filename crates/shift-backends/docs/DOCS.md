@@ -28,7 +28,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** TrueType quadratic segments remain one `OffCurve` control plus one `QCurve` endpoint in the authored layer. Closing qcurve endpoints transfer their type to the wrapped start point. CFF cubic segments remain cubic. The bridge may project a qcurve endpoint as on-curve because clients infer the quadratic from its single control; canonical storage and source export retain the distinction. WHY: lifting every TrueType quadratic to cubic adds a point and derived coordinates to every segment, inflating canonical documents without adding information.
 
-**Architecture Invariant:** Designspace source locations are imported as complete design-space locations. An omitted source dimension resolves to that axis's user-space default mapped into design space; default-source selection compares against that same completed mapped location and never silently substitutes the first source. A `layer` attribute only selects where a source's outlines live and does not make it ineligible to be the default. WHY: these are the reference designspaceLib semantics, and mixing user defaults with design coordinates corrupts interpolation bases.
+**Architecture Invariant:** Designspace source locations are imported as complete design-space locations. An omitted source dimension resolves to that axis's user-space default mapped into design space; default-source selection compares against that same completed mapped location and never silently substitutes the first source. A `layer` attribute only selects where a source's outlines live and does not make it ineligible to be the default. Each source's standard metrics are translated from that UFO's metric identities into the Designspace header definitions. WHY: mixing user defaults with design coordinates corrupts interpolation bases, while looking up one UFO's metrics with another UFO's random IDs silently drops non-default master metrics.
 
 ## Codemap
 
@@ -80,7 +80,7 @@ src/
 
 **Point type mapping (read):** norad uses separate `Move`, `Line`, `Curve`, `OffCurve`, `QCurve` types. The IR collapses `Move`/`Line`/`Curve` into `OnCurve` and keeps `OffCurve` and `QCurve` distinct. On write, context (position in contour, open/closed, preceding point type) is used to reconstruct the correct norad variant.
 
-**Multi-layer support:** `UfoReader` iterates all norad layers. The `public.default` layer maps to the IR's default layer; other layers are added via `Font::add_layer`. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
+**Multi-layer support:** `UfoReader` publishes `public.default` first, then preserves the relative authored order of every other entry in `layercontents.plist`. The default layer maps to the IR's default layer; other layers are represented by layer sources. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
 
 **Binary variation metadata:** The TTF/OTF reader imports `fvar` axis definitions, hidden flags, and named instances into the Shift IR. The bounded path enumerates every `maxp` glyph ID, groups all `cmap` values by glyph, deterministically derives contour/point identities from emitted positions, and preserves TrueType quadratics instead of expanding them to cubic control pairs. Binary glyph geometry is still materialized only at the default variation location; recovering editable `gvar` sources is separate work.
 

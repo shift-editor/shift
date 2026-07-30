@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use shift_backends::font_loader::FontLoader;
 use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
@@ -10,6 +13,19 @@ fn fixtures_path() -> PathBuf {
         .parent()
         .unwrap()
         .join("fixtures")
+}
+
+fn copy_directory(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).unwrap();
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let destination_path = destination.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_directory(&entry.path(), &destination_path);
+        } else {
+            fs::copy(entry.path(), destination_path).unwrap();
+        }
+    }
 }
 
 fn mutatorsans_ufo_path() -> PathBuf {
@@ -233,6 +249,70 @@ fn streams_binary_ufo_and_designspace_without_eager_glyphs() {
             .map(Glyph::name)
             .collect::<std::collections::BTreeSet<_>>()
     );
+}
+
+#[test]
+fn ufo_import_keeps_nondefault_layer_order_when_default_was_not_first() {
+    let temp = tempfile::tempdir().unwrap();
+    let ufo_path = temp.path().join("Reordered.ufo");
+    copy_directory(&mutatorsans_ufo_path(), &ufo_path);
+    let layercontents_path = ufo_path.join("layercontents.plist");
+    let mut layercontents = plist::Value::from_file(&layercontents_path).unwrap();
+    let layers = layercontents.as_array_mut().unwrap();
+    let default = layers.remove(0);
+    layers.insert(2, default);
+    layercontents.to_file_xml(&layercontents_path).unwrap();
+
+    let font = load_font(&ufo_path);
+    let source_names = font
+        .sources()
+        .iter()
+        .map(|source| source.name().to_string())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        &source_names[..3],
+        &["Regular", "support", "support.crossbar"]
+    );
+}
+
+#[test]
+fn streaming_batches_preserve_published_directory_order() {
+    for path in [
+        mutatorsans_ttf_path(),
+        mutatorsans_ufo_path(),
+        mutatorsans_designspace_path(),
+    ] {
+        let mut import = FontLoader::new()
+            .stream_font(path.to_str().unwrap())
+            .unwrap();
+        let expected = import
+            .directory()
+            .into_iter()
+            .map(|entry| (entry.glyph_id, entry.name))
+            .collect::<Vec<_>>();
+        let mut actual = Vec::new();
+        loop {
+            let batch = import
+                .next_batch(shift_backends::ImportBatchLimit::new(7, 20))
+                .unwrap();
+            if batch.is_empty() {
+                break;
+            }
+            actual.extend(
+                batch
+                    .into_iter()
+                    .map(|glyph| (glyph.id(), glyph.glyph_name().clone())),
+            );
+        }
+
+        assert_eq!(
+            actual,
+            expected,
+            "stream order changed for {}",
+            path.display()
+        );
+    }
 }
 
 #[test]
@@ -518,6 +598,20 @@ fn loads_designspace_sources_axes_and_default_metadata() {
     assert_eq!(font.sources()[0].location().get(&width_axis_id), Some(0.0));
     assert_eq!(font.sources()[0].location().get(&weight_axis_id), Some(0.0));
     assert!(font.sources()[0].filename().is_some());
+    let bold_condensed = font
+        .sources()
+        .iter()
+        .find(|source| {
+            source.filename() == Some("MutatorSansBoldCondensed.ufo")
+                && source.layer_name().is_none()
+        })
+        .expect("non-default Bold Condensed master should be imported");
+    assert_eq!(
+        font.metric_value(bold_condensed.id(), MetricKind::Ascender)
+            .expect("non-default master ascender should survive import")
+            .position,
+        800.0
+    );
     assert_eq!(font.named_instances().len(), 14);
     let medium_wide = font
         .named_instances()

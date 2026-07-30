@@ -40,7 +40,8 @@ fn load_layer_directories(
         .iter()
         .position(|(_, path)| path == Path::new("glyphs"))
         .ok_or_else(|| FormatBackendError::Ufo("UFO is missing its default glyphs layer".into()))?;
-    layer_paths.rotate_left(default_index);
+    let default_layer = layer_paths.remove(default_index);
+    layer_paths.insert(0, default_layer);
 
     let mut layers = Vec::with_capacity(layer_paths.len());
     for (index, (name, relative_path)) in layer_paths.into_iter().enumerate() {
