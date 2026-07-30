@@ -72,15 +72,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install toolchain
         run: rustup show
@@ -91,7 +90,7 @@ jobs:
 
       - name: Cache node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -105,7 +104,7 @@ jobs:
 
       - name: Cache native module binary
         id: native-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: crates/shift-bridge/*.node
           key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
@@ -123,16 +122,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: true
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install toolchain
         run: rustup show
@@ -141,9 +139,9 @@ jobs:
         with:
           shared-key: shift-rust-macos
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -155,9 +153,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Cache Playwright browsers
+      - name: Save node_modules
+        if: steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: ${{ steps.modules-cache.outputs.cache-primary-key }}
+
+      - name: Restore Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/Library/Caches/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/@playwright/test/package.json') }}
@@ -166,9 +175,16 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @shift/desktop exec playwright install
 
-      - name: Cache native module binary
+      - name: Save Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
+
+      - name: Restore native module binary
         id: native-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v6
         with:
           path: crates/shift-bridge/*.node
           key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
@@ -176,6 +192,13 @@ jobs:
       - name: Build native module
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native
+
+      - name: Save native module binary
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: crates/shift-bridge/*.node
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Build E2E app
         run: pnpm --filter @shift/desktop build:e2e
@@ -185,7 +208,7 @@ jobs:
 
       - name: Upload Playwright failures
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-gpu-results
           path: apps/desktop/e2e/test-results/
@@ -193,7 +216,7 @@ jobs:
 
       - name: Upload perf results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: perf-results
           path: apps/desktop/e2e/perf-results/
