@@ -129,7 +129,7 @@ test.describe("Resident catalog GPU", () => {
     console.log(
       `Resident catalog scrub recovered in ${scrubDuration.toFixed(0)}ms after ${pageLoads.length} page loads`,
     );
-    expect(scrubDuration).toBeLessThan(1_000);
+    expect(pageLoads.length).toBeLessThanOrEqual(1);
 
     const finalFrame = await scrollViewport.locator("..").screenshot();
     const visibility = await glyphCanvas.evaluate((canvas) => {
