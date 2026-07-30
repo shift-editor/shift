@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate": "tsx scripts/generate.ts",
+    "generate": "git -C ../.. submodule update --init --recursive packages/glyph-info/vendor/GlyphsInfo && tsx scripts/generate.ts",
     "repl": "tsx scripts/repl.ts"
   },
   "dependencies": {

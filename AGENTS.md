@@ -52,14 +52,16 @@ export const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
 
 ## Package Manager
 
-This project uses **pnpm** (v9.0.0) as its package manager.
+This project uses **pnpm** (v11) as its package manager.
 
 ## Available Commands
 
 ### Development
 
-- `pnpm dev` - Start the Electron app in development mode
-- `pnpm dev:app` - Start with watch mode
+- `pnpm dev` - Start Electron/Vite with a debug Rust addon
+- `pnpm dev:release` - Start Electron/Vite with a release Rust addon for representative performance
+- `pnpm dev:watch` - Start with automatic debug Rust rebuilds
+- `pnpm dev:watch:release` - Start with automatic release Rust rebuilds
 
 ### Code Quality
 
