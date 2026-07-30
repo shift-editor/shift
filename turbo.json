@@ -6,14 +6,6 @@
       "outputs": ["dist/**", "index.js", "index.d.ts", "*.node"],
       "inputs": ["src/**", "package.json", "tsconfig.json"]
     },
-    "build:native": {
-      "inputs": ["crates/*/src/**", "crates/*/Cargo.toml", "Cargo.toml", "Cargo.lock"],
-      "outputs": [
-        "crates/shift-bridge/index.js",
-        "crates/shift-bridge/index.d.ts",
-        "crates/shift-bridge/*.node"
-      ]
-    },
     "shift-bridge#build": {
       "inputs": [
         "src/**",
@@ -34,11 +26,6 @@
         "$TURBO_ROOT$/scripts/generate-bridge-types.mjs"
       ],
       "outputs": ["src/bridge/generated.ts"]
-    },
-    "dev": {
-      "dependsOn": ["build:native"],
-      "cache": false,
-      "persistent": true
     },
     "typecheck": {
       "dependsOn": ["^build", "^generate:bridge-types", "generate:bridge-types"],
