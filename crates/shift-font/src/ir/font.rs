@@ -9,6 +9,7 @@ use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
 use crate::glyph::{Glyph, GlyphLayer};
 use crate::guideline::Guideline;
+use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::KerningData;
 use crate::lib_data::LibData;
 use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
@@ -286,7 +287,7 @@ impl FontIndex {
 
     fn validate_layer_replacements(
         &self,
-        replacements: &[(GlyphId, Arc<GlyphLayer>, GlyphLayer)],
+        replacements: &[(GlyphId, Arc<GlyphLayer>, Arc<GlyphLayer>)],
     ) -> CoreResult<ReplacementIdentities> {
         let mut removed_contour_ids = HashSet::new();
         let mut removed_point_ids = HashSet::new();
@@ -1191,9 +1192,37 @@ impl Font {
         Ok(())
     }
 
+    /// Replaces one layer's canonical numeric values without changing its structure or indexes.
+    ///
+    /// Value count and finiteness are validated before the layer changes.
+    pub fn replace_glyph_layer_values(
+        &mut self,
+        layer_id: LayerId,
+        values: &GlyphInterpolationValues,
+    ) -> CoreResult<()> {
+        let glyph_id = self
+            .glyph_id_by_layer(layer_id.clone())
+            .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+        let state = self.state_mut();
+        let glyph = state
+            .data
+            .glyphs
+            .get_mut(&glyph_id)
+            .expect("layer owner was resolved before mutation");
+        let layer = Arc::make_mut(glyph)
+            .layer_mut(layer_id.clone())
+            .ok_or(CoreError::LayerNotFound(layer_id))?;
+
+        layer.apply_interpolation_values(values)
+    }
+
     /// Atomically replaces existing layers after validating the complete batch.
     /// Uniquely owned fonts mutate in place; shared snapshots retain copy-on-write semantics.
-    pub fn replace_glyph_layers(&mut self, layers: Vec<GlyphLayer>) -> CoreResult<()> {
+    /// Already shared layer snapshots transfer without cloning their geometry.
+    pub fn replace_glyph_layers<L>(&mut self, layers: Vec<L>) -> CoreResult<()>
+    where
+        L: Into<Arc<GlyphLayer>>,
+    {
         if layers.is_empty() {
             return Ok(());
         }
@@ -1201,6 +1230,7 @@ impl Font {
         let mut seen_layer_ids = HashSet::with_capacity(layers.len());
         let mut replacements = Vec::with_capacity(layers.len());
         for layer in layers {
+            let layer = layer.into();
             let layer_id = layer.id();
             if !seen_layer_ids.insert(layer_id.clone()) {
                 return Err(CoreError::DuplicateLayerId(layer_id));
@@ -1854,6 +1884,74 @@ mod tests {
         .unwrap();
         assert_eq!(font.layer(first_layer_id).unwrap().width(), 700.0);
         assert_eq!(font.layer(second_layer_id).unwrap().width(), 800.0);
+    }
+
+    #[test]
+    fn glyph_layer_value_replacement_preserves_structure_indexes_and_snapshots() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let contour_id = ContourId::new();
+        let point_id = PointId::new();
+        let anchor_id = AnchorId::new();
+        let component_id = ComponentId::new();
+        let mut contour = Contour::with_id(contour_id.clone());
+        contour.add_point_with_id(point_id.clone(), 10.0, 20.0, PointType::OnCurve, false);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+        layer.add_contour(contour);
+        layer.add_anchor(Anchor::with_id(
+            anchor_id.clone(),
+            Some("top".to_string()),
+            30.0,
+            40.0,
+        ));
+        layer.add_component(Component::with_id(
+            component_id.clone(),
+            GlyphId::new(),
+            "base",
+            crate::DecomposedTransform::default(),
+        ));
+        let layer_id = layer.id();
+        let mut glyph = Glyph::new("A");
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+
+        let snapshot = font.clone();
+        let mut expected = font.layer(layer_id.clone()).unwrap().clone();
+        expected.set_width(700.0);
+        expected.contours_iter_mut().next().unwrap().points_mut()[0].set_position(50.0, 60.0);
+        expected
+            .anchors_iter_mut()
+            .next()
+            .unwrap()
+            .set_position(70.0, 80.0);
+        expected
+            .components_iter_mut()
+            .next()
+            .unwrap()
+            .translate(90.0, 100.0);
+        let values = expected.interpolation_values();
+
+        font.replace_glyph_layer_values(layer_id.clone(), &values)
+            .unwrap();
+
+        assert_eq!(font.layer(layer_id.clone()).unwrap(), &expected);
+        assert_ne!(snapshot.layer(layer_id.clone()).unwrap(), &expected);
+        assert!(font.has_contour_id(&contour_id));
+        assert!(font.has_point_id(&point_id));
+        assert!(font.has_anchor_id(&anchor_id));
+        assert!(font.index().component_ids.contains(&component_id));
+
+        let committed = font.layer(layer_id.clone()).unwrap().clone();
+        let mut invalid = values.into_vec();
+        invalid[0] = f64::NAN;
+        assert!(matches!(
+            font.replace_glyph_layer_values(
+                layer_id.clone(),
+                &GlyphInterpolationValues::new(invalid)
+            ),
+            Err(CoreError::InvalidPositionUpdateInput { .. })
+        ));
+        assert_eq!(font.layer(layer_id).unwrap(), &committed);
     }
 
     #[test]

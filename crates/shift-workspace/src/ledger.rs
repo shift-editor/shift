@@ -7,6 +7,8 @@
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
+use std::sync::Arc;
+
 use shift_font::{
     Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
     MetricDefinition, NamedInstance, Source, SourceId,
@@ -85,8 +87,11 @@ pub struct GlyphIdentity {
 
 #[derive(Clone)]
 pub struct LayerPair {
-    pub pre: GlyphLayer,
-    pub post: GlyphLayer,
+    pub pre: Arc<GlyphLayer>,
+    pub post: Arc<GlyphLayer>,
+    /// Fixed when the entry is created. Both replay directions preserve
+    /// topology when false and must publish complete structure when true.
+    pub structural: bool,
 }
 
 #[derive(Clone)]

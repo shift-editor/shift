@@ -11,6 +11,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** The `.shift` source package path and SQLite working store path are separate inputs.
 - **Architecture Invariant:** Package recovery policy is not ranked in Rust. `FontWorkspace` exposes package and working-store inspection primitives; the utility process owns binding and lifecycle decisions.
 - **Architecture Invariant:** The workspace is the domain object future bridge or utility-process transports should wrap.
+- **Architecture Invariant:** Ledger layer pairs retain the original touched-layer structural classification. Values-only undo/redo restores the target snapshot's canonical numeric values without rebuilding identity indexes or emitting structure; structural replay installs and emits the complete target structure in both directions.
 - **Architecture Invariant:** Ledger replay restores complete named-instance collections after axis topology so undo/redo never observes an instance against the wrong external-axis shape.
 - **Architecture Invariant:** Metadata ledger entries store complete pre/post snapshots and replay them independently of font metrics.
 - **Architecture Invariant:** Metric-definition ledger state replays before complete source snapshots so source metric IDs are always valid during undo and redo.

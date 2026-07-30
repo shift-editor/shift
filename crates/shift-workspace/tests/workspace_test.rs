@@ -1394,19 +1394,39 @@ fn set_contour_closed_undo_redo_restores_layer() {
 }
 
 #[test]
-fn move_points_undo_redo_restores_layer() {
+fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
     let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let pre = workspace.font().layer(layer_id.clone()).unwrap().clone();
 
-    assert_layer_undo_redo(
-        &mut workspace,
-        &layer_id,
-        vec![FontIntent::MovePoints {
-            layer_id: layer_id.clone(),
-            point_ids: vec![point_ids[0].clone(), point_ids[1].clone()],
-            coords: vec![5.0, 6.0, 105.0, 6.0],
-        }],
-    );
+    let applied = workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::MovePoints {
+                    layer_id: layer_id.clone(),
+                    point_ids: vec![point_ids[0].clone(), point_ids[1].clone()],
+                    coords: vec![5.0, 6.0, 105.0, 6.0],
+                }],
+            },
+            None,
+        )
+        .unwrap();
+    let post = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    assert!(!applied.layers[0].structural);
+
+    let undone = workspace
+        .undo()
+        .unwrap()
+        .expect("position edit should undo");
+    assert!(!undone.layers[0].structural);
+    assert_eq!(workspace.font().layer(layer_id.clone()).unwrap(), &pre);
+
+    let redone = workspace
+        .redo()
+        .unwrap()
+        .expect("position edit should redo");
+    assert!(!redone.layers[0].structural);
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &post);
 }
 
 #[test]

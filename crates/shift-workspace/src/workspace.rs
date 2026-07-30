@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     io,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use shift_backends::{
@@ -270,13 +271,14 @@ impl FontWorkspace {
             if pre.layers.iter().any(|pre| pre.layer.id() == *layer_id) {
                 continue;
             }
-            if let Some(layer) = self.font.layer(layer_id.clone())
-                && let Some(glyph_id) = self.font.glyph_id_by_layer(layer_id.clone())
+            if let Some(glyph_id) = self.font.glyph_id_by_layer(layer_id.clone())
+                && let Some(layer) = self
+                    .font
+                    .glyph(glyph_id.clone())
+                    .and_then(|glyph| glyph.layers().get(layer_id))
+                    .cloned()
             {
-                pre.layers.push(PreLayer {
-                    glyph_id,
-                    layer: layer.clone(),
-                });
+                pre.layers.push(PreLayer { glyph_id, layer });
             }
         }
 
@@ -307,6 +309,7 @@ impl FontWorkspace {
                     .map(|pre| LayerPair {
                         pre: pre.layer.clone(),
                         post,
+                        structural: touched.structural,
                     })
             })
             .collect();
@@ -438,7 +441,7 @@ impl FontWorkspace {
                             .find(|pre| {
                                 pre.glyph_id == change.glyph_id && pre.layer.id() == change.layer_id
                             })
-                            .map(|pre| Box::new(pre.layer.clone())),
+                            .map(|pre| Box::new(pre.layer.as_ref().clone())),
                         post: None,
                     });
                 }
@@ -965,7 +968,7 @@ impl FontWorkspace {
 #[derive(Clone)]
 struct PreLayer {
     glyph_id: GlyphId,
-    layer: GlyphLayer,
+    layer: Arc<GlyphLayer>,
 }
 
 #[derive(Default)]
@@ -1038,7 +1041,12 @@ fn capture_font_level_pre_state(
             }
 
             for glyph in font.glyphs() {
-                let Some(layer) = glyph.layer_for_source(source_id.clone()) else {
+                let Some(layer) = glyph
+                    .layers()
+                    .values()
+                    .find(|layer| layer.source_id() == *source_id)
+                    .cloned()
+                else {
                     continue;
                 };
                 if pre.layers.iter().any(|pre| pre.layer.id() == layer.id()) {
@@ -1046,7 +1054,7 @@ fn capture_font_level_pre_state(
                 }
                 pre.layers.push(PreLayer {
                     glyph_id: glyph.id(),
-                    layer: layer.clone(),
+                    layer,
                 });
             }
         }
@@ -1113,25 +1121,28 @@ fn replay_layer_pairs(
     changes: &mut FontChangeSet,
     touched: &mut Vec<TouchedLayer>,
 ) -> Result<(), WorkspaceError> {
+    let mut replayed = Vec::with_capacity(pairs.len());
+    let mut structural_replacements = Vec::with_capacity(pairs.len());
     for pair in pairs {
         let replacement = match side {
             ReplaySide::Pre => pair.pre,
             ReplaySide::Post => pair.post,
         };
-        let layer_id = replacement.id();
-        let layer = font
-            .layer_mut(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id))?;
-        *layer = replacement;
+        if pair.structural {
+            structural_replacements.push(replacement.clone());
+        } else {
+            font.replace_glyph_layer_values(replacement.id(), &replacement.interpolation_values())?;
+        }
+        replayed.push((replacement, pair.structural));
+    }
+    font.replace_glyph_layers(structural_replacements)?;
 
+    for (layer, structural) in replayed {
         // Geometry replace persists contours only; metrics ride their
         // own change so width/height restores reach SQLite too.
-        changes.push(FontChange::layer_geometry_replaced(layer));
-        changes.push(FontChange::layer_metrics_changed(layer));
-        touched.push(TouchedLayer {
-            layer: layer.clone(),
-            structural: true,
-        });
+        changes.push(FontChange::layer_geometry_replaced(layer.as_ref()));
+        changes.push(FontChange::layer_metrics_changed(layer.as_ref()));
+        touched.push(TouchedLayer { layer, structural });
     }
 
     Ok(())
@@ -1155,10 +1166,9 @@ fn replay_glyph(
         changes.push(FontChange::glyph_created(&glyph));
 
         for layer in glyph.layers().values() {
-            let layer = layer.as_ref().clone();
-            changes.push(FontChange::glyph_layer_created(glyph.id(), &layer));
+            changes.push(FontChange::glyph_layer_created(glyph.id(), layer.as_ref()));
             touched.push(TouchedLayer {
-                layer,
+                layer: layer.clone(),
                 structural: true,
             });
         }
@@ -1328,7 +1338,7 @@ fn replay_glyph_layer(
         changes.push(FontChange::glyph_layer_created(glyph_id.clone(), &layer));
         font.insert_glyph_layer(glyph_id, layer.clone())?;
         touched.push(TouchedLayer {
-            layer,
+            layer: Arc::new(layer),
             structural: true,
         });
     }

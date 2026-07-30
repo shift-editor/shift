@@ -386,8 +386,12 @@ impl Glyph {
         self.layer_mut(layer_id).expect("layer was just inserted")
     }
 
-    pub fn set_layer(&mut self, layer: GlyphLayer) {
-        self.layers.insert(layer.id(), Arc::new(layer));
+    pub fn set_layer<L>(&mut self, layer: L)
+    where
+        L: Into<Arc<GlyphLayer>>,
+    {
+        let layer = layer.into();
+        self.layers.insert(layer.id(), layer);
     }
 
     pub fn layer_for_source(&self, source_id: SourceId) -> Option<&GlyphLayer> {

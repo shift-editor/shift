@@ -17,6 +17,7 @@ use crate::ir::{
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 /// A point to create, with stable identity minted by a trusted caller.
 #[derive(Clone, Debug)]
@@ -311,7 +312,7 @@ pub struct FontIntentSet {
 
 /// One touched layer after an intent set applied.
 pub struct TouchedLayer {
-    pub layer: GlyphLayer,
+    pub layer: Arc<GlyphLayer>,
     pub structural: bool,
 }
 
@@ -366,9 +367,11 @@ impl Font {
             .into_iter()
             .map(|(layer_id, structural)| {
                 let layer = self
-                    .layer(layer_id.clone())
-                    .ok_or(CoreError::LayerNotFound(layer_id))?
-                    .clone();
+                    .glyph_id_by_layer(layer_id.clone())
+                    .and_then(|glyph_id| self.glyph(glyph_id))
+                    .and_then(|glyph| glyph.layers().get(&layer_id))
+                    .cloned()
+                    .ok_or(CoreError::LayerNotFound(layer_id))?;
                 Ok(TouchedLayer { layer, structural })
             })
             .collect::<CoreResult<Vec<_>>>()?;

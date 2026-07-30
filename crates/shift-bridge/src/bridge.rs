@@ -643,8 +643,8 @@ impl Bridge {
         layer_id: touched.layer.id().to_string(),
         structure: touched
           .structural
-          .then(|| GlyphStructure::from(&touched.layer).into()),
-        values: shift_wire::values_from_layer(&touched.layer).into(),
+          .then(|| GlyphStructure::from(touched.layer.as_ref()).into()),
+        values: shift_wire::values_from_layer(touched.layer.as_ref()).into(),
         changed: GlyphChangedEntities::default().into(),
       })
       .collect();
@@ -2342,11 +2342,54 @@ mod tests {
 
     let undone = bridge.undo().unwrap().expect("one entry to undo");
     assert_eq!(undone.layers.len(), 1);
+    assert!(undone.layers[0].structure.is_some());
     assert_eq!(contour_point_count(&mut bridge), 0);
 
     let redone = bridge.redo().unwrap().expect("one entry to redo");
     assert_eq!(redone.layers.len(), 1);
+    assert!(redone.layers[0].structure.is_some());
     assert_eq!(contour_point_count(&mut bridge), 1);
+  }
+
+  #[test]
+  fn position_only_undo_redo_echoes_values_without_structure() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let point_id = shift_font::PointId::new().to_string();
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&point_id, 10.0, 20.0)],
+        )],
+        None,
+      )
+      .unwrap();
+    bridge
+      .apply(
+        vec![NapiFontIntent {
+          move_points: Some(NapiMovePointsIntent {
+            layer_id,
+            point_ids: vec![point_id],
+            coords: vec![30.0, 40.0],
+          }),
+          ..skeleton_intent("movePoints")
+        }],
+        None,
+      )
+      .unwrap();
+
+    let undone = bridge.undo().unwrap().expect("position edit should undo");
+    assert!(undone.layers[0].structure.is_none());
+    assert_eq!(&undone.layers[0].values[1..3], &[10.0, 20.0]);
+    assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[10.0, 20.0]);
+
+    let redone = bridge.redo().unwrap().expect("position edit should redo");
+    assert!(redone.layers[0].structure.is_none());
+    assert_eq!(&redone.layers[0].values[1..3], &[30.0, 40.0]);
+    assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
   }
 
   #[test]
