@@ -167,7 +167,6 @@ jobs:
             .turbo/cache
             crates/shift-bridge/*.node
           key: native-turbo-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
-          save-always: true
 
       - name: Run unit tests
         run: pnpm test:unit
