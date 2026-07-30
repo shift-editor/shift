@@ -836,16 +836,14 @@ impl FontWorkspace {
             return Ok(());
         }
 
-        // Decode through bounded SQLite reads, then clone and validate the font
-        // index once so any malformed batch leaves the live cache unchanged.
+        // Decode through bounded SQLite reads. Font validates the complete
+        // replacement batch before mutating, so malformed input leaves the
+        // live cache unchanged without copying the complete directory.
         let mut layers = Vec::with_capacity(layer_ids.len());
         for layer_ids in layer_ids.chunks(MAX_LAYER_READ_BATCH_COUNT) {
             layers.extend(self.store.load_glyph_layers(layer_ids)?);
         }
-        let mut next_font = self.font.clone();
-        next_font.replace_glyph_layers(layers)?;
-
-        self.font = next_font;
+        self.font.replace_glyph_layers(layers)?;
         self.residency.mark_loaded(layer_ids);
         Ok(())
     }
@@ -876,10 +874,7 @@ impl FontWorkspace {
             }
         }
 
-        let mut next_font = self.font.clone();
-        next_font.replace_glyph_layers(placeholders)?;
-
-        self.font = next_font;
+        self.font.replace_glyph_layers(placeholders)?;
         self.residency.mark_unloaded(evicted);
         Ok(())
     }

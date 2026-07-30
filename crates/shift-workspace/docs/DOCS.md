@@ -6,7 +6,7 @@ Backend runtime object for an open Shift font workspace.
 
 - **Architecture Invariant:** `FontWorkspace` composes a directory-complete, payload-lazy `shift-font::Font`, the user-selected `shift-source` package, and the working `shift-store` database.
 - **Architecture Invariant:** Resuming SQLite loads metadata and glyph/layer directory facts only. `acquire_glyphs` performs explicit bounded payload I/O; synchronous `font()` reads never initiate I/O.
-- **Architecture Invariant:** TTF/OTF, UFO, and Designspace imports consume bounded `FontImport` batches and write through one `LayerStreamWriter`; they never construct a complete geometry-resident `Font`. Format readers and canonical packing use Rayon, while SQLite has one transaction owner.
+- **Architecture Invariant:** TTF/OTF, UFO, and Designspace imports consume bounded `FontImport` batches and write through one `LayerStreamWriter`; they never construct a complete geometry-resident `Font`. Format readers, canonical packing, BLAKE3 hashing, and independent per-layer compression use Rayon, while SQLite has one transaction owner.
 - **Architecture Invariant:** `LayerResidency` is the sole owner of loaded-layer membership and placeholder replacement. A loaded layer is only a cache of already-committed authored state; apply, undo, and redo reacquire their complete layer read sets before mutation, and `evict_glyphs` replaces only committed layers with directory placeholders.
 - **Architecture Invariant:** The `.shift` source package path and SQLite working store path are separate inputs.
 - **Architecture Invariant:** Package recovery policy is not ranked in Rust. `FontWorkspace` exposes package and working-store inspection primitives; the utility process owns binding and lifecycle decisions.
@@ -44,7 +44,7 @@ crates/shift-workspace/examples/
 
 `FontWorkspace::create(source_path, store_path, options)` creates a placeholder `.shift` package, opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font`.
 
-`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, and Designspace paths use a metadata/directory-first backend cursor, parse batches of at most 512 glyphs and 1,024 authored layers, parallel-pack those layers, and insert them into a disposable import connection. After the complete stream commits, `finish_import` syncs the database and restores edit-time WAL settings. The returned workspace contains directory placeholders and zero loaded layer payloads. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues requires the separate app import-session boundary. Other supported foreign formats retain the eager compatibility path until they gain a bounded reader.
+`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, and Designspace paths use a metadata/directory-first backend cursor, parse batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable import connection. After the complete stream commits, `finish_import` syncs the database and restores edit-time WAL settings. The returned workspace contains directory placeholders and zero loaded layer payloads. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues requires the separate app import-session boundary. Other supported foreign formats retain the eager compatibility path until they gain a bounded reader.
 
 `FontWorkspace::save()` succeeds for saved `.shift` workspaces and returns `NeedsSaveAs` for imported workspaces. `save_as(path)` creates a `.shift` package and makes it the save target.
 
@@ -52,11 +52,11 @@ crates/shift-workspace/examples/
 
 `FontWorkspace::inspect_package_draft(store_path)` reads the working-store package ownership record without resuming it. It returns the package id, source path, base fingerprint, document id, and dirty flag so the utility process can choose an explicit open transition.
 
-`FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, AcquireScope::Glyphs)` fetches only requested layers; `AcquireScope::ComponentClosure` first expands component dependencies from the relational index. Acquisition reads directory facts, payloads, and component indexes in ordered batches of at most 512 layers and 256 MiB of packed bytes, accumulates the decoded results, and installs them with one COW font-index rebuild. A malformed batch does not replace the live cache. Save/export explicitly acquire all layers before creating their complete snapshots.
+`FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, AcquireScope::Glyphs)` fetches only requested layers; `AcquireScope::ComponentClosure` first expands component dependencies from the relational index. Acquisition reads directory facts, payloads, and component indexes in ordered batches of at most 512 layers and 256 MiB of decoded bytes, decompresses and verifies exact lengths plus BLAKE3 in parallel, accumulates the canonical results, and validates the complete replacement before mutating the uniquely owned live font in place. Validated identity sets become the final index entries rather than a temporary duplicate; shared font snapshots still use copy-on-write. A malformed batch does not replace the live cache. Save/export explicitly acquire all layers before creating their complete snapshots.
 
 ## Profiling
 
-`profile_streaming_import` uses the same public `stream_into` three-stage pipeline as the workspace and reports foreign-directory, parse, canonical pack, SQLite write, commit, durable-finalization, native-directory materialization, reopen, BLOB, and database measurements without putting machine-specific timing assertions in tests:
+`profile_streaming_import` uses the same public `stream_into` three-stage pipeline as the workspace and reports foreign-directory, parse, canonical pack, compression, SQLite write, commit, durable-finalization, native-directory materialization, reopen, decoded/stored BLOB, and database measurements without putting machine-specific timing assertions in tests:
 
 ```bash
 cargo build --release -p shift-workspace --example profile_streaming_import
@@ -64,7 +64,7 @@ cargo build --release -p shift-workspace --example profile_streaming_import
   /path/to/font-or-project /tmp/import.sqlite
 ```
 
-Use `RAYON_NUM_THREADS`, `SHIFT_IMPORT_BATCH_GLYPHS`, and `SHIFT_IMPORT_BATCH_LAYERS` to compare worker and bounded-batch limits. `SHIFT_IMPORT_PROGRESS_BATCHES` controls machine-readable periodic lines containing cumulative batches, glyphs, layers, parse, pack, SQLite, wall time, and throughput. Canonical packing uses Rayon; the SQLite writer remains single-threaded.
+Use `RAYON_NUM_THREADS`, `SHIFT_IMPORT_BATCH_GLYPHS`, and `SHIFT_IMPORT_BATCH_LAYERS` to compare worker and bounded-batch limits. `SHIFT_IMPORT_PROGRESS_BATCHES` controls machine-readable periodic lines containing cumulative batches, glyphs, layers, parse, pack, compression, SQLite, wall time, and throughput. Canonical packing, hashing, and compression use Rayon; the SQLite writer remains single-threaded.
 
 A repeatable ignored corpus gate exercises streaming import, directory-only
 resume, and bounded acquisition without checking large fonts into Git:
