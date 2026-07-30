@@ -127,9 +127,14 @@ ON glyph_layers(source_id);
 
 CREATE TABLE IF NOT EXISTS glyph_layer_payloads (
     layer_id TEXT PRIMARY KEY,
-    format TEXT NOT NULL,
+    inner_format TEXT NOT NULL,
+    compression TEXT NOT NULL CHECK (compression IN ('none', 'zstd.v1')),
     payload BLOB NOT NULL,
-    byte_length INTEGER NOT NULL CHECK (byte_length >= 0 AND byte_length = length(payload)),
+    stored_byte_length INTEGER NOT NULL
+        CHECK (stored_byte_length >= 0 AND stored_byte_length = length(payload)),
+    decoded_byte_length INTEGER NOT NULL
+        CHECK (decoded_byte_length >= 0 AND stored_byte_length <= decoded_byte_length),
+    decoded_blake3 BLOB NOT NULL CHECK (length(decoded_blake3) = 32),
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
 

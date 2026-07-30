@@ -365,7 +365,8 @@ fn load_glyphs(
     let layer_rows = {
         let mut stmt = conn.prepare(
             "
-            SELECT l.id, l.glyph_id, l.source_id, l.width, l.height, p.byte_length
+            SELECT l.id, l.glyph_id, l.source_id, l.width, l.height,
+                   p.decoded_byte_length
             FROM glyph_layers AS l
             LEFT JOIN glyph_layer_payloads AS p ON p.layer_id = l.id
             ORDER BY l.glyph_id, l.source_id, l.id
@@ -387,26 +388,28 @@ fn load_glyphs(
     if include_layer_payloads {
         let mut batch = Vec::new();
         let mut batch_bytes = 0_u64;
-        for (layer_id, _, _, _, _, byte_length) in &layer_rows {
-            let byte_length = byte_length.ok_or_else(|| StoreError::MissingEntity {
-                kind: "glyph layer payload",
-                id: layer_id.to_string(),
-            })?;
-            let byte_length =
-                u64::try_from(byte_length).map_err(|_| StoreError::LayerDirectoryMismatch {
-                    layer_id: layer_id.to_string(),
-                    detail: format!("negative payload byte length {byte_length}"),
+        for (layer_id, _, _, _, _, decoded_byte_length) in &layer_rows {
+            let decoded_byte_length =
+                decoded_byte_length.ok_or_else(|| StoreError::MissingEntity {
+                    kind: "glyph layer payload",
+                    id: layer_id.to_string(),
                 })?;
+            let decoded_byte_length = u64::try_from(decoded_byte_length).map_err(|_| {
+                StoreError::LayerDirectoryMismatch {
+                    layer_id: layer_id.to_string(),
+                    detail: format!("negative decoded byte length {decoded_byte_length}"),
+                }
+            })?;
             if !batch.is_empty()
                 && (batch.len() == crate::MAX_LAYER_READ_BATCH_COUNT
-                    || batch_bytes.saturating_add(byte_length)
-                        > crate::packed_layer::MAX_LAYER_READ_BATCH_PAYLOAD_BYTES)
+                    || batch_bytes.saturating_add(decoded_byte_length)
+                        > crate::MAX_LAYER_READ_BATCH_DECODED_BYTES)
             {
                 load_layer_batch(conn, &mut batch, &mut loaded_layers)?;
                 batch_bytes = 0;
             }
             batch.push(layer_id.clone());
-            batch_bytes = batch_bytes.saturating_add(byte_length);
+            batch_bytes = batch_bytes.saturating_add(decoded_byte_length);
         }
         load_layer_batch(conn, &mut batch, &mut loaded_layers)?;
     }

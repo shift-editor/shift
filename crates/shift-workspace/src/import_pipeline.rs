@@ -12,6 +12,7 @@ pub struct ImportBatchProgress {
     pub layer_count: usize,
     pub parse_elapsed: Duration,
     pub pack_elapsed: Duration,
+    pub compression_elapsed: Duration,
     pub sqlite_elapsed: Duration,
 }
 
@@ -97,12 +98,14 @@ pub fn stream_into(
         for result in packed_receiver {
             let batch = result?;
             let pack_elapsed = batch.glyphs.pack_elapsed();
+            let compression_elapsed = batch.glyphs.compression_elapsed();
             let sqlite_elapsed = writer.write_packed_glyph_batch(batch.glyphs)?;
             observe(ImportBatchProgress {
                 glyph_count: batch.glyph_count,
                 layer_count: batch.layer_count,
                 parse_elapsed: batch.parse_elapsed,
                 pack_elapsed,
+                compression_elapsed,
                 sqlite_elapsed,
             });
         }

@@ -57,6 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pipeline_started = Instant::now();
     let mut parse = Duration::ZERO;
     let mut pack = Duration::ZERO;
+    let mut compression = Duration::ZERO;
     let mut sqlite = Duration::ZERO;
     let mut glyph_count = 0;
     let mut layer_count = 0;
@@ -64,6 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stream_into(import, &mut writer, batch_limit, |batch| {
         parse += batch.parse_elapsed;
         pack += batch.pack_elapsed;
+        compression += batch.compression_elapsed;
         sqlite += batch.sqlite_elapsed;
         glyph_count += batch.glyph_count;
         layer_count += batch.layer_count;
@@ -72,9 +74,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if batches % progress_batches == 0 {
             let wall = pipeline_started.elapsed();
             println!(
-                "progress batches={batches} glyphs={glyph_count} layers={layer_count} parse_ms={:.3} pack_ms={:.3} sqlite_ms={:.3} wall_ms={:.3} glyphs_per_sec={:.1}",
+                "progress batches={batches} glyphs={glyph_count} layers={layer_count} parse_ms={:.3} pack_ms={:.3} compression_ms={:.3} sqlite_ms={:.3} wall_ms={:.3} glyphs_per_sec={:.1}",
                 ms(parse),
                 ms(pack),
+                ms(compression),
                 ms(sqlite),
                 ms(wall),
                 glyph_count as f64 / wall.as_secs_f64()
@@ -83,6 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     println!("parse_ms={:.3}", ms(parse));
     println!("pack_ms={:.3}", ms(pack));
+    println!("compression_ms={:.3}", ms(compression));
     println!("sqlite_ms={:.3}", ms(sqlite));
     println!("pipeline_wall_ms={:.3}", ms(pipeline_started.elapsed()));
     println!("batch_count={batches}");
@@ -110,7 +114,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "packed_bytes={}",
         layer_directory
             .iter()
-            .map(|entry| entry.payload_byte_length)
+            .map(|entry| entry.decoded_byte_length)
+            .sum::<u64>()
+    );
+    println!(
+        "stored_payload_bytes={}",
+        layer_directory
+            .iter()
+            .map(|entry| entry.stored_byte_length)
             .sum::<u64>()
     );
     println!("inspection_ms={:.3}", ms(started.elapsed()));

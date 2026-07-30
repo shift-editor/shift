@@ -18,14 +18,26 @@ pub enum StoreError {
     #[error("unsupported glyph layer payload format: {0}")]
     UnsupportedLayerFormat(String),
 
+    #[error("unsupported glyph layer compression: {0}")]
+    UnsupportedLayerCompression(String),
+
+    #[error("glyph layer compression failed: {0}")]
+    LayerCompression(String),
+
+    #[error("glyph layer decompression failed: {0}")]
+    LayerDecompression(String),
+
     #[error("glyph layer payload has {bytes} bytes; limit is {limit}")]
     LayerPayloadTooLarge { bytes: u64, limit: u64 },
 
     #[error("glyph layer read batch has {layers} layers; limit is {limit}")]
     LayerReadBatchTooLarge { layers: usize, limit: usize },
 
-    #[error("glyph layer read batch has {bytes} payload bytes; limit is {limit}")]
-    LayerReadBatchPayloadTooLarge { bytes: u64, limit: u64 },
+    #[error("glyph layer read batch has {bytes} stored bytes; limit is {limit}")]
+    LayerReadBatchStoredTooLarge { bytes: u64, limit: u64 },
+
+    #[error("glyph layer read batch has {bytes} decoded bytes; limit is {limit}")]
+    LayerReadBatchDecodedTooLarge { bytes: u64, limit: u64 },
 
     #[error("glyph layer {layer_id} payload disagrees with its directory: {detail}")]
     LayerDirectoryMismatch { layer_id: String, detail: String },

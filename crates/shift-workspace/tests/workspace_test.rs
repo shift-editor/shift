@@ -357,6 +357,57 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
 }
 
 #[test]
+fn ufo_source_roundtrips_through_lazy_acquisition() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let store_path = temp.path().join("mutatorsans-ufo.sqlite");
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_id = workspace
+        .font()
+        .glyphs()
+        .find(|glyph| !glyph.layers().is_empty())
+        .expect("fixture should contain a glyph layer")
+        .id();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
+        .unwrap();
+    let expected = workspace
+        .font()
+        .glyph(glyph_id.clone())
+        .unwrap()
+        .layers()
+        .values()
+        .map(|layer| {
+            (
+                layer.id(),
+                shift_font::pack_glyph_layer(layer).unwrap().into_bytes(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(!expected.is_empty());
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.loaded_layer_count(), 0);
+    resumed
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
+        .unwrap();
+
+    assert_eq!(resumed.loaded_layer_count(), expected.len());
+    for (layer_id, bytes) in expected {
+        assert_eq!(
+            shift_font::pack_glyph_layer(resumed.font().layer(layer_id).unwrap())
+                .unwrap()
+                .as_bytes(),
+            bytes
+        );
+    }
+}
+
+#[test]
 fn save_requires_save_as_for_untitled_workspaces() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

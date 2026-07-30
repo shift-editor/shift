@@ -5,10 +5,12 @@ edition = "2024"
 
 [dependencies]
 shift-font = { workspace = true }
+blake3 = "1.8"
 rusqlite = { version = "0.37.0", features = ["blob", "backup", "limits"] }
 rayon = "1.10"
 serde_json = "1.0"
 thiserror = "2"
+zstd = "0.13"
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }

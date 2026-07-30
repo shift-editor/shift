@@ -7,9 +7,10 @@ use shift_font as font;
 use crate::{
     LayerBatchTiming, PackedGlyphBatch, ShiftStore, StoreError,
     change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
-    packed_layer::store_packed_layer_in_tx,
+    packed_layer::store_stored_layer_in_tx,
     schema::{defer_import_indexes, restore_import_indexes},
-    types::PackedGlyph,
+    stored_layer::compress_glyph_layer,
+    types::{PackedGlyph, StoredGlyphLayer},
     write_mode::WriteMode,
 };
 
@@ -43,8 +44,11 @@ impl ShiftStore {
 /// The returned batch retains glyph directory facts for the single writer.
 pub fn pack_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<PackedGlyphBatch, StoreError> {
     let started = Instant::now();
-    let layers = pack_glyph_layers(&glyphs)?;
+    let packed_layers = pack_glyph_layers(&glyphs)?;
     let pack_elapsed = started.elapsed();
+    let started = Instant::now();
+    let layers = compress_glyph_layers(packed_layers)?;
+    let compression_elapsed = started.elapsed();
     let glyphs = glyphs
         .into_iter()
         .zip(layers)
@@ -54,6 +58,7 @@ pub fn pack_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<PackedGlyphBatch, St
     Ok(PackedGlyphBatch {
         glyphs,
         pack_elapsed,
+        compression_elapsed,
     })
 }
 
@@ -70,8 +75,11 @@ impl LayerStreamWriter<'_> {
         glyphs: &[font::Glyph],
     ) -> Result<LayerBatchTiming, StoreError> {
         let started = Instant::now();
-        let layers = pack_glyph_layers(glyphs)?;
+        let packed_layers = pack_glyph_layers(glyphs)?;
         let pack_elapsed = started.elapsed();
+        let started = Instant::now();
+        let layers = compress_glyph_layers(packed_layers)?;
+        let compression_elapsed = started.elapsed();
 
         let started = Instant::now();
         for (glyph, layers) in glyphs.iter().zip(&layers) {
@@ -80,6 +88,7 @@ impl LayerStreamWriter<'_> {
 
         Ok(LayerBatchTiming {
             pack_elapsed,
+            compression_elapsed,
             sqlite_elapsed: started.elapsed(),
         })
     }
@@ -99,10 +108,10 @@ impl LayerStreamWriter<'_> {
     fn write_packed_glyph(
         &mut self,
         glyph: &font::Glyph,
-        layers: &[(font::LayerId, font::PackedGlyphLayer)],
+        layers: &[(font::LayerId, StoredGlyphLayer)],
     ) -> Result<(), StoreError> {
         write_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order, WriteMode::Insert)?;
-        for (layer_id, packed) in layers {
+        for (layer_id, stored) in layers {
             let layer = glyph
                 .layers()
                 .get(layer_id)
@@ -110,12 +119,12 @@ impl LayerStreamWriter<'_> {
                     kind: "glyph layer",
                     id: layer_id.to_string(),
                 })?;
-            store_packed_layer_in_tx(
+            store_stored_layer_in_tx(
                 &self.tx,
                 &glyph.id(),
                 Some(glyph.glyph_name()),
                 layer,
-                packed,
+                stored,
                 WriteMode::Insert,
             )?;
         }
@@ -145,6 +154,22 @@ fn pack_glyph_layers(
         })
         .collect::<Result<Vec<_>, font::PackedLayerError>>()
         .map_err(Into::into)
+}
+
+fn compress_glyph_layers(
+    layers: Vec<Vec<(font::LayerId, font::PackedGlyphLayer)>>,
+) -> Result<Vec<Vec<(font::LayerId, StoredGlyphLayer)>>, StoreError> {
+    layers
+        .into_par_iter()
+        .map(|layers| {
+            layers
+                .into_iter()
+                .map(|(layer_id, packed)| {
+                    compress_glyph_layer(packed.as_bytes()).map(|stored| (layer_id, stored))
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect()
 }
 
 #[cfg(test)]

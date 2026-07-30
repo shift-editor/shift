@@ -7,16 +7,29 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 ## Storage boundary
 
 - Font metadata and the glyph/layer directory remain relational and load eagerly.
-- Each editable glyph layer is one independently addressable `shift.glyph-layer.v1` BLOB.
+- Each editable glyph layer is one independently addressable payload. Its canonical decoded bytes remain `shift.glyph-layer.v1`; the store independently wraps them as `none` or `zstd.v1` without changing authored semantics.
 - Component dependency rows contain only the earned query index: component ID, owner layer ID, base glyph ID, and ordinal.
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.
 - Payload replacement, directory facts, component rows, and workspace revision state commit in one transaction.
 
-`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds and validates one payload; `load_glyph_layers` scans directory facts, bounded payloads, and reference rows once for a deduplicated batch of at most 512 layers and 256 MiB of packed bytes. Explicit full-font materialization partitions the directory through that same bounded loader instead of issuing one query sequence per layer. All payload paths cross-check canonical bytes against relational facts. `FontWorkspace` uses the batch path for explicit glyph acquisition and safe cache eviction.
+`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds stored and decoded lengths before fetching and decompressing one payload. `load_glyph_layers` scans directory facts, bounded payloads, and reference rows once for a deduplicated batch of at most 512 layers and 256 MiB decoded bytes, then decompresses and validates the batch with Rayon. Every decoded payload must match its exact declared length and 32-byte BLAKE3 before strict canonical decoding. Explicit full-font materialization partitions the directory through that same bounded loader instead of issuing one query sequence per layer. All payload paths cross-check canonical bytes against relational facts. `FontWorkspace` uses the batch path for explicit glyph acquisition and safe cache eviction.
+
+## Outer payload contract
+
+`glyph_layer_payloads` stores `inner_format`, `compression`, `stored_byte_length`,
+`decoded_byte_length`, `decoded_blake3`, and `payload`. `inner_format` remains
+`shift.glyph-layer.v1`. Compression is either `none` or `zstd.v1`; `zstd.v1` means one complete
+independent Zstandard frame with no dictionary. Level 1 is the current write policy, not a decoding
+requirement. Writers retain compressed bytes only when they are smaller than the canonical input.
+
+`decoded_blake3` is the 32-byte BLAKE3 of the exact canonical bytes. Reads bound both lengths before
+fetch/allocation, reject trailing Zstandard data, require the exact decoded length and hash, and
+only then invoke strict canonical decoding. A layer replacement may move between `none` and
+`zstd.v1` without changing its inner bytes or touching another layer.
 
 ## Import boundary
 
-`LayerStreamWriter` accepts bounded replacement glyph batches without requiring a complete in-memory `Font`. `pack_glyph_batch` canonical-encodes an owned batch with Rayon without borrowing the SQLite transaction, allowing the workspace to overlap parsing, packing, and one stable-order SQLite writer. Streaming inserts, full-state replacement, and change-set replacement share one write implementation parameterized only by insert/upsert mode. Change sets supplied with a committed post-edit font skip incremental decode/re-encode for touched existing layers and write each final layer once. Secondary query indexes are dropped inside the stream transaction and rebuilt in bulk by `finish`; dropping an unfinished writer restores them with the rest of the rollback. Prefix-redundant Unicode-glyph and component-layer indexes are omitted. `finish` is the only stream commit point.
+`LayerStreamWriter` accepts bounded replacement glyph batches without requiring a complete in-memory `Font`. `pack_glyph_batch` canonical-encodes, BLAKE3-hashes, and independently compresses an owned batch with Rayon without borrowing the SQLite transaction, allowing the workspace to overlap parsing, packing/compression, and one stable-order SQLite writer. Streaming inserts, full-state replacement, and change-set replacement share one write implementation parameterized only by insert/upsert mode. Change sets supplied with a committed post-edit font skip incremental decode/re-encode for touched existing layers and write each final layer once. Secondary query indexes are dropped inside the stream transaction and rebuilt in bulk by `finish`; dropping an unfinished writer restores them with the rest of the rollback. Prefix-redundant Unicode-glyph and component-layer indexes are omitted. `finish` is the only stream commit point.
 
 `ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the foreign source remains authoritative and the destination is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL before workspace state is published. Normal edits never use import pragmas. Progress, cancellation, source fingerprinting, and final atomic destination installation remain workspace responsibilities.
 
@@ -41,7 +54,8 @@ src/
   schema.rs        # pre-release version-1 baseline
   font_state.rs    # eager metadata/directory and explicit full materialization
   packed_layer.rs  # bounded BLOB fetch/replace and reference-index checks
-  stream_writer.rs # independently pipelined Rayon pack plus single-transaction SQLite sink
+  stored_layer.rs  # independent Zstd/BLAKE3 outer storage representation
+  stream_writer.rs # independently pipelined Rayon pack/compress plus single-transaction SQLite sink
   write_mode.rs    # shared insert/upsert policy for canonical write paths
   change_set.rs    # transactional workspace changes and one final touched-layer write
   workspace_state.rs
