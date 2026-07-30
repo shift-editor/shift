@@ -120,6 +120,15 @@ struct FontData {
     images: BinaryData,
 }
 
+#[derive(Default)]
+struct ReplacementIdentities {
+    contours: HashSet<ContourId>,
+    points: HashSet<PointId>,
+    components: HashSet<ComponentId>,
+    anchors: HashSet<AnchorId>,
+    guidelines: HashSet<GuidelineId>,
+}
+
 #[derive(Clone, Debug, Default)]
 struct FontIndex {
     glyph_by_name: HashMap<GlyphName, GlyphId>,
@@ -277,13 +286,8 @@ impl FontIndex {
 
     fn validate_layer_replacements(
         &self,
-        replacements: &[(GlyphId, GlyphLayer, GlyphLayer)],
-        replacement_contour_ids: &mut HashSet<ContourId>,
-        replacement_point_ids: &mut HashSet<PointId>,
-        replacement_component_ids: &mut HashSet<ComponentId>,
-        replacement_anchor_ids: &mut HashSet<AnchorId>,
-        replacement_guideline_ids: &mut HashSet<GuidelineId>,
-    ) -> CoreResult<()> {
+        replacements: &[(GlyphId, Arc<GlyphLayer>, GlyphLayer)],
+    ) -> CoreResult<ReplacementIdentities> {
         let mut removed_contour_ids = HashSet::new();
         let mut removed_point_ids = HashSet::new();
         let mut removed_component_ids = HashSet::new();
@@ -300,12 +304,13 @@ impl FontIndex {
             removed_guideline_ids.extend(previous.guidelines().iter().map(Guideline::id));
         }
 
+        let mut replacement_ids = ReplacementIdentities::default();
         for (_, _, replacement) in replacements {
             for contour in replacement.contours_iter() {
                 let contour_id = contour.id();
                 if (self.contour_ids.contains(&contour_id)
                     && !removed_contour_ids.contains(&contour_id))
-                    || !replacement_contour_ids.insert(contour_id.clone())
+                    || !replacement_ids.contours.insert(contour_id.clone())
                 {
                     return Err(CoreError::DuplicateContourId(contour_id));
                 }
@@ -314,7 +319,7 @@ impl FontIndex {
                     let point_id = point.id();
                     if (self.point_ids.contains(&point_id)
                         && !removed_point_ids.contains(&point_id))
-                        || !replacement_point_ids.insert(point_id.clone())
+                        || !replacement_ids.points.insert(point_id.clone())
                     {
                         return Err(CoreError::DuplicatePointId(point_id));
                     }
@@ -325,7 +330,7 @@ impl FontIndex {
                 let component_id = component.id();
                 if (self.component_ids.contains(&component_id)
                     && !removed_component_ids.contains(&component_id))
-                    || !replacement_component_ids.insert(component_id.clone())
+                    || !replacement_ids.components.insert(component_id.clone())
                 {
                     return Err(CoreError::DuplicateComponentId(component_id));
                 }
@@ -335,7 +340,7 @@ impl FontIndex {
                 let anchor_id = anchor.id();
                 if (self.anchor_ids.contains(&anchor_id)
                     && !removed_anchor_ids.contains(&anchor_id))
-                    || !replacement_anchor_ids.insert(anchor_id.clone())
+                    || !replacement_ids.anchors.insert(anchor_id.clone())
                 {
                     return Err(CoreError::DuplicateAnchorId(anchor_id));
                 }
@@ -345,14 +350,14 @@ impl FontIndex {
                 let guideline_id = guideline.id();
                 if (self.guideline_ids.contains(&guideline_id)
                     && !removed_guideline_ids.contains(&guideline_id))
-                    || !replacement_guideline_ids.insert(guideline_id.clone())
+                    || !replacement_ids.guidelines.insert(guideline_id.clone())
                 {
                     return Err(CoreError::DuplicateGuidelineId(guideline_id));
                 }
             }
         }
 
-        Ok(())
+        Ok(replacement_ids)
     }
 
     fn insert_layer(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
@@ -1205,9 +1210,12 @@ impl Font {
                 .glyph_id_by_layer(layer_id.clone())
                 .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             let previous = self
-                .layer(layer_id.clone())
-                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?
-                .clone();
+                .data()
+                .glyphs
+                .get(&glyph_id)
+                .and_then(|glyph| glyph.layers().get(&layer_id))
+                .cloned()
+                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
             if layer.source_id() != previous.source_id() {
                 return Err(CoreError::LayerSourceMismatch {
                     layer_id,
@@ -1218,19 +1226,7 @@ impl Font {
             replacements.push((glyph_id, previous, layer));
         }
 
-        let mut replacement_contour_ids = HashSet::new();
-        let mut replacement_point_ids = HashSet::new();
-        let mut replacement_component_ids = HashSet::new();
-        let mut replacement_anchor_ids = HashSet::new();
-        let mut replacement_guideline_ids = HashSet::new();
-        self.index().validate_layer_replacements(
-            &replacements,
-            &mut replacement_contour_ids,
-            &mut replacement_point_ids,
-            &mut replacement_component_ids,
-            &mut replacement_anchor_ids,
-            &mut replacement_guideline_ids,
-        )?;
+        let replacement_ids = self.index().validate_layer_replacements(&replacements)?;
 
         let state = self.state_mut();
         for (glyph_id, previous, _) in &replacements {
@@ -1249,11 +1245,11 @@ impl Font {
                 .expect("replacement owner was resolved before mutation");
             Arc::make_mut(glyph).set_layer(layer);
         }
-        state.index.contour_ids.extend(replacement_contour_ids);
-        state.index.point_ids.extend(replacement_point_ids);
-        state.index.component_ids.extend(replacement_component_ids);
-        state.index.anchor_ids.extend(replacement_anchor_ids);
-        state.index.guideline_ids.extend(replacement_guideline_ids);
+        state.index.contour_ids.extend(replacement_ids.contours);
+        state.index.point_ids.extend(replacement_ids.points);
+        state.index.component_ids.extend(replacement_ids.components);
+        state.index.anchor_ids.extend(replacement_ids.anchors);
+        state.index.guideline_ids.extend(replacement_ids.guidelines);
 
         Ok(())
     }
@@ -1516,8 +1512,8 @@ fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult
 mod tests {
     use super::*;
     use crate::{
-        test_support::sample_font, AxisMappingPoint, AxisRole, Contour, ContourId, GlyphLayer,
-        LayerId, PointId, PointType,
+        test_support::sample_font, Anchor, AxisMappingPoint, AxisRole, Component, Contour,
+        ContourId, GlyphLayer, LayerId, PointId, PointType,
     };
     use std::sync::Arc;
     use std::time::{Duration, Instant};
@@ -1865,11 +1861,35 @@ mod tests {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
         let contour_id = ContourId::new();
+        let point_id = PointId::new();
+        let component_id = ComponentId::new();
+        let anchor_id = AnchorId::new();
+        let guideline_id = GuidelineId::new();
+        let base_glyph_id = GlyphId::new();
         let mut contour = Contour::with_id(contour_id.clone());
-        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
-        let point_id = contour.points()[0].id();
+        contour.add_point_with_id(point_id.clone(), 0.0, 0.0, PointType::OnCurve, false);
         let mut first_layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 500.0);
         first_layer.add_contour(contour);
+        first_layer.add_component(Component::with_id(
+            component_id.clone(),
+            base_glyph_id.clone(),
+            "base",
+            crate::DecomposedTransform::default(),
+        ));
+        first_layer.add_anchor(Anchor::with_id(
+            anchor_id.clone(),
+            Some("top".to_string()),
+            0.0,
+            100.0,
+        ));
+        first_layer.add_guideline(Guideline::with_id(
+            guideline_id.clone(),
+            None,
+            Some(0.0),
+            None,
+            None,
+            None,
+        ));
         let first_layer_id = first_layer.id();
         let mut first_glyph = Glyph::new("A");
         first_glyph.set_layer(first_layer);
@@ -1887,21 +1907,100 @@ mod tests {
         font.replace_glyph_layers(vec![replacement]).unwrap();
 
         assert_eq!(font.layer(first_layer_id.clone()).unwrap().width(), 700.0);
-        assert_eq!(snapshot.layer(first_layer_id).unwrap().width(), 500.0);
+        assert_eq!(
+            snapshot.layer(first_layer_id.clone()).unwrap().width(),
+            500.0
+        );
         assert!(font.has_contour_id(&contour_id));
         assert!(font.has_point_id(&point_id));
+        assert!(font.has_anchor_id(&anchor_id));
 
-        let mut conflicting_contour = Contour::with_id(contour_id.clone());
-        conflicting_contour.add_point(10.0, 10.0, PointType::OnCurve, false);
+        let mut conflicting_contour = Contour::new();
+        conflicting_contour.add_point_with_id(
+            point_id.clone(),
+            10.0,
+            10.0,
+            PointType::OnCurve,
+            false,
+        );
         let mut conflicting_layer =
-            GlyphLayer::with_width(second_layer_id.clone(), source_id, 800.0);
+            GlyphLayer::with_width(second_layer_id.clone(), source_id.clone(), 800.0);
         conflicting_layer.add_contour(conflicting_contour);
-
         assert!(matches!(
             font.replace_glyph_layers(vec![conflicting_layer]),
-            Err(CoreError::DuplicateContourId(id)) if id == contour_id
+            Err(CoreError::DuplicatePointId(id)) if id == point_id
         ));
-        assert_eq!(font.layer(second_layer_id).unwrap().width(), 600.0);
+
+        let mut conflicting_layer =
+            GlyphLayer::with_width(second_layer_id.clone(), source_id.clone(), 800.0);
+        conflicting_layer.add_component(Component::with_id(
+            component_id.clone(),
+            base_glyph_id.clone(),
+            "base",
+            crate::DecomposedTransform::default(),
+        ));
+        assert!(matches!(
+            font.replace_glyph_layers(vec![conflicting_layer]),
+            Err(CoreError::DuplicateComponentId(id)) if id == component_id
+        ));
+
+        let mut conflicting_layer =
+            GlyphLayer::with_width(second_layer_id.clone(), source_id.clone(), 800.0);
+        conflicting_layer.add_anchor(Anchor::with_id(anchor_id.clone(), None, 10.0, 10.0));
+        assert!(matches!(
+            font.replace_glyph_layers(vec![conflicting_layer]),
+            Err(CoreError::DuplicateAnchorId(id)) if id == anchor_id
+        ));
+
+        let mut conflicting_layer =
+            GlyphLayer::with_width(second_layer_id.clone(), source_id.clone(), 800.0);
+        conflicting_layer.add_guideline(Guideline::with_id(
+            guideline_id.clone(),
+            Some(10.0),
+            None,
+            None,
+            None,
+            None,
+        ));
+        assert!(matches!(
+            font.replace_glyph_layers(vec![conflicting_layer]),
+            Err(CoreError::DuplicateGuidelineId(id)) if id == guideline_id
+        ));
+        assert_eq!(font.layer(second_layer_id.clone()).unwrap().width(), 600.0);
+
+        let emptied = GlyphLayer::with_width(first_layer_id, source_id.clone(), 700.0);
+        let mut transferred_contour = Contour::with_id(contour_id.clone());
+        transferred_contour.add_point_with_id(
+            point_id.clone(),
+            20.0,
+            20.0,
+            PointType::OnCurve,
+            false,
+        );
+        let mut transferred = GlyphLayer::with_width(second_layer_id.clone(), source_id, 800.0);
+        transferred.add_contour(transferred_contour);
+        transferred.add_component(Component::with_id(
+            component_id,
+            base_glyph_id,
+            "base",
+            crate::DecomposedTransform::default(),
+        ));
+        transferred.add_anchor(Anchor::with_id(anchor_id.clone(), None, 20.0, 20.0));
+        transferred.add_guideline(Guideline::with_id(
+            guideline_id,
+            None,
+            Some(20.0),
+            None,
+            None,
+            None,
+        ));
+        font.replace_glyph_layers(vec![emptied, transferred])
+            .unwrap();
+
+        assert_eq!(font.layer(second_layer_id).unwrap().width(), 800.0);
+        assert!(font.has_contour_id(&contour_id));
+        assert!(font.has_point_id(&point_id));
+        assert!(font.has_anchor_id(&anchor_id));
     }
 
     #[test]
