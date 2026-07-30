@@ -365,11 +365,9 @@ fn load_glyphs(
     let layer_rows = {
         let mut stmt = conn.prepare(
             "
-            SELECT l.id, l.glyph_id, l.source_id, l.width, l.height,
-                   p.decoded_byte_length
-            FROM glyph_layers AS l
-            LEFT JOIN glyph_layer_payloads AS p ON p.layer_id = l.id
-            ORDER BY l.glyph_id, l.source_id, l.id
+            SELECT id, glyph_id, source_id, width, height
+            FROM glyph_layers
+            ORDER BY glyph_id, source_id, id
             ",
         )?;
         stmt.query_map([], |row| {
@@ -379,43 +377,23 @@ fn load_glyphs(
                 font::SourceId::from_raw(row.get::<_, String>(2)?),
                 row.get::<_, f64>(3)?,
                 row.get::<_, Option<f64>>(4)?,
-                row.get::<_, Option<i64>>(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?
     };
     let mut loaded_layers = HashMap::new();
     if include_layer_payloads {
-        let mut batch = Vec::new();
-        let mut batch_bytes = 0_u64;
-        for (layer_id, _, _, _, _, decoded_byte_length) in &layer_rows {
-            let decoded_byte_length =
-                decoded_byte_length.ok_or_else(|| StoreError::MissingEntity {
-                    kind: "glyph layer payload",
-                    id: layer_id.to_string(),
-                })?;
-            let decoded_byte_length = u64::try_from(decoded_byte_length).map_err(|_| {
-                StoreError::LayerDirectoryMismatch {
-                    layer_id: layer_id.to_string(),
-                    detail: format!("negative decoded byte length {decoded_byte_length}"),
-                }
-            })?;
-            if !batch.is_empty()
-                && (batch.len() == crate::MAX_LAYER_READ_BATCH_COUNT
-                    || batch_bytes.saturating_add(decoded_byte_length)
-                        > crate::MAX_LAYER_READ_BATCH_DECODED_BYTES)
-            {
-                load_layer_batch(conn, &mut batch, &mut loaded_layers)?;
-                batch_bytes = 0;
-            }
-            batch.push(layer_id.clone());
-            batch_bytes = batch_bytes.saturating_add(decoded_byte_length);
+        let layer_ids = layer_rows
+            .iter()
+            .map(|(layer_id, _, _, _, _)| layer_id.clone())
+            .collect::<Vec<_>>();
+        for layer in crate::packed_layer::load_glyph_layers_from_conn(conn, &layer_ids)? {
+            loaded_layers.insert(layer.id(), layer);
         }
-        load_layer_batch(conn, &mut batch, &mut loaded_layers)?;
     }
 
     let mut layers: HashMap<font::GlyphId, Vec<font::GlyphLayer>> = HashMap::new();
-    for (layer_id, glyph_id, source_id, width, height, _) in layer_rows {
+    for (layer_id, glyph_id, source_id, width, height) in layer_rows {
         let layer = if include_layer_payloads {
             loaded_layers
                 .remove(&layer_id)
@@ -449,22 +427,6 @@ fn load_glyphs(
         glyphs.push(glyph);
     }
     Ok(glyphs)
-}
-
-fn load_layer_batch(
-    conn: &rusqlite::Connection,
-    batch: &mut Vec<font::LayerId>,
-    loaded: &mut HashMap<font::LayerId, font::GlyphLayer>,
-) -> Result<(), StoreError> {
-    if batch.is_empty() {
-        return Ok(());
-    }
-
-    let layer_ids = std::mem::take(batch);
-    for layer in crate::packed_layer::load_glyph_layers_from_conn(conn, &layer_ids)? {
-        loaded.insert(layer.id(), layer);
-    }
-    Ok(())
 }
 
 fn load_font_guidelines(conn: &rusqlite::Connection) -> Result<Vec<font::Guideline>, StoreError> {

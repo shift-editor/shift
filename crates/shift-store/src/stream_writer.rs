@@ -119,14 +119,7 @@ impl LayerStreamWriter<'_> {
                     kind: "glyph layer",
                     id: layer_id.to_string(),
                 })?;
-            store_stored_layer_in_tx(
-                &self.tx,
-                &glyph.id(),
-                Some(glyph.glyph_name()),
-                layer,
-                stored,
-                WriteMode::Insert,
-            )?;
+            store_stored_layer_in_tx(&self.tx, &glyph.id(), layer, stored, WriteMode::Insert)?;
         }
         self.next_glyph_order += 1;
         Ok(())

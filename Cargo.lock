@@ -2429,6 +2429,7 @@ dependencies = [
 name = "shift-workspace"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "shift-backends",
  "shift-font",
  "shift-source",

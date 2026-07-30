@@ -1,9 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use shift_font::{
-    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, FontChange, FontIntent,
-    FontIntentSet, GlyphId, GlyphName, LayerId, Location, NamedInstance, NamedInstanceId, PointId,
-    PointSeed, PointType, SourceId, error::CoreError,
+    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, Font, FontChange, FontIntent,
+    FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Location, NamedInstance,
+    NamedInstanceId, PointId, PointSeed, PointType, SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
@@ -145,6 +145,13 @@ fn imports_external_fonts_without_a_save_target() {
             .family_name
             .is_some()
     );
+    assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".shift-import-")
+    }));
 }
 
 #[test]
@@ -170,9 +177,10 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
         .font()
         .glyphs()
         .filter(|glyph| !glyph.layers().is_empty())
-        .take(8)
+        .take(520)
         .map(|glyph| glyph.id())
         .collect::<Vec<_>>();
+    assert!(requested.len() > 512);
     assert_eq!(workspace.loaded_layer_count(), 0);
     workspace
         .acquire_glyphs(&requested, AcquireScope::Glyphs)
@@ -405,6 +413,125 @@ fn ufo_source_roundtrips_through_lazy_acquisition() {
             bytes
         );
     }
+}
+
+#[test]
+fn failed_streaming_import_removes_staging_and_preserves_the_destination() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join("Broken.ufo");
+    let store_path = temp.path().join("existing.sqlite");
+    let mut font = Font::new();
+    let mut glyph = Glyph::new("A");
+    let mut layer = GlyphLayer::new(LayerId::new(), font.default_source_id().unwrap());
+    let mut contour = shift_font::Contour::new();
+    contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+    layer.add_contour(contour);
+    glyph.set_layer(layer);
+    font.insert_glyph(glyph).unwrap();
+    shift_backends::font_loader::FontLoader::new()
+        .write_font(&font, source_path.to_str().unwrap())
+        .unwrap();
+    let glif_path = fs::read_dir(source_path.join("glyphs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "glif")
+        })
+        .unwrap();
+    fs::remove_file(glif_path).unwrap();
+    drop(shift_store::ShiftStore::open(&store_path).unwrap());
+    let destination_before = fs::read(&store_path).unwrap();
+
+    assert!(FontWorkspace::open(&source_path, &store_path).is_err());
+
+    assert_eq!(fs::read(&store_path).unwrap(), destination_before);
+    assert!(
+        shift_store::ShiftStore::open(&store_path)
+            .unwrap()
+            .workspace_state()
+            .unwrap()
+            .is_none()
+    );
+    assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".shift-import-")
+    }));
+}
+
+#[test]
+fn foreign_import_refuses_to_replace_a_published_workspace_store() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let store_path = temp.path().join("published.sqlite");
+    let workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    drop(workspace);
+
+    let error = match FontWorkspace::open(&source_path, &store_path) {
+        Ok(_) => panic!("foreign import must not replace a published workspace"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        error,
+        WorkspaceError::Store(shift_store::StoreError::ImportDestinationNotEmpty(path))
+            if path == store_path
+    ));
+    let resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.font().glyph_count(), 0);
+}
+
+#[test]
+fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let store_path = temp.path().join("corrupt-acquisition.sqlite");
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let requested = workspace
+        .font()
+        .glyphs()
+        .filter(|glyph| !glyph.layers().is_empty())
+        .take(2)
+        .map(|glyph| glyph.id())
+        .collect::<Vec<_>>();
+    assert_eq!(requested.len(), 2);
+    let corrupt_layer_id = workspace
+        .font()
+        .glyph(requested[0].clone())
+        .unwrap()
+        .layers()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let conn = rusqlite::Connection::open(&store_path).unwrap();
+    conn.execute(
+        "UPDATE glyph_layer_payloads
+         SET payload = X'00', stored_byte_length = 1
+         WHERE layer_id = ?1",
+        [corrupt_layer_id.to_string()],
+    )
+    .unwrap();
+    drop(conn);
+
+    let error = workspace
+        .acquire_glyphs(std::slice::from_ref(&requested[0]), AcquireScope::Glyphs)
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        WorkspaceError::Store(shift_store::StoreError::LayerDecompression(_))
+    ));
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    assert!(workspace.font().layer(corrupt_layer_id).unwrap().is_empty());
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&requested[1]), AcquireScope::Glyphs)
+        .unwrap();
+    assert!(workspace.loaded_layer_count() > 0);
 }
 
 #[test]

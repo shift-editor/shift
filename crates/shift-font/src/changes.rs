@@ -134,12 +134,8 @@ impl FontChange {
         })
     }
 
-    pub fn glyph_layer_created(
-        glyph_id: GlyphId,
-        name: Option<GlyphName>,
-        layer: &GlyphLayer,
-    ) -> Self {
-        Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, name, layer))
+    pub fn glyph_layer_created(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
+        Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, layer))
     }
 
     pub fn glyph_layer_deleted(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
@@ -381,18 +377,16 @@ pub struct GlyphLayerCreated {
     pub glyph_id: GlyphId,
     pub source_id: SourceId,
     pub layer_id: LayerId,
-    pub name: Option<GlyphName>,
     pub width: f64,
     pub height: Option<f64>,
 }
 
 impl GlyphLayerCreated {
-    pub fn from_layer(glyph_id: GlyphId, name: Option<GlyphName>, layer: &GlyphLayer) -> Self {
+    pub fn from_layer(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
         Self {
             glyph_id,
             source_id: layer.source_id(),
             layer_id: layer.id(),
-            name,
             width: layer.width(),
             height: layer.height(),
         }

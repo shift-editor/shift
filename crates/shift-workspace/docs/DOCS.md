@@ -24,6 +24,7 @@ crates/shift-workspace/src/
   new_workspace.rs -- creation options for a fresh workspace
   source_identity.rs -- package identity snapshots and source-save validation
   import_pipeline.rs -- bounded parser/parallel-packer/single-writer pipeline and progress observer
+  import_staging.rs  -- sibling staged-store creation, atomic installation, and parent sync
   layer_residency.rs -- complete read sets, bounded acquisition, and safe eviction
   ledger.rs        -- bounded snapshot-pair undo/redo entries
   workspace.rs     -- `FontWorkspace` orchestration and workspace errors
@@ -44,7 +45,7 @@ crates/shift-workspace/examples/
 
 `FontWorkspace::create(source_path, store_path, options)` creates a placeholder `.shift` package, opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font`.
 
-`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, and Designspace paths use a metadata/directory-first backend cursor, parse batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable import connection. After the complete stream commits, `finish_import` syncs the database and restores edit-time WAL settings. The returned workspace contains directory placeholders and zero loaded layer payloads. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues requires the separate app import-session boundary. Other supported foreign formats retain the eager compatibility path until they gain a bounded reader.
+`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, and Designspace paths use a metadata/directory-first backend cursor, parse batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable sibling staging database. The legal import transitions are **Staging** (foreign source remains authoritative), **Durable** (stream committed, indexes restored, workspace state written, database synced), then **Published** (closed staging file atomically installed and parent directory synced). Failure before Published removes staging and leaves the previous destination untouched. The returned workspace contains directory placeholders and zero loaded layer payloads. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues requires the separate app import-session boundary. Other supported foreign formats retain the eager compatibility path until they gain a bounded reader.
 
 `FontWorkspace::save()` succeeds for saved `.shift` workspaces and returns `NeedsSaveAs` for imported workspaces. `save_as(path)` creates a `.shift` package and makes it the save target.
 
@@ -52,7 +53,7 @@ crates/shift-workspace/examples/
 
 `FontWorkspace::inspect_package_draft(store_path)` reads the working-store package ownership record without resuming it. It returns the package id, source path, base fingerprint, document id, and dirty flag so the utility process can choose an explicit open transition.
 
-`FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, AcquireScope::Glyphs)` fetches only requested layers; `AcquireScope::ComponentClosure` first expands component dependencies from the relational index. Acquisition reads directory facts, payloads, and component indexes in ordered batches of at most 512 layers and 256 MiB of decoded bytes, decompresses and verifies exact lengths plus BLAKE3 in parallel, accumulates the canonical results, and validates the complete replacement before mutating the uniquely owned live font in place. Validated identity sets become the final index entries rather than a temporary duplicate; shared font snapshots still use copy-on-write. A malformed batch does not replace the live cache. Save/export explicitly acquire all layers before creating their complete snapshots.
+`FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, AcquireScope::Glyphs)` fetches only requested layers; `AcquireScope::ComponentClosure` first expands component dependencies from the relational index. Acquisition passes the complete request to the store's shared count- and decoded-byte-aware planner. Each internal batch reads directory facts, payloads, and component indexes for at most 512 layers and 256 MiB decoded bytes, decompresses and verifies exact lengths plus BLAKE3 in parallel, accumulates the canonical results, and validates the complete replacement before mutating the uniquely owned live font in place. Validated identity sets become the final index entries rather than a temporary duplicate; shared font snapshots still use copy-on-write. A malformed batch does not replace the live cache. Save/export explicitly acquire all layers before creating their complete snapshots.
 
 ## Profiling
 

@@ -6,13 +6,13 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 
 ## Storage boundary
 
-- Font metadata and the glyph/layer directory remain relational and load eagerly.
+- Font metadata and the glyph/layer directory remain relational and load eagerly. Layer rows reference their glyph rather than duplicating its editable name.
 - Each editable glyph layer is one independently addressable payload. Its canonical decoded bytes remain `shift.glyph-layer.v1`; the store independently wraps them as `none` or `zstd.v1` without changing authored semantics.
 - Component dependency rows contain only the earned query index: component ID, owner layer ID, base glyph ID, and ordinal.
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.
 - Payload replacement, directory facts, component rows, and workspace revision state commit in one transaction.
 
-`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds stored and decoded lengths before fetching and decompressing one payload. `load_glyph_layers` scans directory facts, bounded payloads, and reference rows once for a deduplicated batch of at most 512 layers and 256 MiB decoded bytes, then decompresses and validates the batch with Rayon. Every decoded payload must match its exact declared length and 32-byte BLAKE3 before strict canonical decoding. Explicit full-font materialization partitions the directory through that same bounded loader instead of issuing one query sequence per layer. All payload paths cross-check canonical bytes against relational facts. `FontWorkspace` uses the batch path for explicit glyph acquisition and safe cache eviction.
+`ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds stored and decoded lengths before fetching and decompressing one payload. `load_glyph_layers` accepts a complete requested set, deduplicates it, and partitions it through the single count- and decoded-byte-aware planner. Each internal batch performs three ordered directory/payload/reference scans for at most 512 layers and 256 MiB decoded bytes, then decompresses and validates with Rayon. Every decoded payload must match its exact declared length and 32-byte BLAKE3 before strict canonical decoding. Full-font materialization and workspace acquisition use that same planner; no caller maintains a weaker count-only loop. All payload paths cross-check canonical bytes against relational facts.
 
 ## Outer payload contract
 
@@ -31,7 +31,7 @@ only then invoke strict canonical decoding. A layer replacement may move between
 
 `LayerStreamWriter` accepts bounded replacement glyph batches without requiring a complete in-memory `Font`. `pack_glyph_batch` canonical-encodes, BLAKE3-hashes, and independently compresses an owned batch with Rayon without borrowing the SQLite transaction, allowing the workspace to overlap parsing, packing/compression, and one stable-order SQLite writer. Streaming inserts, full-state replacement, and change-set replacement share one write implementation parameterized only by insert/upsert mode. Change sets supplied with a committed post-edit font skip incremental decode/re-encode for touched existing layers and write each final layer once. Secondary query indexes are dropped inside the stream transaction and rebuilt in bulk by `finish`; dropping an unfinished writer restores them with the rest of the rollback. Prefix-redundant Unicode-glyph and component-layer indexes are omitted. `finish` is the only stream commit point.
 
-`ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the foreign source remains authoritative and the destination is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL before workspace state is published. Normal edits never use import pragmas. Progress, cancellation, source fingerprinting, and final atomic destination installation remain workspace responsibilities.
+`ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the foreign source remains authoritative and the path is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL. Normal edits never use import pragmas. `FontWorkspace` opens imports at a sibling staging path, writes workspace state there, makes the staged database durable, closes it, atomically installs it at the requested destination, and syncs the parent directory. A failure before installation leaves the previous destination untouched.
 
 ## Schema policy
 

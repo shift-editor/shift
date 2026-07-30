@@ -36,8 +36,8 @@ impl ShiftStore {
         })
     }
 
-    /// Flushes a completed base import and restores the normal edit-time WAL
-    /// posture before the workspace becomes authoritative.
+    /// Flushes a completed staged import and restores the normal edit-time
+    /// WAL posture before the workspace publishes the closed database.
     pub fn finish_import(&self) -> Result<(), StoreError> {
         self.sync_store_file()?;
 

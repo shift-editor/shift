@@ -163,7 +163,7 @@ pub(crate) fn write_glyph_in_tx(
     write_glyph_directory_in_tx(tx, glyph, order_index, WriteMode::Upsert)?;
 
     for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
-        write_layer_in_tx(tx, &glyph.id(), Some(glyph.glyph_name()), layer)?;
+        write_layer_in_tx(tx, &glyph.id(), layer)?;
     }
     Ok(())
 }
@@ -335,13 +335,16 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             Ok(())
         }
         font::FontChange::GlyphIdentityChanged(change) => {
-            upsert_glyph(tx, &change.glyph_id, &change.to_name, 0)?;
+            let rows_changed = tx.execute(
+                "UPDATE glyphs SET name = ?1 WHERE id = ?2",
+                params![change.to_name.as_str(), change.glyph_id.to_string()],
+            )?;
+            require_changed(rows_changed, "glyph", change.glyph_id.to_string())?;
             replace_glyph_unicodes(tx, &change.glyph_id, &change.to_unicodes)
         }
         font::FontChange::GlyphLayerCreated(change) => create_empty_layer_in_tx(
             tx,
             &change.glyph_id,
-            change.name.as_ref(),
             change.layer_id.clone(),
             change.source_id.clone(),
             change.width,

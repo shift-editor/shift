@@ -112,7 +112,6 @@ CREATE TABLE IF NOT EXISTS glyph_layers (
     id TEXT PRIMARY KEY,
     glyph_id TEXT NOT NULL,
     source_id TEXT NOT NULL,
-    name TEXT,
     width REAL NOT NULL DEFAULT 0,
     height REAL,
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,

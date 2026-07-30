@@ -1,4 +1,5 @@
 mod import_pipeline;
+mod import_staging;
 mod layer_residency;
 mod ledger;
 mod new_workspace;

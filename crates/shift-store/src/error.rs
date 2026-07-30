@@ -33,9 +33,6 @@ pub enum StoreError {
     #[error("glyph layer read batch has {layers} layers; limit is {limit}")]
     LayerReadBatchTooLarge { layers: usize, limit: usize },
 
-    #[error("glyph layer read batch has {bytes} stored bytes; limit is {limit}")]
-    LayerReadBatchStoredTooLarge { bytes: u64, limit: u64 },
-
     #[error("glyph layer read batch has {bytes} decoded bytes; limit is {limit}")]
     LayerReadBatchDecodedTooLarge { bytes: u64, limit: u64 },
 

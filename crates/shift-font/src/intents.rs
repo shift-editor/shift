@@ -702,11 +702,6 @@ impl Font {
         source_id: SourceId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let glyph_name = self
-            .glyph(glyph_id.clone())
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?
-            .glyph_name()
-            .clone();
         if self.glyph_id_by_layer(layer_id.clone()).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
@@ -722,11 +717,7 @@ impl Font {
         let layer = GlyphLayer::with_width(layer_id.clone(), source_id, self.default_layer_width());
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id,
-            Some(glyph_name),
-            &layer,
-        ));
+        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
 
         Ok(vec![layer_id])
     }
@@ -739,15 +730,11 @@ impl Font {
         from_layer_id: LayerId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let (glyph_name, layer) =
+        let layer =
             self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id,
-            Some(glyph_name),
-            &layer,
-        ));
+        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
 
         Ok(vec![layer_id])
     }
@@ -761,16 +748,12 @@ impl Font {
         values: &GlyphInterpolationValues,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let (glyph_name, mut layer) =
+        let mut layer =
             self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
         layer.apply_interpolation_values(values)?;
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id,
-            Some(glyph_name),
-            &layer,
-        ));
+        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
 
         Ok(vec![layer_id])
     }
@@ -781,13 +764,7 @@ impl Font {
         glyph_id: GlyphId,
         source_id: SourceId,
         from_layer_id: LayerId,
-    ) -> CoreResult<(GlyphName, GlyphLayer)> {
-        let glyph_name = self
-            .glyph(glyph_id.clone())
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?
-            .glyph_name()
-            .clone();
-
+    ) -> CoreResult<GlyphLayer> {
         if self.glyph_id_by_layer(layer_id.clone()).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
@@ -817,7 +794,7 @@ impl Font {
             .ok_or(CoreError::LayerNotFound(from_layer_id))?;
         let layer = source_layer.clone_with_fresh_ids(layer_id, source_id);
 
-        Ok((glyph_name, layer))
+        Ok(layer)
     }
 
     fn apply_update_glyph(

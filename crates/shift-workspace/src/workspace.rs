@@ -13,11 +13,9 @@ use shift_font::{
     SourceId, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
-use shift_store::{
-    MAX_LAYER_READ_BATCH_COUNT, ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind,
-    WorkspaceState,
-};
+use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
 
+use crate::import_staging::{create_import_staging_path, install_import_store};
 use crate::layer_residency::LayerResidency;
 use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
 use crate::source_identity::{
@@ -749,17 +747,32 @@ impl FontWorkspace {
         let loader = FontLoader::new();
         match loader.stream_font(import_path_str) {
             Ok(import) => {
-                let mut store = ShiftStore::open_for_import(store_path)?;
+                let store_path = store_path.as_ref();
+                if store_path.exists() {
+                    let existing = ShiftStore::open(store_path)?;
+                    if existing.workspace_state()?.is_some() {
+                        return Err(shift_store::StoreError::ImportDestinationNotEmpty(
+                            store_path.to_path_buf(),
+                        )
+                        .into());
+                    }
+                }
+
+                let staged_path = create_import_staging_path(store_path)?;
+                let mut store = ShiftStore::open_for_import(&staged_path)?;
                 let mut writer = store.font_stream_writer(import.header())?;
                 stream_into(import, &mut writer, ImportBatchLimit::default(), |_| {})?;
                 writer.finish()?;
-                store.finish_import()?;
                 store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
+                store.finish_import()?;
                 let font = store.load_font_directory()?;
                 let residency = LayerResidency::with_unloaded(
                     font.glyphs()
                         .flat_map(|glyph| glyph.layers().keys().cloned()),
                 );
+                drop(store);
+                install_import_store(staged_path, store_path)?;
+                let store = ShiftStore::open(store_path)?;
 
                 return Ok(Self::from_store(
                     font,
@@ -839,10 +852,7 @@ impl FontWorkspace {
         // Decode through bounded SQLite reads. Font validates the complete
         // replacement batch before mutating, so malformed input leaves the
         // live cache unchanged without copying the complete directory.
-        let mut layers = Vec::with_capacity(layer_ids.len());
-        for layer_ids in layer_ids.chunks(MAX_LAYER_READ_BATCH_COUNT) {
-            layers.extend(self.store.load_glyph_layers(layer_ids)?);
-        }
+        let layers = self.store.load_glyph_layers(&layer_ids)?;
         self.font.replace_glyph_layers(layers)?;
         self.residency.mark_loaded(layer_ids);
         Ok(())
@@ -1146,11 +1156,7 @@ fn replay_glyph(
 
         for layer in glyph.layers().values() {
             let layer = layer.as_ref().clone();
-            changes.push(FontChange::glyph_layer_created(
-                glyph.id(),
-                Some(glyph.glyph_name().clone()),
-                &layer,
-            ));
+            changes.push(FontChange::glyph_layer_created(glyph.id(), &layer));
             touched.push(TouchedLayer {
                 layer,
                 structural: true,
@@ -1319,14 +1325,7 @@ fn replay_glyph_layer(
     }
 
     if let Some(layer) = to {
-        let glyph_name = font
-            .glyph(glyph_id.clone())
-            .map(|glyph| glyph.glyph_name().clone());
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id.clone(),
-            glyph_name,
-            &layer,
-        ));
+        changes.push(FontChange::glyph_layer_created(glyph_id.clone(), &layer));
         font.insert_glyph_layer(glyph_id, layer.clone())?;
         touched.push(TouchedLayer {
             layer,
