@@ -8,10 +8,13 @@
     "apps/desktop/src/renderer/src/testing/stubCanvas.ts"
   ],
   "includeEntryExports": true,
-  "ignoreWorkspaces": ["crates/shift-node"],
   "ignoreExportsUsedInFile": true,
   "tags": ["-lintignore"],
   "workspaces": {
+    ".": {
+      "entry": ["scripts/find-refs.ts", "scripts/oxlint/shift-plugin.mjs"],
+      "project": ["scripts/**/*.{ts,mjs}"]
+    },
     "apps/desktop": {
       "entry": [
         "src/main/main.ts",
@@ -19,24 +22,20 @@
         "src/utility/workspace.ts",
         "src/renderer/renderer.ts",
         "forge.config.ts",
-        "vitest.config.ts",
         "vite.main.config.ts",
         "vite.preload.config.ts",
         "vite.renderer.config.ts",
-        "playwright.config.ts",
         "e2e/**/*.ts",
         "src/**/*.bench.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "*.config.ts", "e2e/**/*.ts", "!src/**/*.d.ts"]
-    },
-    "packages/font": {
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.{ts,tsx}", "*.config.ts", "e2e/**/*.ts", "!src/**/*.d.ts"],
+      "ignoreDependencies": ["oxlint-plugin-eslint", "shift-bridge", "tailwindcss"]
     },
     "packages/geo": {
       "project": ["src/**/*.ts"]
     },
     "packages/glyph-info": {
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts", "scripts/**/*.ts"]
     },
     "packages/rules": {
       "project": ["src/**/*.ts"]

@@ -20,7 +20,6 @@
     "shift-bridge": "workspace:*"
   },
   "devDependencies": {
-    "@shift/tsconfig": "workspace:*",
     "typescript": "^5.5.4"
   }
 }

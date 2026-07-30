@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { Toolbar } from "@/components/chrome/Toolbar";

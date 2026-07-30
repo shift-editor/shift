@@ -6,7 +6,7 @@
   "scripts": {
     "prepare": "git submodule update --init --recursive && pnpm generate:glyph-info",
     "dev": "pnpm run build:native:debug && pnpm --filter @shift/desktop dev",
-    "dev:watch": "scripts/watch.sh",
+    "dev:watch": "./scripts/watch.sh",
     "build": "turbo run build",
     "build:native": "pnpm --filter shift-bridge run build",
     "build:native:debug": "pnpm --filter shift-bridge run build:debug",
@@ -32,6 +32,7 @@
     "deadcode:class": "knip -c knip.class.json --workspace apps/desktop --workspace \"packages/*\" --include classMembers --exclude files,dependencies,unlisted,unresolved,exports,nsExports,types,nsTypes,enumMembers,duplicates,catalog --no-exit-code",
     "deadcode:strict": "pnpm deadcode && pnpm deadcode:class",
     "deadcode:fix": "knip -c knip.fix.json --workspace apps/desktop --workspace \"packages/*\" --fix --allow-remove-files",
+    "check-deps": "knip --include dependencies --exclude files,exports",
     "agent-skills:sync": "node scripts/sync-agent-skills.mjs",
     "agent-skills:check": "node scripts/sync-agent-skills.mjs --check",
     "check": "pnpm lint:check && pnpm typecheck && pnpm deadcode:strict && pnpm test",
@@ -60,23 +61,8 @@
     "oxfmt": "^0.49.0",
     "ts-morph": "^27.0.2",
     "tsx": "^4.7.0",
-    "turbo": "^2.7.5",
+    "turbo": "^2.10.7",
     "typescript": "^5.5.4"
   },
-  "pnpm": {
-    "overrides": {
-      "tar": ">=7.5.8",
-      "qs": ">=6.14.2",
-      "glob": ">=10.5.0",
-      "esbuild": ">=0.25.0",
-      "js-yaml": ">=4.1.1",
-      "tmp": ">=0.2.4",
-      "minimatch": ">=10.2.1",
-      "fast-xml-parser": ">=5.3.6",
-      "beautiful-mermaid": ">=0.1.3",
-      "@isaacs/brace-expansion": ">=5.0.1",
-      "lodash": ">=4.17.23"
-    }
-  },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@11.18.0"
 }
