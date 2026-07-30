@@ -2,3 +2,29 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'crates/shift-bridge'
+
+allowBuilds:
+  '@tailwindcss/oxide@4.1.11': true
+  electron-winstaller@5.4.0: true
+  electron@40.10.6: true
+  esbuild@0.25.12: true
+  esbuild@0.27.2: true
+
+dedupePeerDependents: false
+engineStrict: true
+nodeLinker: hoisted
+
+minimumReleaseAgeExclude:
+  - brace-expansion@5.0.9
+
+overrides:
+  # Targeted major updates for upstream ranges with no patched release.
+  '@electron/node-gyp>tar': 7.5.22
+  '@electron/rebuild@3>tar': 7.5.22
+  'cacache@16>tar': 7.5.22
+  'external-editor@3>tmp': 0.2.7
+  'minimatch@3>brace-expansion': 5.0.9
+  'minimatch@5>brace-expansion': 5.0.9
+  'minimatch@9>brace-expansion': 5.0.9
+  # Electron Forge 7 otherwise fetches this transitive dependency from GitHub.
+  '@electron/rebuild>@electron/node-gyp': 10.2.0-electron.2
