@@ -122,10 +122,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: shift-rust
-
       - name: Typecheck
         run: pnpm typecheck
 
@@ -164,16 +160,13 @@ jobs:
         with:
           shared-key: shift-rust
 
-      - name: Cache native module binary
-        id: native-cache
+      - name: Cache native Turbo build
         uses: actions/cache@v6
         with:
-          path: crates/shift-bridge/*.node
-          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
-
-      - name: Build native module
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        run: pnpm build:native
+          path: |
+            .turbo/cache
+            crates/shift-bridge/*.node
+          key: native-turbo-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
 
       - name: Run unit tests
         run: pnpm test:unit
