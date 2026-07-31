@@ -387,7 +387,7 @@ fn load_glyphs(
             .iter()
             .map(|(layer_id, _, _, _, _)| layer_id.clone())
             .collect::<Vec<_>>();
-        for layer in crate::packed_layer::load_glyph_layers_from_conn(conn, &layer_ids)? {
+        for layer in crate::layer::load_glyph_layers_from_conn(conn, &layer_ids)? {
             loaded_layers.insert(layer.id(), layer);
         }
     }

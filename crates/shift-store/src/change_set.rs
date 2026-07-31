@@ -5,7 +5,7 @@ use shift_font as font;
 
 use crate::{
     ShiftStore, StoreError,
-    packed_layer::{create_empty_layer_in_tx, rewrite_layer_in_tx, write_layer_in_tx},
+    layer::{create_empty_layer_in_tx, rewrite_layer_in_tx, write_layer_in_tx},
     source::SourceKind,
     workspace_state::mark_workspace_dirty_in_tx,
     write_mode::WriteMode,
@@ -491,13 +491,12 @@ fn update_packed_layer(
     layer_id: &font::LayerId,
     update: impl FnOnce(&mut font::GlyphLayer) -> Result<(), StoreError>,
 ) -> Result<(), StoreError> {
-    let mut layer =
-        crate::packed_layer::load_glyph_layer_from_conn(tx, layer_id)?.ok_or_else(|| {
-            StoreError::MissingEntity {
-                kind: "glyph layer",
-                id: layer_id.to_string(),
-            }
-        })?;
+    let mut layer = crate::layer::load_glyph_layer_from_conn(tx, layer_id)?.ok_or_else(|| {
+        StoreError::MissingEntity {
+            kind: "glyph layer",
+            id: layer_id.to_string(),
+        }
+    })?;
     update(&mut layer)?;
     rewrite_layer_in_tx(tx, &layer)
 }

@@ -7,10 +7,9 @@ use shift_font as font;
 use crate::{
     GlyphWriteBatch, LayerBatchTiming, ShiftStore, StoreError,
     change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
-    packed_layer::store_stored_layer_in_tx,
+    layer::{StoredLayerPayload, compress_layer, encode_layer, store_stored_layer_in_tx},
     schema::{defer_import_indexes, restore_import_indexes},
-    stored_layer::{compress_glyph_layer, encode_layer},
-    types::{EncodedGlyphLayers, PackedGlyph, StoredLayerPayload},
+    types::{EncodedGlyphLayers, PackedGlyph},
     write_mode::WriteMode,
 };
 
@@ -155,7 +154,7 @@ fn compress_glyph_layers(
             layers
                 .into_iter()
                 .map(|(layer_id, encoded)| {
-                    compress_glyph_layer(&encoded).map(|stored| (layer_id, stored))
+                    compress_layer(&encoded).map(|stored| (layer_id, stored))
                 })
                 .collect::<Result<Vec<_>, _>>()
         })

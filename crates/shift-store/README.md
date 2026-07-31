@@ -49,13 +49,19 @@ Shift has not shipped this working-store schema. Schema changes therefore update
 
 ```text
 src/
-  connection.rs    # normal WAL opening plus disposable import/finalization posture
-  schema.rs        # pre-release version-1 baseline
-  font_state.rs    # eager metadata/directory and explicit full materialization
-  packed_layer.rs  # bounded BLOB fetch/replace and reference-index checks
-  stored_layer.rs  # strict MessagePack plus independent Zstd/BLAKE3 storage representation
-  stream_writer.rs # independently pipelined Rayon encode/compress plus single-transaction SQLite sink
-  write_mode.rs    # shared insert/upsert policy for canonical write paths
-  change_set.rs    # transactional workspace changes and one final touched-layer write
+  connection.rs     # normal WAL opening plus disposable import/finalization posture
+  schema.rs         # pre-release version-1 baseline
+  font_state.rs     # eager metadata/directory and explicit full materialization
+  import_writer.rs  # pipelined Rayon encode/compress plus one SQLite transaction owner
+  layer/
+    format.rs       # strict MessagePack encoding and domain validation
+    payload.rs      # independent Zstd/BLAKE3 storage representation
+    directory.rs    # relational metadata and row cross-validation
+    load.rs         # bounded single and batch BLOB reads
+    write.rs        # transactional payload and reference-index writes
+    references.rs   # component dependency queries and index validation
+    tests.rs        # integrated SQLite layer behavior
+  write_mode.rs     # shared insert/upsert policy for canonical write paths
+  change_set.rs     # transactional workspace changes and one final touched-layer write
   workspace_state.rs
 ```
