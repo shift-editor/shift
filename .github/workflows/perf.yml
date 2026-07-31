@@ -1,6 +1,8 @@
 name: Perf
 
 on:
+  schedule:
+    - cron: "0 6 * * *"
   push:
     branches: [main]
     paths:
@@ -68,6 +70,7 @@ concurrency:
 jobs:
   engine-benchmarks:
     name: Engine Benchmarks
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -116,8 +119,17 @@ jobs:
       - name: Run engine benchmarks
         run: pnpm test:perf
 
-  playwright-perf:
-    name: Playwright GPU and Perf
+  playwright:
+    name: Playwright ${{ matrix.name }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GPU
+            project: gpu
+          - name: Perf
+            project: perf
     runs-on: macos-latest
     permissions:
       contents: read
@@ -203,19 +215,19 @@ jobs:
       - name: Build E2E app
         run: pnpm --filter @shift/desktop build:e2e
 
-      - name: Run Playwright GPU and perf tests
-        run: pnpm --filter @shift/desktop exec playwright test --project=gpu --project=perf
+      - name: Run Playwright ${{ matrix.name }} tests
+        run: pnpm --filter @shift/desktop exec playwright test --project=${{ matrix.project }}
 
       - name: Upload Playwright failures
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-gpu-results
+          name: playwright-${{ matrix.project }}-results
           path: apps/desktop/e2e/test-results/
           retention-days: 7
 
       - name: Upload perf results
-        if: always()
+        if: ${{ always() && matrix.project == 'perf' }}
         uses: actions/upload-artifact@v7
         with:
           name: perf-results

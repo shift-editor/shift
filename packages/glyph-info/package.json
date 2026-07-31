@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "generate": "git -C ../.. submodule update --init --recursive packages/glyph-info/vendor/GlyphsInfo && tsx scripts/generate.ts",
