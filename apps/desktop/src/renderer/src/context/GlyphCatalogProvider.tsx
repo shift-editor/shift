@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { GlyphCategory, GlyphCategoryCatalog } from "@shift/glyph-info";
+import type { GlyphCategory, GlyphCategoryCatalog, GlyphInfo } from "@shift/glyph-info";
 import type { GlyphName, GlyphRecord } from "@shift/types";
 import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
@@ -24,8 +24,8 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);
 
   const availableGlyphs = useMemo(
-    () => glyphRecords.map(glyphCatalogItemFromRecord),
-    [glyphRecords],
+    () => glyphRecords.map((record) => glyphCatalogItemFromRecord(record, glyphInfo)),
+    [glyphInfo, glyphRecords],
   );
 
   const availableUnicodes = useMemo(
@@ -54,7 +54,9 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     return availableGlyphs.filter((glyph) => {
       const unicodeMatched = glyph.unicode !== null && categoryFilteredUnicodes.has(glyph.unicode);
       const nameMatched =
-        normalizedQuery !== "" && glyph.name.toLowerCase().includes(normalizedQuery);
+        normalizedQuery !== "" &&
+        (glyph.name.toLowerCase().includes(normalizedQuery) ||
+          glyph.displayName.toLowerCase().includes(normalizedQuery));
 
       if (filteringByCategory) return unicodeMatched;
       if (normalizedQuery !== "") return unicodeMatched || nameMatched;
@@ -100,10 +102,13 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   };
 };
 
-function glyphCatalogItemFromRecord(record: GlyphRecord): GlyphCatalogItem {
+function glyphCatalogItemFromRecord(record: GlyphRecord, glyphInfo: GlyphInfo): GlyphCatalogItem {
+  const unicode = record.unicodes[0] ?? null;
+
   return {
     id: record.id,
     name: record.name,
-    unicode: record.unicodes[0] ?? null,
+    displayName: glyphInfo.resolveGlyphName(record.name, unicode),
+    unicode,
   };
 }

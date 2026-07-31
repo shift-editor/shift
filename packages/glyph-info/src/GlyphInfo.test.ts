@@ -103,6 +103,25 @@ describe("getGlyphName", () => {
   });
 });
 
+describe("resolveGlyphName", () => {
+  it("maps legacy aliases from the glyph database", () => {
+    expect(db.resolveGlyphName("afii10072")).toBe("zhe-cy");
+    expect(db.resolveGlyphName("afii10081")).toBe("pe-cy");
+  });
+
+  it("uses the assigned codepoint when the authored name is noncanonical", () => {
+    expect(db.resolveGlyphName("custom-zhe", 0x0436)).toBe("zhe-cy");
+  });
+
+  it("maps production names and preserves dot suffixes", () => {
+    expect(db.resolveGlyphName("uni01C9.sc")).toBe("lj.sc");
+  });
+
+  it("preserves unknown authored names", () => {
+    expect(db.resolveGlyphName("custom.unencoded")).toBe("custom.unencoded");
+  });
+});
+
 describe("getAllGlyph", () => {
   it("returns many entries", () => {
     const all = db.getAllGlyph();

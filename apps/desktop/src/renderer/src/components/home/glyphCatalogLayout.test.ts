@@ -7,6 +7,7 @@ function catalog(count: number): GlyphCatalogItem[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `glyph-${index}` as GlyphId,
     name: `name-${index}` as GlyphName,
+    displayName: `name-${index}`,
     unicode: index,
   }));
 }
