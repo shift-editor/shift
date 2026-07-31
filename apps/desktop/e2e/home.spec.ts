@@ -6,6 +6,26 @@ test.describe("Home view", () => {
     await expect(page).toHaveScreenshot("home-glyph-grid.png");
   });
 
+  test("glyph canvas contributes rendered outlines", async ({ page }) => {
+    const scrollViewport = page.getByLabel("Glyph catalog");
+    const catalogSurface = scrollViewport.locator("..");
+    const glyphCanvas = catalogSurface.locator("canvas").first();
+    await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
+
+    const renderedFrame = await catalogSurface.screenshot();
+    const visibility = await glyphCanvas.evaluate((canvas) => {
+      const previous = canvas.style.visibility;
+      canvas.style.visibility = "hidden";
+      return previous;
+    });
+    const frameWithoutGlyphs = await catalogSurface.screenshot();
+    await glyphCanvas.evaluate((canvas, previous) => {
+      canvas.style.visibility = previous;
+    }, visibility);
+
+    expect(renderedFrame.equals(frameWithoutGlyphs)).toBe(false);
+  });
+
   test("keeps the resident grid when returning from the editor", async ({ page }) => {
     const scrollViewport = page.getByLabel("Glyph catalog");
     const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();

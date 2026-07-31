@@ -310,12 +310,21 @@ jobs:
         run: pnpm test:native
 
   # ---------------------------------------------------------------------------
-  # Optional / manual jobs
+  # Required end-to-end correctness
   # ---------------------------------------------------------------------------
-  playwright:
-    name: Playwright (Manual)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+  e2e:
+    name: E2E ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Visual
+            project: visual
+            runner: macos-latest
+          - name: GPU
+            project: gpu
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     steps:
@@ -332,12 +341,7 @@ jobs:
       - name: Install toolchain
         run: rustup show
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: shift-rust
-
       - name: Cache node_modules
-        id: modules-cache
         uses: actions/cache@v6
         with:
           path: |
@@ -350,17 +354,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/@playwright/test/package.json') }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @shift/desktop exec playwright install
-
       - name: Cache native module binary
         id: native-cache
         uses: actions/cache@v6
@@ -368,20 +361,31 @@ jobs:
           path: crates/shift-bridge/*.node
           key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
 
+      - uses: Swatinem/rust-cache@v2
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          shared-key: shift-rust-${{ runner.os }}
+
       - name: Build native module
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native
 
-      - name: Run Playwright tests
-        run: xvfb-run pnpm test:playwright
-        env:
-          LIBGL_ALWAYS_SOFTWARE: "true"
+      - name: Build E2E app
+        run: pnpm --filter @shift/desktop build:e2e
 
-      - name: Upload snapshots on failure
+      - name: Run visual E2E tests
+        if: matrix.project == 'visual'
+        run: pnpm --filter @shift/desktop exec playwright test --project=visual
+
+      - name: Run GPU E2E tests
+        if: matrix.project == 'gpu'
+        run: pnpm --filter @shift/desktop exec playwright test --project=gpu
+
+      - name: Upload Playwright failures
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-results
+          name: playwright-${{ matrix.project }}-results
           path: apps/desktop/e2e/test-results/
           retention-days: 7
 
@@ -400,6 +404,7 @@ jobs:
       - rust-fmt
       - rust-check
       - integration
+      - e2e
     runs-on: ubuntu-latest
     permissions: {}
     steps:

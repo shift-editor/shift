@@ -2,15 +2,15 @@
  * Visual snapshot tests for glyph rendering — covers handles, curves, filled
  * outlines, and distinct visual styles for on-curve vs off-curve points.
  *
- * Uses MutatorSans "S" (U+0053) which has 44 points with cubic beziers,
- * smooth/corner nodes, and off-curve handles — exercising every visual style.
+ * Uses MutatorSans "S" (U+0053), whose TrueType quadratic contours include
+ * smooth/corner nodes and off-curve handles — exercising every visual style.
  */
 
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
 // MutatorSans glyph codepoints (hex).
-const GLYPH_S = "53"; // Complex cubic curves, 44 points
+const GLYPH_S = "53"; // Complex quadratic curves
 const GLYPH_B = "42"; // Mix of curves + straights
 const GLYPH_I = "49"; // Simple straight segments
 const GLYPH_Q = "51"; // Counter with curves
@@ -19,7 +19,7 @@ const GLYPH_Q = "51"; // Counter with curves
 // S glyph — full layer snapshots
 // ---------------------------------------------------------------------------
 
-test.describe("Glyph rendering — S (cubic curves)", () => {
+test.describe("Glyph rendering — S (quadratic curves)", () => {
   test.beforeEach(async ({ page }) => {
     await navigateToEditor(page, GLYPH_S);
   });
