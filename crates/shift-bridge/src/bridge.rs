@@ -840,6 +840,7 @@ impl Bridge {
   /// geometry remains native until `stream_slug_atlas` emits bounded chunks.
   #[napi]
   pub fn prepare_slug_atlas(&mut self, alignment: u32) -> errors::Result<NapiSlugAtlas> {
+    self.workspace_mut()?.acquire_all_layers()?;
     let authored = build_authored_atlas(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
     let layout = authored.atlas().layout(alignment as usize)?;
     self.slug_generation = self
@@ -870,8 +871,8 @@ impl Bridge {
       .iter()
       .map(|glyph_id| parse::<GlyphId>(glyph_id))
       .collect::<errors::Result<Vec<_>>>()?;
-    let authored =
-      build_authored_atlas_page(self.font()?, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
+    let authored = build_authored_atlas_page(font, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
     let layout = authored.atlas().layout(alignment as usize)?;
     self.slug_generation = self
       .slug_generation

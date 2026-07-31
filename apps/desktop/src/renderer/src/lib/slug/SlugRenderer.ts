@@ -4,7 +4,7 @@ import { SlugAtlas } from "./SlugAtlas";
 import { SlugAtlasPage } from "./SlugAtlasPage";
 import { SlugRendererPipelines } from "./SlugRendererResources";
 
-/** Concrete paged Slug implementation behind the resident glyph preview layer. */
+/** Complete Slug atlas renderer with independently replaceable glyph patches. */
 export class SlugRenderer {
   readonly #device: GPUDevice;
   readonly #context: GPUCanvasContext;

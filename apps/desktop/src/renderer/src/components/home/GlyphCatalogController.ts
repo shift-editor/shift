@@ -17,8 +17,6 @@ import type {
 } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance } from "@/types/glyphPreview";
 
-const BACKGROUND_PAGE_SIZE = 2048;
-
 /** Owns catalog DOM events, frame scheduling, layout, and resident rendering. */
 export class GlyphCatalogController {
   readonly #container: HTMLDivElement;
@@ -37,7 +35,7 @@ export class GlyphCatalogController {
 
   #frame: GlyphCatalogControllerFrame | null = null;
   #layer: ResidentGlyphLayer | null = null;
-  /** Single native page operation; aborted work retains this slot until it actually settles. */
+  /** Single native atlas operation; aborted work retains this slot until it actually settles. */
   #refresh: AbortController | null = null;
   #pointer: Point2D | null = null;
   #hoveredCatalogIndex: number | null = null;
@@ -77,10 +75,11 @@ export class GlyphCatalogController {
     void this.#redrawWhenFontsReady();
 
     this.#fontEffect = effect(
-      () => {
-        const invalidGlyphIds = font.invalidGlyphIdsCell.value;
-        this.#invalidate(invalidGlyphIds ?? font.glyphRecords().map((glyph) => glyph.id));
-      },
+      () =>
+        this.#invalidate(
+          font.invalidGlyphIdsCell.value,
+          font.glyphRecords().map((glyph) => glyph.id),
+        ),
       { name: "glyphCatalog.residentFont" },
     );
     this.#startLayer();
@@ -145,11 +144,29 @@ export class GlyphCatalogController {
     document.fonts.removeEventListener("loadingdone", this.#handleFontsLoaded);
   }
 
-  #invalidate(glyphIds: readonly GlyphId[]): void {
-    for (const glyphId of glyphIds) this.#invalidGlyphIds.add(glyphId);
+  #invalidate(glyphIds: readonly GlyphId[] | null, fontGlyphIds: readonly GlyphId[]): void {
+    if (glyphIds === null) {
+      this.#invalidGlyphIds.clear();
+      this.#refresh?.abort(new Error("resident font changed"));
+      this.#layer?.destroy();
+      this.#layer = null;
+      this.#glyphCanvas.dataset.fullyResident = "false";
+      this.#firstFrameStarted = false;
+      this.#needsRedraw = true;
+      this.#onReadyChange(false);
+
+      if (this.#frame?.active) this.#startLayer();
+      return;
+    }
+    if (glyphIds.length === 0) return;
+
     this.#layer?.invalidate(glyphIds);
+    const fontGlyphIdSet = new Set(fontGlyphIds);
+    for (const glyphId of glyphIds) {
+      if (fontGlyphIdSet.has(glyphId)) this.#invalidGlyphIds.add(glyphId);
+    }
     this.#updateFullyResident();
-    this.#refresh?.abort(new Error("resident font changed"));
+    this.#refresh?.abort(new Error("resident glyphs changed"));
     this.#firstFrameStarted = false;
     this.#needsRedraw = true;
     this.#onReadyChange(false);
@@ -179,9 +196,12 @@ export class GlyphCatalogController {
       }
 
       this.#layer = layer;
+      this.#invalidGlyphIds.clear();
       this.#updateFullyResident();
       this.#refresh = null;
-      if (this.#frame?.active) await this.#refreshVisible();
+      this.#needsRedraw = true;
+      this.#firstFrameStarted = false;
+      this.redraw();
     } catch (error) {
       if (this.#disposed || this.#refresh !== refresh) return;
       this.#refresh = null;
@@ -202,25 +222,25 @@ export class GlyphCatalogController {
       return;
     }
 
-    const pageGlyphIds = this.#viewportPageGlyphIds();
-    const missingGlyphIds = pageGlyphIds.filter(
-      (glyphId) => this.#invalidGlyphIds.has(glyphId) || !layer.hasGlyphs([glyphId]),
-    );
-    if (missingGlyphIds.length === 0) {
-      if (pageGlyphIds.length === 0) this.#onReadyChange(true);
+    const missingGlyphIds = new Set(this.#invalidGlyphIds);
+    for (const cell of this.#currentFrame().cells) {
+      if (!layer.hasGlyphs([cell.glyph.id])) missingGlyphIds.add(cell.glyph.id);
+    }
+    if (missingGlyphIds.size === 0) {
+      this.#updateFullyResident();
       this.redraw();
-      if (!this.#refresh) this.#startBackgroundRefresh(pageGlyphIds);
       return;
     }
 
+    const glyphIds = [...missingGlyphIds];
     const refresh = new AbortController();
     this.#refresh = refresh;
     this.#onReadyChange(false);
 
     try {
-      await layer.loadPage(missingGlyphIds, refresh.signal);
+      await layer.loadPatch(glyphIds, refresh.signal);
       if (this.#disposed || this.#refresh !== refresh) return;
-      for (const glyphId of missingGlyphIds) this.#invalidGlyphIds.delete(glyphId);
+      for (const glyphId of glyphIds) this.#invalidGlyphIds.delete(glyphId);
       this.#updateFullyResident();
       this.#refresh = null;
       this.#needsRedraw = true;
@@ -234,70 +254,6 @@ export class GlyphCatalogController {
         return;
       }
       this.#failFrame(layer, error);
-    }
-  }
-
-  #startBackgroundRefresh(pageGlyphIds: readonly GlyphId[]): void {
-    const refresh = new AbortController();
-    this.#refresh = refresh;
-    void this.#refreshRemaining(refresh, pageGlyphIds).catch((error: unknown) => {
-      if (this.#disposed || this.#refresh !== refresh) return;
-      this.#refresh = null;
-      if (refresh.signal.aborted) {
-        if (this.#frame?.active) void this.#refreshVisible();
-        return;
-      }
-      if (this.#layer) this.#failFrame(this.#layer, error);
-    });
-  }
-
-  async #refreshRemaining(
-    refresh: AbortController,
-    pageGlyphIds: readonly GlyphId[],
-  ): Promise<void> {
-    const layer = this.#layer;
-    const input = this.#frame;
-    if (!layer || !input) return;
-
-    const pageSet = new Set(pageGlyphIds);
-    const remaining = input.glyphs
-      .map((glyph) => glyph.id)
-      .filter(
-        (glyphId) =>
-          !pageSet.has(glyphId) &&
-          (this.#invalidGlyphIds.has(glyphId) || !layer.hasGlyphs([glyphId])),
-      );
-    const ordered = outwardGlyphIds(input.glyphs, remaining, pageGlyphIds);
-
-    let visibleNeedsRefresh = false;
-    for (let offset = 0; offset < ordered.length; offset += BACKGROUND_PAGE_SIZE) {
-      refresh.signal.throwIfAborted();
-      const visibleGlyphIds = this.#viewportPageGlyphIds();
-      visibleNeedsRefresh = visibleGlyphIds.some(
-        (glyphId) => this.#invalidGlyphIds.has(glyphId) || !layer.hasGlyphs([glyphId]),
-      );
-      if (visibleNeedsRefresh) break;
-
-      const glyphIds = ordered.slice(offset, offset + BACKGROUND_PAGE_SIZE);
-      await layer.loadPage(glyphIds, refresh.signal);
-      if (this.#disposed || this.#refresh !== refresh) return;
-      for (const glyphId of glyphIds) this.#invalidGlyphIds.delete(glyphId);
-      this.#updateFullyResident();
-      this.#needsRedraw = true;
-      this.#firstFrameStarted = false;
-      this.redraw();
-
-      visibleNeedsRefresh = this.#viewportPageGlyphIds().some(
-        (glyphId) => this.#invalidGlyphIds.has(glyphId) || !layer.hasGlyphs([glyphId]),
-      );
-      if (visibleNeedsRefresh) break;
-    }
-
-    if (this.#refresh !== refresh) return;
-    this.#refresh = null;
-    if (visibleNeedsRefresh) {
-      void this.#refreshVisible();
-      this.redraw();
     }
   }
 
@@ -324,10 +280,6 @@ export class GlyphCatalogController {
 
   #currentFrame(layout = this.#layout()): GlyphCatalogFrame {
     return layout.frame(this.#frame?.glyphs ?? [], this.#container.scrollTop);
-  }
-
-  #viewportPageGlyphIds(): GlyphId[] {
-    return viewportPageGlyphIds(this.#frame?.glyphs ?? [], this.#currentFrame());
   }
 
   #draw(): void {
@@ -424,7 +376,6 @@ export class GlyphCatalogController {
         return;
       }
       this.#onReadyChange(true);
-      if (!this.#refresh) this.#startBackgroundRefresh(this.#viewportPageGlyphIds());
     } catch (error) {
       if (this.#disposed || this.#layer !== layer) return;
       this.#failFrame(layer, error);
@@ -518,49 +469,4 @@ export class GlyphCatalogController {
       console.error("failed to await catalog fonts", error);
     }
   }
-}
-
-function viewportPageGlyphIds(
-  glyphs: readonly GlyphCatalogItem[],
-  frame: GlyphCatalogFrame,
-): GlyphId[] {
-  if (frame.cells.length === 0) return [];
-
-  const firstIndex = frame.cells[0]!.catalogIndex;
-  const lastIndex = frame.cells.at(-1)!.catalogIndex;
-  const viewportCount = lastIndex - firstIndex + 1;
-  const start = Math.max(0, firstIndex - viewportCount);
-  const end = Math.min(glyphs.length, lastIndex + viewportCount + 1);
-  return glyphs.slice(start, end).map((glyph) => glyph.id);
-}
-
-function outwardGlyphIds(
-  glyphs: readonly GlyphCatalogItem[],
-  remainingGlyphIds: readonly GlyphId[],
-  pageGlyphIds: readonly GlyphId[],
-): GlyphId[] {
-  const remaining = new Set(remainingGlyphIds);
-  const firstPageIndex =
-    pageGlyphIds.length > 0 ? glyphs.findIndex((glyph) => glyph.id === pageGlyphIds[0]) : 0;
-  const lastPageGlyphId = pageGlyphIds.at(-1);
-  const lastPageIndex = lastPageGlyphId
-    ? glyphs.findIndex((glyph) => glyph.id === lastPageGlyphId)
-    : firstPageIndex;
-  const ordered: GlyphId[] = [];
-  let before = firstPageIndex - 1;
-  let after = lastPageIndex + 1;
-
-  while (before >= 0 || after < glyphs.length) {
-    for (let count = 0; count < BACKGROUND_PAGE_SIZE && after < glyphs.length; count += 1) {
-      const glyphId = glyphs[after++]!.id;
-      if (remaining.delete(glyphId)) ordered.push(glyphId);
-    }
-    for (let count = 0; count < BACKGROUND_PAGE_SIZE && before >= 0; count += 1) {
-      const glyphId = glyphs[before--]!.id;
-      if (remaining.delete(glyphId)) ordered.push(glyphId);
-    }
-  }
-
-  ordered.push(...remaining);
-  return ordered;
 }

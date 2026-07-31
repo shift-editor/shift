@@ -14,7 +14,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW `FontSaveSnapshot`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
 
-**Architecture Invariant:** Glyph snapshot, projection, and preview methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans.
+**Architecture Invariant:** Glyph snapshot, projection, preview, and Slug preparation methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans, and acquired payloads remain resident in the workspace cache.
 
 **Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
@@ -64,7 +64,7 @@ crates/shift-bridge/
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
-10. `prepareSlugAtlasPage(glyphIds, alignment)` compiles only ordered roots and their component closures; its stream/discard methods retain the bounded complete-atlas transport contract. `prepareSlugAtlas(alignment)` remains the complete-font diagnostic path. Every font edit invalidates an unconsumed generation or page.
+10. `prepareSlugAtlas(alignment)` acquires all layers for the catalog's complete resident generation. `prepareSlugAtlasPage(glyphIds, alignment)` acquires the ordered roots and their indexed component closures for a local edit patch. Acquired payloads remain in the workspace cache, while stream/discard methods retain the bounded atlas transport contract. Every font edit invalidates an unconsumed generation or patch.
 
 ## Type Boundary
 
