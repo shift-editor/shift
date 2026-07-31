@@ -32,6 +32,7 @@ const RESULTS_DIR = path.resolve(__dirname, "perf-results");
 const BASELINE_PATH = path.resolve(__dirname, "perf-baseline.json");
 const TARGET_POINTS = 50_000;
 const DRAG_FRAMES = 30;
+const UNDO_REDO_SAMPLES = 10;
 
 /**
  * Hard p95 ceilings per operation (ms). If p95 exceeds this, the test fails
@@ -90,6 +91,7 @@ test.describe("Performance — 50K points", () => {
       "",
       `**Scale:** ${TARGET_POINTS.toLocaleString()} points`,
       `**Drag frames:** ${DRAG_FRAMES}`,
+      `**Undo/redo samples:** ${UNDO_REDO_SAMPLES}`,
       "",
       table,
       "",
@@ -349,7 +351,7 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      async ({ contours, frames }) => {
+      async ({ contours, sampleCount }) => {
         const editor = window.shift!.editor;
         const inserted = editor.insertContent({ contours });
         if (!inserted) throw new Error("contour insertion failed");
@@ -374,7 +376,7 @@ test.describe("Performance — 50K points", () => {
         const undoTimes: number[] = [];
         const redoTimes: number[] = [];
 
-        for (let index = 0; index < frames; index++) {
+        for (let index = 0; index < sampleCount; index++) {
           const undoStart = performance.now();
           await editor.font.editCoordinator.undo();
           undoTimes.push(performance.now() - undoStart);
@@ -386,7 +388,7 @@ test.describe("Performance — 50K points", () => {
 
         return { undo: undoTimes, redo: redoTimes };
       },
-      { contours, frames: DRAG_FRAMES },
+      { contours, sampleCount: UNDO_REDO_SAMPLES },
     );
 
     const undoStats = computeStats("undo (all pts)", samples.undo);

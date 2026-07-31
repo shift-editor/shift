@@ -14,7 +14,7 @@
   },
   "scripts": {
     "generate:bridge-types": "node ../../scripts/generate-bridge-types.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
     "@shift/tsconfig": "workspace:*",

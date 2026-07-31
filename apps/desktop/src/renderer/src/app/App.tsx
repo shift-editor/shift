@@ -1,5 +1,5 @@
 import "./App.css";
-import { HashRouter } from "react-router-dom";
+import { HashRouter } from "react-router";
 
 import { ThemeProvider } from "@/context/ThemeContext";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";

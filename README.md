@@ -50,8 +50,8 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18+)
-- [pnpm](https://pnpm.io/) (v9+)
+- [Node.js](https://nodejs.org/) (v24)
+- [pnpm](https://pnpm.io/) (v11)
 - [Rust](https://rustup.rs/) (stable)
 
 ### Quick Start
@@ -61,9 +61,10 @@ git clone https://github.com/shift-editor/shift.git
 cd shift
 
 pnpm install
-pnpm build:native
 pnpm dev
 ```
+
+`pnpm dev` builds the Rust addon in debug mode. Use `pnpm dev:release` for representative performance, or `pnpm dev:watch` / `pnpm dev:watch:release` to rebuild the addon when Rust changes.
 
 ### Command-line inspection
 

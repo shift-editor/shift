@@ -32,11 +32,11 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       typescript: ${{ steps.filter.outputs.typescript }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -63,19 +63,18 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Cache node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -100,19 +99,18 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Cache node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -124,9 +122,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache Typecheck Turbo results
+        uses: actions/cache@v6
         with:
-          shared-key: shift-rust
+          path: .turbo/cache
+          key: typecheck-turbo-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            typecheck-turbo-v1-${{ runner.os }}-
 
       - name: Typecheck
         run: pnpm typecheck
@@ -139,19 +141,18 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Cache node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -163,20 +164,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Cache native Turbo build
+        id: native-turbo-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            .turbo/cache
+            crates/shift-bridge/*.node
+          key: native-turbo-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
+
       - uses: Swatinem/rust-cache@v2
+        if: steps.native-turbo-cache.outputs.cache-hit != 'true'
         with:
           shared-key: shift-rust
-
-      - name: Cache native module binary
-        id: native-cache
-        uses: actions/cache@v4
-        with:
-          path: crates/shift-bridge/*.node
-          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
-
-      - name: Build native module
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        run: pnpm build:native
 
       - name: Run unit tests
         run: pnpm test:unit
@@ -189,19 +189,18 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Cache node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -227,7 +226,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -245,7 +244,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: true
@@ -272,16 +271,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: true
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install toolchain
         run: rustup show
@@ -293,7 +291,7 @@ jobs:
 
       - name: Cache node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -321,16 +319,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: true
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install toolchain
         run: rustup show
@@ -341,7 +338,7 @@ jobs:
 
       - name: Cache node_modules
         id: modules-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -355,7 +352,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/@playwright/test/package.json') }}
@@ -366,7 +363,7 @@ jobs:
 
       - name: Cache native module binary
         id: native-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: crates/shift-bridge/*.node
           key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
@@ -382,7 +379,7 @@ jobs:
 
       - name: Upload snapshots on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results
           path: apps/desktop/e2e/test-results/

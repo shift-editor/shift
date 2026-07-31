@@ -73,7 +73,11 @@ export class GlyphCatalogOverlay {
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillText(
-        fitCanvasText(context, cell.glyph.name, cell.nameRect.width - 2 * LABEL_HORIZONTAL_INSET),
+        fitCanvasText(
+          context,
+          cell.glyph.displayName,
+          cell.nameRect.width - 2 * LABEL_HORIZONTAL_INSET,
+        ),
         cell.nameRect.x + cell.nameRect.width / 2,
         cell.nameRect.y + cell.nameRect.height / 2,
       );

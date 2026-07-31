@@ -6,14 +6,6 @@
       "outputs": ["dist/**", "index.js", "index.d.ts", "*.node"],
       "inputs": ["src/**", "package.json", "tsconfig.json"]
     },
-    "build:native": {
-      "inputs": ["crates/*/src/**", "crates/*/Cargo.toml", "Cargo.toml", "Cargo.lock"],
-      "outputs": [
-        "crates/shift-bridge/index.js",
-        "crates/shift-bridge/index.d.ts",
-        "crates/shift-bridge/*.node"
-      ]
-    },
     "shift-bridge#build": {
       "inputs": [
         "src/**",
@@ -35,13 +27,23 @@
       ],
       "outputs": ["src/bridge/generated.ts"]
     },
-    "dev": {
-      "dependsOn": ["build:native"],
-      "cache": false,
-      "persistent": true
+    "generate": {
+      "outputs": ["resources/**"]
     },
     "typecheck": {
-      "dependsOn": ["^build", "^generate:bridge-types", "generate:bridge-types"],
+      "dependsOn": ["^generate:bridge-types", "generate:bridge-types"],
+      "outputs": []
+    },
+    "@shift/glyph-info#typecheck": {
+      "dependsOn": ["generate"],
+      "outputs": []
+    },
+    "@shift/desktop#typecheck": {
+      "dependsOn": [
+        "@shift/glyph-info#generate",
+        "^generate:bridge-types",
+        "generate:bridge-types"
+      ],
       "outputs": []
     },
     "lint": {
@@ -54,8 +56,13 @@
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"]
     },
+    "@shift/glyph-info#test": {
+      "dependsOn": ["generate"],
+      "outputs": [],
+      "inputs": ["src/**", "*.config.ts"]
+    },
     "@shift/desktop#test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "@shift/glyph-info#generate"],
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"]
     },
@@ -66,6 +73,16 @@
     },
     "test:watch": {
       "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "@shift/glyph-info#test:watch": {
+      "dependsOn": ["generate"],
+      "cache": false,
+      "persistent": true
+    },
+    "@shift/desktop#test:watch": {
+      "dependsOn": ["^build", "@shift/glyph-info#generate"],
       "cache": false,
       "persistent": true
     }

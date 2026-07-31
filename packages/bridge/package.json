@@ -13,14 +13,13 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@shift/types": "workspace:*",
     "shift-bridge": "workspace:*"
   },
   "devDependencies": {
-    "@shift/tsconfig": "workspace:*",
     "typescript": "^5.5.4"
   }
 }

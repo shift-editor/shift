@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { GlyphCatalogCanvas } from "./GlyphCatalogCanvas";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";

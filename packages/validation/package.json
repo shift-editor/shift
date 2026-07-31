@@ -13,16 +13,15 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@shift/types": "workspace:*",
-    "zod": "^4.1.12"
+    "@shift/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
-    "vitest": "^4.0.17"
+    "vitest": "^4.1.10"
   }
 }

@@ -1,7 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-pnpm run build:native:debug
+PROFILE="${1:-debug}"
+
+case "$PROFILE" in
+  debug)
+    BUILD_SCRIPT="build:native:debug"
+    ;;
+  release)
+    BUILD_SCRIPT="build:native"
+    ;;
+  *)
+    echo "Usage: $0 [debug|release]" >&2
+    exit 2
+    ;;
+esac
+
+pnpm run "$BUILD_SCRIPT"
 pnpm --filter @shift/desktop dev &
 DESKTOP_PID=$!
 
@@ -13,10 +28,4 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-cargo watch \
-  -w "crates/shift-font/src/" \
-  -w "crates/shift-bridge/src/" \
-  -w "crates/shift-font/Cargo.toml" \
-  -w "crates/shift-bridge/Cargo.toml" \
-  -w "Cargo.toml" \
-  -s "pnpm run build:native:debug && touch apps/desktop/src/main/main.ts"
+cargo watch --postpone -s "pnpm run $BUILD_SCRIPT && touch apps/desktop/src/main/main.ts"
