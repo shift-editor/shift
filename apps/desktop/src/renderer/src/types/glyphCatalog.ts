@@ -10,6 +10,7 @@ export type GlyphCatalogCellArea = "preview" | "name";
 export interface GlyphCatalogItem {
   readonly id: GlyphId;
   readonly name: GlyphName;
+  readonly displayName: string;
   readonly unicode: number | null;
 }
 

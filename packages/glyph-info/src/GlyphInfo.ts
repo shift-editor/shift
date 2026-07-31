@@ -127,6 +127,7 @@ function toSortedCategorySummaries(
 export class GlyphInfo {
   #glyphData: Map<number, Glyph>;
   #glyphDataByName: Map<string, Glyph>;
+  #glyphDataByAlias: Map<string, Glyph>;
   #decomposed: Map<number, number[]>;
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
@@ -135,6 +136,19 @@ export class GlyphInfo {
   constructor(resources: GlyphInfoResources) {
     this.#glyphData = new Map(resources.glyphData.map((g) => [g.codepoint, g]));
     this.#glyphDataByName = new Map(resources.glyphData.map((g) => [g.name, g]));
+    this.#glyphDataByAlias = new Map(this.#glyphDataByName);
+    for (const glyph of resources.glyphData) {
+      if (glyph.production && !this.#glyphDataByAlias.has(glyph.production)) {
+        this.#glyphDataByAlias.set(glyph.production, glyph);
+      }
+
+      for (const alias of glyph.altNames?.split(",") ?? []) {
+        const name = alias.trim();
+        if (name && !this.#glyphDataByAlias.has(name)) {
+          this.#glyphDataByAlias.set(name, glyph);
+        }
+      }
+    }
 
     this.#decomposed = new Map(
       Object.entries(resources.decomposition.decomposed).map(([k, v]) => [Number(k), v]),
@@ -169,9 +183,24 @@ export class GlyphInfo {
     return data.name;
   }
 
-  /** Look up the full metadata record for a production glyph name. */
+  /** Look up the full metadata record for a canonical glyph name. */
   getGlyphByName(name: string): Glyph | null {
     return this.#glyphDataByName.get(name) ?? null;
+  }
+
+  /**
+   * Resolve an authored glyph name to the canonical glyph database name.
+   * Dot suffixes are preserved, and unknown names pass through unchanged.
+   */
+  resolveGlyphName(name: string, codepoint?: number | null): string {
+    const suffixStart = name.indexOf(".");
+    const baseName = suffixStart > 0 ? name.slice(0, suffixStart) : name;
+    const suffix = suffixStart > 0 ? name.slice(suffixStart) : "";
+    const glyph =
+      (codepoint === null || codepoint === undefined ? null : this.#glyphData.get(codepoint)) ??
+      this.#glyphDataByAlias.get(baseName);
+
+    return glyph ? `${glyph.name}${suffix}` : name;
   }
 
   getAllGlyph(): Glyph[] {
