@@ -12,8 +12,14 @@ pub enum StoreError {
     #[error(transparent)]
     Font(#[from] shift_font::error::CoreError),
 
-    #[error(transparent)]
-    PackedLayer(#[from] shift_font::PackedLayerError),
+    #[error("glyph layer encoding failed: {0}")]
+    LayerEncoding(String),
+
+    #[error("glyph layer decoding failed: {0}")]
+    LayerDecoding(String),
+
+    #[error("invalid glyph layer payload: {0}")]
+    InvalidLayerPayload(String),
 
     #[error("unsupported glyph layer payload format: {0}")]
     UnsupportedLayerFormat(String),

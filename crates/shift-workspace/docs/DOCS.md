@@ -6,7 +6,7 @@ Backend runtime object for an open Shift font workspace.
 
 - **Architecture Invariant:** `FontWorkspace` composes a directory-complete, payload-lazy `shift-font::Font`, the user-selected `shift-source` package, and the working `shift-store` database.
 - **Architecture Invariant:** Resuming SQLite loads metadata and glyph/layer directory facts only. `acquire_glyphs` performs explicit bounded payload I/O; synchronous `font()` reads never initiate I/O.
-- **Architecture Invariant:** TTF/OTF, UFO, and Designspace imports consume bounded `FontImport` batches and write through one `LayerStreamWriter`; they never construct a complete geometry-resident `Font`. Format readers, canonical packing, BLAKE3 hashing, and independent per-layer compression use Rayon, while SQLite has one transaction owner.
+- **Architecture Invariant:** TTF/OTF, UFO, and Designspace imports consume bounded `FontImport` batches and write through one `FontImportWriter`; they never construct a complete geometry-resident `Font`. Format readers, MessagePack encoding, BLAKE3 hashing, and independent per-layer compression use Rayon, while SQLite has one transaction owner.
 - **Architecture Invariant:** `LayerResidency` is the sole owner of loaded-layer membership and placeholder replacement. A loaded layer is only a cache of already-committed authored state; apply, undo, and redo reacquire their complete layer read sets before mutation, and `evict_glyphs` replaces only committed layers with directory placeholders.
 - **Architecture Invariant:** The `.shift` source package path and SQLite working store path are separate inputs.
 - **Architecture Invariant:** Package recovery policy is not ranked in Rust. `FontWorkspace` exposes package and working-store inspection primitives; the utility process owns binding and lifecycle decisions.
@@ -58,7 +58,7 @@ crates/shift-workspace/examples/
 
 ## Profiling
 
-`profile_streaming_import` uses the same public `stream_into` three-stage pipeline as the workspace and reports foreign-directory, parse, canonical pack, compression, SQLite write, commit, durable-finalization, native-directory materialization, reopen, decoded/stored BLOB, and database measurements without putting machine-specific timing assertions in tests:
+`profile_streaming_import` uses the same public `stream_into` three-stage pipeline as the workspace and reports foreign-directory, parse, MessagePack encode, compression, SQLite write, commit, durable-finalization, native-directory materialization, reopen, decoded/stored BLOB, and database measurements without putting machine-specific timing assertions in tests:
 
 ```bash
 cargo build --release -p shift-workspace --example profile_streaming_import
@@ -66,7 +66,7 @@ cargo build --release -p shift-workspace --example profile_streaming_import
   /path/to/font-or-project /tmp/import.sqlite
 ```
 
-Use `RAYON_NUM_THREADS`, `SHIFT_IMPORT_BATCH_GLYPHS`, and `SHIFT_IMPORT_BATCH_LAYERS` to compare worker and bounded-batch limits. `SHIFT_IMPORT_PROGRESS_BATCHES` controls machine-readable periodic lines containing cumulative batches, glyphs, layers, parse, pack, compression, SQLite, wall time, and throughput. Canonical packing, hashing, and compression use Rayon; the SQLite writer remains single-threaded.
+Use `RAYON_NUM_THREADS`, `SHIFT_IMPORT_BATCH_GLYPHS`, and `SHIFT_IMPORT_BATCH_LAYERS` to compare worker and bounded-batch limits. `SHIFT_IMPORT_PROGRESS_BATCHES` controls machine-readable periodic lines containing cumulative batches, glyphs, layers, parse, pack, compression, SQLite, wall time, and throughput. MessagePack encoding, hashing, and compression use Rayon; the SQLite writer remains single-threaded.
 
 A repeatable ignored corpus gate exercises streaming import, directory-only
 resume, and bounded acquisition without checking large fonts into Git:

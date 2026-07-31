@@ -1,7 +1,6 @@
 use std::{env, error::Error, fs, path::PathBuf, time::Instant};
 
-use shift_glyph_codec::OutlineCommand;
-use shift_slug::{AtlasBuilder, CurveIndexEncoding, DEFAULT_BAND_COUNT};
+use shift_slug::{AtlasBuilder, CurveIndexEncoding, OutlineCommand, DEFAULT_BAND_COUNT};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},

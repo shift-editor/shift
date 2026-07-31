@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use rusqlite::params;
 use shift_font as font;
@@ -639,7 +639,7 @@ fn lib_value_from_value(value: serde_json::Value) -> Result<font::LibValue, Stor
             serde_json::Value::Object(values) => values
                 .into_iter()
                 .map(|(key, value)| lib_value_from_value(value).map(|value| (key, value)))
-                .collect::<Result<HashMap<_, _>, _>>()
+                .collect::<Result<BTreeMap<_, _>, _>>()
                 .map(font::LibValue::Dict),
             _ => Err(StoreError::InvalidLibValue("expected dict".to_string())),
         },

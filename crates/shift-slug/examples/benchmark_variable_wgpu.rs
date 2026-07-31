@@ -1,9 +1,8 @@
 use std::{env, error::Error, fs, path::PathBuf, sync::mpsc, time::Instant};
 
-use shift_glyph_codec::OutlineCommand;
 use shift_slug::{
-    pack_render_instances, pack_render_params, pack_variable_params, Bounds, Curve, RenderInstance,
-    RenderParams, SlugError, VariableAtlas, VariableAtlasBuilder, VariableParams,
+    pack_render_instances, pack_render_params, pack_variable_params, Bounds, Curve, OutlineCommand,
+    RenderInstance, RenderParams, SlugError, VariableAtlas, VariableAtlasBuilder, VariableParams,
     DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
 };
 use skrifa::{

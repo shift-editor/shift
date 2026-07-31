@@ -11,12 +11,14 @@ GPU-independent preprocessing for the experimental Slug home/catalog glyph grid.
 - **Bands are location-bound.** The static builder bands one resolved shape. The variable path resolves and re-bands only visible glyphs after every weight update, so current-location membership stays exact without geometry upload.
 - **Deterministic topology conversion.** Lines become quadratics. Cubics use the conservative third-derivative error bound from Kurbo's `CubicBez::to_quads`, with a one-font-unit tolerance and equal parameter intervals. Compatible authored sources freeze the maximum subdivision count required by any source so variable topology remains identical.
 - **No shaping.** The grid addresses glyphs by dense atlas index and does not need a text shaper.
+- **Command ownership.** `OutlineCommand` is a Slug preprocessing input. No standalone packed-outline storage format exists.
 
 ## Codemap
 
 ```text
 src/
   lib.rs       public boundary
+  outline.rs   Slug-owned drawing command type
   curve.rs     outline commands -> quadratic curves
   atlas.rs     glyph bounds, horizontal/vertical bands, atlas assembly
   authored.rs            stable shift-font point/segment topology and source derivation

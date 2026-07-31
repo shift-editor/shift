@@ -30,7 +30,6 @@
 //! `shift-wire`. UI interaction belongs to the TypeScript editor.
 //!
 pub mod changes;
-mod codec_adapter;
 pub mod composite;
 pub mod curve;
 pub mod error;
@@ -43,10 +42,6 @@ pub mod projection;
 pub mod test_support;
 
 pub use changes::*;
-pub use codec_adapter::{
-    pack_glyph_layer, unpack_glyph_layer, PackedGlyphLayer, PackedLayerError,
-    MAX_LAYER_PAYLOAD_BYTES,
-};
 pub use error::{CoreError, CoreResult};
 pub use intents::*;
 pub use interpolation::*;

@@ -145,13 +145,16 @@ fn imports_external_fonts_without_a_save_target() {
             .family_name
             .is_some()
     );
-    assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
-        !entry
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .starts_with(".shift-import-")
-    }));
+    let entries = fs::read_dir(temp.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert!(
+        entries
+            .iter()
+            .all(|name| !name.to_string_lossy().starts_with(".shift-import-")),
+        "staging artifacts remain: {entries:?}"
+    );
 }
 
 #[test]
@@ -194,12 +197,7 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
                 .unwrap()
                 .layers()
                 .values()
-                .map(|layer| {
-                    (
-                        layer.id(),
-                        shift_font::pack_glyph_layer(layer).unwrap().into_bytes(),
-                    )
-                })
+                .map(|layer| (layer.id(), layer.as_ref().clone()))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -215,13 +213,8 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
 
     assert_eq!(resumed.loaded_layer_count(), expected.len());
     assert!(resumed.loaded_layer_count() < total_layers);
-    for (layer_id, bytes) in expected {
-        assert_eq!(
-            shift_font::pack_glyph_layer(resumed.font().layer(layer_id).unwrap())
-                .unwrap()
-                .as_bytes(),
-            bytes
-        );
+    for (layer_id, layer) in expected {
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
     }
 }
 
@@ -337,12 +330,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
         .unwrap()
         .layers()
         .values()
-        .map(|layer| {
-            (
-                layer.id(),
-                shift_font::pack_glyph_layer(layer).unwrap().into_bytes(),
-            )
-        })
+        .map(|layer| (layer.id(), layer.as_ref().clone()))
         .collect::<Vec<_>>();
     drop(workspace);
 
@@ -354,13 +342,8 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
 
     assert_eq!(resumed.loaded_layer_count(), closure_layer_count);
     assert!(resumed.loaded_layer_count() < total_layers);
-    for (layer_id, bytes) in expected_root_layers {
-        assert_eq!(
-            shift_font::pack_glyph_layer(resumed.font().layer(layer_id).unwrap())
-                .unwrap()
-                .as_bytes(),
-            bytes
-        );
+    for (layer_id, layer) in expected_root_layers {
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
     }
 }
 
@@ -388,12 +371,7 @@ fn ufo_source_roundtrips_through_lazy_acquisition() {
         .unwrap()
         .layers()
         .values()
-        .map(|layer| {
-            (
-                layer.id(),
-                shift_font::pack_glyph_layer(layer).unwrap().into_bytes(),
-            )
-        })
+        .map(|layer| (layer.id(), layer.as_ref().clone()))
         .collect::<Vec<_>>();
     assert!(!expected.is_empty());
     drop(workspace);
@@ -405,13 +383,8 @@ fn ufo_source_roundtrips_through_lazy_acquisition() {
         .unwrap();
 
     assert_eq!(resumed.loaded_layer_count(), expected.len());
-    for (layer_id, bytes) in expected {
-        assert_eq!(
-            shift_font::pack_glyph_layer(resumed.font().layer(layer_id).unwrap())
-                .unwrap()
-                .as_bytes(),
-            bytes
-        );
+    for (layer_id, layer) in expected {
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
     }
 }
 

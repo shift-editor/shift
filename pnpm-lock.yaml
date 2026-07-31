@@ -242,18 +242,6 @@ importers:
         specifier: ^4.0.17
         version: 4.0.17(@types/node@25.3.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/glyph-codec:
-    devDependencies:
-      '@types/node':
-        specifier: ^25.3.0
-        version: 25.3.0
-      typescript:
-        specifier: ^5.5.4
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.17
-        version: 4.0.17(@types/node@25.3.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.1)(tsx@4.21.0)(yaml@2.8.2)
-
   packages/glyph-info:
     dependencies:
       minisearch:
@@ -2182,6 +2170,7 @@ packages:
   '@xmldom/xmldom@0.8.10':
     resolution: {integrity: sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
@@ -4209,6 +4198,7 @@ packages:
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
+    deprecated: unmaintained
     hasBin: true
     peerDependencies:
       typescript: ^5.0.0

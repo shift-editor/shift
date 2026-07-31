@@ -1009,7 +1009,7 @@ fn completed_import_store_restores_durable_wal_mode() {
     let path = temp_store_path("import-pragmas");
     let font = shift_font::test_support::sample_font();
     let mut store = ShiftStore::open_for_import(&path).expect("open import store");
-    let mut writer = store.font_stream_writer(&font).expect("begin import");
+    let mut writer = store.begin_import(&font).expect("begin import");
     for glyph in font.glyphs() {
         writer.write_glyph(glyph).expect("write glyph");
     }

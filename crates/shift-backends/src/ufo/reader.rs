@@ -8,7 +8,7 @@ use shift_font::{
     KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType, SourceId,
     Transform,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 pub struct UfoReader;
@@ -130,7 +130,7 @@ impl UfoReader {
                 LibValue::Array(arr.iter().map(Self::convert_plist_to_lib_value).collect())
             }
             plist::Value::Dictionary(dict) => {
-                let mut map = HashMap::new();
+                let mut map = BTreeMap::new();
                 for (k, v) in dict.iter() {
                     map.insert(k.clone(), Self::convert_plist_to_lib_value(v));
                 }
@@ -177,7 +177,7 @@ impl UfoReader {
     }
 
     pub(crate) fn convert_lib(lib: &plist::Dictionary) -> LibData {
-        let mut data = HashMap::new();
+        let mut data = BTreeMap::new();
         for (k, v) in lib.iter() {
             data.insert(k.clone(), Self::convert_plist_to_lib_value(v));
         }

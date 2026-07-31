@@ -1,4 +1,8 @@
-use std::{io, path::Path};
+use std::{
+    ffi::OsString,
+    io,
+    path::{Path, PathBuf},
+};
 
 use tempfile::TempPath;
 
@@ -15,8 +19,26 @@ pub(crate) fn create_import_staging_path(destination: &Path) -> io::Result<TempP
 }
 
 pub(crate) fn install_import_store(staged: TempPath, destination: &Path) -> io::Result<()> {
+    remove_staging_sidecars(&staged)?;
     staged.persist(destination).map_err(|error| error.error)?;
     sync_parent_directory(destination)
+}
+
+fn remove_staging_sidecars(staged: &Path) -> io::Result<()> {
+    for suffix in ["-wal", "-shm"] {
+        match std::fs::remove_file(sqlite_sidecar_path(staged, suffix)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+fn sqlite_sidecar_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut sidecar = OsString::from(path.as_os_str());
+    sidecar.push(suffix);
+    PathBuf::from(sidecar)
 }
 
 #[cfg(unix)]
@@ -45,11 +67,17 @@ mod tests {
         std::fs::write(&destination, b"old").unwrap();
         let staged = create_import_staging_path(&destination).unwrap();
         let staged_path = staged.to_path_buf();
+        let staged_wal_path = sqlite_sidecar_path(&staged_path, "-wal");
+        let staged_shm_path = sqlite_sidecar_path(&staged_path, "-shm");
         std::fs::write(&staged_path, b"new").unwrap();
+        std::fs::write(&staged_wal_path, b"").unwrap();
+        std::fs::write(&staged_shm_path, b"").unwrap();
 
         install_import_store(staged, &destination).unwrap();
 
         assert_eq!(std::fs::read(&destination).unwrap(), b"new");
         assert!(!staged_path.exists());
+        assert!(!staged_wal_path.exists());
+        assert!(!staged_shm_path.exists());
     }
 }

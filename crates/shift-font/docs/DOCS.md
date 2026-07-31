@@ -22,7 +22,6 @@ crates/shift-font/src/
   intents.rs       -- atomic authoring intents and semantic application
   changes.rs       -- replace-grade semantic change records
   layer_edit.rs    -- glyph-layer geometry mutations
-  codec_adapter.rs -- lossless shift.glyph-layer.v1 domain adapter
   variation.rs     -- external-to-design mapping evaluation
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
@@ -43,7 +42,8 @@ crates/shift-font/src/
 - `SourceMetricInterpolation` owns metric identity, optional technical-field participation, variation regions, and delta ordering for source-owned metrics.
 - `Glyph` is a glyph concept identified by `GlyphId`.
 - `GlyphLayer` is authored editable data for one glyph at one source.
-- `pack_glyph_layer`, `unpack_glyph_layer`, and `glyph_layer_from_view` adapt one layer to/from canonical `shift.glyph-layer.v1` while validating typed IDs and glyph names at the domain boundary.
+- `LibData` and recursive `LibValue::Dict` use ordered maps so equal domain values serialize deterministically.
+- `GlyphEntityId` gives `FontIndex` one typed set for contour, point, component, anchor, and guideline identity.
 - `InterpolationBasis` is coordinate-independent variation math for an ordered source set. It contains normalized supports and source coefficient rows, never glyph coordinates or metrics.
 - `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. The glyph's default-source layer owns topology when present; otherwise a deterministic master-backed reference layer allows sparse glyph interpolation.
 - `LayerCompatibility` records every hard structural difference between an interpolation reference layer and another source layer. `LayerDifference` retains ordered path, node, anchor, and component evidence for diagnostics.
@@ -70,7 +70,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 - Own font authoring data structures such as `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Source`, and `Axis`.
 - Keep object-level mutation behavior near the objects it mutates.
-- Provide model-native helpers for layer editing, component resolution, variation behavior, axis mapping evaluation, and geometry-derived behavior. `Font::replace_glyph_layers` retains previous layers through cheap `Arc` references, validates a complete hydration/eviction batch into one `ReplacementIdentities` value, moves those sets into the final index, mutates uniquely owned fonts in place, and preserves shared snapshots through copy-on-write.
+- Provide model-native helpers for layer editing, component resolution, variation behavior, axis mapping evaluation, and geometry-derived behavior. `Font::replace_glyph_layers` retains previous layers through cheap `Arc` references, validates a complete hydration/eviction batch into one `HashSet<GlyphEntityId>`, moves that set into the final index, mutates uniquely owned fonts in place, and preserves shared snapshots through copy-on-write.
 - Own canonical glyph and source-metric interpolation value ordering, variation-model construction, interpolation evaluation, and location-bound glyph resolution.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 
@@ -92,7 +92,7 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 
 `shift-wire` may translate native bases, source values, and projections into transport DTOs, but it must not rebuild source samples, define value ordering or topology compatibility, or evaluate variation models.
 
-`shift-font` should not perform SQLite persistence. Durable working-store reads and writes belong in `shift-store`. The private `codec_adapter` module only adapts one domain layer to codec-owned bytes/views; it does not choose storage, caching, transactions, or loading policy.
+`shift-font` should not perform SQLite persistence or define a durable binary encoding. Durable working-store reads, writes, MessagePack encoding, compression, and compatibility policy belong in `shift-store`.
 
 `shift-font` should not own Electron, NAPI, or editor state. The TypeScript editor owns UI interaction, selection, hover, camera, tools, and command history.
 

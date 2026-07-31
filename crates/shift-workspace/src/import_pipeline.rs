@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use shift_backends::{FontImport, ImportBatchLimit};
 use shift_font::Glyph;
-use shift_store::{LayerStreamWriter, PackedGlyphBatch, pack_glyph_batch};
+use shift_store::{FontImportWriter, GlyphWriteBatch, encode_glyph_batch};
 
 use crate::WorkspaceError;
 
@@ -24,7 +24,7 @@ struct ParsedImportBatch {
 }
 
 struct PackedImportBatch {
-    glyphs: PackedGlyphBatch,
+    glyphs: GlyphWriteBatch,
     glyph_count: usize,
     layer_count: usize,
     parse_elapsed: Duration,
@@ -36,7 +36,7 @@ struct PackedImportBatch {
 /// must remain lightweight so it does not throttle the writer.
 pub fn stream_into(
     mut import: FontImport,
-    writer: &mut LayerStreamWriter<'_>,
+    writer: &mut FontImportWriter<'_>,
     batch_limit: ImportBatchLimit,
     mut observe: impl FnMut(ImportBatchProgress),
 ) -> Result<(), WorkspaceError> {
@@ -76,7 +76,7 @@ pub fn stream_into(
                         break;
                     }
                 };
-                let glyphs = match pack_glyph_batch(batch.glyphs) {
+                let glyphs = match encode_glyph_batch(batch.glyphs) {
                     Ok(glyphs) => glyphs,
                     Err(error) => {
                         let _ = packed_sender.send(Err(WorkspaceError::from(error)));

@@ -7,7 +7,7 @@ use crate::{
     LibValue, Location, MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point, PointId,
     PointType, Source, SourceId,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Builds a kitchen-sink font corpus for semantic round-trip tests.
 ///
@@ -58,7 +58,7 @@ pub fn sample_font() -> Font {
     font_guideline.set_color(Some("green".to_string()));
     font.add_guideline(font_guideline);
 
-    let mut nested = HashMap::new();
+    let mut nested = BTreeMap::new();
     nested.insert(
         "nestedString".to_string(),
         LibValue::String("value".to_string()),
@@ -90,7 +90,7 @@ pub fn sample_font() -> Font {
     );
     font.fontinfo_remainder_mut()
         .set("openTypeOS2WeightClass".to_string(), LibValue::Integer(700));
-    let mut woff_metadata = HashMap::new();
+    let mut woff_metadata = BTreeMap::new();
     woff_metadata.insert(
         "id".to_string(),
         LibValue::String("dogfood-unique-id".to_string()),

@@ -1,11 +1,9 @@
-use shift_glyph_codec::OutlineCommand;
-
 use crate::{
     curve::{
         cubic_subdivision_counts_from_commands,
         curves_and_line_flags_from_commands_with_subdivisions,
     },
-    Bounds, Curve, Point, Section, SlugError, LINE_EPSILON,
+    Bounds, Curve, OutlineCommand, Point, Section, SlugError, LINE_EPSILON,
 };
 
 const CURVE_BYTES: usize = 24;

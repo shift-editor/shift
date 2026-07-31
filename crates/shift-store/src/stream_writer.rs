@@ -5,12 +5,12 @@ use rusqlite::Transaction;
 use shift_font as font;
 
 use crate::{
-    LayerBatchTiming, PackedGlyphBatch, ShiftStore, StoreError,
+    GlyphWriteBatch, LayerBatchTiming, ShiftStore, StoreError,
     change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
     packed_layer::store_stored_layer_in_tx,
     schema::{defer_import_indexes, restore_import_indexes},
-    stored_layer::compress_glyph_layer,
-    types::{PackedGlyph, StoredGlyphLayer},
+    stored_layer::{compress_glyph_layer, encode_layer},
+    types::{EncodedGlyphLayers, PackedGlyph, StoredLayerPayload},
     write_mode::WriteMode,
 };
 
@@ -19,35 +19,35 @@ use crate::{
 /// A foreign reader can write one glyph batch at a time without building a
 /// complete [`font::Font`]. The transaction commits only when [`Self::finish`]
 /// is called; dropping the writer rolls the entire stream back.
-pub struct LayerStreamWriter<'store> {
+pub struct FontImportWriter<'store> {
     tx: Transaction<'store>,
     next_glyph_order: i64,
 }
 
 impl ShiftStore {
     /// Starts an atomic replacement using a glyph-free font header.
-    pub fn font_stream_writer(
+    pub fn begin_import(
         &mut self,
         font_header: &font::Font,
-    ) -> Result<LayerStreamWriter<'_>, StoreError> {
+    ) -> Result<FontImportWriter<'_>, StoreError> {
         let tx = self.conn.transaction()?;
         replace_font_header_in_tx(&tx, font_header)?;
         defer_import_indexes(&tx)?;
-        Ok(LayerStreamWriter {
+        Ok(FontImportWriter {
             tx,
             next_glyph_order: 0,
         })
     }
 }
 
-/// Packs an owned bounded glyph batch in parallel without touching SQLite.
+/// Encodes and compresses an owned bounded glyph batch without touching SQLite.
 /// The returned batch retains glyph directory facts for the single writer.
-pub fn pack_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<PackedGlyphBatch, StoreError> {
+pub fn encode_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<GlyphWriteBatch, StoreError> {
     let started = Instant::now();
-    let packed_layers = pack_glyph_layers(&glyphs)?;
+    let encoded_layers = encode_glyph_layers(&glyphs)?;
     let pack_elapsed = started.elapsed();
     let started = Instant::now();
-    let layers = compress_glyph_layers(packed_layers)?;
+    let layers = compress_glyph_layers(encoded_layers)?;
     let compression_elapsed = started.elapsed();
     let glyphs = glyphs
         .into_iter()
@@ -55,30 +55,30 @@ pub fn pack_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<PackedGlyphBatch, St
         .map(|(glyph, layers)| PackedGlyph { glyph, layers })
         .collect();
 
-    Ok(PackedGlyphBatch {
+    Ok(GlyphWriteBatch {
         glyphs,
         pack_elapsed,
         compression_elapsed,
     })
 }
 
-impl LayerStreamWriter<'_> {
+impl FontImportWriter<'_> {
     /// Writes one complete glyph and all of its currently authored layers.
     pub fn write_glyph(&mut self, glyph: &font::Glyph) -> Result<(), StoreError> {
         self.write_glyph_batch(std::slice::from_ref(glyph))?;
         Ok(())
     }
 
-    /// Packs a bounded glyph batch in parallel, then writes it in stable order.
+    /// Encodes a bounded glyph batch in parallel, then writes it in stable order.
     pub fn write_glyph_batch(
         &mut self,
         glyphs: &[font::Glyph],
     ) -> Result<LayerBatchTiming, StoreError> {
         let started = Instant::now();
-        let packed_layers = pack_glyph_layers(glyphs)?;
+        let encoded_layers = encode_glyph_layers(glyphs)?;
         let pack_elapsed = started.elapsed();
         let started = Instant::now();
-        let layers = compress_glyph_layers(packed_layers)?;
+        let layers = compress_glyph_layers(encoded_layers)?;
         let compression_elapsed = started.elapsed();
 
         let started = Instant::now();
@@ -93,10 +93,10 @@ impl LayerStreamWriter<'_> {
         })
     }
 
-    /// Writes a pre-packed batch in stable order through the owned transaction.
+    /// Writes a prepared batch in stable order through the owned transaction.
     pub fn write_packed_glyph_batch(
         &mut self,
-        batch: PackedGlyphBatch,
+        batch: GlyphWriteBatch,
     ) -> Result<std::time::Duration, StoreError> {
         let started = Instant::now();
         for glyph in &batch.glyphs {
@@ -108,7 +108,7 @@ impl LayerStreamWriter<'_> {
     fn write_packed_glyph(
         &mut self,
         glyph: &font::Glyph,
-        layers: &[(font::LayerId, StoredGlyphLayer)],
+        layers: &[(font::LayerId, StoredLayerPayload)],
     ) -> Result<(), StoreError> {
         write_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order, WriteMode::Insert)?;
         for (layer_id, stored) in layers {
@@ -133,32 +133,29 @@ impl LayerStreamWriter<'_> {
     }
 }
 
-fn pack_glyph_layers(
-    glyphs: &[font::Glyph],
-) -> Result<Vec<Vec<(font::LayerId, font::PackedGlyphLayer)>>, StoreError> {
+fn encode_glyph_layers(glyphs: &[font::Glyph]) -> Result<EncodedGlyphLayers, StoreError> {
     glyphs
         .par_iter()
         .map(|glyph| {
             glyph
                 .layers()
                 .values()
-                .map(|layer| font::pack_glyph_layer(layer).map(|packed| (layer.id(), packed)))
+                .map(|layer| encode_layer(layer).map(|encoded| (layer.id(), encoded)))
                 .collect::<Result<Vec<_>, _>>()
         })
-        .collect::<Result<Vec<_>, font::PackedLayerError>>()
-        .map_err(Into::into)
+        .collect()
 }
 
 fn compress_glyph_layers(
-    layers: Vec<Vec<(font::LayerId, font::PackedGlyphLayer)>>,
-) -> Result<Vec<Vec<(font::LayerId, StoredGlyphLayer)>>, StoreError> {
+    layers: Vec<Vec<(font::LayerId, Vec<u8>)>>,
+) -> Result<Vec<Vec<(font::LayerId, StoredLayerPayload)>>, StoreError> {
     layers
         .into_par_iter()
         .map(|layers| {
             layers
                 .into_iter()
-                .map(|(layer_id, packed)| {
-                    compress_glyph_layer(packed.as_bytes()).map(|stored| (layer_id, stored))
+                .map(|(layer_id, encoded)| {
+                    compress_glyph_layer(&encoded).map(|stored| (layer_id, stored))
                 })
                 .collect::<Result<Vec<_>, _>>()
         })
@@ -187,7 +184,7 @@ mod tests {
         assert!(!index_exists(&store.conn, "glyph_components_layer_id_idx"));
 
         {
-            let writer = store.font_stream_writer(&font).unwrap();
+            let writer = store.begin_import(&font).unwrap();
             for name in DEFERRED_INDEXES {
                 assert!(!index_exists(&writer.tx, name));
             }
@@ -196,7 +193,7 @@ mod tests {
             assert!(index_exists(&store.conn, name));
         }
 
-        let mut writer = store.font_stream_writer(&font).unwrap();
+        let mut writer = store.begin_import(&font).unwrap();
         for glyph in font.glyphs() {
             writer.write_glyph(glyph).unwrap();
         }

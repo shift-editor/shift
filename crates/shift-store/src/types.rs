@@ -2,6 +2,10 @@ use std::time::Duration;
 
 use shift_font::{Glyph, LayerId};
 
+use crate::StoreError;
+
+pub(crate) type EncodedGlyphLayers = Vec<Vec<(LayerId, Vec<u8>)>>;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct LayerBatchTiming {
     pub pack_elapsed: Duration,
@@ -9,13 +13,13 @@ pub struct LayerBatchTiming {
     pub sqlite_elapsed: Duration,
 }
 
-pub struct PackedGlyphBatch {
+pub struct GlyphWriteBatch {
     pub(crate) glyphs: Vec<PackedGlyph>,
     pub(crate) pack_elapsed: Duration,
     pub(crate) compression_elapsed: Duration,
 }
 
-impl PackedGlyphBatch {
+impl GlyphWriteBatch {
     pub fn pack_elapsed(&self) -> Duration {
         self.pack_elapsed
     }
@@ -40,7 +44,19 @@ impl LayerPayloadCompression {
     }
 }
 
-pub(crate) struct StoredGlyphLayer {
+impl TryFrom<&str> for LayerPayloadCompression {
+    type Error = StoreError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "none" => Ok(Self::None),
+            "zstd.v1" => Ok(Self::ZstandardV1),
+            value => Err(StoreError::UnsupportedLayerCompression(value.to_owned())),
+        }
+    }
+}
+
+pub(crate) struct StoredLayerPayload {
     pub(crate) compression: LayerPayloadCompression,
     pub(crate) bytes: Vec<u8>,
     pub(crate) stored_byte_length: u64,
@@ -50,7 +66,7 @@ pub(crate) struct StoredGlyphLayer {
 
 pub(crate) struct PackedGlyph {
     pub(crate) glyph: Glyph,
-    pub(crate) layers: Vec<(LayerId, StoredGlyphLayer)>,
+    pub(crate) layers: Vec<(LayerId, StoredLayerPayload)>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

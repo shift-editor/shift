@@ -1,9 +1,8 @@
 use std::cmp::Ordering;
 
-use shift_glyph_codec::OutlineCommand;
-
 use crate::{
-    curve::curves_from_commands, Bounds, Curve, CurveIndexEncoding, Layout, PackedAtlas, SlugError,
+    curve::curves_from_commands, Bounds, Curve, CurveIndexEncoding, Layout, OutlineCommand,
+    PackedAtlas, SlugError,
 };
 
 pub const DEFAULT_BAND_COUNT: u32 = 8;

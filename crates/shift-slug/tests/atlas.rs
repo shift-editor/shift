@@ -1,4 +1,4 @@
-use shift_glyph_codec::OutlineCommand;
+use shift_slug::OutlineCommand;
 #[cfg(feature = "wgpu-benchmark")]
 use shift_slug::SLUG_WGSL;
 use shift_slug::{

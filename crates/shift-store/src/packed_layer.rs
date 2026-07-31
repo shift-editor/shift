@@ -6,8 +6,11 @@ use shift_font as font;
 
 use crate::{
     ShiftStore, StoreError,
-    stored_layer::{compress_glyph_layer, decompress_glyph_layer, parse_layer_compression},
-    types::StoredGlyphLayer,
+    stored_layer::{
+        MAX_LAYER_PAYLOAD_BYTES as MAX_LAYER_PAYLOAD_BYTES_USIZE, compress_glyph_layer,
+        decode_layer, decompress_glyph_layer, encode_layer,
+    },
+    types::{LayerPayloadCompression, StoredLayerPayload},
     workspace_state::mark_workspace_dirty_in_tx,
     write_mode::WriteMode,
 };
@@ -15,7 +18,7 @@ use crate::{
 pub const GLYPH_LAYER_FORMAT: &str = "shift.glyph-layer.v1";
 pub const MAX_LAYER_READ_BATCH_COUNT: usize = 512;
 pub const MAX_LAYER_READ_BATCH_DECODED_BYTES: u64 = 256 * 1024 * 1024;
-const MAX_LAYER_PAYLOAD_BYTES: i64 = font::MAX_LAYER_PAYLOAD_BYTES as i64;
+const MAX_LAYER_PAYLOAD_BYTES: i64 = MAX_LAYER_PAYLOAD_BYTES_USIZE as i64;
 
 /// Relational facts needed to locate a layer without reading its payload.
 #[derive(Clone, Debug, PartialEq)]
@@ -199,7 +202,7 @@ impl DirectoryFacts {
                 self.inner_format.clone(),
             ));
         }
-        parse_layer_compression(&self.compression)?;
+        LayerPayloadCompression::try_from(self.compression.as_str())?;
         if self.stored_byte_length != self.actual_stored_byte_length {
             return Err(StoreError::LayerDirectoryMismatch {
                 layer_id: self.layer_id.clone(),
@@ -238,15 +241,15 @@ impl DirectoryFacts {
         Ok(self.decoded_byte_length as u64)
     }
 
-    fn stored_layer(&self, payload: Vec<u8>) -> Result<StoredGlyphLayer, StoreError> {
+    fn stored_layer(&self, payload: Vec<u8>) -> Result<StoredLayerPayload, StoreError> {
         let decoded_blake3: [u8; 32] = self.decoded_blake3.as_slice().try_into().map_err(|_| {
             StoreError::LayerDirectoryMismatch {
                 layer_id: self.layer_id.clone(),
                 detail: "decoded BLAKE3 is not 32 bytes".to_string(),
             }
         })?;
-        Ok(StoredGlyphLayer {
-            compression: parse_layer_compression(&self.compression)?,
+        Ok(StoredLayerPayload {
+            compression: self.compression.as_str().try_into()?,
             stored_byte_length: self.stored_byte_length as u64,
             decoded_byte_length: self.decoded_byte_length as u64,
             decoded_blake3,
@@ -320,7 +323,7 @@ pub(crate) fn load_glyph_layer_from_conn(
             detail: "payload changed during bounded read".to_string(),
         })?;
     let decoded = decompress_glyph_layer(facts.layer_id.as_str(), facts.stored_layer(payload)?)?;
-    let layer = font::unpack_glyph_layer(&decoded)?;
+    let layer = decode_layer(&decoded)?;
     validate_directory_facts(
         layer_id,
         &facts.source_id,
@@ -524,7 +527,7 @@ fn load_glyph_layer_batch_from_conn(
                     detail: "payload has no directory row".to_string(),
                 })?;
             let decoded = decompress_glyph_layer(layer_id.as_str(), facts.stored_layer(payload)?)?;
-            let layer = font::unpack_glyph_layer(&decoded)?;
+            let layer = decode_layer(&decoded)?;
             let expected_id = font::LayerId::from_raw(layer_id.clone());
             validate_directory_facts(
                 &expected_id,
@@ -594,8 +597,8 @@ pub(crate) fn write_layer_in_tx(
     glyph_id: &font::GlyphId,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
-    let packed = font::pack_glyph_layer(layer)?;
-    let stored = compress_glyph_layer(packed.as_bytes())?;
+    let encoded = encode_layer(layer)?;
+    let stored = compress_glyph_layer(&encoded)?;
     store_stored_layer_in_tx(tx, glyph_id, layer, &stored, WriteMode::Upsert)
 }
 
@@ -603,7 +606,7 @@ pub(crate) fn store_stored_layer_in_tx(
     tx: &Transaction<'_>,
     glyph_id: &font::GlyphId,
     layer: &font::GlyphLayer,
-    stored: &StoredGlyphLayer,
+    stored: &StoredLayerPayload,
     mode: WriteMode,
 ) -> Result<(), StoreError> {
     let stored_byte_length = encoded_len(stored.stored_byte_length)?;
@@ -863,9 +866,16 @@ mod tests {
     }
 
     #[test]
-    fn sqlite_payload_matches_shared_canonical_golden_bytes() {
-        let golden = include_bytes!("../../../fixtures/glyph-codec/layer-v1/full.bin");
-        let layer = font::unpack_glyph_layer(golden).unwrap();
+    fn sqlite_payload_preserves_canonical_bytes() {
+        let font = font::test_support::sample_font();
+        let layer = font
+            .glyph_by_name("A")
+            .unwrap()
+            .layers()
+            .values()
+            .next()
+            .unwrap();
+        let encoded = encode_layer(layer).unwrap();
         let glyph_id = font::GlyphId::from_raw("storage_golden");
         let glyph_name = font::GlyphName::from("storageGolden");
         let mut store = ShiftStore::open_memory_for_test().unwrap();
@@ -885,7 +895,7 @@ mod tests {
             .unwrap();
 
         let tx = store.conn.transaction().unwrap();
-        write_layer_in_tx(&tx, &glyph_id, &layer).unwrap();
+        write_layer_in_tx(&tx, &glyph_id, layer).unwrap();
         tx.commit().unwrap();
 
         let stored = store
@@ -896,7 +906,7 @@ mod tests {
                  FROM glyph_layer_payloads WHERE layer_id = ?1",
                 [layer.id().to_string()],
                 |row| {
-                    Ok(StoredGlyphLayer {
+                    Ok(StoredLayerPayload {
                         compression: match row.get::<_, String>(0)?.as_str() {
                             "zstd.v1" => crate::types::LayerPayloadCompression::ZstandardV1,
                             _ => crate::types::LayerPayloadCompression::None,
@@ -916,10 +926,10 @@ mod tests {
         assert!(stored.stored_byte_length < stored.decoded_byte_length);
         assert_eq!(
             decompress_glyph_layer(layer.id().as_str(), stored).unwrap(),
-            golden
+            encoded
         );
         let decoded = store.load_glyph_layer(&layer.id()).unwrap().unwrap();
-        assert_eq!(font::pack_glyph_layer(&decoded).unwrap().as_bytes(), golden);
+        assert_eq!(encode_layer(&decoded).unwrap(), encoded);
     }
 
     #[test]
@@ -1015,8 +1025,8 @@ mod tests {
             .collect::<Vec<_>>();
         layer_ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         let uncompressed_layer = font.layer(layer_ids[0].clone()).unwrap();
-        let packed = font::pack_glyph_layer(uncompressed_layer).unwrap();
-        let decoded_blake3 = blake3::hash(packed.as_bytes());
+        let encoded = encode_layer(uncompressed_layer).unwrap();
+        let decoded_blake3 = blake3::hash(&encoded);
         store
             .conn
             .execute(
@@ -1026,8 +1036,8 @@ mod tests {
                      decoded_blake3 = ?3
                  WHERE layer_id = ?4",
                 params![
-                    packed.as_bytes(),
-                    packed.as_bytes().len() as i64,
+                    encoded.as_slice(),
+                    encoded.len() as i64,
                     decoded_blake3.as_bytes().as_slice(),
                     layer_ids[0].to_string(),
                 ],
@@ -1096,17 +1106,29 @@ mod tests {
             .values()
             .next()
             .unwrap();
-        let packed = font::pack_glyph_layer(layer).unwrap();
-        let uncompressed = StoredGlyphLayer {
+        let mut compressible_layer = layer.as_ref().clone();
+        compressible_layer.lib_mut().set(
+            "com.shift.compression-fixture".to_string(),
+            font::LibValue::Data(vec![0; 8 * 1024]),
+        );
+        let encoded = encode_layer(&compressible_layer).unwrap();
+        let uncompressed = StoredLayerPayload {
             compression: crate::types::LayerPayloadCompression::None,
-            bytes: packed.as_bytes().to_vec(),
-            stored_byte_length: packed.as_bytes().len() as u64,
-            decoded_byte_length: packed.as_bytes().len() as u64,
-            decoded_blake3: *blake3::hash(packed.as_bytes()).as_bytes(),
+            bytes: encoded.clone(),
+            stored_byte_length: encoded.len() as u64,
+            decoded_byte_length: encoded.len() as u64,
+            decoded_blake3: *blake3::hash(&encoded).as_bytes(),
         };
         let glyph_id = font.glyph_id_by_layer(layer.id()).unwrap();
         let tx = store.conn.transaction().unwrap();
-        store_stored_layer_in_tx(&tx, &glyph_id, layer, &uncompressed, WriteMode::Upsert).unwrap();
+        store_stored_layer_in_tx(
+            &tx,
+            &glyph_id,
+            &compressible_layer,
+            &uncompressed,
+            WriteMode::Upsert,
+        )
+        .unwrap();
         tx.commit().unwrap();
         assert_eq!(
             store
@@ -1120,7 +1142,7 @@ mod tests {
             "none"
         );
 
-        store.replace_glyph_layer(layer).unwrap();
+        store.replace_glyph_layer(&compressible_layer).unwrap();
 
         let (compression, stored, decoded, hash_length, payload_length) = store
             .conn
@@ -1146,7 +1168,7 @@ mod tests {
         assert_eq!(hash_length, 32);
         assert_eq!(
             store.load_glyph_layer(&layer.id()).unwrap().unwrap(),
-            **layer
+            compressible_layer
         );
     }
 
@@ -1176,14 +1198,14 @@ mod tests {
                 if detail.contains("decoded byte length")
         ));
 
-        let packed = font::pack_glyph_layer(font.layer(layer_id.clone()).unwrap()).unwrap();
+        let encoded = encode_layer(font.layer(layer_id.clone()).unwrap()).unwrap();
         store
             .conn
             .execute(
                 "UPDATE glyph_layer_payloads
                  SET decoded_byte_length = ?1, decoded_blake3 = zeroblob(32)
                  WHERE layer_id = ?2",
-                params![packed.as_bytes().len() as i64, layer_id.to_string()],
+                params![encoded.len() as i64, layer_id.to_string()],
             )
             .unwrap();
         assert!(matches!(
@@ -1426,7 +1448,7 @@ mod tests {
         let (mut store, font) = populated_store();
         let before = store.list_glyph_layer_directory().unwrap();
         {
-            let mut writer = store.font_stream_writer(&font).unwrap();
+            let mut writer = store.begin_import(&font).unwrap();
             let glyph = font.glyphs().next().unwrap();
             writer
                 .write_glyph_batch(std::slice::from_ref(glyph))

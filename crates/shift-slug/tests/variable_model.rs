@@ -1,8 +1,7 @@
 use shift_font::{
     test_support::sample_variable_font, CurveSegment, CurveSegmentIter, GlyphId, Location,
 };
-use shift_glyph_codec::OutlineCommand;
-use shift_slug::{AtlasBuilder, VariableAtlasBuilder};
+use shift_slug::{AtlasBuilder, OutlineCommand, VariableAtlasBuilder};
 
 #[test]
 fn resident_two_source_model_matches_shift_projection_at_midpoint() {

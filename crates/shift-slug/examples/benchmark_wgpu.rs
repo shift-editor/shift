@@ -8,10 +8,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use shift_glyph_codec::OutlineCommand;
 use shift_slug::{
     pack_render_instances, pack_render_params, Atlas, AtlasBuilder, Bounds, CurveIndexEncoding,
-    Layout, RenderInstance, RenderParams, Section, DEFAULT_BAND_COUNT, SLUG_WGSL,
+    Layout, OutlineCommand, RenderInstance, RenderParams, Section, DEFAULT_BAND_COUNT, SLUG_WGSL,
 };
 use skrifa::{
     outline::{DrawSettings, OutlinePen},

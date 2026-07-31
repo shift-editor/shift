@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize};
 
 const SHORT_ID_ALPHABET: &[u8; 64] =
     b"useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
@@ -36,7 +37,7 @@ impl std::fmt::Display for EntityId {
 
 macro_rules! typed_id {
     ($name:ident, $prefix:literal) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize)]
         pub struct $name(String);
 
         impl Default for $name {
@@ -82,6 +83,16 @@ macro_rules! typed_id {
                         value: s.to_string(),
                     })
                 }
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let value = String::deserialize(deserializer)?;
+                value.parse().map_err(D::Error::custom)
             }
         }
     };
@@ -132,6 +143,45 @@ typed_id!(AxisLabelId, "axisLabel");
 typed_id!(AxisMappingId, "axisMapping");
 typed_id!(NamedInstanceId, "namedInstance");
 typed_id!(MetricId, "metric");
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum GlyphEntityId {
+    Contour(ContourId),
+    Point(PointId),
+    Component(ComponentId),
+    Anchor(AnchorId),
+    Guideline(GuidelineId),
+}
+
+impl From<ContourId> for GlyphEntityId {
+    fn from(id: ContourId) -> Self {
+        Self::Contour(id)
+    }
+}
+
+impl From<PointId> for GlyphEntityId {
+    fn from(id: PointId) -> Self {
+        Self::Point(id)
+    }
+}
+
+impl From<ComponentId> for GlyphEntityId {
+    fn from(id: ComponentId) -> Self {
+        Self::Component(id)
+    }
+}
+
+impl From<AnchorId> for GlyphEntityId {
+    fn from(id: AnchorId) -> Self {
+        Self::Anchor(id)
+    }
+}
+
+impl From<GuidelineId> for GlyphEntityId {
+    fn from(id: GuidelineId) -> Self {
+        Self::Guideline(id)
+    }
+}
 
 #[cfg(test)]
 mod tests {

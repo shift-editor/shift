@@ -2,8 +2,7 @@ use crate::axis::{Axis, AxisMapping, Location};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
 use crate::entity::{
-    AnchorId, AxisId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, MetricId, PointId,
-    SourceId,
+    AnchorId, AxisId, ContourId, GlyphEntityId, GlyphId, LayerId, MetricId, PointId, SourceId,
 };
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
@@ -121,26 +120,13 @@ struct FontData {
     images: BinaryData,
 }
 
-#[derive(Default)]
-struct ReplacementIdentities {
-    contours: HashSet<ContourId>,
-    points: HashSet<PointId>,
-    components: HashSet<ComponentId>,
-    anchors: HashSet<AnchorId>,
-    guidelines: HashSet<GuidelineId>,
-}
-
 #[derive(Clone, Debug, Default)]
 struct FontIndex {
     glyph_by_name: HashMap<GlyphName, GlyphId>,
     layer_owner: HashMap<LayerId, GlyphId>,
     layer_by_glyph_source: HashMap<(GlyphId, SourceId), LayerId>,
     glyphs_by_unicode: HashMap<u32, Vec<GlyphId>>,
-    contour_ids: HashSet<ContourId>,
-    point_ids: HashSet<PointId>,
-    component_ids: HashSet<ComponentId>,
-    anchor_ids: HashSet<AnchorId>,
-    guideline_ids: HashSet<GuidelineId>,
+    entity_ids: HashSet<GlyphEntityId>,
 }
 
 impl FontIndex {
@@ -168,11 +154,7 @@ impl FontIndex {
         }
 
         let mut local_sources = HashSet::new();
-        let mut local_contours = HashSet::new();
-        let mut local_points = HashSet::new();
-        let mut local_components = HashSet::new();
-        let mut local_anchors = HashSet::new();
-        let mut local_guidelines = HashSet::new();
+        let mut local_entities = HashSet::new();
 
         for layer in glyph.layers().values().map(Arc::as_ref) {
             if self.layer_owner.contains_key(&layer.id()) {
@@ -190,38 +172,10 @@ impl FontIndex {
                 });
             }
 
-            for contour in layer.contours_iter() {
-                if self.contour_ids.contains(&contour.id()) || !local_contours.insert(contour.id())
+            for entity_id in glyph_entity_ids(layer) {
+                if self.entity_ids.contains(&entity_id) || !local_entities.insert(entity_id.clone())
                 {
-                    return Err(CoreError::DuplicateContourId(contour.id()));
-                }
-
-                for point in contour.points() {
-                    if self.point_ids.contains(&point.id()) || !local_points.insert(point.id()) {
-                        return Err(CoreError::DuplicatePointId(point.id()));
-                    }
-                }
-            }
-
-            for component in layer.components_iter() {
-                if self.component_ids.contains(&component.id())
-                    || !local_components.insert(component.id())
-                {
-                    return Err(CoreError::DuplicateComponentId(component.id()));
-                }
-            }
-
-            for anchor in layer.anchors_iter() {
-                if self.anchor_ids.contains(&anchor.id()) || !local_anchors.insert(anchor.id()) {
-                    return Err(CoreError::DuplicateAnchorId(anchor.id()));
-                }
-            }
-
-            for guideline in layer.guidelines() {
-                if self.guideline_ids.contains(&guideline.id())
-                    || !local_guidelines.insert(guideline.id())
-                {
-                    return Err(CoreError::DuplicateGuidelineId(guideline.id()));
+                    return Err(duplicate_entity_error(entity_id));
                 }
             }
         }
@@ -244,41 +198,10 @@ impl FontIndex {
             });
         }
 
-        let mut contour_ids = HashSet::new();
-        let mut point_ids = HashSet::new();
-        let mut component_ids = HashSet::new();
-        let mut anchor_ids = HashSet::new();
-        let mut guideline_ids = HashSet::new();
-
-        for contour in layer.contours_iter() {
-            if self.contour_ids.contains(&contour.id()) || !contour_ids.insert(contour.id()) {
-                return Err(CoreError::DuplicateContourId(contour.id()));
-            }
-
-            for point in contour.points() {
-                if self.point_ids.contains(&point.id()) || !point_ids.insert(point.id()) {
-                    return Err(CoreError::DuplicatePointId(point.id()));
-                }
-            }
-        }
-
-        for component in layer.components_iter() {
-            if self.component_ids.contains(&component.id()) || !component_ids.insert(component.id())
-            {
-                return Err(CoreError::DuplicateComponentId(component.id()));
-            }
-        }
-
-        for anchor in layer.anchors_iter() {
-            if self.anchor_ids.contains(&anchor.id()) || !anchor_ids.insert(anchor.id()) {
-                return Err(CoreError::DuplicateAnchorId(anchor.id()));
-            }
-        }
-
-        for guideline in layer.guidelines() {
-            if self.guideline_ids.contains(&guideline.id()) || !guideline_ids.insert(guideline.id())
-            {
-                return Err(CoreError::DuplicateGuidelineId(guideline.id()));
+        let mut local_entities = HashSet::new();
+        for entity_id in glyph_entity_ids(layer) {
+            if self.entity_ids.contains(&entity_id) || !local_entities.insert(entity_id.clone()) {
+                return Err(duplicate_entity_error(entity_id));
             }
         }
 
@@ -288,72 +211,19 @@ impl FontIndex {
     fn validate_layer_replacements(
         &self,
         replacements: &[(GlyphId, Arc<GlyphLayer>, Arc<GlyphLayer>)],
-    ) -> CoreResult<ReplacementIdentities> {
-        let mut removed_contour_ids = HashSet::new();
-        let mut removed_point_ids = HashSet::new();
-        let mut removed_component_ids = HashSet::new();
-        let mut removed_anchor_ids = HashSet::new();
-        let mut removed_guideline_ids = HashSet::new();
-        for (_, previous, _) in replacements {
-            for contour in previous.contours_iter() {
-                removed_contour_ids.insert(contour.id());
-                removed_point_ids.extend(contour.points().iter().map(|point| point.id()));
-            }
-            removed_component_ids
-                .extend(previous.components_iter().map(|component| component.id()));
-            removed_anchor_ids.extend(previous.anchors_iter().map(|anchor| anchor.id()));
-            removed_guideline_ids.extend(previous.guidelines().iter().map(Guideline::id));
-        }
+    ) -> CoreResult<HashSet<GlyphEntityId>> {
+        let removed_ids = replacements
+            .iter()
+            .flat_map(|(_, previous, _)| glyph_entity_ids(previous))
+            .collect::<HashSet<_>>();
+        let mut replacement_ids = HashSet::new();
 
-        let mut replacement_ids = ReplacementIdentities::default();
         for (_, _, replacement) in replacements {
-            for contour in replacement.contours_iter() {
-                let contour_id = contour.id();
-                if (self.contour_ids.contains(&contour_id)
-                    && !removed_contour_ids.contains(&contour_id))
-                    || !replacement_ids.contours.insert(contour_id.clone())
+            for entity_id in glyph_entity_ids(replacement) {
+                if (self.entity_ids.contains(&entity_id) && !removed_ids.contains(&entity_id))
+                    || !replacement_ids.insert(entity_id.clone())
                 {
-                    return Err(CoreError::DuplicateContourId(contour_id));
-                }
-
-                for point in contour.points() {
-                    let point_id = point.id();
-                    if (self.point_ids.contains(&point_id)
-                        && !removed_point_ids.contains(&point_id))
-                        || !replacement_ids.points.insert(point_id.clone())
-                    {
-                        return Err(CoreError::DuplicatePointId(point_id));
-                    }
-                }
-            }
-
-            for component in replacement.components_iter() {
-                let component_id = component.id();
-                if (self.component_ids.contains(&component_id)
-                    && !removed_component_ids.contains(&component_id))
-                    || !replacement_ids.components.insert(component_id.clone())
-                {
-                    return Err(CoreError::DuplicateComponentId(component_id));
-                }
-            }
-
-            for anchor in replacement.anchors_iter() {
-                let anchor_id = anchor.id();
-                if (self.anchor_ids.contains(&anchor_id)
-                    && !removed_anchor_ids.contains(&anchor_id))
-                    || !replacement_ids.anchors.insert(anchor_id.clone())
-                {
-                    return Err(CoreError::DuplicateAnchorId(anchor_id));
-                }
-            }
-
-            for guideline in replacement.guidelines() {
-                let guideline_id = guideline.id();
-                if (self.guideline_ids.contains(&guideline_id)
-                    && !removed_guideline_ids.contains(&guideline_id))
-                    || !replacement_ids.guidelines.insert(guideline_id.clone())
-                {
-                    return Err(CoreError::DuplicateGuidelineId(guideline_id));
+                    return Err(duplicate_entity_error(entity_id));
                 }
             }
         }
@@ -366,17 +236,7 @@ impl FontIndex {
         self.layer_by_glyph_source
             .insert((glyph_id, layer.source_id()), layer.id());
 
-        for contour in layer.contours_iter() {
-            self.contour_ids.insert(contour.id());
-            self.point_ids
-                .extend(contour.points().iter().map(|point| point.id()));
-        }
-        self.component_ids
-            .extend(layer.components_iter().map(|component| component.id()));
-        self.anchor_ids
-            .extend(layer.anchors_iter().map(|anchor| anchor.id()));
-        self.guideline_ids
-            .extend(layer.guidelines().iter().map(Guideline::id));
+        self.entity_ids.extend(glyph_entity_ids(layer));
     }
 
     fn remove_layer(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
@@ -384,20 +244,8 @@ impl FontIndex {
         self.layer_by_glyph_source
             .remove(&(glyph_id, layer.source_id()));
 
-        for contour in layer.contours_iter() {
-            self.contour_ids.remove(&contour.id());
-            for point in contour.points() {
-                self.point_ids.remove(&point.id());
-            }
-        }
-        for component in layer.components_iter() {
-            self.component_ids.remove(&component.id());
-        }
-        for anchor in layer.anchors_iter() {
-            self.anchor_ids.remove(&anchor.id());
-        }
-        for guideline in layer.guidelines() {
-            self.guideline_ids.remove(&guideline.id());
+        for entity_id in glyph_entity_ids(layer) {
+            self.entity_ids.remove(&entity_id);
         }
     }
 
@@ -432,6 +280,44 @@ impl FontIndex {
         for layer in glyph.layers().values().map(Arc::as_ref) {
             self.remove_layer(glyph_id.clone(), layer);
         }
+    }
+}
+
+fn glyph_entity_ids(layer: &GlyphLayer) -> impl Iterator<Item = GlyphEntityId> + '_ {
+    layer
+        .contours_iter()
+        .map(|contour| GlyphEntityId::from(contour.id()))
+        .chain(
+            layer
+                .contours_iter()
+                .flat_map(|contour| contour.points().iter())
+                .map(|point| GlyphEntityId::from(point.id())),
+        )
+        .chain(
+            layer
+                .components_iter()
+                .map(|component| GlyphEntityId::from(component.id())),
+        )
+        .chain(
+            layer
+                .anchors_iter()
+                .map(|anchor| GlyphEntityId::from(anchor.id())),
+        )
+        .chain(
+            layer
+                .guidelines()
+                .iter()
+                .map(|guideline| GlyphEntityId::from(guideline.id())),
+        )
+}
+
+fn duplicate_entity_error(id: GlyphEntityId) -> CoreError {
+    match id {
+        GlyphEntityId::Contour(id) => CoreError::DuplicateContourId(id),
+        GlyphEntityId::Point(id) => CoreError::DuplicatePointId(id),
+        GlyphEntityId::Component(id) => CoreError::DuplicateComponentId(id),
+        GlyphEntityId::Anchor(id) => CoreError::DuplicateAnchorId(id),
+        GlyphEntityId::Guideline(id) => CoreError::DuplicateGuidelineId(id),
     }
 }
 
@@ -1044,45 +930,66 @@ impl Font {
 
     /// Returns whether a contour identity is already in use anywhere in the font.
     pub(crate) fn has_contour_id(&self, contour_id: &ContourId) -> bool {
-        self.index().contour_ids.contains(contour_id)
+        self.index()
+            .entity_ids
+            .contains(&GlyphEntityId::from(contour_id.clone()))
     }
 
     /// Returns whether a point identity is already in use anywhere in the font.
     pub(crate) fn has_point_id(&self, point_id: &PointId) -> bool {
-        self.index().point_ids.contains(point_id)
+        self.index()
+            .entity_ids
+            .contains(&GlyphEntityId::from(point_id.clone()))
     }
 
     /// Returns whether an anchor identity is already in use anywhere in the font.
     pub(crate) fn has_anchor_id(&self, anchor_id: &AnchorId) -> bool {
-        self.index().anchor_ids.contains(anchor_id)
+        self.index()
+            .entity_ids
+            .contains(&GlyphEntityId::from(anchor_id.clone()))
     }
 
     /// Records a contour minted by an in-place layer edit.
     pub(crate) fn record_contour_id(&mut self, contour_id: ContourId) {
-        self.state_mut().index.contour_ids.insert(contour_id);
+        self.state_mut()
+            .index
+            .entity_ids
+            .insert(GlyphEntityId::from(contour_id));
     }
 
     /// Records points minted by an in-place layer edit.
     pub(crate) fn record_point_ids(&mut self, point_ids: impl IntoIterator<Item = PointId>) {
-        self.state_mut().index.point_ids.extend(point_ids);
+        self.state_mut()
+            .index
+            .entity_ids
+            .extend(point_ids.into_iter().map(GlyphEntityId::from));
     }
 
     /// Records anchors minted by an in-place layer edit.
     pub(crate) fn record_anchor_ids(&mut self, anchor_ids: impl IntoIterator<Item = AnchorId>) {
-        self.state_mut().index.anchor_ids.extend(anchor_ids);
+        self.state_mut()
+            .index
+            .entity_ids
+            .extend(anchor_ids.into_iter().map(GlyphEntityId::from));
     }
 
     /// Forgets point identities removed by an in-place layer edit.
     pub(crate) fn forget_point_ids(&mut self, point_ids: &[PointId]) {
         for point_id in point_ids {
-            self.state_mut().index.point_ids.remove(point_id);
+            self.state_mut()
+                .index
+                .entity_ids
+                .remove(&GlyphEntityId::from(point_id.clone()));
         }
     }
 
     /// Forgets anchor identities removed by an in-place layer edit.
     pub(crate) fn forget_anchor_ids(&mut self, anchor_ids: &[AnchorId]) {
         for anchor_id in anchor_ids {
-            self.state_mut().index.anchor_ids.remove(anchor_id);
+            self.state_mut()
+                .index
+                .entity_ids
+                .remove(&GlyphEntityId::from(anchor_id.clone()));
         }
     }
 
@@ -1275,11 +1182,7 @@ impl Font {
                 .expect("replacement owner was resolved before mutation");
             Arc::make_mut(glyph).set_layer(layer);
         }
-        state.index.contour_ids.extend(replacement_ids.contours);
-        state.index.point_ids.extend(replacement_ids.points);
-        state.index.component_ids.extend(replacement_ids.components);
-        state.index.anchor_ids.extend(replacement_ids.anchors);
-        state.index.guideline_ids.extend(replacement_ids.guidelines);
+        state.index.entity_ids.extend(replacement_ids);
 
         Ok(())
     }
@@ -1542,8 +1445,8 @@ fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult
 mod tests {
     use super::*;
     use crate::{
-        test_support::sample_font, Anchor, AxisMappingPoint, AxisRole, Component, Contour,
-        ContourId, GlyphLayer, LayerId, PointId, PointType,
+        test_support::sample_font, Anchor, AxisMappingPoint, AxisRole, Component, ComponentId,
+        Contour, ContourId, GlyphLayer, GuidelineId, LayerId, PointId, PointType,
     };
     use std::sync::Arc;
     use std::time::{Duration, Instant};
@@ -1939,7 +1842,10 @@ mod tests {
         assert!(font.has_contour_id(&contour_id));
         assert!(font.has_point_id(&point_id));
         assert!(font.has_anchor_id(&anchor_id));
-        assert!(font.index().component_ids.contains(&component_id));
+        assert!(font
+            .index()
+            .entity_ids
+            .contains(&GlyphEntityId::from(component_id)));
 
         let committed = font.layer(layer_id.clone()).unwrap().clone();
         let mut invalid = values.into_vec();

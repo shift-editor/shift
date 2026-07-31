@@ -1605,7 +1605,7 @@ impl TryFrom<LibValueDoc> for LibValue {
                 values
                     .into_iter()
                     .map(|(key, value)| value.try_into().map(|value| (key, value)))
-                    .collect::<Result<HashMap<_, _>, _>>()?,
+                    .collect::<Result<BTreeMap<_, _>, _>>()?,
             ),
             LibValueDoc::Data(value) => Self::Data(value),
             LibValueDoc::Date(value) => Self::Date(value),

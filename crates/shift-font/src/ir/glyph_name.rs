@@ -1,9 +1,10 @@
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Borrow;
 use std::fmt;
 use std::ops::Deref;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct GlyphName(String);
 
@@ -27,6 +28,16 @@ impl GlyphName {
 
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for GlyphName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::new(value).map_err(D::Error::custom)
     }
 }
 

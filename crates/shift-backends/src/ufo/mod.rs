@@ -181,7 +181,7 @@ mod tests {
         let mut broken = create_test_font();
         broken.lib_mut().set(
             "public.objectLibs".to_string(),
-            shift_font::LibValue::Dict(std::collections::HashMap::new()),
+            shift_font::LibValue::Dict(std::collections::BTreeMap::new()),
         );
         UfoWriter::new()
             .save(&broken, ufo_path_str)

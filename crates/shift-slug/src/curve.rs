@@ -1,6 +1,4 @@
-use shift_glyph_codec::OutlineCommand;
-
-use crate::SlugError;
+use crate::{OutlineCommand, SlugError};
 
 /// Maximum font-space distance between a source cubic and its quadratic approximation.
 pub const CUBIC_APPROXIMATION_ACCURACY: f32 = 1.0;

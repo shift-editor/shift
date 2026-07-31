@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let started = Instant::now();
     let mut store = ShiftStore::open_for_import(&store_path)?;
-    let mut writer = store.font_stream_writer(import.header())?;
+    let mut writer = store.begin_import(import.header())?;
     println!("store_setup_ms={:.3}", ms(started.elapsed()));
 
     let pipeline_started = Instant::now();

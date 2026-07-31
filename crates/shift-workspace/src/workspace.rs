@@ -763,7 +763,7 @@ impl FontWorkspace {
 
                 let staged_path = create_import_staging_path(store_path)?;
                 let mut store = ShiftStore::open_for_import(&staged_path)?;
-                let mut writer = store.font_stream_writer(import.header())?;
+                let mut writer = store.begin_import(import.header())?;
                 stream_into(import, &mut writer, ImportBatchLimit::default(), |_| {})?;
                 writer.finish()?;
                 store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
