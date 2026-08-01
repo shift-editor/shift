@@ -124,6 +124,18 @@ export class WorkspaceProcess {
     return this.#requireChannel().call("workspace.open", request);
   }
 
+  /** Starts complete authored glyph compilation without delaying workspace-window creation. */
+  prepareAuthoredGlyphCompilation(): void {
+    const preparation = this.#requireChannel().call(
+      "workspace.prepareAuthoredGlyphCompilation",
+      undefined,
+    );
+    // This is a genuine fire-and-forget boundary: renderer startup consumes the result later.
+    void preparation.catch((error: unknown) => {
+      this.#log.error("authored glyph compilation failed", error);
+    });
+  }
+
   /**
    * Closes the live utility-owned workspace, treating an unavailable process as already closed.
    *

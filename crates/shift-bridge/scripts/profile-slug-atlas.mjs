@@ -53,10 +53,11 @@ try {
 
   bridge.closeWorkspace();
   const resumed = measure(() => bridge.resumeWorkspaceForSource(storePath, packagePath));
-  const resumedPrepare = prepare();
+  const resumedAuthoredCompilation = measure(() => bridge.prepareAuthoredGlyphCompilation());
+  const resumedAlignedPrepare = prepare();
 
   const warm = Array.from({ length: iterations }, prepare);
-  for (const sample of [resumedPrepare, ...warm]) {
+  for (const sample of [resumedAlignedPrepare, ...warm]) {
     if (JSON.stringify(sample.signature) !== JSON.stringify(cold.signature)) {
       throw new Error("Slug atlas counts changed between preparations");
     }
@@ -71,7 +72,10 @@ try {
         openMs: opened.milliseconds,
         coldPrepareMs: cold.milliseconds,
         resumeMs: resumed.milliseconds,
-        resumedPrepareMs: resumedPrepare.milliseconds,
+        resumedAuthoredCompilationMs: resumedAuthoredCompilation.milliseconds,
+        resumedAlignedPrepareMs: resumedAlignedPrepare.milliseconds,
+        resumedPreviewMs:
+          resumedAuthoredCompilation.milliseconds + resumedAlignedPrepare.milliseconds,
         warmPrepareMs: {
           p50: percentile(samples, 0.5),
           p95: percentile(samples, 0.95),

@@ -14,13 +14,13 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW `FontSaveSnapshot`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
 
-**Architecture Invariant:** Glyph snapshot, projection, preview, and Slug preparation methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans, and acquired payloads remain resident in the workspace cache.
+**Architecture Invariant:** Glyph snapshot, projection, preview, and Slug preparation methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans, and acquired payloads remain resident in the workspace cache. `prepareAuthoredGlyphCompilation()` may perform complete acquisition before WebGPU initialization so the later aligned atlas request does not repeat that work.
 
 **Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
 **Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
 
-**Architecture Invariant:** A prepared Slug atlas or page remains native and is consumed once through napi-rs `ReadableStream<Buffer>` chunks. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. **WHY:** Product upload must retain one bounded temporary chunk, not an atlas-sized JavaScript copy or an unbounded IPC queue.
+**Architecture Invariant:** A prepared authored glyph compilation remains native until `prepareSlugAtlas(alignment)` supplies its device alignment. The resulting Slug atlas or page is consumed once through napi-rs `ReadableStream<Buffer>` chunks. Every font edit invalidates both forms. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. **WHY:** Renderer startup can overlap complete authored compilation without placeholders, while product upload retains one bounded temporary chunk rather than an atlas-sized JavaScript copy or an unbounded IPC queue.
 
 ## Codemap
 
@@ -53,7 +53,8 @@ crates/shift-bridge/
 - `NapiGlyphProjection` -- compact location-independent glyph backing with reusable interpolation, exact-source exceptions, and Rust-owned `GlyphComponents` relationships.
 - `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
 - `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, and aligned resident-section layout.
-- `SlugAtlasGeneration` -- one prepared native atlas or page consumed by its stream API or released by its discard API.
+- `authoredGlyphCompilation` -- one complete location-independent `AuthoredAtlas` prepared before device alignment and consumed by the complete-atlas endpoint.
+- `SlugAtlasGeneration` -- one aligned native atlas or page consumed by its stream API or released by its discard API.
 
 ## How it works
 
@@ -64,9 +65,9 @@ crates/shift-bridge/
 5. Full glyph snapshots first acquire requested layer payloads, then include authored state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` and previews expand transitive component identities through SQLite indexes, acquire those layers, and only then project without further I/O. Source reads expose master sources only; layer-only/background sources remain native authoring details and never enter renderer interpolation.
 6. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
-8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
+8. `closeWorkspace()` drops the live Rust workspace handle. The utility process retains a clean package-backed SQLite document, but deletes untitled/imported documents and explicitly discarded dirty documents.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
-10. `prepareSlugAtlas(alignment)` acquires all layers for the catalog's complete resident generation. `prepareSlugAtlasPage(glyphIds, alignment)` acquires the ordered roots and their indexed component closures for a local edit patch. Both build one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives the call. Acquired payloads remain in the workspace cache, while stream/discard methods retain the bounded atlas transport contract. Every font edit invalidates an unconsumed generation or patch. Set `SHIFT_PROFILE_SLUG_ATLAS=1` to emit native phase timings from these unchanged endpoints.
+10. After source open, `prepareAuthoredGlyphCompilation()` acquires all layers and builds the catalog's complete location-independent `AuthoredAtlas` while the renderer starts. `prepareSlugAtlas(alignment)` consumes that prepared compilation and performs only alignment-specific layout; if prewarming has not run, it performs the same complete build synchronously. `prepareSlugAtlasPage(glyphIds, alignment)` independently acquires ordered roots and their indexed component closures for a local edit patch. Each build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. Every font edit invalidates the prepared compilation and any unconsumed generation or patch. Background compilation emits a `[workspace-open]` acquisition/compilation summary; set `SHIFT_PROFILE_SLUG_ATLAS=1` for every nested native phase.
 
 ## Type Boundary
 

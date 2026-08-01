@@ -62,7 +62,7 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 File -> New asks `WorkspaceManager.createUntitled()` for a session. The launcher prepares an idle utility process, so File -> Open overlaps process startup with `showOpenFontDialog()` before asking `WorkspaceManager.openPath(path)`.
 
-For `.shift` paths, `WorkspaceManager` calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the inspected identity is passed into the open request instead of reading and hashing the package a second time. A matching clean or dirty working document resumes directory-first; a divergent clean document is replaced, while a divergent dirty document is orphaned.
+For `.shift` paths, `WorkspaceManager` calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the inspected identity is passed into the open request instead of reading and hashing the package a second time. A matching clean or dirty working document resumes directory-first; a divergent clean document is replaced, while a divergent dirty document is orphaned. After main receives the open response, it sends a fire-and-forget complete authored glyph compilation request so layer acquisition and Slug work overlap workspace-window and WebGPU startup; the grid still waits for the complete atlas and never renders placeholder glyphs.
 
 ### Window Attachment
 

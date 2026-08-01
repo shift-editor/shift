@@ -69,6 +69,8 @@ export class WorkspaceHost {
       "workspace.inspectPackage": ({ path }) => this.#serialize(() => this.#inspectPackage(path)),
       "workspace.open": ({ path, packageIdentity }) =>
         this.#serialize(() => this.#open(path, packageIdentity)),
+      "workspace.prepareAuthoredGlyphCompilation": () =>
+        this.#serialize(() => this.#bridge.prepareAuthoredGlyphCompilation()),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);

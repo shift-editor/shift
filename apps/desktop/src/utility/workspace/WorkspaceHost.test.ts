@@ -241,6 +241,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const snapshot = await createWorkspace(sync);
     const glyph = createGlyphALayer(snapshot.sources[0]!.id);
     await applyWorkspace(sync, { intents: glyph.intents });
+    await shell.call("workspace.prepareAuthoredGlyphCompilation", undefined);
 
     const atlas = await sync.call("workspace.slugAtlasPrepare", { alignment: 256 });
     const bytes = await streamSlugAtlas(sync, atlas.generation, 64);

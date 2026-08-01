@@ -465,6 +465,7 @@ pub struct Bridge {
   saved_version: DocumentVersion,
   slug_generation: u32,
   slug_atlas: Option<SlugAtlasGeneration>,
+  authored_glyph_compilation: Option<AuthoredAtlas>,
 }
 
 #[napi]
@@ -477,6 +478,7 @@ impl Bridge {
       saved_version: DocumentVersion::default(),
       slug_generation: 0,
       slug_atlas: None,
+      authored_glyph_compilation: None,
     }
   }
 
@@ -868,6 +870,42 @@ impl Bridge {
     Ok(previews)
   }
 
+  /// Acquires every authored layer and compiles the complete location-independent atlas.
+  ///
+  /// The utility process calls this after opening a workspace so acquisition and
+  /// compilation overlap renderer and WebGPU startup. Alignment-specific layout
+  /// remains deferred until `prepare_slug_atlas` knows the adapter requirement.
+  #[napi]
+  pub fn prepare_authored_glyph_compilation(&mut self) -> errors::Result<()> {
+    if self.authored_glyph_compilation.is_some() || self.slug_atlas.is_some() {
+      return Ok(());
+    }
+
+    let total_started = Instant::now();
+    let started = Instant::now();
+    self.workspace_mut()?.acquire_all_layers()?;
+    let acquisition = started.elapsed();
+    let started = Instant::now();
+    let (authored, profile) =
+      build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+    let compilation = started.elapsed();
+    println!(
+      "[workspace-open] mode=authored-glyph-compilation acquisition_ms={:.3} compilation_ms={:.3} total_ms={:.3}",
+      milliseconds(acquisition),
+      milliseconds(compilation),
+      milliseconds(total_started.elapsed()),
+    );
+    log_slug_atlas_profile(
+      "authored-prewarm",
+      acquisition,
+      profile,
+      Duration::ZERO,
+      total_started.elapsed(),
+    );
+    self.authored_glyph_compilation = Some(authored);
+    Ok(())
+  }
+
   /// Builds one complete authored Slug generation without resolving a location.
   ///
   /// The returned metadata is small enough for the ordinary sync lane. Packed
@@ -875,11 +913,22 @@ impl Bridge {
   #[napi]
   pub fn prepare_slug_atlas(&mut self, alignment: u32) -> errors::Result<NapiSlugAtlas> {
     let total_started = Instant::now();
-    let started = Instant::now();
-    self.workspace_mut()?.acquire_all_layers()?;
-    let acquisition = started.elapsed();
-    let (authored, profile) =
-      build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+    let (authored, acquisition, profile, scope) =
+      if let Some(authored) = self.authored_glyph_compilation.take() {
+        (
+          authored,
+          Duration::ZERO,
+          AuthoredAtlasProfile::default(),
+          "complete-prepared",
+        )
+      } else {
+        let started = Instant::now();
+        self.workspace_mut()?.acquire_all_layers()?;
+        let acquisition = started.elapsed();
+        let (authored, profile) =
+          build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+        (authored, acquisition, profile, "complete")
+      };
     let started = Instant::now();
     let layout = authored.atlas().layout(alignment as usize)?;
     let layout_elapsed = started.elapsed();
@@ -890,7 +939,7 @@ impl Bridge {
     let generation = self.slug_generation;
     let result = napi_slug_atlas(generation, &authored, layout)?;
     log_slug_atlas_profile(
-      "complete",
+      scope,
       acquisition,
       profile,
       layout_elapsed,
@@ -1185,6 +1234,7 @@ impl Bridge {
 
   fn mark_font_changed(&mut self) {
     self.slug_atlas = None;
+    self.authored_glyph_compilation = None;
     self.bump_live_version();
   }
 
@@ -1198,6 +1248,7 @@ impl Bridge {
 
   fn reset_versions(&mut self) {
     self.slug_atlas = None;
+    self.authored_glyph_compilation = None;
     self.live_version = DocumentVersion::default();
     self.saved_version = DocumentVersion::default();
   }
@@ -1797,6 +1848,31 @@ mod tests {
       }),
       ..skeleton_intent("cloneGlyphLayer")
     }
+  }
+
+  #[test]
+  fn authored_glyph_compilation_is_consumed_and_invalidated() {
+    let mut bridge = bridge_with_workspace();
+
+    bridge.prepare_authored_glyph_compilation().unwrap();
+    assert!(bridge.authored_glyph_compilation.is_some());
+
+    let prepared = bridge.prepare_slug_atlas(256).unwrap();
+    assert!(bridge.authored_glyph_compilation.is_none());
+    assert_eq!(
+      bridge.slug_atlas.as_ref().unwrap().generation,
+      prepared.generation
+    );
+
+    bridge.discard_slug_atlas(prepared.generation);
+    bridge.prepare_authored_glyph_compilation().unwrap();
+    bridge
+      .apply(
+        vec![create_glyph_napi("A", vec![65])],
+        Some("Add Glyph".to_string()),
+      )
+      .unwrap();
+    assert!(bridge.authored_glyph_compilation.is_none());
   }
 
   #[test]

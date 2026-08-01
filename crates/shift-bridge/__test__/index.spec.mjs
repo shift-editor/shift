@@ -159,9 +159,10 @@ describe("Bridge", () => {
     bridge.resumeWorkspaceForSource(storePath, packagePath);
   }
 
-  it("acquires every lazy glyph payload before preparing the complete Slug atlas", () => {
+  it("consumes a prewarmed authored compilation when preparing the complete Slug atlas", () => {
     resumeMutatorPackage();
 
+    bridge.prepareAuthoredGlyphCompilation();
     const atlas = bridge.prepareSlugAtlas(256);
     expect(atlas.glyphs).toHaveLength(bridge.getGlyphs().length);
     expect(atlas.curveCount).toBeGreaterThan(0);
