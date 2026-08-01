@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use shift_backends::font_loader::FontLoader;
 use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
@@ -10,6 +13,19 @@ fn fixtures_path() -> PathBuf {
         .parent()
         .unwrap()
         .join("fixtures")
+}
+
+fn copy_directory(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).unwrap();
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let destination_path = destination.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_directory(&entry.path(), &destination_path);
+        } else {
+            fs::copy(entry.path(), destination_path).unwrap();
+        }
+    }
 }
 
 fn mutatorsans_ufo_path() -> PathBuf {
@@ -50,6 +66,25 @@ fn load_font(path: &Path) -> Font {
     FontLoader::new()
         .read_font(path.to_str().unwrap())
         .unwrap_or_else(|error| panic!("failed to load {}: {error}", path.display()))
+}
+
+fn stream_font(path: &Path) -> Font {
+    let import = FontLoader::new()
+        .stream_font(path.to_str().unwrap())
+        .unwrap_or_else(|error| panic!("failed to stream {}: {error}", path.display()));
+    assert_eq!(import.header().glyph_count(), 0);
+    let directory = import.directory();
+    let expected_count = import.glyph_count();
+    assert_eq!(directory.len(), expected_count);
+    let font = import.collect_font().unwrap();
+    assert_eq!(font.glyph_count(), expected_count);
+    for entry in directory {
+        assert_eq!(
+            font.glyph(entry.glyph_id).map(Glyph::glyph_name),
+            Some(&entry.name)
+        );
+    }
+    font
 }
 
 fn main_layer(glyph: &Glyph) -> &GlyphLayer {
@@ -177,6 +212,129 @@ fn loads_binary_fonts_with_contours() {
 }
 
 #[test]
+fn streams_binary_ufo_and_designspace_without_eager_glyphs() {
+    let binary_path = mutatorsans_ttf_path();
+    let binary_bytes = std::fs::read(&binary_path).unwrap();
+    let binary = skrifa::FontRef::new(&binary_bytes).unwrap();
+    let expected_binary_glyphs = skrifa::raw::TableProvider::maxp(&binary)
+        .unwrap()
+        .num_glyphs() as usize;
+    let streamed_binary = stream_font(&binary_path);
+    assert_eq!(streamed_binary.glyph_count(), expected_binary_glyphs);
+
+    for path in [binary_path, mutatorsans_ufo_path()] {
+        let eager = load_font(&path);
+        let streamed = stream_font(&path);
+        assert_eq!(streamed.glyph_count(), eager.glyph_count());
+        let glyph_a = streamed
+            .glyphs_by_unicode(65)
+            .next()
+            .unwrap_or_else(|| panic!("{} should stream U+0041", path.display()));
+        assert!(!main_layer(glyph_a).contours().is_empty());
+    }
+
+    let path = mutatorsans_designspace_path();
+    let eager = load_font(&path);
+    let streamed = stream_font(&path);
+    assert_eq!(streamed.glyph_count(), eager.glyph_count());
+    assert_eq!(streamed.axes().len(), eager.axes().len());
+    assert_eq!(streamed.sources().len(), eager.sources().len());
+    assert_eq!(
+        streamed
+            .glyphs()
+            .map(Glyph::name)
+            .collect::<std::collections::BTreeSet<_>>(),
+        eager
+            .glyphs()
+            .map(Glyph::name)
+            .collect::<std::collections::BTreeSet<_>>()
+    );
+}
+
+#[test]
+fn ufo_import_keeps_nondefault_layer_order_when_default_was_not_first() {
+    let temp = tempfile::tempdir().unwrap();
+    let ufo_path = temp.path().join("Reordered.ufo");
+    copy_directory(&mutatorsans_ufo_path(), &ufo_path);
+    let layercontents_path = ufo_path.join("layercontents.plist");
+    let mut layercontents = plist::Value::from_file(&layercontents_path).unwrap();
+    let layers = layercontents.as_array_mut().unwrap();
+    let default = layers.remove(0);
+    layers.insert(2, default);
+    layercontents.to_file_xml(&layercontents_path).unwrap();
+
+    let font = load_font(&ufo_path);
+    let source_names = font
+        .sources()
+        .iter()
+        .map(|source| source.name().to_string())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        &source_names[..3],
+        &["Regular", "support", "support.crossbar"]
+    );
+}
+
+#[test]
+fn streaming_batches_preserve_published_directory_order() {
+    for path in [
+        mutatorsans_ttf_path(),
+        mutatorsans_ufo_path(),
+        mutatorsans_designspace_path(),
+    ] {
+        let mut import = FontLoader::new()
+            .stream_font(path.to_str().unwrap())
+            .unwrap();
+        let expected = import
+            .directory()
+            .into_iter()
+            .map(|entry| (entry.glyph_id, entry.name))
+            .collect::<Vec<_>>();
+        let mut actual = Vec::new();
+        loop {
+            let batch = import
+                .next_batch(shift_backends::ImportBatchLimit::new(7, 20))
+                .unwrap();
+            if batch.is_empty() {
+                break;
+            }
+            actual.extend(
+                batch
+                    .into_iter()
+                    .map(|glyph| (glyph.id(), glyph.glyph_name().clone())),
+            );
+        }
+
+        assert_eq!(
+            actual,
+            expected,
+            "stream order changed for {}",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn streaming_batches_bound_authored_layers_across_sources() {
+    let path = mutatorsans_designspace_path();
+    let mut import = FontLoader::new()
+        .stream_font(path.to_str().unwrap())
+        .unwrap();
+    let glyphs = import
+        .next_batch(shift_backends::ImportBatchLimit::new(512, 4))
+        .unwrap();
+    let layer_count = glyphs
+        .iter()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+
+    assert!(!glyphs.is_empty());
+    assert!(glyphs.len() < import.glyph_count());
+    assert!(layer_count <= 4 || glyphs.len() == 1);
+}
+
+#[test]
 fn loads_binary_variable_axes_and_named_instances() {
     let font = load_font(&host_grotesk_variable_ttf_path());
 
@@ -207,7 +365,7 @@ fn loads_binary_variable_axes_and_named_instances() {
     assert_eq!(regular.postscript_name(), Some("HostGrotesk-Regular"));
 }
 
-fn assert_cubic_point_runs(contour: &Contour, context: &str) {
+fn assert_curve_point_runs(contour: &Contour, context: &str) {
     let points = contour.points();
     assert!(!points.is_empty(), "empty contour in {context}");
     assert!(
@@ -226,16 +384,29 @@ fn assert_cubic_point_runs(contour: &Contour, context: &str) {
                 );
                 off_run = 0;
             }
-            other => panic!("unexpected point type {other:?} in {context}"),
+            PointType::QCurve => {
+                assert_eq!(
+                    off_run, 1,
+                    "qcurve point preceded by {off_run} off-curves in {context}"
+                );
+                off_run = 0;
+            }
         }
     }
 
     if contour.is_closed() {
-        assert!(
-            off_run == 0 || off_run == 2,
-            "closing segment has {off_run} off-curves in {context}"
-        );
         let first = &points[0];
+        match first.point_type() {
+            PointType::QCurve => assert_eq!(
+                off_run, 1,
+                "closing qcurve has {off_run} off-curves in {context}"
+            ),
+            PointType::OnCurve => assert!(
+                off_run == 0 || off_run == 2,
+                "closing segment has {off_run} off-curves in {context}"
+            ),
+            PointType::OffCurve => unreachable!("first point is known to be on-curve"),
+        }
         let last = &points[points.len() - 1];
         assert!(
             points.len() == 1
@@ -251,7 +422,7 @@ fn assert_cubic_point_runs(contour: &Contour, context: &str) {
 }
 
 #[test]
-fn binary_import_produces_valid_cubic_point_runs() {
+fn binary_import_produces_valid_curve_point_runs() {
     for path in [mutatorsans_ttf_path(), mutatorsans_otf_path()] {
         let font = load_font(&path);
         let mut curve_contours = 0;
@@ -259,7 +430,7 @@ fn binary_import_produces_valid_cubic_point_runs() {
             for layer in glyph.layers().values() {
                 for contour in layer.contours_iter() {
                     let context = format!("glyph '{}' in {}", glyph.name(), path.display());
-                    assert_cubic_point_runs(contour, &context);
+                    assert_curve_point_runs(contour, &context);
                     if contour
                         .points()
                         .iter()
@@ -427,6 +598,20 @@ fn loads_designspace_sources_axes_and_default_metadata() {
     assert_eq!(font.sources()[0].location().get(&width_axis_id), Some(0.0));
     assert_eq!(font.sources()[0].location().get(&weight_axis_id), Some(0.0));
     assert!(font.sources()[0].filename().is_some());
+    let bold_condensed = font
+        .sources()
+        .iter()
+        .find(|source| {
+            source.filename() == Some("MutatorSansBoldCondensed.ufo")
+                && source.layer_name().is_none()
+        })
+        .expect("non-default Bold Condensed master should be imported");
+    assert_eq!(
+        font.metric_value(bold_condensed.id(), MetricKind::Ascender)
+            .expect("non-default master ascender should survive import")
+            .position,
+        800.0
+    );
     assert_eq!(font.named_instances().len(), 14);
     let medium_wide = font
         .named_instances()

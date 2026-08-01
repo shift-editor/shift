@@ -15,8 +15,8 @@ const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
 const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
 
 /** Fixed window size for deterministic snapshots. */
-const WINDOW_WIDTH = 1280;
-const WINDOW_HEIGHT = 800;
+const WINDOW_WIDTH = 1200;
+const WINDOW_HEIGHT = 600;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -68,27 +68,30 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
 
     try {
       app = await electron.launch({
-        args: [MAIN_JS, `--user-data-dir=${userDataDir}`],
+        args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
         env: environment,
       });
 
-      // Wait for the startup window, then set a fixed size for deterministic tests.
-      await app.firstWindow();
+      // Size the window that owns the test page instead of whichever app window was created first.
+      const page = await app.firstWindow();
       const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
         electronApp.getPath("userData"),
       );
       if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
         throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
       }
-      await app.evaluate(
-        async ({ BrowserWindow }, { w, h }) => {
-          const win = BrowserWindow.getAllWindows()[0];
-          if (win) {
-            win.unmaximize();
-            win.setSize(w, h);
-            win.center();
-          }
+      const browserWindow = await app.browserWindow(page);
+      await browserWindow.evaluate(
+        (win, { w, h }) => {
+          win.unmaximize();
+          win.setSize(w, h);
+          win.center();
         },
+        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+      );
+      await browserWindow.dispose();
+      await page.waitForFunction(
+        ({ w, h }) => window.innerWidth === w && window.innerHeight === h,
         { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
       );
 

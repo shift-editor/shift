@@ -17,6 +17,7 @@ use crate::ir::{
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 /// A point to create, with stable identity minted by a trusted caller.
 #[derive(Clone, Debug)]
@@ -241,6 +242,56 @@ impl FontIntent {
         }
     }
 
+    /// Complete authored-layer read set required before applying this intent.
+    ///
+    /// Keeping this exhaustive match beside the intent vocabulary prevents a
+    /// new operation from accidentally mutating a directory placeholder. The
+    /// workspace still guards the persistence boundary if a dependency is
+    /// ever omitted here.
+    pub fn required_layer_ids(&self, font: &Font) -> Vec<LayerId> {
+        match self {
+            Self::AddPoints { layer_id, .. }
+            | Self::AddContour { layer_id, .. }
+            | Self::SetContourClosed { layer_id, .. }
+            | Self::MovePoints { layer_id, .. }
+            | Self::SetPointSmooth { layer_id, .. }
+            | Self::RemovePoints { layer_id, .. }
+            | Self::AddAnchors { layer_id, .. }
+            | Self::MoveAnchors { layer_id, .. }
+            | Self::RemoveAnchors { layer_id, .. }
+            | Self::ReverseContour { layer_id, .. }
+            | Self::TranslatePoints { layer_id, .. }
+            | Self::SetXAdvance { layer_id, .. }
+            | Self::ApplyBooleanOp { layer_id, .. } => vec![layer_id.clone()],
+            Self::CloneGlyphLayer { from_layer_id, .. }
+            | Self::MaterializeGlyphLayer { from_layer_id, .. } => {
+                vec![from_layer_id.clone()]
+            }
+            Self::DeleteSource { source_id } => font
+                .glyphs()
+                .filter_map(|glyph| {
+                    glyph
+                        .layer_for_source(source_id.clone())
+                        .map(GlyphLayer::id)
+                })
+                .collect(),
+            Self::CreateGlyph { .. }
+            | Self::UpdateGlyph { .. }
+            | Self::UpdateFontMetadata { .. }
+            | Self::CreateAxis { .. }
+            | Self::UpdateAxis { .. }
+            | Self::DeleteAxis { .. }
+            | Self::SetAxisMappings { .. }
+            | Self::SetMetricDefinitions { .. }
+            | Self::CreateNamedInstance { .. }
+            | Self::UpdateNamedInstance { .. }
+            | Self::DeleteNamedInstance { .. }
+            | Self::CreateSource { .. }
+            | Self::UpdateSource { .. }
+            | Self::CreateGlyphLayer { .. } => Vec::new(),
+        }
+    }
+
     /// Whether applying this intent changes layer structure (vs values only).
     /// Smooth flags live in structure, so they count.
     fn structural(&self) -> bool {
@@ -261,7 +312,7 @@ pub struct FontIntentSet {
 
 /// One touched layer after an intent set applied.
 pub struct TouchedLayer {
-    pub layer: GlyphLayer,
+    pub layer: Arc<GlyphLayer>,
     pub structural: bool,
 }
 
@@ -316,9 +367,11 @@ impl Font {
             .into_iter()
             .map(|(layer_id, structural)| {
                 let layer = self
-                    .layer(layer_id.clone())
-                    .ok_or(CoreError::LayerNotFound(layer_id))?
-                    .clone();
+                    .glyph_id_by_layer(layer_id.clone())
+                    .and_then(|glyph_id| self.glyph(glyph_id))
+                    .and_then(|glyph| glyph.layers().get(&layer_id))
+                    .cloned()
+                    .ok_or(CoreError::LayerNotFound(layer_id))?;
                 Ok(TouchedLayer { layer, structural })
             })
             .collect::<CoreResult<Vec<_>>>()?;
@@ -652,11 +705,6 @@ impl Font {
         source_id: SourceId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let glyph_name = self
-            .glyph(glyph_id.clone())
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?
-            .glyph_name()
-            .clone();
         if self.glyph_id_by_layer(layer_id.clone()).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
@@ -672,11 +720,7 @@ impl Font {
         let layer = GlyphLayer::with_width(layer_id.clone(), source_id, self.default_layer_width());
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id,
-            Some(glyph_name),
-            &layer,
-        ));
+        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
 
         Ok(vec![layer_id])
     }
@@ -689,15 +733,11 @@ impl Font {
         from_layer_id: LayerId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let (glyph_name, layer) =
+        let layer =
             self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id,
-            Some(glyph_name),
-            &layer,
-        ));
+        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
 
         Ok(vec![layer_id])
     }
@@ -711,16 +751,12 @@ impl Font {
         values: &GlyphInterpolationValues,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let (glyph_name, mut layer) =
+        let mut layer =
             self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
         layer.apply_interpolation_values(values)?;
 
         self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(
-            glyph_id,
-            Some(glyph_name),
-            &layer,
-        ));
+        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
 
         Ok(vec![layer_id])
     }
@@ -731,13 +767,7 @@ impl Font {
         glyph_id: GlyphId,
         source_id: SourceId,
         from_layer_id: LayerId,
-    ) -> CoreResult<(GlyphName, GlyphLayer)> {
-        let glyph_name = self
-            .glyph(glyph_id.clone())
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?
-            .glyph_name()
-            .clone();
-
+    ) -> CoreResult<GlyphLayer> {
         if self.glyph_id_by_layer(layer_id.clone()).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
@@ -767,7 +797,7 @@ impl Font {
             .ok_or(CoreError::LayerNotFound(from_layer_id))?;
         let layer = source_layer.clone_with_fresh_ids(layer_id, source_id);
 
-        Ok((glyph_name, layer))
+        Ok(layer)
     }
 
     fn apply_update_glyph(
@@ -1123,40 +1153,6 @@ impl Font {
                 unreachable!("font-level intents take the apply_font_intent path")
             }
         }
-    }
-
-    /// Ids of glyphs whose components reference the glyphs owning the
-    /// given layers — the composites a renderer must re-render after an
-    /// edit. Stable ids (not names): references survive renames. Sorted,
-    /// deduplicated, excludes the touched glyphs themselves.
-    pub fn dependents_of_layers(&self, layer_ids: &[LayerId]) -> Vec<GlyphId> {
-        let touched: Vec<GlyphId> = self
-            .glyphs()
-            .filter(|glyph| {
-                glyph
-                    .layers()
-                    .keys()
-                    .any(|layer_id| layer_ids.contains(layer_id))
-            })
-            .map(|glyph| glyph.id())
-            .collect();
-
-        let mut dependents: Vec<GlyphId> = self
-            .glyphs()
-            .filter(|glyph| !touched.contains(&glyph.id()))
-            .filter(|glyph| {
-                glyph.layers().values().any(|layer| {
-                    layer
-                        .components_iter()
-                        .any(|component| touched.contains(&component.base_glyph_id()))
-                })
-            })
-            .map(|glyph| glyph.id())
-            .collect();
-
-        dependents.sort();
-        dependents.dedup();
-        dependents
     }
 
     fn layer_mut_or_err(&mut self, layer_id: &LayerId) -> CoreResult<&mut GlyphLayer> {

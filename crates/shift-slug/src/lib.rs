@@ -9,6 +9,7 @@ mod atlas;
 mod authored;
 mod curve;
 mod error;
+mod outline;
 mod pack;
 mod render;
 mod resident;
@@ -24,6 +25,7 @@ pub use authored::{
 };
 pub use curve::{Bounds, Curve, Point, CUBIC_APPROXIMATION_ACCURACY, LINE_EPSILON};
 pub use error::SlugError;
+pub use outline::OutlineCommand;
 pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
 pub use render::{
     pack_render_instances, pack_render_params, RenderInstance, RenderParams, RENDER_INSTANCE_BYTES,

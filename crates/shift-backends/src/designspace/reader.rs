@@ -1,18 +1,14 @@
-use super::axis_labels;
 use super::error::{DesignspaceError, DesignspaceResult};
-use crate::errors::{FormatBackendError, FormatBackendResult};
-use crate::metrics::copy_source_metrics;
+use crate::errors::FormatBackendResult;
+use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
-use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use shift_font::{
-    Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, Component, Font, GlyphLayer,
-    LayerId, Location, NamedInstance, Source, SourceId,
+    Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, Font, Location, NamedInstance,
 };
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 
 pub struct DesignspaceReader;
@@ -32,217 +28,17 @@ impl Default for DesignspaceReader {
 impl FontReader for DesignspaceReader {
     fn load(&self, path: &str) -> FormatBackendResult<Font> {
         self.load_designspace(path)
-            .map_err(FormatBackendError::from)
     }
 }
 
 impl DesignspaceReader {
-    fn load_designspace(&self, path: &str) -> DesignspaceResult<Font> {
-        let ds_path = Path::new(path);
-        let ds_dir = ds_path
-            .parent()
-            .ok_or_else(|| DesignspaceError::MissingParent {
-                path: ds_path.to_path_buf(),
-            })?;
-        let xml = fs::read_to_string(ds_path).map_err(|source| DesignspaceError::ReadFile {
-            path: ds_path.to_path_buf(),
-            source,
-        })?;
-        let mut axis_labels = axis_labels::parse(&xml)?;
-
-        let doc = match DesignSpaceDocument::load(ds_path) {
-            Ok(doc) => doc,
-            Err(error) => {
-                let original_error = error.to_string();
-                return load_axisless_designspace(ds_path, ds_dir, &original_error).map_err(
-                    |fallback_error| DesignspaceError::LoadDesignspace {
-                        path: ds_path.to_path_buf(),
-                        details: format!("{original_error}; {fallback_error}"),
-                    },
-                );
-            }
-        };
-
-        if doc.sources.is_empty() {
-            return Err(DesignspaceError::NoSources);
-        }
-
-        let default_idx =
-            find_default_source_index(&doc).ok_or(DesignspaceError::MissingDefaultSource)?;
-
-        // Load the default source first to establish the base font.
-        let default_ds_source = &doc.sources[default_idx];
-        let default_ufo_path = ds_dir.join(&default_ds_source.filename);
-        let default_ufo_str =
-            default_ufo_path
-                .to_str()
-                .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
-                    path: default_ufo_path.clone(),
-                })?;
-
-        let ufo_reader = UfoReader::new();
-        let mut font =
-            ufo_reader
-                .load(default_ufo_str)
-                .map_err(|source| DesignspaceError::LoadUfo {
-                    path: default_ufo_path.clone(),
-                    details: source.to_string(),
-                })?;
-        let default_ufo_source_id = source_layer_id(&font, default_ds_source)?;
-        let default_ufo_metrics = font
-            .default_source()
-            .cloned()
-            .ok_or(DesignspaceError::NoSources)?;
-        font.clear_sources();
-
-        if let Some(ref family) = default_ds_source.familyname {
-            font.metadata_mut().family_name = Some(family.clone());
-        }
-
-        // Add axes.
-        for ds_axis in &doc.axes {
-            let mut axis = if let Some(values) = &ds_axis.values {
-                let mut values = values.iter().map(|value| *value as f64).collect::<Vec<_>>();
-                values.sort_by(f64::total_cmp);
-                values.dedup();
-                Axis::discrete_with_id(
-                    AxisId::new(),
-                    ds_axis.tag.clone(),
-                    ds_axis.name.clone(),
-                    values,
-                    ds_axis.default as f64,
-                )
-            } else {
-                let (minimum, maximum) = derive_axis_range(ds_axis);
-                Axis::new(
-                    ds_axis.tag.clone(),
-                    ds_axis.name.clone(),
-                    minimum,
-                    ds_axis.default as f64,
-                    maximum,
-                )
-            };
-            axis.set_hidden(ds_axis.hidden);
-            axis.set_labels(
-                axis_labels
-                    .remove(ds_axis.name.as_str())
-                    .unwrap_or_default(),
-            );
-            axis.validate()?;
-            font.add_axis(axis)?;
-        }
-        font.set_axis_mappings(axis_mappings_from_designspace(&doc, font.axes())?)?;
-        font.set_named_instances(named_instances_from_designspace(&doc, font.axes())?)?;
-
-        // Register the default source.
-        let mut source_names = HashSet::new();
-        let default_location =
-            location_from_dimensions(&default_ds_source.location, &doc, font.axes());
-        let default_name = source_name(
-            default_ds_source,
-            font.metadata().style_name.as_deref(),
-            &source_names,
-            default_idx,
-        );
-        source_names.insert(default_name.clone());
-        let mut default_source = Source::with_filename(
-            default_name,
-            default_location,
-            default_ds_source.filename.clone(),
-        );
-        default_source.set_layer_name(default_ds_source.layer.clone());
-        let metric_definitions = font.metric_definitions().to_vec();
-        copy_source_metrics(
-            &metric_definitions,
-            &default_ufo_metrics,
-            &metric_definitions,
-            &mut default_source,
-        );
-        let default_source_id = font.add_source(default_source);
-        font.set_default_source_id(default_source_id.clone());
-        move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
-
-        // Cache loaded UFO fonts so we don't re-read the same file for support layers.
-        let mut ufo_cache: HashMap<String, Font> = HashMap::new();
-
-        // Load each non-default source.
-        for (idx, ds_source) in doc.sources.iter().enumerate() {
-            if idx == default_idx {
-                continue;
-            }
-
-            let ufo_path = ds_dir.join(&ds_source.filename);
-            let ufo_str = ufo_path
-                .to_str()
-                .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
-                    path: ufo_path.clone(),
-                })?
-                .to_string();
-
-            let source_font = match ufo_cache.get(&ufo_str) {
-                Some(f) => f,
-                None => {
-                    let loaded =
-                        ufo_reader
-                            .load(&ufo_str)
-                            .map_err(|source| DesignspaceError::LoadUfo {
-                                path: ufo_path.clone(),
-                                details: source.to_string(),
-                            })?;
-                    ufo_cache.insert(ufo_str.clone(), loaded);
-                    ufo_cache.get(&ufo_str).unwrap()
-                }
-            };
-
-            // Determine which layer from the source UFO to read.
-            let source_source_id = source_layer_id(source_font, ds_source)?;
-
-            let name = source_name(
-                ds_source,
-                source_font.metadata().style_name.as_deref(),
-                &source_names,
-                idx,
-            );
-            source_names.insert(name.clone());
-            let location = location_from_dimensions(&ds_source.location, &doc, font.axes());
-            let mut source = Source::with_filename(name, location, ds_source.filename.clone());
-            source.set_layer_name(ds_source.layer.clone());
-            let imported_metrics = source_font
-                .default_source()
-                .ok_or(DesignspaceError::NoSources)?;
-            copy_source_metrics(
-                source_font.metric_definitions(),
-                imported_metrics,
-                font.metric_definitions(),
-                &mut source,
-            );
-            let source_id = font.add_source(source);
-
-            // Copy glyphs from the resolved layer into the new layer.
-            for source_glyph in source_font.glyphs() {
-                if let Some(source_layer) = source_glyph.layer_for_source(source_source_id.clone())
-                {
-                    if let Some(glyph_id) = font.glyph_id_by_name(source_glyph.name()) {
-                        font.insert_glyph_layer(
-                            glyph_id,
-                            clone_layer_with_remapped_components(
-                                source_layer,
-                                &font,
-                                LayerId::new(),
-                                source_id.clone(),
-                            )?,
-                        )?;
-                    }
-                }
-            }
-        }
-
-        remove_glyph_layers_without_source(&mut font)?;
-        Ok(font)
+    fn load_designspace(&self, path: &str) -> FormatBackendResult<Font> {
+        let (header, mut stream) = super::stream_font(path)?;
+        collect_streamed_font(header, &mut stream)
     }
 }
 
-fn named_instances_from_designspace(
+pub(super) fn named_instances_from_designspace(
     doc: &DesignSpaceDocument,
     axes: &[Axis],
 ) -> DesignspaceResult<Vec<NamedInstance>> {
@@ -361,7 +157,7 @@ fn unmap_axis_value(axis: &norad::designspace::Axis, value: f64) -> f64 {
     value + last_user - last_design
 }
 
-fn axis_mappings_from_designspace(
+pub(super) fn axis_mappings_from_designspace(
     doc: &DesignSpaceDocument,
     axes: &[Axis],
 ) -> DesignspaceResult<Vec<AxisMapping>> {
@@ -463,169 +259,15 @@ fn extend_axis_ids(target: &mut Vec<AxisId>, location: &Location) {
 }
 
 #[derive(Clone, Debug)]
-struct AxislessSource {
-    filename: String,
-    familyname: Option<String>,
-    stylename: Option<String>,
-    name: Option<String>,
-    layer: Option<String>,
+pub(super) struct AxislessSource {
+    pub(super) filename: String,
+    pub(super) familyname: Option<String>,
+    pub(super) stylename: Option<String>,
+    pub(super) name: Option<String>,
+    pub(super) layer: Option<String>,
 }
 
-fn load_axisless_designspace(
-    ds_path: &Path,
-    ds_dir: &Path,
-    original_error: &str,
-) -> DesignspaceResult<Font> {
-    let xml = fs::read_to_string(ds_path).map_err(|source| DesignspaceError::ReadFile {
-        path: ds_path.to_path_buf(),
-        source,
-    })?;
-    let sources = parse_axisless_sources(&xml).map_err(|fallback_error| {
-        DesignspaceError::LoadDesignspace {
-            path: ds_path.to_path_buf(),
-            details: format!(
-                "{fallback_error}; axisless fallback was used after parser error: {original_error}"
-            ),
-        }
-    })?;
-    if sources.is_empty() {
-        return Err(DesignspaceError::NoSources);
-    }
-
-    let default_source = &sources[0];
-    let default_ufo_path = ds_dir.join(&default_source.filename);
-    let default_ufo_str =
-        default_ufo_path
-            .to_str()
-            .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
-                path: default_ufo_path.clone(),
-            })?;
-
-    let ufo_reader = UfoReader::new();
-    let mut font =
-        ufo_reader
-            .load(default_ufo_str)
-            .map_err(|source| DesignspaceError::LoadUfo {
-                path: default_ufo_path.clone(),
-                details: source.to_string(),
-            })?;
-    let default_ufo_source_id = font
-        .default_source_id()
-        .ok_or(DesignspaceError::NoSources)?;
-    let default_ufo_source = font
-        .default_source()
-        .cloned()
-        .ok_or(DesignspaceError::NoSources)?;
-    font.clear_sources();
-
-    if let Some(family) = &default_source.familyname {
-        font.metadata_mut().family_name = Some(family.clone());
-    }
-
-    let mut source_names = HashSet::new();
-    let default_name = axisless_source_name(
-        default_source,
-        font.metadata().style_name.as_deref(),
-        &source_names,
-        0,
-    );
-    source_names.insert(default_name.clone());
-    let mut new_default_source = Source::with_filename(
-        default_name,
-        Location::new(),
-        default_source.filename.clone(),
-    );
-    let metric_definitions = font.metric_definitions().to_vec();
-    copy_source_metrics(
-        &metric_definitions,
-        &default_ufo_source,
-        &metric_definitions,
-        &mut new_default_source,
-    );
-    let default_source_id = font.add_source(new_default_source);
-    font.set_default_source_id(default_source_id.clone());
-    move_glyph_layers_to_source(&mut font, default_ufo_source_id, default_source_id)?;
-
-    let mut ufo_cache: HashMap<String, Font> = HashMap::new();
-    for (idx, ds_source) in sources.iter().enumerate().skip(1) {
-        let ufo_path = ds_dir.join(&ds_source.filename);
-        let ufo_str = ufo_path
-            .to_str()
-            .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
-                path: ufo_path.clone(),
-            })?
-            .to_string();
-
-        let source_font = match ufo_cache.get(&ufo_str) {
-            Some(f) => f,
-            None => {
-                let loaded =
-                    ufo_reader
-                        .load(&ufo_str)
-                        .map_err(|source| DesignspaceError::LoadUfo {
-                            path: ufo_path.clone(),
-                            details: source.to_string(),
-                        })?;
-                ufo_cache.insert(ufo_str.clone(), loaded);
-                ufo_cache.get(&ufo_str).unwrap()
-            }
-        };
-
-        let source_source_id = match &ds_source.layer {
-            Some(layer_name) => find_source_by_external_layer_name(source_font, layer_name)
-                .ok_or_else(|| DesignspaceError::MissingLayer {
-                    layer: layer_name.clone(),
-                    filename: ds_source.filename.clone(),
-                })?,
-            None => source_font
-                .default_source_id()
-                .ok_or(DesignspaceError::NoSources)?,
-        };
-
-        let name = axisless_source_name(
-            ds_source,
-            source_font.metadata().style_name.as_deref(),
-            &source_names,
-            idx,
-        );
-        source_names.insert(name.clone());
-        let mut source = Source::with_filename(name, Location::new(), ds_source.filename.clone());
-        source.set_layer_name(ds_source.layer.clone());
-        let imported_source = source_font
-            .sources()
-            .iter()
-            .find(|source| source.id() == source_source_id)
-            .ok_or(DesignspaceError::NoSources)?;
-        copy_source_metrics(
-            source_font.metric_definitions(),
-            imported_source,
-            font.metric_definitions(),
-            &mut source,
-        );
-        let source_id = font.add_source(source);
-
-        for source_glyph in source_font.glyphs() {
-            if let Some(source_layer) = source_glyph.layer_for_source(source_source_id.clone()) {
-                if let Some(glyph_id) = font.glyph_id_by_name(source_glyph.name()) {
-                    font.insert_glyph_layer(
-                        glyph_id,
-                        clone_layer_with_remapped_components(
-                            source_layer,
-                            &font,
-                            LayerId::new(),
-                            source_id.clone(),
-                        )?,
-                    )?;
-                }
-            }
-        }
-    }
-
-    remove_glyph_layers_without_source(&mut font)?;
-    Ok(font)
-}
-
-fn axisless_source_name(
+pub(super) fn axisless_source_name(
     source: &AxislessSource,
     ufo_style_name: Option<&str>,
     used_names: &HashSet<String>,
@@ -641,7 +283,7 @@ fn axisless_source_name(
     )
 }
 
-fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<AxislessSource>> {
+pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<AxislessSource>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut sources = Vec::new();
@@ -702,7 +344,7 @@ fn xml_attr(
     Ok(None)
 }
 
-fn source_name(
+pub(super) fn source_name(
     source: &norad::designspace::Source,
     ufo_style_name: Option<&str>,
     used_names: &HashSet<String>,
@@ -763,7 +405,7 @@ fn imported_source_name(
     }
 }
 
-fn location_from_dimensions(
+pub(super) fn location_from_dimensions(
     dimensions: &[norad::designspace::Dimension],
     doc: &DesignSpaceDocument,
     axes: &[Axis],
@@ -847,7 +489,7 @@ fn map_axis_value(axis: &norad::designspace::Axis, user_value: f64) -> f64 {
 // design-space locations to the mapped user-space defaults. Layer-backed
 // sources remain eligible because `layer` describes storage, not source role.
 // https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.DesignSpaceDocument.findDefault
-fn find_default_source_index(doc: &DesignSpaceDocument) -> Option<usize> {
+pub(super) fn find_default_source_index(doc: &DesignSpaceDocument) -> Option<usize> {
     doc.sources.iter().position(|source| {
         doc.axes.iter().all(|axis| {
             let source_value = source_axis_design_value(&source.location, axis);
@@ -862,105 +504,6 @@ fn design_values_equal(left: f64, right: f64) -> bool {
     (left - right).abs() <= f64::from(f32::EPSILON) * scale * 4.0
 }
 
-fn source_layer_id(
-    font: &Font,
-    source: &norad::designspace::Source,
-) -> DesignspaceResult<SourceId> {
-    match &source.layer {
-        Some(layer_name) => find_source_by_external_layer_name(font, layer_name).ok_or_else(|| {
-            DesignspaceError::MissingLayer {
-                layer: layer_name.clone(),
-                filename: source.filename.clone(),
-            }
-        }),
-        None => font.default_source_id().ok_or(DesignspaceError::NoSources),
-    }
-}
-
-fn find_source_by_external_layer_name(font: &Font, name: &str) -> Option<SourceId> {
-    font.sources()
-        .iter()
-        .find(|source| !source.is_master() && source.name() == name)
-        .map(Source::id)
-}
-
-fn move_glyph_layers_to_source(
-    font: &mut Font,
-    from_source_id: SourceId,
-    to_source_id: SourceId,
-) -> DesignspaceResult<()> {
-    let layer_moves: Vec<_> = font
-        .glyphs()
-        .filter_map(|glyph| {
-            glyph.layer_for_source(from_source_id.clone()).map(|layer| {
-                (
-                    glyph.id(),
-                    layer.id(),
-                    layer.clone_with_identity(LayerId::new(), to_source_id.clone()),
-                )
-            })
-        })
-        .collect();
-
-    for (glyph_id, old_layer_id, layer) in layer_moves {
-        font.remove_glyph_layer(old_layer_id)?;
-        font.insert_glyph_layer(glyph_id, layer)?;
-    }
-
-    Ok(())
-}
-
-fn clone_layer_with_remapped_components(
-    layer: &GlyphLayer,
-    font: &Font,
-    layer_id: LayerId,
-    source_id: SourceId,
-) -> DesignspaceResult<GlyphLayer> {
-    let mut cloned = layer.clone_with_identity(layer_id, source_id);
-    cloned.clear_components();
-
-    for component in layer.components_iter() {
-        let base_glyph_id = font
-            .glyph_id_by_name(component.base_glyph_name().as_str())
-            .ok_or_else(|| DesignspaceError::LoadUfo {
-                path: std::path::PathBuf::from(component.base_glyph_name().as_str()),
-                details: format!(
-                    "component base glyph {:?} does not exist in default font",
-                    component.base_glyph_name()
-                ),
-            })?;
-        cloned.add_component(Component::with_id(
-            component.id(),
-            base_glyph_id,
-            component.base_glyph_name().clone(),
-            *component.transform(),
-        ));
-    }
-
-    Ok(cloned)
-}
-
-fn remove_glyph_layers_without_source(font: &mut Font) -> DesignspaceResult<()> {
-    let source_ids: Vec<_> = font.sources().iter().map(Source::id).collect();
-    let orphan_layer_ids: Vec<_> = font
-        .glyphs()
-        .flat_map(|glyph| {
-            glyph
-                .layers()
-                .values()
-                .filter(|layer| !source_ids.contains(&layer.source_id()))
-                .map(|layer| layer.id())
-                .collect::<Vec<_>>()
-        })
-        .collect();
-
-    for layer_id in orphan_layer_ids {
-        font.remove_glyph_layer(layer_id)?;
-    }
-
-    Ok(())
-}
-
 /// Derive (minimum, maximum) for an axis from norad's parsed designspace.
 ///
 /// Designspace axis edge cases handled:
@@ -970,7 +513,7 @@ fn remove_glyph_layers_without_source(font: &mut Font) -> DesignspaceResult<()> 
 /// - **One-sided** (only min OR max specified): the missing side falls back
 ///   to `default`. Common with slant axes (`min=-15, default=0, max=0`).
 /// - **Degenerate** (no min/max/values): all three collapse to default.
-fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
+pub(super) fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
     let values_range = || {
         ds_axis
             .values

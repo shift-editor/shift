@@ -3,6 +3,7 @@ import { createRequire } from "module";
 import { existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { fileURLToPath } from "url";
 
 const require = createRequire(import.meta.url);
 const { Bridge } = require("../index.js");
@@ -10,6 +11,7 @@ const { Bridge } = require("../index.js");
 const shortIdAlphabet = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
 const shortIdLength = 10;
 const shortIdAlphabetMask = shortIdAlphabet.length - 1;
+const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
 function mintId(prefix) {
   const bytes = new Uint8Array(shortIdLength);
@@ -145,6 +147,37 @@ describe("Bridge", () => {
 
     expect(result).toMatchObject({ path: outputPath, format: "ttf" });
     expect(existsSync(outputPath)).toBe(true);
+  });
+
+  function resumeMutatorPackage() {
+    const sourcePath = join(repositoryRoot, "fixtures/fonts/mutatorsans/MutatorSans.ttf");
+    const storePath = join(tempDir, "mutatorsans.sqlite");
+    const packagePath = join(tempDir, "MutatorSans.shift");
+    bridge.openWorkspace(sourcePath, storePath);
+    bridge.saveWorkspaceAs(packagePath);
+    bridge.closeWorkspace();
+    bridge.resumeWorkspaceForSource(storePath, packagePath);
+  }
+
+  it("acquires every lazy glyph payload before preparing the complete Slug atlas", () => {
+    resumeMutatorPackage();
+
+    const atlas = bridge.prepareSlugAtlas(256);
+    expect(atlas.glyphs).toHaveLength(bridge.getGlyphs().length);
+    expect(atlas.curveCount).toBeGreaterThan(0);
+    expect(atlas.layout.totalLength).toBeGreaterThan(0);
+  });
+
+  it("acquires lazy glyph payloads before preparing a Slug atlas patch", () => {
+    resumeMutatorPackage();
+
+    const glyph = bridge.getGlyphs().find((record) => record.name === "S");
+    expect(glyph).toBeDefined();
+
+    const atlas = bridge.prepareSlugAtlasPage([glyph.id], 256);
+    expect(atlas.glyphs).toContainEqual(expect.objectContaining({ glyphId: glyph.id }));
+    expect(atlas.curveCount).toBeGreaterThan(0);
+    expect(atlas.layout.totalLength).toBeGreaterThan(0);
   });
 
   it("adds a point and echoes structure, values, and the client-minted ids", () => {

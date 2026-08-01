@@ -97,7 +97,7 @@ export class FontStore {
     return this.#committedFont;
   }
 
-  /** Glyph roots whose resident atlas pages no longer match the committed font. */
+  /** Glyph roots whose resident atlas entries no longer match the committed font. */
   get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
     return this.#invalidGlyphIds;
   }

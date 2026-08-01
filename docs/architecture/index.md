@@ -17,9 +17,9 @@ Central routing table for Shift's distributed documentation. Before creating new
 | --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats |
 | `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior       |
-| `crates/shift-glyph-codec/**` | [`crates/shift-glyph-codec/SPECIFICATION.md`](../../crates/shift-glyph-codec/SPECIFICATION.md) | Packed glyph framing, validation, and compatibility |
 | `crates/shift-slug/**`        | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)             | GPU-independent Slug curves, bands, and atlas packing          |
 | `crates/shift-source/**`    | [`crates/shift-source/docs/DOCS.md`](../../crates/shift-source/docs/DOCS.md)       | User-authored `.shift` source package layout                  |
+| `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | SQLite directory, independently compressed canonical layer payloads, and reference indexes |
 | `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font      |
 | `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                 |
 
@@ -30,6 +30,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `apps/desktop/src/main/**`          | [`apps/desktop/src/main/docs/DOCS.md`](../../apps/desktop/src/main/docs/DOCS.md)                   | Electron main process: lifecycle, windows, menus, document state |
 | `apps/desktop/src/preload/**`       | [`apps/desktop/src/preload/docs/DOCS.md`](../../apps/desktop/src/preload/docs/DOCS.md)             | Preload script bridging native Rust FontEngine to renderer       |
 | `apps/desktop/src/shared/bridge/**` | [`apps/desktop/src/shared/bridge/docs/DOCS.md`](../../apps/desktop/src/shared/bridge/docs/DOCS.md) | Type-safe preload bridge system (FontEngineAPI contract)         |
+| `apps/desktop/e2e/**`               | [`apps/desktop/e2e/README.md`](../../apps/desktop/e2e/README.md)                                 | Playwright visual, GPU correctness, and performance suites       |
 
 ### Desktop app — Renderer
 
@@ -50,7 +51,6 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `packages/types/**`       | [`packages/types/docs/DOCS.md`](../../packages/types/docs/DOCS.md)             | Branded IDs, bridge DTO facade, and legacy editor migration types  |
 | `packages/geo/**`         | [`packages/geo/docs/DOCS.md`](../../packages/geo/docs/DOCS.md)                 | Geometry utilities (Vec2, Curve, Polygon, Mat)                     |
 | `packages/glyph-state/**` | [`packages/glyph-state/docs/DOCS.md`](../../packages/glyph-state/docs/DOCS.md) | Glyph-domain geometry (contour traversal, segment parsing, bounds) |
-| `packages/glyph-codec/**` | [`packages/glyph-codec/README.md`](../../packages/glyph-codec/README.md) | DOM-free TypeScript packed glyph validation and views |
 | `packages/ui/**`          | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                   | UI component library wrapping Base UI primitives                   |
 | `packages/validation/**`  | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)   | Point sequence validation and persistence schemas                  |
 | `packages/rules/**`       | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)             | Point editing rules engine for geometric constraints               |

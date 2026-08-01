@@ -7,14 +7,16 @@
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
+use std::sync::Arc;
+
 use shift_font::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, MetricDefinition,
-    NamedInstance, Source, SourceId,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
+    MetricDefinition, NamedInstance, Source, SourceId,
 };
 
-/// Generous bound so a marathon session cannot grow memory unboundedly;
-/// oldest entries fall off first.
-const MAX_ENTRIES: usize = 100;
+/// Maximum entries retained independently by each stack. The oldest entry on
+/// the stack being extended falls off first; a fresh apply also clears redo.
+const MAX_ENTRIES_PER_STACK: usize = 100;
 
 #[derive(Clone)]
 pub enum LedgerStep {
@@ -85,14 +87,51 @@ pub struct GlyphIdentity {
 
 #[derive(Clone)]
 pub struct LayerPair {
-    pub pre: GlyphLayer,
-    pub post: GlyphLayer,
+    pub pre: Arc<GlyphLayer>,
+    pub post: Arc<GlyphLayer>,
+    /// Fixed when the entry is created. Both replay directions preserve
+    /// topology when false and must publish complete structure when true.
+    pub structural: bool,
 }
 
 #[derive(Clone)]
 pub struct LedgerEntry {
     pub label: Option<String>,
     pub steps: Vec<LedgerStep>,
+}
+
+impl LedgerEntry {
+    /// Layers whose persisted current values may be needed before replay.
+    /// Snapshot-backed replay can then replace loaded authored state without
+    /// leaving workspace residency bookkeeping pointed at a placeholder.
+    pub(crate) fn layer_ids(&self) -> Vec<LayerId> {
+        self.steps
+            .iter()
+            .flat_map(|step| match step {
+                LedgerStep::Layers(pairs) => pairs
+                    .iter()
+                    .flat_map(|pair| [pair.pre.id(), pair.post.id()])
+                    .collect(),
+                LedgerStep::Glyph { pre, post } => pre
+                    .iter()
+                    .chain(post.iter())
+                    .flat_map(|glyph| glyph.layers().keys().cloned())
+                    .collect(),
+                LedgerStep::GlyphLayer { pre, post, .. } => pre
+                    .iter()
+                    .chain(post.iter())
+                    .map(|layer| layer.id())
+                    .collect(),
+                LedgerStep::FontMetadata { .. }
+                | LedgerStep::Axis { .. }
+                | LedgerStep::AxisMappings { .. }
+                | LedgerStep::MetricDefinitions { .. }
+                | LedgerStep::NamedInstances { .. }
+                | LedgerStep::Source { .. }
+                | LedgerStep::GlyphIdentity { .. } => Vec::new(),
+            })
+            .collect()
+    }
 }
 
 #[derive(Default)]
@@ -105,11 +144,7 @@ impl Ledger {
     /// Records an applied entry. A fresh apply truncates the redo stack.
     pub fn push(&mut self, entry: LedgerEntry) {
         self.redo.clear();
-        self.undo.push(entry);
-
-        if self.undo.len() > MAX_ENTRIES {
-            self.undo.remove(0);
-        }
+        push_bounded(&mut self.undo, entry);
     }
 
     /// Pops the entry to undo; the caller replays its pre states and must
@@ -121,12 +156,12 @@ impl Ledger {
     }
 
     pub fn record_undone(&mut self, entry: LedgerEntry) {
-        self.redo.push(entry);
+        push_bounded(&mut self.redo, entry);
     }
 
     /// Hands a popped undo entry back after a failed replay.
     pub fn restore_undo(&mut self, entry: LedgerEntry) {
-        self.undo.push(entry);
+        push_bounded(&mut self.undo, entry);
     }
 
     /// Pops the entry to redo; hand back via [`Ledger::record_redone`] after
@@ -137,11 +172,59 @@ impl Ledger {
     }
 
     pub fn record_redone(&mut self, entry: LedgerEntry) {
-        self.undo.push(entry);
+        push_bounded(&mut self.undo, entry);
     }
 
     /// Hands a popped redo entry back after a failed replay.
     pub fn restore_redo(&mut self, entry: LedgerEntry) {
-        self.redo.push(entry);
+        push_bounded(&mut self.redo, entry);
+    }
+}
+
+fn push_bounded(stack: &mut Vec<LedgerEntry>, entry: LedgerEntry) {
+    stack.push(entry);
+    if stack.len() > MAX_ENTRIES_PER_STACK {
+        stack.remove(0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_stack_drops_its_oldest_entry_independently() {
+        let mut ledger = Ledger::default();
+        for index in 0..=MAX_ENTRIES_PER_STACK {
+            ledger.push(entry(index));
+        }
+        assert_eq!(ledger.undo.len(), MAX_ENTRIES_PER_STACK);
+        assert_eq!(ledger.undo[0].label.as_deref(), Some("1"));
+
+        let undo = std::mem::take(&mut ledger.undo);
+        for entry in undo {
+            ledger.record_undone(entry);
+        }
+        ledger.record_undone(entry(MAX_ENTRIES_PER_STACK + 1));
+        assert_eq!(ledger.redo.len(), MAX_ENTRIES_PER_STACK);
+        assert_eq!(ledger.redo[0].label.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn fresh_apply_clears_the_bounded_redo_stack() {
+        let mut ledger = Ledger::default();
+        ledger.record_undone(entry(1));
+
+        ledger.push(entry(2));
+
+        assert!(ledger.redo.is_empty());
+        assert_eq!(ledger.undo.len(), 1);
+    }
+
+    fn entry(index: usize) -> LedgerEntry {
+        LedgerEntry {
+            label: Some(index.to_string()),
+            steps: Vec::new(),
+        }
     }
 }

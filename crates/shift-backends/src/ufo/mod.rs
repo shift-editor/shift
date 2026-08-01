@@ -1,6 +1,8 @@
+mod import;
 mod reader;
 mod writer;
 
+pub(crate) use import::{load_header, read_glyph_paths, stream_font};
 pub use reader::UfoReader;
 pub use writer::UfoWriter;
 
@@ -179,7 +181,7 @@ mod tests {
         let mut broken = create_test_font();
         broken.lib_mut().set(
             "public.objectLibs".to_string(),
-            shift_font::LibValue::Dict(std::collections::HashMap::new()),
+            shift_font::LibValue::Dict(std::collections::BTreeMap::new()),
         );
         UfoWriter::new()
             .save(&broken, ufo_path_str)

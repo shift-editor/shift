@@ -1,9 +1,10 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LibData {
-    data: HashMap<String, LibValue>,
+    data: BTreeMap<String, LibValue>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -16,7 +17,7 @@ pub enum LibValue {
     Float(f64),
     Boolean(bool),
     Array(Vec<LibValue>),
-    Dict(HashMap<String, LibValue>),
+    Dict(BTreeMap<String, LibValue>),
     Data(Vec<u8>),
     /// A plist date, carried as the RFC 3339 / ISO 8601 string used by XML
     /// plists (`plist::Date::to_xml_format`), e.g. `2024-02-02T02:02:02Z`.
@@ -29,7 +30,7 @@ pub enum LibValue {
 impl LibData {
     pub fn new() -> Self {
         Self {
-            data: HashMap::new(),
+            data: BTreeMap::new(),
         }
     }
 
@@ -61,17 +62,19 @@ impl LibData {
         self.data.iter()
     }
 
-    pub fn into_inner(self) -> HashMap<String, LibValue> {
+    pub fn into_inner(self) -> BTreeMap<String, LibValue> {
         self.data
     }
 
-    pub fn from_map(data: HashMap<String, LibValue>) -> Self {
-        Self { data }
+    pub fn from_map(data: impl IntoIterator<Item = (String, LibValue)>) -> Self {
+        Self {
+            data: data.into_iter().collect(),
+        }
     }
 }
 
-impl From<HashMap<String, LibValue>> for LibData {
-    fn from(data: HashMap<String, LibValue>) -> Self {
+impl From<BTreeMap<String, LibValue>> for LibData {
+    fn from(data: BTreeMap<String, LibValue>) -> Self {
         Self { data }
     }
 }

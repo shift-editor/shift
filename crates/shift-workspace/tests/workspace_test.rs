@@ -1,12 +1,12 @@
 use std::{fs, path::PathBuf};
 
 use shift_font::{
-    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, FontChange, FontIntent,
-    FontIntentSet, GlyphId, GlyphName, LayerId, Location, NamedInstance, NamedInstanceId, PointId,
-    PointSeed, PointType, SourceId, error::CoreError,
+    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, Font, FontChange, FontIntent,
+    FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Location, NamedInstance,
+    NamedInstanceId, PointId, PointSeed, PointType, SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
-use shift_workspace::{FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
+use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 fn create_glyph_intent(name: &str, unicodes: Vec<u32>) -> FontIntent {
     FontIntent::CreateGlyph {
@@ -145,6 +145,366 @@ fn imports_external_fonts_without_a_save_target() {
             .family_name
             .is_some()
     );
+    let entries = fs::read_dir(temp.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert!(
+        entries
+            .iter()
+            .all(|name| !name.to_string_lossy().starts_with(".shift-import-")),
+        "staging artifacts remain: {entries:?}"
+    );
+}
+
+#[test]
+fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("apps/desktop/src/renderer/src/assets/fonts/Inter-VariableFont.ttf");
+    let store_path = temp.path().join("inter.sqlite");
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_count = workspace.font().glyph_count();
+    let total_layers = workspace
+        .font()
+        .glyphs()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+    assert!(
+        glyph_count > 2_000,
+        "fixture should exercise a large glyph directory"
+    );
+    assert!(total_layers >= glyph_count);
+
+    let requested = workspace
+        .font()
+        .glyphs()
+        .filter(|glyph| !glyph.layers().is_empty())
+        .take(520)
+        .map(|glyph| glyph.id())
+        .collect::<Vec<_>>();
+    assert!(requested.len() > 512);
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace
+        .acquire_glyphs(&requested, AcquireScope::Glyphs)
+        .unwrap();
+    let expected = requested
+        .iter()
+        .flat_map(|glyph_id| {
+            workspace
+                .font()
+                .glyph(glyph_id.clone())
+                .unwrap()
+                .layers()
+                .values()
+                .map(|layer| (layer.id(), layer.as_ref().clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.font().glyph_count(), glyph_count);
+    assert_eq!(resumed.loaded_layer_count(), 0);
+
+    resumed
+        .acquire_glyphs(&requested, AcquireScope::Glyphs)
+        .unwrap();
+
+    assert_eq!(resumed.loaded_layer_count(), expected.len());
+    assert!(resumed.loaded_layer_count() < total_layers);
+    for (layer_id, layer) in expected {
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
+    }
+}
+
+/// Manual corpus gate for large fonts that cannot live in the repository.
+///
+/// Run with, for example:
+/// `SHIFT_STRESS_FONT=/path/to/SourceHanSans-VF.ttf SHIFT_STRESS_MIN_GLYPHS=65000 SHIFT_STRESS_MIN_LAYERS=65000 cargo test -p shift-workspace configured_large_corpus_streams_resumes_and_acquires -- --ignored --nocapture`.
+#[test]
+#[ignore = "requires SHIFT_STRESS_FONT and explicit corpus expectations"]
+fn configured_large_corpus_streams_resumes_and_acquires() {
+    let source_path = PathBuf::from(
+        std::env::var_os("SHIFT_STRESS_FONT").expect("SHIFT_STRESS_FONT must name a font source"),
+    );
+    let min_glyphs = std::env::var("SHIFT_STRESS_MIN_GLYPHS")
+        .expect("SHIFT_STRESS_MIN_GLYPHS must document the selected corpus")
+        .parse::<usize>()
+        .expect("SHIFT_STRESS_MIN_GLYPHS must be an integer");
+    let min_layers = std::env::var("SHIFT_STRESS_MIN_LAYERS")
+        .expect("SHIFT_STRESS_MIN_LAYERS must document the selected corpus")
+        .parse::<usize>()
+        .expect("SHIFT_STRESS_MIN_LAYERS must be an integer");
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("corpus.sqlite");
+    let started = std::time::Instant::now();
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_count = workspace.font().glyph_count();
+    let layer_count = workspace
+        .font()
+        .glyphs()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+    assert!(glyph_count >= min_glyphs, "got {glyph_count} glyphs");
+    assert!(layer_count >= min_layers, "got {layer_count} layers");
+    assert_eq!(workspace.loaded_layer_count(), 0);
+
+    let glyph_ids = workspace
+        .font()
+        .glyphs()
+        .filter(|glyph| !glyph.layers().is_empty())
+        .take(16)
+        .map(|glyph| glyph.id())
+        .collect::<Vec<_>>();
+    workspace
+        .acquire_glyphs(&glyph_ids, AcquireScope::Glyphs)
+        .unwrap();
+    assert!(workspace.loaded_layer_count() > 0);
+    assert!(workspace.loaded_layer_count() < layer_count);
+    drop(workspace);
+
+    let resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.font().glyph_count(), glyph_count);
+    assert_eq!(resumed.loaded_layer_count(), 0);
+    eprintln!(
+        "corpus={} glyphs={glyph_count} layers={layer_count} store_bytes={} elapsed_ms={:.3}",
+        source_path.display(),
+        fs::metadata(&store_path).unwrap().len(),
+        started.elapsed().as_secs_f64() * 1_000.0
+    );
+}
+
+#[test]
+fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let store_path = temp.path().join("mutatorsans.sqlite");
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_count = workspace.font().glyph_count();
+    let total_layers = workspace
+        .font()
+        .glyphs()
+        .map(|glyph| glyph.layers().len())
+        .sum::<usize>();
+    assert!(workspace.font().sources().len() >= 4);
+    assert!(total_layers >= glyph_count * 4);
+
+    let root = workspace
+        .font()
+        .glyphs()
+        .find(|glyph| {
+            !workspace
+                .store()
+                .referenced_glyph_ids_for_glyph(&glyph.id())
+                .unwrap()
+                .is_empty()
+        })
+        .expect("fixture should contain a composite glyph")
+        .id();
+    let closure = workspace
+        .store()
+        .referenced_glyph_closure([root.clone()])
+        .unwrap();
+    assert!(closure.len() > 1);
+    let closure_layer_count = closure
+        .iter()
+        .map(|glyph_id| {
+            workspace
+                .font()
+                .glyph(glyph_id.clone())
+                .unwrap()
+                .layers()
+                .len()
+        })
+        .sum::<usize>();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&root), AcquireScope::ComponentClosure)
+        .unwrap();
+    let expected_root_layers = workspace
+        .font()
+        .glyph(root.clone())
+        .unwrap()
+        .layers()
+        .values()
+        .map(|layer| (layer.id(), layer.as_ref().clone()))
+        .collect::<Vec<_>>();
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.loaded_layer_count(), 0);
+    resumed
+        .acquire_glyphs(std::slice::from_ref(&root), AcquireScope::ComponentClosure)
+        .unwrap();
+
+    assert_eq!(resumed.loaded_layer_count(), closure_layer_count);
+    assert!(resumed.loaded_layer_count() < total_layers);
+    for (layer_id, layer) in expected_root_layers {
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
+    }
+}
+
+#[test]
+fn ufo_source_roundtrips_through_lazy_acquisition() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let store_path = temp.path().join("mutatorsans-ufo.sqlite");
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let glyph_id = workspace
+        .font()
+        .glyphs()
+        .find(|glyph| !glyph.layers().is_empty())
+        .expect("fixture should contain a glyph layer")
+        .id();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
+        .unwrap();
+    let expected = workspace
+        .font()
+        .glyph(glyph_id.clone())
+        .unwrap()
+        .layers()
+        .values()
+        .map(|layer| (layer.id(), layer.as_ref().clone()))
+        .collect::<Vec<_>>();
+    assert!(!expected.is_empty());
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.loaded_layer_count(), 0);
+    resumed
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
+        .unwrap();
+
+    assert_eq!(resumed.loaded_layer_count(), expected.len());
+    for (layer_id, layer) in expected {
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
+    }
+}
+
+#[test]
+fn failed_streaming_import_removes_staging_and_preserves_the_destination() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join("Broken.ufo");
+    let store_path = temp.path().join("existing.sqlite");
+    let mut font = Font::new();
+    let mut glyph = Glyph::new("A");
+    let mut layer = GlyphLayer::new(LayerId::new(), font.default_source_id().unwrap());
+    let mut contour = shift_font::Contour::new();
+    contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+    layer.add_contour(contour);
+    glyph.set_layer(layer);
+    font.insert_glyph(glyph).unwrap();
+    shift_backends::font_loader::FontLoader::new()
+        .write_font(&font, source_path.to_str().unwrap())
+        .unwrap();
+    let glif_path = fs::read_dir(source_path.join("glyphs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "glif")
+        })
+        .unwrap();
+    fs::remove_file(glif_path).unwrap();
+    drop(shift_store::ShiftStore::open(&store_path).unwrap());
+    let destination_before = fs::read(&store_path).unwrap();
+
+    assert!(FontWorkspace::open(&source_path, &store_path).is_err());
+
+    assert_eq!(fs::read(&store_path).unwrap(), destination_before);
+    assert!(
+        shift_store::ShiftStore::open(&store_path)
+            .unwrap()
+            .workspace_state()
+            .unwrap()
+            .is_none()
+    );
+    assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".shift-import-")
+    }));
+}
+
+#[test]
+fn foreign_import_refuses_to_replace_a_published_workspace_store() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let store_path = temp.path().join("published.sqlite");
+    let workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    drop(workspace);
+
+    let error = match FontWorkspace::open(&source_path, &store_path) {
+        Ok(_) => panic!("foreign import must not replace a published workspace"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        error,
+        WorkspaceError::Store(shift_store::StoreError::ImportDestinationNotEmpty(path))
+            if path == store_path
+    ));
+    let resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.font().glyph_count(), 0);
+}
+
+#[test]
+fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let store_path = temp.path().join("corrupt-acquisition.sqlite");
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let requested = workspace
+        .font()
+        .glyphs()
+        .filter(|glyph| !glyph.layers().is_empty())
+        .take(2)
+        .map(|glyph| glyph.id())
+        .collect::<Vec<_>>();
+    assert_eq!(requested.len(), 2);
+    let corrupt_layer_id = workspace
+        .font()
+        .glyph(requested[0].clone())
+        .unwrap()
+        .layers()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let conn = rusqlite::Connection::open(&store_path).unwrap();
+    conn.execute(
+        "UPDATE glyph_layer_payloads
+         SET payload = X'00', stored_byte_length = 1
+         WHERE layer_id = ?1",
+        [corrupt_layer_id.to_string()],
+    )
+    .unwrap();
+    drop(conn);
+
+    let error = workspace
+        .acquire_glyphs(std::slice::from_ref(&requested[0]), AcquireScope::Glyphs)
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        WorkspaceError::Store(shift_store::StoreError::LayerDecompression(_))
+    ));
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    assert!(workspace.font().layer(corrupt_layer_id).unwrap().is_empty());
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&requested[1]), AcquireScope::Glyphs)
+        .unwrap();
+    assert!(workspace.loaded_layer_count() > 0);
 }
 
 #[test]
@@ -235,6 +595,115 @@ fn resume_rebuilds_dirty_untitled_workspace_from_store() {
     assert_eq!(workspace.source(), &WorkspaceSource::Untitled);
     assert!(workspace.is_dirty().unwrap());
     assert!(workspace.font().glyph_id_by_name("A").is_some());
+}
+
+#[test]
+fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
+    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    drop(workspace);
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
+        .unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 1);
+    let authored = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    assert_eq!(authored.contours_iter().next().unwrap().points().len(), 4);
+
+    workspace
+        .evict_glyphs(&[glyph_id.clone(), glyph_id.clone()])
+        .unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
+        .unwrap();
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &authored);
+}
+
+#[test]
+fn intent_on_directory_layer_acquires_before_persisting() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
+    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    drop(workspace);
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::SetXAdvance {
+                    layer_id: layer_id.clone(),
+                    width: 777.0,
+                }],
+            },
+            None,
+        )
+        .unwrap();
+
+    let layer = workspace.font().layer(layer_id.clone()).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 1);
+    assert_eq!(layer.width(), 777.0);
+    assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    resumed
+        .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
+        .unwrap();
+    let layer = resumed.font().layer(layer_id).unwrap();
+    assert_eq!(layer.width(), 777.0);
+    assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
+}
+
+#[test]
+fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
+    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    let original_width = workspace.font().layer(layer_id.clone()).unwrap().width();
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::SetXAdvance {
+                    layer_id: layer_id.clone(),
+                    width: 777.0,
+                }],
+            },
+            Some("Change advance".to_string()),
+        )
+        .unwrap();
+    workspace
+        .evict_glyphs(std::slice::from_ref(&glyph_id))
+        .unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+
+    workspace.undo().unwrap().expect("advance edit should undo");
+
+    let layer = workspace.font().layer(layer_id).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 1);
+    assert_eq!(layer.width(), original_width);
+    assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
 }
 
 #[test]
@@ -898,19 +1367,39 @@ fn set_contour_closed_undo_redo_restores_layer() {
 }
 
 #[test]
-fn move_points_undo_redo_restores_layer() {
+fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
     let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let pre = workspace.font().layer(layer_id.clone()).unwrap().clone();
 
-    assert_layer_undo_redo(
-        &mut workspace,
-        &layer_id,
-        vec![FontIntent::MovePoints {
-            layer_id: layer_id.clone(),
-            point_ids: vec![point_ids[0].clone(), point_ids[1].clone()],
-            coords: vec![5.0, 6.0, 105.0, 6.0],
-        }],
-    );
+    let applied = workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::MovePoints {
+                    layer_id: layer_id.clone(),
+                    point_ids: vec![point_ids[0].clone(), point_ids[1].clone()],
+                    coords: vec![5.0, 6.0, 105.0, 6.0],
+                }],
+            },
+            None,
+        )
+        .unwrap();
+    let post = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    assert!(!applied.layers[0].structural);
+
+    let undone = workspace
+        .undo()
+        .unwrap()
+        .expect("position edit should undo");
+    assert!(!undone.layers[0].structural);
+    assert_eq!(workspace.font().layer(layer_id.clone()).unwrap(), &pre);
+
+    let redone = workspace
+        .redo()
+        .unwrap()
+        .expect("position edit should redo");
+    assert!(!redone.layers[0].structural);
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &post);
 }
 
 #[test]

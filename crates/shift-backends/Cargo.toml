@@ -22,6 +22,7 @@ kurbo = "0.12"
 ordered-float = "5"
 plist = "1"
 quick-xml = { version = "0.37.5", features = ["serialize"] }
+rayon = "1.10"
 serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"

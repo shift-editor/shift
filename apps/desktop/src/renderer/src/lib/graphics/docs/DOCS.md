@@ -8,9 +8,9 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 
 - **Architecture Invariant:** `Renderer` owns the `MarkerLayer` lifecycle. `CanvasContextProvider` only reports DOM canvas mount, resize, and unmount events.
 
-- **Architecture Invariant:** `ResidentGlyphLayer` is the generic catalog-preview boundary. It owns one WebGPU adapter/device/context and independently replaceable atlas pages; Slug names and packed-layout knowledge remain behind that backend rather than entering React or catalog frame types.
+- **Architecture Invariant:** `ResidentGlyphLayer` is the generic catalog-preview boundary. It owns one WebGPU adapter/device/context, one complete base atlas, and independently replaceable edit patches; Slug names and packed-layout knowledge remain behind that backend rather than entering React or catalog frame types.
 
-- **Architecture Invariant:** Catalog route activity and GPU readiness are independent. Leaving `/home` makes the catalog inert and keeps it painted behind the opaque editor without destroying the resident layer or resizing its canvas. Returning submits one cheap redraw from current resident pages because Chromium may discard the WebGPU canvas presentation; it does not compile or upload those pages. Readiness means the current viewport plus overscan is current and its submitted frame completed.
+- **Architecture Invariant:** Catalog route activity and GPU readiness are independent. Leaving `/home` makes the catalog inert and keeps it painted behind the opaque editor without destroying the resident layer or resizing its canvas. Returning submits one cheap redraw because Chromium may discard the WebGPU canvas presentation. Readiness means the complete atlas, including any required local edit patches, is current and its submitted frame completed.
 
 - **Architecture Invariant:** **CRITICAL**: The instance buffer layout (attribute offsets in the draw command) must exactly match the packing order in `MarkerHandleRenderer.#writeInstance`. If either side changes stride/offset, handles render garbage with no error.
 
@@ -28,7 +28,7 @@ graphics/
   canvasText.ts               — width-constrained Canvas2D label fitting
   backends/
     MarkerLayer.ts            — WebGL context: REGL init, instance buffer management, draw command
-    ResidentGlyphLayer.ts     — WebGPU catalog device, page upload, draw, invalidation, and teardown boundary
+    ResidentGlyphLayer.ts     — WebGPU catalog device, complete upload, edit patches, draw, and teardown
 ```
 
 Supporting files live in the editor rendering module:
@@ -51,7 +51,7 @@ editor/rendering/markers/
 
 - `MarkerLayer` -- WebGL context wrapper. Manages REGL instance, instance buffer, and draw command. Provides `resizeCanvas`, `draw`, `clear`, `destroy`, and `isAvailable`.
 
-- `ResidentGlyphLayer` -- algorithm-neutral surface used by the catalog controller. It keeps one device/context resident, prepares and streams native Slug pages, invalidates roots independently, and delegates multi-page rendering to the internal Slug backend.
+- `ResidentGlyphLayer` -- algorithm-neutral surface used by the catalog controller. It prepares and streams one complete native Slug atlas, retains one device/context, and overlays small replacement patches for locally invalidated roots.
 
 - `MarkerInstance` -- logical representation of one marker shape. The current marker path packs directly into a `Float32Array` for zero steady-state allocation.
 
@@ -73,7 +73,7 @@ editor/rendering/markers/
 
 ### Resident catalog lifecycle
 
-`GlyphCatalogController` retains `ResidentGlyphLayer` across routes and tracks `Font.invalidGlyphIdsCell`. Local edits invalidate only touched roots and component dependents; axis/source changes invalidate every root. The remembered viewport plus one viewport of overscan loads as the first page, then 2,048-root pages populate outward in both directions. At most one native page compilation is in flight: scrolling redraws already-resident roots immediately, and when that compilation settles the scheduler rechecks the latest viewport before starting anything else. Every published background page schedules a current-viewport redraw, even when that publication itself satisfies a viewport that became visible while the page was in flight. Intermediate scrub positions therefore cannot queue native compilation work. Once all pages are resident, `GlyphCatalogController` marks the glyph canvas `data-fully-resident="true"`; thumb scrubbing then neither hides the canvas nor prepares or uploads atlas data. Invalidation clears full residency until every current catalog root is uploaded again. Invalid or missing roots are never submitted, so stale previews are not displayed. Route-dependent navigation is accessed through a stable callback ref so it cannot recreate the controller or device. `#needsRedraw` keeps overlay-only pointer updates from submitting glyph frames.
+`GlyphCatalogController` retains `ResidentGlyphLayer` across routes and tracks `Font.invalidGlyphIdsCell`. Initial residency acquires every authored layer, streams one complete atlas, and marks the glyph canvas `data-fully-resident="true"`. Scrolling in either direction therefore only submits frames and never prepares or uploads geometry. Local edits invalidate touched roots and component dependents, then stream one replacement patch while untouched roots remain in the complete base atlas. Axis/source changes discard the complete atlas and rebuild it because every root is invalid. Invalid or missing roots are never submitted, so stale previews are not displayed. Route-dependent navigation is accessed through a stable callback ref so it cannot recreate the controller or device. `#needsRedraw` keeps overlay-only pointer updates from submitting glyph frames.
 
 ### Per-frame draw pipeline
 
@@ -120,7 +120,7 @@ Set a breakpoint or add logging in `MarkerLayer.draw`. Check `isAvailable()` ret
 
 ## Verification
 
-- Run `pnpm --filter @shift/desktop test:e2e -- --project=gpu e2e/gpu.spec.ts` after changing catalog residency or scheduling. The suite blocks background publication to verify visible-first painting, verifies that publication restores a viewport reached while the page was in flight, and samples top/middle/bottom screenshots while asserting that a fully resident atlas never hides, prepares, or uploads during thumb scrubbing.
+- See [Desktop E2E tests](../../../../../../e2e/README.md) for visual and hardware-GPU verification commands.
 - Run `pnpm test:desktop apps/desktop/src/renderer/src/lib/graphics/ContourPath.test.ts` after changing contour command, transform, SVG, Canvas, or bounds behavior.
 - No dedicated tests exist for `MarkerLayer`. Verify GPU markers visually: open a glyph with mixed point types (corner, smooth, off-curve), hover and select points, confirm correct shapes and state colors.
 - Check CPU fallback: in `MarkerLayer.#initialize`, temporarily throw before `this.#available = true`. Handles should still render via Canvas 2D.

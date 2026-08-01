@@ -64,8 +64,8 @@ pub fn build_authored_atlas(
 /// Compiles an ordered root-glyph batch and its transitive component geometry.
 ///
 /// Root identities are deduplicated in caller order. Interpolation bases are
-/// collected only from those roots and their component closures, so viewport
-/// work does not scan or compile unrelated glyphs.
+/// collected only from those roots and their component closures, so a local
+/// edit patch does not scan or compile unrelated glyphs.
 pub fn build_authored_atlas_page(
     font: &Font,
     glyph_ids: &[GlyphId],

@@ -29,8 +29,8 @@ pub use boolean::{boolean, BooleanOp};
 pub use component::{Component, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{
-    AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphId,
-    GuidelineId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
+    AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,
+    GlyphId, GuidelineId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata};

@@ -2,6 +2,7 @@ mod reader;
 
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::font_loader::FontAdaptor;
+use crate::import::GlyphStream;
 use shift_font::Font;
 
 pub struct BytesFontAdaptor;
@@ -13,5 +14,10 @@ impl FontAdaptor for BytesFontAdaptor {
 
     fn write_font(&self, _font: &Font, _path: &str) -> FormatBackendResult<()> {
         Err(FormatBackendError::WriteUnsupported)
+    }
+
+    fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
+        let (header, stream) = reader::stream_font_file(path)?;
+        Ok(Some((header, Box::new(stream))))
     }
 }

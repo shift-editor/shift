@@ -134,12 +134,8 @@ impl FontChange {
         })
     }
 
-    pub fn glyph_layer_created(
-        glyph_id: GlyphId,
-        name: Option<GlyphName>,
-        layer: &GlyphLayer,
-    ) -> Self {
-        Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, name, layer))
+    pub fn glyph_layer_created(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
+        Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, layer))
     }
 
     pub fn glyph_layer_deleted(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
@@ -202,6 +198,40 @@ impl FontChange {
             layer_id: layer.id(),
             layer: GlyphLayerValue::from(layer),
         })
+    }
+
+    /// Layer identity touched by a payload-affecting change.
+    ///
+    /// Workspace persistence uses this exhaustive match as a safety boundary:
+    /// an unloaded directory placeholder must never be written back over its
+    /// canonical payload.
+    pub fn layer_id(&self) -> Option<&LayerId> {
+        match self {
+            Self::GlyphLayerCreated(change) => Some(&change.layer_id),
+            Self::GlyphLayerDeleted(change) => Some(&change.layer_id),
+            Self::LayerMetricsChanged(change) => Some(&change.layer_id),
+            Self::ContourAdded(change) => Some(&change.layer_id),
+            Self::ContourOpenClosedChanged(change) => Some(&change.layer_id),
+            Self::PointsAdded(change) => Some(&change.layer_id),
+            Self::PointsDeleted(change) => Some(&change.layer_id),
+            Self::PointSmoothChanged(change) => Some(&change.layer_id),
+            Self::PointPositionsChanged(change) => Some(&change.layer_id),
+            Self::AnchorPositionsChanged(change) => Some(&change.layer_id),
+            Self::LayerGeometryReplaced(change) => Some(&change.layer_id),
+            Self::FontMetadataUpdated(_)
+            | Self::AxisCreated(_)
+            | Self::AxisUpdated(_)
+            | Self::AxisDeleted(_)
+            | Self::AxisMappingsUpdated(_)
+            | Self::MetricDefinitionsUpdated(_)
+            | Self::NamedInstancesUpdated(_)
+            | Self::SourceCreated(_)
+            | Self::SourceUpdated(_)
+            | Self::SourceDeleted(_)
+            | Self::GlyphCreated(_)
+            | Self::GlyphDeleted(_)
+            | Self::GlyphIdentityChanged(_) => None,
+        }
     }
 }
 
@@ -347,18 +377,16 @@ pub struct GlyphLayerCreated {
     pub glyph_id: GlyphId,
     pub source_id: SourceId,
     pub layer_id: LayerId,
-    pub name: Option<GlyphName>,
     pub width: f64,
     pub height: Option<f64>,
 }
 
 impl GlyphLayerCreated {
-    pub fn from_layer(glyph_id: GlyphId, name: Option<GlyphName>, layer: &GlyphLayer) -> Self {
+    pub fn from_layer(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
         Self {
             glyph_id,
             source_id: layer.source_id(),
             layer_id: layer.id(),
-            name,
             width: layer.width(),
             height: layer.height(),
         }

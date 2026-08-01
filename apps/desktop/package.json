@@ -15,8 +15,12 @@
     "lint:check": "oxlint --deny-warnings src/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:e2e": "tsx e2e/build.ts",
-    "test:e2e": "pnpm build:e2e && pnpm exec playwright test"
+    "build:e2e": "pnpm --workspace-root generate:glyph-info && tsx e2e/build.ts",
+    "test:e2e": "pnpm build:e2e && pnpm exec playwright test --project=visual --project=gpu",
+    "test:e2e:visual": "pnpm build:e2e && pnpm exec playwright test --project=visual",
+    "test:e2e:visual:update": "pnpm build:e2e && pnpm exec playwright test --project=visual --update-snapshots",
+    "test:e2e:gpu": "pnpm build:e2e && pnpm exec playwright test --project=gpu",
+    "test:e2e:perf": "pnpm build:e2e && pnpm exec playwright test --project=perf"
   },
   "author": {
     "name": "Kostya Farber",

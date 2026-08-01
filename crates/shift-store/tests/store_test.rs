@@ -1,8 +1,7 @@
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
-    AxisId, ComponentId, Evidence, FileIdentity, FontInfo, GlyphId, LayerId, NewAxis, NewGlyph,
-    NewGlyphComponent, NewGlyphLayer, NewSource, ShiftStore, SourceId, SourceIdentitySnapshot,
-    SourceKind, WorkspaceState,
+    AxisId, Evidence, FileIdentity, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, ShiftStore,
+    SourceId, SourceIdentitySnapshot, SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -283,27 +282,34 @@ fn creates_and_reads_glyph_layer() {
     let source_id = create_regular_source(&mut store);
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
 
-    let layer = store
-        .get_glyph_layer(&layer_id)
-        .expect("glyph layer query should succeed")
+    let directory = store
+        .list_glyph_layer_directory()
+        .expect("glyph layer directory query should succeed");
+    let layer = directory
+        .iter()
+        .find(|entry| entry.layer_id == layer_id)
         .expect("glyph layer should exist");
 
-    assert_eq!(layer.id, layer_id);
-    assert_eq!(layer.glyph_id, glyph_id);
-    assert_eq!(layer.source_id, source_id);
-    assert_eq!(layer.name.as_deref(), Some("Regular"));
+    assert_eq!(layer.glyph_id.as_str(), glyph_id.as_str());
+    assert_eq!(layer.source_id.as_str(), source_id.as_str());
+    assert_eq!(layer.name.as_ref().map(|name| name.as_str()), Some("A"));
 }
 
 #[test]
 fn glyph_layer_requires_existing_glyph_and_source() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
-    let result = store.create_glyph_layer(NewGlyphLayer {
-        id: LayerId::new("layer-A-regular"),
-        glyph_id: GlyphId::new("glyph-missing"),
-        source_id: SourceId::new("source-missing"),
-        name: Some("Regular".to_string()),
-    });
+    let layer = shift_font::GlyphLayer::with_width(
+        shift_font::LayerId::from_raw("layer-A-regular"),
+        shift_font::SourceId::from_raw("source-missing"),
+        0.0,
+    );
+    let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::glyph_layer_created(
+            shift_font::GlyphId::from_raw("glyph-missing"),
+            &layer,
+        ),
+    ]));
 
     assert!(result.is_err());
 }
@@ -316,13 +322,15 @@ fn lists_glyph_layers_for_glyph() {
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
 
     let layers = store
-        .list_glyph_layers_for_glyph(&glyph_id)
-        .expect("glyph layers query should succeed");
+        .list_glyph_layer_directory()
+        .expect("glyph layers query should succeed")
+        .into_iter()
+        .filter(|entry| entry.glyph_id.as_str() == glyph_id.as_str())
+        .collect::<Vec<_>>();
 
     assert_eq!(layers.len(), 1);
-    assert_eq!(layers[0].id, layer_id);
-    assert_eq!(layers[0].glyph_id, glyph_id);
-    assert_eq!(layers[0].source_id, source_id);
+    assert_eq!(layers[0].layer_id, layer_id);
+    assert_eq!(layers[0].source_id.as_str(), source_id.as_str());
 }
 
 #[test]
@@ -334,29 +342,35 @@ fn creates_and_reads_glyph_component() {
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
     let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
 
-    let component = store
-        .get_glyph_component(&component_id)
-        .expect("glyph component query should succeed")
+    let layer = store
+        .load_glyph_layer(&layer_id)
+        .expect("glyph layer query should succeed")
+        .expect("glyph layer should exist");
+    let component = layer
+        .components_iter()
+        .next()
         .expect("glyph component should exist");
 
-    assert_eq!(component.id, component_id);
-    assert_eq!(component.layer_id, layer_id);
-    assert_eq!(component.base_glyph_id, base_glyph_id);
-    assert_eq!(component.order_index, 0);
+    assert_eq!(component.id(), component_id);
+    assert_eq!(component.base_glyph_id().as_str(), base_glyph_id.as_str());
 }
 
 #[test]
-fn glyph_component_requires_existing_layer_and_base_glyph() {
+fn glyph_component_replacement_requires_existing_layer() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let mut layer = shift_font::GlyphLayer::with_width(
+        shift_font::LayerId::from_raw("layer-missing"),
+        shift_font::SourceId::from_raw("source-missing"),
+        0.0,
+    );
+    layer.add_component(shift_font::Component::with_id(
+        shift_font::ComponentId::from_raw("component-A-missing"),
+        shift_font::GlyphId::from_raw("glyph-missing"),
+        "Missing",
+        shift_font::DecomposedTransform::identity(),
+    ));
 
-    let result = store.create_glyph_component(NewGlyphComponent {
-        id: ComponentId::new("component-A-B"),
-        layer_id: LayerId::new("layer-missing"),
-        base_glyph_id: GlyphId::new("glyph-missing"),
-        base_glyph_name: "Missing".to_string(),
-        transform: shift_font::DecomposedTransform::identity(),
-        order_index: 0,
-    });
+    let result = store.replace_glyph_layer(&layer);
 
     assert!(result.is_err());
 }
@@ -370,15 +384,16 @@ fn lists_glyph_components_for_layer() {
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
     let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
 
-    let components = store
-        .list_glyph_components_for_layer(&layer_id)
-        .expect("glyph components query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer_id)
+        .expect("glyph layer query should succeed")
+        .expect("glyph layer should exist");
+    let components = layer.components();
+    let (_, component) = components.iter().next().expect("component should exist");
 
     assert_eq!(components.len(), 1);
-    assert_eq!(components[0].id, component_id);
-    assert_eq!(components[0].layer_id, layer_id);
-    assert_eq!(components[0].base_glyph_id, base_glyph_id);
-    assert_eq!(components[0].order_index, 0);
+    assert_eq!(component.id(), component_id);
+    assert_eq!(component.base_glyph_id().as_str(), base_glyph_id.as_str());
 }
 
 #[test]
@@ -386,10 +401,15 @@ fn applies_glyph_identity_change_set() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let glyph = shift_font::Glyph::with_unicode("A", 65);
     let glyph_id = glyph.id();
+    let source_id = shift_font::SourceId::new();
+    let layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
+    create_regular_source_with_id(&mut store, source_id);
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::GlyphCreated(shift_font::GlyphCreated::from(&glyph)),
+            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::GlyphIdentityChanged(shift_font::GlyphIdentityChanged {
                 glyph_id: glyph_id.clone(),
                 from_name: shift_font::GlyphName::from("A"),
@@ -408,8 +428,46 @@ fn applies_glyph_identity_change_set() {
         .list_glyph_unicodes(&stored.id)
         .expect("unicode query should succeed");
 
+    let directory = store.list_glyph_layer_directory().unwrap();
+
     assert_eq!(stored.name.as_deref(), Some("A.alt"));
     assert_eq!(unicodes, vec![0x00c1]);
+    assert_eq!(directory.len(), 1);
+    assert_eq!(directory[0].name.as_deref(), Some("A.alt"));
+}
+
+#[test]
+fn glyph_rename_preserves_authored_order() {
+    let mut font = shift_font::Font::new();
+    let first = shift_font::Glyph::new("first");
+    let second = shift_font::Glyph::new("second");
+    let second_id = second.id();
+    font.insert_glyph(first).unwrap();
+    font.insert_glyph(second).unwrap();
+    let mut store = ShiftStore::open_memory_for_test().unwrap();
+    store.replace_font_state(&font).unwrap();
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::GlyphIdentityChanged(shift_font::GlyphIdentityChanged {
+                glyph_id: second_id,
+                from_name: shift_font::GlyphName::from("second"),
+                to_name: shift_font::GlyphName::from("second.alt"),
+                from_unicodes: vec![],
+                to_unicodes: vec![],
+            }),
+        ]))
+        .unwrap();
+
+    assert_eq!(
+        store
+            .load_font_directory()
+            .unwrap()
+            .glyphs()
+            .map(|glyph| glyph.name().to_string())
+            .collect::<Vec<_>>(),
+        vec!["first", "second.alt"]
+    );
 }
 
 #[test]
@@ -425,11 +483,7 @@ fn applies_glyph_delete_change_set_and_cascades_layers() {
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::glyph_created(&glyph),
-            shift_font::FontChange::glyph_layer_created(
-                glyph.id(),
-                Some(glyph.glyph_name().clone()),
-                &layer,
-            ),
+            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::glyph_deleted(glyph.id()),
         ]))
         .expect("change set should apply");
@@ -438,8 +492,11 @@ fn applies_glyph_delete_change_set_and_cascades_layers() {
         .get_glyph(&GlyphId::new(glyph_id.to_string()))
         .expect("glyph query should succeed");
     let layers = store
-        .list_glyph_layers_for_glyph(&GlyphId::new(glyph_id.to_string()))
-        .expect("layer query should succeed");
+        .list_glyph_layer_directory()
+        .expect("layer query should succeed")
+        .into_iter()
+        .filter(|entry| entry.glyph_id == glyph_id)
+        .collect::<Vec<_>>();
     let unicodes = store
         .list_glyph_unicodes(&GlyphId::new(glyph_id.to_string()))
         .expect("unicode query should succeed");
@@ -458,11 +515,7 @@ fn applies_layer_metrics_and_contour_point_changes() {
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::glyph_created(&glyph),
-            shift_font::FontChange::glyph_layer_created(
-                glyph.id(),
-                Some(glyph.glyph_name().clone()),
-                &layer,
-            ),
+            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::LayerMetricsChanged(shift_font::LayerMetricsChanged {
                 layer_id: layer.id(),
                 width: 720.0,
@@ -484,23 +537,20 @@ fn applies_layer_metrics_and_contour_point_changes() {
         .expect("change set should apply");
 
     let layer = store
-        .get_glyph_layer(&LayerId::new(layer.id().to_string()))
+        .load_glyph_layer(&layer.id())
         .expect("layer query should succeed")
         .expect("layer should exist");
-    let contours = store
-        .list_contours_for_layer(&layer.id)
-        .expect("contour query should succeed");
-    let points = store
-        .list_points_for_contour(&contours[0].id)
-        .expect("point query should succeed");
+    let contours = layer.contours();
+    let (_, contour) = contours.iter().next().expect("contour should exist");
+    let points = contour.points();
 
-    assert_eq!(layer.width, 720.0);
+    assert_eq!(layer.width(), 720.0);
     assert_eq!(contours.len(), 1);
-    assert!(!contours[0].closed);
+    assert!(!contour.is_closed());
     assert_eq!(points.len(), 1);
-    assert_eq!(points[0].id, point_id.to_string());
-    assert_eq!((points[0].x, points[0].y), (40.0, 50.0));
-    assert_eq!(points[0].point_type, "onCurve");
+    assert_eq!(points[0].id(), point_id);
+    assert_eq!((points[0].x(), points[0].y()), (40.0, 50.0));
+    assert_eq!(points[0].point_type(), shift_font::PointType::OnCurve);
 }
 
 #[test]
@@ -514,11 +564,7 @@ fn applies_layer_geometry_replacement() {
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::glyph_created(&glyph),
-            shift_font::FontChange::glyph_layer_created(
-                glyph.id(),
-                Some(glyph.glyph_name().clone()),
-                &layer,
-            ),
+            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::ContourAdded(shift_font::ContourAdded {
                 layer_id: layer.id(),
                 contour: first_contour,
@@ -530,16 +576,17 @@ fn applies_layer_geometry_replacement() {
         ]))
         .expect("change set should apply");
 
-    let contours = store
-        .list_contours_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("contour query should succeed");
-    let points = store
-        .list_points_for_contour(&contours[0].id)
-        .expect("point query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("layer query should succeed")
+        .expect("layer should exist");
+    let contours = layer.contours();
+    let (_, contour) = contours.iter().next().expect("contour should exist");
+    let points = contour.points();
 
     assert_eq!(contours.len(), 1);
     assert_eq!(points.len(), 1);
-    assert_eq!((points[0].x, points[0].y), (10.0, 20.0));
+    assert_eq!((points[0].x(), points[0].y()), (10.0, 20.0));
 }
 
 #[test]
@@ -552,15 +599,16 @@ fn layer_geometry_replacement_round_trips_anchors() {
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
 
-    let anchors = store
-        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("anchor query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("anchor query should succeed")
+        .expect("layer should exist");
+    let anchors = layer.anchors();
 
     assert_eq!(anchors.len(), 1);
-    assert_eq!(anchors[0].id, anchor_id.to_string());
-    assert_eq!(anchors[0].name.as_deref(), Some("top"));
-    assert_eq!((anchors[0].x, anchors[0].y), (250.0, 700.0));
-    assert_eq!(anchors[0].order_index, 0);
+    assert_eq!(anchors[0].id(), anchor_id);
+    assert_eq!(anchors[0].name(), Some("top"));
+    assert_eq!((anchors[0].x(), anchors[0].y()), (250.0, 700.0));
 }
 
 #[test]
@@ -585,10 +633,12 @@ fn applies_anchor_position_changes() {
         ]))
         .expect("anchor positions should apply");
 
-    let anchors = store
-        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("anchor query should succeed");
-    assert_eq!((anchors[0].x, anchors[0].y), (300.0, 650.0));
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("anchor query should succeed")
+        .expect("layer should exist");
+    let anchors = layer.anchors();
+    assert_eq!((anchors[0].x(), anchors[0].y()), (300.0, 650.0));
 }
 
 #[test]
@@ -634,14 +684,16 @@ fn reopen_preserves_layer_anchors() {
     }
 
     let store = ShiftStore::open(&path).expect("reopen");
-    let anchors = store
-        .list_anchors_for_layer(&LayerId::new(layer.id().to_string()))
-        .expect("anchor query should succeed");
+    let layer = store
+        .load_glyph_layer(&layer.id())
+        .expect("anchor query should succeed")
+        .expect("layer should exist");
+    let anchors = layer.anchors();
 
     assert_eq!(anchors.len(), 1);
-    assert_eq!(anchors[0].id, anchor_id.to_string());
-    assert_eq!(anchors[0].name.as_deref(), Some("top"));
-    assert_eq!((anchors[0].x, anchors[0].y), (250.0, 700.0));
+    assert_eq!(anchors[0].id(), anchor_id);
+    assert_eq!(anchors[0].name(), Some("top"));
+    assert_eq!((anchors[0].x(), anchors[0].y()), (250.0, 700.0));
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }
@@ -655,11 +707,7 @@ fn rejects_incremental_change_for_missing_point_row() {
 
     let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
         shift_font::FontChange::glyph_created(&glyph),
-        shift_font::FontChange::glyph_layer_created(
-            glyph.id(),
-            Some(glyph.glyph_name().clone()),
-            &layer,
-        ),
+        shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
         shift_font::FontChange::PointPositionsChanged(shift_font::PointPositionsChanged {
             layer_id: layer.id(),
             points: vec![shift_font::PointPosition {
@@ -700,7 +748,7 @@ fn rejects_layer_edit_for_missing_layer_row() {
 }
 
 fn create_glyph_a(store: &mut ShiftStore) -> GlyphId {
-    let glyph_id = GlyphId::new("glyph-A");
+    let glyph_id = GlyphId::new(shift_font::GlyphId::from_raw("A").to_string());
 
     store
         .create_glyph(NewGlyph {
@@ -769,7 +817,7 @@ fn empty_font_info() -> FontInfo {
 }
 
 fn create_glyph_b(store: &mut ShiftStore) -> GlyphId {
-    let glyph_id = GlyphId::new("glyph-B");
+    let glyph_id = GlyphId::new(shift_font::GlyphId::from_raw("B").to_string());
 
     store
         .create_glyph(NewGlyph {
@@ -785,37 +833,44 @@ fn create_default_glyph_layer(
     store: &mut ShiftStore,
     glyph_id: &GlyphId,
     source_id: &SourceId,
-) -> LayerId {
-    let layer_id = LayerId::new("layer-A-regular");
+) -> shift_font::LayerId {
+    let layer = shift_font::GlyphLayer::with_width(
+        shift_font::LayerId::from_raw("A-regular"),
+        shift_font::SourceId::from_raw(source_id.as_str()),
+        0.0,
+    );
 
     store
-        .create_glyph_layer(NewGlyphLayer {
-            id: layer_id.clone(),
-            glyph_id: glyph_id.clone(),
-            source_id: source_id.clone(),
-            name: Some("Regular".to_string()),
-        })
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::glyph_layer_created(
+                shift_font::GlyphId::from_raw(glyph_id.as_str()),
+                &layer,
+            ),
+        ]))
         .expect("glyph layer should be created");
 
-    layer_id
+    layer.id()
 }
 
 fn create_default_component(
     store: &mut ShiftStore,
-    layer_id: &LayerId,
+    layer_id: &shift_font::LayerId,
     base_glyph_id: &GlyphId,
-) -> ComponentId {
-    let component_id = ComponentId::new("component-A-B");
+) -> shift_font::ComponentId {
+    let component_id = shift_font::ComponentId::from_raw("A-B");
+    let mut layer = store
+        .load_glyph_layer(layer_id)
+        .expect("glyph layer query should succeed")
+        .expect("glyph layer should exist");
+    layer.add_component(shift_font::Component::with_id(
+        component_id.clone(),
+        shift_font::GlyphId::from_raw(base_glyph_id.as_str()),
+        "B",
+        shift_font::DecomposedTransform::identity(),
+    ));
 
     store
-        .create_glyph_component(NewGlyphComponent {
-            id: component_id.clone(),
-            layer_id: layer_id.clone(),
-            base_glyph_id: base_glyph_id.clone(),
-            base_glyph_name: "B".to_string(),
-            transform: shift_font::DecomposedTransform::identity(),
-            order_index: 0,
-        })
+        .replace_glyph_layer(&layer)
         .expect("glyph component should be created");
 
     component_id
@@ -840,7 +895,7 @@ fn create_weight_axis(store: &mut ShiftStore) -> AxisId {
 }
 
 fn create_regular_source(store: &mut ShiftStore) -> SourceId {
-    let source_id = SourceId::new("source-regular");
+    let source_id = SourceId::new(shift_font::SourceId::from_raw("regular").to_string());
 
     store
         .create_source(NewSource {
@@ -913,11 +968,7 @@ fn anchored_layer_change_set(
 ) -> shift_font::FontChangeSet {
     shift_font::FontChangeSet::new(vec![
         shift_font::FontChange::glyph_created(glyph),
-        shift_font::FontChange::glyph_layer_created(
-            glyph.id(),
-            Some(glyph.glyph_name().clone()),
-            layer,
-        ),
+        shift_font::FontChange::glyph_layer_created(glyph.id(), layer),
         shift_font::FontChange::layer_geometry_replaced(layer),
     ])
 }
@@ -949,6 +1000,53 @@ fn file_stores_run_wal_with_verified_pragmas() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
     assert_eq!(version, 1);
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn completed_import_store_restores_durable_wal_mode() {
+    let path = temp_store_path("import-pragmas");
+    let font = shift_font::test_support::sample_font();
+    let mut store = ShiftStore::open_for_import(&path).expect("open import store");
+    let mut writer = store.begin_import(&font).expect("begin import");
+    for glyph in font.glyphs() {
+        writer.write_glyph(glyph).expect("write glyph");
+    }
+    writer.finish().expect("commit import");
+    store.finish_import().expect("finish import");
+    drop(store);
+
+    let conn = rusqlite::Connection::open(&path).expect("reopen raw");
+    let journal: String = conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .expect("journal_mode");
+    assert_eq!(journal, "wal");
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .expect("integrity_check");
+    assert_eq!(integrity, "ok");
+
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn import_mode_refuses_a_published_workspace_destination() {
+    let path = temp_store_path("occupied-import");
+    let mut store = ShiftStore::open(&path).expect("open");
+    store
+        .set_workspace_state(WorkspaceState::untitled(None))
+        .expect("publish workspace");
+    drop(store);
+
+    let error = match ShiftStore::open_for_import(&path) {
+        Ok(_) => panic!("published store must be retained"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        shift_store::StoreError::ImportDestinationNotEmpty(existing) if existing == path
+    ));
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }

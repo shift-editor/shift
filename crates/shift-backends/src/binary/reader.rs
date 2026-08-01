@@ -1,11 +1,18 @@
-use crate::errors::{FormatBackendError, FormatBackendResult};
+use std::sync::Arc;
+
+use crate::{
+    errors::{FormatBackendError, FormatBackendResult},
+    import::{collect_streamed_font, GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
+};
+use rayon::prelude::*;
 use shift_font::{
-    Axis, Contour, Font, Glyph, GlyphLayer, LayerId, Location, MetricKind, NamedInstance, PointType,
+    Axis, Contour, ContourId, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, LayerId,
+    Location, MetricKind, NamedInstance, PointId, PointType, SourceId,
 };
 use skrifa::{
-    outline::{DrawSettings, OutlinePen},
+    outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
     prelude::{LocationRef, Size},
-    raw::{ReadError, TableProvider},
+    raw::{tables::hmtx::Hmtx, types::GlyphId, ReadError, TableProvider},
     string::StringId,
     FontRef, MetadataProvider,
 };
@@ -13,19 +20,39 @@ use skrifa::{
 use crate::metrics::set_metric_position;
 
 pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| FormatBackendError::Binary(format!("failed to read '{path}': {e}")))?;
-    let font = FontRef::new(&bytes)
-        .map_err(|e| FormatBackendError::Binary(format!("failed to parse '{path}': {e}")))?;
-    font_from_skrifa(&font)
+    let (header, mut stream) = stream_font_file(path)?;
+    collect_streamed_font(header, &mut stream)
 }
 
-#[derive(Default)]
 struct ShiftPen {
+    glyph_id: u32,
+    next_contour_index: usize,
+    next_point_index: usize,
     contours: Vec<Contour>,
 }
 
 impl ShiftPen {
+    fn new(glyph_id: GlyphId) -> Self {
+        Self {
+            glyph_id: glyph_id.to_u32(),
+            next_contour_index: 0,
+            next_point_index: 0,
+            contours: Vec::new(),
+        }
+    }
+
+    fn next_contour_id(&mut self) -> ContourId {
+        let index = self.next_contour_index;
+        self.next_contour_index += 1;
+        ContourId::from_raw(format!("b{:x}_{index:x}", self.glyph_id))
+    }
+
+    fn next_point_id(&mut self) -> PointId {
+        let index = self.next_point_index;
+        self.next_point_index += 1;
+        PointId::from_raw(format!("b{:x}_{index:x}", self.glyph_id))
+    }
+
     /// Returns the contour currently being built.
     /// Panics if called before `move_to` — skrifa guarantees `move_to` is called first.
     fn current_contour(&mut self) -> &mut Contour {
@@ -41,44 +68,67 @@ impl ShiftPen {
 
 impl OutlinePen for ShiftPen {
     fn move_to(&mut self, x: f32, y: f32) {
-        self.contours.push(Contour::new());
-        self.current_contour()
-            .add_point(x as f64, y as f64, PointType::OnCurve, false);
+        let contour_id = self.next_contour_id();
+        self.contours.push(Contour::with_id(contour_id));
+        let point_id = self.next_point_id();
+        self.current_contour().add_point_with_id(
+            point_id,
+            x as f64,
+            y as f64,
+            PointType::OnCurve,
+            false,
+        );
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        self.current_contour()
-            .add_point(x as f64, y as f64, PointType::OnCurve, false);
+        let point_id = self.next_point_id();
+        self.current_contour().add_point_with_id(
+            point_id,
+            x as f64,
+            y as f64,
+            PointType::OnCurve,
+            false,
+        );
     }
 
-    /// Binary imports produce cubic-only IR: the wire and renderer layers do
-    /// not support quadratic segments, so every TrueType quadratic is lifted
-    /// to its exact cubic equivalent (mathematically lossless — every
-    /// quadratic is a cubic with c1 = q0 + 2/3(q1 - q0), c2 = q2 + 2/3(q1 - q2)).
+    /// Preserves the source quadratic as one control and one qcurve endpoint.
+    /// The canonical layer codec retains this distinction; the wire projects
+    /// the endpoint as on-curve, which still lets clients infer one-control
+    /// quadratic segments without cubic expansion.
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        let control_id = self.next_point_id();
+        let endpoint_id = self.next_point_id();
         let contour = self.current_contour();
-        let q0 = contour
-            .last_point()
-            .expect("quad_to requires a current point");
-        let (q0x, q0y) = (q0.x(), q0.y());
-        let (q1x, q1y) = (cx0 as f64, cy0 as f64);
-        let (q2x, q2y) = (x as f64, y as f64);
-        let c1x = q0x + 2.0 / 3.0 * (q1x - q0x);
-        let c1y = q0y + 2.0 / 3.0 * (q1y - q0y);
-        let c2x = q2x + 2.0 / 3.0 * (q1x - q2x);
-        let c2y = q2y + 2.0 / 3.0 * (q1y - q2y);
-        contour.add_point(c1x, c1y, PointType::OffCurve, false);
-        contour.add_point(c2x, c2y, PointType::OffCurve, false);
-        contour.add_point(q2x, q2y, PointType::OnCurve, false);
+        contour.add_point_with_id(
+            control_id,
+            cx0 as f64,
+            cy0 as f64,
+            PointType::OffCurve,
+            false,
+        );
+        contour.add_point_with_id(endpoint_id, x as f64, y as f64, PointType::QCurve, false);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.current_contour()
-            .add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
-        self.current_contour()
-            .add_point(cx1 as f64, cy1 as f64, PointType::OffCurve, false);
-        self.current_contour()
-            .add_point(x as f64, y as f64, PointType::OnCurve, false);
+        let control_0_id = self.next_point_id();
+        let control_1_id = self.next_point_id();
+        let endpoint_id = self.next_point_id();
+        let contour = self.current_contour();
+        contour.add_point_with_id(
+            control_0_id,
+            cx0 as f64,
+            cy0 as f64,
+            PointType::OffCurve,
+            false,
+        );
+        contour.add_point_with_id(
+            control_1_id,
+            cx1 as f64,
+            cy1 as f64,
+            PointType::OffCurve,
+            false,
+        );
+        contour.add_point_with_id(endpoint_id, x as f64, y as f64, PointType::OnCurve, false);
     }
 
     /// Closes the current contour. skrifa ends contours whose final segment
@@ -91,7 +141,11 @@ impl OutlinePen for ShiftPen {
                 let first = contour.first_point().expect("contour is non-empty");
                 let last = contour.last_point().expect("contour is non-empty");
                 if last.is_on_curve() && last.x() == first.x() && last.y() == first.y() {
+                    let closes_quadratic = last.point_type() == PointType::QCurve;
                     contour.points_mut().pop();
+                    if closes_quadratic {
+                        contour.points_mut()[0].set_point_type(PointType::QCurve);
+                    }
                 }
             }
             contour.close();
@@ -148,13 +202,7 @@ fn detect_smooth_points(contours: &mut [Contour]) {
     }
 }
 
-fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
-    let outlines = font.outline_glyphs();
-    let char_map = font.charmap();
-    let hmtx = font
-        .hmtx()
-        .map_err(|e| FormatBackendError::Binary(format!("failed to read hmtx table: {e}")))?;
-
+fn font_header_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
     let mut ir_font = Font::new();
     let default_source_id = ir_font
@@ -164,7 +212,7 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     ir_font.metrics_mut().units_per_em = metrics.units_per_em as f64;
     let metric_definitions = ir_font.metric_definitions().to_vec();
     let default_source = ir_font
-        .source_mut(default_source_id.clone())
+        .source_mut(default_source_id)
         .expect("new font should contain its default source");
     set_metric_position(
         &metric_definitions,
@@ -199,47 +247,157 @@ fn font_from_skrifa(font: &FontRef<'_>) -> FormatBackendResult<Font> {
     }
 
     load_variation_metadata(font, &mut ir_font)?;
+    Ok(ir_font)
+}
 
-    for (unicode, glyph_id) in char_map.mappings() {
-        let outline = outlines.get(glyph_id).ok_or_else(|| {
-            FormatBackendError::Binary(format!(
-                "missing outline for glyph {glyph_id} (U+{unicode:04X})"
-            ))
+#[derive(Clone)]
+struct BinaryGlyphRecord {
+    raw_id: GlyphId,
+    shift_id: ShiftGlyphId,
+    name: GlyphName,
+    unicodes: Vec<u32>,
+}
+
+pub(crate) struct BinaryGlyphStream {
+    bytes: Arc<[u8]>,
+    source_id: SourceId,
+    glyphs: Vec<BinaryGlyphRecord>,
+    next_glyph: usize,
+}
+
+pub(crate) fn stream_font_file(path: &str) -> FormatBackendResult<(Font, BinaryGlyphStream)> {
+    let bytes: Arc<[u8]> = std::fs::read(path)
+        .map_err(|error| FormatBackendError::Binary(format!("failed to read '{path}': {error}")))?
+        .into();
+    let font = FontRef::new(bytes.as_ref()).map_err(|error| {
+        FormatBackendError::Binary(format!("failed to parse '{path}': {error}"))
+    })?;
+    font.hmtx().map_err(|error| {
+        FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
+    })?;
+    let header = font_header_from_skrifa(&font)?;
+    let source_id = header.default_source_id().ok_or_else(|| {
+        FormatBackendError::Binary("binary font header is missing its default source".into())
+    })?;
+    let glyph_count = font
+        .maxp()
+        .map_err(|error| FormatBackendError::Binary(format!("failed to read maxp table: {error}")))?
+        .num_glyphs() as usize;
+    let mut unicodes = vec![Vec::new(); glyph_count];
+    for (unicode, glyph_id) in font.charmap().mappings() {
+        if let Some(values) = unicodes.get_mut(glyph_id.to_u32() as usize) {
+            values.push(unicode);
+        }
+    }
+    let names = font.glyph_names();
+    let glyphs = unicodes
+        .into_iter()
+        .enumerate()
+        .map(|(index, unicodes)| {
+            let raw_id = GlyphId::new(index as u32);
+            let name = names
+                .get(raw_id)
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("gid{index}"));
+            BinaryGlyphRecord {
+                raw_id,
+                // Compiled fonts carry stable glyph order but no Shift IDs, so
+                // deterministic GID-derived identities make re-import repeatable.
+                shift_id: ShiftGlyphId::from_raw(format!("binary{index}")),
+                name: GlyphName::from(name),
+                unicodes,
+            }
+        })
+        .collect();
+
+    Ok((
+        header,
+        BinaryGlyphStream {
+            bytes,
+            source_id,
+            glyphs,
+            next_glyph: 0,
+        },
+    ))
+}
+
+impl GlyphStream for BinaryGlyphStream {
+    fn directory(&self) -> Vec<GlyphDirectoryEntry> {
+        self.glyphs
+            .iter()
+            .map(|glyph| GlyphDirectoryEntry {
+                glyph_id: glyph.shift_id.clone(),
+                name: glyph.name.clone(),
+            })
+            .collect()
+    }
+
+    fn glyph_count(&self) -> usize {
+        self.glyphs.len()
+    }
+
+    fn next_batch(&mut self, limit: ImportBatchLimit) -> FormatBackendResult<Vec<Glyph>> {
+        if self.next_glyph == self.glyphs.len() {
+            return Ok(Vec::new());
+        }
+
+        let batch_glyphs = limit.max_glyphs().min(limit.max_layers());
+        let end = self
+            .next_glyph
+            .saturating_add(batch_glyphs)
+            .min(self.glyphs.len());
+        let font = FontRef::new(self.bytes.as_ref()).map_err(|error| {
+            FormatBackendError::Binary(format!("failed to reopen resident font: {error}"))
         })?;
+        let hmtx = font.hmtx().map_err(|error| {
+            FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
+        })?;
+        let outlines = font.outline_glyphs();
+        let source_id = &self.source_id;
+        let glyphs = self.glyphs[self.next_glyph..end]
+            .par_iter()
+            .map(|record| glyph_from_skrifa(&hmtx, &outlines, source_id, record))
+            .collect::<FormatBackendResult<Vec<_>>>()?;
+        self.next_glyph = end;
+        Ok(glyphs)
+    }
+}
+
+fn glyph_from_skrifa(
+    hmtx: &Hmtx<'_>,
+    outlines: &OutlineGlyphCollection<'_>,
+    source_id: &SourceId,
+    record: &BinaryGlyphRecord,
+) -> FormatBackendResult<Glyph> {
+    let advance_width = hmtx.advance(record.raw_id).ok_or_else(|| {
+        FormatBackendError::Binary(format!("missing advance width for glyph {}", record.raw_id))
+    })?;
+    let mut layer = GlyphLayer::with_width(
+        LayerId::from_raw(format!("binary{}", record.raw_id.to_u32())),
+        source_id.clone(),
+        advance_width as f64,
+    );
+
+    if let Some(outline) = outlines.get(record.raw_id) {
         let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
-        let mut pen = ShiftPen::default();
-        outline.draw(settings, &mut pen).map_err(|e| {
+        let mut pen = ShiftPen::new(record.raw_id);
+        outline.draw(settings, &mut pen).map_err(|error| {
             FormatBackendError::Binary(format!(
-                "failed to draw outline for glyph {glyph_id} (U+{unicode:04X}): {e}"
+                "failed to draw outline for glyph {}: {error}",
+                record.raw_id
             ))
         })?;
-
-        let advance_width = hmtx.advance(glyph_id).ok_or_else(|| {
-            FormatBackendError::Binary(format!(
-                "missing advance width for glyph {glyph_id} (U+{unicode:04X})"
-            ))
-        })?;
-
-        let glyph_name = char::from_u32(unicode)
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| format!("uni{unicode:04X}"));
-
-        let mut glyph = Glyph::with_unicode(glyph_name, unicode);
-        let mut layer = GlyphLayer::with_width(
-            LayerId::new(),
-            default_source_id.clone(),
-            advance_width as f64,
-        );
         let mut contours = pen.contours();
         detect_smooth_points(&mut contours);
         for contour in contours {
             layer.add_contour(contour);
         }
-        glyph.set_layer(layer);
-        ir_font.insert_glyph(glyph)?;
     }
 
-    Ok(ir_font)
+    let mut glyph = Glyph::with_id(record.shift_id.clone(), record.name.clone());
+    glyph.set_unicodes(record.unicodes.clone());
+    glyph.set_layer(layer);
+    Ok(glyph)
 }
 
 fn load_variation_metadata(font: &FontRef<'_>, ir_font: &mut Font) -> FormatBackendResult<()> {
@@ -324,7 +482,7 @@ fn localized_string(font: &FontRef<'_>, id: StringId) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::Point;
+    use shift_font::CurveSegment;
     use skrifa::outline::pen::PathElement;
     use std::path::PathBuf;
 
@@ -337,35 +495,39 @@ mod tests {
             .join("fixtures/fonts/mutatorsans/MutatorSans.ttf")
     }
 
-    fn quad_at(q0: (f64, f64), q1: (f64, f64), q2: (f64, f64), t: f64) -> (f64, f64) {
-        let u = 1.0 - t;
-        (
-            u * u * q0.0 + 2.0 * u * t * q1.0 + t * t * q2.0,
-            u * u * q0.1 + 2.0 * u * t * q1.1 + t * t * q2.1,
-        )
-    }
-
-    fn cubic_at(
-        p0: (f64, f64),
-        c1: (f64, f64),
-        c2: (f64, f64),
-        p3: (f64, f64),
-        t: f64,
-    ) -> (f64, f64) {
-        let u = 1.0 - t;
-        (
-            u * u * u * p0.0 + 3.0 * u * u * t * c1.0 + 3.0 * u * t * t * c2.0 + t * t * t * p3.0,
-            u * u * u * p0.1 + 3.0 * u * u * t * c1.1 + 3.0 * u * t * t * c2.1 + t * t * t * p3.1,
-        )
-    }
-
     fn point_types(contour: &Contour) -> Vec<PointType> {
         contour.points().iter().map(|p| p.point_type()).collect()
     }
 
+    fn deterministic_pen_contours() -> Vec<Contour> {
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
+        pen.move_to(0.0, 0.0);
+        pen.line_to(100.0, 0.0);
+        pen.quad_to(100.0, 100.0, 0.0, 0.0);
+        pen.close();
+        pen.move_to(10.0, 20.0);
+        pen.contours()
+    }
+
     #[test]
-    fn quad_lifted_to_geometrically_identical_cubic() {
-        let mut pen = ShiftPen::default();
+    fn binary_pen_mints_deterministic_positional_ids() {
+        let contours = deterministic_pen_contours();
+        assert_eq!(contours, deterministic_pen_contours());
+        assert_eq!(contours[0].id().as_str(), "contour_b2a_0");
+        assert_eq!(contours[1].id().as_str(), "contour_b2a_1");
+        assert_eq!(contours[0].points()[0].id().as_str(), "point_b2a_0");
+        assert_eq!(contours[0].points()[1].id().as_str(), "point_b2a_1");
+        assert_eq!(contours[0].points()[2].id().as_str(), "point_b2a_2");
+        assert_eq!(
+            contours[1].points()[0].id().as_str(),
+            "point_b2a_4",
+            "the removed closing endpoint keeps its consumed positional index"
+        );
+    }
+
+    #[test]
+    fn quad_preserves_control_and_endpoint() {
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(10.0, 20.0);
         pen.quad_to(50.0, 90.0, 100.0, 20.0);
 
@@ -373,33 +535,15 @@ mod tests {
         let points = contours[0].points();
         assert_eq!(
             point_types(&contours[0]),
-            vec![
-                PointType::OnCurve,
-                PointType::OffCurve,
-                PointType::OffCurve,
-                PointType::OnCurve
-            ]
+            vec![PointType::OnCurve, PointType::OffCurve, PointType::QCurve]
         );
-
-        let q0 = (10.0, 20.0);
-        let q1 = (50.0, 90.0);
-        let q2 = (100.0, 20.0);
-        let c1 = (points[1].x(), points[1].y());
-        let c2 = (points[2].x(), points[2].y());
-        for step in 0..=20 {
-            let t = step as f64 / 20.0;
-            let expected = quad_at(q0, q1, q2, t);
-            let actual = cubic_at(q0, c1, c2, q2, t);
-            assert!(
-                (expected.0 - actual.0).abs() < 1e-9 && (expected.1 - actual.1).abs() < 1e-9,
-                "lifted cubic diverges from quad at t={t}: {expected:?} vs {actual:?}"
-            );
-        }
+        assert_eq!((points[1].x(), points[1].y()), (50.0, 90.0));
+        assert_eq!((points[2].x(), points[2].y()), (100.0, 20.0));
     }
 
     #[test]
     fn close_drops_duplicate_start_point_from_closing_curve() {
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(0.0, 0.0);
         pen.line_to(100.0, 0.0);
         pen.quad_to(100.0, 100.0, 0.0, 0.0);
@@ -410,19 +554,14 @@ mod tests {
         assert!(contour.is_closed());
         assert_eq!(
             point_types(contour),
-            vec![
-                PointType::OnCurve,
-                PointType::OnCurve,
-                PointType::OffCurve,
-                PointType::OffCurve
-            ],
-            "closing curve's explicit end point should be dropped; the closed contour wraps to the start"
+            vec![PointType::QCurve, PointType::OnCurve, PointType::OffCurve],
+            "closing qcurve endpoint should move to the wrapped start point"
         );
     }
 
     #[test]
     fn close_keeps_distinct_last_point() {
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(0.0, 0.0);
         pen.line_to(100.0, 0.0);
         pen.line_to(100.0, 100.0);
@@ -435,7 +574,7 @@ mod tests {
 
     #[test]
     fn line_after_quad_composes() {
-        let mut pen = ShiftPen::default();
+        let mut pen = ShiftPen::new(GlyphId::new(0x2a));
         pen.move_to(0.0, 0.0);
         pen.quad_to(50.0, 100.0, 100.0, 0.0);
         pen.line_to(200.0, 0.0);
@@ -447,15 +586,14 @@ mod tests {
             vec![
                 PointType::OnCurve,
                 PointType::OffCurve,
-                PointType::OffCurve,
-                PointType::OnCurve,
+                PointType::QCurve,
                 PointType::OnCurve
             ]
         );
     }
 
     #[test]
-    fn imported_cubics_match_source_quadratics() {
+    fn imported_quadratics_match_source_segments() {
         let path = mutatorsans_ttf_path();
         let bytes = std::fs::read(&path).expect("MutatorSans.ttf fixture should exist");
         let font_ref = FontRef::new(&bytes).unwrap();
@@ -475,7 +613,7 @@ mod tests {
             )
             .unwrap();
 
-        let font = font_from_skrifa(&font_ref).unwrap();
+        let font = read_font_file(path.to_str().unwrap()).unwrap();
         let glyph = font
             .glyphs_by_unicode('O' as u32)
             .next()
@@ -486,21 +624,18 @@ mod tests {
             .next()
             .expect("glyph should have a layer");
 
-        let mut cubic_segments: Vec<[(f64, f64); 4]> = Vec::new();
-        for contour in layer.contours_iter() {
-            let points: Vec<&Point> = contour.points().iter().collect();
-            let len = points.len();
-            for i in 0..len {
-                let window: Vec<&Point> = (0..4).map(|offset| points[(i + offset) % len]).collect();
-                if window[0].is_on_curve()
-                    && window[1].point_type() == PointType::OffCurve
-                    && window[2].point_type() == PointType::OffCurve
-                    && window[3].is_on_curve()
-                {
-                    cubic_segments.push([0, 1, 2, 3].map(|p| (window[p].x(), window[p].y())));
-                }
-            }
-        }
+        let quadratics = layer
+            .contours_iter()
+            .flat_map(|contour| contour.segments())
+            .filter_map(|segment| match segment {
+                CurveSegment::Quad(start, control, end) => Some([
+                    (start.x(), start.y()),
+                    (control.x(), control.y()),
+                    (end.x(), end.y()),
+                ]),
+                CurveSegment::Line(..) | CurveSegment::Cubic(..) => None,
+            })
+            .collect::<Vec<_>>();
 
         let mut current = (0.0, 0.0);
         let mut quads_checked = 0;
@@ -510,27 +645,13 @@ mod tests {
                     current = (x as f64, y as f64);
                 }
                 PathElement::QuadTo { cx0, cy0, x, y } => {
-                    let q0 = current;
-                    let q1 = (cx0 as f64, cy0 as f64);
-                    let q2 = (x as f64, y as f64);
-                    let segment = cubic_segments
-                        .iter()
-                        .find(|[p0, _, _, p3]| *p0 == q0 && *p3 == q2)
-                        .unwrap_or_else(|| {
-                            panic!("no imported cubic segment from {q0:?} to {q2:?}")
-                        });
-                    for step in 1..8 {
-                        let t = step as f64 / 8.0;
-                        let expected = quad_at(q0, q1, q2, t);
-                        let actual = cubic_at(segment[0], segment[1], segment[2], segment[3], t);
-                        assert!(
-                            (expected.0 - actual.0).abs() < 1e-9
-                                && (expected.1 - actual.1).abs() < 1e-9,
-                            "imported cubic diverges from source quad at t={t}"
-                        );
-                    }
+                    let expected = [current, (cx0 as f64, cy0 as f64), (x as f64, y as f64)];
+                    assert!(
+                        quadratics.contains(&expected),
+                        "missing imported quadratic {expected:?}"
+                    );
                     quads_checked += 1;
-                    current = q2;
+                    current = expected[2];
                 }
                 PathElement::CurveTo { x, y, .. } => {
                     current = (x as f64, y as f64);

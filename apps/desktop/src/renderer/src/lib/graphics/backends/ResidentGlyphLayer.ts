@@ -6,10 +6,11 @@ import { SlugRenderer } from "@/lib/slug/SlugRenderer";
 
 const COPY_ALIGNMENT = 256;
 const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
-const PREFERRED_PAGE_BYTES = 64 * 1024 * 1024;
+const PREFERRED_ATLAS_BYTES = 256 * 1024 * 1024;
+const PREFERRED_PATCH_BYTES = 64 * 1024 * 1024;
 const REQUIRED_STORAGE_BUFFERS = 8;
 
-/** Generic paged glyph-preview surface backed by the current Slug implementation. */
+/** Complete resident glyph-preview surface with incremental edit patches. */
 export class ResidentGlyphLayer {
   readonly #renderer: SlugRenderer;
   readonly #device: GPUDevice;
@@ -39,9 +40,19 @@ export class ResidentGlyphLayer {
   ): Promise<ResidentGlyphLayer> {
     if (!navigator.gpu) throw new Error("WebGPU is unavailable");
 
+    let preparedGeneration: number | null = null;
     let device: GPUDevice | null = null;
     let context: GPUCanvasContext | null = null;
+    let atlas: SlugAtlas | null = null;
     let renderer: SlugRenderer | null = null;
+
+    async function discardPrepared(): Promise<void> {
+      if (preparedGeneration === null) return;
+
+      const generation = preparedGeneration;
+      preparedGeneration = null;
+      await edits.discardSlugAtlas(generation);
+    }
 
     try {
       const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
@@ -53,8 +64,34 @@ export class ResidentGlyphLayer {
         );
       }
 
+      const alignment = Math.max(COPY_ALIGNMENT, adapter.limits.minStorageBufferOffsetAlignment);
+      const descriptor = await edits.prepareSlugAtlas(alignment);
+      preparedGeneration = descriptor.generation;
+      throwIfAborted(signal);
+
+      const adapterMaximumBindingSize = Math.min(
+        adapter.limits.maxBufferSize,
+        adapter.limits.maxStorageBufferBindingSize,
+      );
+      const [, firstLength, secondLength] = SlugAtlas.bindingLengths(
+        descriptor.layout.totalLength,
+        adapterMaximumBindingSize,
+      );
+      const largestResidentBuffer = Math.max(firstLength, secondLength);
+      if (descriptor.layout.totalLength > PREFERRED_ATLAS_BYTES) {
+        console.warn("resident glyph atlas exceeds preferred size", {
+          bytes: descriptor.layout.totalLength,
+          preferredBytes: PREFERRED_ATLAS_BYTES,
+          adapterMaximumBytes: adapterMaximumBindingSize * 2,
+        });
+      }
+
       device = await adapter.requestDevice({
-        requiredLimits: { maxStorageBuffersPerShaderStage: REQUIRED_STORAGE_BUFFERS },
+        requiredLimits: {
+          maxBufferSize: largestResidentBuffer,
+          maxStorageBufferBindingSize: largestResidentBuffer,
+          maxStorageBuffersPerShaderStage: REQUIRED_STORAGE_BUFFERS,
+        },
       });
       throwIfAborted(signal);
 
@@ -63,11 +100,33 @@ export class ResidentGlyphLayer {
       const format = navigator.gpu.getPreferredCanvasFormat();
       context.configure({ device, format, alphaMode: "premultiplied" });
       renderer = new SlugRenderer(device, context, format, onDeviceLost);
-      const alignment = Math.max(COPY_ALIGNMENT, device.limits.minStorageBufferOffsetAlignment);
       const maximumBindingSize = Math.min(
         device.limits.maxBufferSize,
         device.limits.maxStorageBufferBindingSize,
       );
+      atlas = SlugAtlas.create(descriptor, device, maximumBindingSize);
+      const activeAtlas = atlas;
+      const uploadDevice = device;
+      const totalLength = await edits.streamSlugAtlas(
+        descriptor.generation,
+        UPLOAD_CHUNK_BYTES,
+        (offset, bytes) => {
+          throwIfAborted(signal);
+          activeAtlas.write(uploadDevice.queue, offset, bytes);
+        },
+      );
+      preparedGeneration = null;
+      throwIfAborted(signal);
+      if (totalLength !== descriptor.layout.totalLength) {
+        throw new Error(
+          `resident glyph stream wrote ${totalLength} bytes; expected ${descriptor.layout.totalLength}`,
+        );
+      }
+
+      const loadedAtlas = atlas;
+      atlas = null;
+      renderer.loadPage(loadedAtlas);
+      throwIfAborted(signal);
 
       const layer = new ResidentGlyphLayer(renderer, device, edits, alignment, maximumBindingSize);
       renderer = null;
@@ -76,34 +135,37 @@ export class ResidentGlyphLayer {
       return layer;
     } catch (error) {
       renderer?.destroy();
+      if (renderer) {
+        context = null;
+        device = null;
+      }
+      atlas?.destroy();
       context?.unconfigure();
       device?.destroy();
+      try {
+        await discardPrepared();
+      } catch (discardError) {
+        console.error("failed to release rejected resident glyph atlas", discardError);
+      }
       throw error;
     }
   }
 
-  async loadPage(glyphIds: readonly GlyphId[], signal: AbortSignal): Promise<void> {
+  async loadPatch(glyphIds: readonly GlyphId[], signal: AbortSignal): Promise<void> {
     if (glyphIds.length === 0) return;
 
     let preparedGeneration: number | null = null;
     let atlas: SlugAtlas | null = null;
-
-    async function discardPrepared(
-      edits: WorkspaceEditCoordinator,
-      generation: number,
-    ): Promise<void> {
-      await edits.discardSlugAtlasPage(generation);
-    }
 
     try {
       const descriptor = await this.#edits.prepareSlugAtlasPage(glyphIds, this.#alignment);
       preparedGeneration = descriptor.generation;
       throwIfAborted(signal);
 
-      if (descriptor.layout.totalLength > PREFERRED_PAGE_BYTES) {
-        console.warn("resident glyph atlas page exceeds preferred size", {
+      if (descriptor.layout.totalLength > PREFERRED_PATCH_BYTES) {
+        console.warn("resident glyph atlas patch exceeds preferred size", {
           bytes: descriptor.layout.totalLength,
-          preferredBytes: PREFERRED_PAGE_BYTES,
+          preferredBytes: PREFERRED_PATCH_BYTES,
         });
       }
 
@@ -121,7 +183,7 @@ export class ResidentGlyphLayer {
       throwIfAborted(signal);
       if (totalLength !== descriptor.layout.totalLength) {
         throw new Error(
-          `resident glyph page stream wrote ${totalLength} bytes; expected ${descriptor.layout.totalLength}`,
+          `resident glyph patch stream wrote ${totalLength} bytes; expected ${descriptor.layout.totalLength}`,
         );
       }
 
@@ -132,9 +194,9 @@ export class ResidentGlyphLayer {
       atlas?.destroy();
       if (preparedGeneration !== null) {
         try {
-          await discardPrepared(this.#edits, preparedGeneration);
+          await this.#edits.discardSlugAtlasPage(preparedGeneration);
         } catch (discardError) {
-          console.error("failed to release rejected resident glyph atlas page", discardError);
+          console.error("failed to release rejected resident glyph atlas patch", discardError);
         }
       }
       throw error;

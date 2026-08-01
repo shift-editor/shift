@@ -4,11 +4,11 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 ## Architecture Invariants
 
-**Architecture Invariant:** All backends convert to/from `Font` (the shift-font representation), never exposing format-specific types (norad, glyphs-reader) to callers. WHY: The rest of the editor operates on a single IR; leaking format types would couple the editor to specific file formats.
+**Architecture Invariant:** All backends convert to/from `shift-font` values, never exposing format-specific types (norad, glyphs-reader) to callers. Eager readers return `Font`; bounded foreign imports return a glyph-free `Font` header plus batches of owned `Glyph` values. WHY: The rest of the editor operates on one authored model while large imports avoid constructing the complete model at once.
 
 **Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
 
-**Architecture Invariant:** Backends are stateless unit structs (no fields). WHY: They are pure converters with no caching or mutable state, making them trivially thread-safe and cheap to construct.
+**Architecture Invariant:** Eager reader/writer backends are stateless unit structs. A `FontImport` owns only the foreign bytes or GLIF directory records and its current cursor. WHY: ordinary conversion stays pure, while bounded imports retain only the state needed to produce the next batch.
 
 **Architecture Invariant:** `UfoWriter` stages a complete UFO beside the destination and swaps it into place only after the staged tree is durable. WHY: a failed save must preserve the previous source rather than leave a partial directory.
 
@@ -20,23 +20,35 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** TrueType export compiles an owned snapshot of the Shift `Font` IR directly through fontir/fontc. It must not serialize a temporary UFO or fall back to another authoring format. WHY: `.shift` is the canonical authoring source, and an intermediate format would discard or reinterpret Shift concepts before compilation.
 
-**Architecture Invariant:** Designspace source locations are imported as complete design-space locations. An omitted source dimension resolves to that axis's user-space default mapped into design space; default-source selection compares against that same completed mapped location and never silently substitutes the first source. A `layer` attribute only selects where a source's outlines live and does not make it ineligible to be the default. WHY: these are the reference designspaceLib semantics, and mixing user defaults with design coordinates corrupts interpolation bases.
+**Architecture Invariant:** TTF/OTF, UFO, and Designspace streaming imports parse glyphs in bounded Rayon batches and preserve input order when publishing each batch. Eager readers drain those same canonical streams rather than maintaining a second parser. UFO and Designspace share `GlifGlyphStream`; only source discovery differs. SQLite remains outside this crate and is written by one workspace-owned sink. WHY: one conversion path prevents eager/streaming semantic drift, while concurrent SQLite authors would add contention and weaken transaction ownership.
+
+**Architecture Invariant:** Compiled-font streaming enumerates `maxp` glyph IDs, not only `cmap` mappings. Unencoded glyphs receive their `post`/CFF name or a synthesized `gidN` name, and all Unicode mappings for a glyph share one authored glyph identity. WHY: `cmap` is character lookup, not the complete glyph directory.
+
+**Architecture Invariant:** Compiled-font contour and point identities are deterministic positions within one glyph's emitted outline: `contour_b{glyph-id-hex}_{contour-index-hex}` and `point_b{glyph-id-hex}_{point-index-hex}`. Counters are monotonic from zero; dropping an explicit closing endpoint does not reuse its consumed point index. WHY: compiled fonts have stable glyph/outline order but no Shift identities, and random IDs make equivalent re-imports differ while injecting incompressible entropy into canonical payloads.
+
+**Architecture Invariant:** TrueType quadratic segments remain one `OffCurve` control plus one `QCurve` endpoint in the authored layer. Closing qcurve endpoints transfer their type to the wrapped start point. CFF cubic segments remain cubic. The bridge may project a qcurve endpoint as on-curve because clients infer the quadratic from its single control; canonical storage and source export retain the distinction. WHY: lifting every TrueType quadratic to cubic adds a point and derived coordinates to every segment, inflating canonical documents without adding information.
+
+**Architecture Invariant:** Designspace source locations are imported as complete design-space locations. An omitted source dimension resolves to that axis's user-space default mapped into design space; default-source selection compares against that same completed mapped location and never silently substitutes the first source. A `layer` attribute only selects where a source's outlines live and does not make it ineligible to be the default. Each source's standard metrics are translated from that UFO's metric identities into the Designspace header definitions. WHY: mixing user defaults with design coordinates corrupts interpolation bases, while looking up one UFO's metrics with another UFO's random IDs silently drops non-default master metrics.
 
 ## Codemap
 
 ```
 src/
-  lib.rs           -- re-exports FontReader, FontWriter, FontBackend, and sub-modules
+  lib.rs           -- re-exports FontReader, FontWriter, FontBackend, FontImport, and sub-modules
+  import.rs        -- glyph-free foreign header, bounded cursor, and shared GLIF stream
   traits.rs        -- FontReader, FontWriter, FontBackend trait definitions
   ufo/
     mod.rs         -- UfoBackend convenience struct combining reader+writer; round-trip tests
-    reader.rs      -- UfoReader: norad::Font -> shift_font::Font
+    import.rs      -- UFO source discovery configured into the shared GLIF stream
+    reader.rs      -- UfoReader eagerly drains the canonical UFO stream
     writer.rs      -- UfoWriter: shift_font::Font -> atomically written norad::Font
   glyphs/
     mod.rs         -- GlyphsReader re-export; fixture-based integration tests
     reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_font::Font (read-only)
+  designspace/
+    import.rs      -- Designspace source discovery configured into the shared GLIF stream
   binary/
-    reader.rs      -- TTF/OTF outlines, metrics, names, and fvar metadata -> shift_font::Font
+    reader.rs      -- maxp-complete TTF/OTF stream plus eager stream draining
   shift2fontir/
     source.rs      -- owned Shift FontView snapshot and fontir Source implementation
     axes.rs         -- Shift axis/mapping conversion and source normalization
@@ -49,6 +61,9 @@ src/
 
 ## Key Types
 
+- `FontImport` -- top-level authored header, an immediately publishable stable-ID/name directory, and layer-aware `next_batch(limit)`, with no glyphs stored in the header
+- `GlyphDirectoryEntry` -- cheap foreign glyph ID and name used before geometry batches are parsed
+- `ImportBatchLimit` -- simultaneous glyph and authored-layer limits; multi-source projects cannot turn a glyph-count bound into an unbounded layer batch
 - `FontReader` -- trait with `load(&self, path) -> Result<Font, String>` plus default methods for extracting glyphs, kerning, features from a loaded `Font`
 - `FontWriter` -- trait with `save(&self, font, path) -> Result<(), String>`
 - `FontBackend` -- auto-implemented marker trait for types implementing both `FontReader` + `FontWriter`
@@ -61,13 +76,13 @@ src/
 
 ## How it works
 
-**Loading a font:** `FontLoader` (in shift-core) dispatches by file extension to the appropriate backend. The backend reads the file using a format-specific library (`norad` for UFO, `glyphs-reader` for Glyphs), then walks the parsed data to build a `Font`. This involves converting point types, contours, components, anchors, guidelines, kerning groups/pairs, OpenType features, and lib data into their IR equivalents.
+**Loading a font:** `FontLoader::read_font` retains the eager API but the TTF/OTF, UFO, and Designspace readers implement it by draining their bounded streams. `FontLoader::stream_font` dispatches those sources to the same importers. It first returns complete top-level metadata and a cheap glyph/source directory, then materializes at most the requested batch of `Glyph` values. UFO and Designspace both feed shared GLIF work records into `GlifGlyphStream`; Designspace only adds stable multi-source discovery. Rayon converts geometry records in parallel; indexed collection preserves glyph order. The workspace writes and releases each batch before requesting another.
 
 **Point type mapping (read):** norad uses separate `Move`, `Line`, `Curve`, `OffCurve`, `QCurve` types. The IR collapses `Move`/`Line`/`Curve` into `OnCurve` and keeps `OffCurve` and `QCurve` distinct. On write, context (position in contour, open/closed, preceding point type) is used to reconstruct the correct norad variant.
 
-**Multi-layer support:** `UfoReader` iterates all norad layers. The `public.default` layer maps to the IR's default layer; other layers are added via `Font::add_layer`. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
+**Multi-layer support:** `UfoReader` publishes `public.default` first, then preserves the relative authored order of every other entry in `layercontents.plist`. The default layer maps to the IR's default layer; other layers are represented by layer sources. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
 
-**Binary variation metadata:** The TTF/OTF reader imports `fvar` axis definitions, hidden flags, and named instances into the Shift IR. Binary glyph geometry is still materialized only at the default variation location; recovering editable `gvar` sources is separate work.
+**Binary variation metadata:** The TTF/OTF reader imports `fvar` axis definitions, hidden flags, and named instances into the Shift IR. The bounded path enumerates every `maxp` glyph ID, groups all `cmap` values by glyph, deterministically derives contour/point identities from emitted positions, and preserves TrueType quadratics instead of expanding them to cubic control pairs. Binary glyph geometry is still materialized only at the default variation location; recovering editable `gvar` sources is separate work.
 
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
 
