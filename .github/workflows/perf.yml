@@ -204,11 +204,8 @@ jobs:
           path: crates/shift-bridge/*.node
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
-      - name: Build E2E app
-        run: pnpm --filter @shift/desktop build:e2e
-
       - name: Run Playwright perf tests
-        run: pnpm --filter @shift/desktop exec playwright test --project=perf
+        run: pnpm test:e2e:perf
 
       - name: Upload Playwright failures
         if: failure()

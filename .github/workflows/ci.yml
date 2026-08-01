@@ -370,16 +370,8 @@ jobs:
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native
 
-      - name: Build E2E app
-        run: pnpm --filter @shift/desktop build:e2e
-
-      - name: Run visual E2E tests
-        if: matrix.project == 'visual'
-        run: pnpm --filter @shift/desktop exec playwright test --project=visual
-
-      - name: Run GPU E2E tests
-        if: matrix.project == 'gpu'
-        run: pnpm --filter @shift/desktop exec playwright test --project=gpu
+      - name: Run E2E tests
+        run: pnpm test:e2e:${{ matrix.project }}
 
       - name: Upload Playwright failures
         if: failure()

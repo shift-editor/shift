@@ -120,7 +120,7 @@ Set a breakpoint or add logging in `MarkerLayer.draw`. Check `isAvailable()` ret
 
 ## Verification
 
-- Run `pnpm --filter @shift/desktop test:e2e -- --project=gpu e2e/gpu.spec.ts` after changing catalog residency. The suite samples the catalog while scrolling down and back up, verifies that the complete atlas never hides or reloads, checks local replacement patches, and requires a complete rebuild after global axis/source invalidation.
+- See [Desktop E2E tests](../../../../../../e2e/README.md) for visual and hardware-GPU verification commands.
 - Run `pnpm test:desktop apps/desktop/src/renderer/src/lib/graphics/ContourPath.test.ts` after changing contour command, transform, SVG, Canvas, or bounds behavior.
 - No dedicated tests exist for `MarkerLayer`. Verify GPU markers visually: open a glyph with mixed point types (corner, smooth, off-curve), hover and select points, confirm correct shapes and state colors.
 - Check CPU fallback: in `MarkerLayer.#initialize`, temporarily throw before `this.#available = true`. Handles should still render via Canvas 2D.

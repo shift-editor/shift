@@ -153,8 +153,13 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await page.mouse.move(750, 250, { steps: 5 });
     await page.mouse.up();
 
-    // Segment 3: another straight.
-    await canvas.click({ position: { x: 850, y: 500 } });
+    // Segment 3: another straight, kept inside the measured canvas bounds.
+    const canvasBounds = await canvas.boundingBox();
+    if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
+
+    await canvas.click({
+      position: { x: Math.round(canvasBounds.width * 0.9), y: 500 },
+    });
     await page.waitForTimeout(300);
 
     const canvasUtil = new CanvasUtil(page);

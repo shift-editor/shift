@@ -30,6 +30,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `apps/desktop/src/main/**`          | [`apps/desktop/src/main/docs/DOCS.md`](../../apps/desktop/src/main/docs/DOCS.md)                   | Electron main process: lifecycle, windows, menus, document state |
 | `apps/desktop/src/preload/**`       | [`apps/desktop/src/preload/docs/DOCS.md`](../../apps/desktop/src/preload/docs/DOCS.md)             | Preload script bridging native Rust FontEngine to renderer       |
 | `apps/desktop/src/shared/bridge/**` | [`apps/desktop/src/shared/bridge/docs/DOCS.md`](../../apps/desktop/src/shared/bridge/docs/DOCS.md) | Type-safe preload bridge system (FontEngineAPI contract)         |
+| `apps/desktop/e2e/**`               | [`apps/desktop/e2e/README.md`](../../apps/desktop/e2e/README.md)                                 | Playwright visual, GPU correctness, and performance suites       |
 
 ### Desktop app — Renderer
 
