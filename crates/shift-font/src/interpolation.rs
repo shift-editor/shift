@@ -2,6 +2,7 @@
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
@@ -156,8 +157,8 @@ impl GlyphInterpolationSource {
 /// Reusable interpolation for one glyph's compatible authored source layers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlyphInterpolation {
-    reference_layer: GlyphLayer,
-    basis: InterpolationBasis,
+    reference_layer: Arc<GlyphLayer>,
+    basis: Arc<InterpolationBasis>,
     sources: Vec<GlyphInterpolationSource>,
 }
 
@@ -189,7 +190,7 @@ impl GlyphInterpolation {
     /// support axis, or a glyph-value shape error if the interpolation model
     /// and its structural reference layer are inconsistent.
     pub fn resolve(&self, location: &Location, axes: &[Axis]) -> CoreResult<GlyphLayer> {
-        let mut layer = self.reference_layer.clone();
+        let mut layer = self.reference_layer.as_ref().clone();
         let values = self.values_at(location, axes)?;
         layer.apply_interpolation_values(&values)?;
         Ok(layer)
@@ -238,6 +239,14 @@ impl Font {
         &self,
         glyph_id: &GlyphId,
     ) -> CoreResult<Option<GlyphInterpolation>> {
+        self.glyph_interpolation_with_bases(glyph_id, &mut HashMap::new())
+    }
+
+    pub(crate) fn glyph_interpolation_with_bases(
+        &self,
+        glyph_id: &GlyphId,
+        bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
+    ) -> CoreResult<Option<GlyphInterpolation>> {
         let glyph = self
             .glyph(glyph_id.clone())
             .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
@@ -269,14 +278,25 @@ impl Font {
             ));
         }
 
-        let Some(basis) = InterpolationBasis::from_source_locations(
-            &compatible_sources
-                .iter()
-                .map(|(source_id, location, _)| (source_id.clone(), location.clone()))
-                .collect::<Vec<_>>(),
-            self.axes(),
-        ) else {
-            return Ok(None);
+        let source_locations = compatible_sources
+            .iter()
+            .map(|(source_id, location, _)| (source_id.clone(), location.clone()))
+            .collect::<Vec<_>>();
+        let basis_key = source_locations
+            .iter()
+            .map(|(source_id, _)| source_id.clone())
+            .collect::<Vec<_>>();
+        let basis = if let Some(basis) = bases.get(&basis_key) {
+            basis.clone()
+        } else {
+            let Some(basis) =
+                InterpolationBasis::from_source_locations(&source_locations, self.axes())
+            else {
+                return Ok(None);
+            };
+            let basis = Arc::new(basis);
+            bases.insert(basis_key, basis.clone());
+            basis
         };
         let sources = compatible_sources
             .into_iter()
@@ -284,17 +304,14 @@ impl Font {
             .collect();
 
         Ok(Some(GlyphInterpolation {
-            reference_layer: reference_layer.clone(),
+            reference_layer,
             basis,
             sources,
         }))
     }
 }
 
-fn interpolation_reference_layer<'a>(
-    font: &Font,
-    glyph: &'a crate::Glyph,
-) -> Option<&'a GlyphLayer> {
+fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(default_source_id) = font.default_source_id() {
         let default_is_master = font
             .sources()
@@ -302,18 +319,28 @@ fn interpolation_reference_layer<'a>(
             .find(|source| source.id() == default_source_id)
             .is_some_and(crate::Source::is_master);
         if default_is_master {
-            if let Some(layer) = glyph.layer_for_source(default_source_id) {
-                return Some(layer);
+            if let Some(layer) = glyph
+                .layers()
+                .values()
+                .find(|layer| layer.source_id() == default_source_id)
+            {
+                return Some(layer.clone());
             }
         }
     }
 
-    font.sources()
-        .iter()
-        .filter(|source| source.is_master())
-        .filter_map(|source| glyph.layer_for_source(source.id()))
+    glyph
+        .layers()
+        .values()
+        .filter(|layer| {
+            font.sources()
+                .iter()
+                .find(|source| source.id() == layer.source_id())
+                .is_some_and(crate::Source::is_master)
+        })
+        .cloned()
         .reduce(|preferred, candidate| {
-            if layer_complexity(candidate) > layer_complexity(preferred) {
+            if layer_complexity(&candidate) > layer_complexity(&preferred) {
                 candidate
             } else {
                 preferred

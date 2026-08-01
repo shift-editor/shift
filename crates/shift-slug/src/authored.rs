@@ -9,16 +9,29 @@ use std::{collections::HashMap, error::Error, fmt};
 
 use shift_font::{
     composite::ResolvedContour, ContourId, CoreError, CurveSegment, CurveSegmentIter, Font,
-    GlyphLayer, GlyphProjection, Point as FontPoint, PointId, PointType, SourceId,
+    GlyphLayer, GlyphProjection, GlyphProjectionSet, Point as FontPoint, PointId, PointType,
+    SourceId,
 };
 
-use crate::{Curve, Point, SlugError, VariableAtlasBuilder};
+use crate::{AuthoredAtlasProfile, Curve, Point, SlugError, VariableAtlasBuilder};
 
 mod component;
 pub use component::{add_authored_glyph_with_weight_sets, AuthoredWeightSet};
 
 pub(crate) type AuthoredDefaultKey = (shift_font::GlyphId, Vec<u32>, u32);
 pub(crate) type AuthoredDefaultGlyphs = HashMap<AuthoredDefaultKey, u32>;
+
+/// Borrowed inputs for compiling one authored root glyph.
+///
+/// The compilation mutates only phase timings. It owns no cache and is dropped
+/// after the root; resolved source glyphs remain in a separate root-local map.
+pub(super) struct AuthoredGlyphCompilation<'a, 'profile> {
+    font: &'a Font,
+    projection_set: &'a GlyphProjectionSet,
+    weight_sets: &'a [AuthoredWeightSet],
+    constant_weight_index: u32,
+    profile: &'profile mut AuthoredAtlasProfile,
+}
 
 /// Product semantics that the first authored contour adapter cannot yet encode.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -105,16 +118,62 @@ impl AuthoredAtlasBuilder {
         weight_sets: &[AuthoredWeightSet],
         constant_weight_index: u32,
     ) -> Result<AuthoredGlyph, AuthoredSlugError> {
+        let glyph_id = projection.glyph_id();
+        let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
+        let projection = projection_set
+            .projection(&glyph_id)
+            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        self.add_glyph_from_projection_set(
+            font,
+            &projection_set,
+            projection,
+            weight_sets,
+            constant_weight_index,
+        )
+    }
+
+    pub(crate) fn add_glyph_from_projection_set(
+        &mut self,
+        font: &Font,
+        projection_set: &GlyphProjectionSet,
+        projection: &GlyphProjection,
+        weight_sets: &[AuthoredWeightSet],
+        constant_weight_index: u32,
+    ) -> Result<AuthoredGlyph, AuthoredSlugError> {
+        self.add_glyph_from_projection_set_profiled(
+            font,
+            projection_set,
+            projection,
+            weight_sets,
+            constant_weight_index,
+            &mut AuthoredAtlasProfile::default(),
+        )
+    }
+
+    pub(crate) fn add_glyph_from_projection_set_profiled(
+        &mut self,
+        font: &Font,
+        projection_set: &GlyphProjectionSet,
+        projection: &GlyphProjection,
+        weight_sets: &[AuthoredWeightSet],
+        constant_weight_index: u32,
+        profile: &mut AuthoredAtlasProfile,
+    ) -> Result<AuthoredGlyph, AuthoredSlugError> {
         let checkpoint = self.builder.checkpoint();
         let mut inserted_defaults = Vec::new();
+        let mut compilation = AuthoredGlyphCompilation {
+            font,
+            projection_set,
+            weight_sets,
+            constant_weight_index,
+            profile,
+        };
         match component::add_authored_glyph_with_weight_sets_cached(
             &mut self.builder,
             &mut self.defaults,
             &mut inserted_defaults,
-            font,
+            &mut compilation,
             projection,
-            weight_sets,
-            constant_weight_index,
         ) {
             Ok(glyph) => Ok(glyph),
             Err(error) => {
@@ -730,15 +789,28 @@ pub fn add_authored_component_projection_glyph(
         interpolation.basis().clone(),
         source_weight_indices.to_vec(),
     )?;
+    let glyph_id = projection.glyph_id();
+    let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
+    let projection = projection_set
+        .projection(&glyph_id)
+        .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
     let checkpoint = builder.checkpoint();
+    let weight_sets = [weight_set];
+    let mut profile = AuthoredAtlasProfile::default();
+    let mut compilation = AuthoredGlyphCompilation {
+        font,
+        projection_set: &projection_set,
+        weight_sets: &weight_sets,
+        constant_weight_index: 0,
+        profile: &mut profile,
+    };
     let glyph_index = component::add_default_component_projection_glyph(
         builder,
         &mut AuthoredDefaultGlyphs::new(),
         &mut Vec::new(),
-        font,
+        &mut compilation,
         projection,
-        &[weight_set],
-        0,
+        &mut HashMap::new(),
     )
     .map_err(|error| match error {
         AuthoredSlugError::MissingWeightBasis(_) => AuthoredSlugError::ComponentBasisMismatch,

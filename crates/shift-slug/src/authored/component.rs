@@ -1,20 +1,21 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
+use std::time::Instant;
 
 use shift_font::{
     composite::ComponentAnchorReference, ComponentId, Font, GlyphId, GlyphLayer, GlyphProjection,
-    InterpolationBasis,
+    GlyphProjectionSet, InterpolationBasis, ResolvedGlyph, SourceId,
 };
 
 use crate::variable::ROOT_COMPONENT;
 use crate::{
-    Bounds, VariableAnchorSource, VariableAtlasBuilder, VariableComponent, VariableComponentPart,
-    VariableComponentSource,
+    AuthoredAtlasProfile, Bounds, VariableAnchorSource, VariableAtlasBuilder, VariableComponent,
+    VariableComponentPart, VariableComponentSource,
 };
 
 use super::{
     add_default_projection_glyph, authored_advance, curves_from_resolved_contours, source_location,
-    AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredSlugError,
-    AuthoredSourceGlyph, ResolvedCurveTopology,
+    AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredGlyphCompilation,
+    AuthoredSlugError, AuthoredSourceGlyph, ResolvedCurveTopology,
 };
 
 /// One deduplicated interpolation basis and its per-frame weight-buffer indexes.
@@ -60,17 +61,28 @@ pub fn add_authored_glyph_with_weight_sets(
     weight_sets: &[AuthoredWeightSet],
     constant_weight_index: u32,
 ) -> Result<AuthoredGlyph, AuthoredSlugError> {
+    let glyph_id = projection.glyph_id();
+    let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
+    let projection = projection_set
+        .projection(&glyph_id)
+        .ok_or_else(|| shift_font::CoreError::GlyphNotFound(glyph_id.clone()))?;
     let checkpoint = builder.checkpoint();
     let mut defaults = AuthoredDefaultGlyphs::new();
     let mut inserted_defaults = Vec::new();
+    let mut profile = AuthoredAtlasProfile::default();
+    let mut compilation = AuthoredGlyphCompilation {
+        font,
+        projection_set: &projection_set,
+        weight_sets,
+        constant_weight_index,
+        profile: &mut profile,
+    };
     match add_authored_glyph_with_weight_sets_cached(
         builder,
         &mut defaults,
         &mut inserted_defaults,
-        font,
+        &mut compilation,
         projection,
-        weight_sets,
-        constant_weight_index,
     ) {
         Ok(glyph) => Ok(glyph),
         Err(error) => {
@@ -84,47 +96,49 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
     builder: &mut VariableAtlasBuilder,
     defaults: &mut AuthoredDefaultGlyphs,
     inserted_defaults: &mut Vec<AuthoredDefaultKey>,
-    font: &Font,
+    compilation: &mut AuthoredGlyphCompilation<'_, '_>,
     projection: &GlyphProjection,
-    weight_sets: &[AuthoredWeightSet],
-    constant_weight_index: u32,
 ) -> Result<AuthoredGlyph, AuthoredSlugError> {
+    let mut resolved_sources = HashMap::new();
     let default_glyph = if projection.components().components().is_empty() {
-        let source_weight_indices = projection_weight_indices(projection, weight_sets)?;
+        let source_weight_indices = projection_weight_indices(projection, compilation.weight_sets)?;
         add_default_projection_glyph(
             builder,
             defaults,
             inserted_defaults,
             projection,
             source_weight_indices,
-            constant_weight_index,
+            compilation.constant_weight_index,
         )?
     } else {
         add_default_component_projection_glyph(
             builder,
             defaults,
             inserted_defaults,
-            font,
+            compilation,
             projection,
-            weight_sets,
-            constant_weight_index,
+            &mut resolved_sources,
         )?
     };
 
-    let exact_source_ids = exact_source_ids(font, projection)?;
+    let exact_started = Instant::now();
+    let exact_source_ids =
+        exact_source_ids(compilation.font, compilation.projection_set, projection)?;
     let mut exact_sources = Vec::with_capacity(exact_source_ids.len());
     for source_id in exact_source_ids {
-        let location = source_location(font, &source_id)?;
-        let mut font_projection = font.projection(location);
-        let resolved = font_projection
-            .glyph(&projection.glyph_id())?
-            .ok_or_else(|| shift_font::CoreError::GlyphNotFound(projection.glyph_id()))?;
+        let resolved = resolved_source_glyph(
+            &mut resolved_sources,
+            compilation.font,
+            compilation.projection_set,
+            projection,
+            &source_id,
+        )?;
         let topology = ResolvedCurveTopology::from_contours(resolved.contours());
         let advance = authored_advance(resolved.x_advance(), 0)?;
         let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
             topology.curves_from_contours(resolved.contours())?,
             topology.line_flags(),
-            constant_weight_index,
+            compilation.constant_weight_index,
             [],
         )?;
         builder.set_glyph_source_advances(glyph_index, [advance])?;
@@ -133,6 +147,7 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
             glyph_index,
         });
     }
+    compilation.profile.exact_source_preparation += exact_started.elapsed();
 
     Ok(AuthoredGlyph {
         default_glyph,
@@ -144,12 +159,11 @@ pub(super) fn add_default_component_projection_glyph(
     builder: &mut VariableAtlasBuilder,
     defaults: &mut AuthoredDefaultGlyphs,
     inserted_defaults: &mut Vec<AuthoredDefaultKey>,
-    font: &Font,
+    compilation: &mut AuthoredGlyphCompilation<'_, '_>,
     projection: &GlyphProjection,
-    weight_sets: &[AuthoredWeightSet],
-    constant_weight_index: u32,
+    resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
 ) -> Result<u32, AuthoredSlugError> {
-    let projections = component_projections(font, projection)?;
+    let component_started = Instant::now();
     let mut direct_glyphs = HashMap::<GlyphId, u32>::new();
     for glyph_id in std::iter::once(projection.glyph_id()).chain(
         projection
@@ -161,15 +175,15 @@ pub(super) fn add_default_component_projection_glyph(
         if direct_glyphs.contains_key(&glyph_id) {
             continue;
         }
-        let direct_projection = projection_for(&projections, &glyph_id)?;
-        let weight_indices = projection_weight_indices(direct_projection, weight_sets)?;
+        let direct_projection = projection_for(compilation.projection_set, &glyph_id)?;
+        let weight_indices = projection_weight_indices(direct_projection, compilation.weight_sets)?;
         let glyph_index = add_default_projection_glyph(
             builder,
             defaults,
             inserted_defaults,
             direct_projection,
             weight_indices,
-            constant_weight_index,
+            compilation.constant_weight_index,
         )?;
         direct_glyphs.insert(glyph_id, glyph_index);
     }
@@ -186,12 +200,13 @@ pub(super) fn add_default_component_projection_glyph(
     let mut anchor_sources = Vec::new();
     let mut components = Vec::with_capacity(projection.components().components().len());
     for (component_index, occurrence) in projection.components().components().iter().enumerate() {
-        let parent_projection = projection_for(&projections, &occurrence.parent_glyph_id())?;
+        let parent_projection =
+            projection_for(compilation.projection_set, &occurrence.parent_glyph_id())?;
         let source_start =
             u32::try_from(component_sources.len()).map_err(|_| crate::SlugError::LengthOverflow)?;
         let source_context = AuthoredComponentSourceContext {
-            weight_sets,
-            constant_weight_index,
+            weight_sets: compilation.weight_sets,
+            constant_weight_index: compilation.constant_weight_index,
             component_index,
         };
         append_component_sources(
@@ -221,14 +236,14 @@ pub(super) fn add_default_component_projection_glyph(
         if let Some(attachment) = occurrence.attachment() {
             let source_range = append_anchor_sources(
                 &mut anchor_sources,
-                projection_for(&projections, &attachment.source().glyph_id())?,
+                projection_for(compilation.projection_set, &attachment.source().glyph_id())?,
                 attachment.source(),
                 &source_context,
                 "source anchor",
             )?;
             let target_range = append_anchor_sources(
                 &mut anchor_sources,
-                projection_for(&projections, &attachment.target().glyph_id())?,
+                projection_for(compilation.projection_set, &attachment.target().glyph_id())?,
                 attachment.target(),
                 &source_context,
                 "target anchor",
@@ -268,7 +283,15 @@ pub(super) fn add_default_component_projection_glyph(
         )?;
     }
 
-    let bounds = fallback_bounds(font, projection)?;
+    compilation.profile.component_preparation += component_started.elapsed();
+    let fallback_started = Instant::now();
+    let bounds = fallback_bounds(
+        compilation.font,
+        compilation.projection_set,
+        projection,
+        resolved_sources,
+    )?;
+    compilation.profile.fallback_bounds += fallback_started.elapsed();
     builder
         .add_component_glyph(
             bounds,
@@ -281,26 +304,12 @@ pub(super) fn add_default_component_projection_glyph(
         .map_err(Into::into)
 }
 
-fn component_projections(
-    font: &Font,
-    root: &GlyphProjection,
-) -> Result<HashMap<GlyphId, GlyphProjection>, AuthoredSlugError> {
-    let mut projections = HashMap::from([(root.glyph_id(), root.clone())]);
-    for glyph_id in root.component_glyph_ids() {
-        let projection = font
-            .glyph_projection(glyph_id)?
-            .ok_or_else(|| shift_font::CoreError::GlyphNotFound(glyph_id.clone()))?;
-        projections.insert(glyph_id.clone(), projection);
-    }
-    Ok(projections)
-}
-
 fn projection_for<'a>(
-    projections: &'a HashMap<GlyphId, GlyphProjection>,
+    projection_set: &'a GlyphProjectionSet,
     glyph_id: &GlyphId,
 ) -> Result<&'a GlyphProjection, AuthoredSlugError> {
-    projections
-        .get(glyph_id)
+    projection_set
+        .projection(glyph_id)
         .ok_or_else(|| shift_font::CoreError::GlyphNotFound(glyph_id.clone()).into())
 }
 
@@ -467,12 +476,19 @@ fn append_part(
     Ok(())
 }
 
-fn fallback_bounds(font: &Font, projection: &GlyphProjection) -> Result<Bounds, AuthoredSlugError> {
-    let location = source_location(font, &projection.fallback().source_id())?;
-    let mut font_projection = font.projection(location);
-    let resolved = font_projection
-        .glyph(&projection.glyph_id())?
-        .ok_or_else(|| shift_font::CoreError::GlyphNotFound(projection.glyph_id()))?;
+fn fallback_bounds(
+    font: &Font,
+    projection_set: &GlyphProjectionSet,
+    projection: &GlyphProjection,
+    resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
+) -> Result<Bounds, AuthoredSlugError> {
+    let resolved = resolved_source_glyph(
+        resolved_sources,
+        font,
+        projection_set,
+        projection,
+        &projection.fallback().source_id(),
+    )?;
     let curves = curves_from_resolved_contours(resolved.contours())?;
     let mut curves = curves.into_iter();
     let Some(first) = curves.next() else {
@@ -491,15 +507,23 @@ fn fallback_bounds(font: &Font, projection: &GlyphProjection) -> Result<Bounds, 
 
 fn exact_source_ids(
     font: &Font,
+    projection_set: &GlyphProjectionSet,
     root: &GlyphProjection,
-) -> Result<Vec<shift_font::SourceId>, AuthoredSlugError> {
-    let projections = component_projections(font, root)?;
+) -> Result<Vec<SourceId>, AuthoredSlugError> {
+    let projections = std::iter::once(root)
+        .chain(
+            root.component_glyph_ids()
+                .iter()
+                .map(|glyph_id| projection_for(projection_set, glyph_id))
+                .collect::<Result<Vec<_>, _>>()?,
+        )
+        .collect::<Vec<_>>();
     Ok(font
         .sources()
         .iter()
         .map(shift_font::Source::id)
         .filter(|source_id| {
-            projections.values().any(|projection| {
+            projections.iter().any(|projection| {
                 projection
                     .exact_source_shapes()
                     .iter()
@@ -511,4 +535,28 @@ fn exact_source_ids(
             })
         })
         .collect())
+}
+
+fn resolved_source_glyph<'a>(
+    resolved_sources: &'a mut HashMap<SourceId, ResolvedGlyph>,
+    font: &Font,
+    projection_set: &GlyphProjectionSet,
+    projection: &GlyphProjection,
+    source_id: &SourceId,
+) -> Result<&'a ResolvedGlyph, AuthoredSlugError> {
+    match resolved_sources.entry(source_id.clone()) {
+        Entry::Occupied(entry) => Ok(entry.into_mut()),
+        Entry::Vacant(entry) => {
+            let location = source_location(font, source_id)?;
+            let resolved = projection_set
+                .resolve_glyph(
+                    &projection.glyph_id(),
+                    location,
+                    font.axes(),
+                    font.sources(),
+                )?
+                .ok_or_else(|| shift_font::CoreError::GlyphNotFound(projection.glyph_id()))?;
+            Ok(entry.insert(resolved))
+        }
+    }
 }

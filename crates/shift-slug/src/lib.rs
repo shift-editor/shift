@@ -32,8 +32,9 @@ pub use render::{
     RENDER_PARAMS_BYTES,
 };
 pub use resident::{
-    build_authored_atlas, build_authored_atlas_page, AuthoredAtlas, AuthoredAtlasGlyph,
-    AuthoredAtlasPage,
+    build_authored_atlas, build_authored_atlas_page, build_authored_atlas_page_profiled,
+    build_authored_atlas_profiled, AuthoredAtlas, AuthoredAtlasGlyph, AuthoredAtlasPage,
+    AuthoredAtlasProfile,
 };
 pub use variable::{
     pack_variable_params, PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks,
