@@ -67,7 +67,8 @@ export class WorkspaceHost {
     this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
       "workspace.create": () => this.#serialize(() => this.#create()),
       "workspace.inspectPackage": ({ path }) => this.#serialize(() => this.#inspectPackage(path)),
-      "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
+      "workspace.open": ({ path, packageIdentity }) =>
+        this.#serialize(() => this.#open(path, packageIdentity)),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);
@@ -212,10 +213,14 @@ export class WorkspaceHost {
     };
   }
 
-  #open(sourcePath: string): WorkspaceDocumentState {
+  #open(
+    sourcePath: string,
+    packageIdentity: WorkspacePackageIdentity | undefined,
+  ): WorkspaceDocumentState {
     if (isShiftPackagePath(sourcePath)) {
-      return this.#openPackage(sourcePath);
+      return this.#openPackage(sourcePath, packageIdentity);
     }
+    if (packageIdentity) throw new Error("package identity requires a .shift source path");
 
     const document = this.#documents.createDocument();
     this.#bridge.openWorkspace(sourcePath, document.storePath);
@@ -226,8 +231,11 @@ export class WorkspaceHost {
     return this.#emitDocumentChanged();
   }
 
-  #openPackage(sourcePath: string): WorkspaceDocumentState {
-    const identity = this.#inspectPackage(sourcePath);
+  #openPackage(
+    sourcePath: string,
+    packageIdentity: WorkspacePackageIdentity | undefined,
+  ): WorkspaceDocumentState {
+    const identity = packageIdentity ?? this.#inspectPackage(sourcePath);
     const opened = this.#packageOpener.open(identity);
 
     this.#adoptDocument(opened.document, opened.address);
@@ -288,8 +296,10 @@ export class WorkspaceHost {
     this.#documentId = null;
     this.#packageAddress = null;
 
-    if (address) this.#documents.removePackageBinding(address);
-    this.#documents.deleteDocument(documentId);
+    if (!address || discard) {
+      if (address) this.#documents.removePackageBinding(address);
+      this.#documents.deleteDocument(documentId);
+    }
     this.#shell?.emit("document.changed", null);
     this.#sync?.emit("document.changed", null);
 

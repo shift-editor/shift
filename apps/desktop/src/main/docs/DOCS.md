@@ -9,7 +9,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
-- **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean documents and explicitly discarded dirty documents are closed through the utility process so package bindings and SQLite documents are pruned.
+- **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean package-backed SQLite documents remain bound for directory-first reopen; untitled/imported documents and explicitly discarded dirty documents are pruned.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
 
@@ -60,9 +60,9 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 ### Workspace Creation And Open
 
-File -> New asks `WorkspaceManager.createUntitled()` for a session. File -> Open shows `showOpenFontDialog()` and then asks `WorkspaceManager.openPath(path)`.
+File -> New asks `WorkspaceManager.createUntitled()` for a session. The launcher prepares an idle utility process, so File -> Open overlaps process startup with `showOpenFontDialog()` before asking `WorkspaceManager.openPath(path)`.
 
-For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the process opens the package and the resulting state is registered.
+For `.shift` paths, `WorkspaceManager` calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the inspected identity is passed into the open request instead of reading and hashing the package a second time. A matching clean or dirty working document resumes directory-first; a divergent clean document is replaced, while a divergent dirty document is orphaned.
 
 ### Window Attachment
 
@@ -74,7 +74,7 @@ Save and Save As start in `DocumentSession`, but the actual save request goes th
 
 Export TrueType follows the same document and sync lanes. The utility process captures an immutable native snapshot after prior edits, then awaits direct Shift IR-to-fontc compilation outside the workspace queue. Edits submitted after snapshot capture can proceed and are not included in that export. Export does not change the package binding or dirty state.
 
-Close and quit call `DocumentSession.confirmClose`. If the document is clean, or the user saves successfully, or the user chooses discard, `DocumentSession` calls `workspace.close` in the utility process. The utility drops the Rust workspace handle, removes package bindings, and deletes the clean/discarded SQLite document. Dirty divergent documents created by package-source conflicts are orphaned by the utility process, not by main.
+Close and quit call `DocumentSession.confirmClose`. If the document is clean, or the user saves successfully, or the user chooses discard, `DocumentSession` calls `workspace.close` in the utility process. The utility drops the Rust workspace handle but retains a clean package-backed binding and SQLite document for the next open. Untitled/imported documents and explicitly discarded dirty package documents are deleted. Dirty divergent documents created by package-source conflicts are orphaned by the utility process, not by main.
 
 Message lanes reject in-flight calls when their remote port closes. An unexpected utility-process exit also disconnects the renderer document lane: Save remains blocked because pending edits cannot be settled, while an explicit Discard treats the unavailable workspace as already closed so window and quit guards can finish.
 

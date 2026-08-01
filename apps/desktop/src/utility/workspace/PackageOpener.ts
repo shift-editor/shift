@@ -15,8 +15,8 @@ import {
  *
  * @remarks
  * Package opens resolve through a small action machine over the durable binding,
- * the source fingerprint, and the saved draft metadata. Dirty matching drafts
- * resume; clean drafts are replaceable; dirty divergent drafts are orphaned
+ * the source fingerprint, and the saved draft metadata. Matching drafts resume;
+ * clean divergent drafts are replaceable; dirty divergent drafts are orphaned
  * before a fresh hydrate. Moved packages resume only when exactly one missing
  * old path matches the package id and base fingerprint.
  */
@@ -76,8 +76,8 @@ export class PackageOpener {
       );
     }
 
-    if (!draft.dirty) return { kind: "replace", binding };
     if (draft.baseFingerprint === identity.fingerprint) return { kind: "resume", binding };
+    if (!draft.dirty) return { kind: "replace", binding };
 
     return { kind: "orphan", binding };
   }

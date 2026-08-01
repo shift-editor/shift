@@ -125,7 +125,7 @@ export type ShellCallMap = {
     response: WorkspacePackageIdentity;
   };
   "workspace.open": {
-    request: { path: string };
+    request: { path: string; packageIdentity?: WorkspacePackageIdentity };
     response: WorkspaceDocumentState;
   };
   "workspace.close": { request: { discard: boolean }; response: null };

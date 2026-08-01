@@ -112,11 +112,16 @@ export class WorkspaceProcess {
    * Opens a workspace from a source path through the shell lane.
    *
    * @param path - User-selected source path to open.
+   * @param packageIdentity - Previously inspected identity for a `.shift` package.
    * @returns utility-owned document state for the opened workspace.
    * @throws {Error} when the utility process is not running or rejects the call.
    */
-  openWorkspace(path: string): Promise<WorkspaceDocumentState> {
-    return this.#requireChannel().call("workspace.open", { path });
+  openWorkspace(
+    path: string,
+    packageIdentity: WorkspacePackageIdentity | null = null,
+  ): Promise<WorkspaceDocumentState> {
+    const request = packageIdentity ? { path, packageIdentity } : { path };
+    return this.#requireChannel().call("workspace.open", request);
   }
 
   /**

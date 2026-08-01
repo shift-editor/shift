@@ -173,6 +173,7 @@ export class App {
   }
 
   #openLauncher(): Window {
+    this.#workspaces.prepareOpen();
     const window = this.#createWindow();
     this.#loadLauncher(window);
     return window;
@@ -299,6 +300,7 @@ export class App {
   }
 
   async #openWorkspaceFromWindow(opener: Window): Promise<void> {
+    this.#workspaces.prepareOpen();
     const openPath = await showOpenFontDialog(opener);
     if (!openPath) return;
 
