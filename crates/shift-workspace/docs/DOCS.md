@@ -58,6 +58,8 @@ crates/shift-workspace/examples/
 
 ## Profiling
 
+Interactive package opens, working-store resumes, and foreign imports emit one `[workspace-open]` line to the utility-process log. Each line reports the relevant source, decode, SQLite, directory-materialization, and total durations without source paths. Streaming import stage durations overlap within `pipeline_wall_ms` and must not be summed.
+
 `profile_streaming_import` uses the same public `stream_into` three-stage pipeline as the workspace and reports foreign-directory, parse, MessagePack encode, compression, SQLite write, commit, durable-finalization, native-directory materialization, reopen, decoded/stored BLOB, and database measurements without putting machine-specific timing assertions in tests:
 
 ```bash
