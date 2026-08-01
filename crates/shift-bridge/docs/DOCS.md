@@ -102,7 +102,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm --filter shift-bridge run build:debug
 pnpm generate:bridge-types
-SHIFT_PROFILE_SLUG_ATLAS=1 node crates/shift-bridge/scripts/profile-slug-atlas.mjs /path/to/font.shift 10
+SHIFT_PROFILE_SLUG_ATLAS=1 node crates/shift-bridge/scripts/profile-slug-atlas.mjs /path/to/font.shift 10 5
 ```
 
 ## Related

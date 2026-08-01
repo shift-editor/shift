@@ -17,6 +17,11 @@ pub const MAX_LAYER_READ_BATCH_COUNT: usize = 512;
 pub const MAX_LAYER_READ_BATCH_DECODED_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_LAYER_PAYLOAD_BYTES_SQL: i64 = MAX_LAYER_PAYLOAD_BYTES as i64;
 
+struct LayerDirectoryRead {
+    facts: HashMap<String, super::directory::DirectoryFacts>,
+    decoded_byte_lengths: Vec<u64>,
+}
+
 impl ShiftStore {
     /// Fetches, bounds-checks, decodes, and cross-checks one canonical layer.
     pub fn load_glyph_layer(
@@ -114,50 +119,22 @@ pub(crate) fn load_glyph_layers_from_conn(
 
     let mut layers = Vec::with_capacity(keys.len());
     for count_batch in keys.chunks(MAX_LAYER_READ_BATCH_COUNT) {
-        let placeholders = (0..count_batch.len())
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql = format!(
-            "SELECT l.id, p.decoded_byte_length
-             FROM glyph_layers AS l
-             JOIN glyph_layer_payloads AS p ON p.layer_id = l.id
-             WHERE l.id IN ({placeholders})
-             ORDER BY l.id"
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(rusqlite::params_from_iter(count_batch.iter()), |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })?;
-        let mut decoded_lengths = HashMap::with_capacity(count_batch.len());
-        for row in rows {
-            let (layer_id, decoded_byte_length) = row?;
-            if !(0..=MAX_LAYER_PAYLOAD_BYTES_SQL).contains(&decoded_byte_length) {
-                return Err(StoreError::LayerPayloadTooLarge {
-                    bytes: u64::try_from(decoded_byte_length).unwrap_or(u64::MAX),
-                    limit: MAX_LAYER_PAYLOAD_BYTES as u64,
-                });
-            }
-            decoded_lengths.insert(layer_id, decoded_byte_length as u64);
-        }
-        drop(stmt);
-
+        let directory = read_layer_directory(conn, count_batch)?;
         let mut batch = Vec::new();
         let mut batch_decoded_bytes = 0_u64;
-        for key in count_batch {
-            let decoded_byte_length =
-                decoded_lengths
-                    .get(key)
-                    .copied()
-                    .ok_or_else(|| StoreError::MissingEntity {
-                        kind: "glyph layer",
-                        id: key.clone(),
-                    })?;
+        for (key, decoded_byte_length) in count_batch
+            .iter()
+            .zip(directory.decoded_byte_lengths.iter().copied())
+        {
             if !batch.is_empty()
                 && batch_decoded_bytes.saturating_add(decoded_byte_length)
                     > MAX_LAYER_READ_BATCH_DECODED_BYTES
             {
-                layers.extend(load_glyph_layer_batch_from_conn(conn, &batch)?);
+                layers.extend(load_glyph_layer_batch_with_directory(
+                    conn,
+                    &batch,
+                    &directory.facts,
+                )?);
                 batch.clear();
                 batch_decoded_bytes = 0;
             }
@@ -165,13 +142,18 @@ pub(crate) fn load_glyph_layers_from_conn(
             batch_decoded_bytes = batch_decoded_bytes.saturating_add(decoded_byte_length);
         }
         if !batch.is_empty() {
-            layers.extend(load_glyph_layer_batch_from_conn(conn, &batch)?);
+            layers.extend(load_glyph_layer_batch_with_directory(
+                conn,
+                &batch,
+                &directory.facts,
+            )?);
         }
     }
 
     Ok(layers)
 }
 
+#[cfg(test)]
 pub(super) fn load_glyph_layer_batch_from_conn(
     conn: &Connection,
     layer_ids: &[font::LayerId],
@@ -192,6 +174,29 @@ pub(super) fn load_glyph_layer_batch_from_conn(
         });
     }
 
+    let directory = read_layer_directory(conn, &keys)?;
+    let batch_decoded_bytes = directory
+        .decoded_byte_lengths
+        .iter()
+        .fold(0_u64, |total, length| total.saturating_add(*length));
+    if batch_decoded_bytes > MAX_LAYER_READ_BATCH_DECODED_BYTES {
+        return Err(StoreError::LayerReadBatchDecodedTooLarge {
+            bytes: batch_decoded_bytes,
+            limit: MAX_LAYER_READ_BATCH_DECODED_BYTES,
+        });
+    }
+    let layer_ids = keys
+        .iter()
+        .cloned()
+        .map(font::LayerId::from_raw)
+        .collect::<Vec<_>>();
+    load_glyph_layer_batch_with_directory(conn, &layer_ids, &directory.facts)
+}
+
+fn read_layer_directory(
+    conn: &Connection,
+    keys: &[String],
+) -> Result<LayerDirectoryRead, StoreError> {
     let placeholders = (0..keys.len()).map(|_| "?").collect::<Vec<_>>().join(",");
     let directory_sql = format!(
         "
@@ -211,30 +216,37 @@ pub(super) fn load_glyph_layer_batch_from_conn(
         map_directory_facts_row,
     )?;
     let mut facts = HashMap::with_capacity(keys.len());
-    let mut batch_decoded_bytes = 0_u64;
     for row in directory_rows {
         let facts_row = row?;
-        let decoded_byte_length = facts_row.validate()?;
-        batch_decoded_bytes = batch_decoded_bytes.saturating_add(decoded_byte_length);
         facts.insert(facts_row.layer_id.clone(), facts_row);
     }
     drop(directory_stmt);
 
-    for key in &keys {
-        if !facts.contains_key(key) {
-            return Err(StoreError::MissingEntity {
-                kind: "glyph layer",
-                id: key.clone(),
-            });
-        }
-    }
-    if batch_decoded_bytes > MAX_LAYER_READ_BATCH_DECODED_BYTES {
-        return Err(StoreError::LayerReadBatchDecodedTooLarge {
-            bytes: batch_decoded_bytes,
-            limit: MAX_LAYER_READ_BATCH_DECODED_BYTES,
-        });
+    let mut decoded_byte_lengths = Vec::with_capacity(keys.len());
+    for key in keys {
+        let facts = facts.get(key).ok_or_else(|| StoreError::MissingEntity {
+            kind: "glyph layer",
+            id: key.clone(),
+        })?;
+        decoded_byte_lengths.push(facts.validate()?);
     }
 
+    Ok(LayerDirectoryRead {
+        facts,
+        decoded_byte_lengths,
+    })
+}
+
+fn load_glyph_layer_batch_with_directory(
+    conn: &Connection,
+    layer_ids: &[font::LayerId],
+    facts: &HashMap<String, super::directory::DirectoryFacts>,
+) -> Result<Vec<font::GlyphLayer>, StoreError> {
+    let keys = layer_ids
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let placeholders = (0..keys.len()).map(|_| "?").collect::<Vec<_>>().join(",");
     let payload_sql = format!(
         "
         SELECT layer_id, payload, length(payload)
