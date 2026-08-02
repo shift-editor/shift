@@ -11,6 +11,7 @@ import { FrameHandler } from "@/lib/editor/rendering/FrameHandler";
 import { parseCssColor } from "@/lib/editor/rendering/markers/color";
 import { ResidentGlyphLayer } from "@/lib/graphics/backends/ResidentGlyphLayer";
 import type {
+  GlyphCatalogAtlasPage,
   GlyphCatalogControllerFrame,
   GlyphCatalogFrame,
   GlyphCatalogItem,
@@ -42,6 +43,7 @@ export class GlyphCatalogController {
   readonly #resizeObserver: ResizeObserver;
   readonly #fontEffect: Effect;
   readonly #invalidGlyphIds = new Set<GlyphId>();
+  readonly #replacementPageIndices = new Set<number>();
 
   #targetFrame: GridFrame | null = null;
   #activeFrame: GridFrame | null = null;
@@ -182,6 +184,12 @@ export class GlyphCatalogController {
       }
     }
 
+    this.#replacementPageIndices.clear();
+    for (const glyphId of this.#invalidGlyphIds) {
+      const pageIndex = this.#pageIndex(glyphId);
+      if (pageIndex !== null) this.#replacementPageIndices.add(pageIndex);
+    }
+
     this.#visibleBuild?.abort(new Error("resident visible frame changed"));
     this.#completeBuild?.abort(new Error("resident complete atlas changed"));
     this.#needsRedraw = true;
@@ -267,7 +275,8 @@ export class GlyphCatalogController {
     this.#updateFullyResident();
 
     try {
-      const pageExtents = await layer.loadPatch(glyphIds, visibleBuild.signal);
+      const pageRequests = this.#pageRequests(glyphIds);
+      const pageExtents = await layer.loadPages(pageRequests, visibleBuild.signal);
       if (this.#disposed || this.#visibleBuild !== visibleBuild || visibleBuild.signal.aborted) {
         return;
       }
@@ -281,7 +290,9 @@ export class GlyphCatalogController {
       );
       this.#targetFrame = { ...latestTarget, previewExtents: targetExtents };
       this.#activeFrame = { ...latestTarget, previewExtents: presentedExtents };
-      for (const glyphId of glyphIds) this.#invalidGlyphIds.delete(glyphId);
+      for (const request of pageRequests) {
+        for (const glyphId of request.glyphIds) this.#invalidGlyphIds.delete(glyphId);
+      }
       this.#onPreviewExtentsChange(presentedExtents);
       this.#needsRedraw = true;
       this.#updateFullyResident();
@@ -337,7 +348,11 @@ export class GlyphCatalogController {
         );
         if (!needsReplacement) continue;
 
-        const pageExtents = await this.#layer.loadPatch(pageGlyphIds, completeBuild.signal);
+        const pageIndex = start / ATLAS_PAGE_ROOT_COUNT;
+        const pageExtents = await this.#layer.loadPages(
+          [this.#pageRequest(pageIndex)],
+          completeBuild.signal,
+        );
         if (completeBuild.signal.aborted) break;
 
         const latestTarget = this.#targetFrame;
@@ -368,6 +383,37 @@ export class GlyphCatalogController {
     if (completeBuild.signal.aborted) void this.#refreshVisible();
   }
 
+  #pageRequests(glyphIds: readonly GlyphId[]): GlyphCatalogAtlasPage[] {
+    const pageIndices = new Set<number>();
+    for (const glyphId of glyphIds) {
+      const pageIndex = this.#pageIndex(glyphId);
+      if (pageIndex !== null) pageIndices.add(pageIndex);
+    }
+
+    return [...pageIndices]
+      .sort((left, right) => left - right)
+      .map((pageIndex) => this.#pageRequest(pageIndex));
+  }
+
+  #pageRequest(pageIndex: number): GlyphCatalogAtlasPage {
+    const start = pageIndex * ATLAS_PAGE_ROOT_COUNT;
+    return {
+      glyphIds: this.#fontGlyphIds.slice(start, start + ATLAS_PAGE_ROOT_COUNT),
+      pageIndex,
+      pageCount: this.#pageCount(),
+      replacementPageIndices: [...this.#replacementPageIndices].sort((left, right) => left - right),
+    };
+  }
+
+  #pageIndex(glyphId: GlyphId): number | null {
+    const glyphIndex = this.#fontGlyphIds.indexOf(glyphId);
+    return glyphIndex < 0 ? null : Math.floor(glyphIndex / ATLAS_PAGE_ROOT_COUNT);
+  }
+
+  #pageCount(): number {
+    return Math.ceil(this.#fontGlyphIds.length / ATLAS_PAGE_ROOT_COUNT);
+  }
+
   #handleDeviceLoss(reason: string): void {
     if (this.#disposed) return;
     console.error("resident glyph device lost", reason);
@@ -381,6 +427,10 @@ export class GlyphCatalogController {
     this.#activeFrame = null;
     this.#invalidGlyphIds.clear();
     for (const glyphId of this.#fontGlyphIds) this.#invalidGlyphIds.add(glyphId);
+    this.#replacementPageIndices.clear();
+    for (let pageIndex = 0; pageIndex < this.#pageCount(); pageIndex += 1) {
+      this.#replacementPageIndices.add(pageIndex);
+    }
     this.#glyphCanvas.dataset.fullyResident = "false";
     this.#glyphCanvas.dataset.gridReadiness = "Unavailable" satisfies GridReadiness;
     this.#firstFrameStarted = false;

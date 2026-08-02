@@ -11,6 +11,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
 - **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean package-backed SQLite documents remain bound for directory-first reopen; untitled/imported documents and explicitly discarded dirty documents are pruned.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
+- **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
 
 ## Codemap
@@ -62,7 +63,7 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 File -> New asks `WorkspaceManager.createUntitled()` for a session. The launcher prepares an idle utility process, so File -> Open overlaps process startup with `showOpenFontDialog()` before asking `WorkspaceManager.openPath(path)`.
 
-For `.shift` paths, `WorkspaceManager` calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the inspected identity is passed into the open request instead of reading and hashing the package a second time. A matching clean or dirty working document resumes directory-first; a divergent clean document is replaced, while a divergent dirty document is orphaned. Main does not start monolithic Slug preparation: the renderer requests the current visible root page first, presents that complete frame, and cooperatively fills fixed-size catalog pages afterward.
+For `.shift` paths, `WorkspaceManager` calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the inspected identity is passed into the open request instead of reading and hashing the package a second time. A matching clean or dirty working document resumes directory-first; a divergent clean document is replaced, while a divergent dirty document is orphaned. Main does not start monolithic Slug preparation: the renderer requests every fixed page intersecting the current viewport first, presents that set atomically, and cooperatively fills remaining pages afterward. The utility serves validated Zstd cache hits through the same bounded stream contract or compiles a native miss and stages it for atomic publication.
 
 ### Window Attachment
 

@@ -1,12 +1,15 @@
 import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
 import { PortByteStream } from "@shared/workspace/PortByteStream";
 import type {
+  SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentState,
   WorkspaceExportResult,
   WorkspaceGlyphSnapshot,
   WorkspaceGlyphSnapshotRequest,
+  WorkspaceSlugAtlas,
+  WorkspaceSlugAtlasPageRequest,
   WorkspaceSnapshot,
 } from "@shared/workspace/protocol";
 import type { ShiftHost } from "@shared/host/ShiftHost";
@@ -201,14 +204,11 @@ export class WorkspaceClient {
     return this.#require().call("workspace.slugAtlasPrepare", { alignment });
   }
 
-  /** Builds one ordered root-glyph page behind committed workspace edits. */
-  async prepareSlugAtlasPage(glyphIds: readonly GlyphId[], alignment: number): Promise<SlugAtlas> {
+  /** Opens or builds one deterministic root-glyph page behind committed edits. */
+  async prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
     await this.connect();
 
-    return this.#require().call("workspace.slugAtlasPagePrepare", {
-      glyphIds: [...glyphIds],
-      alignment,
-    });
+    return this.#require().call("workspace.slugAtlasPagePrepare", request);
   }
 
   /** Writes one prepared Slug generation through bounded, ordered chunks. */
@@ -238,6 +238,7 @@ export class WorkspaceClient {
   /** Writes one prepared page through bounded, ordered chunks. */
   async streamSlugAtlasPage(
     generation: number,
+    origin: SlugAtlasOrigin,
     maximumLength: number,
     write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
   ): Promise<number> {
@@ -248,9 +249,11 @@ export class WorkspaceClient {
 
     try {
       const [, totalLength] = await Promise.all([
-        this.#require().call("workspace.slugAtlasPageStream", { generation, maximumLength }, [
-          ports.port2,
-        ]),
+        this.#require().call(
+          "workspace.slugAtlasPageStream",
+          { generation, origin, maximumLength },
+          [ports.port2],
+        ),
         stream.receive(write),
       ]);
       return totalLength;
@@ -267,10 +270,10 @@ export class WorkspaceClient {
   }
 
   /** Releases a prepared page that was rejected before streaming. */
-  async discardSlugAtlasPage(generation: number): Promise<void> {
+  async discardSlugAtlasPage(generation: number, origin: SlugAtlasOrigin): Promise<void> {
     await this.connect();
 
-    await this.#require().call("workspace.slugAtlasPageDiscard", { generation });
+    await this.#require().call("workspace.slugAtlasPageDiscard", { generation, origin });
   }
 
   /**

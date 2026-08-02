@@ -36,6 +36,22 @@ describe("bounded byte delivery over a message port", () => {
     receiver.close();
   });
 
+  it("re-chunks a source that exceeds the transport maximum", async () => {
+    const lane = new MessageChannel();
+    const sender = new PortByteStream(nodePortTransport(lane.port1));
+    const receiver = new PortByteStream(nodePortTransport(lane.port2));
+    const writes: number[][] = [];
+
+    await Promise.all([
+      sender.send(stream([1, 2, 3, 4, 5]), undefined, 2),
+      receiver.receive((_offset, bytes) => writes.push([...bytes])),
+    ]);
+
+    expect(writes).toEqual([[1, 2], [3, 4], [5]]);
+    sender.close();
+    receiver.close();
+  });
+
   it("cancels the source when the receiving sink rejects a chunk", async () => {
     const lane = new MessageChannel();
     const sender = new PortByteStream(nodePortTransport(lane.port1));

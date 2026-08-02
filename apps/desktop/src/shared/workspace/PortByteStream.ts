@@ -18,8 +18,19 @@ export class PortByteStream {
     transport.onClose(() => this.#close(new Error("byte stream port closed"), false));
   }
 
-  /** Sends a native/web byte stream and waits for each receiver acknowledgment. */
-  async send(source: ByteReadableStream<Uint8Array>): Promise<number> {
+  /** Sends a native/web byte stream and waits for each sink and receiver acknowledgment. */
+  async send(
+    source: ByteReadableStream<Uint8Array>,
+    observe?: (bytes: Uint8Array<ArrayBuffer>) => void | Promise<void>,
+    maximumLength?: number,
+  ): Promise<number> {
+    if (
+      maximumLength !== undefined &&
+      (!Number.isSafeInteger(maximumLength) || maximumLength < 1)
+    ) {
+      throw new Error("byte stream maximum length must be a positive safe integer");
+    }
+
     const reader = source.getReader();
     let totalLength = 0;
 
@@ -33,19 +44,24 @@ export class PortByteStream {
           value.byteOffset,
           value.byteLength,
         );
-        const nextOffset = totalLength + bytes.byteLength;
-        const controlPromise = this.#next();
-        this.#transport.post({
-          kind: "chunk",
-          offset: totalLength,
-          bytes,
-        } satisfies ByteStreamMessage);
-        const control = readControl(await controlPromise);
-        if (control.kind === "cancel") throw new Error(control.message);
-        if (control.nextOffset !== nextOffset) {
-          throw new Error(`byte stream expected acknowledgment ${nextOffset}`);
+        await observe?.(bytes);
+        const sendLength = maximumLength ?? Math.max(1, bytes.byteLength);
+        for (let start = 0; start < bytes.byteLength; start += sendLength) {
+          const chunk = bytes.subarray(start, start + sendLength);
+          const nextOffset = totalLength + chunk.byteLength;
+          const controlPromise = this.#next();
+          this.#transport.post({
+            kind: "chunk",
+            offset: totalLength,
+            bytes: chunk,
+          } satisfies ByteStreamMessage);
+          const control = readControl(await controlPromise);
+          if (control.kind === "cancel") throw new Error(control.message);
+          if (control.nextOffset !== nextOffset) {
+            throw new Error(`byte stream expected acknowledgment ${nextOffset}`);
+          }
+          totalLength = nextOffset;
         }
-        totalLength = nextOffset;
       }
 
       this.#transport.post({ kind: "complete", totalLength } satisfies ByteStreamMessage);

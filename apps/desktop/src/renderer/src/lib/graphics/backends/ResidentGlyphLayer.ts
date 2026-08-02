@@ -1,4 +1,6 @@
 import type { GlyphId, SlugPreviewExtents } from "@shift/types";
+import type { SlugAtlasOrigin } from "@shared/workspace/protocol";
+import type { GlyphCatalogAtlasPage } from "@/types/glyphCatalog";
 import type { GlyphPreviewFrame } from "@/types/glyphPreview";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import { SlugAtlas } from "@/lib/slug/SlugAtlas";
@@ -7,10 +9,10 @@ import { SlugRenderer } from "@/lib/slug/SlugRenderer";
 const COPY_ALIGNMENT = 256;
 const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 const PREFERRED_ATLAS_BYTES = 256 * 1024 * 1024;
-const PREFERRED_PATCH_BYTES = 64 * 1024 * 1024;
+const PREFERRED_PAGE_BYTES = 64 * 1024 * 1024;
 const REQUIRED_STORAGE_BUFFERS = 8;
 
-/** Complete resident glyph-preview surface with incremental edit patches. */
+/** Complete resident glyph-preview surface with atomically replaceable fixed pages. */
 export class ResidentGlyphLayer {
   readonly #renderer: SlugRenderer;
   readonly #device: GPUDevice;
@@ -92,55 +94,76 @@ export class ResidentGlyphLayer {
     }
   }
 
-  async loadPatch(glyphIds: readonly GlyphId[], signal: AbortSignal): Promise<SlugPreviewExtents> {
-    if (glyphIds.length === 0) {
+  async loadPages(
+    pages: readonly GlyphCatalogAtlasPage[],
+    signal: AbortSignal,
+  ): Promise<SlugPreviewExtents> {
+    if (pages.length === 0) {
       return { horizontal: 0, minimumY: 0, maximumY: 0 };
     }
 
+    const atlases: SlugAtlas[] = [];
     let preparedGeneration: number | null = null;
+    let preparedOrigin: SlugAtlasOrigin | null = null;
     let atlas: SlugAtlas | null = null;
+    let previewExtents: SlugPreviewExtents = {
+      horizontal: 0,
+      minimumY: 0,
+      maximumY: 0,
+    };
 
     try {
-      const descriptor = await this.#edits.prepareSlugAtlasPage(glyphIds, this.#alignment);
-      preparedGeneration = descriptor.generation;
-      throwIfAborted(signal);
-
-      if (descriptor.layout.totalLength > PREFERRED_PATCH_BYTES) {
-        console.warn("resident glyph atlas patch exceeds preferred size", {
-          bytes: descriptor.layout.totalLength,
-          preferredBytes: PREFERRED_PATCH_BYTES,
+      for (const page of pages) {
+        const descriptor = await this.#edits.prepareSlugAtlasPage({
+          ...page,
+          alignment: this.#alignment,
         });
-      }
+        preparedGeneration = descriptor.generation;
+        preparedOrigin = descriptor.origin;
+        throwIfAborted(signal);
 
-      atlas = SlugAtlas.create(descriptor, this.#device, this.#maximumBindingSize);
-      const activeAtlas = atlas;
-      const totalLength = await this.#edits.streamSlugAtlasPage(
-        descriptor.generation,
-        UPLOAD_CHUNK_BYTES,
-        (offset, bytes) => {
-          throwIfAborted(signal);
-          activeAtlas.write(this.#device.queue, offset, bytes);
-        },
-      );
-      preparedGeneration = null;
-      throwIfAborted(signal);
-      if (totalLength !== descriptor.layout.totalLength) {
-        throw new Error(
-          `resident glyph patch stream wrote ${totalLength} bytes; expected ${descriptor.layout.totalLength}`,
+        if (descriptor.layout.totalLength > PREFERRED_PAGE_BYTES) {
+          console.warn("resident glyph atlas page exceeds preferred size", {
+            bytes: descriptor.layout.totalLength,
+            preferredBytes: PREFERRED_PAGE_BYTES,
+          });
+        }
+
+        atlas = SlugAtlas.create(descriptor, this.#device, this.#maximumBindingSize);
+        const activeAtlas = atlas;
+        const totalLength = await this.#edits.streamSlugAtlasPage(
+          descriptor.generation,
+          descriptor.origin,
+          UPLOAD_CHUNK_BYTES,
+          (offset, bytes) => {
+            throwIfAborted(signal);
+            activeAtlas.write(this.#device.queue, offset, bytes);
+          },
         );
+        preparedGeneration = null;
+        preparedOrigin = null;
+        throwIfAborted(signal);
+        if (totalLength !== descriptor.layout.totalLength) {
+          throw new Error(
+            `resident glyph page stream wrote ${totalLength} bytes; expected ${descriptor.layout.totalLength}`,
+          );
+        }
+
+        atlases.push(atlas);
+        atlas = null;
+        previewExtents = mergePreviewExtents(previewExtents, descriptor.previewExtents);
       }
 
-      const loadedAtlas = atlas;
-      atlas = null;
-      this.#renderer.loadPage(loadedAtlas);
-      return descriptor.previewExtents;
+      this.#renderer.loadPages(atlases);
+      return previewExtents;
     } catch (error) {
       atlas?.destroy();
-      if (preparedGeneration !== null) {
+      for (const uploadedAtlas of atlases) uploadedAtlas.destroy();
+      if (preparedGeneration !== null && preparedOrigin !== null) {
         try {
-          await this.#edits.discardSlugAtlasPage(preparedGeneration);
+          await this.#edits.discardSlugAtlasPage(preparedGeneration, preparedOrigin);
         } catch (discardError) {
-          console.error("failed to release rejected resident glyph atlas patch", discardError);
+          console.error("failed to release rejected resident glyph atlas page", discardError);
         }
       }
       throw error;
@@ -166,6 +189,17 @@ export class ResidentGlyphLayer {
   destroy(): void {
     this.#renderer.destroy();
   }
+}
+
+function mergePreviewExtents(
+  current: SlugPreviewExtents,
+  next: SlugPreviewExtents,
+): SlugPreviewExtents {
+  return {
+    horizontal: Math.max(current.horizontal, next.horizontal),
+    minimumY: Math.min(current.minimumY, next.minimumY),
+    maximumY: Math.max(current.maximumY, next.maximumY),
+  };
 }
 
 function throwIfAborted(signal: AbortSignal): void {

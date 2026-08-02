@@ -34,13 +34,14 @@ export class WorkspaceProcess {
    * Forks the workspace utility process if it is not already running.
    *
    * @param documentsRoot - Directory the utility process owns for working
-   *   documents; passed as the process's only argument.
+   *   documents; its sibling derived-cache directory owns disposable atlases.
    */
   start(documentsRoot: string): void {
     if (this.#process) return;
 
     const entryPoint = path.join(__dirname, "workspace.js");
-    const proc = utilityProcess.fork(entryPoint, [documentsRoot], {
+    const atlasCacheRoot = path.join(path.dirname(documentsRoot), "derived-cache", "slug-atlases");
+    const proc = utilityProcess.fork(entryPoint, [documentsRoot, atlasCacheRoot], {
       serviceName: "Shift Workspace",
       stdio: "pipe",
     });

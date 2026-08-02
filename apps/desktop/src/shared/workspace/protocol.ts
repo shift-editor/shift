@@ -51,6 +51,23 @@ export type WorkspaceGlyphSnapshot = {
   layers: WorkspaceGlyphLayerSnapshot[];
 };
 
+/** Process-local origin required to stream or discard one prepared atlas page. */
+export type SlugAtlasOrigin = "native" | "cached";
+
+/** Prepared page descriptor paired with its utility-owned byte origin. */
+export type WorkspaceSlugAtlas = SlugAtlas & {
+  origin: SlugAtlasOrigin;
+};
+
+/** One deterministic fixed-page request within the current authored revision. */
+export type WorkspaceSlugAtlasPageRequest = {
+  glyphIds: GlyphId[];
+  alignment: number;
+  pageIndex: number;
+  pageCount: number;
+  replacementPageIndices: number[];
+};
+
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
 
 /** Bounded byte delivery over a dedicated transferred port. */
@@ -207,10 +224,10 @@ export type SyncCallMap = {
     request: { alignment: number };
     response: SlugAtlas;
   };
-  /** Builds one ordered root-glyph page and its component closure. */
+  /** Opens or builds one fixed root-glyph page and its component closure. */
   "workspace.slugAtlasPagePrepare": {
-    request: { glyphIds: GlyphId[]; alignment: number };
-    response: SlugAtlas;
+    request: WorkspaceSlugAtlasPageRequest;
+    response: WorkspaceSlugAtlas;
   };
   /** Streams bounded atlas chunks over the transferred response port. */
   "workspace.slugAtlasStream": {
@@ -219,7 +236,7 @@ export type SyncCallMap = {
   };
   /** Streams one prepared page over the transferred response port. */
   "workspace.slugAtlasPageStream": {
-    request: { generation: number; maximumLength: number };
+    request: { generation: number; origin: SlugAtlasOrigin; maximumLength: number };
     response: null;
   };
   /** Releases native CPU residency when adapter initialization is rejected. */
@@ -229,7 +246,7 @@ export type SyncCallMap = {
   };
   /** Releases one rejected prepared page. */
   "workspace.slugAtlasPageDiscard": {
-    request: { generation: number };
+    request: { generation: number; origin: SlugAtlasOrigin };
     response: null;
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */

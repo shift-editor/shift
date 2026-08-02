@@ -3,12 +3,14 @@ import { electronPortTransport, parentPortTransport } from "../shared/workspace/
 import { WorkspaceHost } from "./workspace/WorkspaceHost";
 
 const documentsRoot = process.argv[2];
-if (!documentsRoot) {
-  throw new Error("workspace utility process requires a documents root argument");
+const atlasCacheRoot = process.argv[3];
+if (!documentsRoot || !atlasCacheRoot) {
+  throw new Error("workspace utility process requires document and atlas cache root arguments");
 }
 
 new WorkspaceHost({
   documentsRoot,
+  atlasCacheRoot,
   shell: parentPortTransport(),
   portTransport: (port) => electronPortTransport(port as MessagePortMain),
 }).start();

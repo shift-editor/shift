@@ -535,13 +535,13 @@ async function trackSlugAtlasLoads(page: Page): Promise<void> {
       );
       return originalCompletePrepare(alignment);
     };
-    coordinator.prepareSlugAtlasPage = async (glyphIds, alignment) => {
+    coordinator.prepareSlugAtlasPage = async (request) => {
       const counts = JSON.parse(
         document.documentElement.dataset.slugPatchRootCounts ?? "[]",
       ) as number[];
-      counts.push(glyphIds.length);
+      counts.push(request.glyphIds.length);
       document.documentElement.dataset.slugPatchRootCounts = JSON.stringify(counts);
-      return originalPatchPrepare(glyphIds, alignment);
+      return originalPatchPrepare(request);
     };
   });
 }
