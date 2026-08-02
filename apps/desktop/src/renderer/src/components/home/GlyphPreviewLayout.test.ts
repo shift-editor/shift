@@ -31,11 +31,4 @@ describe("Glyph preview layout", () => {
     expect(layout.viewBox).toBe("0 -1000 1 1250");
     expect(layout.width).toBe(75);
   });
-
-  it("extends the shared viewport without changing its font-space scale", () => {
-    const extents = { horizontal: 200, minimumY: -500, maximumY: 1500 };
-
-    expect(GlyphPreviewLayout.fontViewport(METRICS, extents)).toEqual([2000, 1500]);
-    expect(GlyphPreviewLayout.sideMargin(METRICS, extents)).toBe(200);
-  });
 });

@@ -1,4 +1,4 @@
-import type { SlugPreviewExtents, SourceMetrics } from "@shift/types";
+import type { SourceMetrics } from "@shift/types";
 
 const MARGIN_TOP_RATIO = 0.2;
 const MARGIN_BOTTOM_RATIO = 0.05;
@@ -22,22 +22,17 @@ export class GlyphPreviewLayout {
   }
 
   /** Shared horizontal margin used by fallback and resident previews. */
-  static sideMargin(metrics: SourceMetrics, previewExtents?: SlugPreviewExtents): number {
-    return Math.max(metrics.unitsPerEm * MARGIN_SIDE_RATIO, previewExtents?.horizontal ?? 0);
+  static sideMargin(metrics: SourceMetrics): number {
+    return metrics.unitsPerEm * MARGIN_SIDE_RATIO;
   }
 
   /** Shared font-space viewport used by fallback and resident previews. */
-  static fontViewport(
-    metrics: SourceMetrics,
-    previewExtents?: SlugPreviewExtents,
-  ): readonly [viewHeight: number, fontTop: number] {
+  static fontViewport(metrics: SourceMetrics): readonly [viewHeight: number, fontTop: number] {
     const marginTop = metrics.unitsPerEm * MARGIN_TOP_RATIO;
     const marginBottom = metrics.unitsPerEm * MARGIN_BOTTOM_RATIO;
-    const metricsTop = metrics.ascender + marginTop;
-    const metricsBottom = metrics.descender - marginBottom;
-    const fontTop = Math.max(metricsTop, previewExtents?.maximumY ?? metricsTop);
-    const fontBottom = Math.min(metricsBottom, previewExtents?.minimumY ?? metricsBottom);
-
-    return [fontTop - fontBottom, fontTop];
+    return [
+      metrics.ascender - metrics.descender + marginTop + marginBottom,
+      metrics.ascender + marginTop,
+    ];
   }
 }

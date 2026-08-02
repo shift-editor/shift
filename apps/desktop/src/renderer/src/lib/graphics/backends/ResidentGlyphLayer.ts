@@ -1,4 +1,4 @@
-import type { GlyphId, SlugPreviewExtents } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import type { SlugAtlasOrigin } from "@shared/workspace/protocol";
 import type { GlyphCatalogAtlasPage } from "@/types/glyphCatalog";
 import type { GlyphPreviewFrame } from "@/types/glyphPreview";
@@ -94,23 +94,13 @@ export class ResidentGlyphLayer {
     }
   }
 
-  async loadPages(
-    pages: readonly GlyphCatalogAtlasPage[],
-    signal: AbortSignal,
-  ): Promise<SlugPreviewExtents> {
-    if (pages.length === 0) {
-      return { horizontal: 0, minimumY: 0, maximumY: 0 };
-    }
+  async loadPages(pages: readonly GlyphCatalogAtlasPage[], signal: AbortSignal): Promise<void> {
+    if (pages.length === 0) return;
 
     const atlases: SlugAtlas[] = [];
     let preparedGeneration: number | null = null;
     let preparedOrigin: SlugAtlasOrigin | null = null;
     let atlas: SlugAtlas | null = null;
-    let previewExtents: SlugPreviewExtents = {
-      horizontal: 0,
-      minimumY: 0,
-      maximumY: 0,
-    };
 
     try {
       for (const page of pages) {
@@ -151,11 +141,9 @@ export class ResidentGlyphLayer {
 
         atlases.push(atlas);
         atlas = null;
-        previewExtents = mergePreviewExtents(previewExtents, descriptor.previewExtents);
       }
 
       this.#renderer.loadPages(atlases);
-      return previewExtents;
     } catch (error) {
       atlas?.destroy();
       for (const uploadedAtlas of atlases) uploadedAtlas.destroy();
@@ -189,17 +177,6 @@ export class ResidentGlyphLayer {
   destroy(): void {
     this.#renderer.destroy();
   }
-}
-
-function mergePreviewExtents(
-  current: SlugPreviewExtents,
-  next: SlugPreviewExtents,
-): SlugPreviewExtents {
-  return {
-    horizontal: Math.max(current.horizontal, next.horizontal),
-    minimumY: Math.min(current.minimumY, next.minimumY),
-    maximumY: Math.max(current.maximumY, next.maximumY),
-  };
 }
 
 function throwIfAborted(signal: AbortSignal): void {

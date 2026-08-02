@@ -10,10 +10,9 @@ export interface GlyphPreviewInstance {
 
 /** Screen-space styling shared by resident glyph preview backends. */
 export interface GlyphPreviewStyle {
-  readonly viewHeight: number;
-  readonly fontTop: number;
-  readonly previewHeight: number;
-  readonly sideMargin: number;
+  readonly defaultPixelsPerEm: number;
+  readonly metricsTop: number;
+  readonly metricsBottom: number;
   readonly color: readonly [number, number, number, number];
 }
 

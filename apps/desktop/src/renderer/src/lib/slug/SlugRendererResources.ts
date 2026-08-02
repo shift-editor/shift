@@ -123,11 +123,21 @@ export class SlugRendererBuffers {
       0,
       new Float32Array([
         ...frame.style.color,
-        frame.style.viewHeight,
-        frame.style.fontTop,
-        frame.style.previewHeight,
-        frame.style.sideMargin,
+        frame.style.defaultPixelsPerEm,
+        frame.style.metricsTop,
+        frame.style.metricsBottom,
+        0,
       ]),
+    );
+  }
+
+  copyPreviewBounds(encoder: GPUCommandEncoder, glyphCount: number): void {
+    encoder.copyBufferToBuffer(
+      this.#scratch.bounds,
+      0,
+      this.#scratch.previewBounds,
+      0,
+      Math.max(1, glyphCount) * BOUNDS_BYTES,
     );
   }
 
@@ -250,6 +260,7 @@ export class SlugRendererBuffers {
           entries: [
             { binding: 0, resource: { buffer: this.#scratch.advances } },
             { binding: 1, resource: { buffer: this.#uniforms.preview } },
+            { binding: 2, resource: { buffer: this.#scratch.previewBounds } },
           ],
         }),
       ],
@@ -292,7 +303,18 @@ function createScratch(device: GPUDevice, capacity: GlyphPreviewCapacity) {
     curves: storageBuffer(device, "shift Slug curves", capacity.curveCount * CURVE_BYTES),
     bands: storageBuffer(device, "shift Slug bands", capacity.bandCount * BAND_BYTES),
     indexes: storageBuffer(device, "shift Slug indexes", capacity.indexCount * INDEX_BYTES),
-    bounds: storageBuffer(device, "shift Slug bounds", capacity.glyphCount * BOUNDS_BYTES),
+    bounds: storageBuffer(
+      device,
+      "shift Slug bounds",
+      capacity.glyphCount * BOUNDS_BYTES,
+      GPUBufferUsage.COPY_SRC,
+    ),
+    previewBounds: storageBuffer(
+      device,
+      "shift Slug preview bounds",
+      capacity.glyphCount * BOUNDS_BYTES,
+      GPUBufferUsage.COPY_DST,
+    ),
     advances: storageBuffer(device, "shift Slug advances", capacity.glyphCount * ADVANCE_BYTES),
     componentTransforms: storageBuffer(
       device,
@@ -307,6 +329,7 @@ function destroyScratch(scratch: ReturnType<typeof createScratch>): void {
   scratch.bands.destroy();
   scratch.indexes.destroy();
   scratch.bounds.destroy();
+  scratch.previewBounds.destroy();
   scratch.advances.destroy();
   scratch.componentTransforms.destroy();
 }

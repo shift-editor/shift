@@ -17,7 +17,6 @@ export function GlyphCatalogCanvas({
   openGlyph,
   onFirstFrame,
   onUnavailable,
-  onPreviewExtentsChange,
 }: GlyphCatalogCanvasProps) {
   const editor = useEditor();
   const { themeName } = useTheme();
@@ -51,7 +50,6 @@ export function GlyphCatalogCanvas({
         if (nextReady) onFirstFrame();
       },
       onUnavailable,
-      onPreviewExtentsChange,
     );
     controllerRef.current = controller;
 
@@ -59,7 +57,7 @@ export function GlyphCatalogCanvas({
       controllerRef.current = null;
       controller.destroy();
     };
-  }, [containerRef, editor.font, onFirstFrame, onPreviewExtentsChange, onUnavailable, openGlyph]);
+  }, [containerRef, editor.font, onFirstFrame, onUnavailable, openGlyph]);
 
   useLayoutEffect(() => {
     controllerRef.current?.update(

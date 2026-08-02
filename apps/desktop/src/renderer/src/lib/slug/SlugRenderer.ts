@@ -114,6 +114,7 @@ export class SlugRenderer {
         pass.dispatchWorkgroups(packed.instanceCount);
         pass.end();
       }
+      page.buffers.copyPreviewBounds(encoder, packed.instanceCount);
       {
         const pass = encoder.beginComputePass({ label: "shift Slug bands" });
         pass.setPipeline(this.#pipelines.bands);
