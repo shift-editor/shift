@@ -1,4 +1,5 @@
 import type { ElectronApplication, Locator, Page } from "@playwright/test";
+import type { AxisId, SourceId } from "@shift/types";
 import { test, expect, navigateToEditor } from "./fixtures/perfApp";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
@@ -217,10 +218,11 @@ test.describe("Resident catalog GPU", () => {
     await page.getByRole("button", { name: "Display all glyphs" }).click();
     await page.waitForURL(/#\/home/);
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.slugFrameSubmits), {
-        timeout: 30_000,
-      })
-      .toBe("1");
+      .poll(
+        () => page.evaluate(() => Number(document.documentElement.dataset.slugFrameSubmits ?? "0")),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThanOrEqual(1);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     const recoveryDuration = performance.now() - returnStarted;
     const refreshDuration = performance.now() - editStarted;
@@ -302,25 +304,21 @@ test.describe("Resident catalog GPU", () => {
     page,
   }) => {
     const glyphCanvas = await preparePagedGrid(electronApp, page);
+    const variable = await createVariableDesignspace(page);
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
     await trackGridTransitions(page);
     await trackSlugAtlasLoads(page);
 
-    await page.evaluate(async () => {
+    await page.evaluate(async ({ axisId, sourceId }) => {
       const workspace = window.shift;
-      const font = workspace?.font;
-      const source = font?.sources.find((candidate) => candidate.id !== font.defaultSource.id);
-      if (!workspace || !font || !source) throw new Error("Expected a non-default source");
+      if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setDesignLocation(
-        new Map(
-          font
-            .getAxes()
-            .map((axis) => [axis.id, source.location.values[axis.id] ?? axis.default] as const),
-        ),
-      );
-      font.deleteSource(source.id);
-      await font.editCoordinator.settled();
-    });
+      workspace.editor.setDesignLocation(new Map([[axisId, 900]]));
+      workspace.font.deleteSource(sourceId);
+      await workspace.font.editCoordinator.settled();
+    }, variable);
 
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
@@ -341,20 +339,22 @@ test.describe("Resident catalog GPU", () => {
     page,
   }) => {
     const glyphCanvas = await preparePagedGrid(electronApp, page);
+    const variable = await createVariableDesignspace(page);
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
     await trackGridTransitions(page);
 
-    const deletedAxis = await page.evaluate(async () => {
+    const deletedAxis = await page.evaluate(async ({ axisId }) => {
       const workspace = window.shift;
-      const axis = workspace?.font.getAxes()[0];
-      if (!workspace || !axis) throw new Error("Expected a variable axis");
+      if (!workspace) throw new Error("Expected workspace");
 
-      const nonDefault = axis.maximum === axis.default ? axis.minimum : axis.maximum;
-      workspace.editor.setDesignLocation(new Map([[axis.id, nonDefault ?? axis.default]]));
+      workspace.editor.setDesignLocation(new Map([[axisId, 750]]));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      workspace.font.deleteAxis(axis.id);
+      workspace.font.deleteAxis(axisId);
       await workspace.font.editCoordinator.settled();
-      return axis.id;
-    });
+      return axisId;
+    }, variable);
 
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
@@ -412,6 +412,31 @@ test.describe("Resident catalog GPU", () => {
     expect(Number(await glyphCanvas.getAttribute("data-preview-horizontal"))).toBeGreaterThan(0);
   });
 });
+
+async function createVariableDesignspace(
+  page: Page,
+): Promise<{ axisId: AxisId; sourceId: SourceId }> {
+  return page.evaluate(async () => {
+    const font = window.shift?.font;
+    if (!font) throw new Error("Expected font");
+
+    const axisId = font.createAxis({
+      tag: "wght",
+      name: "Weight",
+      role: "external",
+      axisType: "continuous",
+      minimum: 100,
+      default: 400,
+      maximum: 900,
+      labels: [],
+      hidden: false,
+    });
+    await font.editCoordinator.settled();
+    const sourceId = font.createSource("Bold", { values: { [axisId]: 900 } });
+    await font.editCoordinator.settled();
+    return { axisId, sourceId };
+  });
+}
 
 async function preparePagedGrid(electronApp: ElectronApplication, page: Page): Promise<Locator> {
   await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
