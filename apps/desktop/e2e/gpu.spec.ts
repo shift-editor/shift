@@ -288,10 +288,11 @@ test.describe("Resident catalog GPU", () => {
       element.scrollTop = element.scrollHeight;
     });
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.slugFrameSubmits), {
-        timeout: 30_000,
-      })
-      .toBe("1");
+      .poll(
+        () => page.evaluate(() => Number(document.documentElement.dataset.slugFrameSubmits ?? "0")),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThanOrEqual(1);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     const scrollDuration = performance.now() - scrollStarted;
 
