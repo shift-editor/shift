@@ -293,6 +293,16 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(cachedBytes).toEqual(bytes);
     expect(retainedBytes).toEqual(bytes);
     expect(cached.glyphs.map((entry) => entry.glyphId)).toEqual([secondGlyphId]);
+
+    await applyWorkspace(sync, {
+      intents: [{ kind: "setXAdvance", setXAdvance: { layerId: secondLayerId, width: 700 } }],
+    });
+    const changed = await sync.call("workspace.slugAtlasPagePrepare", request);
+    expect(changed.origin).toBe("native");
+    await sync.call("workspace.slugAtlasPageDiscard", {
+      generation: changed.generation,
+      origin: changed.origin,
+    });
     await shell.call("workspace.close", { discard: true });
   });
 
