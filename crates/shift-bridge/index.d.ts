@@ -149,6 +149,7 @@ export interface NapiSlugAtlas {
   bandCount: number
   weightCount: number
   layout: NapiSlugLayout
+  previewExtents: NapiSlugPreviewExtents
   glyphs: Array<NapiSlugGlyph>
   weightSets: Array<NapiSlugWeightSet>
   atlasGlyphCount: number
@@ -181,6 +182,12 @@ export interface NapiSlugLayout {
   anchorSources: NapiSlugSection
   lineBits: NapiSlugSection
   totalLength: number
+}
+
+export interface NapiSlugPreviewExtents {
+  horizontal: number
+  minimumY: number
+  maximumY: number
 }
 
 export interface NapiSlugSection {

@@ -1,6 +1,13 @@
 import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
-import type { Axis, GlyphId, GlyphName, SourceId, SourceMetrics } from "@shift/types";
+import type {
+  Axis,
+  GlyphId,
+  GlyphName,
+  SlugPreviewExtents,
+  SourceId,
+  SourceMetrics,
+} from "@shift/types";
 import type { RefObject } from "react";
 import type { ThemeName } from "./uiState";
 import type { AxisLocation } from "./variation";
@@ -63,7 +70,9 @@ export interface GlyphCatalogFrame {
   readonly cells: readonly GlyphCatalogCell[];
 }
 
-/** Mutable catalog inputs replaced atomically before the next scheduled frame. */
+export type GridReadiness = "Initial" | "Stale" | "Visible" | "Complete" | "Unavailable";
+
+/** Mutable catalog inputs requested by React for the latest authored revision. */
 export interface GlyphCatalogControllerFrame {
   readonly glyphs: readonly GlyphCatalogItem[];
   readonly location: AxisLocation;
@@ -73,6 +82,11 @@ export interface GlyphCatalogControllerFrame {
   readonly themeName: ThemeName;
   readonly active: boolean;
   readonly editingGlyphId: GlyphId | null;
+}
+
+/** Complete immutable Grid input presented with one shared preview extent. */
+export interface GridFrame extends GlyphCatalogControllerFrame {
+  readonly previewExtents: SlugPreviewExtents;
 }
 
 export interface GlyphNameInputProps {
@@ -91,4 +105,5 @@ export interface GlyphCatalogCanvasProps {
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;
+  readonly onPreviewExtentsChange: (previewExtents: SlugPreviewExtents) => void;
 }

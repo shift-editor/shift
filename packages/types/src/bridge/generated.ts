@@ -164,6 +164,7 @@ export interface SlugAtlas {
   bandCount: number
   weightCount: number
   layout: SlugLayout
+  previewExtents: SlugPreviewExtents
   glyphs: Array<SlugGlyph>
   weightSets: Array<SlugWeightSet>
   atlasGlyphCount: number
@@ -196,6 +197,12 @@ export interface SlugLayout {
   anchorSources: SlugSection
   lineBits: SlugSection
   totalLength: number
+}
+
+export interface SlugPreviewExtents {
+  horizontal: number
+  minimumY: number
+  maximumY: number
 }
 
 export interface SlugSection {

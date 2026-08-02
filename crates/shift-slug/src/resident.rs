@@ -5,7 +5,7 @@ use shift_font::{CoreError, Font, GlyphId, GlyphProjection, GlyphProjectionSet};
 
 use crate::{
     AuthoredAtlasBuilder, AuthoredGlyph, AuthoredSlugError, AuthoredWeightSet, SlugError,
-    VariableAtlas,
+    SlugPreviewExtents, VariableAtlas,
 };
 
 /// One authored root glyph and every resident atlas glyph it may select.
@@ -47,6 +47,24 @@ impl AuthoredAtlasPage {
     /// Total per-frame weight count, including the constant weight at index zero.
     pub fn weight_count(&self) -> u32 {
         self.weight_count
+    }
+
+    /// Shared all-source preview overflow for this ordered root page.
+    pub fn preview_extents(&self) -> Result<SlugPreviewExtents, SlugError> {
+        let glyph_indices = self
+            .glyphs
+            .iter()
+            .flat_map(|glyph| {
+                std::iter::once(glyph.authored.default_glyph).chain(
+                    glyph
+                        .authored
+                        .exact_sources
+                        .iter()
+                        .map(|source| source.glyph_index),
+                )
+            })
+            .collect::<Vec<_>>();
+        self.atlas.preview_extents(&glyph_indices)
     }
 }
 
