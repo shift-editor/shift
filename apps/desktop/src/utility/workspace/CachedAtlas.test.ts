@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { mintAxisId, mintGlyphId, mintSourceId, type GlyphId, type SlugAtlas } from "@shift/types";
 import {
+  closeCachedAtlas,
+  loadCachedAtlasPage,
   openCachedAtlas,
   pruneCachedAtlases,
   publishCachedAtlas,
@@ -33,11 +35,18 @@ describe("CachedAtlas keeps only validated latest document pages", () => {
     const second = await stagePage(key, 1, 2, [glyphB], Uint8Array.of(4, 5));
     await publish(key, [first, second], [0, 1]);
 
-    const opened = await openCachedAtlas(rootPath, pageRequest(key, 1, [glyphB], [0, 1]));
+    const request = pageRequest(key, 1, [glyphB], [0, 1]);
+    const opened = await openCachedAtlas(rootPath, request);
+    if (!opened) throw new Error("expected CachedAtlas to open");
 
-    expect(opened?.atlas.glyphs.map((glyph) => glyph.glyphId)).toEqual([glyphB]);
-    expect(opened?.atlas.weightSets[0]?.basis.coefficients[0]).toBeInstanceOf(Float64Array);
-    expect(await readOpened(opened)).toEqual(Uint8Array.of(4, 5));
+    try {
+      const page = await loadCachedAtlasPage(opened, request);
+      expect(page?.atlas.glyphs.map((glyph) => glyph.glyphId)).toEqual([glyphB]);
+      expect(page?.atlas.weightSets[0]?.basis.coefficients[0]).toBeInstanceOf(Float64Array);
+      expect(await readOpened(page)).toEqual(Uint8Array.of(4, 5));
+    } finally {
+      await closeCachedAtlas(opened);
+    }
   });
 
   it("falls back to a miss when a compressed page is corrupt", async () => {
@@ -49,9 +58,9 @@ describe("CachedAtlas keeps only validated latest document pages", () => {
     bytes[bytes.length - 1] ^= 0xff;
     fs.writeFileSync(filePath, bytes);
 
-    const opened = await openCachedAtlas(rootPath, pageRequest(key, 0, [glyphA], [0]));
+    const bytesAfterCorruption = await readPage(pageRequest(key, 0, [glyphA], [0]));
 
-    expect(opened).toBeNull();
+    expect(bytesAfterCorruption).toBeNull();
     expect(publishedFiles()).toEqual([]);
   });
 
@@ -62,14 +71,12 @@ describe("CachedAtlas keeps only validated latest document pages", () => {
     await publish(firstKey, [first], [0]);
     const second = await stagePage(secondKey, 0, 1, [glyphB], Uint8Array.of(4, 5, 6));
     const budget = await publish(secondKey, [second], [0]);
-    await readOpened(await openCachedAtlas(rootPath, pageRequest(firstKey, 0, [glyphA], [0])));
+    await readPage(pageRequest(firstKey, 0, [glyphA], [0]));
 
     await pruneCachedAtlases(rootPath, budget);
 
-    expect(await openCachedAtlas(rootPath, pageRequest(secondKey, 0, [glyphB], [0]))).toBeNull();
-    expect(
-      await readOpened(await openCachedAtlas(rootPath, pageRequest(firstKey, 0, [glyphA], [0]))),
-    ).toEqual(Uint8Array.of(1, 2, 3));
+    expect(await readPage(pageRequest(secondKey, 0, [glyphB], [0]))).toBeNull();
+    expect(await readPage(pageRequest(firstKey, 0, [glyphA], [0]))).toEqual(Uint8Array.of(1, 2, 3));
   });
 
   it("publishes a new revision only after every replacement page is ready", async () => {
@@ -82,9 +89,7 @@ describe("CachedAtlas keeps only validated latest document pages", () => {
     const result = await publishAttempt(newKey, [first], [0, 1]);
 
     expect(result).toBeNull();
-    expect(
-      await readOpened(await openCachedAtlas(rootPath, pageRequest(oldKey, 1, [glyphB], [0, 1]))),
-    ).toEqual(Uint8Array.of(2));
+    expect(await readPage(pageRequest(oldKey, 1, [glyphB], [0, 1]))).toEqual(Uint8Array.of(2));
   });
 
   it("carries unchanged pages into the latest document revision", async () => {
@@ -95,12 +100,49 @@ describe("CachedAtlas keeps only validated latest document pages", () => {
 
     await publish(newKey, [replacement], [0], 2);
 
-    expect(await openCachedAtlas(rootPath, pageRequest(oldKey, 0, [glyphA], [0]))).toBeNull();
+    expect(await readPage(pageRequest(oldKey, 0, [glyphA], [0]))).toBeNull();
     expect(publishedFiles()).toHaveLength(1);
-    expect(
-      await readOpened(await openCachedAtlas(rootPath, pageRequest(newKey, 1, [glyphB], [0]))),
-    ).toEqual(Uint8Array.of(2));
+    expect(await readPage(pageRequest(newKey, 1, [glyphB], [0]))).toEqual(Uint8Array.of(2));
   });
+
+  it("loads every fixed page from one validated index", async () => {
+    const key = cacheKey("document-a", "revision-1");
+    await publish(key, await stageBoth(key, Uint8Array.of(1), Uint8Array.of(2)), [0, 1]);
+    const firstRequest = pageRequest(key, 0, [glyphA], [0, 1]);
+    const opened = await openCachedAtlas(rootPath, firstRequest);
+    if (!opened) throw new Error("expected CachedAtlas to open");
+    corruptPublishedIndex();
+
+    try {
+      expect(await readOpened(await loadCachedAtlasPage(opened, firstRequest))).toEqual(
+        Uint8Array.of(1),
+      );
+      const secondRequest = pageRequest(key, 1, [glyphB], [0, 1]);
+      expect(await readOpened(await loadCachedAtlasPage(opened, secondRequest))).toEqual(
+        Uint8Array.of(2),
+      );
+    } finally {
+      await closeCachedAtlas(opened);
+    }
+  });
+
+  async function readPage(request: CachedAtlasPageRequest): Promise<Uint8Array | null> {
+    const opened = await openCachedAtlas(rootPath, request);
+    if (!opened) return null;
+
+    try {
+      return await readOpened(await loadCachedAtlasPage(opened, request));
+    } finally {
+      await closeCachedAtlas(opened);
+    }
+  }
+
+  function corruptPublishedIndex(): void {
+    const filePath = publishedFiles()[0]!;
+    const bytes = fs.readFileSync(filePath);
+    bytes[12] ^= 0xff;
+    fs.writeFileSync(filePath, bytes);
+  }
 
   async function stagePage(
     key: CachedAtlasKey,
@@ -222,7 +264,7 @@ function descriptor(glyphIds: GlyphId[], totalLength: number): SlugAtlas {
 }
 
 async function readOpened(
-  opened: Awaited<ReturnType<typeof openCachedAtlas>>,
+  opened: Awaited<ReturnType<typeof loadCachedAtlasPage>>,
 ): Promise<Uint8Array | null> {
   if (!opened) return null;
 
