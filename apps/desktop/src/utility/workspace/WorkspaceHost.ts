@@ -79,6 +79,7 @@ export class WorkspaceHost {
   #sync: ChannelServer<SyncEventMap> | null = null;
   #documentId: string | null = null;
   #packageAddress: PackageAddress | null = null;
+  #atlasCacheRevision: string | null = null;
   #cachedGeneration = 0;
   #cachedPages = new Map<number, OpenedCachedAtlasPage>();
   #openedCachedAtlasKey: string | null = null;
@@ -130,17 +131,20 @@ export class WorkspaceHost {
       "workspace.apply": ({ intents, label }) =>
         this.#serialize(() => {
           const applied = this.#bridge.apply(intents, label);
+          this.#atlasCacheRevision = null;
           return { applied, documentState: this.#emitDocumentChanged() };
         }),
       "workspace.undo": () =>
         this.#serialize(() => {
           const applied = this.#bridge.undo();
+          if (applied) this.#atlasCacheRevision = null;
           const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
           return { applied, documentState };
         }),
       "workspace.redo": () =>
         this.#serialize(() => {
           const applied = this.#bridge.redo();
+          if (applied) this.#atlasCacheRevision = null;
           const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
           return { applied, documentState };
         }),
@@ -182,7 +186,7 @@ export class WorkspaceHost {
       ...request,
       key: {
         documentKey: this.#requireDocumentId(),
-        revisionKey: this.#bridge.slugAtlasCacheRevision(),
+        revisionKey: this.#currentAtlasCacheRevision(),
       },
     };
     const cached = await this.#loadCachedAtlasPage(cacheRequest);
@@ -213,6 +217,13 @@ export class WorkspaceHost {
       await this.#closeOpenedCachedAtlas();
       this.#openedCachedAtlasKey = openedKey;
       this.#openedCachedAtlas = await openCachedAtlas(this.#atlasCacheRoot, request);
+      if (this.#openedCachedAtlas) {
+        try {
+          await pruneCachedAtlases(this.#atlasCacheRoot, this.#atlasCacheByteBudget);
+        } catch (error) {
+          console.error("failed to prune cached Slug atlases", error);
+        }
+      }
     }
 
     const opened = this.#openedCachedAtlas;
@@ -279,11 +290,6 @@ export class WorkspaceHost {
 
       try {
         await stream.send(cached.stream, undefined, maximumLength);
-        try {
-          await pruneCachedAtlases(this.#atlasCacheRoot, this.#atlasCacheByteBudget);
-        } catch (error) {
-          console.error("failed to prune cached Slug atlases", error);
-        }
         return null;
       } finally {
         stream.close();
@@ -424,6 +430,7 @@ export class WorkspaceHost {
     this.#bridge.createUntitledWorkspace(document.storePath);
     this.#bridge.setDocumentId(document.documentId);
     this.#documentId = document.documentId;
+    this.#atlasCacheRevision = null;
     this.#packageAddress = null;
 
     return this.#emitDocumentChanged();
@@ -466,6 +473,7 @@ export class WorkspaceHost {
     this.#bridge.openWorkspace(sourcePath, document.storePath);
     this.#bridge.setDocumentId(document.documentId);
     this.#documentId = document.documentId;
+    this.#atlasCacheRevision = null;
     this.#packageAddress = null;
 
     return this.#emitDocumentChanged();
@@ -484,6 +492,7 @@ export class WorkspaceHost {
 
   #adoptDocument(document: DocumentAllocation, address: PackageAddress | null): void {
     this.#documentId = document.documentId;
+    this.#atlasCacheRevision = null;
     this.#packageAddress = address;
   }
 
@@ -546,6 +555,7 @@ export class WorkspaceHost {
     this.#discardAtlasBuildsExcept(null);
     this.#bridge.closeWorkspace();
     this.#documentId = null;
+    this.#atlasCacheRevision = null;
     this.#packageAddress = null;
 
     if (!address || discard) {
@@ -592,6 +602,11 @@ export class WorkspaceHost {
       () => undefined,
     );
     return run;
+  }
+
+  #currentAtlasCacheRevision(): string {
+    this.#atlasCacheRevision ??= this.#bridge.slugAtlasCacheRevision();
+    return this.#atlasCacheRevision;
   }
 
   #requireDocumentId(): string {

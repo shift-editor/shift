@@ -44,6 +44,7 @@ export class GlyphCatalogController {
   readonly #fontEffect: Effect;
   readonly #invalidGlyphIds = new Set<GlyphId>();
   readonly #replacementPageIndices = new Set<number>();
+  readonly #pageIndexByGlyph = new Map<GlyphId, number>();
 
   #targetFrame: GridFrame | null = null;
   #activeFrame: GridFrame | null = null;
@@ -167,8 +168,18 @@ export class GlyphCatalogController {
   #invalidate(glyphIds: readonly GlyphId[] | null, fontGlyphIds: readonly GlyphId[]): void {
     const directoryChanged = !sameGlyphIds(this.#fontGlyphIds, fontGlyphIds);
     this.#fontGlyphIds = fontGlyphIds;
+    if (directoryChanged) {
+      this.#pageIndexByGlyph.clear();
+      for (let glyphIndex = 0; glyphIndex < fontGlyphIds.length; glyphIndex += 1) {
+        this.#pageIndexByGlyph.set(
+          fontGlyphIds[glyphIndex]!,
+          Math.floor(glyphIndex / ATLAS_PAGE_ROOT_COUNT),
+        );
+      }
+    }
 
-    if (glyphIds === null || directoryChanged) {
+    const invalidateAll = glyphIds === null || directoryChanged;
+    if (invalidateAll) {
       this.#invalidGlyphIds.clear();
       for (const glyphId of fontGlyphIds) this.#invalidGlyphIds.add(glyphId);
       if (this.#targetFrame) {
@@ -178,16 +189,21 @@ export class GlyphCatalogController {
         };
       }
     } else {
-      const fontGlyphIdSet = new Set(fontGlyphIds);
       for (const glyphId of glyphIds) {
-        if (fontGlyphIdSet.has(glyphId)) this.#invalidGlyphIds.add(glyphId);
+        if (this.#pageIndexByGlyph.has(glyphId)) this.#invalidGlyphIds.add(glyphId);
       }
     }
 
     this.#replacementPageIndices.clear();
-    for (const glyphId of this.#invalidGlyphIds) {
-      const pageIndex = this.#pageIndex(glyphId);
-      if (pageIndex !== null) this.#replacementPageIndices.add(pageIndex);
+    if (invalidateAll) {
+      for (let pageIndex = 0; pageIndex < this.#pageCount(); pageIndex += 1) {
+        this.#replacementPageIndices.add(pageIndex);
+      }
+    } else {
+      for (const glyphId of this.#invalidGlyphIds) {
+        const pageIndex = this.#pageIndex(glyphId);
+        if (pageIndex !== null) this.#replacementPageIndices.add(pageIndex);
+      }
     }
 
     this.#visibleBuild?.abort(new Error("resident visible frame changed"));
@@ -406,8 +422,7 @@ export class GlyphCatalogController {
   }
 
   #pageIndex(glyphId: GlyphId): number | null {
-    const glyphIndex = this.#fontGlyphIds.indexOf(glyphId);
-    return glyphIndex < 0 ? null : Math.floor(glyphIndex / ATLAS_PAGE_ROOT_COUNT);
+    return this.#pageIndexByGlyph.get(glyphId) ?? null;
   }
 
   #pageCount(): number {
@@ -567,17 +582,10 @@ export class GlyphCatalogController {
 
   #updateFullyResident(): void {
     const layer = this.#layer;
-    const complete =
-      Boolean(layer) &&
-      this.#fontGlyphIds.every(
-        (glyphId) => !this.#invalidGlyphIds.has(glyphId) && Boolean(layer?.hasGlyphs([glyphId])),
-      );
+    const complete = Boolean(layer) && this.#invalidGlyphIds.size === 0;
+    const residentGlyphCount = layer ? this.#fontGlyphIds.length - this.#invalidGlyphIds.size : 0;
     this.#glyphCanvas.dataset.fullyResident = String(complete);
-    this.#glyphCanvas.dataset.residentGlyphCount = String(
-      this.#fontGlyphIds.filter(
-        (glyphId) => !this.#invalidGlyphIds.has(glyphId) && Boolean(layer?.hasGlyphs([glyphId])),
-      ).length,
-    );
+    this.#glyphCanvas.dataset.residentGlyphCount = String(residentGlyphCount);
     this.#glyphCanvas.dataset.targetGlyphCount = String(this.#fontGlyphIds.length);
     const activeLayout = this.#activeFrame ? this.#layout(this.#activeFrame) : null;
     this.#glyphCanvas.dataset.previewHeight = String(activeLayout?.previewHeight ?? 0);
