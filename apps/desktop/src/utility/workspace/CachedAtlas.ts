@@ -17,7 +17,6 @@ import { z } from "zod";
 import type {
   CachedAtlas,
   CachedAtlasFile,
-  CachedAtlasKey,
   CachedAtlasPage,
   CachedAtlasPageRequest,
   CachedAtlasPageSink,
@@ -36,7 +35,7 @@ const INDEX_CHECKSUM_BYTES = 32;
 const INDEX_CHECKSUM_OFFSET = MAGIC.byteLength + 4;
 const HEADER_BYTES = INDEX_CHECKSUM_OFFSET + INDEX_CHECKSUM_BYTES;
 const MAXIMUM_INDEX_BYTES = 64 * 1024 * 1024;
-const STAGING_SESSION = `${process.pid}-${crypto.randomUUID()}`;
+const STAGING_SESSION = `run-${process.pid}-${shortId()}`;
 const closedCachedAtlases = new WeakSet<OpenedCachedAtlas>();
 let lastTouchMilliseconds = 0;
 
@@ -150,8 +149,8 @@ export function stageCachedAtlasPage(
   descriptor: SlugAtlas,
 ): CachedAtlasPageSink {
   validatePageRequest(request);
-  const filePath = stagedPagePath(rootPath, request.key, request.pageIndex);
-  const temporaryPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+  const filePath = stagedPagePath(rootPath, request.pageIndex);
+  const temporaryPath = `${filePath}.tmp`;
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 
   const compressor = createZstdCompress();
@@ -358,7 +357,7 @@ export async function publishCachedAtlas(
     throw new Error("cached atlas index exceeds the supported size");
   }
 
-  const temporaryPath = `${targetPath}.${crypto.randomUUID()}.tmp`;
+  const temporaryPath = `${targetPath}.${shortId()}.tmp`;
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   const output = await fs.promises.open(temporaryPath, "wx");
 
@@ -741,15 +740,12 @@ function cachedAtlasPath(rootPath: string, documentKey: string): string {
   return path.join(rootPath, `${hashKey(documentKey)}.atlas`);
 }
 
-function stagedPagePath(rootPath: string, key: CachedAtlasKey, pageIndex: number): string {
-  return path.join(
-    rootPath,
-    "staging",
-    STAGING_SESSION,
-    hashKey(key.documentKey),
-    hashKey(key.revisionKey),
-    `${pageIndex}.zst`,
-  );
+function stagedPagePath(rootPath: string, pageIndex: number): string {
+  return path.join(rootPath, "staging", STAGING_SESSION, `page-${pageIndex}-${shortId()}.zst`);
+}
+
+function shortId(): string {
+  return crypto.randomBytes(4).toString("hex");
 }
 
 function hashKey(value: string): string {

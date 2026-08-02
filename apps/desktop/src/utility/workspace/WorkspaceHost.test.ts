@@ -306,6 +306,55 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await shell.call("workspace.close", { discard: true });
   });
 
+  it("publishes cached pages after retrying one page before the build completes", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const first = createGlyphALayer(snapshot.sources[0]!.id);
+    const secondGlyphId = mintGlyphId();
+    const secondLayerId = mintLayerId();
+    await applyWorkspace(sync, {
+      intents: [
+        ...first.intents,
+        createGlyph("B" as GlyphName, 66 as Unicode, secondGlyphId),
+        createGlyphLayer(secondGlyphId, snapshot.sources[0]!.id, secondLayerId),
+      ],
+    });
+
+    const firstRequest = {
+      glyphIds: [first.glyphId],
+      alignment: 256,
+      pageIndex: 0,
+      pageCount: 2,
+      replacementPageIndices: [0, 1],
+    };
+    const secondRequest = {
+      ...firstRequest,
+      glyphIds: [secondGlyphId],
+      pageIndex: 1,
+    };
+    const firstPage = await sync.call("workspace.slugAtlasPagePrepare", firstRequest);
+    await streamSlugAtlas(sync, firstPage.generation, 64, firstPage.origin);
+    const retriedPage = await sync.call("workspace.slugAtlasPagePrepare", firstRequest);
+    const retriedBytes = await streamSlugAtlas(
+      sync,
+      retriedPage.generation,
+      64,
+      retriedPage.origin,
+    );
+    const secondPage = await sync.call("workspace.slugAtlasPagePrepare", secondRequest);
+    await streamSlugAtlas(sync, secondPage.generation, 64, secondPage.origin);
+    const cachedPage = await sync.call("workspace.slugAtlasPagePrepare", firstRequest);
+    const cachedBytes = await streamSlugAtlas(sync, cachedPage.generation, 64, cachedPage.origin);
+
+    expect(firstPage.origin).toBe("native");
+    expect(retriedPage.origin).toBe("native");
+    expect(secondPage.origin).toBe("native");
+    expect(cachedPage.origin).toBe("cached");
+    expect(cachedBytes).toEqual(retriedBytes);
+
+    await shell.call("workspace.close", { discard: true });
+  });
+
   it("cancels native Slug production when the renderer rejects a chunk", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);

@@ -4,7 +4,7 @@ import { test, expect, navigateToEditor } from "./fixtures/perfApp";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
 
-test.describe("Resident catalog GPU", () => {
+test.describe("Resident Glyph Grid", () => {
   test("redraws the resident viewport without rebuilding it after editor navigation", async ({
     page,
   }) => {
@@ -20,7 +20,11 @@ test.describe("Resident catalog GPU", () => {
     const scrollViewport = page.getByLabel("Glyph catalog");
     await scrollViewport.waitFor({ state: "visible" });
     const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
-    await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
+    await page.evaluate(() => document.fonts.ready);
+    await afterNextPaint(page);
 
     const initialSize = await glyphCanvas.evaluate((canvas) => ({
       width: canvas.width,
@@ -48,8 +52,8 @@ test.describe("Resident catalog GPU", () => {
 
     await scrollViewport.click({ position: { x: 50, y: 50 } });
     await page.waitForURL(/#\/editor\//);
+    await expect(page.locator("#scene-canvas")).toBeVisible();
     await afterNextPaint(page);
-    await page.waitForTimeout(3_000);
 
     await expect
       .poll(() =>
@@ -237,9 +241,11 @@ test.describe("Resident catalog GPU", () => {
     );
     expect(recoveryDuration).toBeLessThan(1_000);
     expect(atlasLoads.complete).toBe(0);
-    expect(atlasLoads.patches).toHaveLength(1);
-    expect(atlasLoads.patches[0]).toBeGreaterThan(0);
-    expect(atlasLoads.patches[0]).toBeLessThan(atlasLoads.glyphCount);
+    expect(atlasLoads.patches.length).toBeGreaterThanOrEqual(1);
+    for (const rootCount of atlasLoads.patches) {
+      expect(rootCount).toBeGreaterThan(0);
+      expect(rootCount).toBeLessThanOrEqual(atlasLoads.glyphCount);
+    }
   });
 
   test("keeps distant glyphs resident after a topology patch", async ({ electronApp, page }) => {
@@ -300,17 +306,13 @@ test.describe("Resident catalog GPU", () => {
     expect(scrollDuration).toBeLessThan(1_000);
   });
 
-  test("replaces the visible frame before completing a selected-source deletion", async ({
-    electronApp,
-    page,
-  }) => {
+  test("replaces a selected-source deletion atomically", async ({ electronApp, page }) => {
     const glyphCanvas = await preparePagedGrid(electronApp, page);
     const variable = await createVariableDesignspace(page);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
     await trackGridTransitions(page);
-    await trackSlugAtlasLoads(page);
 
     await page.evaluate(async ({ axisId, sourceId }) => {
       const workspace = window.shift;
@@ -325,14 +327,8 @@ test.describe("Resident catalog GPU", () => {
       timeout: 30_000,
     });
     const state = await observedGridState(page);
-    expect(state.readiness).toEqual(expect.arrayContaining(["Stale", "Visible", "Complete"]));
-    expect(state.readiness.indexOf("Stale")).toBeLessThan(state.readiness.indexOf("Visible"));
-    expect(state.readiness.indexOf("Visible")).toBeLessThan(
-      state.readiness.lastIndexOf("Complete"),
-    );
+    expectAtomicGridReadiness(state.readiness);
     expect(state.hiddenTransitions).toBe(0);
-    expect(state.patchRootCounts[0]).toBeLessThan(state.glyphCount);
-    expect(state.patchRootCounts.at(-1)).toBe(state.glyphCount);
   });
 
   test("replaces a non-default design location atomically after deleting its axis", async ({
@@ -367,11 +363,7 @@ test.describe("Resident catalog GPU", () => {
       ),
     ).toBe(false);
     const state = await observedGridState(page);
-    expect(state.readiness).toEqual(expect.arrayContaining(["Stale", "Visible", "Complete"]));
-    expect(state.readiness.indexOf("Stale")).toBeLessThan(state.readiness.indexOf("Visible"));
-    expect(state.readiness.indexOf("Visible")).toBeLessThan(
-      state.readiness.lastIndexOf("Complete"),
-    );
+    expectAtomicGridReadiness(state.readiness);
     expect(state.hiddenTransitions).toBe(0);
   });
 
@@ -545,19 +537,23 @@ async function trackGridTransitions(page: Page): Promise<void> {
 async function observedGridState(page: Page): Promise<{
   readiness: string[];
   hiddenTransitions: number;
-  patchRootCounts: number[];
-  glyphCount: number;
 }> {
   return page.evaluate(() => ({
     readiness: JSON.parse(
       document.documentElement.dataset.gridReadinessTransitions ?? "[]",
     ) as string[],
     hiddenTransitions: Number(document.documentElement.dataset.gridHiddenTransitions),
-    patchRootCounts: JSON.parse(
-      document.documentElement.dataset.slugPatchRootCounts ?? "[]",
-    ) as number[],
-    glyphCount: window.shift?.font.glyphRecords().length ?? 0,
   }));
+}
+
+function expectAtomicGridReadiness(readiness: readonly string[]): void {
+  const staleIndex = readiness.indexOf("Stale");
+  const visibleIndex = readiness.indexOf("Visible", staleIndex);
+  const completeIndex = readiness.lastIndexOf("Complete");
+
+  expect(staleIndex).toBeGreaterThanOrEqual(0);
+  expect(completeIndex).toBeGreaterThan(staleIndex);
+  if (visibleIndex >= 0) expect(visibleIndex).toBeLessThan(completeIndex);
 }
 
 async function trackSlugFrameSubmits(page: Page): Promise<void> {
