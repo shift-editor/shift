@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -22,6 +23,7 @@ import type {
   CachedAtlasPageSink,
   CachedAtlasPublication,
   CachedSlugAtlas,
+  OpenedCachedAtlas,
   OpenedCachedAtlasPage,
   StagedCachedAtlasPage,
 } from "./types";
@@ -35,6 +37,7 @@ const INDEX_CHECKSUM_OFFSET = MAGIC.byteLength + 4;
 const HEADER_BYTES = INDEX_CHECKSUM_OFFSET + INDEX_CHECKSUM_BYTES;
 const MAXIMUM_INDEX_BYTES = 64 * 1024 * 1024;
 const STAGING_SESSION = `${process.pid}-${crypto.randomUUID()}`;
+const closedCachedAtlases = new WeakSet<OpenedCachedAtlas>();
 let lastTouchMilliseconds = 0;
 
 const nonnegativeInteger = z.number().int().nonnegative().safe();
@@ -217,58 +220,94 @@ export function stageCachedAtlasPage(
   };
 }
 
-/** Opens and validates one fixed page from the latest matching document entry. */
+/** Opens and validates one latest cache artifact while parsing its index exactly once. */
 export async function openCachedAtlas(
   rootPath: string,
   request: CachedAtlasPageRequest,
-): Promise<OpenedCachedAtlasPage | null> {
+): Promise<OpenedCachedAtlas | null> {
   validatePageRequest(request);
   const filePath = cachedAtlasPath(rootPath, request.key.documentKey);
+  let file: FileHandle | null = null;
 
   try {
-    const cached = await readCachedAtlas(filePath);
+    file = await fs.promises.open(filePath, "r");
+    const cached = await readCachedAtlasFile(file);
     if (
       cached.documentKey !== request.key.documentKey ||
       cached.revisionKey !== request.key.revisionKey ||
       cached.alignment !== request.alignment ||
       cached.pageCount !== request.pageCount
     ) {
+      await file.close();
       return null;
     }
 
-    const page = cached.pages.find((candidate) => candidate.pageIndex === request.pageIndex);
-    if (!page || !sameGlyphIds(page.glyphIds, request.glyphIds)) return null;
-
-    const payloadOffset = await payloadStart(filePath);
-    const checksum = await checksumFileRange(
-      filePath,
-      payloadOffset + page.compressedOffset,
-      page.compressedLength,
-    );
-    if (checksum !== page.checksum) {
-      await removeCachedAtlas(filePath);
-      return null;
-    }
-
-    const descriptor = withTypedCoefficients(page.atlas);
-    const fileDescriptor = fs.openSync(filePath, "r");
-    const compressed = fs.createReadStream(filePath, {
-      fd: fileDescriptor,
-      autoClose: true,
-      start: payloadOffset + page.compressedOffset,
-      end: payloadOffset + page.compressedOffset + page.compressedLength - 1,
-    });
-    const decompressed = compressed.pipe(createZstdDecompress());
+    const payloadOffset = await payloadStartFromFile(file);
     await touchCachedAtlas(filePath);
-
-    return {
-      atlas: descriptor,
-      stream: Readable.toWeb(decompressed) as OpenedCachedAtlasPage["stream"],
-    };
+    return { atlas: cached, filePath, file, payloadOffset };
   } catch {
+    await file?.close().catch(() => {});
     await removeCachedAtlas(filePath);
     return null;
   }
+}
+
+/** Loads one independently compressed page from an already validated cache artifact. */
+export async function loadCachedAtlasPage(
+  opened: OpenedCachedAtlas,
+  request: CachedAtlasPageRequest,
+): Promise<OpenedCachedAtlasPage | null> {
+  validatePageRequest(request);
+  const cached = opened.atlas;
+  if (
+    cached.documentKey !== request.key.documentKey ||
+    cached.revisionKey !== request.key.revisionKey ||
+    cached.alignment !== request.alignment ||
+    cached.pageCount !== request.pageCount
+  ) {
+    return null;
+  }
+
+  const page = cached.pages[request.pageIndex];
+  if (!page || !sameGlyphIds(page.glyphIds, request.glyphIds)) return null;
+
+  try {
+    const compressedOffset = opened.payloadOffset + page.compressedOffset;
+    const checksum = await checksumFileHandleRange(
+      opened.filePath,
+      opened.file,
+      compressedOffset,
+      page.compressedLength,
+    );
+    if (checksum !== page.checksum) {
+      await closeCachedAtlas(opened).catch(() => {});
+      await removeCachedAtlas(opened.filePath);
+      return null;
+    }
+
+    const compressed = fs.createReadStream(opened.filePath, {
+      fd: opened.file.fd,
+      autoClose: false,
+      start: compressedOffset,
+      end: compressedOffset + page.compressedLength - 1,
+    });
+    const decompressed = compressed.pipe(createZstdDecompress());
+    return {
+      atlas: page.atlas,
+      stream: Readable.toWeb(decompressed) as OpenedCachedAtlasPage["stream"],
+    };
+  } catch {
+    await closeCachedAtlas(opened).catch(() => {});
+    await removeCachedAtlas(opened.filePath);
+    return null;
+  }
+}
+
+/** Releases the file owned by one opened cache artifact. */
+export async function closeCachedAtlas(opened: OpenedCachedAtlas): Promise<void> {
+  if (closedCachedAtlases.has(opened)) return;
+  await opened.file.close();
+  closedCachedAtlases.add(opened);
 }
 
 /** Publishes a complete latest entry, carrying forward only declared unchanged pages. */
@@ -468,50 +507,54 @@ function typedArrayReplacer(_key: string, value: unknown): unknown {
 async function readCachedAtlas(filePath: string): Promise<CachedAtlas> {
   const file = await fs.promises.open(filePath, "r");
   try {
-    const header = Buffer.alloc(HEADER_BYTES);
-    const headerRead = await file.read(header, 0, header.byteLength, 0);
-    if (
-      headerRead.bytesRead !== header.byteLength ||
-      !header.subarray(0, MAGIC.byteLength).equals(MAGIC)
-    ) {
-      throw new Error("invalid cached atlas header");
-    }
-
-    const indexLength = header.readUInt32LE(MAGIC.byteLength);
-    if (indexLength < 2 || indexLength > MAXIMUM_INDEX_BYTES) {
-      throw new Error("invalid cached atlas index length");
-    }
-    const index = Buffer.alloc(indexLength);
-    const indexRead = await file.read(index, 0, index.byteLength, HEADER_BYTES);
-    if (indexRead.bytesRead !== index.byteLength) throw new Error("truncated cached atlas index");
-
-    const expectedIndexChecksum = header.subarray(
-      INDEX_CHECKSUM_OFFSET,
-      INDEX_CHECKSUM_OFFSET + INDEX_CHECKSUM_BYTES,
-    );
-    const indexChecksum = crypto.createHash("sha256").update(index).digest();
-    if (!crypto.timingSafeEqual(indexChecksum, expectedIndexChecksum)) {
-      throw new Error("cached atlas index checksum does not match");
-    }
-
-    const parsed = cachedAtlasSchema.parse(JSON.parse(index.toString("utf8")));
-    const cached = {
-      ...parsed,
-      pages: parsed.pages.map((page) => ({
-        ...page,
-        glyphIds: page.glyphIds as GlyphId[],
-        atlas: withTypedCoefficients(page.atlas as unknown as CachedSlugAtlas),
-      })),
-    } satisfies CachedAtlas;
-    await validateCachedAtlas(filePath, cached, HEADER_BYTES + indexLength);
-    return cached;
+    return await readCachedAtlasFile(file);
   } finally {
     await file.close();
   }
 }
 
+async function readCachedAtlasFile(file: FileHandle): Promise<CachedAtlas> {
+  const header = Buffer.alloc(HEADER_BYTES);
+  const headerRead = await file.read(header, 0, header.byteLength, 0);
+  if (
+    headerRead.bytesRead !== header.byteLength ||
+    !header.subarray(0, MAGIC.byteLength).equals(MAGIC)
+  ) {
+    throw new Error("invalid cached atlas header");
+  }
+
+  const indexLength = header.readUInt32LE(MAGIC.byteLength);
+  if (indexLength < 2 || indexLength > MAXIMUM_INDEX_BYTES) {
+    throw new Error("invalid cached atlas index length");
+  }
+  const index = Buffer.alloc(indexLength);
+  const indexRead = await file.read(index, 0, index.byteLength, HEADER_BYTES);
+  if (indexRead.bytesRead !== index.byteLength) throw new Error("truncated cached atlas index");
+
+  const expectedIndexChecksum = header.subarray(
+    INDEX_CHECKSUM_OFFSET,
+    INDEX_CHECKSUM_OFFSET + INDEX_CHECKSUM_BYTES,
+  );
+  const indexChecksum = crypto.createHash("sha256").update(index).digest();
+  if (!crypto.timingSafeEqual(indexChecksum, expectedIndexChecksum)) {
+    throw new Error("cached atlas index checksum does not match");
+  }
+
+  const parsed = cachedAtlasSchema.parse(JSON.parse(index.toString("utf8")));
+  const cached = {
+    ...parsed,
+    pages: parsed.pages.map((page) => ({
+      ...page,
+      glyphIds: page.glyphIds as GlyphId[],
+      atlas: withTypedCoefficients(page.atlas as unknown as CachedSlugAtlas),
+    })),
+  } satisfies CachedAtlas;
+  await validateCachedAtlas(file, cached, HEADER_BYTES + indexLength);
+  return cached;
+}
+
 async function validateCachedAtlas(
-  filePath: string,
+  file: FileHandle,
   cached: CachedAtlas,
   payloadOffset: number,
 ): Promise<void> {
@@ -534,7 +577,7 @@ async function validateCachedAtlas(
     compressedOffset += page.compressedLength;
   }
 
-  const stat = await fs.promises.stat(filePath);
+  const stat = await file.stat();
   if (payloadOffset + compressedOffset !== stat.size) {
     throw new Error("cached atlas payload length does not match its index");
   }
@@ -589,13 +632,17 @@ function stagedPage(page: StagedCachedAtlasPage, compressedOffset: number): Cach
 async function payloadStart(filePath: string): Promise<number> {
   const file = await fs.promises.open(filePath, "r");
   try {
-    const header = Buffer.alloc(HEADER_BYTES);
-    const result = await file.read(header, 0, header.byteLength, 0);
-    if (result.bytesRead !== header.byteLength) throw new Error("truncated cached atlas header");
-    return HEADER_BYTES + header.readUInt32LE(MAGIC.byteLength);
+    return await payloadStartFromFile(file);
   } finally {
     await file.close();
   }
+}
+
+async function payloadStartFromFile(file: FileHandle): Promise<number> {
+  const header = Buffer.alloc(HEADER_BYTES);
+  const result = await file.read(header, 0, header.byteLength, 0);
+  if (result.bytesRead !== header.byteLength) throw new Error("truncated cached atlas header");
+  return HEADER_BYTES + header.readUInt32LE(MAGIC.byteLength);
 }
 
 async function copyFileInto(sourcePath: string, output: fs.promises.FileHandle): Promise<void> {
@@ -629,10 +676,26 @@ async function checksumFileRange(
   offset: number,
   length: number,
 ): Promise<string> {
+  const file = await fs.promises.open(filePath, "r");
+  try {
+    return await checksumFileHandleRange(filePath, file, offset, length);
+  } finally {
+    await file.close();
+  }
+}
+
+async function checksumFileHandleRange(
+  filePath: string,
+  file: FileHandle,
+  offset: number,
+  length: number,
+): Promise<string> {
   const hash = crypto.createHash("sha256");
   if (length === 0) return hash.digest("hex");
 
   for await (const chunk of fs.createReadStream(filePath, {
+    fd: file.fd,
+    autoClose: false,
     start: offset,
     end: offset + length - 1,
   })) {

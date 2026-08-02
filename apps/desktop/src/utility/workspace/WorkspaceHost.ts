@@ -19,7 +19,9 @@ import type {
 } from "../../shared/workspace/protocol";
 import { PortByteStream } from "../../shared/workspace/PortByteStream";
 import {
+  closeCachedAtlas,
   DEFAULT_ATLAS_CACHE_BYTE_BUDGET,
+  loadCachedAtlasPage,
   openCachedAtlas,
   pruneCachedAtlases,
   publishCachedAtlas,
@@ -33,6 +35,7 @@ import {
   type CachedAtlasPageRequest,
   type CachedAtlasPageSink,
   type DocumentAllocation,
+  type OpenedCachedAtlas,
   type OpenedCachedAtlasPage,
   type PreparedAtlasPage,
   type StagedCachedAtlasPage,
@@ -78,6 +81,8 @@ export class WorkspaceHost {
   #packageAddress: PackageAddress | null = null;
   #cachedGeneration = 0;
   #cachedPages = new Map<number, OpenedCachedAtlasPage>();
+  #openedCachedAtlasKey: string | null = null;
+  #openedCachedAtlas: OpenedCachedAtlas | null = null;
   #preparedPages = new Map<number, PreparedAtlasPage>();
   #atlasBuilds = new Map<string, CachedAtlasBuild>();
   #operations: Promise<void> = Promise.resolve();
@@ -179,7 +184,7 @@ export class WorkspaceHost {
         revisionKey: this.#bridge.slugAtlasCacheRevision(),
       },
     };
-    const cached = await openCachedAtlas(this.#atlasCacheRoot, cacheRequest);
+    const cached = await this.#loadCachedAtlasPage(cacheRequest);
     if (cached) {
       this.#cachedGeneration += 1;
       if (!Number.isSafeInteger(this.#cachedGeneration)) {
@@ -197,6 +202,38 @@ export class WorkspaceHost {
       descriptor,
     });
     return { ...descriptor, origin: "native" };
+  }
+
+  async #loadCachedAtlasPage(
+    request: CachedAtlasPageRequest,
+  ): Promise<OpenedCachedAtlasPage | null> {
+    const openedKey = cachedAtlasOpenKey(request);
+    if (this.#openedCachedAtlasKey !== openedKey) {
+      await this.#closeOpenedCachedAtlas();
+      this.#openedCachedAtlasKey = openedKey;
+      this.#openedCachedAtlas = await openCachedAtlas(this.#atlasCacheRoot, request);
+    }
+
+    const opened = this.#openedCachedAtlas;
+    if (!opened) return null;
+
+    const page = await loadCachedAtlasPage(opened, request);
+    if (page) return page;
+
+    await this.#closeOpenedCachedAtlas();
+    return null;
+  }
+
+  async #closeOpenedCachedAtlas(): Promise<void> {
+    const opened = this.#openedCachedAtlas;
+    this.#openedCachedAtlas = null;
+    if (!opened) return;
+
+    try {
+      await closeCachedAtlas(opened);
+    } catch (error) {
+      console.error("failed to close cached Slug atlas", error);
+    }
   }
 
   async #streamSlugAtlas(
@@ -366,6 +403,8 @@ export class WorkspaceHost {
     if (publishedBytes === null) return;
 
     this.#atlasBuilds.delete(buildKey);
+    await this.#closeOpenedCachedAtlas();
+    this.#openedCachedAtlasKey = null;
     await pruneCachedAtlases(this.#atlasCacheRoot, this.#atlasCacheByteBudget);
   }
 
@@ -475,7 +514,7 @@ export class WorkspaceHost {
     return { path: result.path, format: "ttf" };
   }
 
-  #close(discard: boolean): null {
+  async #close(discard: boolean): Promise<null> {
     const state = this.#documentState();
     if (!state) return null;
     if (state.dirty && !discard) {
@@ -485,7 +524,16 @@ export class WorkspaceHost {
     const documentId = state.documentId;
     const address = this.#packageAddress;
 
+    for (const page of this.#cachedPages.values()) {
+      try {
+        await cancelCachedAtlasPage(page);
+      } catch (error) {
+        console.error("failed to cancel cached Slug atlas page", error);
+      }
+    }
     this.#cachedPages.clear();
+    await this.#closeOpenedCachedAtlas();
+    this.#openedCachedAtlasKey = null;
     this.#preparedPages.clear();
     this.#discardAtlasBuildsExcept(null);
     this.#bridge.closeWorkspace();
@@ -543,6 +591,15 @@ export class WorkspaceHost {
 
     return this.#documentId;
   }
+}
+
+function cachedAtlasOpenKey(request: CachedAtlasPageRequest): string {
+  return JSON.stringify([
+    request.key.documentKey,
+    request.key.revisionKey,
+    request.alignment,
+    request.pageCount,
+  ]);
 }
 
 function cachedAtlasBuildKey(request: CachedAtlasPageRequest): string {

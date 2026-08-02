@@ -1,4 +1,5 @@
 import type { GlyphId, SlugAtlas } from "@shift/types";
+import type { FileHandle } from "node:fs/promises";
 import type { ByteReadableStream, WorkspacePackageIdentity } from "../../shared/workspace/protocol";
 
 /** Opaque key for one authored revision's disposable Slug pages. */
@@ -84,6 +85,14 @@ export type CachedAtlasFile = {
   name: string;
   bytes: number;
   touched: number;
+};
+
+/** One validated cache artifact whose index and file stay open across page loads. */
+export type OpenedCachedAtlas = {
+  atlas: CachedAtlas;
+  filePath: string;
+  file: FileHandle;
+  payloadOffset: number;
 };
 
 /** Validated cached page ready for bounded decompression. */

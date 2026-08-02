@@ -185,6 +185,17 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     return bytes;
   }
 
+  function corruptAtlasCacheIndex(): void {
+    const cacheRoot = path.join(tmpRoot, "atlas-cache");
+    const fileName = fs.readdirSync(cacheRoot).find((name) => name.endsWith(".atlas"));
+    if (!fileName) throw new Error("expected a published CachedAtlas");
+
+    const filePath = path.join(cacheRoot, fileName);
+    const bytes = fs.readFileSync(filePath);
+    bytes[12] ^= 0xff;
+    fs.writeFileSync(filePath, bytes);
+  }
+
   async function createWorkspace(
     sync: SyncChannel,
     targetShell: ShellChannel = shell,
@@ -247,7 +258,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(atlas.glyphs.map((entry) => entry.glyphId)).toEqual([glyph.glyphId]);
   });
 
-  it("streams requested roots and reuses the completed cached page", async () => {
+  it("streams requested roots through one validated cached artifact", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);
     const first = createGlyphALayer(snapshot.sources[0]!.id);
@@ -272,11 +283,17 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const bytes = await streamSlugAtlas(sync, page.generation, 64, page.origin);
     const cached = await sync.call("workspace.slugAtlasPagePrepare", request);
     const cachedBytes = await streamSlugAtlas(sync, cached.generation, 64, cached.origin);
+    corruptAtlasCacheIndex();
+    const retained = await sync.call("workspace.slugAtlasPagePrepare", request);
+    const retainedBytes = await streamSlugAtlas(sync, retained.generation, 64, retained.origin);
 
     expect(page.origin).toBe("native");
     expect(cached.origin).toBe("cached");
+    expect(retained.origin).toBe("cached");
     expect(cachedBytes).toEqual(bytes);
+    expect(retainedBytes).toEqual(bytes);
     expect(cached.glyphs.map((entry) => entry.glyphId)).toEqual([secondGlyphId]);
+    await shell.call("workspace.close", { discard: true });
   });
 
   it("cancels native Slug production when the renderer rejects a chunk", async () => {
