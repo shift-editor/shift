@@ -1,5 +1,8 @@
+mod conversion;
+mod import;
 mod reader;
 
+pub(crate) use import::stream_font;
 pub use reader::GlyphsReader;
 
 #[cfg(test)]

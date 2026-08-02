@@ -8,7 +8,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
 
-**Architecture Invariant:** Eager reader/writer backends are stateless unit structs. A `FontImport` owns only the foreign bytes or GLIF directory records and its current cursor. WHY: ordinary conversion stays pure, while bounded imports retain only the state needed to produce the next batch.
+**Architecture Invariant:** Eager reader/writer backends are stateless unit structs. A `FontImport` owns the foreign bytes, GLIF directory records, or one upstream-parsed Glyphs source model plus its current cursor; it never owns a complete geometry-resident Shift `Font`. WHY: ordinary conversion stays pure, while bounded Shift conversion retains only format state needed to produce the next batch.
 
 **Architecture Invariant:** `UfoWriter` stages a complete UFO beside the destination and swaps it into place only after the staged tree is durable. WHY: a failed save must preserve the previous source rather than leave a partial directory.
 
@@ -20,7 +20,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** TrueType export compiles an owned snapshot of the Shift `Font` IR directly through fontir/fontc. It must not serialize a temporary UFO or fall back to another authoring format. WHY: `.shift` is the canonical authoring source, and an intermediate format would discard or reinterpret Shift concepts before compilation.
 
-**Architecture Invariant:** TTF/OTF, UFO, and Designspace streaming imports parse glyphs in bounded Rayon batches and preserve input order when publishing each batch. Eager readers drain those same canonical streams rather than maintaining a second parser. UFO and Designspace share `GlifGlyphStream`; only source discovery differs. SQLite remains outside this crate and is written by one workspace-owned sink. WHY: one conversion path prevents eager/streaming semantic drift, while concurrent SQLite authors would add contention and weaken transaction ownership.
+**Architecture Invariant:** TTF/OTF, UFO, Designspace, and Glyphs streaming imports convert glyphs in bounded Rayon batches and preserve input order when publishing each batch. Eager readers drain those same canonical streams rather than maintaining a second conversion path. UFO and Designspace share `GlifGlyphStream`; Glyphs parses its source model once, publishes stable glyph identities, then releases owned Shift batches through `GlyphsGlyphStream`. SQLite remains outside this crate and is written by one workspace-owned sink. WHY: one conversion path prevents eager/streaming semantic drift, while concurrent SQLite authors would add contention and weaken transaction ownership.
 
 **Architecture Invariant:** Compiled-font streaming enumerates `maxp` glyph IDs, not only `cmap` mappings. Unencoded glyphs receive their `post`/CFF name or a synthesized `gidN` name, and all Unicode mappings for a glyph share one authored glyph identity. WHY: `cmap` is character lookup, not the complete glyph directory.
 
@@ -43,8 +43,10 @@ src/
     reader.rs      -- UfoReader eagerly drains the canonical UFO stream
     writer.rs      -- UfoWriter: shift_font::Font -> atomically written norad::Font
   glyphs/
-    mod.rs         -- GlyphsReader re-export; fixture-based integration tests
-    reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_font::Font (read-only)
+    mod.rs         -- GlyphsReader and bounded stream exports; fixture-based integration tests
+    conversion.rs  -- Glyphs header, glyph geometry, features, and kerning conversion
+    import.rs      -- parsed Glyphs directory plus bounded parallel `GlyphsGlyphStream`
+    reader.rs      -- eager compatibility reader that drains the canonical Glyphs stream
   designspace/
     import.rs      -- Designspace source discovery configured into the shared GLIF stream
   binary/
@@ -71,12 +73,13 @@ src/
 - `UfoWriter` -- atomically writes `.ufo` bundles via `norad`
 - `DesignspaceReader` / `DesignspaceWriter` -- read and atomically write `.designspace` projects plus companion UFOs, including continuous/discrete axes, axis value labels, per-axis maps, and cross-axis mappings
 - `UfoBackend` -- unit struct implementing `FontBackend` by delegating to `UfoReader`/`UfoWriter`
-- `GlyphsReader` -- loads `.glyphs` and `.glyphspackage` files via `glyphs-reader`; read-only (no writer)
+- `GlyphsReader` -- eagerly drains the canonical `.glyphs` / `.glyphspackage` stream for compatibility callers; read-only (no writer)
+- `GlyphsGlyphStream` -- owns one upstream-parsed Glyphs model and converts bounded, layer-aware Shift glyph batches in directory order
 - `FontExporter` -- compiles a `FontView` directly to TTF via `ShiftIrSource` and fontc
 
 ## How it works
 
-**Loading a font:** `FontLoader::read_font` retains the eager API but the TTF/OTF, UFO, and Designspace readers implement it by draining their bounded streams. `FontLoader::stream_font` dispatches those sources to the same importers. It first returns complete top-level metadata and a cheap glyph/source directory, then materializes at most the requested batch of `Glyph` values. UFO and Designspace both feed shared GLIF work records into `GlifGlyphStream`; Designspace only adds stable multi-source discovery. Rayon converts geometry records in parallel; indexed collection preserves glyph order. The workspace writes and releases each batch before requesting another.
+**Loading a font:** `FontLoader::read_font` retains the eager API but the TTF/OTF, UFO, Designspace, and Glyphs readers implement it by draining their bounded streams. `FontLoader::stream_font` dispatches those sources to the same importers. It first returns complete top-level metadata and a cheap glyph/source directory, then materializes at most the requested batch of `Glyph` values. UFO and Designspace both feed shared GLIF work records into `GlifGlyphStream`; Designspace only adds stable multi-source discovery. Glyphs syntax is parsed once by `glyphs-reader`; `GlyphsGlyphStream` preassigns every glyph identity so component references resolve before their bases are converted. Rayon converts geometry records in parallel; indexed collection preserves glyph order. The workspace writes and releases each Shift batch before requesting another.
 
 **Point type mapping (read):** norad uses separate `Move`, `Line`, `Curve`, `OffCurve`, `QCurve` types. The IR collapses `Move`/`Line`/`Curve` into `OnCurve` and keeps `OffCurve` and `QCurve` distinct. On write, context (position in contour, open/closed, preceding point type) is used to reconstruct the correct norad variant.
 
@@ -84,7 +87,7 @@ src/
 
 **Binary variation metadata:** The TTF/OTF reader imports `fvar` axis definitions, hidden flags, and named instances into the Shift IR. The bounded path enumerates every `maxp` glyph ID, groups all `cmap` values by glyph, deterministically derives contour/point identities from emitted positions, and preserves TrueType quadratics instead of expanding them to cubic control pairs. Binary glyph geometry is still materialized only at the default variation location; recovering editable `gvar` sources is separate work.
 
-**Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
+**Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions. The upstream parser currently materializes its complete normalized Glyphs source model before the bounded cursor begins; batching bounds Shift glyph conversion and persistence, not source-syntax parsing.
 
 **Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation; imported labels receive newly minted Shift identity because Designspace has no equivalent stable label ID.
 
@@ -123,6 +126,7 @@ src/
 
 - **Cross-platform UFO replacement:** macOS and Linux use an atomic directory exchange when supported. The fallback moves the old tree aside first and restores it if installing the staged tree fails.
 - **OnCurve ambiguity on write:** The IR's `OnCurve` type is context-dependent when writing. The first point of an open contour becomes `Move`, a point after `OffCurve` becomes `Curve`, everything else becomes `Line`. If contour structure is malformed, this heuristic may produce wrong results.
+- **Glyphs source parsing is eager:** `glyphs-reader` materializes one normalized source model before `GlyphsGlyphStream` starts. Shift geometry conversion, packing, compression, and SQLite writes remain bounded.
 - **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
 - **Cross-axis mappings:** Direct TTF compilation rejects cross-axis mappings until the compiler stack supports `avar` version 2. It never flattens the mapping or falls back to temporary UFO compilation.
 - **Authored STAT tables:** When Shift axis labels exist, export appends a generated `STAT` feature block. If authored feature text also declares `STAT`, the feature compiler reports the conflict.

@@ -63,6 +63,11 @@ impl FontAdaptor for GlyphsFontAdaptor {
     fn write_font(&self, _font: &Font, _path: &str) -> FormatBackendResult<()> {
         Err(FormatBackendError::WriteUnsupported)
     }
+
+    fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
+        let (header, stream) = crate::glyphs::stream_font(path)?;
+        Ok(Some((header, Box::new(stream))))
+    }
 }
 
 impl FontAdaptor for DesignspaceFontAdaptor {

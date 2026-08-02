@@ -348,6 +348,81 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
 }
 
 #[test]
+fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = fixture("fixtures/fonts/Homenaje.glyphs");
+    let store_path = temp.path().join("homenaje.sqlite");
+
+    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let root = workspace
+        .font()
+        .glyph_id_by_name("Aacute")
+        .expect("Homenaje should contain Aacute");
+    let closure = workspace
+        .store()
+        .referenced_glyph_closure([root.clone()])
+        .unwrap();
+    let closure_layer_count = closure
+        .iter()
+        .map(|glyph_id| {
+            workspace
+                .font()
+                .glyph(glyph_id.clone())
+                .unwrap()
+                .layers()
+                .len()
+        })
+        .sum::<usize>();
+
+    assert!(closure.len() > 1);
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    assert!(
+        workspace
+            .font()
+            .glyph(root.clone())
+            .unwrap()
+            .layers()
+            .values()
+            .all(|layer| layer.is_empty())
+    );
+
+    workspace
+        .acquire_glyphs(std::slice::from_ref(&root), AcquireScope::ComponentClosure)
+        .unwrap();
+    assert_eq!(workspace.loaded_layer_count(), closure_layer_count);
+    assert_eq!(
+        workspace
+            .font()
+            .glyph(root.clone())
+            .unwrap()
+            .layers()
+            .values()
+            .flat_map(|layer| layer.components_iter())
+            .count(),
+        2
+    );
+    drop(workspace);
+
+    let mut resumed = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(resumed.loaded_layer_count(), 0);
+    resumed
+        .acquire_glyphs(std::slice::from_ref(&root), AcquireScope::ComponentClosure)
+        .unwrap();
+    assert_eq!(resumed.loaded_layer_count(), closure_layer_count);
+    assert_eq!(
+        resumed
+            .font()
+            .glyph(root)
+            .unwrap()
+            .layers()
+            .values()
+            .flat_map(|layer| layer.components_iter())
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn ufo_source_roundtrips_through_lazy_acquisition() {
     let temp = tempfile::tempdir().unwrap();
     let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
