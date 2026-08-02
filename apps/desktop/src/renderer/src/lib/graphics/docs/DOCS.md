@@ -8,9 +8,13 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 
 - **Architecture Invariant:** `Renderer` owns the `MarkerLayer` lifecycle. `CanvasContextProvider` only reports DOM canvas mount, resize, and unmount events.
 
-- **Architecture Invariant:** `ResidentGlyphLayer` is the generic catalog-preview boundary. It owns one WebGPU adapter/device/context, one complete base atlas, and independently replaceable edit patches; Slug names and packed-layout knowledge remain behind that backend rather than entering React or catalog frame types.
+- **Architecture Invariant:** `ResidentGlyphLayer` is the generic catalog-preview boundary. It owns one WebGPU adapter/device/context and independently replaceable authored root pages; Slug names and packed-layout knowledge remain behind that backend rather than entering React catalog components.
 
-- **Architecture Invariant:** Catalog route activity and GPU readiness are independent. Leaving `/home` makes the catalog inert and keeps it painted behind the opaque editor without destroying the resident layer or resizing its canvas. Returning submits one cheap redraw because Chromium may discard the WebGPU canvas presentation. Readiness means the complete atlas, including any required local edit patches, is current and its submitted frame completed.
+- **Architecture Invariant:** Catalog route activity and GPU readiness are independent. Leaving `/home` makes the catalog inert and keeps it painted behind the opaque editor without destroying the resident layer or resizing its canvas. Returning submits one cheap redraw because Chromium may discard the WebGPU canvas presentation. Initial readiness means the current visible page is complete and its submitted frame completed; complete residency is tracked separately while fixed root pages fill cooperatively.
+
+- **Architecture Invariant:** Atlas invalidation never removes a presented root before its replacement page is uploaded. Axis, source, mapping, directory, and structural changes retain the prior frame, prioritize every visible root at the new authored revision, swap that frame atomically, and then replace offscreen fixed pages. One bounded native page may occupy the utility lane; no monolithic complete-font request blocks later visible work.
+
+- **Architecture Invariant:** Preview scale remains metrics-derived. `SlugPreviewExtents` expands every cell from the font-wide all-source overflow without changing pixels per em; extents grow as pages arrive and stale extents remain safe during replacement.
 
 - **Architecture Invariant:** **CRITICAL**: The instance buffer layout (attribute offsets in the draw command) must exactly match the packing order in `MarkerHandleRenderer.#writeInstance`. If either side changes stride/offset, handles render garbage with no error.
 
@@ -51,7 +55,7 @@ editor/rendering/markers/
 
 - `MarkerLayer` -- WebGL context wrapper. Manages REGL instance, instance buffer, and draw command. Provides `resizeCanvas`, `draw`, `clear`, `destroy`, and `isAvailable`.
 
-- `ResidentGlyphLayer` -- algorithm-neutral surface used by the catalog controller. It prepares and streams one complete native Slug atlas, retains one device/context, and overlays small replacement patches for locally invalidated roots.
+- `ResidentGlyphLayer` -- algorithm-neutral surface used by the catalog controller. It retains one device/context and prepares, streams, and atomically installs independently replaceable native Slug root pages.
 
 - `MarkerInstance` -- logical representation of one marker shape. The current marker path packs directly into a `Float32Array` for zero steady-state allocation.
 
@@ -73,7 +77,9 @@ editor/rendering/markers/
 
 ### Resident catalog lifecycle
 
-`GlyphCatalogController` retains `ResidentGlyphLayer` across routes and tracks `Font.invalidGlyphIdsCell`. Initial residency acquires every authored layer, streams one complete atlas, and marks the glyph canvas `data-fully-resident="true"`. Scrolling in either direction therefore only submits frames and never prepares or uploads geometry. Local edits invalidate touched roots and component dependents, then stream one replacement patch while untouched roots remain in the complete base atlas. Axis/source changes discard the complete atlas and rebuild it because every root is invalid. Invalid or missing roots are never submitted, so stale previews are not displayed. Route-dependent navigation is accessed through a stable callback ref so it cannot recreate the controller or device. `#needsRedraw` keeps overlay-only pointer updates from submitting glyph frames.
+`GlyphCatalogController` retains `ResidentGlyphLayer` across routes and tracks `Font.invalidGlyphIdsCell`. Initial residency prepares only roots intersecting the current viewport, submits that complete page, and then `#refreshComplete` fills deterministic directory pages while yielding between native calls. Local edits and global axis/source changes leave the active mappings intact, abort stale candidates, and route through the same visible-first replacement. Scrolling during incomplete residency aborts background work and prioritizes the newly visible roots. Once every root is current, the glyph canvas reports `data-fully-resident="true"`; `data-grid-readiness` distinguishes `Initial`, `Stale`, `Visible`, `Complete`, and `Unavailable` for product E2E assertions. Route-dependent navigation is accessed through a stable callback ref so it cannot recreate the controller or device. `#needsRedraw` keeps overlay-only pointer updates from submitting glyph frames.
+
+Every page reports all-source `SlugPreviewExtents`. The controller monotonically merges those bounds during the active generation, and `GlyphCatalogLayout` expands shared cell width, preview height, and row pitch using the existing metrics-derived pixels-per-em ratio. Oversized glyphs therefore retain the same scale rather than being individually fitted or clipped to the metrics box.
 
 ### Per-frame draw pipeline
 

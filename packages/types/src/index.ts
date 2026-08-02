@@ -88,6 +88,7 @@ export type {
   SlugExactSource,
   SlugGlyph,
   SlugLayout,
+  SlugPreviewExtents,
   SlugSection,
   SlugWeightSet,
   TranslatePointsIntent,

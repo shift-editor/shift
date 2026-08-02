@@ -38,9 +38,10 @@ pub use resident::{
 };
 pub use variable::{
     pack_variable_params, PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks,
-    VariableAnchorSource, VariableAtlas, VariableAtlasBuilder, VariableComponent,
-    VariableComponentGlyph, VariableComponentPart, VariableComponentSource, VariableGlyph,
-    VariableLayout, VariableParams, VariableSource, VariableStatistics, VARIABLE_PARAMS_BYTES,
+    SlugPreviewExtents, VariableAnchorSource, VariableAtlas, VariableAtlasBuilder,
+    VariableComponent, VariableComponentGlyph, VariableComponentPart, VariableComponentSource,
+    VariableGlyph, VariableLayout, VariableParams, VariableSource, VariableStatistics,
+    VARIABLE_PARAMS_BYTES,
 };
 
 /// Shader source shared by native `wgpu` and Electron WebGPU consumers.

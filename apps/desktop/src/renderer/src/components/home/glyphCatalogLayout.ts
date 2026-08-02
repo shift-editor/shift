@@ -1,4 +1,6 @@
 import { Rect, type Point2D } from "@shift/geo";
+import type { SlugPreviewExtents, SourceMetrics } from "@shift/types";
+import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 import type {
   GlyphCatalogCell,
   GlyphCatalogCellArea,
@@ -11,12 +13,11 @@ const VIEWPORT_PADDING = 20;
 const GRID_INSET = 16;
 const COLUMN_GAP = 8;
 const NOMINAL_CELL_WIDTH = 100;
-const ROW_PITCH = 123;
 const PREVIEW_HEIGHT = 75;
 const PREVIEW_CONTENT_INSET = 16;
 const NAME_GAP = 8;
 const NAME_HEIGHT = 28;
-const CELL_HEIGHT = PREVIEW_HEIGHT + NAME_GAP + NAME_HEIGHT;
+const ROW_GAP = 12;
 
 /** Immutable screen-space layout for one glyph catalog viewport. */
 export class GlyphCatalogLayout implements GlyphCatalogLayoutMetrics {
@@ -32,27 +33,42 @@ export class GlyphCatalogLayout implements GlyphCatalogLayoutMetrics {
   readonly gridLeft = VIEWPORT_PADDING + GRID_INSET;
   readonly gridWidth: number;
   readonly columnGap = COLUMN_GAP;
-  readonly rowPitch = ROW_PITCH;
-  readonly previewHeight = PREVIEW_HEIGHT;
+  readonly rowPitch: number;
+  readonly previewHeight: number;
   readonly previewContentInset = PREVIEW_CONTENT_INSET;
   readonly nameGap = NAME_GAP;
   readonly nameHeight = NAME_HEIGHT;
 
-  constructor(viewportWidth: number, viewportHeight: number, glyphCount: number) {
+  constructor(
+    viewportWidth: number,
+    viewportHeight: number,
+    glyphCount: number,
+    metrics: SourceMetrics,
+    previewExtents: SlugPreviewExtents,
+  ) {
     this.viewportWidth = finiteNonNegative(viewportWidth);
     this.viewportHeight = finiteNonNegative(viewportHeight);
     this.glyphCount = Math.max(0, Math.floor(finiteNonNegative(glyphCount)));
+
+    const [baseViewHeight] = GlyphPreviewLayout.fontViewport(metrics);
+    const [expandedViewHeight] = GlyphPreviewLayout.fontViewport(metrics, previewExtents);
+    const pixelsPerEm = PREVIEW_HEIGHT / Math.max(1, baseViewHeight);
+    this.previewHeight = expandedViewHeight * pixelsPerEm;
+    this.rowPitch = this.previewHeight + NAME_GAP + NAME_HEIGHT + ROW_GAP;
+
+    const horizontalOverflow = 2 * previewExtents.horizontal * pixelsPerEm;
+    const nominalCellWidth = NOMINAL_CELL_WIDTH + horizontalOverflow;
     this.gridWidth = Math.max(0, this.viewportWidth - 2 * this.gridLeft);
     this.columns =
       this.gridWidth > 0
-        ? Math.max(1, Math.floor((this.gridWidth + COLUMN_GAP) / (NOMINAL_CELL_WIDTH + COLUMN_GAP)))
+        ? Math.max(1, Math.floor((this.gridWidth + COLUMN_GAP) / (nominalCellWidth + COLUMN_GAP)))
         : 0;
     this.cellWidth =
       this.columns > 0
         ? (this.gridWidth - Math.max(0, this.columns - 1) * COLUMN_GAP) / this.columns
         : 0;
     this.rowCount = this.columns > 0 ? Math.ceil(this.glyphCount / this.columns) : 0;
-    this.totalHeight = this.rowCount > 0 ? 2 * VIEWPORT_PADDING + this.rowCount * ROW_PITCH : 0;
+    this.totalHeight = this.rowCount > 0 ? 2 * VIEWPORT_PADDING + this.rowCount * this.rowPitch : 0;
   }
 
   /** Derives only the cells intersecting the current native scroll viewport. */
@@ -106,7 +122,12 @@ export class GlyphCatalogLayout implements GlyphCatalogLayoutMetrics {
         cells.push({
           catalogIndex,
           glyph,
-          cellRect: Rect.fromXYWH(x, y, this.cellWidth, CELL_HEIGHT),
+          cellRect: Rect.fromXYWH(
+            x,
+            y,
+            this.cellWidth,
+            this.previewHeight + this.nameGap + this.nameHeight,
+          ),
           previewRect,
           previewContentRect,
           nameRect,

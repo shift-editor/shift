@@ -92,7 +92,6 @@ export class WorkspaceManager {
         return existingAfterOpen;
       }
 
-      workspaceProcess.prepareAuthoredGlyphCompilation();
       return this.#registerLoadedSession(workspaceProcess, state);
     } catch (error) {
       workspaceProcess.stop();

@@ -14,13 +14,13 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW `FontSaveSnapshot`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
 
-**Architecture Invariant:** Glyph snapshot, projection, preview, and Slug preparation methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans, and acquired payloads remain resident in the workspace cache. `prepareAuthoredGlyphCompilation()` may perform complete acquisition before WebGPU initialization so the later aligned atlas request does not repeat that work.
+**Architecture Invariant:** Glyph snapshot, projection, preview, and Slug preparation methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans, and acquired payloads remain resident in the workspace cache. Product Grid startup requests bounded `prepareSlugAtlasPage()` roots rather than initiating complete acquisition.
 
 **Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
 **Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
 
-**Architecture Invariant:** A prepared authored glyph compilation remains native until `prepareSlugAtlas(alignment)` supplies its device alignment. The resulting Slug atlas or page is consumed once through napi-rs `ReadableStream<Buffer>` chunks. Every font edit invalidates both forms. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. **WHY:** Renderer startup can overlap complete authored compilation without placeholders, while product upload retains one bounded temporary chunk rather than an atlas-sized JavaScript copy or an unbounded IPC queue.
+**Architecture Invariant:** A prepared Slug page remains native until it is consumed once through napi-rs `ReadableStream<Buffer>` chunks. Every font edit invalidates unconsumed output. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. **WHY:** Visible roots take priority, fixed pages yield between native calls, and product upload retains one bounded temporary chunk rather than an atlas-sized JavaScript copy or an unbounded IPC queue. `prepareAuthoredGlyphCompilation()` and the complete endpoint remain diagnostic/profiling boundaries, not product startup scheduling.
 
 ## Codemap
 
@@ -52,8 +52,8 @@ crates/shift-bridge/
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
 - `NapiGlyphProjection` -- compact location-independent glyph backing with reusable interpolation, exact-source exceptions, and Rust-owned `GlyphComponents` relationships.
 - `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
-- `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, and aligned resident-section layout.
-- `authoredGlyphCompilation` -- one complete location-independent `AuthoredAtlas` prepared before device alignment and consumed by the complete-atlas endpoint.
+- `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, scale-preserving `SlugPreviewExtents`, and aligned resident-section layout.
+- `authoredGlyphCompilation` -- diagnostic complete location-independent `AuthoredAtlas` prepared before device alignment and consumed by the complete-atlas endpoint.
 - `SlugAtlasGeneration` -- one aligned native atlas or page consumed by its stream API or released by its discard API.
 
 ## How it works
@@ -67,7 +67,7 @@ crates/shift-bridge/
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
 8. `closeWorkspace()` drops the live Rust workspace handle. The utility process retains a clean package-backed SQLite document, but deletes untitled/imported documents and explicitly discarded dirty documents.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
-10. After source open, `prepareAuthoredGlyphCompilation()` acquires all layers and builds the catalog's complete location-independent `AuthoredAtlas` while the renderer starts. `prepareSlugAtlas(alignment)` consumes that prepared compilation and performs only alignment-specific layout; if prewarming has not run, it performs the same complete build synchronously. `prepareSlugAtlasPage(glyphIds, alignment)` independently acquires ordered roots and their indexed component closures for a local edit patch. Each build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. Every font edit invalidates the prepared compilation and any unconsumed generation or patch. Background compilation emits a `[workspace-open]` acquisition/compilation summary; set `SHIFT_PROFILE_SLUG_ATLAS=1` for every nested native phase.
+10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` first for current visible roots, then for deterministic fixed directory pages. Every page independently acquires its indexed component closure and reports shared all-source preview extents. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. New visible work supersedes queued complete-residency pages between calls. The complete preparation endpoints remain available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for every nested native phase.
 
 ## Type Boundary
 

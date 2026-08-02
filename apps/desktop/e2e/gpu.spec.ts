@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import { test, expect, navigateToEditor } from "./fixtures/perfApp";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
@@ -297,46 +297,184 @@ test.describe("Resident catalog GPU", () => {
     expect(scrollDuration).toBeLessThan(1_000);
   });
 
-  test("rebuilds the complete atlas after a source change", async ({ page }) => {
-    await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
-
-    const scrollViewport = page.getByLabel("Glyph catalog");
-    await scrollViewport.waitFor({ state: "visible" });
-    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
-    await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
-
-    await navigateToEditor(page, "53");
-    await trackSlugFrameSubmits(page);
+  test("replaces the visible frame before completing a selected-source deletion", async ({
+    electronApp,
+    page,
+  }) => {
+    const glyphCanvas = await preparePagedGrid(electronApp, page);
+    await trackGridTransitions(page);
     await trackSlugAtlasLoads(page);
-    await page.evaluate(async () => {
-      const font = window.shift?.font;
-      const source = font?.sources[0];
-      if (!font || !source) throw new Error("Expected a source for global invalidation");
 
-      await font.updateSource({ ...source, name: `${source.name} E2E` });
+    await page.evaluate(async () => {
+      const workspace = window.shift;
+      const font = workspace?.font;
+      const source = font?.sources.find((candidate) => candidate.id !== font.defaultSource.id);
+      if (!workspace || !font || !source) throw new Error("Expected a non-default source");
+
+      workspace.editor.setDesignLocation(
+        new Map(
+          font
+            .getAxes()
+            .map((axis) => [axis.id, source.location.values[axis.id] ?? axis.default] as const),
+        ),
+      );
+      font.deleteSource(source.id);
       await font.editCoordinator.settled();
     });
 
-    const returnStarted = performance.now();
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
+    const state = await observedGridState(page);
+    expect(state.readiness).toEqual(expect.arrayContaining(["Stale", "Visible", "Complete"]));
+    expect(state.readiness.indexOf("Stale")).toBeLessThan(state.readiness.indexOf("Visible"));
+    expect(state.readiness.indexOf("Visible")).toBeLessThan(
+      state.readiness.lastIndexOf("Complete"),
+    );
+    expect(state.hiddenTransitions).toBe(0);
+    expect(state.patchRootCounts[0]).toBeLessThan(state.glyphCount);
+    expect(state.patchRootCounts.at(-1)).toBe(state.glyphCount);
+  });
+
+  test("replaces a non-default design location atomically after deleting its axis", async ({
+    electronApp,
+    page,
+  }) => {
+    const glyphCanvas = await preparePagedGrid(electronApp, page);
+    await trackGridTransitions(page);
+
+    const deletedAxis = await page.evaluate(async () => {
+      const workspace = window.shift;
+      const axis = workspace?.font.getAxes()[0];
+      if (!workspace || !axis) throw new Error("Expected a variable axis");
+
+      const nonDefault = axis.maximum === axis.default ? axis.minimum : axis.maximum;
+      workspace.editor.setDesignLocation(new Map([[axis.id, nonDefault ?? axis.default]]));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      workspace.font.deleteAxis(axis.id);
+      await workspace.font.editCoordinator.settled();
+      return axis.id;
+    });
+
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
+    expect(
+      await page.evaluate(
+        (axisId) => window.shift?.font.getAxes().some((axis) => axis.id === axisId),
+        deletedAxis,
+      ),
+    ).toBe(false);
+    const state = await observedGridState(page);
+    expect(state.readiness).toEqual(expect.arrayContaining(["Stale", "Visible", "Complete"]));
+    expect(state.readiness.indexOf("Stale")).toBeLessThan(state.readiness.indexOf("Visible"));
+    expect(state.readiness.indexOf("Visible")).toBeLessThan(
+      state.readiness.lastIndexOf("Complete"),
+    );
+    expect(state.hiddenTransitions).toBe(0);
+  });
+
+  test("expands every preview cell for outlines outside the font metrics", async ({ page }) => {
+    const scrollViewport = page.getByLabel("Glyph catalog");
+    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
+    const initialHeight = Number(await glyphCanvas.getAttribute("data-preview-height"));
+
+    await navigateToEditor(page, "53");
+    await page.evaluate(async () => {
+      const editor = window.shift?.editor;
+      if (!editor) throw new Error("Expected editor runtime");
+      const inserted = editor.insertContent({
+        contours: [
+          {
+            closed: true,
+            points: [
+              { x: -600, y: -800, pointType: "onCurve", smooth: false },
+              { x: 1800, y: -800, pointType: "onCurve", smooth: false },
+              { x: 1800, y: 1800, pointType: "onCurve", smooth: false },
+              { x: -600, y: 1800, pointType: "onCurve", smooth: false },
+            ],
+          },
+        ],
+      });
+      if (!inserted) throw new Error("Oversized contour insertion failed");
+      await editor.font.editCoordinator.settled();
+    });
     await page.getByRole("button", { name: "Display all glyphs" }).click();
     await page.waitForURL(/#\/home/);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.slugFrameSubmits), {
-        timeout: 30_000,
-      })
-      .toBe("1");
-    await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
-    const recoveryDuration = performance.now() - returnStarted;
 
-    const atlasLoads = await page.evaluate(() => ({
-      complete: Number(document.documentElement.dataset.slugCompleteAtlasPrepares),
-      patches: document.documentElement.dataset.slugPatchRootCounts,
-    }));
-    console.log(`Resident catalog source recovery took ${recoveryDuration.toFixed(0)}ms`);
-    expect(recoveryDuration).toBeLessThan(1_000);
-    expect(atlasLoads).toEqual({ complete: 1, patches: "[]" });
+    await expect
+      .poll(async () => Number(await glyphCanvas.getAttribute("data-preview-height")))
+      .toBeGreaterThan(initialHeight);
+    await expect(glyphCanvas).toBeVisible();
+    expect(Number(await glyphCanvas.getAttribute("data-preview-horizontal"))).toBeGreaterThan(0);
   });
 });
+
+async function preparePagedGrid(electronApp: ElectronApplication, page: Page): Promise<Locator> {
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
+  await electronApp.evaluate(async ({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setSize(760, 500);
+  });
+
+  const scrollViewport = page.getByLabel("Glyph catalog");
+  const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+  await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+    timeout: 30_000,
+  });
+  return glyphCanvas;
+}
+
+async function trackGridTransitions(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>(
+      '[aria-label="Glyph catalog"] + canvas',
+    );
+    if (!canvas) throw new Error("Expected resident glyph canvas");
+
+    document.documentElement.dataset.gridReadinessTransitions = "[]";
+    document.documentElement.dataset.gridHiddenTransitions = "0";
+    new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.attributeName === "data-grid-readiness") {
+          const transitions = JSON.parse(
+            document.documentElement.dataset.gridReadinessTransitions ?? "[]",
+          ) as string[];
+          transitions.push(canvas.dataset.gridReadiness ?? "");
+          document.documentElement.dataset.gridReadinessTransitions = JSON.stringify(transitions);
+        }
+        if (record.attributeName === "style" && canvas.style.visibility === "hidden") {
+          document.documentElement.dataset.gridHiddenTransitions = String(
+            Number(document.documentElement.dataset.gridHiddenTransitions) + 1,
+          );
+        }
+      }
+    }).observe(canvas, {
+      attributeFilter: ["data-grid-readiness", "style"],
+      attributes: true,
+    });
+  });
+}
+
+async function observedGridState(page: Page): Promise<{
+  readiness: string[];
+  hiddenTransitions: number;
+  patchRootCounts: number[];
+  glyphCount: number;
+}> {
+  return page.evaluate(() => ({
+    readiness: JSON.parse(
+      document.documentElement.dataset.gridReadinessTransitions ?? "[]",
+    ) as string[],
+    hiddenTransitions: Number(document.documentElement.dataset.gridHiddenTransitions),
+    patchRootCounts: JSON.parse(
+      document.documentElement.dataset.slugPatchRootCounts ?? "[]",
+    ) as number[],
+    glyphCount: window.shift?.font.glyphRecords().length ?? 0,
+  }));
+}
 
 async function trackSlugFrameSubmits(page: Page): Promise<void> {
   await page.evaluate(() => {

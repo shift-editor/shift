@@ -85,6 +85,39 @@ fn diagonal_lines_receive_the_reference_epsilon() {
 }
 
 #[test]
+fn preview_extents_preserve_scale_for_all_source_overflow() {
+    let mut builder = VariableAtlasBuilder::new(8).unwrap();
+    let glyph_index = builder
+        .add_curve_glyph_with_sources(
+            [Curve {
+                p0: Point::new(-40.0, -200.0),
+                p1: Point::new(200.0, 900.0),
+                p2: Point::new(500.0, 100.0),
+            }],
+            0,
+            [(
+                1,
+                vec![Curve {
+                    p0: Point::new(-60.0, -250.0),
+                    p1: Point::new(300.0, 1000.0),
+                    p2: Point::new(700.0, 120.0),
+                }],
+            )],
+        )
+        .unwrap();
+    builder
+        .set_glyph_source_advances(glyph_index, [600.0, 650.0])
+        .unwrap();
+    let atlas = builder.finish();
+
+    let extents = atlas.preview_extents(&[glyph_index]).unwrap();
+
+    assert_eq!(extents.horizontal, 100.0);
+    assert_eq!(extents.minimum_y, -250.0);
+    assert_eq!(extents.maximum_y, 1000.0);
+}
+
+#[test]
 fn every_band_range_addresses_its_glyph_curves() {
     let mut builder = AtlasBuilder::new(8).unwrap();
     builder
