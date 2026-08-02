@@ -212,7 +212,7 @@ fn loads_binary_fonts_with_contours() {
 }
 
 #[test]
-fn streams_binary_ufo_and_designspace_without_eager_glyphs() {
+fn streams_binary_ufo_designspace_and_glyphs_without_eager_shift_geometry() {
     let binary_path = mutatorsans_ttf_path();
     let binary_bytes = std::fs::read(&binary_path).unwrap();
     let binary = skrifa::FontRef::new(&binary_bytes).unwrap();
@@ -222,7 +222,7 @@ fn streams_binary_ufo_and_designspace_without_eager_glyphs() {
     let streamed_binary = stream_font(&binary_path);
     assert_eq!(streamed_binary.glyph_count(), expected_binary_glyphs);
 
-    for path in [binary_path, mutatorsans_ufo_path()] {
+    for path in [binary_path, mutatorsans_ufo_path(), homenaje_glyphs_path()] {
         let eager = load_font(&path);
         let streamed = stream_font(&path);
         assert_eq!(streamed.glyph_count(), eager.glyph_count());
@@ -282,6 +282,8 @@ fn streaming_batches_preserve_published_directory_order() {
         mutatorsans_ttf_path(),
         mutatorsans_ufo_path(),
         mutatorsans_designspace_path(),
+        homenaje_glyphs_path(),
+        mutatorsans_variable_glyphs_path(),
     ] {
         let mut import = FontLoader::new()
             .stream_font(path.to_str().unwrap())
@@ -317,21 +319,25 @@ fn streaming_batches_preserve_published_directory_order() {
 
 #[test]
 fn streaming_batches_bound_authored_layers_across_sources() {
-    let path = mutatorsans_designspace_path();
-    let mut import = FontLoader::new()
-        .stream_font(path.to_str().unwrap())
-        .unwrap();
-    let glyphs = import
-        .next_batch(shift_backends::ImportBatchLimit::new(512, 4))
-        .unwrap();
-    let layer_count = glyphs
-        .iter()
-        .map(|glyph| glyph.layers().len())
-        .sum::<usize>();
+    for path in [
+        mutatorsans_designspace_path(),
+        mutatorsans_variable_glyphs_path(),
+    ] {
+        let mut import = FontLoader::new()
+            .stream_font(path.to_str().unwrap())
+            .unwrap();
+        let glyphs = import
+            .next_batch(shift_backends::ImportBatchLimit::new(512, 4))
+            .unwrap();
+        let layer_count = glyphs
+            .iter()
+            .map(|glyph| glyph.layers().len())
+            .sum::<usize>();
 
-    assert!(!glyphs.is_empty());
-    assert!(glyphs.len() < import.glyph_count());
-    assert!(layer_count <= 4 || glyphs.len() == 1);
+        assert!(!glyphs.is_empty());
+        assert!(glyphs.len() < import.glyph_count());
+        assert!(layer_count <= 4 || glyphs.len() == 1);
+    }
 }
 
 #[test]
@@ -489,8 +495,8 @@ fn truncated_binary_font_returns_error_instead_of_panicking() {
 }
 
 #[test]
-fn loads_glyphs_file_features_kerning_components_and_anchors() {
-    let font = load_font(&homenaje_glyphs_path());
+fn streams_glyphs_file_features_kerning_components_and_anchors() {
+    let font = stream_font(&homenaje_glyphs_path());
 
     assert_eq!(font.metadata().family_name.as_deref(), Some("Homenaje"));
     assert_eq!(font.metrics().units_per_em, 1000.0);
@@ -542,8 +548,8 @@ fn loads_glyphs_file_features_kerning_components_and_anchors() {
 }
 
 #[test]
-fn loads_variable_glyphs_sources_and_compatible_layers() {
-    let font = load_font(&mutatorsans_variable_glyphs_path());
+fn streams_variable_glyphs_sources_and_compatible_layers() {
+    let font = stream_font(&mutatorsans_variable_glyphs_path());
 
     assert!(font.is_variable());
     assert_eq!(font.axes().len(), 1);
