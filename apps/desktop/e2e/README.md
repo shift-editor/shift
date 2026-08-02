@@ -18,7 +18,7 @@ Append a Playwright file filter for a focused run:
 
 ```sh
 pnpm test:e2e:visual e2e/home.spec.ts
-pnpm test:e2e:gpu e2e/gpu.spec.ts
+pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
 ```
 
 Build the native bridge first with `pnpm build:native` when its binary is absent or stale. Each E2E command builds the Electron main, workspace, preload, and renderer bundles through `e2e/build.ts`.
@@ -34,7 +34,7 @@ Build the native bridge first with `pnpm build:native` when its binary is absent
 Visual tests default to MutatorSans. The GPU and performance fixture also defaults to MutatorSans, but accepts a real font or designspace through `SHIFT_E2E_FONT_PATH`:
 
 ```sh
-SHIFT_E2E_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/gpu.spec.ts
+SHIFT_E2E_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
 ```
 
 Fixtures copy source files into a temporary workspace. Tests must not depend on a developer's existing Shift workspace or user-data directory.
