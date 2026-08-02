@@ -1,9 +1,11 @@
 import { createBridge, type ShiftBridge } from "@shift/bridge";
+import fs from "node:fs";
 import path from "node:path";
 import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
 import type {
   ShellCallMap,
   ShellEventMap,
+  SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentSourceKind,
@@ -11,12 +13,30 @@ import type {
   WorkspaceExportResult,
   WorkspaceGlyphSnapshot,
   WorkspacePackageIdentity,
+  WorkspaceSlugAtlas,
+  WorkspaceSlugAtlasPageRequest,
   WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
 import { PortByteStream } from "../../shared/workspace/PortByteStream";
+import {
+  DEFAULT_ATLAS_CACHE_BYTE_BUDGET,
+  openCachedAtlas,
+  pruneCachedAtlases,
+  publishCachedAtlas,
+  stageCachedAtlasPage,
+} from "./CachedAtlas";
 import { DocumentStorage } from "./DocumentStorage";
 import { PackageOpener } from "./PackageOpener";
-import { PackageAddress, type DocumentAllocation } from "./types";
+import {
+  PackageAddress,
+  type CachedAtlasBuild,
+  type CachedAtlasPageRequest,
+  type CachedAtlasPageSink,
+  type DocumentAllocation,
+  type OpenedCachedAtlasPage,
+  type PreparedAtlasPage,
+  type StagedCachedAtlasPage,
+} from "./types";
 
 /**
  * Construction options for {@link WorkspaceHost}.
@@ -28,6 +48,8 @@ import { PackageAddress, type DocumentAllocation } from "./types";
  */
 export type WorkspaceHostOptions = {
   documentsRoot: string;
+  atlasCacheRoot: string;
+  atlasCacheByteBudget?: number;
   shell: Transport;
   /** Adapts any transferred workspace port into a transport. */
   portTransport: (port: unknown) => Transport;
@@ -46,18 +68,26 @@ export class WorkspaceHost {
   readonly #bridge: ShiftBridge;
   readonly #documents: DocumentStorage;
   readonly #packageOpener: PackageOpener;
+  readonly #atlasCacheRoot: string;
+  readonly #atlasCacheByteBudget: number;
   readonly #shellTransport: Transport;
   readonly #portTransport: (port: unknown) => Transport;
   #shell: ChannelServer<ShellEventMap> | null = null;
   #sync: ChannelServer<SyncEventMap> | null = null;
   #documentId: string | null = null;
   #packageAddress: PackageAddress | null = null;
+  #cachedGeneration = 0;
+  #cachedPages = new Map<number, OpenedCachedAtlasPage>();
+  #preparedPages = new Map<number, PreparedAtlasPage>();
+  #atlasBuilds = new Map<string, CachedAtlasBuild>();
   #operations: Promise<void> = Promise.resolve();
 
   constructor(options: WorkspaceHostOptions) {
     this.#bridge = createBridge();
     this.#documents = new DocumentStorage(options.documentsRoot);
     this.#packageOpener = new PackageOpener(this.#bridge, this.#documents);
+    this.#atlasCacheRoot = options.atlasCacheRoot;
+    this.#atlasCacheByteBudget = options.atlasCacheByteBudget ?? DEFAULT_ATLAS_CACHE_BYTE_BUDGET;
     this.#shellTransport = options.shell;
     this.#portTransport = options.portTransport;
   }
@@ -121,25 +151,52 @@ export class WorkspaceHost {
         this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location)),
       "workspace.slugAtlasPrepare": ({ alignment }) =>
         this.#serialize(() => this.#bridge.prepareSlugAtlas(alignment)),
-      "workspace.slugAtlasPagePrepare": ({ glyphIds, alignment }) =>
-        this.#serialize(() => this.#bridge.prepareSlugAtlasPage(glyphIds, alignment)),
+      "workspace.slugAtlasPagePrepare": (request) =>
+        this.#serialize(() => this.#prepareSlugAtlasPage(request)),
       "workspace.slugAtlasStream": ({ generation, maximumLength }, context) =>
         this.#serialize(() => this.#streamSlugAtlas(generation, maximumLength, context.ports)),
-      "workspace.slugAtlasPageStream": ({ generation, maximumLength }, context) =>
-        this.#serialize(() => this.#streamSlugAtlasPage(generation, maximumLength, context.ports)),
+      "workspace.slugAtlasPageStream": ({ generation, origin, maximumLength }, context) =>
+        this.#serialize(() =>
+          this.#streamSlugAtlasPage(generation, origin, maximumLength, context.ports),
+        ),
       "workspace.slugAtlasDiscard": ({ generation }) =>
         this.#serialize(() => {
           this.#bridge.discardSlugAtlas(generation);
           return null;
         }),
-      "workspace.slugAtlasPageDiscard": ({ generation }) =>
-        this.#serialize(() => {
-          this.#bridge.discardSlugAtlasPage(generation);
-          return null;
-        }),
+      "workspace.slugAtlasPageDiscard": ({ generation, origin }) =>
+        this.#serialize(() => this.#discardSlugAtlasPage(generation, origin)),
       "workspace.mapLocation": (location) =>
         this.#serialize(() => this.#bridge.mapLocation(location)),
     });
+  }
+
+  async #prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
+    const cacheRequest: CachedAtlasPageRequest = {
+      ...request,
+      key: {
+        documentKey: this.#requireDocumentId(),
+        revisionKey: this.#bridge.slugAtlasCacheRevision(),
+      },
+    };
+    const cached = await openCachedAtlas(this.#atlasCacheRoot, cacheRequest);
+    if (cached) {
+      this.#cachedGeneration += 1;
+      if (!Number.isSafeInteger(this.#cachedGeneration)) {
+        throw new Error("cached Slug atlas generation overflow");
+      }
+
+      const generation = this.#cachedGeneration;
+      this.#cachedPages.set(generation, cached);
+      return { ...cached.atlas, generation, origin: "cached" };
+    }
+
+    const descriptor = this.#bridge.prepareSlugAtlasPage(request.glyphIds, request.alignment);
+    this.#preparedPages.set(descriptor.generation, {
+      request: cacheRequest,
+      descriptor,
+    });
+    return { ...descriptor, origin: "native" };
   }
 
   async #streamSlugAtlas(
@@ -152,7 +209,11 @@ export class WorkspaceHost {
 
     const stream = new PortByteStream(this.#portTransport(port));
     try {
-      await stream.send(this.#bridge.streamSlugAtlas(generation, maximumLength));
+      await stream.send(
+        this.#bridge.streamSlugAtlas(generation, maximumLength),
+        undefined,
+        maximumLength,
+      );
       return null;
     } finally {
       stream.close();
@@ -161,6 +222,7 @@ export class WorkspaceHost {
 
   async #streamSlugAtlasPage(
     generation: number,
+    origin: SlugAtlasOrigin,
     maximumLength: number,
     ports: readonly unknown[],
   ): Promise<null> {
@@ -169,11 +231,150 @@ export class WorkspaceHost {
       throw new Error("workspace.slugAtlasPageStream requires a transferred response port");
 
     const stream = new PortByteStream(this.#portTransport(port));
+    if (origin === "cached") {
+      const cached = this.#cachedPages.get(generation);
+      if (!cached) {
+        stream.close();
+        throw new Error(`unknown cached Slug atlas generation ${generation}`);
+      }
+      this.#cachedPages.delete(generation);
+
+      try {
+        await stream.send(cached.stream, undefined, maximumLength);
+        try {
+          await pruneCachedAtlases(this.#atlasCacheRoot, this.#atlasCacheByteBudget);
+        } catch (error) {
+          console.error("failed to prune cached Slug atlases", error);
+        }
+        return null;
+      } finally {
+        stream.close();
+      }
+    }
+
+    const prepared = this.#preparedPages.get(generation);
+    if (!prepared) {
+      stream.close();
+      throw new Error(`unknown native Slug atlas generation ${generation}`);
+    }
+    this.#preparedPages.delete(generation);
+    let sink: CachedAtlasPageSink | null = null;
     try {
-      await stream.send(this.#bridge.streamSlugAtlasPage(generation, maximumLength));
+      sink = stageCachedAtlasPage(this.#atlasCacheRoot, prepared.request, prepared.descriptor);
+    } catch (error) {
+      console.error("failed to start cached Slug atlas page", error);
+    }
+
+    try {
+      await stream.send(
+        this.#bridge.streamSlugAtlasPage(generation, maximumLength),
+        async (bytes) => {
+          if (!sink) return;
+
+          try {
+            await sink.write(bytes);
+          } catch (error) {
+            console.error("failed to stage cached Slug atlas page", error);
+            const failedSink = sink;
+            sink = null;
+            try {
+              await failedSink.discard();
+            } catch (discardError) {
+              console.error("failed to discard cached Slug atlas page", discardError);
+            }
+          }
+        },
+        maximumLength,
+      );
+
+      if (sink) {
+        try {
+          const staged = await sink.complete();
+          sink = null;
+          await this.#registerCachedAtlasPage(prepared.request, staged);
+        } catch (error) {
+          console.error("failed to complete cached Slug atlas page", error);
+        }
+      }
       return null;
+    } catch (error) {
+      if (sink) {
+        try {
+          await sink.discard();
+        } catch (discardError) {
+          console.error("failed to discard interrupted cached Slug atlas page", discardError);
+        }
+      }
+      throw error;
     } finally {
       stream.close();
+    }
+  }
+
+  async #discardSlugAtlasPage(generation: number, origin: SlugAtlasOrigin): Promise<null> {
+    if (origin === "cached") {
+      const cached = this.#cachedPages.get(generation);
+      this.#cachedPages.delete(generation);
+      if (cached) await cancelCachedAtlasPage(cached);
+      return null;
+    }
+
+    this.#preparedPages.delete(generation);
+    this.#bridge.discardSlugAtlasPage(generation);
+    return null;
+  }
+
+  async #registerCachedAtlasPage(
+    request: CachedAtlasPageRequest,
+    staged: StagedCachedAtlasPage,
+  ): Promise<void> {
+    const buildKey = cachedAtlasBuildKey(request);
+    let build = this.#atlasBuilds.get(buildKey);
+    if (!build) {
+      const replacementPageIndices = new Set(request.replacementPageIndices);
+      const stagedPages = new Map<number, StagedCachedAtlasPage>();
+      for (const previousBuild of this.#atlasBuilds.values()) {
+        const compatible =
+          previousBuild.key.documentKey === request.key.documentKey &&
+          previousBuild.alignment === request.alignment &&
+          previousBuild.pageCount === request.pageCount;
+        for (const page of previousBuild.stagedPages.values()) {
+          if (compatible && !replacementPageIndices.has(page.pageIndex)) {
+            stagedPages.set(page.pageIndex, page);
+          } else {
+            fs.rmSync(page.filePath, { force: true });
+          }
+        }
+      }
+      this.#atlasBuilds.clear();
+
+      build = {
+        key: request.key,
+        alignment: request.alignment,
+        pageCount: request.pageCount,
+        replacementPageIndices: [...request.replacementPageIndices],
+        stagedPages,
+      };
+      this.#atlasBuilds.set(buildKey, build);
+    }
+
+    const previous = build.stagedPages.get(staged.pageIndex);
+    if (previous) fs.rmSync(previous.filePath, { force: true });
+    build.stagedPages.set(staged.pageIndex, staged);
+
+    const publishedBytes = await publishCachedAtlas(this.#atlasCacheRoot, build);
+    if (publishedBytes === null) return;
+
+    this.#atlasBuilds.delete(buildKey);
+    await pruneCachedAtlases(this.#atlasCacheRoot, this.#atlasCacheByteBudget);
+  }
+
+  #discardAtlasBuildsExcept(retainedKey: string | null): void {
+    for (const [buildKey, build] of this.#atlasBuilds) {
+      if (buildKey === retainedKey) continue;
+
+      for (const page of build.stagedPages.values()) fs.rmSync(page.filePath, { force: true });
+      this.#atlasBuilds.delete(buildKey);
     }
   }
 
@@ -284,6 +485,9 @@ export class WorkspaceHost {
     const documentId = state.documentId;
     const address = this.#packageAddress;
 
+    this.#cachedPages.clear();
+    this.#preparedPages.clear();
+    this.#discardAtlasBuildsExcept(null);
     this.#bridge.closeWorkspace();
     this.#documentId = null;
     this.#packageAddress = null;
@@ -338,6 +542,25 @@ export class WorkspaceHost {
     }
 
     return this.#documentId;
+  }
+}
+
+function cachedAtlasBuildKey(request: CachedAtlasPageRequest): string {
+  return JSON.stringify([
+    request.key.documentKey,
+    request.key.revisionKey,
+    request.alignment,
+    request.pageCount,
+    request.replacementPageIndices,
+  ]);
+}
+
+async function cancelCachedAtlasPage(page: OpenedCachedAtlasPage): Promise<void> {
+  const reader = page.stream.getReader();
+  try {
+    await reader.cancel("cached Slug atlas page discarded");
+  } finally {
+    reader.releaseLock();
   }
 }
 

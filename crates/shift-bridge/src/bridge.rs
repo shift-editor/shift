@@ -919,6 +919,12 @@ impl Bridge {
     Ok(result)
   }
 
+  /// Returns the durable authored revision used to address disposable cached atlas pages.
+  #[napi]
+  pub fn slug_atlas_cache_revision(&self) -> errors::Result<String> {
+    Ok(self.workspace()?.slug_atlas_cache_revision()?)
+  }
+
   /// Builds one ordered root-glyph page plus its transitive component geometry.
   ///
   /// The page uses the same packed layout as a complete atlas, but excludes

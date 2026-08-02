@@ -10,8 +10,11 @@ import type {
 import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
+  SlugAtlasOrigin,
   WorkspaceGlyphSnapshot,
   WorkspaceGlyphSnapshotRequest,
+  WorkspaceSlugAtlas,
+  WorkspaceSlugAtlasPageRequest,
 } from "@shared/workspace/protocol";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 import type { FontStore, WorkspaceCommitState } from "@/lib/model/FontStore";
@@ -195,9 +198,9 @@ export class WorkspaceEditCoordinator {
     return this.#withFlush(() => this.#workspace.prepareSlugAtlas(alignment));
   }
 
-  /** Builds one ordered root-glyph page behind every pending edit. */
-  prepareSlugAtlasPage(glyphIds: readonly GlyphId[], alignment: number): Promise<SlugAtlas> {
-    return this.#withFlush(() => this.#workspace.prepareSlugAtlasPage(glyphIds, alignment));
+  /** Opens or builds one deterministic root-glyph page behind every pending edit. */
+  prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
+    return this.#withFlush(() => this.#workspace.prepareSlugAtlasPage(request));
   }
 
   /** Streams a prepared generation without constructing a contiguous JS atlas. */
@@ -212,11 +215,12 @@ export class WorkspaceEditCoordinator {
   /** Streams one prepared page without constructing a contiguous JS atlas. */
   streamSlugAtlasPage(
     generation: number,
+    origin: SlugAtlasOrigin,
     maximumLength: number,
     write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
   ): Promise<number> {
     return this.#withFlush(() =>
-      this.#workspace.streamSlugAtlasPage(generation, maximumLength, write),
+      this.#workspace.streamSlugAtlasPage(generation, origin, maximumLength, write),
     );
   }
 
@@ -226,8 +230,8 @@ export class WorkspaceEditCoordinator {
   }
 
   /** Releases one rejected prepared page. */
-  discardSlugAtlasPage(generation: number): Promise<void> {
-    return this.#withFlush(() => this.#workspace.discardSlugAtlasPage(generation));
+  discardSlugAtlasPage(generation: number, origin: SlugAtlasOrigin): Promise<void> {
+    return this.#withFlush(() => this.#workspace.discardSlugAtlasPage(generation, origin));
   }
 
   /**

@@ -654,6 +654,23 @@ fn save_and_save_as_write_the_live_font_to_the_source_package() {
 }
 
 #[test]
+fn slug_atlas_cache_revision_advances_and_survives_resume() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+
+    {
+        let mut workspace =
+            FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+        assert_eq!(workspace.slug_atlas_cache_revision().unwrap(), "0");
+        create_glyph(&mut workspace, "A", vec![65]);
+        assert_eq!(workspace.slug_atlas_cache_revision().unwrap(), "1");
+    }
+
+    let workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.slug_atlas_cache_revision().unwrap(), "1");
+}
+
+#[test]
 fn resume_rebuilds_dirty_untitled_workspace_from_store() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

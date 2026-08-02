@@ -76,6 +76,8 @@ export declare class Bridge {
    * geometry remains native until `stream_slug_atlas` emits bounded chunks.
    */
   prepareSlugAtlas(alignment: number): NapiSlugAtlas
+  /** Returns the durable authored revision used to address disposable cached atlas pages. */
+  slugAtlasCacheRevision(): string
   /**
    * Builds one ordered root-glyph page plus its transitive component geometry.
    *

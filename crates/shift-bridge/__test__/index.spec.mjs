@@ -84,6 +84,14 @@ describe("Bridge", () => {
     return snapshots[0]?.layers[0]?.state;
   }
 
+  it("exposes the durable Slug cache revision", () => {
+    expect(bridge.slugAtlasCacheRevision()).toBe("0");
+
+    createGlyphLayer();
+
+    expect(bridge.slugAtlasCacheRevision()).toBe("1");
+  });
+
   it("creates an untitled workspace with default committed font metadata", () => {
     expect(bridge.getMetadata()).toMatchObject({
       familyName: "Untitled Font",

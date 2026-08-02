@@ -31,6 +31,7 @@ export function createWorkspaceStack(): WorkspaceStack {
   const shellLane = new MessageChannel();
   new WorkspaceHost({
     documentsRoot,
+    atlasCacheRoot: join(documentsRoot, "atlas-cache"),
     shell: nodePortTransport(shellLane.port2),
     portTransport: (port) => nodePortTransport(port as NodeMessagePort),
   }).start();

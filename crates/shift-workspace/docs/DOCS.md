@@ -11,6 +11,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** The `.shift` source package path and SQLite working store path are separate inputs.
 - **Architecture Invariant:** Package recovery policy is not ranked in Rust. `FontWorkspace` exposes package and working-store inspection primitives; the utility process owns binding and lifecycle decisions.
 - **Architecture Invariant:** The workspace is the domain object future bridge or utility-process transports should wrap.
+- **Architecture Invariant:** `slug_atlas_cache_revision()` reads the durable authored workspace revision as an opaque string for disposable derived-cache addressing. It does not persist preview bytes or make them authored state.
 - **Architecture Invariant:** Ledger layer pairs retain the original touched-layer structural classification. Values-only undo/redo restores the target snapshot's canonical numeric values without rebuilding identity indexes or emitting structure; structural replay installs and emits the complete target structure in both directions.
 - **Architecture Invariant:** Ledger replay restores complete named-instance collections after axis topology so undo/redo never observes an instance against the wrong external-axis shape.
 - **Architecture Invariant:** Metadata ledger entries store complete pre/post snapshots and replay them independently of font metrics.
@@ -53,6 +54,8 @@ crates/shift-workspace/examples/
 `FontWorkspace::inspect_package(path)` reads a `.shift` package without opening it as the live workspace. It returns the stable package id, canonical path, and fingerprint used by the utility process to address a package instance.
 
 `FontWorkspace::inspect_package_draft(store_path)` reads the working-store package ownership record without resuming it. It returns the package id, source path, base fingerprint, document id, and dirty flag so the utility process can choose an explicit open transition.
+
+`FontWorkspace::slug_atlas_cache_revision()` returns the persisted authored revision used by the utility process to distinguish disposable `CachedAtlas` entries across edits and process restarts. Save does not alter this key when authored content is unchanged.
 
 `FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, AcquireScope::Glyphs)` fetches only requested layers; `AcquireScope::ComponentClosure` first expands component dependencies from the relational index. Acquisition passes the complete request to the store's shared count- and decoded-byte-aware planner. Each internal batch reads directory facts, payloads, and component indexes for at most 512 layers and 256 MiB decoded bytes, decompresses and verifies exact lengths plus BLAKE3 in parallel, accumulates the canonical results, and validates the complete replacement before mutating the uniquely owned live font in place. Validated identity sets become the final index entries rather than a temporary duplicate; shared font snapshots still use copy-on-write. A malformed batch does not replace the live cache. Save/export explicitly acquire all layers before creating their complete snapshots.
 
