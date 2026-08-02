@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, SlugPreviewExtents } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphCatalogOverlay } from "./GlyphCatalogOverlay";
@@ -15,17 +15,11 @@ import type {
   GlyphCatalogControllerFrame,
   GlyphCatalogFrame,
   GlyphCatalogItem,
-  GridFrame,
   GridReadiness,
 } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance } from "@/types/glyphPreview";
 
 const ATLAS_PAGE_ROOT_COUNT = 256;
-const EMPTY_PREVIEW_EXTENTS: SlugPreviewExtents = {
-  horizontal: 0,
-  minimumY: 0,
-  maximumY: 0,
-};
 
 /** Owns catalog DOM events, visible-first atlas replacement, and frame scheduling. */
 export class GlyphCatalogController {
@@ -37,7 +31,6 @@ export class GlyphCatalogController {
   readonly #openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly #onReadyChange: (ready: boolean) => void;
   readonly #onUnavailable: () => void;
-  readonly #onPreviewExtentsChange: (previewExtents: SlugPreviewExtents) => void;
   readonly #overlay: GlyphCatalogOverlay;
   readonly #frames = new FrameHandler();
   readonly #resizeObserver: ResizeObserver;
@@ -46,8 +39,8 @@ export class GlyphCatalogController {
   readonly #replacementPageIndices = new Set<number>();
   readonly #pageIndexByGlyph = new Map<GlyphId, number>();
 
-  #targetFrame: GridFrame | null = null;
-  #activeFrame: GridFrame | null = null;
+  #targetFrame: GlyphCatalogControllerFrame | null = null;
+  #activeFrame: GlyphCatalogControllerFrame | null = null;
   #fontGlyphIds: readonly GlyphId[] = [];
   #layer: ResidentGlyphLayer | null = null;
   /** Device initialization; aborted work retains this slot until it settles. */
@@ -70,7 +63,6 @@ export class GlyphCatalogController {
     openGlyph: (glyph: GlyphCatalogItem) => Promise<void>,
     onReadyChange: (ready: boolean) => void,
     onUnavailable: () => void,
-    onPreviewExtentsChange: (previewExtents: SlugPreviewExtents) => void,
   ) {
     this.#container = container;
     this.#glyphCanvas = glyphCanvas;
@@ -80,7 +72,6 @@ export class GlyphCatalogController {
     this.#openGlyph = openGlyph;
     this.#onReadyChange = onReadyChange;
     this.#onUnavailable = onUnavailable;
-    this.#onPreviewExtentsChange = onPreviewExtentsChange;
     this.#overlay = new GlyphCatalogOverlay(overlayCanvas);
     this.#glyphCanvas.dataset.fullyResident = "false";
     this.#glyphCanvas.dataset.gridReadiness = "Initial" satisfies GridReadiness;
@@ -111,9 +102,7 @@ export class GlyphCatalogController {
 
   update(frame: GlyphCatalogControllerFrame, inputContainer: HTMLDivElement | null): void {
     const previousTarget = this.#targetFrame;
-    const previewExtents = previousTarget?.previewExtents ??
-      this.#activeFrame?.previewExtents ?? { ...EMPTY_PREVIEW_EXTENTS };
-    this.#targetFrame = { ...frame, previewExtents };
+    this.#targetFrame = frame;
 
     if (
       !previousTarget ||
@@ -182,12 +171,6 @@ export class GlyphCatalogController {
     if (invalidateAll) {
       this.#invalidGlyphIds.clear();
       for (const glyphId of fontGlyphIds) this.#invalidGlyphIds.add(glyphId);
-      if (this.#targetFrame) {
-        this.#targetFrame = {
-          ...this.#targetFrame,
-          previewExtents: { ...EMPTY_PREVIEW_EXTENTS },
-        };
-      }
     } else {
       for (const glyphId of glyphIds) {
         if (this.#pageIndexByGlyph.has(glyphId)) this.#invalidGlyphIds.add(glyphId);
@@ -292,24 +275,17 @@ export class GlyphCatalogController {
 
     try {
       const pageRequests = this.#pageRequests(glyphIds);
-      const pageExtents = await layer.loadPages(pageRequests, visibleBuild.signal);
+      await layer.loadPages(pageRequests, visibleBuild.signal);
       if (this.#disposed || this.#visibleBuild !== visibleBuild || visibleBuild.signal.aborted) {
         return;
       }
 
       const latestTarget = this.#targetFrame;
       if (!latestTarget) return;
-      const targetExtents = mergePreviewExtents(latestTarget.previewExtents, pageExtents);
-      const presentedExtents = mergePreviewExtents(
-        this.#activeFrame?.previewExtents ?? EMPTY_PREVIEW_EXTENTS,
-        targetExtents,
-      );
-      this.#targetFrame = { ...latestTarget, previewExtents: targetExtents };
-      this.#activeFrame = { ...latestTarget, previewExtents: presentedExtents };
+      this.#activeFrame = latestTarget;
       for (const request of pageRequests) {
         for (const glyphId of request.glyphIds) this.#invalidGlyphIds.delete(glyphId);
       }
-      this.#onPreviewExtentsChange(presentedExtents);
       this.#needsRedraw = true;
       this.#updateFullyResident();
       this.redraw();
@@ -365,25 +341,10 @@ export class GlyphCatalogController {
         if (!needsReplacement) continue;
 
         const pageIndex = start / ATLAS_PAGE_ROOT_COUNT;
-        const pageExtents = await this.#layer.loadPages(
-          [this.#pageRequest(pageIndex)],
-          completeBuild.signal,
-        );
+        await this.#layer.loadPages([this.#pageRequest(pageIndex)], completeBuild.signal);
         if (completeBuild.signal.aborted) break;
 
-        const latestTarget = this.#targetFrame;
-        if (!latestTarget) break;
-        const targetExtents = mergePreviewExtents(latestTarget.previewExtents, pageExtents);
-        const presentedExtents = mergePreviewExtents(
-          this.#activeFrame?.previewExtents ?? EMPTY_PREVIEW_EXTENTS,
-          targetExtents,
-        );
-        this.#targetFrame = { ...latestTarget, previewExtents: targetExtents };
-        if (this.#activeFrame) {
-          this.#activeFrame = { ...this.#activeFrame, previewExtents: presentedExtents };
-        }
         for (const glyphId of pageGlyphIds) this.#invalidGlyphIds.delete(glyphId);
-        this.#onPreviewExtentsChange(presentedExtents);
         this.#needsRedraw = true;
         this.#updateFullyResident();
         this.redraw();
@@ -455,13 +416,10 @@ export class GlyphCatalogController {
   }
 
   #layout(frame = this.#activeFrame ?? this.#targetFrame): GlyphCatalogLayout {
-    const metrics = frame?.metrics;
     return new GlyphCatalogLayout(
       this.#container.clientWidth,
       this.#container.clientHeight,
       frame?.glyphs.length ?? 0,
-      metrics ?? fallbackMetrics(),
-      frame?.previewExtents ?? EMPTY_PREVIEW_EXTENTS,
     );
   }
 
@@ -520,19 +478,15 @@ export class GlyphCatalogController {
         frame.scrollTop + frame.layout.viewportHeight > 0;
 
       if (instances.length > 0 || input.glyphs.length === 0 || !catalogIntersectsViewport) {
-        const [viewHeight, fontTop] = GlyphPreviewLayout.fontViewport(
-          input.metrics,
-          input.previewExtents,
-        );
+        const [viewHeight, metricsTop] = GlyphPreviewLayout.fontViewport(input.metrics);
         layer.draw({
           location: input.location,
           axes: input.axes,
           instances,
           style: {
-            viewHeight,
-            fontTop,
-            previewHeight: frame.layout.previewHeight * ratio,
-            sideMargin: GlyphPreviewLayout.sideMargin(input.metrics, input.previewExtents),
+            defaultPixelsPerEm: (frame.layout.previewHeight * ratio) / Math.max(1, viewHeight),
+            metricsTop,
+            metricsBottom: metricsTop - viewHeight,
             color: parseCssColor(getComputedStyle(this.#container).color),
           },
           viewportWidth: this.#glyphCanvas.width,
@@ -589,9 +543,6 @@ export class GlyphCatalogController {
     this.#glyphCanvas.dataset.targetGlyphCount = String(this.#fontGlyphIds.length);
     const activeLayout = this.#activeFrame ? this.#layout(this.#activeFrame) : null;
     this.#glyphCanvas.dataset.previewHeight = String(activeLayout?.previewHeight ?? 0);
-    this.#glyphCanvas.dataset.previewHorizontal = String(
-      this.#activeFrame?.previewExtents.horizontal ?? 0,
-    );
 
     let readiness: GridReadiness = "Initial";
     if (this.#activeFrame) {
@@ -675,33 +626,6 @@ export class GlyphCatalogController {
   }
 }
 
-function mergePreviewExtents(
-  current: SlugPreviewExtents,
-  next: SlugPreviewExtents,
-): SlugPreviewExtents {
-  return {
-    horizontal: Math.max(current.horizontal, next.horizontal),
-    minimumY: Math.min(current.minimumY, next.minimumY),
-    maximumY: Math.max(current.maximumY, next.maximumY),
-  };
-}
-
 function sameGlyphIds(left: readonly GlyphId[], right: readonly GlyphId[]): boolean {
   return left.length === right.length && left.every((glyphId, index) => glyphId === right[index]);
-}
-
-function fallbackMetrics() {
-  return {
-    unitsPerEm: 1000,
-    metricValues: [],
-    ascender: 800,
-    descender: -200,
-    xHeight: 500,
-    capHeight: 700,
-    baseline: 0,
-    italicAngle: 0,
-    lineGap: 0,
-    underlinePosition: -100,
-    underlineThickness: 50,
-  };
 }

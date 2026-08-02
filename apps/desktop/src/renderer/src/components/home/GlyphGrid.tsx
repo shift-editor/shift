@@ -1,4 +1,3 @@
-import type { SlugPreviewExtents } from "@shift/types";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { GlyphCatalogCanvas } from "./GlyphCatalogCanvas";
@@ -24,23 +23,11 @@ export const GlyphGrid = memo(function GlyphGrid() {
     readonly [width: number, height: number]
   >([0, 0]);
   const [catalogReady, setCatalogReady] = useState(false);
-  const [previewExtents, setPreviewExtents] = useState<SlugPreviewExtents>({
-    horizontal: 0,
-    minimumY: 0,
-    maximumY: 0,
-  });
-  const metrics = useMemo(() => font.metricsAtLocation(location), [font, location]);
   const layout = useMemo(
-    () =>
-      new GlyphCatalogLayout(
-        viewportWidth,
-        viewportHeight,
-        filteredGlyphs.length,
-        metrics,
-        previewExtents,
-      ),
-    [filteredGlyphs.length, metrics, previewExtents, viewportHeight, viewportWidth],
+    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, filteredGlyphs.length),
+    [filteredGlyphs.length, viewportHeight, viewportWidth],
   );
+  const metrics = useMemo(() => font.metricsAtLocation(location), [font, location]);
   const axes = font.getAxes();
   const sourceId = font.sourceAt(location)?.id ?? null;
   const initialMeasurementLoggedRef = useRef(false);
@@ -121,7 +108,6 @@ export const GlyphGrid = memo(function GlyphGrid() {
         openGlyph={handleCellClick}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}
-        onPreviewExtentsChange={setPreviewExtents}
       />
     </section>
   );

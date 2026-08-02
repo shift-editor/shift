@@ -52,7 +52,7 @@ crates/shift-bridge/
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
 - `NapiGlyphProjection` -- compact location-independent glyph backing with reusable interpolation, exact-source exceptions, and Rust-owned `GlyphComponents` relationships.
 - `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
-- `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, scale-preserving `SlugPreviewExtents`, and aligned resident-section layout.
+- `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, cache-serialized preview extents, and aligned resident-section layout.
 - `SlugAtlasGeneration` -- one aligned native atlas or page consumed by its stream API or released by its discard API.
 - `slugAtlasCacheRevision()` -- utility-only durable authored revision key; it does not make cached Slug bytes canonical workspace state.
 
@@ -67,7 +67,7 @@ crates/shift-bridge/
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
-10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` for deterministic fixed directory pages. Every native miss independently acquires its indexed component closure and reports shared all-source preview extents. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. The utility may bypass native preparation with a validated external `CachedAtlas` page keyed by `slugAtlasCacheRevision()`, but cached and native pages share the same bounded renderer stream contract. The complete preparation endpoint remains available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for native phase timings.
+10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` for deterministic fixed directory pages. Every native miss independently acquires its indexed component closure. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. The utility may bypass native preparation with a validated external `CachedAtlas` page keyed by `slugAtlasCacheRevision()`, but cached and native pages share the same bounded renderer stream contract. The complete preparation endpoint remains available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for native phase timings.
 
 ## Type Boundary
 

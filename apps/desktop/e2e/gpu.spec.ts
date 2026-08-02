@@ -375,13 +375,24 @@ test.describe("Resident catalog GPU", () => {
     expect(state.hiddenTransitions).toBe(0);
   });
 
-  test("expands every preview cell for outlines outside the font metrics", async ({ page }) => {
+  test("fits oversized outlines without resizing cells while scrubbing an axis", async ({
+    page,
+  }) => {
     const scrollViewport = page.getByLabel("Glyph catalog");
-    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    const catalogSurface = scrollViewport.locator("..");
+    const glyphCanvas = catalogSurface.locator("canvas").first();
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
-    const initialHeight = Number(await glyphCanvas.getAttribute("data-preview-height"));
+    const initialGeometry = await scrollViewport.evaluate((element) => {
+      const canvas = element.parentElement?.querySelector<HTMLCanvasElement>("canvas");
+      if (!canvas) throw new Error("Expected resident glyph canvas");
+
+      return {
+        previewHeight: Number(canvas.dataset.previewHeight),
+        scrollHeight: element.scrollHeight,
+      };
+    });
 
     await navigateToEditor(page, "53");
     await page.evaluate(async () => {
@@ -405,12 +416,47 @@ test.describe("Resident catalog GPU", () => {
     });
     await page.getByRole("button", { name: "Display all glyphs" }).click();
     await page.waitForURL(/#\/home/);
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
 
-    await expect
-      .poll(async () => Number(await glyphCanvas.getAttribute("data-preview-height")))
-      .toBeGreaterThan(initialHeight);
+    const variable = await createVariableDesignspace(page);
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
+    const geometrySamples = await page.evaluate(async ({ axisId }) => {
+      const workspace = window.shift;
+      const viewport = document.querySelector<HTMLElement>('[aria-label="Glyph catalog"]');
+      const canvas = viewport?.parentElement?.querySelector<HTMLCanvasElement>("canvas");
+      if (!workspace || !viewport || !canvas) throw new Error("Expected Grid runtime");
+
+      const samples: Array<{ previewHeight: number; scrollHeight: number }> = [];
+      for (const value of [400, 500, 650, 800, 900, 650, 400]) {
+        workspace.editor.setDesignLocation(new Map([[axisId, value]]));
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        samples.push({
+          previewHeight: Number(canvas.dataset.previewHeight),
+          scrollHeight: viewport.scrollHeight,
+        });
+      }
+      return samples;
+    }, variable);
+
+    expect(geometrySamples).toEqual(
+      Array.from({ length: geometrySamples.length }, () => initialGeometry),
+    );
     await expect(glyphCanvas).toBeVisible();
-    expect(Number(await glyphCanvas.getAttribute("data-preview-horizontal"))).toBeGreaterThan(0);
+    const renderedFrame = await catalogSurface.screenshot();
+    const visibility = await glyphCanvas.evaluate((canvas) => {
+      const previous = canvas.style.visibility;
+      canvas.style.visibility = "hidden";
+      return previous;
+    });
+    const frameWithoutGlyphs = await catalogSurface.screenshot();
+    await glyphCanvas.evaluate((canvas, previous) => {
+      canvas.style.visibility = previous;
+    }, visibility);
+    expect(renderedFrame.equals(frameWithoutGlyphs)).toBe(false);
   });
 });
 
@@ -434,6 +480,18 @@ async function createVariableDesignspace(
     });
     await font.editCoordinator.settled();
     const sourceId = font.createSource("Bold", { values: { [axisId]: 900 } });
+    await font.editCoordinator.settled();
+    const source = font.sources.find((candidate) => candidate.id === sourceId);
+    if (!source || source.metricValues.length === 0) {
+      throw new Error("Expected Bold source metrics");
+    }
+    await font.updateSource({
+      ...source,
+      metricValues: source.metricValues.map((value) => ({
+        ...value,
+        position: value.position * 2,
+      })),
+    });
     await font.editCoordinator.settled();
     return { axisId, sourceId };
   });

@@ -1,22 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { GlyphId, GlyphName, SlugPreviewExtents, SourceMetrics } from "@shift/types";
+import type { GlyphId, GlyphName } from "@shift/types";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
-
-const METRICS: SourceMetrics = {
-  unitsPerEm: 1000,
-  metricValues: [],
-  ascender: 800,
-  descender: -200,
-  xHeight: 500,
-  capHeight: 700,
-  baseline: 0,
-  italicAngle: 0,
-  lineGap: 0,
-  underlinePosition: -100,
-  underlineThickness: 50,
-};
-const NO_OVERFLOW: SlugPreviewExtents = { horizontal: 0, minimumY: 0, maximumY: 0 };
 
 function catalog(count: number): GlyphCatalogItem[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -27,13 +12,8 @@ function catalog(count: number): GlyphCatalogItem[] {
   }));
 }
 
-function layout(
-  width: number,
-  height: number,
-  glyphCount: number,
-  previewExtents = NO_OVERFLOW,
-): GlyphCatalogLayout {
-  return new GlyphCatalogLayout(width, height, glyphCount, METRICS, previewExtents);
+function layout(width: number, height: number, glyphCount: number): GlyphCatalogLayout {
+  return new GlyphCatalogLayout(width, height, glyphCount);
 }
 
 describe("canvas-owned Glyph catalog layout", () => {
@@ -102,18 +82,5 @@ describe("canvas-owned Glyph catalog layout", () => {
     for (let scrollTop = 0; scrollTop <= maximumScrollTop; scrollTop += 1) {
       expect(result.frame(glyphs, scrollTop).cells.length).toBeGreaterThan(0);
     }
-  });
-
-  it("expands every cell for font-wide bounds without changing pixels per em", () => {
-    const result = layout(500, 240, 9, {
-      horizontal: 200,
-      minimumY: -500,
-      maximumY: 1500,
-    });
-
-    expect(result.previewHeight).toBe(120);
-    expect(result.columns).toBe(3);
-    expect(result.rowPitch).toBe(168);
-    expect(result.totalHeight).toBe(544);
   });
 });
