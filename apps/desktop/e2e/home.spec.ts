@@ -29,6 +29,11 @@ test.describe("Home view", () => {
   test("keeps the resident grid when returning from the editor", async ({ page }) => {
     const scrollViewport = page.getByLabel("Glyph catalog");
     const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
+    await afterNextPaint(page);
     const initialSize = await glyphCanvas.evaluate((canvas) => ({
       width: canvas.width,
       height: canvas.height,
