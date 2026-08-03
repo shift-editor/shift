@@ -1,4 +1,4 @@
-import type { GlyphId } from "@shift/types";
+import type { CatalogGlyphKey } from "@/types/glyphAtlas";
 import { Canvas2DSurface } from "@/lib/editor/rendering/CanvasSurface";
 import { fitCanvasText } from "@/lib/graphics/canvasText";
 import type { GlyphCatalogFrame } from "@/types/glyphCatalog";
@@ -19,7 +19,7 @@ export class GlyphCatalogOverlay {
     this.#inputContainer = container;
   }
 
-  positionInput(frame: GlyphCatalogFrame, glyphId: GlyphId): boolean {
+  positionInput(frame: GlyphCatalogFrame, glyphId: CatalogGlyphKey): boolean {
     const container = this.#inputContainer;
     if (!container) return false;
 

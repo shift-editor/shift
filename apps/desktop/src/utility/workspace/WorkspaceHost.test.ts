@@ -4,6 +4,7 @@ import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Channel, nodePortTransport, type Transport } from "../../shared/workspace/channel";
 import {
   mintContourId,
@@ -32,6 +33,11 @@ import type {
 import { WorkspaceHost } from "./WorkspaceHost";
 
 type ShellChannel = Channel<ShellCallMap, ShellEventMap>;
+
+const retainedFontPath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
+);
 
 const createGlyph = (
   name: GlyphName,
@@ -119,7 +125,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     sync: SyncChannel,
     generation: number,
     maximumLength: number,
-    pageOrigin: SlugAtlasOrigin | null = null,
+    pageOrigin: SlugAtlasOrigin | "source" | null = null,
   ): Promise<Uint8Array> {
     const lane = new MessageChannel();
     const chunks: Uint8Array[] = [];
@@ -164,7 +170,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       };
     });
     lane.port2.start();
-    if (pageOrigin) {
+    if (pageOrigin === "source") {
+      await sync.call("source.atlasPageStream", { generation, maximumLength }, [lane.port1]);
+    } else if (pageOrigin) {
       await sync.call(
         "workspace.slugAtlasPageStream",
         { generation, origin: pageOrigin, maximumLength },
@@ -242,6 +250,71 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
   afterEach(() => {
     for (const channel of channels.splice(0)) channel.dispose();
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("opens a retained source without allocating document or cache storage", async () => {
+    const state = await shell.call("source.open", { path: retainedFontPath });
+    const sync = await connectSyncLane();
+    const snapshot = await sync.call("source.snapshot", undefined);
+
+    expect(state.canonicalPath).toBe(fs.realpathSync(retainedFontPath));
+    expect(snapshot?.directory.format).toBe("ttf");
+    expect(snapshot?.directory.glyphs.length).toBeGreaterThan(0);
+    expect(snapshot?.directory.capabilities).toEqual({
+      editable: false,
+      savable: false,
+      exportable: false,
+    });
+    expect(await sync.call("workspace.snapshot", undefined)).toBeNull();
+    expect(await sync.call("document.state", undefined)).toBeNull();
+    expect(fs.existsSync(path.join(tmpRoot, "documents"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpRoot, "atlas-cache"))).toBe(false);
+  });
+
+  it("streams every retained atlas page and evaluates its resident weights", async () => {
+    await shell.call("source.open", { path: retainedFontPath });
+    const sync = await connectSyncLane();
+    const snapshot = await sync.call("source.snapshot", undefined);
+    if (!snapshot) throw new Error("source.open did not create a snapshot");
+    const coordinates = snapshot.directory.defaultLocation;
+    const pages = [];
+
+    for (let start = 0, pageIndex = 0; start < snapshot.directory.glyphs.length; start += 256) {
+      const page = await sync.call("source.atlasPagePrepare", {
+        pageIndex,
+        glyphIndices: snapshot.directory.glyphs
+          .slice(start, start + 256)
+          .map((glyph) => glyph.index),
+        coordinates,
+        alignment: 256,
+      });
+      const bytes = await streamSlugAtlas(sync, page.generation, 64, "source");
+      expect(bytes.byteLength).toBe(page.layout.totalLength);
+      pages.push(page);
+      pageIndex += 1;
+    }
+
+    const weights = await sync.call("source.atlasWeights", { coordinates });
+    const maximumCoordinates = snapshot.directory.axes.map(
+      (axis) => axis.maximum ?? axis.defaultValue,
+    );
+    const maximumWeights = await sync.call("source.atlasWeights", {
+      coordinates: maximumCoordinates,
+    });
+    expect(weights.map((page) => page.pageIndex)).toEqual(pages.map((page) => page.pageIndex));
+    expect(weights.map((page) => page.weights)).toEqual(pages.map((page) => page.weights));
+    expect(maximumWeights).not.toEqual(weights);
+    expect(fs.existsSync(path.join(tmpRoot, "documents"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpRoot, "atlas-cache"))).toBe(false);
+  });
+
+  it("drops retained catch-up state when the source closes", async () => {
+    await shell.call("source.open", { path: retainedFontPath });
+    const sync = await connectSyncLane();
+
+    expect(await sync.call("source.snapshot", undefined)).not.toBeNull();
+    expect(await shell.call("source.close", undefined)).toBeNull();
+    expect(await sync.call("source.snapshot", undefined)).toBeNull();
   });
 
   it("streams one authored Slug generation through bounded native chunks", async () => {

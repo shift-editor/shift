@@ -2,8 +2,11 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { GlyphCatalogController } from "./GlyphCatalogController";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { useTheme } from "@/context/ThemeContext";
-import type { GlyphCatalogCanvasProps, GlyphCatalogItem } from "@/types/glyphCatalog";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import type {
+  EditableGlyphCatalogItem,
+  GlyphCatalogCanvasProps,
+  GlyphCatalogItem,
+} from "@/types/glyphCatalog";
 
 /** Thin React shell around the imperative, canvas-owned glyph catalog. */
 export function GlyphCatalogCanvas({
@@ -14,11 +17,14 @@ export function GlyphCatalogCanvas({
   metrics,
   sourceId,
   active,
+  atlasSource,
+  observeAtlasInvalidation,
+  resolvedCoordinates,
+  editable,
   openGlyph,
   onFirstFrame,
   onUnavailable,
 }: GlyphCatalogCanvasProps) {
-  const editor = useEditor();
   const { themeName } = useTheme();
   const glyphCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -26,7 +32,7 @@ export function GlyphCatalogCanvas({
   const inputRef = useRef<HTMLInputElement>(null);
   const controllerRef = useRef<GlyphCatalogController | null>(null);
   const [ready, setReady] = useState(false);
-  const [editingGlyph, setEditingGlyph] = useState<GlyphCatalogItem | null>(null);
+  const [editingGlyph, setEditingGlyph] = useState<EditableGlyphCatalogItem | null>(null);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -38,8 +44,13 @@ export function GlyphCatalogCanvas({
       container,
       glyphCanvas,
       overlayCanvas,
-      editor.font,
-      setEditingGlyph,
+      atlasSource,
+      observeAtlasInvalidation,
+      editable
+        ? (glyph) => {
+            if (isEditableGlyph(glyph)) setEditingGlyph(glyph);
+          }
+        : null,
       () => {
         inputRef.current?.blur();
         setEditingGlyph(null);
@@ -57,7 +68,15 @@ export function GlyphCatalogCanvas({
       controllerRef.current = null;
       controller.destroy();
     };
-  }, [containerRef, editor.font, onFirstFrame, onUnavailable, openGlyph]);
+  }, [
+    atlasSource,
+    containerRef,
+    editable,
+    observeAtlasInvalidation,
+    onFirstFrame,
+    onUnavailable,
+    openGlyph,
+  ]);
 
   useLayoutEffect(() => {
     controllerRef.current?.update(
@@ -70,10 +89,21 @@ export function GlyphCatalogCanvas({
         themeName,
         active,
         editingGlyphId: editingGlyph?.id ?? null,
+        resolvedCoordinates,
       },
       inputContainerRef.current,
     );
-  }, [active, axes, editingGlyph, glyphs, location, metrics, sourceId, themeName]);
+  }, [
+    active,
+    axes,
+    editingGlyph,
+    glyphs,
+    location,
+    metrics,
+    resolvedCoordinates,
+    sourceId,
+    themeName,
+  ]);
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;
@@ -110,4 +140,8 @@ export function GlyphCatalogCanvas({
       ) : null}
     </>
   );
+}
+
+function isEditableGlyph(glyph: GlyphCatalogItem): glyph is EditableGlyphCatalogItem {
+  return typeof glyph.id === "string";
 }

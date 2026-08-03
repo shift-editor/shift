@@ -3,7 +3,11 @@ use crate::input::{parse, BridgeParse};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
-use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter, FontView};
+use shift_backends::{
+  build_binary_atlas_page, font_loader::FontLoader, AxisIndex as SourceAxisIndex, ExportFormat,
+  FontExportRequest, FontExportResult, FontExporter, FontSource, FontView, GlyphIndex,
+  RandomAccessFont, SourceAtlasDescriptor, VariationAxisKind, VariationCoordinate,
+};
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
@@ -36,7 +40,7 @@ use shift_workspace::{
   WorkspaceSource,
 };
 use std::{
-  collections::{HashSet, VecDeque},
+  collections::{BTreeMap, HashSet, VecDeque},
   path::Path,
   sync::Arc,
   time::{Duration, Instant},
@@ -149,6 +153,80 @@ pub struct NapiSlugAtlas {
   pub atlas_glyph_count: u32,
   pub curve_count: u32,
   pub component_count: u32,
+}
+
+#[napi(object)]
+pub struct NapiCatalogCapabilities {
+  pub editable: bool,
+  pub savable: bool,
+  pub exportable: bool,
+}
+
+#[napi(object)]
+pub struct NapiCatalogGlyph {
+  pub index: u32,
+  pub name: String,
+  pub unicodes: Vec<u32>,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAxis {
+  pub index: u32,
+  pub tag: String,
+  pub name: String,
+  pub hidden: bool,
+  pub kind: String,
+  pub minimum: Option<f64>,
+  pub default_value: f64,
+  pub maximum: Option<f64>,
+  pub values: Vec<f64>,
+}
+
+#[napi(object)]
+pub struct NapiCatalogMetrics {
+  pub units_per_em: f64,
+  pub ascender: f64,
+  pub descender: f64,
+  pub line_gap: f64,
+}
+
+#[napi(object)]
+pub struct NapiCatalogDirectory {
+  pub format: String,
+  pub family_name: Option<String>,
+  pub style_name: Option<String>,
+  pub glyphs: Vec<NapiCatalogGlyph>,
+  pub axes: Vec<NapiCatalogAxis>,
+  pub default_location: Vec<f64>,
+  pub metrics: Option<NapiCatalogMetrics>,
+  pub capabilities: NapiCatalogCapabilities,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAtlasGlyph {
+  pub glyph_index: u32,
+  pub atlas_glyph: u32,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAtlasPage {
+  pub generation: u32,
+  pub page_index: u32,
+  pub band_count: u32,
+  pub weight_count: u32,
+  pub layout: NapiSlugLayout,
+  pub preview_extents: NapiSlugPreviewExtents,
+  pub glyphs: Vec<NapiCatalogAtlasGlyph>,
+  pub weights: Vec<f64>,
+  pub atlas_glyph_count: u32,
+  pub curve_count: u32,
+  pub component_count: u32,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAtlasWeights {
+  pub page_index: u32,
+  pub weights: Vec<f64>,
 }
 
 struct SlugAtlasGeneration {
@@ -279,6 +357,120 @@ fn log_slug_atlas_profile(
     milliseconds(layout),
     milliseconds(total),
   );
+}
+
+fn napi_catalog_directory(source: &FontSource) -> BridgeResult<NapiCatalogDirectory> {
+  let directory = source.directory();
+  let metrics = match source {
+    FontSource::Binary(font) => Some(font.metrics(directory.default_location())?),
+    FontSource::Glif(_) | FontSource::Glyphs(_) => None,
+  };
+  let glyphs = directory
+    .glyphs
+    .iter()
+    .map(|glyph| NapiCatalogGlyph {
+      index: glyph.index.to_u32(),
+      name: glyph.name.clone(),
+      unicodes: glyph.unicodes.to_vec(),
+    })
+    .collect();
+  let axes = directory
+    .axes
+    .iter()
+    .map(|axis| match &axis.kind {
+      VariationAxisKind::Continuous {
+        minimum,
+        default,
+        maximum,
+      } => NapiCatalogAxis {
+        index: axis.index.to_u32(),
+        tag: axis.tag.clone(),
+        name: axis.name.clone(),
+        hidden: axis.hidden,
+        kind: "continuous".into(),
+        minimum: Some(*minimum),
+        default_value: *default,
+        maximum: Some(*maximum),
+        values: Vec::new(),
+      },
+      VariationAxisKind::Discrete { values, default } => NapiCatalogAxis {
+        index: axis.index.to_u32(),
+        tag: axis.tag.clone(),
+        name: axis.name.clone(),
+        hidden: axis.hidden,
+        kind: "discrete".into(),
+        minimum: None,
+        default_value: *default,
+        maximum: None,
+        values: values.to_vec(),
+      },
+    })
+    .collect();
+
+  Ok(NapiCatalogDirectory {
+    format: directory.format.name().into(),
+    family_name: directory.family_name.clone(),
+    style_name: directory.style_name.clone(),
+    glyphs,
+    axes,
+    default_location: directory.default_location().coordinates().to_vec(),
+    metrics: metrics.map(|metrics| NapiCatalogMetrics {
+      units_per_em: metrics.units_per_em,
+      ascender: metrics.ascender,
+      descender: metrics.descender,
+      line_gap: metrics.line_gap,
+    }),
+    capabilities: NapiCatalogCapabilities {
+      editable: false,
+      savable: false,
+      exportable: false,
+    },
+  })
+}
+
+fn napi_source_atlas_page(
+  generation: u32,
+  page_index: u32,
+  atlas: &VariableAtlas,
+  descriptor: &SourceAtlasDescriptor,
+  location: &shift_backends::VariationLocation,
+  layout: VariableLayout,
+) -> BridgeResult<NapiCatalogAtlasPage> {
+  let statistics = atlas.statistics();
+  let weights = descriptor
+    .weights(location)?
+    .into_iter()
+    .map(f64::from)
+    .collect::<Vec<_>>();
+
+  Ok(NapiCatalogAtlasPage {
+    generation,
+    page_index,
+    band_count: atlas.band_count(),
+    weight_count: u32::try_from(weights.len())
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    layout: napi_slug_layout(layout)?,
+    preview_extents: NapiSlugPreviewExtents {
+      horizontal: 0.0,
+      minimum_y: 0.0,
+      maximum_y: 0.0,
+    },
+    glyphs: descriptor
+      .glyphs()
+      .iter()
+      .map(|(glyph, atlas_glyph)| NapiCatalogAtlasGlyph {
+        glyph_index: glyph.to_u32(),
+        atlas_glyph: *atlas_glyph,
+      })
+      .collect(),
+    weights,
+    atlas_glyph_count: u32::try_from(statistics.glyph_count)
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    curve_count: u32::try_from(statistics.curve_count)
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    component_count: u32::try_from(statistics.component_count)
+      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+  })
 }
 
 fn napi_slug_atlas(
@@ -476,10 +668,12 @@ impl Task for ExportFontTask {
 #[napi]
 pub struct Bridge {
   workspace: Option<FontWorkspace>,
+  font_source: Option<FontSource>,
   live_version: DocumentVersion,
   saved_version: DocumentVersion,
   slug_generation: u32,
   slug_atlas: Option<SlugAtlasGeneration>,
+  source_atlas_descriptors: BTreeMap<u32, SourceAtlasDescriptor>,
 }
 
 #[napi]
@@ -488,10 +682,12 @@ impl Bridge {
   pub fn new() -> Self {
     Self {
       workspace: None,
+      font_source: None,
       live_version: DocumentVersion::default(),
       saved_version: DocumentVersion::default(),
       slug_generation: 0,
       slug_atlas: None,
+      source_atlas_descriptors: BTreeMap::new(),
     }
   }
 
@@ -505,6 +701,7 @@ impl Bridge {
       store_path,
       new_workspace_from_options(options),
     )?);
+    self.font_source = None;
     self.reset_versions();
     Ok(())
   }
@@ -546,6 +743,7 @@ impl Bridge {
   #[napi]
   pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::open(path, store_path)?);
+    self.font_source = None;
     self.reset_versions();
     Ok(())
   }
@@ -557,8 +755,27 @@ impl Bridge {
     source_path: String,
   ) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::resume_for_source(store_path, source_path)?);
+    self.font_source = None;
     self.reset_versions();
     Ok(())
+  }
+
+  #[napi]
+  pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiCatalogDirectory> {
+    let source = FontLoader::new().open_source(Path::new(&path))?;
+    let directory = napi_catalog_directory(&source)?;
+    self.workspace = None;
+    self.font_source = Some(source);
+    self.slug_atlas = None;
+    self.source_atlas_descriptors.clear();
+    Ok(directory)
+  }
+
+  #[napi]
+  pub fn close_font_source(&mut self) {
+    self.font_source = None;
+    self.slug_atlas = None;
+    self.source_atlas_descriptors.clear();
   }
 
   #[napi]
@@ -1056,6 +1273,134 @@ impl Bridge {
     self.discard_slug_atlas(generation);
   }
 
+  /// Builds one source-neutral catalog page through the active format adapter.
+  #[napi]
+  pub fn prepare_source_atlas_page(
+    &mut self,
+    page_index: u32,
+    glyph_indices: Vec<u32>,
+    coordinates: Vec<f64>,
+    alignment: u32,
+  ) -> errors::Result<NapiCatalogAtlasPage> {
+    self.slug_generation = self
+      .slug_generation
+      .checked_add(1)
+      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    let generation = self.slug_generation;
+    let (atlas, descriptor, location, layout) = {
+      let source = self.font_source()?;
+      let directory = source.directory();
+      if coordinates.len() != directory.axes.len() {
+        return Err(BridgeError::InvalidInput {
+          kind: "catalog location coordinate count",
+          value: coordinates.len().to_string(),
+        });
+      }
+      let source_coordinates = coordinates
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| VariationCoordinate {
+          axis: SourceAxisIndex::new(index as u32),
+          value,
+        })
+        .collect::<Vec<_>>();
+      let location = directory.location(&source_coordinates)?;
+      let roots = glyph_indices
+        .into_iter()
+        .map(GlyphIndex::new)
+        .collect::<Vec<_>>();
+      let page = match source {
+        FontSource::Binary(font) => {
+          build_binary_atlas_page(font, &roots, shift_slug::DEFAULT_BAND_COUNT)?
+        }
+        FontSource::Glif(_) | FontSource::Glyphs(_) => {
+          return Err(
+            shift_backends::SourceAtlasError::UnsupportedBinary {
+              details: "the active retained source does not yet have a Slug atlas adapter",
+            }
+            .into(),
+          );
+        }
+      };
+      let (atlas, descriptor) = page.into_parts();
+      let layout = atlas.layout(alignment as usize)?;
+      (atlas, descriptor, location, layout)
+    };
+    let result = napi_source_atlas_page(
+      generation,
+      page_index,
+      &atlas,
+      &descriptor,
+      &location,
+      layout,
+    )?;
+    self.source_atlas_descriptors.insert(page_index, descriptor);
+    self.slug_atlas = Some(SlugAtlasGeneration {
+      generation,
+      alignment: alignment as usize,
+      atlas,
+    });
+    Ok(result)
+  }
+
+  /// Streams one prepared source page through the same bounded atlas lane.
+  #[napi]
+  pub fn stream_source_atlas_page(
+    &mut self,
+    env: &Env,
+    generation: u32,
+    maximum_length: u32,
+  ) -> Result<ReadableStream<'_, BufferSlice<'_>>> {
+    self.stream_slug_atlas(env, generation, maximum_length)
+  }
+
+  /// Releases a rejected source page and its retained weight descriptor.
+  #[napi]
+  pub fn discard_source_atlas_page(&mut self, page_index: u32, generation: u32) {
+    self.discard_slug_atlas(generation);
+    self.source_atlas_descriptors.remove(&page_index);
+  }
+
+  /// Evaluates every resident page's small weight buffer at one source location.
+  #[napi]
+  pub fn source_atlas_weights(
+    &self,
+    coordinates: Vec<f64>,
+  ) -> errors::Result<Vec<NapiCatalogAtlasWeights>> {
+    let source = self.font_source()?;
+    let directory = source.directory();
+    if coordinates.len() != directory.axes.len() {
+      return Err(BridgeError::InvalidInput {
+        kind: "catalog location coordinate count",
+        value: coordinates.len().to_string(),
+      });
+    }
+    let source_coordinates = coordinates
+      .into_iter()
+      .enumerate()
+      .map(|(index, value)| VariationCoordinate {
+        axis: SourceAxisIndex::new(index as u32),
+        value,
+      })
+      .collect::<Vec<_>>();
+    let location = directory.location(&source_coordinates)?;
+
+    self
+      .source_atlas_descriptors
+      .iter()
+      .map(|(page_index, descriptor)| {
+        Ok(NapiCatalogAtlasWeights {
+          page_index: *page_index,
+          weights: descriptor
+            .weights(&location)?
+            .into_iter()
+            .map(f64::from)
+            .collect(),
+        })
+      })
+      .collect()
+  }
+
   #[napi]
   pub fn is_variable(&self) -> errors::Result<bool> {
     Ok(self.font()?.is_variable())
@@ -1173,6 +1518,16 @@ impl Bridge {
       })
   }
 
+  fn font_source(&self) -> BridgeResult<&FontSource> {
+    self
+      .font_source
+      .as_ref()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "font source",
+        value: "no retained font source is open".to_string(),
+      })
+  }
+
   fn acquire_and_font(
     &mut self,
     glyph_ids: &[GlyphId],
@@ -1219,6 +1574,7 @@ impl Bridge {
 
   fn reset_versions(&mut self) {
     self.slug_atlas = None;
+    self.source_atlas_descriptors.clear();
     self.live_version = DocumentVersion::default();
     self.saved_version = DocumentVersion::default();
   }

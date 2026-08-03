@@ -1,9 +1,10 @@
-import type { Axis, GlyphId, SourceId } from "@shift/types";
+import type { Axis, SourceId } from "@shift/types";
+import type { CatalogGlyphKey } from "./glyphAtlas";
 import type { AxisLocation } from "./variation";
 
 /** One visible glyph preview and its destination rectangle in physical pixels. */
 export interface GlyphPreviewInstance {
-  readonly glyphId: GlyphId;
+  readonly glyphId: CatalogGlyphKey;
   readonly sourceId: SourceId | null;
   readonly pixelRect: readonly [number, number, number, number];
 }

@@ -148,6 +148,14 @@ impl VariationLocation {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FontMetrics {
+    pub units_per_em: f64,
+    pub ascender: f64,
+    pub descender: f64,
+    pub line_gap: f64,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct FontDirectory {
     pub format: FontFormat,

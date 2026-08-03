@@ -4,96 +4,90 @@ import { DocumentSession } from "../document/DocumentSession";
 import type { Window } from "../windows/Window";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 
+/** Stable identity for one live font session. */
+export type FontSessionId = string;
+
+/** Compatibility name for authored package indexing. */
+export type WorkspaceId = FontSessionId;
+
+export type FontSessionOptions =
+  | {
+      readonly kind: "workspace";
+      readonly sessionId: FontSessionId;
+      readonly workspaceProcess: WorkspaceProcess;
+      readonly documentClient: DocumentClient;
+      readonly applicationName: () => string;
+    }
+  | {
+      readonly kind: "source";
+      readonly sessionId: FontSessionId;
+      readonly workspaceProcess: WorkspaceProcess;
+    };
+
 /**
- * Identifies one live loaded font workspace.
+ * Groups the process, capabilities, and windows for one open font.
  *
- * @remarks
- * Renderer windows attach to this identity and keep it for their lifetime.
+ * Authored sessions additionally own document workflows. Retained source
+ * sessions deliberately have no document client, persistence, dirty state, or
+ * save target.
  */
-export type WorkspaceId = string;
-
-export interface WorkspaceSessionOptions {
-  readonly workspaceId: WorkspaceId;
+export class FontSession {
+  readonly kind: "workspace" | "source";
+  readonly sessionId: FontSessionId;
   readonly workspaceProcess: WorkspaceProcess;
-  readonly documentClient: DocumentClient;
-  readonly applicationName: () => string;
-}
-
-/**
- * Groups the main-process services and windows for one font workspace.
- *
- * @remarks
- * The workspace owns persistence, dirty state, undo state, and sync-lane
- * access. Windows are views attached to this session.
- */
-export class WorkspaceSession {
-  /** Stable identity for this live workspace session. */
-  readonly workspaceId: WorkspaceId;
-
-  /** Utility process that owns this workspace's font data and sync lanes. */
-  readonly workspaceProcess: WorkspaceProcess;
-
-  /** Renderer-mediated document lane for save/state requests that must flush edits. */
-  readonly documentClient: DocumentClient;
-
-  /** Main-owned document workflow for this workspace. */
-  readonly document: DocumentSession;
-
-  /** Renderer windows currently attached to this workspace session. */
+  readonly documentClient: DocumentClient | null;
+  readonly document: DocumentSession | null;
   readonly windows = new Set<Window>();
 
   readonly #unlistenDocumentChanged: () => void;
   readonly #unlistenWorkspaceExit: () => void;
 
-  /**
-   * Creates a session around the services for one loaded font workspace.
-   *
-   * @param options - Services and identity that remain stable for this session lifetime.
-   */
-  constructor(options: WorkspaceSessionOptions) {
-    this.workspaceId = options.workspaceId;
+  constructor(options: FontSessionOptions) {
+    this.kind = options.kind;
+    this.sessionId = options.sessionId;
     this.workspaceProcess = options.workspaceProcess;
-    this.documentClient = options.documentClient;
-    this.document = new DocumentSession({
-      document: this.documentClient,
-      closeDocument: async (discard) => {
-        await this.workspaceProcess.closeWorkspace(discard);
-      },
-      dialogWindow: () => this.activeWindow(),
-      windows: () => this.allWindows(),
-      applicationName: options.applicationName,
-    });
-    this.#unlistenDocumentChanged = this.workspaceProcess.onDocumentChanged((state) => {
-      this.document.acceptState(state);
-    });
-    this.#unlistenWorkspaceExit = this.workspaceProcess.onExit(() => {
-      this.documentClient.dispose();
-    });
+
+    switch (options.kind) {
+      case "workspace":
+        this.documentClient = options.documentClient;
+        this.document = new DocumentSession({
+          document: this.documentClient,
+          closeDocument: async (discard) => {
+            await this.workspaceProcess.closeWorkspace(discard);
+          },
+          dialogWindow: () => this.activeWindow(),
+          windows: () => this.allWindows(),
+          applicationName: options.applicationName,
+        });
+        this.#unlistenDocumentChanged = this.workspaceProcess.onDocumentChanged((state) => {
+          this.document?.acceptState(state);
+        });
+        this.#unlistenWorkspaceExit = this.workspaceProcess.onExit(() => {
+          this.documentClient?.dispose();
+        });
+        break;
+      case "source":
+        this.documentClient = null;
+        this.document = null;
+        this.#unlistenDocumentChanged = () => {};
+        this.#unlistenWorkspaceExit = () => {};
+        break;
+    }
   }
 
-  /**
-   * Attaches a renderer window to this workspace session.
-   *
-   * @param window - Native window wrapper that should display this workspace.
-   */
+  /** Compatibility identity used by authored package indexing. */
+  get workspaceId(): WorkspaceId {
+    return this.sessionId;
+  }
+
   attachWindow(window: Window): void {
     this.windows.add(window);
   }
 
-  /**
-   * Detaches a renderer window from this workspace session.
-   *
-   * @param window - Native window wrapper that no longer displays this workspace.
-   */
   detachWindow(window: Window): void {
     this.windows.delete(window);
   }
 
-  /**
-   * Returns a window suitable for workspace-owned dialogs.
-   *
-   * @returns the focused session window, a remaining attached window, or null.
-   */
   activeWindow(): Window | null {
     const focused = BrowserWindow.getFocusedWindow();
     if (focused) {
@@ -105,21 +99,18 @@ export class WorkspaceSession {
     return this.windows.values().next().value ?? null;
   }
 
-  /**
-   * Returns the renderer windows attached to this session.
-   *
-   * @returns a fresh array; mutating it does not change the session.
-   */
   allWindows(): readonly Window[] {
     return [...this.windows];
   }
 
-  /** Disposes process and renderer-facing document resources for this workspace. */
   dispose(): void {
     this.#unlistenDocumentChanged();
     this.#unlistenWorkspaceExit();
-    this.documentClient.dispose();
+    this.documentClient?.dispose();
     this.workspaceProcess.stop();
     this.windows.clear();
   }
 }
+
+/** Compatibility type for authored-only callers. */
+export type WorkspaceSession = FontSession;

@@ -22,9 +22,9 @@ use crate::font_source::geometry::{
     SourceGeometry,
 };
 use crate::font_source::{
-    AffineTransform, AxisIndex, DirectoryGlyph, DisplayGlyph, FontDirectory, FontReadError,
-    GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, PointProvenance, RandomAccessFont,
-    TrueTypePointIndex, VariationAxis, VariationAxisKind, VariationLocation,
+    AffineTransform, AxisIndex, DirectoryGlyph, DisplayGlyph, FontDirectory, FontMetrics,
+    FontReadError, GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, PointProvenance,
+    RandomAccessFont, TrueTypePointIndex, VariationAxis, VariationAxisKind, VariationLocation,
 };
 use crate::FontFormat;
 
@@ -89,6 +89,24 @@ impl BinaryFont {
 
     pub(crate) fn bytes(&self) -> &Arc<[u8]> {
         &self.bytes
+    }
+
+    pub fn metrics(&self, location: &VariationLocation) -> Result<FontMetrics, FontReadError> {
+        self.verify_source()?;
+        let font = FontRef::new(self.bytes.as_ref()).map_err(|error| {
+            malformed(
+                &self.path,
+                format!("failed to reopen retained font: {error}"),
+            )
+        })?;
+        let skrifa_location = self.skrifa_location(&font, location)?;
+        let metrics = font.metrics(Size::unscaled(), LocationRef::from(&skrifa_location));
+        Ok(FontMetrics {
+            units_per_em: f64::from(metrics.units_per_em),
+            ascender: f64::from(metrics.ascent),
+            descender: f64::from(metrics.descent),
+            line_gap: f64::from(metrics.leading),
+        })
     }
 
     fn verify_source(&self) -> Result<(), FontReadError> {

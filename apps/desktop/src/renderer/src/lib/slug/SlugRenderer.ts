@@ -1,4 +1,4 @@
-import type { GlyphId } from "@shift/types";
+import type { CatalogGlyphKey, GlyphAtlasPageWeights } from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame, GlyphPreviewInstance } from "@/types/glyphPreview";
 import { SlugAtlas } from "./SlugAtlas";
 import { SlugAtlasPage } from "./SlugAtlasPage";
@@ -11,7 +11,7 @@ export class SlugRenderer {
   readonly #onDeviceLost: (reason: string) => void;
   readonly #pipelines: SlugRendererPipelines;
   readonly #pages = new Set<SlugAtlasPage>();
-  readonly #pageByGlyph = new Map<GlyphId, SlugAtlasPage>();
+  readonly #pageByGlyph = new Map<CatalogGlyphKey, SlugAtlasPage>();
   #disposed = false;
 
   constructor(
@@ -57,7 +57,7 @@ export class SlugRenderer {
     const nextPageByGlyph = new Map(this.#pageByGlyph);
     const replaced = new Set<SlugAtlasPage>();
     for (const page of pages) {
-      for (const glyphId of page.glyphIds) {
+      for (const glyphId of page.glyphKeys) {
         const previous = nextPageByGlyph.get(glyphId);
         if (previous) replaced.add(previous);
         nextPageByGlyph.set(glyphId, page);
@@ -70,7 +70,7 @@ export class SlugRenderer {
     this.#removeUnusedPages(replaced);
   }
 
-  invalidate(glyphIds: readonly GlyphId[]): void {
+  invalidate(glyphIds: readonly CatalogGlyphKey[]): void {
     const affected = new Set<SlugAtlasPage>();
     for (const glyphId of glyphIds) {
       const page = this.#pageByGlyph.get(glyphId);
@@ -80,8 +80,17 @@ export class SlugRenderer {
     this.#removeUnusedPages(affected);
   }
 
-  hasGlyphs(glyphIds: readonly GlyphId[]): boolean {
+  hasGlyphs(glyphIds: readonly CatalogGlyphKey[]): boolean {
     return glyphIds.every((glyphId) => this.#pageByGlyph.has(glyphId));
+  }
+
+  setResolvedWeights(updates: readonly GlyphAtlasPageWeights[]): void {
+    const pagesByIndex = new Map([...this.#pages].map((page) => [page.pageIndex, page]));
+    for (const update of updates) {
+      const page = pagesByIndex.get(update.pageIndex);
+      if (!page) throw new Error(`resident Slug page ${update.pageIndex} is missing`);
+      page.atlas.setResolvedWeights(update.weights);
+    }
   }
 
   draw(frame: GlyphPreviewFrame): void {

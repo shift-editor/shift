@@ -1,8 +1,10 @@
-import type { GlyphId } from "@shift/types";
-import type { SlugAtlasOrigin } from "@shared/workspace/protocol";
-import type { GlyphCatalogAtlasPage } from "@/types/glyphCatalog";
+import type {
+  CatalogGlyphKey,
+  GlyphAtlasPageDescriptor,
+  GlyphAtlasPageRequest,
+  GlyphAtlasSource,
+} from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame } from "@/types/glyphPreview";
-import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import { SlugAtlas } from "@/lib/slug/SlugAtlas";
 import { SlugRenderer } from "@/lib/slug/SlugRenderer";
 
@@ -18,27 +20,27 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 export class ResidentGlyphLayer {
   readonly #renderer: SlugRenderer;
   readonly #device: GPUDevice;
-  readonly #edits: WorkspaceEditCoordinator;
+  readonly #source: GlyphAtlasSource;
   readonly #alignment: number;
   readonly #maximumBindingSize: number;
 
   private constructor(
     renderer: SlugRenderer,
     device: GPUDevice,
-    edits: WorkspaceEditCoordinator,
+    source: GlyphAtlasSource,
     alignment: number,
     maximumBindingSize: number,
   ) {
     this.#renderer = renderer;
     this.#device = device;
-    this.#edits = edits;
+    this.#source = source;
     this.#alignment = alignment;
     this.#maximumBindingSize = maximumBindingSize;
   }
 
   static async create(
     canvas: HTMLCanvasElement,
-    edits: WorkspaceEditCoordinator,
+    source: GlyphAtlasSource,
     onDeviceLost: (reason: string) => void,
     signal: AbortSignal,
   ): Promise<ResidentGlyphLayer> {
@@ -79,7 +81,7 @@ export class ResidentGlyphLayer {
       context.configure({ device, format, alphaMode: "premultiplied" });
       renderer = new SlugRenderer(device, context, format, onDeviceLost);
 
-      const layer = new ResidentGlyphLayer(renderer, device, edits, alignment, maximumBindingSize);
+      const layer = new ResidentGlyphLayer(renderer, device, source, alignment, maximumBindingSize);
       renderer = null;
       device = null;
       context = null;
@@ -96,37 +98,22 @@ export class ResidentGlyphLayer {
     }
   }
 
-  async loadPages(pages: readonly GlyphCatalogAtlasPage[], signal: AbortSignal): Promise<void> {
+  async loadPages(pages: readonly GlyphAtlasPageRequest[], signal: AbortSignal): Promise<void> {
     if (pages.length === 0) return;
 
     const started = performance.now();
     const atlases: SlugAtlas[] = [];
-    let cachedPageCount = 0;
-    let nativePageCount = 0;
     let prepareDurationMs = 0;
     let streamAndUploadDurationMs = 0;
-    let preparedGeneration: number | null = null;
-    let preparedOrigin: SlugAtlasOrigin | null = null;
+    let preparedDescriptor: GlyphAtlasPageDescriptor | null = null;
     let atlas: SlugAtlas | null = null;
 
     try {
       for (const page of pages) {
         const prepareStarted = performance.now();
-        const descriptor = await this.#edits.prepareSlugAtlasPage({
-          ...page,
-          alignment: this.#alignment,
-        });
+        const descriptor = await this.#source.preparePage(page, this.#alignment);
         prepareDurationMs += performance.now() - prepareStarted;
-        preparedGeneration = descriptor.generation;
-        preparedOrigin = descriptor.origin;
-        switch (descriptor.origin) {
-          case "cached":
-            cachedPageCount += 1;
-            break;
-          case "native":
-            nativePageCount += 1;
-            break;
-        }
+        preparedDescriptor = descriptor;
         throwIfAborted(signal);
 
         if (descriptor.layout.totalLength > PREFERRED_PAGE_BYTES) {
@@ -139,9 +126,8 @@ export class ResidentGlyphLayer {
         atlas = SlugAtlas.create(descriptor, this.#device, this.#maximumBindingSize);
         const activeAtlas = atlas;
         const streamStarted = performance.now();
-        const totalLength = await this.#edits.streamSlugAtlasPage(
-          descriptor.generation,
-          descriptor.origin,
+        const totalLength = await this.#source.streamPage(
+          descriptor,
           UPLOAD_CHUNK_BYTES,
           (offset, bytes) => {
             throwIfAborted(signal);
@@ -149,8 +135,7 @@ export class ResidentGlyphLayer {
           },
         );
         streamAndUploadDurationMs += performance.now() - streamStarted;
-        preparedGeneration = null;
-        preparedOrigin = null;
+        preparedDescriptor = null;
         throwIfAborted(signal);
         if (totalLength !== descriptor.layout.totalLength) {
           throw new Error(
@@ -166,13 +151,11 @@ export class ResidentGlyphLayer {
       this.#renderer.loadPages(atlases);
       const installationDurationMs = performance.now() - installationStarted;
       const profile = {
-        cachedPageCount,
         durationMs: performance.now() - started,
         installationDurationMs,
-        nativePageCount,
         pageCount: pages.length,
         prepareDurationMs,
-        rootCount: pages.reduce((count, page) => count + page.glyphIds.length, 0),
+        rootCount: pages.reduce((count, page) => count + page.glyphKeys.length, 0),
         streamAndUploadDurationMs,
       };
       if (SLUG_ATLAS_PROFILING_ENABLED) {
@@ -185,9 +168,9 @@ export class ResidentGlyphLayer {
     } catch (error) {
       atlas?.destroy();
       for (const uploadedAtlas of atlases) uploadedAtlas.destroy();
-      if (preparedGeneration !== null && preparedOrigin !== null) {
+      if (preparedDescriptor) {
         try {
-          await this.#edits.discardSlugAtlasPage(preparedGeneration, preparedOrigin);
+          await this.#source.discardPage(preparedDescriptor);
         } catch (discardError) {
           console.error("failed to release rejected resident glyph atlas page", discardError);
         }
@@ -196,12 +179,17 @@ export class ResidentGlyphLayer {
     }
   }
 
-  invalidate(glyphIds: readonly GlyphId[]): void {
+  invalidate(glyphIds: readonly CatalogGlyphKey[]): void {
     this.#renderer.invalidate(glyphIds);
   }
 
-  hasGlyphs(glyphIds: readonly GlyphId[]): boolean {
+  hasGlyphs(glyphIds: readonly CatalogGlyphKey[]): boolean {
     return this.#renderer.hasGlyphs(glyphIds);
+  }
+
+  async updateResolvedWeights(coordinates: readonly number[]): Promise<void> {
+    const updates = await this.#source.weights(coordinates);
+    this.#renderer.setResolvedWeights(updates);
   }
 
   draw(frame: GlyphPreviewFrame): void {

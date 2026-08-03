@@ -25,6 +25,8 @@ export declare class Bridge {
   closeWorkspace(): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
+  openFontSource(path: string): NapiCatalogDirectory
+  closeFontSource(): void
   setDocumentId(documentId: string): NapiDocumentState
   saveWorkspace(): NapiDocumentState
   saveWorkspaceAs(path: string): NapiDocumentState
@@ -99,6 +101,14 @@ export declare class Bridge {
   discardSlugAtlas(generation: number): void
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number): void
+  /** Builds one source-neutral catalog page through the active format adapter. */
+  prepareSourceAtlasPage(pageIndex: number, glyphIndices: Array<number>, coordinates: Array<number>, alignment: number): NapiCatalogAtlasPage
+  /** Streams one prepared source page through the same bounded atlas lane. */
+  streamSourceAtlasPage(generation: number, maximumLength: number): ReadableStream<Buffer>
+  /** Releases a rejected source page and its retained weight descriptor. */
+  discardSourceAtlasPage(pageIndex: number, generation: number): void
+  /** Evaluates every resident page's small weight buffer at one source location. */
+  sourceAtlasWeights(coordinates: Array<number>): Array<NapiCatalogAtlasWeights>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
@@ -108,6 +118,72 @@ export declare class Bridge {
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
+}
+
+export interface NapiCatalogAtlasGlyph {
+  glyphIndex: number
+  atlasGlyph: number
+}
+
+export interface NapiCatalogAtlasPage {
+  generation: number
+  pageIndex: number
+  bandCount: number
+  weightCount: number
+  layout: NapiSlugLayout
+  previewExtents: NapiSlugPreviewExtents
+  glyphs: Array<NapiCatalogAtlasGlyph>
+  weights: Array<number>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface NapiCatalogAtlasWeights {
+  pageIndex: number
+  weights: Array<number>
+}
+
+export interface NapiCatalogAxis {
+  index: number
+  tag: string
+  name: string
+  hidden: boolean
+  kind: string
+  minimum?: number
+  defaultValue: number
+  maximum?: number
+  values: Array<number>
+}
+
+export interface NapiCatalogCapabilities {
+  editable: boolean
+  savable: boolean
+  exportable: boolean
+}
+
+export interface NapiCatalogDirectory {
+  format: string
+  familyName?: string
+  styleName?: string
+  glyphs: Array<NapiCatalogGlyph>
+  axes: Array<NapiCatalogAxis>
+  defaultLocation: Array<number>
+  metrics?: NapiCatalogMetrics
+  capabilities: NapiCatalogCapabilities
+}
+
+export interface NapiCatalogGlyph {
+  index: number
+  name: string
+  unicodes: Array<number>
+}
+
+export interface NapiCatalogMetrics {
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  lineGap: number
 }
 
 export interface NapiDocumentState {
