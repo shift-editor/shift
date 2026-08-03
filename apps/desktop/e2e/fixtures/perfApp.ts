@@ -140,8 +140,20 @@ export async function navigateToEditor(page: Page, hexCodepoint: string): Promis
     window.location.hash = `#/editor/${encodeURIComponent(record.id)}`;
   }, unicode);
 
-  await page.waitForSelector("#scene-canvas", { timeout: 10_000 });
-  await page.waitForTimeout(1000);
+  await page.waitForFunction(
+    () => {
+      const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas");
+      return Boolean(canvas && canvas.width > 1 && canvas.height > 1);
+    },
+    undefined,
+    { timeout: 10_000 },
+  );
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
 }
 
 /**

@@ -11,6 +11,8 @@ const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 const PREFERRED_ATLAS_BYTES = 256 * 1024 * 1024;
 const PREFERRED_PAGE_BYTES = 64 * 1024 * 1024;
 const REQUIRED_STORAGE_BUFFERS = 8;
+const SLUG_ATLAS_PROFILING_ENABLED =
+  new URLSearchParams(window.location.search).get("shiftProfileSlugAtlas") === "1";
 
 /** Complete resident glyph-preview surface with atomically replaceable fixed pages. */
 export class ResidentGlyphLayer {
@@ -97,19 +99,34 @@ export class ResidentGlyphLayer {
   async loadPages(pages: readonly GlyphCatalogAtlasPage[], signal: AbortSignal): Promise<void> {
     if (pages.length === 0) return;
 
+    const started = performance.now();
     const atlases: SlugAtlas[] = [];
+    let cachedPageCount = 0;
+    let nativePageCount = 0;
+    let prepareDurationMs = 0;
+    let streamAndUploadDurationMs = 0;
     let preparedGeneration: number | null = null;
     let preparedOrigin: SlugAtlasOrigin | null = null;
     let atlas: SlugAtlas | null = null;
 
     try {
       for (const page of pages) {
+        const prepareStarted = performance.now();
         const descriptor = await this.#edits.prepareSlugAtlasPage({
           ...page,
           alignment: this.#alignment,
         });
+        prepareDurationMs += performance.now() - prepareStarted;
         preparedGeneration = descriptor.generation;
         preparedOrigin = descriptor.origin;
+        switch (descriptor.origin) {
+          case "cached":
+            cachedPageCount += 1;
+            break;
+          case "native":
+            nativePageCount += 1;
+            break;
+        }
         throwIfAborted(signal);
 
         if (descriptor.layout.totalLength > PREFERRED_PAGE_BYTES) {
@@ -121,6 +138,7 @@ export class ResidentGlyphLayer {
 
         atlas = SlugAtlas.create(descriptor, this.#device, this.#maximumBindingSize);
         const activeAtlas = atlas;
+        const streamStarted = performance.now();
         const totalLength = await this.#edits.streamSlugAtlasPage(
           descriptor.generation,
           descriptor.origin,
@@ -130,6 +148,7 @@ export class ResidentGlyphLayer {
             activeAtlas.write(this.#device.queue, offset, bytes);
           },
         );
+        streamAndUploadDurationMs += performance.now() - streamStarted;
         preparedGeneration = null;
         preparedOrigin = null;
         throwIfAborted(signal);
@@ -143,7 +162,26 @@ export class ResidentGlyphLayer {
         atlas = null;
       }
 
+      const installationStarted = performance.now();
       this.#renderer.loadPages(atlases);
+      const installationDurationMs = performance.now() - installationStarted;
+      const profile = {
+        cachedPageCount,
+        durationMs: performance.now() - started,
+        installationDurationMs,
+        nativePageCount,
+        pageCount: pages.length,
+        prepareDurationMs,
+        rootCount: pages.reduce((count, page) => count + page.glyphIds.length, 0),
+        streamAndUploadDurationMs,
+      };
+      if (SLUG_ATLAS_PROFILING_ENABLED) {
+        console.info("[slug-atlas-profile]", {
+          boundary: "renderer",
+          phase: "load-page-set",
+          ...profile,
+        });
+      }
     } catch (error) {
       atlas?.destroy();
       for (const uploadedAtlas of atlases) uploadedAtlas.destroy();

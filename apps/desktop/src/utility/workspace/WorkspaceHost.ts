@@ -181,6 +181,7 @@ export class WorkspaceHost {
   }
 
   async #prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
+    const started = performance.now();
     const cacheRequest: CachedAtlasPageRequest = {
       ...request,
       key: {
@@ -197,6 +198,13 @@ export class WorkspaceHost {
 
       const generation = this.#cachedGeneration;
       this.#cachedPages.set(generation, cached);
+      logSlugAtlasProfile({
+        boundary: "utility",
+        phase: "prepare-page",
+        pageIndex: request.pageIndex,
+        origin: "cached",
+        durationMs: performance.now() - started,
+      });
       return { ...cached.atlas, generation, origin: "cached" };
     }
 
@@ -204,6 +212,13 @@ export class WorkspaceHost {
     this.#preparedPages.set(descriptor.generation, {
       request: cacheRequest,
       descriptor,
+    });
+    logSlugAtlasProfile({
+      boundary: "utility",
+      phase: "prepare-page",
+      pageIndex: request.pageIndex,
+      origin: "native",
+      durationMs: performance.now() - started,
     });
     return { ...descriptor, origin: "native" };
   }
@@ -288,7 +303,15 @@ export class WorkspaceHost {
       this.#cachedPages.delete(generation);
 
       try {
+        const started = performance.now();
         await stream.send(cached.stream, undefined, maximumLength);
+        logSlugAtlasProfile({
+          boundary: "utility",
+          phase: "stream-page",
+          origin: "cached",
+          generation,
+          streamMs: performance.now() - started,
+        });
         return null;
       } finally {
         stream.close();
@@ -309,6 +332,7 @@ export class WorkspaceHost {
     }
 
     try {
+      const streamStarted = performance.now();
       await stream.send(
         this.#bridge.streamSlugAtlasPage(generation, maximumLength),
         async (bytes) => {
@@ -329,16 +353,33 @@ export class WorkspaceHost {
         },
         maximumLength,
       );
+      const streamMs = performance.now() - streamStarted;
+      let cacheFinalizeMs: number | null = null;
+      let cachePublicationMs: number | null = null;
 
       if (sink) {
         try {
+          const finalizeStarted = performance.now();
           const staged = await sink.complete();
+          cacheFinalizeMs = performance.now() - finalizeStarted;
           sink = null;
+          const publicationStarted = performance.now();
           await this.#registerCachedAtlasPage(prepared.request, staged);
+          cachePublicationMs = performance.now() - publicationStarted;
         } catch (error) {
           console.error("failed to complete cached Slug atlas page", error);
         }
       }
+      logSlugAtlasProfile({
+        boundary: "utility",
+        phase: "stream-page",
+        origin: "native",
+        generation,
+        pageIndex: prepared.request.pageIndex,
+        streamMs,
+        cacheFinalizeMs,
+        cachePublicationMs,
+      });
       return null;
     } catch (error) {
       if (sink) {
@@ -634,6 +675,17 @@ async function cancelCachedAtlasPage(page: OpenedCachedAtlasPage): Promise<void>
   } finally {
     reader.releaseLock();
   }
+}
+
+function logSlugAtlasProfile(fields: Record<string, string | number | boolean | null>): void {
+  if (
+    process.env.SHIFT_PROFILE_SLUG_ATLAS === undefined ||
+    process.env.SHIFT_PROFILE_SLUG_ATLAS === "0"
+  ) {
+    return;
+  }
+
+  console.info("[slug-atlas-profile]", JSON.stringify(fields));
 }
 
 function parseDocumentSourceKind(sourceKind: string): WorkspaceDocumentSourceKind {

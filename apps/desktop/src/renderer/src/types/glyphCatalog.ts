@@ -63,7 +63,7 @@ export interface GlyphCatalogFrame {
   readonly cells: readonly GlyphCatalogCell[];
 }
 
-export type GridReadiness = "Initial" | "Stale" | "Visible" | "Complete" | "Unavailable";
+export type GridReadiness = "Initial" | "Stale" | "Complete" | "Unavailable";
 
 /** One fixed root page selected for an atomic Grid replacement. */
 export interface GlyphCatalogAtlasPage {

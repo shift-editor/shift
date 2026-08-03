@@ -20,8 +20,10 @@ import type {
 import type { GlyphPreviewInstance } from "@/types/glyphPreview";
 
 const ATLAS_PAGE_ROOT_COUNT = 256;
+const SLUG_ATLAS_PROFILING_ENABLED =
+  new URLSearchParams(window.location.search).get("shiftProfileSlugAtlas") === "1";
 
-/** Owns catalog DOM events, visible-first atlas replacement, and frame scheduling. */
+/** Owns catalog DOM events, complete atlas replacement, and frame scheduling. */
 export class GlyphCatalogController {
   readonly #container: HTMLDivElement;
   readonly #glyphCanvas: HTMLCanvasElement;
@@ -45,8 +47,8 @@ export class GlyphCatalogController {
   #layer: ResidentGlyphLayer | null = null;
   /** Device initialization; aborted work retains this slot until it settles. */
   #refresh: AbortController | null = null;
-  #visibleBuild: AbortController | null = null;
-  #completeBuild: AbortController | null = null;
+  /** One complete current-revision page-set replacement. */
+  #atlasBuild: AbortController | null = null;
   #pointer: Point2D | null = null;
   #hoveredCatalogIndex: number | null = null;
   #firstFrameStarted = false;
@@ -78,7 +80,6 @@ export class GlyphCatalogController {
 
     this.#resizeObserver = new ResizeObserver(() => {
       this.#needsRedraw = true;
-      void this.#refreshVisible();
       this.redraw();
     });
     this.#resizeObserver.observe(container);
@@ -116,6 +117,11 @@ export class GlyphCatalogController {
       this.#needsRedraw = true;
     }
 
+    if (this.#layer && !this.#atlasBuild && this.#invalidGlyphIds.size === 0) {
+      this.#activeFrame = frame;
+      this.#updateResidency();
+    }
+
     this.#overlay.setInputContainer(inputContainer);
     if (!frame.active) {
       this.#frames.cancelUpdate();
@@ -125,7 +131,7 @@ export class GlyphCatalogController {
     }
 
     if (!this.#layer) this.#startLayer();
-    void this.#refreshVisible();
+    void this.#refreshAtlas();
     this.redraw();
   }
 
@@ -139,8 +145,7 @@ export class GlyphCatalogController {
     this.#disposed = true;
     this.#fontEffect.dispose();
     this.#refresh?.abort(new Error("glyph catalog disposed"));
-    this.#visibleBuild?.abort(new Error("glyph catalog disposed"));
-    this.#completeBuild?.abort(new Error("glyph catalog disposed"));
+    this.#atlasBuild?.abort(new Error("glyph catalog disposed"));
     this.#layer?.destroy();
     this.#layer = null;
     this.#frames.cancelUpdate();
@@ -189,12 +194,11 @@ export class GlyphCatalogController {
       }
     }
 
-    this.#visibleBuild?.abort(new Error("resident visible frame changed"));
-    this.#completeBuild?.abort(new Error("resident complete atlas changed"));
+    this.#atlasBuild?.abort(new Error("resident atlas revision changed"));
     this.#needsRedraw = true;
-    this.#updateFullyResident();
+    this.#updateResidency();
 
-    if (this.#targetFrame?.active) void this.#refreshVisible();
+    if (this.#targetFrame?.active) void this.#refreshAtlas();
   }
 
   #startLayer(): void {
@@ -221,8 +225,8 @@ export class GlyphCatalogController {
       this.#layer = layer;
       this.#refresh = null;
       this.#needsRedraw = true;
-      this.#updateFullyResident();
-      await this.#refreshVisible();
+      this.#updateResidency();
+      await this.#refreshAtlas();
     } catch (error) {
       if (this.#disposed || this.#refresh !== refresh) return;
       this.#refresh = null;
@@ -236,138 +240,50 @@ export class GlyphCatalogController {
     }
   }
 
-  async #refreshVisible(): Promise<void> {
-    if (this.#disposed || !this.#targetFrame?.active || this.#refresh) return;
+  async #refreshAtlas(): Promise<void> {
+    if (this.#disposed || !this.#targetFrame?.active || this.#refresh || this.#atlasBuild) return;
     const layer = this.#layer;
     if (!layer) {
       this.#startLayer();
       return;
     }
 
-    if (this.#visibleBuild) {
-      this.#visibleBuild.abort(new Error("visible Grid frame superseded"));
-      return;
-    }
-    if (this.#completeBuild) {
-      this.#completeBuild.abort(new Error("visible Grid frame takes priority"));
-      return;
-    }
-
-    const targetFrame = this.#targetFrame;
-    const visibleGlyphIds = this.#currentFrame(this.#layout(targetFrame), targetFrame).cells.map(
-      (cell) => cell.glyph.id,
-    );
-    const glyphIds = visibleGlyphIds.filter(
-      (glyphId) => this.#invalidGlyphIds.has(glyphId) || !layer.hasGlyphs([glyphId]),
-    );
-    if (glyphIds.length === 0) {
-      this.#activeFrame = targetFrame;
-      this.#updateFullyResident();
+    const pageRequests = this.#pageRequests();
+    if (pageRequests.length === 0) {
+      this.#activeFrame = this.#targetFrame;
+      this.#updateResidency();
       this.#needsRedraw = true;
       this.redraw();
-      void this.#refreshComplete();
       return;
     }
 
-    const visibleBuild = new AbortController();
-    this.#visibleBuild = visibleBuild;
-    this.#updateFullyResident();
+    const atlasBuild = new AbortController();
+    this.#atlasBuild = atlasBuild;
+    this.#updateResidency();
 
     try {
-      const pageRequests = this.#pageRequests(glyphIds);
-      await layer.loadPages(pageRequests, visibleBuild.signal);
-      if (this.#disposed || this.#visibleBuild !== visibleBuild || visibleBuild.signal.aborted) {
-        return;
-      }
+      await layer.loadPages(pageRequests, atlasBuild.signal);
+      if (this.#disposed || this.#atlasBuild !== atlasBuild || atlasBuild.signal.aborted) return;
 
-      const latestTarget = this.#targetFrame;
-      if (!latestTarget) return;
-      this.#activeFrame = latestTarget;
       for (const request of pageRequests) {
+        this.#replacementPageIndices.delete(request.pageIndex);
         for (const glyphId of request.glyphIds) this.#invalidGlyphIds.delete(glyphId);
       }
+      this.#activeFrame = this.#targetFrame;
       this.#needsRedraw = true;
-      this.#updateFullyResident();
+      this.#updateResidency();
       this.redraw();
     } catch (error) {
-      if (!visibleBuild.signal.aborted) this.#handleReplacementFailure(error);
+      if (!atlasBuild.signal.aborted) this.#handleReplacementFailure(error);
     } finally {
-      if (this.#visibleBuild === visibleBuild) this.#visibleBuild = null;
+      if (this.#atlasBuild === atlasBuild) this.#atlasBuild = null;
     }
 
-    if (visibleBuild.signal.aborted) {
-      void this.#refreshVisible();
-      return;
-    }
-    void this.#refreshComplete();
+    if (atlasBuild.signal.aborted) void this.#refreshAtlas();
   }
 
-  async #refreshComplete(): Promise<void> {
-    if (
-      this.#disposed ||
-      !this.#targetFrame?.active ||
-      !this.#layer ||
-      this.#refresh ||
-      this.#visibleBuild ||
-      this.#completeBuild
-    ) {
-      return;
-    }
-
-    const targetFrame = this.#targetFrame;
-    const visibleGlyphIds = this.#currentFrame(this.#layout(targetFrame), targetFrame).cells.map(
-      (cell) => cell.glyph.id,
-    );
-    if (
-      visibleGlyphIds.some(
-        (glyphId) => this.#invalidGlyphIds.has(glyphId) || !this.#layer?.hasGlyphs([glyphId]),
-      )
-    ) {
-      void this.#refreshVisible();
-      return;
-    }
-
-    const completeBuild = new AbortController();
-    this.#completeBuild = completeBuild;
-
-    try {
-      for (let start = 0; start < this.#fontGlyphIds.length; start += ATLAS_PAGE_ROOT_COUNT) {
-        if (completeBuild.signal.aborted) break;
-
-        const pageGlyphIds = this.#fontGlyphIds.slice(start, start + ATLAS_PAGE_ROOT_COUNT);
-        const needsReplacement = pageGlyphIds.some(
-          (glyphId) => this.#invalidGlyphIds.has(glyphId) || !this.#layer?.hasGlyphs([glyphId]),
-        );
-        if (!needsReplacement) continue;
-
-        const pageIndex = start / ATLAS_PAGE_ROOT_COUNT;
-        await this.#layer.loadPages([this.#pageRequest(pageIndex)], completeBuild.signal);
-        if (completeBuild.signal.aborted) break;
-
-        for (const glyphId of pageGlyphIds) this.#invalidGlyphIds.delete(glyphId);
-        this.#needsRedraw = true;
-        this.#updateFullyResident();
-        this.redraw();
-
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
-    } catch (error) {
-      if (!completeBuild.signal.aborted) this.#handleReplacementFailure(error);
-    } finally {
-      if (this.#completeBuild === completeBuild) this.#completeBuild = null;
-    }
-
-    if (completeBuild.signal.aborted) void this.#refreshVisible();
-  }
-
-  #pageRequests(glyphIds: readonly GlyphId[]): GlyphCatalogAtlasPage[] {
-    const pageIndices = new Set<number>();
-    for (const glyphId of glyphIds) {
-      const pageIndex = this.#pageIndex(glyphId);
-      if (pageIndex !== null) pageIndices.add(pageIndex);
-    }
-
-    return [...pageIndices]
+  #pageRequests(): GlyphCatalogAtlasPage[] {
+    return [...this.#replacementPageIndices]
       .sort((left, right) => left - right)
       .map((pageIndex) => this.#pageRequest(pageIndex));
   }
@@ -394,11 +310,9 @@ export class GlyphCatalogController {
     if (this.#disposed) return;
     console.error("resident glyph device lost", reason);
     this.#refresh?.abort(new Error(reason));
-    this.#visibleBuild?.abort(new Error(reason));
-    this.#completeBuild?.abort(new Error(reason));
+    this.#atlasBuild?.abort(new Error(reason));
     this.#refresh = null;
-    this.#visibleBuild = null;
-    this.#completeBuild = null;
+    this.#atlasBuild = null;
     this.#layer = null;
     this.#activeFrame = null;
     this.#invalidGlyphIds.clear();
@@ -457,7 +371,7 @@ export class GlyphCatalogController {
     if (!layer) return;
     const visibleGlyphIds = frame.cells.map((cell) => cell.glyph.id);
     if (!layer.hasGlyphs(visibleGlyphIds)) {
-      void this.#refreshVisible();
+      void this.#refreshAtlas();
       return;
     }
     if (!this.#needsRedraw) return;
@@ -508,11 +422,20 @@ export class GlyphCatalogController {
 
   async #completeFirstFrame(layer: ResidentGlyphLayer): Promise<void> {
     try {
+      const started = performance.now();
       await layer.complete();
       if (this.#disposed || this.#layer !== layer || !this.#activeFrame) return;
       const visibleGlyphIds = this.#currentFrame().cells.map((cell) => cell.glyph.id);
       if (!layer.hasGlyphs(visibleGlyphIds)) return;
 
+      if (SLUG_ATLAS_PROFILING_ENABLED) {
+        console.info("[slug-atlas-profile]", {
+          boundary: "renderer",
+          phase: "first-frame-gpu-complete",
+          durationMs: performance.now() - started,
+          visibleGlyphCount: visibleGlyphIds.length,
+        });
+      }
       this.#onReadyChange(true);
     } catch (error) {
       if (this.#disposed || this.#layer !== layer) return;
@@ -524,7 +447,7 @@ export class GlyphCatalogController {
     console.error("resident glyph replacement failed", error);
     this.#needsRedraw = true;
     if (this.#activeFrame) {
-      this.#updateFullyResident();
+      this.#updateResidency();
       this.redraw();
       return;
     }
@@ -534,9 +457,13 @@ export class GlyphCatalogController {
     this.#onUnavailable();
   }
 
-  #updateFullyResident(): void {
+  #updateResidency(): void {
     const layer = this.#layer;
-    const complete = Boolean(layer) && this.#invalidGlyphIds.size === 0;
+    const complete =
+      Boolean(layer) &&
+      Boolean(this.#activeFrame) &&
+      this.#invalidGlyphIds.size === 0 &&
+      this.#replacementPageIndices.size === 0;
     const residentGlyphCount = layer ? this.#fontGlyphIds.length - this.#invalidGlyphIds.size : 0;
     this.#glyphCanvas.dataset.fullyResident = String(complete);
     this.#glyphCanvas.dataset.residentGlyphCount = String(residentGlyphCount);
@@ -545,16 +472,7 @@ export class GlyphCatalogController {
     this.#glyphCanvas.dataset.previewHeight = String(activeLayout?.previewHeight ?? 0);
 
     let readiness: GridReadiness = "Initial";
-    if (this.#activeFrame) {
-      const target = this.#targetFrame;
-      const visibleGlyphIds = target
-        ? this.#currentFrame(this.#layout(target), target).cells.map((cell) => cell.glyph.id)
-        : [];
-      const visible = visibleGlyphIds.every(
-        (glyphId) => !this.#invalidGlyphIds.has(glyphId) && Boolean(layer?.hasGlyphs([glyphId])),
-      );
-      readiness = complete ? "Complete" : visible ? "Visible" : "Stale";
-    }
+    if (this.#activeFrame) readiness = complete ? "Complete" : "Stale";
     this.#glyphCanvas.dataset.gridReadiness = readiness;
   }
 
@@ -566,7 +484,6 @@ export class GlyphCatalogController {
 
   #handleScroll = (): void => {
     this.#needsRedraw = true;
-    void this.#refreshVisible();
     this.redraw();
   };
 

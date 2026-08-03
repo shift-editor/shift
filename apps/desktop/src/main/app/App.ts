@@ -25,6 +25,9 @@ import { WorkspaceSession } from "../workspace/WorkspaceSession";
 import { showOpenFontDialog } from "../document/openFontDialog";
 
 const APP_NAME = "Shift";
+const SLUG_ATLAS_PROFILING_ENABLED =
+  process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
+  process.env.SHIFT_PROFILE_SLUG_ATLAS !== "0";
 
 /**
  * Owns Electron app startup and the first main-process service graph.
@@ -191,6 +194,7 @@ export class App {
     if (source.type === "url") {
       // in dev load the renderer from vite at MAIN_WINDOW_VITE_DEV_SERVER_URL
       const url = new URL(source.source);
+      if (SLUG_ATLAS_PROFILING_ENABLED) url.searchParams.set("shiftProfileSlugAtlas", "1");
       url.hash = hash;
       this.#log.info("loading dev server url", { url: url.toString() });
       window.window.loadURL(url.toString());
@@ -199,7 +203,10 @@ export class App {
 
     // otherwise this is the build, load the built file directly
     this.#log.info("loading build file at", { path: source.source });
-    window.window.loadFile(source.source, { hash });
+    window.window.loadFile(source.source, {
+      hash,
+      ...(SLUG_ATLAS_PROFILING_ENABLED ? { query: { shiftProfileSlugAtlas: "1" } } : {}),
+    });
   }
 
   #registerCommands(): void {
@@ -244,6 +251,12 @@ export class App {
       this.#log.info("workspace port sent to renderer");
     });
     ipc.handle(ipcMain, "workspace.ready", (event) => {
+      if (SLUG_ATLAS_PROFILING_ENABLED) {
+        this.#log.info("[slug-atlas-profile]", {
+          boundary: "main",
+          phase: "workspace-ready-requested",
+        });
+      }
       this.#workspaceForSender(event.sender, "workspace.ready");
       const window = this.#requireWindowForWebContents(event.sender);
       const browserWindow = window.window;

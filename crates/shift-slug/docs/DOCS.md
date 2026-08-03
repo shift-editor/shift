@@ -59,7 +59,7 @@ Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical
 
 ## Resident variable execution
 
-`build_authored_atlas()` remains the complete-font compiler and profiling boundary. The product Grid uses `build_authored_atlas_page()` for every deterministic fixed directory page intersecting the current viewport before filling the remainder, so atomic multi-page visible replacement, cooperative complete residency, local edits, and disposable per-page caching share one compiler and packed layout. Each compilation creates one `GlyphProjectionSet` for its ordered roots and transitive component closure. Weight collection, root addition, component preparation, exact-source discovery, and fallback resolution all read that same immutable set instead of rebuilding projections or variation models. Fallback and exact-source resolved glyphs are retained only within the current root, bounding temporary memory; the complete set is dropped after atlas construction and never survives authored edits. A patch preserves explicit `GlyphId` mapping and excludes unrelated roots. Layerless root records receive zero-curve/zero-advance descriptors so one incomplete draft cannot disable the rest of the grid. Complete atlases and patches are location-independent; axis movement changes only their shared weight vectors and visible instances.
+`build_authored_atlas()` remains the complete-font compiler and profiling boundary. The product Grid uses `build_authored_atlas_page()` for every deterministic fixed directory page and presents only after the complete page set is resident, so bounded startup work, atomic affected-page replacement, local edits, and disposable per-page caching share one compiler and packed layout. Each compilation creates one `GlyphProjectionSet` for its ordered roots and transitive component closure. Weight collection, root addition, component preparation, exact-source discovery, and fallback resolution all read that same immutable set instead of rebuilding projections or variation models. Fallback and exact-source resolved glyphs are retained only within the current root, bounding temporary memory; the complete set is dropped after atlas construction and never survives authored edits. A patch preserves explicit `GlyphId` mapping and excludes unrelated roots. Layerless root records receive zero-curve/zero-advance descriptors so one incomplete draft cannot disable the rest of the grid. Complete page sets and patches are location-independent; axis movement changes only their shared weight vectors and visible instances, and scrolling performs no atlas work.
 
 `build_authored_atlas_profiled()` and its page counterpart return nested phase durations from the same compiler path. The bridge uses these functions for `prepareSlugAtlas`; setting `SHIFT_PROFILE_SLUG_ATLAS=1` prints acquisition, projection preparation, weight-set collection, component preparation, fallback bounds, exact-source preparation, atlas addition, layout, and total native time without changing the NAPI endpoint.
 
@@ -67,10 +67,10 @@ Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical
 
 A same-machine release comparison on a 6-core/12-thread Ryzen 5 5500U exercised the Fraunces `.shift` corpus through `Bridge.prepareSlugAtlas(256)`. Both revisions produced 699 roots, 1,290 atlas glyphs, 12,713 curves, 998 components, and 2,190,648 bytes.
 
-| Revision | Cold prepare | Resumed first prepare | Warm p50 | Warm p95 |
-| --- | ---: | ---: | ---: | ---: |
-| `47fc8c01` repeated projections | 526.811 ms | 688.788 ms | 544.630 ms | 546.411 ms |
-| Compilation-scoped reuse | 97.970 ms | 242.474 ms | 100.640 ms | 101.470 ms |
+| Revision                        | Cold prepare | Resumed first prepare |   Warm p50 |   Warm p95 |
+| ------------------------------- | -----------: | --------------------: | ---------: | ---------: |
+| `47fc8c01` repeated projections |   526.811 ms |            688.788 ms | 544.630 ms | 546.411 ms |
+| Compilation-scoped reuse        |    97.970 ms |            242.474 ms | 100.640 ms | 101.470 ms |
 
 Warm p50 improved 5.41× (81.5%). The resumed first preparation includes 141.493 ms of lazy layer acquisition; its atlas compilation remains approximately 100 ms. Representative warm native phases were 23–25 ms projection preparation, about 0.5 ms weight-set collection, and 72–73 ms atlas addition. Within atlas addition, component preparation was about 19 ms, fallback bounds about 28.5 ms, and exact-source preparation about 7.3 ms. This exceeds the sub-second target without parallelism; parallel preparation remains unwarranted until a larger corpus demonstrates a new bottleneck.
 
