@@ -1,5 +1,5 @@
 use napi::{Error, JsError, Status};
-use shift_backends::BackendError;
+use shift_backends::{BackendError, FontReadError, SourceAtlasError};
 use shift_font::error::CoreError;
 use shift_slug::{AuthoredSlugError, SlugError};
 use shift_workspace::WorkspaceError;
@@ -14,6 +14,12 @@ pub enum BridgeError {
 
   #[error(transparent)]
   Backend(#[from] BackendError),
+
+  #[error(transparent)]
+  FontRead(#[from] FontReadError),
+
+  #[error(transparent)]
+  SourceAtlas(#[from] SourceAtlasError),
 
   #[error(transparent)]
   Workspace(#[from] WorkspaceError),
@@ -35,6 +41,8 @@ pub fn to_napi_error(error: BridgeError) -> Error {
     | BridgeError::Backend(BackendError::UnsupportedWriteFormat { .. }) => Status::InvalidArg,
     BridgeError::Core(_)
     | BridgeError::Backend(_)
+    | BridgeError::FontRead(_)
+    | BridgeError::SourceAtlas(_)
     | BridgeError::Workspace(_)
     | BridgeError::AuthoredSlug(_)
     | BridgeError::Slug(_) => Status::GenericFailure,

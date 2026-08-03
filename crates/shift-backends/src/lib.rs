@@ -18,11 +18,11 @@ pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult,
 pub use font_source::{
     build_binary_atlas_page, AffineTransform, AnchorRange, AxisIndex, BinaryFont,
     ComponentInstance, ComponentRange, ContourRange, DirectoryGlyph, DisplayGlyph, FontDirectory,
-    FontImporter, FontReadError, FontSource, GeometryIndex, GlifFont, GlyphAnchor, GlyphBounds,
-    GlyphContour, GlyphGeometry, GlyphGuide, GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind,
-    GlyphsFont, GuideRange, PointProvenance, PointRange, RandomAccessFont, SourceAtlasDescriptor,
-    SourceAtlasError, SourceAtlasPage, TrueTypePointIndex, VariationAxis, VariationAxisKind,
-    VariationCoordinate, VariationLocation,
+    FontImporter, FontMetrics, FontReadError, FontSource, GeometryIndex, GlifFont, GlyphAnchor,
+    GlyphBounds, GlyphContour, GlyphGeometry, GlyphGuide, GlyphIndex, GlyphMetrics, GlyphPoint,
+    GlyphPointKind, GlyphsFont, GuideRange, PointProvenance, PointRange, RandomAccessFont,
+    SourceAtlasDescriptor, SourceAtlasError, SourceAtlasPage, TrueTypePointIndex, VariationAxis,
+    VariationAxisKind, VariationCoordinate, VariationLocation,
 };
 pub use format::FontFormat;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};

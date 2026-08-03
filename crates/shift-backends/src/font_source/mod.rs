@@ -14,10 +14,10 @@ pub use glif::GlifFont;
 pub use glyphs::GlyphsFont;
 pub use types::{
     AffineTransform, AnchorRange, AxisIndex, ComponentInstance, ComponentRange, ContourRange,
-    DirectoryGlyph, DisplayGlyph, FontDirectory, GeometryIndex, GlyphAnchor, GlyphBounds,
-    GlyphContour, GlyphGeometry, GlyphGuide, GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind,
-    GuideRange, PointProvenance, PointRange, TrueTypePointIndex, VariationAxis, VariationAxisKind,
-    VariationCoordinate, VariationLocation,
+    DirectoryGlyph, DisplayGlyph, FontDirectory, FontMetrics, GeometryIndex, GlyphAnchor,
+    GlyphBounds, GlyphContour, GlyphGeometry, GlyphGuide, GlyphIndex, GlyphMetrics, GlyphPoint,
+    GlyphPointKind, GuideRange, PointProvenance, PointRange, TrueTypePointIndex, VariationAxis,
+    VariationAxisKind, VariationCoordinate, VariationLocation,
 };
 
 use crate::{BackendResult, FontImport};

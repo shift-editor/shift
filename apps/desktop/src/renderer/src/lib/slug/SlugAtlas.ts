@@ -1,14 +1,12 @@
-import type {
-  Axis,
-  GlyphId,
-  SlugAtlas as SlugAtlasDescriptor,
-  SlugGlyph,
-  SlugSection,
-  SourceId,
-} from "@shift/types";
+import type { Axis, SlugSection, SourceId } from "@shift/types";
 import { interpolationWeights } from "@/lib/interpolation/InterpolationBasis";
 import type { AxisLocation } from "@/types/variation";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
+import type {
+  CatalogGlyphKey,
+  GlyphAtlasGlyph,
+  GlyphAtlasPageDescriptor,
+} from "@/types/glyphAtlas";
 
 const VARIABLE_GLYPH_BYTES = 32;
 const COMPONENT_GLYPH_BYTES = 24;
@@ -18,25 +16,29 @@ const GLYPH_OFFSET_MASK = 0x7fff_ffff;
 
 /** One concrete Slug atlas generation resident across two WebGPU bindings. */
 export class SlugAtlas {
-  readonly #descriptor: SlugAtlasDescriptor;
-  readonly #glyphIds: readonly GlyphId[];
-  readonly #glyphs: ReadonlyMap<GlyphId, SlugGlyph>;
+  readonly #descriptor: GlyphAtlasPageDescriptor;
+  readonly #glyphKeys: readonly CatalogGlyphKey[];
+  readonly #glyphs: ReadonlyMap<CatalogGlyphKey, GlyphAtlasGlyph>;
   readonly #glyphBytes: Uint8Array<ArrayBuffer>;
   readonly #componentGlyphBytes: Uint8Array<ArrayBuffer>;
   readonly #firstBuffer: GPUBuffer;
   readonly #secondBuffer: GPUBuffer;
   readonly #splitOffset: number;
+  #resolvedWeights: Float32Array<ArrayBuffer> | null;
   #disposed = false;
 
   constructor(
-    descriptor: SlugAtlasDescriptor,
+    descriptor: GlyphAtlasPageDescriptor,
     firstBuffer: GPUBuffer,
     secondBuffer: GPUBuffer,
     splitOffset: number,
   ) {
     this.#descriptor = descriptor;
-    this.#glyphIds = descriptor.glyphs.map((glyph) => glyph.glyphId);
-    this.#glyphs = new Map(descriptor.glyphs.map((glyph) => [glyph.glyphId, glyph]));
+    this.#glyphKeys = descriptor.glyphs.map((glyph) => glyph.glyphKey);
+    this.#glyphs = new Map(descriptor.glyphs.map((glyph) => [glyph.glyphKey, glyph]));
+    this.#resolvedWeights = descriptor.resolvedWeights
+      ? new Float32Array(descriptor.resolvedWeights)
+      : null;
     this.#glyphBytes = new Uint8Array(descriptor.layout.glyphs.length);
     this.#componentGlyphBytes = new Uint8Array(descriptor.layout.componentGlyphs.length);
     this.#firstBuffer = firstBuffer;
@@ -45,7 +47,7 @@ export class SlugAtlas {
   }
 
   static create(
-    descriptor: SlugAtlasDescriptor,
+    descriptor: GlyphAtlasPageDescriptor,
     device: GPUDevice,
     maximumBindingSize: number,
   ): SlugAtlas {
@@ -94,8 +96,12 @@ export class SlugAtlas {
     return [splitOffset, Math.max(4, splitOffset), Math.max(4, remainingLength)];
   }
 
-  get glyphIds(): readonly GlyphId[] {
-    return this.#glyphIds;
+  get glyphKeys(): readonly CatalogGlyphKey[] {
+    return this.#glyphKeys;
+  }
+
+  get pageIndex(): number {
+    return this.#descriptor.pageIndex;
   }
 
   get firstBuffer(): GPUBuffer {
@@ -144,6 +150,8 @@ export class SlugAtlas {
   }
 
   weights(location: AxisLocation, axes: readonly Axis[]): Float32Array<ArrayBuffer> {
+    if (this.#resolvedWeights) return this.#resolvedWeights;
+
     const weights = new Float32Array(this.#descriptor.weightCount);
     weights[0] = 1;
     for (const set of this.#descriptor.weightSets) {
@@ -157,6 +165,15 @@ export class SlugAtlas {
       }
     }
     return weights;
+  }
+
+  setResolvedWeights(weights: readonly number[]): void {
+    if (weights.length !== this.#descriptor.weightCount) {
+      throw new Error(
+        `resident Slug page ${this.pageIndex} received ${weights.length} weights; expected ${this.#descriptor.weightCount}`,
+      );
+    }
+    this.#resolvedWeights = new Float32Array(weights);
   }
 
   variableParams(instanceCount: number): Uint32Array<ArrayBuffer> {
@@ -284,7 +301,7 @@ export class SlugAtlas {
   }
 }
 
-function selectedGlyphIndex(glyph: SlugGlyph, sourceId: SourceId | null): number {
+function selectedGlyphIndex(glyph: GlyphAtlasGlyph, sourceId: SourceId | null): number {
   if (sourceId === null) return glyph.defaultGlyph;
 
   return (

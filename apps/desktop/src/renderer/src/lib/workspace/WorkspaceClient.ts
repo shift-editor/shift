@@ -326,7 +326,7 @@ export class WorkspaceClient {
       const port = this.#nextWorkspacePort();
 
       try {
-        await this.#host.workspace.connect();
+        await this.#host.session.connect();
       } catch (error) {
         port.cancel();
         throw error;
@@ -363,7 +363,7 @@ export class WorkspaceClient {
     const received = new Promise<MessagePort>((resolve) => {
       const listener = (event: MessageEvent) => {
         if (event.source !== window) return;
-        if ((event.data as { type?: string } | null)?.type !== "workspace.port") return;
+        if ((event.data as { type?: string } | null)?.type !== "session.port") return;
 
         const port = event.ports[0];
         if (!port) return;

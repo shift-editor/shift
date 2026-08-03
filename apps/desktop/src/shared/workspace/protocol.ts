@@ -2,6 +2,9 @@ import type {
   AppliedChange,
   Axis,
   AxisMapping,
+  CatalogAtlasPage,
+  CatalogAtlasWeights,
+  CatalogDirectory,
   FontIntent,
   FontMetadata,
   FontMetrics,
@@ -69,6 +72,25 @@ export type WorkspaceSlugAtlasPageRequest = {
 };
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
+
+/** Main-visible identity for one retained, read-only foreign source session. */
+export type FontSourceSessionState = {
+  sessionId: string;
+  canonicalPath: string;
+};
+
+/** Renderer catch-up state for the retained backend of the shared catalog. */
+export type FontSourceSnapshot = FontSourceSessionState & {
+  directory: CatalogDirectory;
+};
+
+/** One deterministic page request expressed in source-local glyph indexes. */
+export type FontSourceAtlasPageRequest = {
+  pageIndex: number;
+  glyphIndices: number[];
+  coordinates: number[];
+  alignment: number;
+};
 
 /** Bounded byte delivery over a dedicated transferred port. */
 export type ByteStreamMessage =
@@ -146,6 +168,11 @@ export type ShellCallMap = {
     response: WorkspaceDocumentState;
   };
   "workspace.close": { request: { discard: boolean }; response: null };
+  "source.open": {
+    request: { path: string };
+    response: FontSourceSessionState;
+  };
+  "source.close": { request: void; response: null };
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
 };
@@ -165,6 +192,23 @@ export type ShellEventMap = {
  */
 export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
+  "source.snapshot": { request: void; response: FontSourceSnapshot | null };
+  "source.atlasPagePrepare": {
+    request: FontSourceAtlasPageRequest;
+    response: CatalogAtlasPage;
+  };
+  "source.atlasPageStream": {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
+  "source.atlasPageDiscard": {
+    request: { pageIndex: number; generation: number };
+    response: null;
+  };
+  "source.atlasWeights": {
+    request: { coordinates: number[] };
+    response: CatalogAtlasWeights[];
+  };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
   /**
    * The one mutation verb. Requests carry intents; the response is pure

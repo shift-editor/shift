@@ -4,12 +4,13 @@ import type { Axis, GlyphId, GlyphName, SourceId, SourceMetrics } from "@shift/t
 import type { RefObject } from "react";
 import type { ThemeName } from "./uiState";
 import type { AxisLocation } from "./variation";
+import type { CatalogGlyphKey, GlyphAtlasSource } from "./glyphAtlas";
 
 export type GlyphCatalogCellArea = "preview" | "name";
 
 export interface GlyphCatalogItem {
-  readonly id: GlyphId;
-  readonly name: GlyphName;
+  readonly id: CatalogGlyphKey;
+  readonly name: string;
   readonly displayName: string;
   readonly unicode: number | null;
 }
@@ -26,6 +27,20 @@ export interface GlyphCatalogState {
   selectAll: () => void;
   selectCategory: (category: GlyphCategory) => void;
   selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
+  atlasSource: GlyphAtlasSource;
+  observeAtlasInvalidation: (
+    listener: (
+      glyphKeys: readonly CatalogGlyphKey[] | null,
+      directory: readonly CatalogGlyphKey[],
+    ) => void,
+  ) => () => void;
+  location: AxisLocation;
+  axes: readonly Axis[];
+  resolvedCoordinates: readonly number[] | null;
+  metrics: SourceMetrics;
+  sourceId: SourceId | null;
+  editable: boolean;
+  openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
 }
 
 export interface GlyphCatalogLayoutMetrics {
@@ -67,7 +82,7 @@ export type GridReadiness = "Initial" | "Stale" | "Complete" | "Unavailable";
 
 /** One fixed root page selected for an atomic Grid replacement. */
 export interface GlyphCatalogAtlasPage {
-  readonly glyphIds: GlyphId[];
+  readonly glyphKeys: CatalogGlyphKey[];
   readonly pageIndex: number;
   readonly pageCount: number;
   readonly replacementPageIndices: number[];
@@ -82,11 +97,17 @@ export interface GlyphCatalogControllerFrame {
   readonly sourceId: SourceId | null;
   readonly themeName: ThemeName;
   readonly active: boolean;
-  readonly editingGlyphId: GlyphId | null;
+  readonly editingGlyphId: CatalogGlyphKey | null;
+  readonly resolvedCoordinates: readonly number[] | null;
+}
+
+export interface EditableGlyphCatalogItem extends GlyphCatalogItem {
+  readonly id: GlyphId;
+  readonly name: GlyphName;
 }
 
 export interface GlyphNameInputProps {
-  readonly glyph: GlyphCatalogItem;
+  readonly glyph: EditableGlyphCatalogItem;
   readonly onFinished: () => void;
 }
 
@@ -98,7 +119,11 @@ export interface GlyphCatalogCanvasProps {
   readonly metrics: SourceMetrics;
   readonly sourceId: SourceId | null;
   readonly active: boolean;
-  readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  readonly atlasSource: GlyphAtlasSource;
+  readonly observeAtlasInvalidation: GlyphCatalogState["observeAtlasInvalidation"];
+  readonly resolvedCoordinates: readonly number[] | null;
+  readonly editable: boolean;
+  readonly openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;
 }

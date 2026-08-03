@@ -21,7 +21,7 @@ import { createShiftLogger, type ShiftLogger } from "../logging";
 import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
-import { WorkspaceSession } from "../workspace/WorkspaceSession";
+import type { FontSession } from "../workspace/WorkspaceSession";
 import { showOpenFontDialog } from "../document/openFontDialog";
 
 const APP_NAME = "Shift";
@@ -63,11 +63,12 @@ export class App {
     this.#lifecycle = new AppLifecycle({
       documentForWindow: (window) => {
         const session = this.#workspaces.getForBrowserWindow(window.window);
-        if (!session || session.windows.size > 1) return null;
+        if (!session?.document || session.windows.size > 1) return null;
 
         return session.document;
       },
-      documents: () => this.#workspaces.list().map((session) => session.document),
+      documents: () =>
+        this.#workspaces.list().flatMap((session) => (session.document ? [session.document] : [])),
       log: this.#log,
     });
   }
@@ -225,39 +226,43 @@ export class App {
     });
     ipc.handle(ipcMain, "document.connect", (event) => {
       this.#log.info("document connect requested");
-      const session = this.#workspaceForSender(event.sender, "document.connect");
+      const session = this.#fontSessionForSender(event.sender, "document.connect");
+      if (!session.documentClient) throw new Error("document.connect requires an authored font");
       const { port1, port2 } = new MessageChannelMain();
 
       session.documentClient.connect(port1);
       event.sender.postMessage("document.port", null, [port2]);
       this.#log.info("document port sent to renderer");
     });
-    ipc.handle(ipcMain, "workspace.connect", async (event) => {
-      this.#log.info("workspace connect requested");
-      const session = this.#workspaceForSender(event.sender, "workspace.connect");
+    ipc.handle(ipcMain, "session.kind", (event) => {
+      return this.#fontSessionForSender(event.sender, "session.kind").kind;
+    });
+    ipc.handle(ipcMain, "session.connect", async (event) => {
+      this.#log.info("font session connect requested");
+      const session = this.#fontSessionForSender(event.sender, "session.connect");
       const { port1, port2 } = new MessageChannelMain();
 
       try {
         await session.workspaceProcess.whenReady();
         await session.workspaceProcess.connectSyncLane(port1);
       } catch (error) {
-        this.#log.error("workspace connect failed", error);
+        this.#log.error("font session connect failed", error);
         port1.close();
         port2.close();
         throw error;
       }
 
-      event.sender.postMessage("workspace.port", null, [port2]);
-      this.#log.info("workspace port sent to renderer");
+      event.sender.postMessage("session.port", null, [port2]);
+      this.#log.info("font session port sent to renderer");
     });
-    ipc.handle(ipcMain, "workspace.ready", (event) => {
+    ipc.handle(ipcMain, "session.ready", (event) => {
       if (SLUG_ATLAS_PROFILING_ENABLED) {
         this.#log.info("[slug-atlas-profile]", {
           boundary: "main",
           phase: "workspace-ready-requested",
         });
       }
-      this.#workspaceForSender(event.sender, "workspace.ready");
+      this.#fontSessionForSender(event.sender, "session.ready");
       const window = this.#requireWindowForWebContents(event.sender);
       const browserWindow = window.window;
       if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
@@ -281,15 +286,15 @@ export class App {
 
           await this.#openWorkspaceFromWindow(window);
         },
-        hasWorkspace: () => this.#activeWorkspaceSession() !== null,
+        hasWorkspace: () => (this.#activeFontSession()?.document ?? null) !== null,
         save: async () => {
-          await this.#requireActiveWorkspaceSession("file.save").document.save();
+          await this.#requireActiveDocument("file.save").save();
         },
         saveAs: async () => {
-          await this.#requireActiveWorkspaceSession("file.saveAs").document.saveAs();
+          await this.#requireActiveDocument("file.saveAs").saveAs();
         },
         exportTtf: async () => {
-          await this.#requireActiveWorkspaceSession("file.exportTtf").document.exportTtf();
+          await this.#requireActiveDocument("file.exportTtf").exportTtf();
         },
       },
       windows: {
@@ -297,8 +302,8 @@ export class App {
       },
       renderer: {
         run: (id) => {
-          const session = this.#activeWorkspaceSession();
-          if (!session) return;
+          const session = this.#activeFontSession();
+          if (!session?.document) return;
 
           session.activeWindow()?.runRendererCommand(id);
         },
@@ -321,7 +326,7 @@ export class App {
     this.#openWorkspaceWindow(opener, session);
   }
 
-  #focusExistingWorkspaceWindow(opener: Window, session: WorkspaceSession): boolean {
+  #focusExistingWorkspaceWindow(opener: Window, session: FontSession): boolean {
     const existingWindow = session.activeWindow();
     if (!existingWindow) return false;
 
@@ -330,7 +335,7 @@ export class App {
     return true;
   }
 
-  #openWorkspaceWindow(opener: Window, session: WorkspaceSession): void {
+  #openWorkspaceWindow(opener: Window, session: FontSession): void {
     const closeOpener = this.#workspaces.getForBrowserWindow(opener.window) === null;
 
     const bounds = screen.getDisplayMatching(opener.window.getBounds()).workArea;
@@ -342,7 +347,7 @@ export class App {
     if (closeOpener) opener.close();
   }
 
-  #workspaceForSender(sender: WebContents, operation: string): WorkspaceSession {
+  #fontSessionForSender(sender: WebContents, operation: string): FontSession {
     const window = this.#requireWindowForWebContents(sender);
     const session = this.#workspaces.getForBrowserWindow(window.window);
     if (!session) {
@@ -352,15 +357,15 @@ export class App {
     return session;
   }
 
-  #activeWorkspaceSession(): WorkspaceSession | null {
+  #activeFontSession(): FontSession | null {
     const window = this.#windows.activeWindow();
     return window ? this.#workspaces.getForBrowserWindow(window.window) : null;
   }
 
-  #requireActiveWorkspaceSession(operation: string): WorkspaceSession {
-    const session = this.#activeWorkspaceSession();
-    if (!session) throw new Error(`${operation} requires an active workspace window`);
-    return session;
+  #requireActiveDocument(operation: string) {
+    const document = this.#activeFontSession()?.document;
+    if (!document) throw new Error(`${operation} requires an active authored font`);
+    return document;
   }
 
   #requireDocumentsRoot(): string {

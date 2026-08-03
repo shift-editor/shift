@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type {
-  GlyphId,
-  SlugAtlas as SlugAtlasDescriptor,
-  SlugSection,
-  SourceId,
-} from "@shift/types";
+import type { GlyphId, SlugSection, SourceId } from "@shift/types";
+import type { GlyphAtlasPageDescriptor } from "@/types/glyphAtlas";
 import { SlugAtlas } from "./SlugAtlas";
 
 const emptySection = (): SlugSection => ({ offset: 0, length: 0 });
 
-function residentFixture(): { descriptor: SlugAtlasDescriptor; bytes: Uint8Array<ArrayBuffer> } {
+function residentFixture(): {
+  descriptor: GlyphAtlasPageDescriptor;
+  bytes: Uint8Array<ArrayBuffer>;
+} {
   const glyphs = { offset: 256, length: 64 };
   const componentGlyphs = { offset: 512, length: 24 };
-  const descriptor: SlugAtlasDescriptor = {
+  const descriptor: GlyphAtlasPageDescriptor = {
     generation: 7,
+    pageIndex: 0,
     bandCount: 8,
     weightCount: 1,
     layout: {
@@ -31,17 +31,16 @@ function residentFixture(): { descriptor: SlugAtlasDescriptor; bytes: Uint8Array
       lineBits: emptySection(),
       totalLength: 536,
     },
+    previewExtents: { horizontal: 0, minimumY: 0, maximumY: 0 },
     glyphs: [
       {
-        glyphId: "glyph-a" as GlyphId,
+        glyphKey: "glyph-a" as GlyphId,
         defaultGlyph: 0,
         exactSources: [{ sourceId: "source-heavy" as SourceId, glyphIndex: 1 }],
       },
     ],
     weightSets: [],
-    atlasGlyphCount: 2,
-    curveCount: 5,
-    componentCount: 4,
+    resolvedWeights: null,
   };
   const bytes = new Uint8Array(descriptor.layout.totalLength);
   const view = new DataView(bytes.buffer);
@@ -98,6 +97,20 @@ describe("resident atlas frame planning", () => {
     expect(Array.from(atlas.variableParams(3))).toEqual([
       3, 8, 128, 0, 0, 0, 0, 256, 0, 0, 512, 0, 0, 0, 0, 0,
     ]);
+  });
+
+  it("uses backend-resolved weights without changing resident geometry", () => {
+    const { descriptor } = residentFixture();
+    const atlas = new SlugAtlas(
+      { ...descriptor, resolvedWeights: [0.25] },
+      buffer(),
+      buffer(),
+      128,
+    );
+
+    expect(Array.from(atlas.weights(new Map(), []))).toEqual([0.25]);
+    atlas.setResolvedWeights([0.75]);
+    expect(Array.from(atlas.weights(new Map(), []))).toEqual([0.75]);
   });
 
   it("captures split descriptors and plans an exact component variant", () => {

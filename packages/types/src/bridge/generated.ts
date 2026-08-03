@@ -40,6 +40,8 @@ export interface BridgeApi {
   closeWorkspace(): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
+  openFontSource(path: string): CatalogDirectory
+  closeFontSource(): void
   setDocumentId(documentId: string): DocumentState
   saveWorkspace(): DocumentState
   saveWorkspaceAs(path: string): DocumentState
@@ -114,6 +116,14 @@ export interface BridgeApi {
   discardSlugAtlas(generation: number): void
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number): void
+  /** Builds one source-neutral catalog page through the active format adapter. */
+  prepareSourceAtlasPage(pageIndex: number, glyphIndices: Array<number>, coordinates: Array<number>, alignment: number): CatalogAtlasPage
+  /** Streams one prepared source page through the same bounded atlas lane. */
+  streamSourceAtlasPage(generation: number, maximumLength: number): NativeReadableStream<Uint8Array>
+  /** Releases a rejected source page and its retained weight descriptor. */
+  discardSourceAtlasPage(pageIndex: number, generation: number): void
+  /** Evaluates every resident page's small weight buffer at one source location. */
+  sourceAtlasWeights(coordinates: Array<number>): Array<CatalogAtlasWeights>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
@@ -123,6 +133,72 @@ export interface BridgeApi {
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
   mapLocation(location: Location): Location
   getSources(): Array<Source>
+}
+
+export interface CatalogAtlasGlyph {
+  glyphIndex: number
+  atlasGlyph: number
+}
+
+export interface CatalogAtlasPage {
+  generation: number
+  pageIndex: number
+  bandCount: number
+  weightCount: number
+  layout: SlugLayout
+  previewExtents: SlugPreviewExtents
+  glyphs: Array<CatalogAtlasGlyph>
+  weights: Array<number>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface CatalogAtlasWeights {
+  pageIndex: number
+  weights: Array<number>
+}
+
+export interface CatalogAxis {
+  index: number
+  tag: string
+  name: string
+  hidden: boolean
+  kind: string
+  minimum?: number
+  defaultValue: number
+  maximum?: number
+  values: Array<number>
+}
+
+export interface CatalogCapabilities {
+  editable: boolean
+  savable: boolean
+  exportable: boolean
+}
+
+export interface CatalogDirectory {
+  format: string
+  familyName?: string
+  styleName?: string
+  glyphs: Array<CatalogGlyph>
+  axes: Array<CatalogAxis>
+  defaultLocation: Array<number>
+  metrics?: CatalogMetrics
+  capabilities: CatalogCapabilities
+}
+
+export interface CatalogGlyph {
+  index: number
+  name: string
+  unicodes: Array<number>
+}
+
+export interface CatalogMetrics {
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  lineGap: number
 }
 
 export interface DocumentState {

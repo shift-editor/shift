@@ -38,15 +38,14 @@ export interface ShiftHost {
      */
     connect: () => Promise<void>;
   };
-  /** Connects the renderer to the workspace utility process. */
-  workspace: {
+  /** Connects the renderer to its selected font-session backend. */
+  session: {
+    kind: () => Promise<"workspace" | "source">;
     /**
-     * Asks main to transfer a fresh sync-lane port to the workspace process.
+     * Asks main to transfer a fresh sync-lane port to the session process.
      *
      * @remarks
-     * The lane's renderer half arrives via the `workspace.port` postMessage
-     * relay; install that listener before calling. Main resolves the workspace
-     * from the sender window.
+     * The renderer half arrives via the `session.port` postMessage relay.
      */
     connect: () => Promise<void>;
     ready: () => Promise<void>;
