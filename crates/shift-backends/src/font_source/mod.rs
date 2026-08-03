@@ -1,3 +1,4 @@
+mod atlas;
 mod binary;
 mod error;
 mod geometry;
@@ -6,7 +7,8 @@ mod glyphs;
 mod interpolation;
 mod types;
 
-pub use binary::BinaryFont;
+pub use atlas::{SourceAtlasDescriptor, SourceAtlasError, SourceAtlasPage};
+pub use binary::{build_binary_atlas_page, BinaryFont};
 pub use error::FontReadError;
 pub use glif::GlifFont;
 pub use glyphs::GlyphsFont;

@@ -28,6 +28,9 @@ use crate::font_source::{
 };
 use crate::FontFormat;
 
+mod atlas;
+pub use atlas::build_binary_atlas_page;
+
 #[derive(Clone, Copy)]
 struct SourceStamp {
     length: u64,
