@@ -14,8 +14,8 @@ use shift_font::{
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
 };
 use shift_slug::{
-  build_authored_atlas, build_authored_atlas_page, AuthoredAtlas, Section as SlugSection,
-  VariableAtlas, VariableLayout,
+  build_authored_atlas_page_profiled, build_authored_atlas_profiled, AuthoredAtlas,
+  AuthoredAtlasProfile, Section as SlugSection, VariableAtlas, VariableLayout,
 };
 use shift_wire::{
   bridges::napi::{
@@ -39,6 +39,7 @@ use std::{
   collections::{HashSet, VecDeque},
   path::Path,
   sync::Arc,
+  time::{Duration, Instant},
 };
 
 #[napi(object)]
@@ -237,6 +238,39 @@ fn napi_slug_layout(layout: VariableLayout) -> BridgeResult<NapiSlugLayout> {
     total_length: u32::try_from(layout.total_length)
       .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
   })
+}
+
+fn slug_atlas_profile_enabled() -> bool {
+  std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0")
+}
+
+fn milliseconds(duration: Duration) -> f64 {
+  duration.as_secs_f64() * 1_000.0
+}
+
+fn log_slug_atlas_profile(
+  scope: &str,
+  acquisition: Duration,
+  profile: AuthoredAtlasProfile,
+  layout: Duration,
+  total: Duration,
+) {
+  if !slug_atlas_profile_enabled() {
+    return;
+  }
+
+  eprintln!(
+    "[slug-atlas] scope={scope} acquisition_ms={:.3} projection_preparation_ms={:.3} weight_set_collection_ms={:.3} component_preparation_ms={:.3} fallback_bounds_ms={:.3} exact_source_preparation_ms={:.3} atlas_addition_ms={:.3} layout_ms={:.3} total_ms={:.3}",
+    milliseconds(acquisition),
+    milliseconds(profile.projection_preparation),
+    milliseconds(profile.weight_set_collection),
+    milliseconds(profile.component_preparation),
+    milliseconds(profile.fallback_bounds),
+    milliseconds(profile.exact_source_preparation),
+    milliseconds(profile.atlas_addition),
+    milliseconds(layout),
+    milliseconds(total),
+  );
 }
 
 fn napi_slug_atlas(
@@ -840,15 +874,28 @@ impl Bridge {
   /// geometry remains native until `stream_slug_atlas` emits bounded chunks.
   #[napi]
   pub fn prepare_slug_atlas(&mut self, alignment: u32) -> errors::Result<NapiSlugAtlas> {
+    let total_started = Instant::now();
+    let started = Instant::now();
     self.workspace_mut()?.acquire_all_layers()?;
-    let authored = build_authored_atlas(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+    let acquisition = started.elapsed();
+    let (authored, profile) =
+      build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+    let started = Instant::now();
     let layout = authored.atlas().layout(alignment as usize)?;
+    let layout_elapsed = started.elapsed();
     self.slug_generation = self
       .slug_generation
       .checked_add(1)
       .ok_or(shift_slug::SlugError::LengthOverflow)?;
     let generation = self.slug_generation;
     let result = napi_slug_atlas(generation, &authored, layout)?;
+    log_slug_atlas_profile(
+      "complete",
+      acquisition,
+      profile,
+      layout_elapsed,
+      total_started.elapsed(),
+    );
     self.slug_atlas = Some(SlugAtlasGeneration {
       generation,
       alignment: alignment as usize,
@@ -867,19 +914,32 @@ impl Bridge {
     glyph_ids: Vec<String>,
     alignment: u32,
   ) -> errors::Result<NapiSlugAtlas> {
+    let total_started = Instant::now();
     let glyph_ids = glyph_ids
       .iter()
       .map(|glyph_id| parse::<GlyphId>(glyph_id))
       .collect::<errors::Result<Vec<_>>>()?;
+    let started = Instant::now();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
-    let authored = build_authored_atlas_page(font, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
+    let acquisition = started.elapsed();
+    let (authored, profile) =
+      build_authored_atlas_page_profiled(font, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
+    let started = Instant::now();
     let layout = authored.atlas().layout(alignment as usize)?;
+    let layout_elapsed = started.elapsed();
     self.slug_generation = self
       .slug_generation
       .checked_add(1)
       .ok_or(shift_slug::SlugError::LengthOverflow)?;
     let generation = self.slug_generation;
     let result = napi_slug_atlas(generation, &authored, layout)?;
+    log_slug_atlas_profile(
+      "page",
+      acquisition,
+      profile,
+      layout_elapsed,
+      total_started.elapsed(),
+    );
     self.slug_atlas = Some(SlugAtlasGeneration {
       generation,
       alignment: alignment as usize,

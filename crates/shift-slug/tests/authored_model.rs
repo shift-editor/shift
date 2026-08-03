@@ -119,8 +119,12 @@ fn complete_authored_atlas_keeps_font_identity_and_independent_bases() {
     );
     let font = FontLoader::new().read_font(&path).unwrap();
 
+    let glyph_ids = font.glyphs().map(Glyph::id).collect::<Vec<_>>();
+    let projection_set = font.glyph_projection_set(&glyph_ids).unwrap();
     let resident = build_authored_atlas(&font, 8).unwrap();
 
+    assert_eq!(projection_set.glyph_count(), font.glyphs().count());
+    assert_eq!(projection_set.interpolation_basis_count(), 4);
     assert_eq!(resident.glyphs().len(), font.glyphs().count());
     assert_eq!(resident.weight_sets().len(), 4);
     assert_eq!(resident.weight_count(), 21);
@@ -214,7 +218,9 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
         records.push((glyph.id(), atlas_index, weight_indices, component_glyph));
     }
     let atlas = builder.finish();
+    let shared = build_authored_atlas(&font, 8).unwrap();
 
+    assert_eq!(shared.atlas(), &atlas);
     assert_eq!(records.len(), 49);
     assert_eq!(component_glyphs, 10);
     assert_eq!(component_occurrences, 20);

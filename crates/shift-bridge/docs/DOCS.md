@@ -31,6 +31,8 @@ crates/shift-bridge/
     bridge.rs    -- `Bridge` NAPI class, workspace lifecycle, font reads, mutations, export task
     errors.rs    -- bridge error type and NAPI mapping
     input.rs     -- boundary parsing/adaptation helpers
+  scripts/
+    profile-slug-atlas.mjs -- release profiler through `Bridge.prepareSlugAtlas`
   Cargo.toml     -- cdylib crate; depends on shift-font, shift-wire, shift-backends, napi
 ```
 
@@ -64,7 +66,7 @@ crates/shift-bridge/
 7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
-10. `prepareSlugAtlas(alignment)` acquires all layers for the catalog's complete resident generation. `prepareSlugAtlasPage(glyphIds, alignment)` acquires the ordered roots and their indexed component closures for a local edit patch. Acquired payloads remain in the workspace cache, while stream/discard methods retain the bounded atlas transport contract. Every font edit invalidates an unconsumed generation or patch.
+10. `prepareSlugAtlas(alignment)` acquires all layers for the catalog's complete resident generation. `prepareSlugAtlasPage(glyphIds, alignment)` acquires the ordered roots and their indexed component closures for a local edit patch. Both build one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives the call. Acquired payloads remain in the workspace cache, while stream/discard methods retain the bounded atlas transport contract. Every font edit invalidates an unconsumed generation or patch. Set `SHIFT_PROFILE_SLUG_ATLAS=1` to emit native phase timings from these unchanged endpoints.
 
 ## Type Boundary
 
@@ -99,6 +101,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm --filter shift-bridge run build:debug
 pnpm generate:bridge-types
+SHIFT_PROFILE_SLUG_ATLAS=1 node crates/shift-bridge/scripts/profile-slug-atlas.mjs /path/to/font.shift 10
 ```
 
 ## Related
