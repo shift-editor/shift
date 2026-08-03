@@ -31,7 +31,6 @@ export class WorkspaceManager {
   readonly #sessionsById = new Map<WorkspaceId, WorkspaceSession>();
   readonly #sessionIdByWindowId = new Map<number, WorkspaceId>();
   readonly #packageSessions = new PackageSessionIndex();
-  #preparedProcess: WorkspaceProcess | null = null;
 
   /**
    * Creates a manager for live font workspace sessions.
@@ -41,15 +40,6 @@ export class WorkspaceManager {
   constructor(options: WorkspaceManagerOptions) {
     this.#documentsRoot = options.documentsRoot;
     this.#applicationName = options.applicationName;
-  }
-
-  /** Starts an idle utility process so source selection can hide its startup cost. */
-  prepareOpen(): void {
-    if (this.#preparedProcess) return;
-
-    const workspaceProcess = new WorkspaceProcess();
-    workspaceProcess.start(this.#documentsRoot());
-    this.#preparedProcess = workspaceProcess;
   }
 
   /**
@@ -68,8 +58,7 @@ export class WorkspaceManager {
    * @returns a live session for the opened source; existing sessions are reused by workspace id.
    */
   async openPath(sourcePath: string): Promise<WorkspaceSession> {
-    const workspaceProcess = this.#preparedProcess ?? new WorkspaceProcess();
-    this.#preparedProcess = null;
+    const workspaceProcess = new WorkspaceProcess();
     workspaceProcess.start(this.#documentsRoot());
 
     try {
@@ -84,7 +73,7 @@ export class WorkspaceManager {
         return existingBeforeOpen;
       }
 
-      const state = await workspaceProcess.openWorkspace(sourcePath, identity);
+      const state = await workspaceProcess.openWorkspace(sourcePath);
       const existingAfterOpen = this.#sessionForDocumentState(state);
       if (existingAfterOpen) {
         workspaceProcess.stop();
@@ -92,7 +81,6 @@ export class WorkspaceManager {
         return existingAfterOpen;
       }
 
-      workspaceProcess.prepareAuthoredGlyphCompilation();
       return this.#registerLoadedSession(workspaceProcess, state);
     } catch (error) {
       workspaceProcess.stop();
@@ -214,8 +202,7 @@ export class WorkspaceManager {
   async #createSession(
     load: (workspaceProcess: WorkspaceProcess) => Promise<WorkspaceDocumentState>,
   ): Promise<WorkspaceSession> {
-    const workspaceProcess = this.#preparedProcess ?? new WorkspaceProcess();
-    this.#preparedProcess = null;
+    const workspaceProcess = new WorkspaceProcess();
     workspaceProcess.start(this.#documentsRoot());
 
     try {

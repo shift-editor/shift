@@ -125,10 +125,9 @@ export type ShellCallMap = {
     response: WorkspacePackageIdentity;
   };
   "workspace.open": {
-    request: { path: string; packageIdentity?: WorkspacePackageIdentity };
+    request: { path: string };
     response: WorkspaceDocumentState;
   };
-  "workspace.prepareAuthoredGlyphCompilation": { request: void; response: void };
   "workspace.close": { request: { discard: boolean }; response: null };
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };

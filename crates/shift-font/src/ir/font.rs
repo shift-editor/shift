@@ -1166,12 +1166,15 @@ impl Font {
         let replacement_ids = self.index().validate_layer_replacements(&replacements)?;
 
         let state = self.state_mut();
-        for (_, previous, _) in &replacements {
-            for entity_id in glyph_entity_ids(previous) {
-                state.index.entity_ids.remove(&entity_id);
-            }
+        for (glyph_id, previous, _) in &replacements {
+            state.index.remove_layer(glyph_id.clone(), previous);
         }
         for (glyph_id, _, layer) in replacements {
+            state.index.layer_owner.insert(layer.id(), glyph_id.clone());
+            state
+                .index
+                .layer_by_glyph_source
+                .insert((glyph_id.clone(), layer.source_id()), layer.id());
             let glyph = state
                 .data
                 .glyphs
@@ -1749,13 +1752,13 @@ mod tests {
         let first_layer_id = first_layer.id();
         let mut first_glyph = Glyph::new("A");
         first_glyph.set_layer(first_layer);
-        let first_glyph_id = font.insert_glyph(first_glyph).unwrap();
+        font.insert_glyph(first_glyph).unwrap();
 
         let second_layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 600.0);
         let second_layer_id = second_layer.id();
         let mut second_glyph = Glyph::new("B");
         second_glyph.set_layer(second_layer);
-        let second_glyph_id = font.insert_glyph(second_glyph).unwrap();
+        font.insert_glyph(second_glyph).unwrap();
 
         let contour_id = ContourId::new();
         let mut first_contour = Contour::with_id(contour_id.clone());
@@ -1779,27 +1782,11 @@ mod tests {
 
         font.replace_glyph_layers(vec![
             GlyphLayer::with_width(first_layer_id.clone(), source_id.clone(), 700.0),
-            GlyphLayer::with_width(second_layer_id.clone(), source_id.clone(), 800.0),
+            GlyphLayer::with_width(second_layer_id.clone(), source_id, 800.0),
         ])
         .unwrap();
-        assert_eq!(font.layer(first_layer_id.clone()).unwrap().width(), 700.0);
-        assert_eq!(font.layer(second_layer_id.clone()).unwrap().width(), 800.0);
-        assert_eq!(
-            font.glyph_id_by_layer(first_layer_id.clone()),
-            Some(first_glyph_id.clone())
-        );
-        assert_eq!(
-            font.glyph_id_by_layer(second_layer_id.clone()),
-            Some(second_glyph_id.clone())
-        );
-        assert_eq!(
-            font.layer_id_for_glyph_source(first_glyph_id, source_id.clone()),
-            Some(first_layer_id)
-        );
-        assert_eq!(
-            font.layer_id_for_glyph_source(second_glyph_id, source_id),
-            Some(second_layer_id)
-        );
+        assert_eq!(font.layer(first_layer_id).unwrap().width(), 700.0);
+        assert_eq!(font.layer(second_layer_id).unwrap().width(), 800.0);
     }
 
     #[test]

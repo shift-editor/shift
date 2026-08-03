@@ -195,16 +195,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     targetShell: ShellChannel,
     sourcePath: string,
   ): Promise<WorkspaceSnapshot> {
-    const request =
-      path.extname(sourcePath).toLowerCase() === ".shift"
-        ? {
-            path: sourcePath,
-            packageIdentity: await targetShell.call("workspace.inspectPackage", {
-              path: sourcePath,
-            }),
-          }
-        : { path: sourcePath };
-    const state = await targetShell.call("workspace.open", request);
+    const state = await targetShell.call("workspace.open", { path: sourcePath });
     const snapshot = await sync.call("workspace.snapshot", undefined);
     if (!snapshot) throw new Error("workspace.open did not create a snapshot");
     expect(snapshot.documentId).toBe(state.documentId);
@@ -241,7 +232,6 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const snapshot = await createWorkspace(sync);
     const glyph = createGlyphALayer(snapshot.sources[0]!.id);
     await applyWorkspace(sync, { intents: glyph.intents });
-    await shell.call("workspace.prepareAuthoredGlyphCompilation", undefined);
 
     const atlas = await sync.call("workspace.slugAtlasPrepare", { alignment: 256 });
     const bytes = await streamSlugAtlas(sync, atlas.generation, 64);
@@ -503,14 +493,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
   });
 
-  it("opening a clean package binding resumes its document", async () => {
+  it("opening a clean package binding hydrates a fresh document", async () => {
     const source = await connectSyncLane();
     const created = await createWorkspace(source);
     await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
     const savePath = path.join(tmpRoot, "CleanBinding.shift");
     await source.call("workspace.saveAs", { path: savePath });
     const oldStorePath = path.join(tmpRoot, "documents", created.documentId, "document.sqlite");
-    await shell.call("workspace.close", { discard: false });
 
     const lane = new MessageChannel();
     const restartedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
@@ -520,9 +509,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     const opened = await openWorkspace(restarted, restartedShell, savePath);
 
-    expect(opened.documentId).toBe(created.documentId);
+    expect(opened.documentId).not.toBe(created.documentId);
     expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(fs.existsSync(oldStorePath)).toBe(true);
+    expect(fs.existsSync(oldStorePath)).toBe(false);
     await expect(restartedShell.call("document.state", undefined)).resolves.toMatchObject({
       packageId: expect.stringMatching(/^package_/),
       canonicalPath: fs.realpathSync(savePath),

@@ -144,37 +144,20 @@ describe("PackageOpener preserves package-backed document bindings", () => {
     });
   });
 
-  it("resumes a clean binding when the package fingerprint still matches", () => {
-    const { identity } = createPackageSource("ResumeClean.shift");
+  it("replaces a clean binding with a fresh document", () => {
+    const { identity } = createPackageSource("Replace.shift");
     const firstBridge = makeBridge();
     const firstOpen = openPackage(firstBridge, identity);
+    const oldDocumentPath = path.dirname(firstOpen.document.storePath);
     firstBridge.closeWorkspace();
     const nextBridge = makeBridge();
 
     const reopened = openPackage(nextBridge, identity);
 
-    expect(reopened.document.documentId).toBe(firstOpen.document.documentId);
-    expect(glyphNames(nextBridge)).toEqual(["A"]);
-    expect(nextBridge.documentState()).toMatchObject({ dirty: false });
-    expect(storage.packageBinding(reopened.address)?.documentId).toBe(
-      firstOpen.document.documentId,
-    );
-  });
-
-  it("replaces a clean binding when the source package diverges", () => {
-    const { sourcePath, identity } = createPackageSource("ReplaceClean.shift");
-    const firstBridge = makeBridge();
-    const firstOpen = openPackage(firstBridge, identity);
-    const oldDocumentPath = path.dirname(firstOpen.document.storePath);
-    const divergedIdentity = externallyAddGlyph(sourcePath, "C" as GlyphName, 67 as Unicode);
-    firstBridge.closeWorkspace();
-    const nextBridge = makeBridge();
-
-    const reopened = openPackage(nextBridge, divergedIdentity);
-
     expect(reopened.document.documentId).not.toBe(firstOpen.document.documentId);
     expect(fs.existsSync(oldDocumentPath)).toBe(false);
-    expect(glyphNames(nextBridge)).toEqual(["A", "C"]);
+    expect(glyphNames(nextBridge)).toEqual(["A"]);
+    expect(storage.packageBinding(reopened.address)?.documentId).toBe(reopened.document.documentId);
   });
 
   it("orphans a dirty binding when the source package diverges", () => {

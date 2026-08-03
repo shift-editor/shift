@@ -3,7 +3,6 @@ use std::{
     io,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant},
 };
 
 use shift_backends::{
@@ -25,10 +24,6 @@ use crate::source_identity::{
     validate_source_identity_for_save,
 };
 use crate::{NewWorkspace, stream_into};
-
-fn milliseconds(duration: Duration) -> f64 {
-    duration.as_secs_f64() * 1_000.0
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
@@ -179,37 +174,16 @@ impl FontWorkspace {
     }
 
     pub fn resume(store_path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
-        let total_started = Instant::now();
-        let started = Instant::now();
         let store = ShiftStore::open(store_path)?;
-        let store_open = started.elapsed();
-        let started = Instant::now();
         let state = store
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
-        let state_read = started.elapsed();
-        let started = Instant::now();
         let font = store.load_font_directory()?;
-        let directory_load = started.elapsed();
-        let started = Instant::now();
         let residency = LayerResidency::with_unloaded(
             font.glyphs()
                 .flat_map(|glyph| glyph.layers().keys().cloned()),
         );
-        let residency_build = started.elapsed();
-        let started = Instant::now();
         let source = source_from_workspace_state(&state)?;
-        let source_restore = started.elapsed();
-
-        println!(
-            "[workspace-open] mode=resume store_open_ms={:.3} state_read_ms={:.3} directory_load_ms={:.3} residency_build_ms={:.3} source_restore_ms={:.3} total_ms={:.3}",
-            milliseconds(store_open),
-            milliseconds(state_read),
-            milliseconds(directory_load),
-            milliseconds(residency_build),
-            milliseconds(source_restore),
-            milliseconds(total_started.elapsed()),
-        );
 
         Ok(Self::from_store(font, source, store, residency))
     }
@@ -218,38 +192,16 @@ impl FontWorkspace {
         store_path: impl AsRef<Path>,
         source_path: impl AsRef<Path>,
     ) -> Result<Self, WorkspaceError> {
-        let total_started = Instant::now();
-        let started = Instant::now();
         let mut workspace = Self::resume(store_path)?;
-        let resume = started.elapsed();
-        let started = Instant::now();
         let identity = source_identity_snapshot(source_path)?;
-        let source_identity = started.elapsed();
-        let started = Instant::now();
         workspace.relink_package_source(identity)?;
-        let source_relink = started.elapsed();
-
-        println!(
-            "[workspace-open] mode=resume-for-source resume_ms={:.3} source_identity_ms={:.3} source_relink_ms={:.3} total_ms={:.3}",
-            milliseconds(resume),
-            milliseconds(source_identity),
-            milliseconds(source_relink),
-            milliseconds(total_started.elapsed()),
-        );
-
         Ok(workspace)
     }
 
     pub fn inspect_package(
         source_path: impl AsRef<Path>,
     ) -> Result<PackageIdentity, WorkspaceError> {
-        let started = Instant::now();
-        let identity = package_identity(source_path)?;
-        println!(
-            "[workspace-open] mode=inspect-package total_ms={:.3}",
-            milliseconds(started.elapsed()),
-        );
-        Ok(identity)
+        package_identity(source_path)
     }
 
     pub fn inspect_package_draft(
@@ -769,40 +721,13 @@ impl FontWorkspace {
         source_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
     ) -> Result<Self, WorkspaceError> {
-        let total_started = Instant::now();
-        let started = Instant::now();
         let source_package = ShiftSourcePackage::open(source_path)?;
-        let package_validate = started.elapsed();
-        let started = Instant::now();
         let mut store = ShiftStore::open(store_path)?;
-        let store_open = started.elapsed();
-        let started = Instant::now();
         let font = ShiftSourcePackage::load_font(source_package.path())?;
-        let package_load = started.elapsed();
-        let started = Instant::now();
         store.set_font_info(font_info_from_font(&font))?;
-        let font_info_write = started.elapsed();
-        let started = Instant::now();
         store.replace_font_state(&font)?;
-        let font_state_write = started.elapsed();
-        let started = Instant::now();
         let identity = source_identity_snapshot(source_package.path())?;
-        let source_identity = started.elapsed();
-        let started = Instant::now();
         store.set_workspace_state(WorkspaceState::package(identity, None))?;
-        let workspace_state_write = started.elapsed();
-
-        println!(
-            "[workspace-open] mode=package package_validate_ms={:.3} store_open_ms={:.3} package_load_ms={:.3} font_info_write_ms={:.3} font_state_write_ms={:.3} source_identity_ms={:.3} workspace_state_write_ms={:.3} total_ms={:.3}",
-            milliseconds(package_validate),
-            milliseconds(store_open),
-            milliseconds(package_load),
-            milliseconds(font_info_write),
-            milliseconds(font_state_write),
-            milliseconds(source_identity),
-            milliseconds(workspace_state_write),
-            milliseconds(total_started.elapsed()),
-        );
 
         Ok(Self::from_store(
             font,
@@ -818,16 +743,13 @@ impl FontWorkspace {
         import_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
     ) -> Result<Self, WorkspaceError> {
-        let total_started = Instant::now();
         let import_path = import_path.as_ref();
         let import_path_str = import_path
             .to_str()
             .ok_or_else(|| WorkspaceError::InvalidPathUtf8(import_path.to_path_buf()))?;
         let loader = FontLoader::new();
-        let started = Instant::now();
         match loader.stream_font(import_path_str) {
             Ok(import) => {
-                let source_directory = started.elapsed();
                 let store_path = store_path.as_ref();
                 if store_path.exists() {
                     let existing = ShiftStore::open(store_path)?;
@@ -839,73 +761,21 @@ impl FontWorkspace {
                     }
                 }
 
-                let started = Instant::now();
                 let staged_path = create_import_staging_path(store_path)?;
                 let mut store = ShiftStore::open_for_import(&staged_path)?;
                 let mut writer = store.begin_import(import.header())?;
-                let store_setup = started.elapsed();
-                let pipeline_started = Instant::now();
-                let mut parse = Duration::ZERO;
-                let mut pack = Duration::ZERO;
-                let mut compression = Duration::ZERO;
-                let mut sqlite = Duration::ZERO;
-                let mut glyph_count = 0;
-                let mut layer_count = 0;
-                let mut batch_count = 0;
-                stream_into(import, &mut writer, ImportBatchLimit::default(), |batch| {
-                    parse += batch.parse_elapsed;
-                    pack += batch.pack_elapsed;
-                    compression += batch.compression_elapsed;
-                    sqlite += batch.sqlite_elapsed;
-                    glyph_count += batch.glyph_count;
-                    layer_count += batch.layer_count;
-                    batch_count += 1;
-                })?;
-                let pipeline_wall = pipeline_started.elapsed();
-                let started = Instant::now();
+                stream_into(import, &mut writer, ImportBatchLimit::default(), |_| {})?;
                 writer.finish()?;
-                let commit = started.elapsed();
-                let started = Instant::now();
                 store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
-                let workspace_state_write = started.elapsed();
-                let started = Instant::now();
                 store.finish_import()?;
-                let store_finalize = started.elapsed();
-                let started = Instant::now();
                 let font = store.load_font_directory()?;
-                let directory_load = started.elapsed();
-                let started = Instant::now();
                 let residency = LayerResidency::with_unloaded(
                     font.glyphs()
                         .flat_map(|glyph| glyph.layers().keys().cloned()),
                 );
-                let residency_build = started.elapsed();
                 drop(store);
-                let started = Instant::now();
                 install_import_store(staged_path, store_path)?;
-                let store_install = started.elapsed();
-                let started = Instant::now();
                 let store = ShiftStore::open(store_path)?;
-                let store_reopen = started.elapsed();
-
-                println!(
-                    "[workspace-open] mode=import-stream glyphs={glyph_count} layers={layer_count} batches={batch_count} source_directory_ms={:.3} store_setup_ms={:.3} pipeline_wall_ms={:.3} parse_ms={:.3} pack_ms={:.3} compression_ms={:.3} sqlite_ms={:.3} commit_ms={:.3} workspace_state_write_ms={:.3} store_finalize_ms={:.3} directory_load_ms={:.3} residency_build_ms={:.3} store_install_ms={:.3} store_reopen_ms={:.3} total_ms={:.3}",
-                    milliseconds(source_directory),
-                    milliseconds(store_setup),
-                    milliseconds(pipeline_wall),
-                    milliseconds(parse),
-                    milliseconds(pack),
-                    milliseconds(compression),
-                    milliseconds(sqlite),
-                    milliseconds(commit),
-                    milliseconds(workspace_state_write),
-                    milliseconds(store_finalize),
-                    milliseconds(directory_load),
-                    milliseconds(residency_build),
-                    milliseconds(store_install),
-                    milliseconds(store_reopen),
-                    milliseconds(total_started.elapsed()),
-                );
 
                 return Ok(Self::from_store(
                     font,
@@ -919,34 +789,12 @@ impl FontWorkspace {
             Err(shift_backends::BackendError::StreamingUnsupported { .. }) => {}
             Err(error) => return Err(error.into()),
         }
-        let stream_probe = started.elapsed();
 
-        let started = Instant::now();
         let font = loader.read_font(import_path_str)?;
-        let font_load = started.elapsed();
-        let started = Instant::now();
         let mut store = ShiftStore::open(store_path)?;
-        let store_open = started.elapsed();
-        let started = Instant::now();
         store.set_font_info(font_info_from_font(&font))?;
-        let font_info_write = started.elapsed();
-        let started = Instant::now();
         store.replace_font_state(&font)?;
-        let font_state_write = started.elapsed();
-        let started = Instant::now();
         store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
-        let workspace_state_write = started.elapsed();
-
-        println!(
-            "[workspace-open] mode=import-eager stream_probe_ms={:.3} font_load_ms={:.3} store_open_ms={:.3} font_info_write_ms={:.3} font_state_write_ms={:.3} workspace_state_write_ms={:.3} total_ms={:.3}",
-            milliseconds(stream_probe),
-            milliseconds(font_load),
-            milliseconds(store_open),
-            milliseconds(font_info_write),
-            milliseconds(font_state_write),
-            milliseconds(workspace_state_write),
-            milliseconds(total_started.elapsed()),
-        );
 
         Ok(Self::from_store(
             font,

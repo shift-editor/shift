@@ -70,14 +70,6 @@ export declare class Bridge {
    */
   getGlyphPreviews(glyphIds: Array<GlyphId>, location: NapiLocation): Array<NapiGlyphPreview>
   /**
-   * Acquires every authored layer and compiles the complete location-independent atlas.
-   *
-   * The utility process calls this after opening a workspace so acquisition and
-   * compilation overlap renderer and WebGPU startup. Alignment-specific layout
-   * remains deferred until `prepare_slug_atlas` knows the adapter requirement.
-   */
-  prepareAuthoredGlyphCompilation(): void
-  /**
    * Builds one complete authored Slug generation without resolving a location.
    *
    * The returned metadata is small enough for the ordinary sync lane. Packed
