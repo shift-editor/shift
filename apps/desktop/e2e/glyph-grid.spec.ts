@@ -45,6 +45,11 @@ test.describe("Resident Glyph Grid", () => {
     }
 
     await expectCompleteResidency(glyphCanvas);
+    await expect
+      .poll(() =>
+        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+      )
+      .toEqual(initialSize);
 
     await scrollViewport.click({ position: { x: 50, y: 50 } });
     await page.waitForURL(/#\/editor\//);
