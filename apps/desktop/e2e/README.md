@@ -28,8 +28,8 @@ Build the native bridge first with `pnpm build:native` when its binary is absent
 | Project  | Fixture                   | Rendering                                         | CI policy                            |
 | -------- | ------------------------- | ------------------------------------------------- | ------------------------------------ |
 | `visual` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on pull requests and `main` |
-| `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU and host device scale                | Required on pull requests and `main` |
-| `perf`   | `fixtures/perfApp.ts`     | Hardware GPU and host device scale                | Nightly and manual only              |
+| `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on pull requests and `main` |
+| `perf`   | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only              |
 
 Visual tests default to MutatorSans. The GPU and performance fixture also defaults to MutatorSans, but accepts a real font or designspace through `SHIFT_E2E_FONT_PATH`:
 
@@ -56,6 +56,7 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 - Use locator-relative positions for canvas clicks.
 - For raw mouse drags, derive page coordinates from the target canvas's `boundingBox()`.
 - Keep interactions inside measured bounds; do not assume the host desktop is wider than the fixture window.
+- GPU fixtures must await workspace-window visibility, then apply the final owning `BrowserWindow` size and await the tested page's matching renderer content size; do not let a hidden-to-visible OS adjustment invalidate a baseline.
 - Wait for a route, visible surface, animation frame, or domain state instead of assuming startup completed after a fixed delay.
 - Do not force software rendering or a fixed DPR in GPU and performance tests.
 

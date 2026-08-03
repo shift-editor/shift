@@ -66,23 +66,43 @@ export const test = base.extend<PerfFixtures>({
         },
       });
 
-      await app.firstWindow();
+      const page = await app.firstWindow();
       const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
         electronApp.getPath("userData"),
       );
       if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
         throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
       }
-      await app.evaluate(
-        async ({ BrowserWindow }, { w, h }) => {
-          const win = BrowserWindow.getAllWindows()[0];
-          if (win) {
-            win.unmaximize();
-            win.setSize(w, h);
-            win.center();
-          }
+
+      const browserWindow = await app.browserWindow(page);
+      const initialContentSize = await browserWindow.evaluate(
+        (win, { w, h }) => {
+          win.unmaximize();
+          win.setSize(w, h);
+          win.center();
+          const [width, height] = win.getContentSize();
+          return { width, height };
         },
         { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+      );
+      await page.waitForFunction(
+        ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
+        initialContentSize,
+      );
+      await page.waitForFunction(() => document.visibilityState === "visible");
+      const visibleContentSize = await browserWindow.evaluate(
+        (win, { w, h }) => {
+          win.setSize(w, h);
+          win.center();
+          const [width, height] = win.getContentSize();
+          return { width, height };
+        },
+        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+      );
+      await browserWindow.dispose();
+      await page.waitForFunction(
+        ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
+        visibleContentSize,
       );
 
       await use(app);
