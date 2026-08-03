@@ -1,6 +1,9 @@
 import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
 import { PortByteStream } from "@shared/workspace/PortByteStream";
 import type {
+  FontSessionMode,
+  FontSourceAtlasPageRequest,
+  FontSourceSnapshot,
   SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
@@ -15,6 +18,8 @@ import type {
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type {
   AppliedChange,
+  CatalogAtlasPage,
+  CatalogAtlasWeights,
   FontIntent,
   GlyphId,
   GlyphPreview,
@@ -32,24 +37,28 @@ import { signal } from "@/lib/signals/signal";
  * owns the renderer-local font model state; this client only
  * transports workspace calls and mirrors the summary for catch-up/recovery.
  */
-export type WorkspaceClientOptions = {
+export type FontSessionClientOptions = {
   /**
    * Test seam: supplies the sync-lane transport directly (in-process
    * WorkspaceHost over node ports). Production uses the preload port relay.
    */
   transport?: () => Promise<Transport>;
+  mode?: FontSessionMode;
 };
 
-export class WorkspaceClient {
+export class FontSessionClient {
   readonly workspaceCell = signal<WorkspaceSnapshot | null>(null);
+  readonly sourceCell = signal<FontSourceSnapshot | null>(null);
   readonly documentStateCell = signal<WorkspaceDocumentState | null>(null);
 
+  readonly #mode: FontSessionMode;
   readonly #host: ShiftHost | null;
   readonly #transport: (() => Promise<Transport>) | null;
   #channel: Channel<SyncCallMap, SyncEventMap> | null = null;
   #connection: Promise<void> | null = null;
 
-  constructor(host: ShiftHost | null, options: WorkspaceClientOptions = {}) {
+  constructor(host: ShiftHost | null, options: FontSessionClientOptions = {}) {
+    this.#mode = options.mode ?? "shift";
     this.#host = host;
     this.#transport = options.transport ?? null;
   }
@@ -70,6 +79,7 @@ export class WorkspaceClient {
     this.#channel = null;
     this.#connection = null;
     this.workspaceCell.set(null);
+    this.sourceCell.set(null);
     this.documentStateCell.set(null);
   }
 
@@ -116,6 +126,60 @@ export class WorkspaceClient {
     const snapshot = await this.#require().call("workspace.snapshot", undefined);
     this.workspaceCell.set(snapshot);
     return snapshot;
+  }
+
+  /** Reads the retained preview directory through the shared session lane. */
+  async sourceSnapshot(): Promise<FontSourceSnapshot | null> {
+    await this.connect();
+
+    const snapshot = await this.#require().call("source.snapshot", undefined);
+    this.sourceCell.set(snapshot);
+    return snapshot;
+  }
+
+  /** Prepares one retained-source atlas page at dense source coordinates. */
+  async prepareSourceAtlasPage(request: FontSourceAtlasPageRequest): Promise<CatalogAtlasPage> {
+    await this.connect();
+
+    return this.#require().call("source.atlasPagePrepare", request);
+  }
+
+  /** Streams one prepared retained-source page through bounded chunks. */
+  async streamSourceAtlasPage(
+    generation: number,
+    maximumLength: number,
+    write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
+  ): Promise<number> {
+    await this.connect();
+
+    const ports = new MessageChannel();
+    const stream = new PortByteStream(domPortTransport(ports.port1));
+
+    try {
+      const [, totalLength] = await Promise.all([
+        this.#require().call("source.atlasPageStream", { generation, maximumLength }, [
+          ports.port2,
+        ]),
+        stream.receive(write),
+      ]);
+      return totalLength;
+    } finally {
+      stream.close();
+    }
+  }
+
+  /** Releases a retained-source page rejected before streaming. */
+  async discardSourceAtlasPage(pageIndex: number, generation: number): Promise<void> {
+    await this.connect();
+
+    await this.#require().call("source.atlasPageDiscard", { pageIndex, generation });
+  }
+
+  /** Resolves all retained page weights for one dense source location. */
+  async sourceAtlasWeights(coordinates: readonly number[]): Promise<CatalogAtlasWeights[]> {
+    await this.connect();
+
+    return this.#require().call("source.atlasWeights", { coordinates: [...coordinates] });
   }
 
   /** Reads utility-owned document state through the renderer sync lane. */
@@ -313,13 +377,12 @@ export class WorkspaceClient {
       if (this.#transport) {
         const channel = new Channel<SyncCallMap, SyncEventMap>(await this.#transport());
         this.#installChannel(channel);
-        this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
-        this.documentStateCell.set(await channel.call("document.state", undefined));
+        await this.#catchUp(channel);
         return;
       }
 
       if (!this.#host) {
-        throw new Error("WorkspaceClient needs a ShiftHost or a transport option");
+        throw new Error("FontSessionClient needs a ShiftHost or a transport option");
       }
 
       // Install the port listener before asking main to post the port.
@@ -337,11 +400,22 @@ export class WorkspaceClient {
 
       // Catch-up pull: covers renderer reattach (Vite hot reload now, crash
       // recovery later). Ports are FIFO, so this cannot overtake a later create.
-      this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
-      this.documentStateCell.set(await channel.call("document.state", undefined));
+      await this.#catchUp(channel);
     } catch (error) {
       this.#connection = null;
       throw error;
+    }
+  }
+
+  async #catchUp(channel: Channel<SyncCallMap, SyncEventMap>): Promise<void> {
+    switch (this.#mode) {
+      case "shift":
+        this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
+        this.documentStateCell.set(await channel.call("document.state", undefined));
+        return;
+      case "preview":
+        this.sourceCell.set(await channel.call("source.snapshot", undefined));
+        return;
     }
   }
 
@@ -381,7 +455,7 @@ export class WorkspaceClient {
 
   #require(): Channel<SyncCallMap, SyncEventMap> {
     if (!this.#channel) {
-      throw new Error("workspace is not connected");
+      throw new Error("font session is not connected");
     }
 
     return this.#channel;

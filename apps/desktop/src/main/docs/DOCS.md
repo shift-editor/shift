@@ -4,8 +4,9 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `WorkspaceManager` owns live workspace sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender.
-- **Architecture Invariant:** Each workspace session owns one `WorkspaceProcess`, one `DocumentClient`, and one `DocumentSession`. Main never reads or mutates font data directly.
+- **Architecture Invariant:** `WorkspaceManager` owns live font sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender. A session's immutable mode is `"shift"` or `"preview"`.
+- **Architecture Invariant:** Every font session owns one `WorkspaceProcess`. Shift sessions additionally own one `DocumentClient` and one `DocumentSession`; preview sessions deliberately have no authored document, persistence, dirty state, save target, or export workflow. Main never reads or mutates font data directly.
+- **Architecture Invariant:** TTF/OTF paths open as retained preview sessions. They use the shared renderer sync lane and `/home` route, but never allocate a SQLite working document or authored Shift model.
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
@@ -38,13 +39,13 @@ src/main/
   workspace/
     WorkspaceManager.ts           -- live workspace session registry and package-session dedupe
     WorkspaceProcess.ts           -- utility-process shell-lane controller
-    WorkspaceSession.ts           -- process/document/window grouping for one workspace
+    WorkspaceSession.ts           -- process/mode/optional-document/window grouping for one font session
 ```
 
 ## Key Types
 
-- `WorkspaceManager` -- registry for live workspace sessions and window attachments.
-- `WorkspaceSession` -- owns the utility process, renderer document lane, document workflow, and attached windows for one workspace.
+- `WorkspaceManager` -- registry for live Shift and preview font sessions and window attachments.
+- `FontSession` -- owns the immutable mode, utility process, optional authored document services, and attached windows for one open font.
 - `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect package, open, close, and document state.
 - `DocumentClient` -- request client for renderer-served document state/save calls.
 - `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
@@ -63,7 +64,7 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 File -> New asks `WorkspaceManager.createUntitled()` for a session. File -> Open shows `showOpenFontDialog()` and then asks `WorkspaceManager.openPath(path)`.
 
-For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the process opens the package and the resulting state is registered. Main does not start monolithic Slug preparation: the renderer requests the complete fixed-page set before its first Grid presentation. The utility opens and validates a matching cache artifact once, serves independently verified Zstd pages through the bounded stream contract, or compiles native misses and stages them for atomic publication. Page boundaries keep compilation, streaming, cache replacement, and local edit invalidation bounded without putting page acquisition on the scroll path.
+For TTF/OTF paths, `WorkspaceManager` opens one retained source in the utility process and registers a `"preview"` session without a document lane. For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the process opens the package and the resulting state is registered. Main does not start monolithic Slug preparation: the renderer requests the complete fixed-page set before its first Grid presentation. The utility opens and validates a matching cache artifact once, serves independently verified Zstd pages through the bounded stream contract, or compiles native misses and stages them for atomic publication. Page boundaries keep compilation, streaming, cache replacement, and local edit invalidation bounded without putting page acquisition on the scroll path.
 
 ### Window Attachment
 
@@ -81,7 +82,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 ### IPC
 
-Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, document-lane port transfer, and workspace sync-lane port transfer. Font data stays on the workspace sync lane between renderer and utility.
+Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
 
 ## Workflow Recipes
 

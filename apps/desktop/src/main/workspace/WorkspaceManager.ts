@@ -114,7 +114,7 @@ export class WorkspaceManager {
       throw new Error(`Workspace session already registered: ${session.workspaceId}`);
     }
 
-    if (session.kind !== "source") this.#packageSessions.track(session);
+    if (session.mode === "shift") this.#packageSessions.track(session);
     this.#sessionsById.set(session.workspaceId, session);
   }
 
@@ -234,7 +234,7 @@ export class WorkspaceManager {
     state: WorkspaceDocumentState,
   ): FontSession {
     const session = new FontSession({
-      kind: "workspace",
+      mode: "shift",
       sessionId: state.documentId,
       workspaceProcess,
       documentClient: new DocumentClient(),
@@ -280,7 +280,7 @@ export class WorkspaceManager {
       }
 
       const session = new FontSession({
-        kind: "source",
+        mode: "preview",
         sessionId: state.sessionId,
         workspaceProcess,
       });

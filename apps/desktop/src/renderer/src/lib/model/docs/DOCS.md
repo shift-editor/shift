@@ -4,6 +4,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
 ## Architecture Invariants
 
+- **Architecture Invariant:** `FontSession` is the renderer's one immutable connection composition. Both `"shift"` and `"preview"` modes expose `GlyphCatalogSource`; only Shift mode composes the authored `Workspace`, `Font`, `FontStore`, and `Editor`. Preview mode never creates those authored services or synthesizes Shift IDs.
 - **Architecture Invariant:** `Font.loadGlyph()` is the asynchronous acquisition boundary. It returns one canonical `Glyph` only after every authored layer and transitive component dependency is available; retained calls return that same object without workspace I/O. `Editor.glyphForId()` may synchronously expose that object to runtime and plugin code after acquisition, but never initiates loading.
 - **Architecture Invariant:** A loaded `Glyph` owns all authored `GlyphLayer` objects and direct component-Glyph references. Its record and layer collections update reactively without replacing the Glyph; its synchronous properties never initiate I/O.
 - **Architecture Invariant:** `FontStore.#glyphs` contains only completely assembled Glyphs. Failed assembly installs nothing, and workspace replacement clears the complete object graph.
@@ -33,9 +34,14 @@ lib/interpolation/
   InterpolationBasis.ts      -- local support evaluation and source-value combination
 types/
   glyphRender.ts             -- contour and anchor contracts consumed by renderers
+workspace/
+  FontSession.ts             -- immutable mode/catalog/optional-workspace composition
+  FontSessionProvider.tsx    -- one renderer bootstrap and context boundary
+lib/catalog/
+  ShiftGlyphCatalogSource.ts   -- projection over authored Font and Editor signals
+  PreviewGlyphCatalogSource.ts -- retained source directory and dense location
 components/home/
-  GlyphGrid.tsx              -- virtualized acquired-Glyph consumer
-  GlyphPreview.tsx           -- frame-scheduled path and advance subscriber
+  GlyphGrid.tsx              -- shared complete-residency catalog consumer
 ```
 
 ## Key Types
@@ -80,6 +86,8 @@ Only observed render output is evaluated. Virtualized offscreen models do not su
 
 ## Boundaries
 
+- `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode.
+- `GlyphCatalogSource` is the only font-wide surface consumed by Home/Grid; preview directory values remain source-local and never populate `FontStore`.
 - Rust owns source compatibility and constructs bases/projections.
 - `shift-wire` and the workspace bridge transport those values without resolving a UI location.
 - `FontStore` owns renderer-local backing, reactive authored state, and canonical completely loaded Glyph objects; do not wrap it in another manager/store/cache.

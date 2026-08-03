@@ -11,12 +11,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
   const {
     filteredGlyphs,
     location,
-    axes,
     metrics,
     sourceId,
     atlasSource,
     observeAtlasInvalidation,
-    resolvedCoordinates,
     editable,
     openGlyph,
   } = useGlyphCatalog();
@@ -88,13 +86,11 @@ export const GlyphGrid = memo(function GlyphGrid() {
         containerRef={scrollContainerRef}
         glyphs={filteredGlyphs}
         location={location}
-        axes={axes}
         metrics={metrics}
         sourceId={sourceId}
         active={catalogActive}
         atlasSource={atlasSource}
         observeAtlasInvalidation={observeAtlasInvalidation}
-        resolvedCoordinates={resolvedCoordinates}
         editable={editable}
         openGlyph={openGlyph}
         onFirstFrame={handleCatalogReady}

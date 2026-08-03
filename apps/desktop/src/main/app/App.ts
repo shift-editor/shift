@@ -234,8 +234,8 @@ export class App {
       event.sender.postMessage("document.port", null, [port2]);
       this.#log.info("document port sent to renderer");
     });
-    ipc.handle(ipcMain, "session.kind", (event) => {
-      return this.#fontSessionForSender(event.sender, "session.kind").kind;
+    ipc.handle(ipcMain, "session.mode", (event) => {
+      return this.#fontSessionForSender(event.sender, "session.mode").mode;
     });
     ipc.handle(ipcMain, "session.connect", async (event) => {
       this.#log.info("font session connect requested");

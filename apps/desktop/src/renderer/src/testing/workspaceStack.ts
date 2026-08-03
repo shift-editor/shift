@@ -7,11 +7,11 @@ import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
 import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
-import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
+import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 export type WorkspaceStack = {
-  client: WorkspaceClient;
+  client: FontSessionClient;
   store: FontStore;
   editCoordinator: WorkspaceEditCoordinator;
   font: Font;
@@ -37,7 +37,7 @@ export function createWorkspaceStack(): WorkspaceStack {
   }).start();
   const shell = new Channel<ShellCallMap, ShellEventMap>(nodePortTransport(shellLane.port1));
 
-  const client = new WorkspaceClient(null, {
+  const client = new FontSessionClient(null, {
     transport: async () => {
       const lane = new MessageChannel();
       await shell.call("workspace.connect", undefined, [lane.port1]);

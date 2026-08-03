@@ -15,7 +15,7 @@ const shiftHost: ShiftHost = {
     connect: invoke(ipcRenderer, "document.connect"),
   },
   session: {
-    kind: invoke(ipcRenderer, "session.kind"),
+    mode: invoke(ipcRenderer, "session.mode"),
     connect: invoke(ipcRenderer, "session.connect"),
     ready: invoke(ipcRenderer, "session.ready"),
   },

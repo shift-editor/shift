@@ -2,6 +2,7 @@ import type {
   GlyphId,
   GlyphIndex,
   SlugLayout,
+  Axis,
   SlugPreviewExtents,
   SlugWeightSet,
   SourceId,
@@ -31,6 +32,7 @@ export interface GlyphAtlasPageDescriptor {
   readonly previewExtents: SlugPreviewExtents;
   readonly glyphs: readonly GlyphAtlasGlyph[];
   readonly weightSets: readonly SlugWeightSet[];
+  readonly weightAxes: readonly Axis[];
   readonly resolvedWeights: readonly number[] | null;
 }
 
@@ -39,7 +41,7 @@ export interface GlyphAtlasPageRequest {
   readonly pageIndex: number;
   readonly pageCount: number;
   readonly replacementPageIndices: readonly number[];
-  readonly coordinates: readonly number[] | null;
+  readonly coordinates: readonly number[];
 }
 
 export interface GlyphAtlasPageWeights {

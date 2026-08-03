@@ -1,13 +1,12 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import type { GlyphCategory, GlyphCategoryCatalog, GlyphInfo } from "@shift/glyph-info";
-import type { GlyphName, GlyphRecord } from "@shift/types";
+import type { GlyphCategory, GlyphCategoryCatalog } from "@shift/glyph-info";
+import type { GlyphName } from "@shift/types";
 import { effect, useSignalState } from "@/lib/signals";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { GlyphCatalogContext } from "./GlyphCatalogContext";
 import type { GlyphCatalogItem, GlyphCatalogState } from "@/types/glyphCatalog";
-import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 
 export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
   const value = useGlyphCatalogState();
@@ -15,40 +14,31 @@ export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
 };
 
 const useGlyphCatalogState = (): GlyphCatalogState => {
-  const editor = useEditor();
+  const session = useFontSession();
   const navigate = useNavigate();
   const glyphInfo = getGlyphInfo();
-  const font = editor.font;
+  const catalog = session.catalog;
+  const workspace = session.workspace;
 
-  const glyphRecords = useSignalState(font.glyphRecordsCell);
-  const location = useSignalState(editor.designLocationCell);
-  const atlasSource = useMemo(
-    () => new AuthoredGlyphAtlasSource(font.editCoordinator),
-    [font.editCoordinator],
-  );
+  const availableGlyphs = useSignalState(catalog.glyphsCell);
+  const location = useSignalState(catalog.locationCell);
+  const axes = useSignalState(catalog.axesCell);
+  const metrics = useSignalState(catalog.metricsCell);
+  const sourceId = useSignalState(catalog.sourceIdCell);
   const observeAtlasInvalidation = useCallback<GlyphCatalogState["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
-        () =>
-          listener(
-            font.invalidGlyphIdsCell.value,
-            font.glyphRecords().map((glyph) => glyph.id),
-          ),
-        { name: "glyphCatalog.authoredAtlas" },
+        () => listener(catalog.invalidGlyphKeysCell.value, catalog.glyphsCell.value.map(glyphKey)),
+        { name: "glyphCatalog.atlas" },
       );
       return () => subscription.dispose();
     },
-    [font],
+    [catalog],
   );
 
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);
-
-  const availableGlyphs = useMemo(
-    () => glyphRecords.map((record) => glyphCatalogItemFromRecord(record, glyphInfo)),
-    [glyphInfo, glyphRecords],
-  );
 
   const availableUnicodes = useMemo(
     () => availableGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [glyph.unicode])),
@@ -93,43 +83,43 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     selectedSubCategoryKey,
   ]);
 
-  const metrics = useMemo(() => font.metricsAtLocation(location), [font, location]);
-  const axes = font.getAxes();
-  const sourceId = font.sourceAt(location)?.id ?? null;
-  const openGlyph = useCallback(
-    async (glyph: GlyphCatalogItem) => {
+  const openGlyph = useMemo<GlyphCatalogState["openGlyph"]>(() => {
+    if (!workspace) return null;
+
+    return async (glyph) => {
       if (typeof glyph.id !== "string") throw new Error("authored catalog received a glyph index");
-      await font.loadGlyph(glyph.id);
+      await workspace.font.loadGlyph(glyph.id);
       navigate(`/editor/${encodeURIComponent(glyph.id)}`);
-    },
-    [font, navigate],
-  );
+    };
+  }, [navigate, workspace]);
+
+  const createQuickGlyph = useCallback<GlyphCatalogState["createQuickGlyph"]>(() => {
+    if (!workspace) throw new Error("preview catalog cannot create glyphs");
+
+    const record = workspace.editor.createGlyph("newGlyph" as GlyphName);
+    setQuery("");
+    setSelectedCategory(null);
+    setSelectedSubCategoryKey(null);
+    return record.name;
+  }, [workspace]);
 
   return {
-    availableGlyphs,
+    availableGlyphs: [...availableGlyphs],
     filteredGlyphs,
     categories: categoryCatalog.categories,
     query,
     selectedCategory,
     selectedSubCategoryKey,
     setQuery,
-    atlasSource,
+    atlasSource: catalog.atlas,
     observeAtlasInvalidation,
     location,
     axes,
-    resolvedCoordinates: null,
     metrics,
     sourceId,
-    editable: true,
+    editable: workspace !== null,
     openGlyph,
-    createQuickGlyph: () => {
-      const record = editor.createGlyph("newGlyph" as GlyphName);
-      setQuery("");
-      setSelectedCategory(null);
-      setSelectedSubCategoryKey(null);
-
-      return record.name;
-    },
+    createQuickGlyph,
     selectAll: () => {
       setSelectedCategory(null);
       setSelectedSubCategoryKey(null);
@@ -145,13 +135,6 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   };
 };
 
-function glyphCatalogItemFromRecord(record: GlyphRecord, glyphInfo: GlyphInfo): GlyphCatalogItem {
-  const unicode = record.unicodes[0] ?? null;
-
-  return {
-    id: record.id,
-    name: record.name,
-    displayName: glyphInfo.resolveGlyphName(record.name, unicode),
-    unicode,
-  };
+function glyphKey(glyph: GlyphCatalogItem) {
+  return glyph.id;
 }

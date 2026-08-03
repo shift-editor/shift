@@ -18,7 +18,7 @@ import type {
 } from "@shared/workspace/protocol";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 import type { FontStore, WorkspaceCommitState } from "@/lib/model/FontStore";
-import type { WorkspaceClient } from "./WorkspaceClient";
+import type { FontSessionClient } from "./FontSessionClient";
 
 export type { WorkspaceCommitState } from "@/lib/model/FontStore";
 
@@ -39,7 +39,7 @@ export type { WorkspaceCommitState } from "@/lib/model/FontStore";
  * watermark.
  */
 export class WorkspaceEditCoordinator {
-  readonly #workspace: WorkspaceClient;
+  readonly #workspace: FontSessionClient;
   readonly #store: FontStore;
   readonly #settledCell: WritableSignal<boolean>;
   readonly #commitState: WritableSignal<WorkspaceCommitState>;
@@ -51,7 +51,7 @@ export class WorkspaceEditCoordinator {
     readonly intents: FontIntent[];
   } | null = null;
 
-  constructor(workspace: WorkspaceClient, store: FontStore) {
+  constructor(workspace: FontSessionClient, store: FontStore) {
     this.#workspace = workspace;
     this.#store = store;
     this.#settledCell = signal(true);

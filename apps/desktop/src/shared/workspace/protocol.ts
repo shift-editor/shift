@@ -73,6 +73,9 @@ export type WorkspaceSlugAtlasPageRequest = {
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
 
+/** Immutable product mode for one live font session. */
+export type FontSessionMode = "shift" | "preview";
+
 /** Main-visible identity for one retained, read-only foreign source session. */
 export type FontSourceSessionState = {
   sessionId: string;

@@ -105,7 +105,6 @@ export type {
   CatalogAtlasPage,
   CatalogAtlasWeights,
   CatalogAxis,
-  CatalogCapabilities,
   CatalogDirectory,
   CatalogGlyph,
   CatalogMetrics,

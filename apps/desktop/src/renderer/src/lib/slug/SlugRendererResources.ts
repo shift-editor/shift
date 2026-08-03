@@ -105,7 +105,7 @@ export class SlugRendererBuffers {
 
   prepare(frame: GlyphPreviewFrame, packed: PackedGlyphPreviewFrame): void {
     this.#ensureCapacity(packed.instances.byteLength, packed.capacity);
-    const weights = this.#atlas.weights(frame.location, frame.axes);
+    const weights = this.#atlas.weights(frame.location);
     this.#device.queue.writeBuffer(this.#instances, 0, packed.instances);
     this.#device.queue.writeBuffer(this.#weights, 0, weights);
     this.#device.queue.writeBuffer(

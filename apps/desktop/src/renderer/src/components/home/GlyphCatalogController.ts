@@ -106,8 +106,7 @@ export class GlyphCatalogController {
     if (
       !previousTarget ||
       previousTarget.glyphs !== frame.glyphs ||
-      previousTarget.location !== frame.location ||
-      previousTarget.axes !== frame.axes ||
+      !sameCoordinates(previousTarget.location, frame.location) ||
       previousTarget.metrics !== frame.metrics ||
       previousTarget.sourceId !== frame.sourceId ||
       previousTarget.themeName !== frame.themeName
@@ -115,12 +114,9 @@ export class GlyphCatalogController {
       this.#needsRedraw = true;
     }
 
-    const resolvedLocationChanged = !sameCoordinates(
-      previousTarget?.resolvedCoordinates ?? null,
-      frame.resolvedCoordinates,
-    );
+    const locationChanged = !sameCoordinates(previousTarget?.location ?? null, frame.location);
     if (this.#layer && !this.#atlasBuild && this.#invalidGlyphIds.size === 0) {
-      if (resolvedLocationChanged && frame.resolvedCoordinates) {
+      if (locationChanged) {
         void this.#refreshResolvedWeights(frame);
       } else {
         this.#activeFrame = frame;
@@ -295,8 +291,8 @@ export class GlyphCatalogController {
 
   async #refreshResolvedWeights(frame: GlyphCatalogControllerFrame): Promise<void> {
     const layer = this.#layer;
-    const coordinates = frame.resolvedCoordinates;
-    if (!layer || !coordinates || this.#atlasBuild) return;
+    const coordinates = frame.location;
+    if (!layer || this.#atlasBuild) return;
     const revision = ++this.#weightRevision;
 
     try {
@@ -305,7 +301,7 @@ export class GlyphCatalogController {
         this.#disposed ||
         this.#layer !== layer ||
         revision !== this.#weightRevision ||
-        !sameCoordinates(this.#targetFrame?.resolvedCoordinates ?? null, coordinates)
+        !sameCoordinates(this.#targetFrame?.location ?? null, coordinates)
       ) {
         return;
       }
@@ -321,11 +317,11 @@ export class GlyphCatalogController {
 
   async #synchronizeResolvedWeights(layer: ResidentGlyphLayer): Promise<void> {
     while (true) {
-      const coordinates = this.#targetFrame?.resolvedCoordinates;
+      const coordinates = this.#targetFrame?.location;
       if (!coordinates) return;
 
       await layer.updateResolvedWeights(coordinates);
-      if (sameCoordinates(this.#targetFrame?.resolvedCoordinates ?? null, coordinates)) return;
+      if (sameCoordinates(this.#targetFrame?.location ?? null, coordinates)) return;
     }
   }
 
@@ -342,7 +338,7 @@ export class GlyphCatalogController {
       pageIndex,
       pageCount: this.#pageCount(),
       replacementPageIndices: [...this.#replacementPageIndices].sort((left, right) => left - right),
-      coordinates: this.#targetFrame?.resolvedCoordinates ?? null,
+      coordinates: this.#targetFrame?.location ?? [],
     };
   }
 
@@ -443,7 +439,6 @@ export class GlyphCatalogController {
         const [viewHeight, metricsTop] = GlyphPreviewLayout.fontViewport(input.metrics);
         layer.draw({
           location: input.location,
-          axes: input.axes,
           instances,
           style: {
             defaultPixelsPerEm: (frame.layout.previewHeight * ratio) / Math.max(1, viewHeight),
