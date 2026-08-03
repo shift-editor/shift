@@ -32,6 +32,8 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** `DisplayGlyph` is a validated flat arena containing only one selected root and its component closure. Geometry, contour, component, point, anchor, and guide ranges form complete non-overlapping partitions; all geometry is reachable from root index zero. Coordinates use y-up design-space font units. Native TrueType points retain local point indexes and implied quadratic points are explicit unindexed on-curve values. WHY: drawing and passive inspection need one coherent source-independent value without recursive duplication, hidden I/O, or synthetic Shift IDs.
 
+**Architecture Invariant:** `build_binary_atlas_page` compiles ordered glyf/gvar roots directly into a location-independent `SourceAtlasPage`; it never constructs `DisplayGlyph` or authored Shift geometry. Page-local OpenType regions are deduplicated, while each distinct glyph region set receives its own complement weight so unrelated tuple supports cannot alter that glyph's base geometry. Before packing, `into_parts` separates CPU atlas geometry from a small `SourceAtlasDescriptor`; the consumer then drops the geometry after packing while retaining the descriptor for glyph mapping and weight evaluation. Fixed pages are bounded compilation/transfer units, not viewport residency: the Grid consumer must install the complete page set before presentation. WHY: variable-axis frames and scrolling must perform no complete outline rebuild, source acquisition, geometry upload, or duplicate CPU atlas residency.
+
 **Architecture Invariant:** Retained handles represent immutable source generations. Binary/Glyphs source stamps and GLIF manifests/selected paths are checked before reads; the first mismatch permanently returns the structured source-changed error from that handle. WHY: mixing directory data and geometry from different on-disk generations would produce incoherent display and conversion results.
 
 ## Codemap
@@ -44,7 +46,12 @@ src/
     mod.rs          -- RandomAccessFont/FontImporter capability split and FontSource dispatch value
     types.rs        -- source-local indexes, directories, locations, and validated DisplayGlyph arenas
     geometry.rs     -- shared contour normalization, component-graph assembly, and exact bounds
+    atlas.rs        -- source atlas page, location weights, region deduplication, and errors
     binary.rs       -- retained TTF/OTF bytes, GID access, glyf/gvar/CFF resolution
+    binary/atlas.rs -- direct ordered glyf/gvar page compilation and source-to-atlas mapping
+    binary/atlas/geometry.rs -- stable raw-point expressions, IUP deltas, and flattened composites
+    binary/atlas/geometry/curves.rs -- normalized quadratic contours and Slug curve conversion
+    binary/atlas/metrics.rs  -- HVAR or gvar phantom-point advance contributions
     glif.rs         -- retained UFO/Designspace manifests, paths, interpolation, and conversion cursor
     glyphs.rs       -- retained parsed Glyphs source, mappings, interpolation, and conversion cursor
     interpolation.rs -- source-location variation weights
@@ -81,6 +88,9 @@ src/
 - `FontSource` -- dispatched `Binary`, `Glif`, or `Glyphs` retained handle returned by `FontLoader::open_source`
 - `FontDirectory` / `GlyphIndex` / `VariationLocation` -- source-local immutable directory and validated external-coordinate addressing
 - `DisplayGlyph` -- validated root/component closure in flat indexed arenas with exact bounds, metrics, anchors, guides, and point provenance
+- `SourceAtlasPage` -- immutable source-indexed `VariableAtlas` page plus location-to-weight evaluation; its ordered roots contain no Shift IDs
+- `SourceAtlasDescriptor` -- small mapping and weight evaluator retained after `SourceAtlasPage::into_parts` separates disposable CPU geometry
+- `SourceAtlasError` -- direct atlas read, format-capability, and Slug construction failures
 - `BinaryFont` / `GlifFont` / `GlyphsFont` -- concrete retained source generations
 - `FontImport` -- top-level authored header, an immediately publishable stable-ID/name directory, and layer-aware `next_batch(limit)`, with no glyphs stored in the header
 - `GlyphDirectoryEntry` -- cheap foreign glyph ID and name used before geometry batches are parsed
@@ -105,6 +115,8 @@ src/
 **Multi-layer support:** `UfoReader` publishes `public.default` first, then preserves the relative authored order of every other entry in `layercontents.plist`. The default layer maps to the IR's default layer; other layers are represented by layer sources. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
 
 **Binary variation metadata:** The retained TTF/OTF handle exposes `fvar` axes in external/user coordinates and resolves selected glyphs at arbitrary valid locations. TrueType resolution applies `gvar` tuple scalars and IUP deltas, preserves native point indexes, inserts explicit implied quadratic points, and retains composite transforms as indexed geometry references. CFF outlines preserve cubic geometry with unindexed native provenance. The authored compatibility importer still materializes binary geometry only at the default location; recovering editable `gvar` masters remains separate work.
+
+**Direct binary atlas:** `build_binary_atlas_page` reads raw glyf points and tuple regions from the retained bytes. It applies IUP independently to each unscaled tuple, preserves a stable quadratic topology, flattens ordinary glyf components exactly, and combines HVAR or gvar phantom-point advance contributions with the same region weights. The page stores absolute region-peak curves because `VariableAtlas` consumes weighted source values; a deduplicated complement weight makes every glyph's participating source weights sum to one. The consumer separates the atlas and descriptor with `into_parts`, packs and drops the former, and retains the latter. Axis updates evaluate fvar/avar 1 normalization and OpenType support scalars without touching geometry. CFF/CFF2, cubic glyf extensions, avar version 2, and VARC remain explicit unsupported capabilities in this first compiler slice.
 
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions. The upstream parser currently materializes its complete normalized Glyphs source model before the bounded cursor begins; batching bounds Shift glyph conversion and persistence, not source-syntax parsing.
 
@@ -148,7 +160,27 @@ src/
 - **Glyphs source parsing is eager:** `glyphs-reader` materializes one normalized source model before `GlyphsGlyphStream` starts. Shift geometry conversion, packing, compression, and SQLite writes remain bounded.
 - **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
 - **Cross-axis mappings:** Direct TTF compilation rejects cross-axis mappings until the compiler stack supports `avar` version 2. It never flattens the mapping or falls back to temporary UFO compilation.
+- **First binary atlas slice:** Direct Grid compilation supports quadratic glyf/gvar plus HVAR or phantom advances. CFF/CFF2, cubic glyf extensions, avar version 2, and VARC fail explicitly rather than falling back to selected-glyph or authored conversion.
 - **Authored STAT tables:** When Shift axis labels exist, export appends a generated `STAT` feature block. If authored feature text also declares `STAT`, the feature compiler reports the conflict.
+
+## Direct binary atlas profile
+
+Release profiling on 2026-08-03 retained every packed page to model complete Grid residency. Source Han Sans VF compiled all 65,535 ordered roots into 256 fixed pages without `DisplayGlyph`, authored `Font`, or SQLite materialization:
+
+```text
+open + directory                         68.458 ms
+location-independent page compilation 2,056.228 ms
+packing all pages                       412.204 ms
+complete build + pack                 2,469.520 ms
+page build p50 / p95                   8.366 / 11.727 ms
+all-page weight update                    0.071 ms
+packed resident bytes                 267,786,324 (255.381 MiB)
+maximum packed page                     1,813,572 (1.730 MiB)
+peak RSS                                  315.9 MiB
+base / stored delta curves       5,489,581 / 5,483,385
+```
+
+The 448-glyph Host Grotesk variable UI font compiled into two pages in 6.814 ms and packed in 0.953 ms, producing 481,448 bytes. Default, midpoint, and maximum-location simple/composite curves and advances match Skrifa's unrounded HarfBuzz-style glyf resolution within 0.001 font units. These are native compiler measurements; transfer, WebGPU upload, complete page-set installation, and first frame belong to the desktop follow-on.
 
 ## Verification
 
@@ -167,6 +199,9 @@ cargo test -p shift-backends --test export
 # Manual release profile: open/directory, selected default/non-default,
 # complete sequential/parallel binary resolution, and peak RSS
 cargo run -p shift-backends --release --example profile_font_source -- <font.ttf> [glyph-name]
+
+# Complete location-independent binary atlas pages, packing, and retained bytes
+cargo run -p shift-backends --release --example profile_binary_atlas -- <font.ttf>
 ```
 
 ## Related

@@ -10,6 +10,7 @@ crate-type = ["rlib"]
 
 [dependencies]
 shift-font = { workspace = true }
+shift-slug = { workspace = true }
 shift-source = { workspace = true }
 
 norad = "0.18.4"
