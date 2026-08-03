@@ -156,13 +156,6 @@ pub struct NapiSlugAtlas {
 }
 
 #[napi(object)]
-pub struct NapiCatalogCapabilities {
-  pub editable: bool,
-  pub savable: bool,
-  pub exportable: bool,
-}
-
-#[napi(object)]
 pub struct NapiCatalogGlyph {
   pub index: u32,
   pub name: String,
@@ -199,7 +192,6 @@ pub struct NapiCatalogDirectory {
   pub axes: Vec<NapiCatalogAxis>,
   pub default_location: Vec<f64>,
   pub metrics: Option<NapiCatalogMetrics>,
-  pub capabilities: NapiCatalogCapabilities,
 }
 
 #[napi(object)]
@@ -420,11 +412,6 @@ fn napi_catalog_directory(source: &FontSource) -> BridgeResult<NapiCatalogDirect
       descender: metrics.descender,
       line_gap: metrics.line_gap,
     }),
-    capabilities: NapiCatalogCapabilities {
-      editable: false,
-      savable: false,
-      exportable: false,
-    },
   })
 }
 

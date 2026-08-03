@@ -1,4 +1,5 @@
 import type { CommandId, RendererCommandId } from "../commands";
+import type { FontSessionMode } from "../workspace/protocol";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -40,7 +41,7 @@ export interface ShiftHost {
   };
   /** Connects the renderer to its selected font-session backend. */
   session: {
-    kind: () => Promise<"workspace" | "source">;
+    mode: () => Promise<FontSessionMode>;
     /**
      * Asks main to transfer a fresh sync-lane port to the session process.
      *

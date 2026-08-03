@@ -260,11 +260,6 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(state.canonicalPath).toBe(fs.realpathSync(retainedFontPath));
     expect(snapshot?.directory.format).toBe("ttf");
     expect(snapshot?.directory.glyphs.length).toBeGreaterThan(0);
-    expect(snapshot?.directory.capabilities).toEqual({
-      editable: false,
-      savable: false,
-      exportable: false,
-    });
     expect(await sync.call("workspace.snapshot", undefined)).toBeNull();
     expect(await sync.call("document.state", undefined)).toBeNull();
     expect(fs.existsSync(path.join(tmpRoot, "documents"))).toBe(false);

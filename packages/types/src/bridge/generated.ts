@@ -171,12 +171,6 @@ export interface CatalogAxis {
   values: Array<number>
 }
 
-export interface CatalogCapabilities {
-  editable: boolean
-  savable: boolean
-  exportable: boolean
-}
-
 export interface CatalogDirectory {
   format: string
   familyName?: string
@@ -185,7 +179,6 @@ export interface CatalogDirectory {
   axes: Array<CatalogAxis>
   defaultLocation: Array<number>
   metrics?: CatalogMetrics
-  capabilities: CatalogCapabilities
 }
 
 export interface CatalogGlyph {

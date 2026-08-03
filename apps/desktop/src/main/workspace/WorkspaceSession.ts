@@ -1,6 +1,7 @@
 import { BrowserWindow } from "electron";
 import { DocumentClient } from "../document/DocumentClient";
 import { DocumentSession } from "../document/DocumentSession";
+import type { FontSessionMode } from "../../shared/workspace/protocol";
 import type { Window } from "../windows/Window";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 
@@ -12,14 +13,14 @@ export type WorkspaceId = FontSessionId;
 
 export type FontSessionOptions =
   | {
-      readonly kind: "workspace";
+      readonly mode: "shift";
       readonly sessionId: FontSessionId;
       readonly workspaceProcess: WorkspaceProcess;
       readonly documentClient: DocumentClient;
       readonly applicationName: () => string;
     }
   | {
-      readonly kind: "source";
+      readonly mode: "preview";
       readonly sessionId: FontSessionId;
       readonly workspaceProcess: WorkspaceProcess;
     };
@@ -32,7 +33,7 @@ export type FontSessionOptions =
  * save target.
  */
 export class FontSession {
-  readonly kind: "workspace" | "source";
+  readonly mode: FontSessionMode;
   readonly sessionId: FontSessionId;
   readonly workspaceProcess: WorkspaceProcess;
   readonly documentClient: DocumentClient | null;
@@ -43,12 +44,12 @@ export class FontSession {
   readonly #unlistenWorkspaceExit: () => void;
 
   constructor(options: FontSessionOptions) {
-    this.kind = options.kind;
+    this.mode = options.mode;
     this.sessionId = options.sessionId;
     this.workspaceProcess = options.workspaceProcess;
 
-    switch (options.kind) {
-      case "workspace":
+    switch (options.mode) {
+      case "shift":
         this.documentClient = options.documentClient;
         this.document = new DocumentSession({
           document: this.documentClient,
@@ -66,7 +67,7 @@ export class FontSession {
           this.documentClient?.dispose();
         });
         break;
-      case "source":
+      case "preview":
         this.documentClient = null;
         this.document = null;
         this.#unlistenDocumentChanged = () => {};

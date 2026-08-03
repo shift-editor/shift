@@ -13,13 +13,11 @@ export function GlyphCatalogCanvas({
   containerRef,
   glyphs,
   location,
-  axes,
   metrics,
   sourceId,
   active,
   atlasSource,
   observeAtlasInvalidation,
-  resolvedCoordinates,
   editable,
   openGlyph,
   onFirstFrame,
@@ -83,27 +81,15 @@ export function GlyphCatalogCanvas({
       {
         glyphs,
         location,
-        axes,
         metrics,
         sourceId,
         themeName,
         active,
         editingGlyphId: editingGlyph?.id ?? null,
-        resolvedCoordinates,
       },
       inputContainerRef.current,
     );
-  }, [
-    active,
-    axes,
-    editingGlyph,
-    glyphs,
-    location,
-    metrics,
-    resolvedCoordinates,
-    sourceId,
-    themeName,
-  ]);
+  }, [active, editingGlyph, glyphs, location, metrics, sourceId, themeName]);
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;

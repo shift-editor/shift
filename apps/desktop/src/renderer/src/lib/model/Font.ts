@@ -1093,7 +1093,7 @@ export class Font {
    * @param location - Cell containing the designspace location to match exactly.
    * @returns A cell whose value is the exact source, or `null` when interpolated.
    */
-  sourceAtCell(location: Signal<AxisLocation>): Signal<Source | null> {
+  sourceAtCell(location: Signal<AxisLocation>): ComputedSignal<Source | null> {
     return computed(
       () => sourceAtLocation(this.#sourcesCell.value, this.#axesCell.value, location.value),
       { name: "font.sourceAt" },

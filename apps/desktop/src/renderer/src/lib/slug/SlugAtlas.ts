@@ -1,6 +1,7 @@
-import type { Axis, SlugSection, SourceId } from "@shift/types";
+import type { SlugSection, SourceId } from "@shift/types";
 import { interpolationWeights } from "@/lib/interpolation/InterpolationBasis";
 import type { AxisLocation } from "@/types/variation";
+import type { CatalogLocation } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
 import type {
   CatalogGlyphKey,
@@ -149,9 +150,18 @@ export class SlugAtlas {
     );
   }
 
-  weights(location: AxisLocation, axes: readonly Axis[]): Float32Array<ArrayBuffer> {
+  weights(coordinates: CatalogLocation): Float32Array<ArrayBuffer> {
     if (this.#resolvedWeights) return this.#resolvedWeights;
 
+    const axes = this.#descriptor.weightAxes;
+    if (coordinates.length !== axes.length) {
+      throw new Error(
+        `resident Slug page ${this.pageIndex} received ${coordinates.length} coordinates for ${axes.length} axes`,
+      );
+    }
+    const location: AxisLocation = new Map(
+      axes.map((axis, index) => [axis.id, coordinates[index] ?? axis.default]),
+    );
     const weights = new Float32Array(this.#descriptor.weightCount);
     weights[0] = 1;
     for (const set of this.#descriptor.weightSets) {

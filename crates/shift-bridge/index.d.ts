@@ -156,12 +156,6 @@ export interface NapiCatalogAxis {
   values: Array<number>
 }
 
-export interface NapiCatalogCapabilities {
-  editable: boolean
-  savable: boolean
-  exportable: boolean
-}
-
 export interface NapiCatalogDirectory {
   format: string
   familyName?: string
@@ -170,7 +164,6 @@ export interface NapiCatalogDirectory {
   axes: Array<NapiCatalogAxis>
   defaultLocation: Array<number>
   metrics?: NapiCatalogMetrics
-  capabilities: NapiCatalogCapabilities
 }
 
 export interface NapiCatalogGlyph {

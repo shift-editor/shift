@@ -31,10 +31,11 @@ Build the native bridge first with `pnpm build:native` when its binary is absent
 | `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU and host device scale                | Required on pull requests and `main` |
 | `perf`   | `fixtures/perfApp.ts`     | Hardware GPU and host device scale                | Nightly and manual only              |
 
-Visual tests default to MutatorSans. The GPU and performance fixture also defaults to MutatorSans, but accepts a real font or designspace through `SHIFT_E2E_FONT_PATH`:
+Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. The retained preview test defaults to MutatorSans TTF and accepts another source through `SHIFT_E2E_PREVIEW_FONT_PATH`:
 
 ```sh
-SHIFT_E2E_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
+SHIFT_E2E_FONT_PATH=/path/to/font.designspace pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
+SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview.spec.ts
 ```
 
 Fixtures copy source files into a temporary workspace. Tests must not depend on a developer's existing Shift workspace or user-data directory.

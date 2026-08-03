@@ -19,14 +19,17 @@ import type { Unicode } from "@shift/types";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
-const FONT_PATH =
+const EDITABLE_FONT_PATH =
   process.env.SHIFT_E2E_FONT_PATH ??
+  path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+const PREVIEW_FONT_PATH =
+  process.env.SHIFT_E2E_PREVIEW_FONT_PATH ??
   path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
 
 const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 800;
 
-type PerfFixtures = {
+export type PerfFixtures = {
   electronApp: ElectronApplication;
   page: Page;
 };
@@ -34,80 +37,85 @@ type PerfFixtures = {
 /**
  * Perf test fixture — GPU enabled, no software rendering override.
  */
-export const test = base.extend<PerfFixtures>({
-  electronApp: async ({}, use) => {
-    const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
-    const userDataDir = path.join(testRoot, "user-data");
-    const workspaceDirectory = path.join(testRoot, "workspace");
-    let workspacePath: string;
-    let app: ElectronApplication | null = null;
+function createAppTest(fontPath: string) {
+  return base.extend<PerfFixtures>({
+    electronApp: async ({}, use) => {
+      const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
+      const userDataDir = path.join(testRoot, "user-data");
+      const workspaceDirectory = path.join(testRoot, "workspace");
+      let workspacePath: string;
+      let app: ElectronApplication | null = null;
 
-    if (path.extname(FONT_PATH) === ".designspace") {
-      fs.cpSync(path.dirname(FONT_PATH), workspaceDirectory, { recursive: true });
-      workspacePath = path.join(workspaceDirectory, path.basename(FONT_PATH));
-    } else {
-      fs.mkdirSync(workspaceDirectory, { recursive: true });
-      workspacePath = path.join(workspaceDirectory, path.basename(FONT_PATH));
-      if (fs.statSync(FONT_PATH).isDirectory()) {
-        fs.cpSync(FONT_PATH, workspacePath, { recursive: true });
+      if (path.extname(fontPath) === ".designspace") {
+        fs.cpSync(path.dirname(fontPath), workspaceDirectory, { recursive: true });
+        workspacePath = path.join(workspaceDirectory, path.basename(fontPath));
       } else {
-        fs.copyFileSync(FONT_PATH, workspacePath, fs.constants.COPYFILE_FICLONE);
+        fs.mkdirSync(workspaceDirectory, { recursive: true });
+        workspacePath = path.join(workspaceDirectory, path.basename(fontPath));
+        if (fs.statSync(fontPath).isDirectory()) {
+          fs.cpSync(fontPath, workspacePath, { recursive: true });
+        } else {
+          fs.copyFileSync(fontPath, workspacePath, fs.constants.COPYFILE_FICLONE);
+        }
       }
-    }
 
-    try {
-      app = await electron.launch({
-        args: [MAIN_JS, `--user-data-dir=${userDataDir}`],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          SHIFT_E2E_FONT_PATH: workspacePath,
-          // No LIBGL_ALWAYS_SOFTWARE — use real GPU for perf measurements.
-        },
-      });
+      try {
+        app = await electron.launch({
+          args: [MAIN_JS, `--user-data-dir=${userDataDir}`],
+          env: {
+            ...process.env,
+            NODE_ENV: "test",
+            SHIFT_E2E_FONT_PATH: workspacePath,
+            // No LIBGL_ALWAYS_SOFTWARE — use real GPU for perf measurements.
+          },
+        });
 
-      await app.firstWindow();
-      const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
-        electronApp.getPath("userData"),
-      );
-      if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
-        throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
+        await app.firstWindow();
+        const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
+          electronApp.getPath("userData"),
+        );
+        if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
+          throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
+        }
+        await app.evaluate(
+          async ({ BrowserWindow }, { w, h }) => {
+            const win = BrowserWindow.getAllWindows()[0];
+            if (win) {
+              win.unmaximize();
+              win.setSize(w, h);
+              win.center();
+            }
+          },
+          { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+        );
+
+        await use(app);
+      } finally {
+        const childProcess = app?.process();
+        if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
+          const exited = once(childProcess, "exit");
+          childProcess.kill("SIGKILL");
+          await exited;
+        }
+        fs.rmSync(testRoot, { recursive: true, force: true });
       }
-      await app.evaluate(
-        async ({ BrowserWindow }, { w, h }) => {
-          const win = BrowserWindow.getAllWindows()[0];
-          if (win) {
-            win.unmaximize();
-            win.setSize(w, h);
-            win.center();
-          }
-        },
-        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-      );
+    },
 
-      await use(app);
-    } finally {
-      const childProcess = app?.process();
-      if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
-        const exited = once(childProcess, "exit");
-        childProcess.kill("SIGKILL");
-        await exited;
-      }
-      fs.rmSync(testRoot, { recursive: true, force: true });
-    }
-  },
+    page: async ({ electronApp }, use) => {
+      const page = await electronApp.firstWindow();
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForURL(/#\/home/, { timeout: 20_000 });
 
-  page: async ({ electronApp }, use) => {
-    const page = await electronApp.firstWindow();
-    await page.waitForLoadState("domcontentloaded");
-    await page.waitForURL(/#\/home/, { timeout: 20_000 });
+      // Auto-dismiss native save dialogs that interrupt tests.
+      page.on("dialog", (dialog) => dialog.dismiss());
 
-    // Auto-dismiss native save dialogs that interrupt tests.
-    page.on("dialog", (dialog) => dialog.dismiss());
+      await use(page);
+    },
+  });
+}
 
-    await use(page);
-  },
-});
+export const test = createAppTest(EDITABLE_FONT_PATH);
+export const previewTest = createAppTest(PREVIEW_FONT_PATH);
 
 export { expect } from "@playwright/test";
 

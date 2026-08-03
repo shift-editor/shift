@@ -40,6 +40,7 @@ function residentFixture(): {
       },
     ],
     weightSets: [],
+    weightAxes: [],
     resolvedWeights: null,
   };
   const bytes = new Uint8Array(descriptor.layout.totalLength);
@@ -108,9 +109,9 @@ describe("resident atlas frame planning", () => {
       128,
     );
 
-    expect(Array.from(atlas.weights(new Map(), []))).toEqual([0.25]);
+    expect(Array.from(atlas.weights([]))).toEqual([0.25]);
     atlas.setResolvedWeights([0.75]);
-    expect(Array.from(atlas.weights(new Map(), []))).toEqual([0.75]);
+    expect(Array.from(atlas.weights([]))).toEqual([0.75]);
   });
 
   it("captures split descriptors and plans an exact component variant", () => {
