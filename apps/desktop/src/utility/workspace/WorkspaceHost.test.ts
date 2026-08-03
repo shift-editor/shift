@@ -23,6 +23,7 @@ import type {
   ByteStreamMessage,
   ShellCallMap,
   ShellEventMap,
+  SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
   WorkspaceDocumentState,
@@ -80,6 +81,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
   function startHost(shellTransport: Transport): void {
     new WorkspaceHost({
       documentsRoot: tmpRoot,
+      atlasCacheRoot: path.join(tmpRoot, "atlas-cache"),
       shell: shellTransport,
       portTransport: (port) => nodePortTransport(port as NodeMessagePort),
     }).start();
@@ -117,7 +119,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     sync: SyncChannel,
     generation: number,
     maximumLength: number,
-    page = false,
+    pageOrigin: SlugAtlasOrigin | null = null,
   ): Promise<Uint8Array> {
     const lane = new MessageChannel();
     const chunks: Uint8Array[] = [];
@@ -162,8 +164,12 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       };
     });
     lane.port2.start();
-    if (page) {
-      await sync.call("workspace.slugAtlasPageStream", { generation, maximumLength }, [lane.port1]);
+    if (pageOrigin) {
+      await sync.call(
+        "workspace.slugAtlasPageStream",
+        { generation, origin: pageOrigin, maximumLength },
+        [lane.port1],
+      );
     } else {
       await sync.call("workspace.slugAtlasStream", { generation, maximumLength }, [lane.port1]);
     }
@@ -177,6 +183,17 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       offset += chunk.byteLength;
     }
     return bytes;
+  }
+
+  function corruptAtlasCacheIndex(): void {
+    const cacheRoot = path.join(tmpRoot, "atlas-cache");
+    const fileName = fs.readdirSync(cacheRoot).find((name) => name.endsWith(".atlas"));
+    if (!fileName) throw new Error("expected a published CachedAtlas");
+
+    const filePath = path.join(cacheRoot, fileName);
+    const bytes = fs.readFileSync(filePath);
+    bytes[12] ^= 0xff;
+    fs.writeFileSync(filePath, bytes);
   }
 
   async function createWorkspace(
@@ -241,7 +258,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(atlas.glyphs.map((entry) => entry.glyphId)).toEqual([glyph.glyphId]);
   });
 
-  it("streams only requested roots in one authored Slug page", async () => {
+  it("streams requested roots through one validated cached artifact", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);
     const first = createGlyphALayer(snapshot.sources[0]!.id);
@@ -255,14 +272,87 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       ],
     });
 
-    const page = await sync.call("workspace.slugAtlasPagePrepare", {
+    const request = {
       glyphIds: [secondGlyphId],
       alignment: 256,
-    });
-    const bytes = await streamSlugAtlas(sync, page.generation, 64, true);
+      pageIndex: 0,
+      pageCount: 1,
+      replacementPageIndices: [0],
+    };
+    const page = await sync.call("workspace.slugAtlasPagePrepare", request);
+    const bytes = await streamSlugAtlas(sync, page.generation, 64, page.origin);
+    const cached = await sync.call("workspace.slugAtlasPagePrepare", request);
+    const cachedBytes = await streamSlugAtlas(sync, cached.generation, 64, cached.origin);
+    corruptAtlasCacheIndex();
+    const retained = await sync.call("workspace.slugAtlasPagePrepare", request);
+    const retainedBytes = await streamSlugAtlas(sync, retained.generation, 64, retained.origin);
 
-    expect(bytes.byteLength).toBe(page.layout.totalLength);
-    expect(page.glyphs.map((entry) => entry.glyphId)).toEqual([secondGlyphId]);
+    expect(page.origin).toBe("native");
+    expect(cached.origin).toBe("cached");
+    expect(retained.origin).toBe("cached");
+    expect(cachedBytes).toEqual(bytes);
+    expect(retainedBytes).toEqual(bytes);
+    expect(cached.glyphs.map((entry) => entry.glyphId)).toEqual([secondGlyphId]);
+
+    await applyWorkspace(sync, {
+      intents: [{ kind: "setXAdvance", setXAdvance: { layerId: secondLayerId, width: 700 } }],
+    });
+    const changed = await sync.call("workspace.slugAtlasPagePrepare", request);
+    expect(changed.origin).toBe("native");
+    await sync.call("workspace.slugAtlasPageDiscard", {
+      generation: changed.generation,
+      origin: changed.origin,
+    });
+    await shell.call("workspace.close", { discard: true });
+  });
+
+  it("publishes cached pages after retrying one page before the build completes", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const first = createGlyphALayer(snapshot.sources[0]!.id);
+    const secondGlyphId = mintGlyphId();
+    const secondLayerId = mintLayerId();
+    await applyWorkspace(sync, {
+      intents: [
+        ...first.intents,
+        createGlyph("B" as GlyphName, 66 as Unicode, secondGlyphId),
+        createGlyphLayer(secondGlyphId, snapshot.sources[0]!.id, secondLayerId),
+      ],
+    });
+
+    const firstRequest = {
+      glyphIds: [first.glyphId],
+      alignment: 256,
+      pageIndex: 0,
+      pageCount: 2,
+      replacementPageIndices: [0, 1],
+    };
+    const secondRequest = {
+      ...firstRequest,
+      glyphIds: [secondGlyphId],
+      pageIndex: 1,
+    };
+    const firstPage = await sync.call("workspace.slugAtlasPagePrepare", firstRequest);
+    await streamSlugAtlas(sync, firstPage.generation, 64, firstPage.origin);
+    const retriedPage = await sync.call("workspace.slugAtlasPagePrepare", firstRequest);
+    const retriedBytes = await streamSlugAtlas(
+      sync,
+      retriedPage.generation,
+      64,
+      retriedPage.origin,
+    );
+    const secondPage = await sync.call("workspace.slugAtlasPagePrepare", secondRequest);
+    await streamSlugAtlas(sync, secondPage.generation, 64, secondPage.origin);
+    const cachedPage = await sync.call("workspace.slugAtlasPagePrepare", firstRequest);
+    const cachedBytes = await streamSlugAtlas(sync, cachedPage.generation, 64, cachedPage.origin);
+
+    expect(firstPage.origin).toBe("native");
+    expect(retriedPage.origin).toBe("native");
+    expect(secondPage.origin).toBe("native");
+    expect(cachedPage.origin).toBe("cached");
+    expect(cachedBytes).toEqual(retriedBytes);
+
+    await shell.call("workspace.close", { discard: true });
   });
 
   it("cancels native Slug production when the renderer rejects a chunk", async () => {

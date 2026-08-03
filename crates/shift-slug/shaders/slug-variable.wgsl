@@ -28,7 +28,7 @@ struct VariableParams {
 
 struct PreviewParams {
     color: vec4<f32>,
-    // view height, font-space top, preview height, font-space side margin
+    // default pixels per em, metrics top, metrics bottom, padding
     geometry: vec4<f32>,
 };
 
@@ -136,6 +136,7 @@ struct VertexOutput {
 @group(2) @binding(5) var<storage, read_write> resolved_component_transforms: array<Affine>;
 @group(3) @binding(0) var<storage, read> preview_resolved_advances: array<f32>;
 @group(3) @binding(1) var<uniform> preview: PreviewParams;
+@group(3) @binding(2) var<storage, read> preview_resolved_bounds: array<vec4<f32>>;
 
 var<workgroup> workgroup_curve_bounds: array<vec4<f32>, 64>;
 var<workgroup> workgroup_transform_start: u32;
@@ -644,8 +645,9 @@ fn vertex_variable(
     return output;
 }
 
-// Advance-fitted preview path. Consumers provide the content rectangle and
-// layout values; this shader owns no row, cell, gap, or padding policy.
+// Bounds-fitted preview path. Consumers provide a fixed content rectangle;
+// each resolved glyph keeps the default scale until its complete view needs
+// to shrink to fit that rectangle.
 @vertex
 fn vertex_variable_preview(
     @builtin(vertex_index) vertex_index: u32,
@@ -653,18 +655,15 @@ fn vertex_variable_preview(
 ) -> VertexOutput {
     let instance = instances[instance_index];
     let content_size = max(instance.pixel_rect.zw - instance.pixel_rect.xy, vec2<f32>(1.0));
-    let view_height = max(preview.geometry.x, 1.0);
+    let glyph_bounds = preview_resolved_bounds[instance_index];
     let advance = preview_resolved_advances[instance_index];
-    let side_margin = preview.geometry.w;
-    let view_width = max(advance + 2.0 * side_margin, 1.0);
-    let preview_height = max(preview.geometry.z, 1.0);
-    let requested_size = vec2<f32>(
-        max(preview_height, preview_height * view_width / view_height),
-        preview_height,
-    );
-    let preview_size = min(content_size, requested_size);
-    let pixels_per_em = min(preview_size.x / view_width, preview_size.y / view_height);
-    let render_size = vec2<f32>(view_width, view_height) * pixels_per_em;
+    let view_min = min(vec2<f32>(0.0, preview.geometry.z), glyph_bounds.xy);
+    let view_max = max(vec2<f32>(advance, preview.geometry.y), glyph_bounds.zw);
+    let view_size = max(view_max - view_min, vec2<f32>(1.0));
+    let fit_pixels_per_em = min(content_size.x / view_size.x, content_size.y / view_size.y);
+    let default_pixels_per_em = max(preview.geometry.x, 1.0 / 65536.0);
+    let pixels_per_em = min(default_pixels_per_em, fit_pixels_per_em);
+    let render_size = view_size * pixels_per_em;
     let render_min = (instance.pixel_rect.xy + instance.pixel_rect.zw - render_size) * 0.5;
     let render_max = render_min + render_size;
     let pixel_position = mix(render_min, render_max, quad_coordinate(vertex_index));
@@ -678,10 +677,7 @@ fn vertex_variable_preview(
     var output: VertexOutput;
     output.position = vec4<f32>(clip_position, 0.0, 1.0);
     output.em_scale = em_scale;
-    output.em_offset = vec2<f32>(
-        -side_margin - render_min.x * em_scale.x,
-        preview.geometry.y - render_min.y * em_scale.y,
-    );
+    output.em_offset = vec2<f32>(view_min.x, view_max.y) - render_min * em_scale;
     output.instance_index = instance_index;
     return output;
 }

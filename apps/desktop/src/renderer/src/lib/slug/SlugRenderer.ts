@@ -4,7 +4,7 @@ import { SlugAtlas } from "./SlugAtlas";
 import { SlugAtlasPage } from "./SlugAtlasPage";
 import { SlugRendererPipelines } from "./SlugRendererResources";
 
-/** Complete Slug atlas renderer with independently replaceable glyph patches. */
+/** Complete Slug atlas renderer with independently replaceable fixed pages. */
 export class SlugRenderer {
   readonly #device: GPUDevice;
   readonly #context: GPUCanvasContext;
@@ -33,19 +33,40 @@ export class SlugRenderer {
   }
 
   loadPage(atlas: SlugAtlas): void {
+    this.loadPages([atlas]);
+  }
+
+  /** Commits a prepared page set in one synchronous glyph-map replacement. */
+  loadPages(atlases: readonly SlugAtlas[]): void {
     if (this.#disposed) {
-      atlas.destroy();
+      for (const atlas of atlases) atlas.destroy();
       return;
     }
 
-    const page = new SlugAtlasPage(this.#device, atlas, this.#pipelines);
-    const replaced = new Set<SlugAtlasPage>();
-    for (const glyphId of page.glyphIds) {
-      const previous = this.#pageByGlyph.get(glyphId);
-      if (previous) replaced.add(previous);
-      this.#pageByGlyph.set(glyphId, page);
+    const pages: SlugAtlasPage[] = [];
+    try {
+      for (const atlas of atlases) {
+        pages.push(new SlugAtlasPage(this.#device, atlas, this.#pipelines));
+      }
+    } catch (error) {
+      for (const page of pages) page.destroy();
+      for (const atlas of atlases.slice(pages.length)) atlas.destroy();
+      throw error;
     }
-    this.#pages.add(page);
+
+    const nextPageByGlyph = new Map(this.#pageByGlyph);
+    const replaced = new Set<SlugAtlasPage>();
+    for (const page of pages) {
+      for (const glyphId of page.glyphIds) {
+        const previous = nextPageByGlyph.get(glyphId);
+        if (previous) replaced.add(previous);
+        nextPageByGlyph.set(glyphId, page);
+      }
+    }
+
+    for (const page of pages) this.#pages.add(page);
+    this.#pageByGlyph.clear();
+    for (const [glyphId, page] of nextPageByGlyph) this.#pageByGlyph.set(glyphId, page);
     this.#removeUnusedPages(replaced);
   }
 
@@ -93,6 +114,7 @@ export class SlugRenderer {
         pass.dispatchWorkgroups(packed.instanceCount);
         pass.end();
       }
+      page.buffers.copyPreviewBounds(encoder, packed.instanceCount);
       {
         const pass = encoder.beginComputePass({ label: "shift Slug bands" });
         pass.setPipeline(this.#pipelines.bands);

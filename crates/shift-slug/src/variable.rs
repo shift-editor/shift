@@ -39,6 +39,14 @@ pub struct VariableGlyph {
     pub source_count: u32,
 }
 
+/// Font-space overflow shared by every preview cell at one authored revision.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SlugPreviewExtents {
+    pub horizontal: f32,
+    pub minimum_y: f32,
+    pub maximum_y: f32,
+}
+
 /// One source contribution for a variable glyph.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -233,6 +241,66 @@ impl VariableAtlas {
                 .max()
                 .unwrap_or(0),
         }
+    }
+
+    /// Derives shared preview overflow without changing the existing pixels-per-em scale.
+    pub fn preview_extents(&self, glyph_indices: &[u32]) -> Result<SlugPreviewExtents, SlugError> {
+        let mut horizontal = 0.0_f32;
+        let mut minimum_y = f32::INFINITY;
+        let mut maximum_y = f32::NEG_INFINITY;
+
+        for glyph_index in glyph_indices {
+            let glyph = *self
+                .glyphs
+                .get(*glyph_index as usize)
+                .ok_or(SlugError::GlyphIndexOutOfRange(*glyph_index))?;
+            let advance_glyph = match component_glyph_index(glyph) {
+                Some(component_index) => {
+                    let component = self
+                        .component_glyphs
+                        .get(component_index)
+                        .ok_or(SlugError::LengthOverflow)?;
+                    *self
+                        .glyphs
+                        .get(component.root_glyph_index as usize)
+                        .ok_or(SlugError::LengthOverflow)?
+                }
+                None => glyph,
+            };
+            let advance_start = advance_glyph.source_start as usize;
+            let advance_end = advance_start
+                .checked_add(advance_glyph.source_count as usize)
+                .ok_or(SlugError::LengthOverflow)?;
+            let minimum_advance = self
+                .source_advances
+                .get(advance_start..advance_end)
+                .ok_or(SlugError::LengthOverflow)?
+                .iter()
+                .copied()
+                .fold(f32::INFINITY, f32::min);
+            let minimum_advance = if minimum_advance.is_finite() {
+                minimum_advance
+            } else {
+                0.0
+            };
+
+            horizontal = horizontal
+                .max((-glyph.bounds.min_x).max(0.0))
+                .max((glyph.bounds.max_x - minimum_advance).max(0.0));
+            minimum_y = minimum_y.min(glyph.bounds.min_y);
+            maximum_y = maximum_y.max(glyph.bounds.max_y);
+        }
+
+        if minimum_y.is_infinite() {
+            minimum_y = 0.0;
+            maximum_y = 0.0;
+        }
+
+        Ok(SlugPreviewExtents {
+            horizontal,
+            minimum_y,
+            maximum_y,
+        })
     }
 
     /// Resolves the common two-source model with the compute shader's f32 arithmetic.

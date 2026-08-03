@@ -63,7 +63,17 @@ export interface GlyphCatalogFrame {
   readonly cells: readonly GlyphCatalogCell[];
 }
 
-/** Mutable catalog inputs replaced atomically before the next scheduled frame. */
+export type GridReadiness = "Initial" | "Stale" | "Complete" | "Unavailable";
+
+/** One fixed root page selected for an atomic Grid replacement. */
+export interface GlyphCatalogAtlasPage {
+  readonly glyphIds: GlyphId[];
+  readonly pageIndex: number;
+  readonly pageCount: number;
+  readonly replacementPageIndices: number[];
+}
+
+/** Mutable catalog inputs requested by React for the latest authored revision. */
 export interface GlyphCatalogControllerFrame {
   readonly glyphs: readonly GlyphCatalogItem[];
   readonly location: AxisLocation;

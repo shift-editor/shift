@@ -959,6 +959,21 @@ impl FontWorkspace {
             .is_some_and(|state| state.dirty))
     }
 
+    /// Returns the durable authored revision used to address disposable derived artifacts.
+    pub fn slug_atlas_cache_revision(&self) -> Result<String, WorkspaceError> {
+        let state = self
+            .store
+            .workspace_state()?
+            .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
+        if state.revision < 0 {
+            return Err(WorkspaceError::CorruptWorkingStore(
+                "negative workspace revision".into(),
+            ));
+        }
+
+        Ok(state.revision.to_string())
+    }
+
     pub fn set_document_id(&mut self, document_id: String) -> Result<(), WorkspaceError> {
         self.store.set_workspace_document_id(document_id)?;
         Ok(())

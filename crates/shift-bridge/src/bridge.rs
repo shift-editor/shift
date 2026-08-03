@@ -131,11 +131,19 @@ pub struct NapiSlugWeightSet {
 }
 
 #[napi(object)]
+pub struct NapiSlugPreviewExtents {
+  pub horizontal: f64,
+  pub minimum_y: f64,
+  pub maximum_y: f64,
+}
+
+#[napi(object)]
 pub struct NapiSlugAtlas {
   pub generation: u32,
   pub band_count: u32,
   pub weight_count: u32,
   pub layout: NapiSlugLayout,
+  pub preview_extents: NapiSlugPreviewExtents,
   pub glyphs: Vec<NapiSlugGlyph>,
   pub weight_sets: Vec<NapiSlugWeightSet>,
   pub atlas_glyph_count: u32,
@@ -305,11 +313,18 @@ fn napi_slug_atlas(
     })
     .collect();
 
+  let preview_extents = authored.preview_extents()?;
+
   Ok(NapiSlugAtlas {
     generation,
     band_count: authored.atlas().band_count(),
     weight_count: authored.weight_count(),
     layout: napi_slug_layout(layout)?,
+    preview_extents: NapiSlugPreviewExtents {
+      horizontal: f64::from(preview_extents.horizontal),
+      minimum_y: f64::from(preview_extents.minimum_y),
+      maximum_y: f64::from(preview_extents.maximum_y),
+    },
     glyphs,
     weight_sets,
     atlas_glyph_count: u32::try_from(statistics.glyph_count)
@@ -902,6 +917,12 @@ impl Bridge {
       atlas: authored.into_atlas(),
     });
     Ok(result)
+  }
+
+  /// Returns the durable authored revision used to address disposable cached atlas pages.
+  #[napi]
+  pub fn slug_atlas_cache_revision(&self) -> errors::Result<String> {
+    Ok(self.workspace()?.slug_atlas_cache_revision()?)
   }
 
   /// Builds one ordered root-glyph page plus its transitive component geometry.

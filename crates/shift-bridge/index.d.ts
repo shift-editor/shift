@@ -76,6 +76,8 @@ export declare class Bridge {
    * geometry remains native until `stream_slug_atlas` emits bounded chunks.
    */
   prepareSlugAtlas(alignment: number): NapiSlugAtlas
+  /** Returns the durable authored revision used to address disposable cached atlas pages. */
+  slugAtlasCacheRevision(): string
   /**
    * Builds one ordered root-glyph page plus its transitive component geometry.
    *
@@ -149,6 +151,7 @@ export interface NapiSlugAtlas {
   bandCount: number
   weightCount: number
   layout: NapiSlugLayout
+  previewExtents: NapiSlugPreviewExtents
   glyphs: Array<NapiSlugGlyph>
   weightSets: Array<NapiSlugWeightSet>
   atlasGlyphCount: number
@@ -181,6 +184,12 @@ export interface NapiSlugLayout {
   anchorSources: NapiSlugSection
   lineBits: NapiSlugSection
   totalLength: number
+}
+
+export interface NapiSlugPreviewExtents {
+  horizontal: number
+  minimumY: number
+  maximumY: number
 }
 
 export interface NapiSlugSection {
