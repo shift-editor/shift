@@ -157,7 +157,7 @@ fn unmap_axis_value(axis: &norad::designspace::Axis, value: f64) -> f64 {
     value + last_user - last_design
 }
 
-pub(super) fn axis_mappings_from_designspace(
+pub(crate) fn axis_mappings_from_designspace(
     doc: &DesignSpaceDocument,
     axes: &[Axis],
 ) -> DesignspaceResult<Vec<AxisMapping>> {
@@ -424,7 +424,7 @@ pub(super) fn location_from_dimensions(
 // Designspace source locations are partial design-space locations. Missing
 // dimensions resolve to the axis default after mapping from user space.
 // https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.SourceDescriptor.getFullDesignLocation
-fn source_axis_design_value(
+pub(crate) fn source_axis_design_value(
     dimensions: &[norad::designspace::Dimension],
     axis: &norad::designspace::Axis,
 ) -> f64 {
@@ -442,7 +442,7 @@ fn source_axis_design_value(
     }
 }
 
-fn map_axis_value(axis: &norad::designspace::Axis, user_value: f64) -> f64 {
+pub(crate) fn map_axis_value(axis: &norad::designspace::Axis, user_value: f64) -> f64 {
     let Some(mapping) = axis.map.as_ref().filter(|mapping| !mapping.is_empty()) else {
         return user_value;
     };
@@ -489,7 +489,7 @@ fn map_axis_value(axis: &norad::designspace::Axis, user_value: f64) -> f64 {
 // design-space locations to the mapped user-space defaults. Layer-backed
 // sources remain eligible because `layer` describes storage, not source role.
 // https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.DesignSpaceDocument.findDefault
-pub(super) fn find_default_source_index(doc: &DesignSpaceDocument) -> Option<usize> {
+pub(crate) fn find_default_source_index(doc: &DesignSpaceDocument) -> Option<usize> {
     doc.sources.iter().position(|source| {
         doc.axes.iter().all(|axis| {
             let source_value = source_axis_design_value(&source.location, axis);
@@ -513,7 +513,7 @@ fn design_values_equal(left: f64, right: f64) -> bool {
 /// - **One-sided** (only min OR max specified): the missing side falls back
 ///   to `default`. Common with slant axes (`min=-15, default=0, max=0`).
 /// - **Degenerate** (no min/max/values): all three collapse to default.
-pub(super) fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
+pub(crate) fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
     let values_range = || {
         ds_axis
             .values

@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use norad::{DataRequest, Font as NoradFont};
@@ -13,6 +14,13 @@ use crate::{
 
 use super::UfoReader;
 
+#[derive(Clone)]
+pub(crate) struct UfoLayerDirectory {
+    pub(crate) name: String,
+    pub(crate) path: PathBuf,
+    pub(crate) glyphs: BTreeMap<String, PathBuf>,
+}
+
 struct LayerDirectory {
     source_id: SourceId,
     glyphs: BTreeMap<String, PathBuf>,
@@ -20,21 +28,27 @@ struct LayerDirectory {
 
 pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlifGlyphStream)> {
     let ufo_path = Path::new(path);
+    let layers = Arc::from(read_ufo_layer_directories(ufo_path)?);
+    stream_retained(ufo_path, layers)
+}
+
+pub(crate) fn stream_retained(
+    ufo_path: &Path,
+    retained: Arc<[UfoLayerDirectory]>,
+) -> FormatBackendResult<(Font, GlifGlyphStream)> {
     let mut header = load_header(ufo_path)?;
     let default_source_id = header.default_source_id().ok_or_else(|| {
         FormatBackendError::Ufo("UFO header is missing its default source".into())
     })?;
-    let layers = load_layer_directories(ufo_path, &mut header, default_source_id)?;
+    let layers = load_layer_directories(&retained, &mut header, default_source_id)?;
     let (glyph_ids, glyphs) = build_glyph_directory(layers);
 
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
 }
 
-fn load_layer_directories(
+pub(crate) fn read_ufo_layer_directories(
     ufo_path: &Path,
-    header: &mut Font,
-    default_source_id: SourceId,
-) -> FormatBackendResult<Vec<LayerDirectory>> {
+) -> FormatBackendResult<Vec<UfoLayerDirectory>> {
     let mut layer_paths = read_layer_paths(ufo_path)?;
     let default_index = layer_paths
         .iter()
@@ -43,16 +57,31 @@ fn load_layer_directories(
     let default_layer = layer_paths.remove(default_index);
     layer_paths.insert(0, default_layer);
 
-    let mut layers = Vec::with_capacity(layer_paths.len());
-    for (index, (name, relative_path)) in layer_paths.into_iter().enumerate() {
-        let layer_path = ufo_path.join(&relative_path);
-        let contents_path = layer_path.join("contents.plist");
-        let glyphs: BTreeMap<String, PathBuf> = plist_file(&contents_path)?;
-        let (color, lib) = read_layer_info(&layer_path)?;
+    layer_paths
+        .into_iter()
+        .map(|(name, relative_path)| {
+            let path = ufo_path.join(relative_path);
+            let glyphs = plist_file::<BTreeMap<String, PathBuf>>(&path.join("contents.plist"))?
+                .into_iter()
+                .map(|(name, glyph)| (name, path.join(glyph)))
+                .collect();
+            Ok(UfoLayerDirectory { name, path, glyphs })
+        })
+        .collect()
+}
+
+fn load_layer_directories(
+    retained: &[UfoLayerDirectory],
+    header: &mut Font,
+    default_source_id: SourceId,
+) -> FormatBackendResult<Vec<LayerDirectory>> {
+    let mut layers = Vec::with_capacity(retained.len());
+    for (index, retained) in retained.iter().enumerate() {
+        let (color, lib) = read_layer_info(&retained.path)?;
         let source_id = if index == 0 {
             default_source_id.clone()
         } else {
-            header.add_source(Source::layer(name))
+            header.add_source(Source::layer(retained.name.clone()))
         };
         let source = header.source_mut(source_id.clone()).ok_or_else(|| {
             FormatBackendError::Ufo("newly registered UFO source is missing".into())
@@ -63,10 +92,7 @@ fn load_layer_directories(
         }
         layers.push(LayerDirectory {
             source_id,
-            glyphs: glyphs
-                .into_iter()
-                .map(|(name, path)| (name, layer_path.join(path)))
-                .collect(),
+            glyphs: retained.glyphs.clone(),
         });
     }
     Ok(layers)

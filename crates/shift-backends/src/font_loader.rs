@@ -6,6 +6,7 @@ use shift_source::ShiftSourcePackage;
 
 use crate::designspace::{DesignspaceReader, DesignspaceWriter};
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
+use crate::font_source::{BinaryFont, FontReadError, FontSource, GlifFont, GlyphsFont};
 use crate::format::FontFormat;
 use crate::glyphs::GlyphsReader;
 use crate::import::{FontImport, GlyphStream};
@@ -156,6 +157,29 @@ impl FontLoader {
         self.adaptors.keys().collect()
     }
 
+    /// Opens a retained random-access source without constructing an authored Font.
+    pub fn open_source(&self, path: &Path) -> Result<FontSource, FontReadError> {
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .ok_or_else(|| FontReadError::UnsupportedFormat {
+                path: path.to_path_buf(),
+            })?;
+        let format =
+            format_from_extension(extension).map_err(|_| FontReadError::UnsupportedFormat {
+                path: path.to_path_buf(),
+            })?;
+
+        match format {
+            FontFormat::Ttf | FontFormat::Otf => BinaryFont::open(path).map(FontSource::Binary),
+            FontFormat::Ufo | FontFormat::Designspace => GlifFont::open(path).map(FontSource::Glif),
+            FontFormat::Glyphs => GlyphsFont::open(path).map(FontSource::Glyphs),
+            FontFormat::Shift => Err(FontReadError::UnsupportedFormat {
+                path: path.to_path_buf(),
+            }),
+        }
+    }
+
     pub fn stream_font(&self, path: &str) -> BackendResult<FontImport> {
         let resolved = resolve(path)?;
         let adaptor = self
@@ -227,8 +251,57 @@ impl FontLoader {
 
 #[cfg(test)]
 mod tests {
-    use super::format_from_extension;
+    use std::path::PathBuf;
+
+    use super::{format_from_extension, FontLoader};
+    use crate::font_source::FontSource;
     use crate::format::FontFormat;
+    use crate::ImportBatchLimit;
+
+    fn fixture(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("fixtures/fonts")
+            .join(name)
+    }
+
+    #[test]
+    fn retained_source_dispatch_preserves_import_capabilities() {
+        let loader = FontLoader::new();
+        let binary = loader
+            .open_source(&fixture("mutatorsans/MutatorSans.ttf"))
+            .unwrap();
+        let glif = loader
+            .open_source(&fixture("mutatorsans/MutatorSansLightCondensed.ufo"))
+            .unwrap();
+        let glyphs = loader.open_source(&fixture("Homenaje.glyphs")).unwrap();
+
+        assert!(matches!(&binary, FontSource::Binary(_)));
+        assert!(binary.importer().is_none());
+        assert!(matches!(&glif, FontSource::Glif(_)));
+        let mut glif_import = glif.importer().unwrap().begin_import().unwrap();
+        assert!(glif_import.glyph_count() > 0);
+        assert_eq!(
+            glif_import
+                .next_batch(ImportBatchLimit::new(1, 1))
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(matches!(&glyphs, FontSource::Glyphs(_)));
+        let mut glyphs_import = glyphs.importer().unwrap().begin_import().unwrap();
+        assert!(glyphs_import.glyph_count() > 0);
+        assert_eq!(
+            glyphs_import
+                .next_batch(ImportBatchLimit::new(1, 1))
+                .unwrap()
+                .len(),
+            1
+        );
+    }
 
     #[test]
     fn supports_glyphs_extensions() {

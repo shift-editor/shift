@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
+    font_source::{BinaryFont, RandomAccessFont},
     import::{collect_streamed_font, GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
 };
 use rayon::prelude::*;
@@ -259,61 +260,43 @@ struct BinaryGlyphRecord {
 }
 
 pub(crate) struct BinaryGlyphStream {
-    bytes: Arc<[u8]>,
+    font: Arc<BinaryFont>,
     source_id: SourceId,
     glyphs: Vec<BinaryGlyphRecord>,
     next_glyph: usize,
 }
 
 pub(crate) fn stream_font_file(path: &str) -> FormatBackendResult<(Font, BinaryGlyphStream)> {
-    let bytes: Arc<[u8]> = std::fs::read(path)
-        .map_err(|error| FormatBackendError::Binary(format!("failed to read '{path}': {error}")))?
-        .into();
-    let font = FontRef::new(bytes.as_ref()).map_err(|error| {
-        FormatBackendError::Binary(format!("failed to parse '{path}': {error}"))
-    })?;
-    font.hmtx().map_err(|error| {
-        FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))
+    let retained = Arc::new(
+        BinaryFont::open(Path::new(path))
+            .map_err(|error| FormatBackendError::Binary(error.to_string()))?,
+    );
+    let font = FontRef::new(retained.bytes()).map_err(|error| {
+        FormatBackendError::Binary(format!("failed to parse retained font '{path}': {error}"))
     })?;
     let header = font_header_from_skrifa(&font)?;
     let source_id = header.default_source_id().ok_or_else(|| {
         FormatBackendError::Binary("binary font header is missing its default source".into())
     })?;
-    let glyph_count = font
-        .maxp()
-        .map_err(|error| FormatBackendError::Binary(format!("failed to read maxp table: {error}")))?
-        .num_glyphs() as usize;
-    let mut unicodes = vec![Vec::new(); glyph_count];
-    for (unicode, glyph_id) in font.charmap().mappings() {
-        if let Some(values) = unicodes.get_mut(glyph_id.to_u32() as usize) {
-            values.push(unicode);
-        }
-    }
-    let names = font.glyph_names();
-    let glyphs = unicodes
-        .into_iter()
-        .enumerate()
-        .map(|(index, unicodes)| {
-            let raw_id = GlyphId::new(index as u32);
-            let name = names
-                .get(raw_id)
-                .map(|name| name.to_string())
-                .unwrap_or_else(|| format!("gid{index}"));
-            BinaryGlyphRecord {
-                raw_id,
-                // Compiled fonts carry stable glyph order but no Shift IDs, so
-                // deterministic GID-derived identities make re-import repeatable.
-                shift_id: ShiftGlyphId::from_raw(format!("binary{index}")),
-                name: GlyphName::from(name),
-                unicodes,
-            }
+    let glyphs = retained
+        .directory()
+        .glyphs
+        .iter()
+        .map(|glyph| BinaryGlyphRecord {
+            raw_id: GlyphId::new(glyph.index.to_u32()),
+            // Compiled fonts carry stable glyph order but no Shift IDs, so
+            // deterministic GID-derived identities make re-import repeatable.
+            // These identities are minted only when authored import begins.
+            shift_id: ShiftGlyphId::from_raw(format!("binary{}", glyph.index.to_u32())),
+            name: GlyphName::from(glyph.name.clone()),
+            unicodes: glyph.unicodes.to_vec(),
         })
         .collect();
 
     Ok((
         header,
         BinaryGlyphStream {
-            bytes,
+            font: retained,
             source_id,
             glyphs,
             next_glyph: 0,
@@ -346,8 +329,8 @@ impl GlyphStream for BinaryGlyphStream {
             .next_glyph
             .saturating_add(batch_glyphs)
             .min(self.glyphs.len());
-        let font = FontRef::new(self.bytes.as_ref()).map_err(|error| {
-            FormatBackendError::Binary(format!("failed to reopen resident font: {error}"))
+        let font = FontRef::new(self.font.bytes()).map_err(|error| {
+            FormatBackendError::Binary(format!("failed to reopen retained font: {error}"))
         })?;
         let hmtx = font.hmtx().map_err(|error| {
             FormatBackendError::Binary(format!("failed to read hmtx table: {error}"))

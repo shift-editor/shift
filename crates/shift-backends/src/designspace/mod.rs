@@ -5,8 +5,12 @@ mod reader;
 mod writer;
 
 pub use error::DesignspaceError;
-pub(crate) use import::stream_font;
+pub(crate) use import::{stream_font, stream_retained};
 pub use reader::DesignspaceReader;
+pub(crate) use reader::{
+    axis_mappings_from_designspace, derive_axis_range, find_default_source_index, map_axis_value,
+    source_axis_design_value,
+};
 pub use writer::DesignspaceWriter;
 
 #[cfg(test)]
