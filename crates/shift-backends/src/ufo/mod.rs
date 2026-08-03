@@ -2,7 +2,10 @@ mod import;
 mod reader;
 mod writer;
 
-pub(crate) use import::{load_header, read_glyph_paths, stream_font};
+pub(crate) use import::{
+    load_header, read_glyph_paths, read_ufo_layer_directories, stream_font, stream_retained,
+    UfoLayerDirectory,
+};
 pub use reader::UfoReader;
 pub use writer::UfoWriter;
 

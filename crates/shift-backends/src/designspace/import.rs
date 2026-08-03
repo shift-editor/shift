@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use norad::designspace::DesignSpaceDocument;
@@ -41,10 +42,20 @@ struct DesignspaceSourceMaterial {
 }
 
 pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlifGlyphStream)> {
-    stream_designspace(Path::new(path)).map_err(FormatBackendError::from)
+    stream_designspace(Path::new(path), None).map_err(FormatBackendError::from)
 }
 
-fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifGlyphStream)> {
+pub(crate) fn stream_retained(
+    path: &Path,
+    glyph_paths: Arc<[BTreeMap<String, PathBuf>]>,
+) -> FormatBackendResult<(Font, GlifGlyphStream)> {
+    stream_designspace(path, Some(&glyph_paths)).map_err(FormatBackendError::from)
+}
+
+fn stream_designspace(
+    designspace_path: &Path,
+    retained_glyph_paths: Option<&[BTreeMap<String, PathBuf>]>,
+) -> DesignspaceResult<(Font, GlifGlyphStream)> {
     let designspace_dir =
         designspace_path
             .parent()
@@ -70,6 +81,12 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
     };
     if document.sources.is_empty() {
         return Err(DesignspaceError::NoSources);
+    }
+    if retained_glyph_paths.is_some_and(|paths| paths.len() != document.sources.len()) {
+        return Err(DesignspaceError::LoadDesignspace {
+            path: designspace_path.to_path_buf(),
+            details: "retained source path count does not match Designspace sources".into(),
+        });
     }
     let default_index =
         find_default_source_index(&document).ok_or(DesignspaceError::MissingDefaultSource)?;
@@ -125,12 +142,15 @@ fn stream_designspace(designspace_path: &Path) -> DesignspaceResult<(Font, GlifG
                 )
             };
             let glyphs =
-                read_glyph_paths(&ufo_path, descriptor.layer.as_deref()).map_err(|error| {
-                    DesignspaceError::LoadUfo {
-                        path: ufo_path,
-                        source: Box::new(error),
-                    }
-                })?;
+                match retained_glyph_paths {
+                    Some(paths) => paths[index].clone(),
+                    None => read_glyph_paths(&ufo_path, descriptor.layer.as_deref()).map_err(
+                        |error| DesignspaceError::LoadUfo {
+                            path: ufo_path,
+                            source: Box::new(error),
+                        },
+                    )?,
+                };
             Ok(DesignspaceSourceMaterial {
                 index,
                 style_name,

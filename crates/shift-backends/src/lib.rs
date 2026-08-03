@@ -4,6 +4,7 @@ pub mod designspace;
 pub mod errors;
 pub mod export;
 pub mod font_loader;
+pub mod font_source;
 pub mod format;
 pub mod glyphs;
 pub mod import;
@@ -14,6 +15,14 @@ pub mod ufo;
 
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter};
+pub use font_source::{
+    AffineTransform, AnchorRange, AxisIndex, BinaryFont, ComponentInstance, ComponentRange,
+    ContourRange, DirectoryGlyph, DisplayGlyph, FontDirectory, FontImporter, FontReadError,
+    FontSource, GeometryIndex, GlifFont, GlyphAnchor, GlyphBounds, GlyphContour, GlyphGeometry,
+    GlyphGuide, GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, GlyphsFont, GuideRange,
+    PointProvenance, PointRange, RandomAccessFont, TrueTypePointIndex, VariationAxis,
+    VariationAxisKind, VariationCoordinate, VariationLocation,
+};
 pub use format::FontFormat;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
 pub use traits::{FontBackend, FontReader, FontView, FontWriter};
