@@ -262,9 +262,13 @@ export class App {
           phase: "workspace-ready-requested",
         });
       }
-      this.#fontSessionForSender(event.sender, "session.ready");
+      const session = this.#fontSessionForSender(event.sender, "session.ready");
       const window = this.#requireWindowForWebContents(event.sender);
       const browserWindow = window.window;
+      this.#log.info("font session ready", {
+        mode: session.mode,
+        windowId: browserWindow.id,
+      });
       if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
 
       window.focus();

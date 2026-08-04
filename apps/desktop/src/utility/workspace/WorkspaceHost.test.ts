@@ -266,6 +266,25 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(fs.existsSync(path.join(tmpRoot, "atlas-cache"))).toBe(false);
   });
 
+  it("reads selected retained glyph geometry without authored state", async () => {
+    await shell.call("source.open", { path: retainedFontPath });
+    const sync = await connectSyncLane();
+    const snapshot = await sync.call("source.snapshot", undefined);
+    if (!snapshot) throw new Error("source.open did not create a snapshot");
+    const glyphIndex = snapshot.directory.glyphs.find((glyph) => glyph.name === "A")?.index;
+    if (glyphIndex === undefined) throw new Error("fixture has no A glyph");
+
+    const glyph = await sync.call("source.glyph", {
+      glyphIndex,
+      coordinates: snapshot.directory.defaultLocation,
+    });
+
+    expect(glyph.glyphIndex).toBe(glyphIndex);
+    expect(glyph.pointCoordinates.length).toBe(glyph.pointKinds.length * 2);
+    expect(glyph.geometries[glyph.rootGeometry]?.glyphIndex).toBe(glyphIndex);
+    expect(await sync.call("workspace.snapshot", undefined)).toBeNull();
+  });
+
   it("streams every retained atlas page and evaluates its resident weights", async () => {
     await shell.call("source.open", { path: retainedFontPath });
     const sync = await connectSyncLane();

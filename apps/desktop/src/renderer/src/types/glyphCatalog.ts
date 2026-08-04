@@ -3,6 +3,7 @@ import type { Rect2D } from "@shift/geo";
 import type { CatalogAxis, CatalogMetrics, GlyphId, GlyphName, SourceId } from "@shift/types";
 import type { RefObject } from "react";
 import type { Signal } from "@/lib/signals";
+import type { GlyphRenderInput } from "./glyphRender";
 import type { ThemeName } from "./uiState";
 import type { CatalogGlyphKey, GlyphAtlasSource } from "./glyphAtlas";
 
@@ -30,6 +31,7 @@ export interface GlyphCatalogSource {
   readonly invalidGlyphKeysCell: Signal<readonly CatalogGlyphKey[] | null>;
   readonly atlas: GlyphAtlasSource;
 
+  openGlyph(glyphKey: CatalogGlyphKey): Promise<GlyphRenderInput>;
   setLocation(location: CatalogLocation): Promise<void>;
   dispose(): void;
 }
@@ -58,7 +60,8 @@ export interface GlyphCatalogState {
   metrics: CatalogMetrics;
   sourceId: SourceId | null;
   editable: boolean;
-  openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
+  openedGlyph: GlyphRenderInput | null;
+  openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
 }
 
 export interface GlyphCatalogLayoutMetrics {
@@ -129,7 +132,7 @@ export interface GlyphCatalogCanvasProps {
   readonly atlasSource: GlyphAtlasSource;
   readonly observeAtlasInvalidation: GlyphCatalogState["observeAtlasInvalidation"];
   readonly editable: boolean;
-  readonly openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
+  readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;
 }

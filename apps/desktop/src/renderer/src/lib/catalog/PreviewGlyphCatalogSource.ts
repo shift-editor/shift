@@ -6,10 +6,13 @@ import { signal, type Signal, type WritableSignal } from "@/lib/signals";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import type { CatalogGlyphKey } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
+import type { GlyphRenderInput } from "@/types/glyphRender";
+import { DisplayGlyphRenderModel } from "@/lib/model/DisplayGlyphRenderModel";
 import { glyphCatalogItem } from "./glyphCatalogItem";
 
 /** Owns the immutable retained directory and mutable preview location. */
 export class PreviewGlyphCatalogSource implements GlyphCatalogSource {
+  readonly #client: FontSessionClient;
   readonly #locationCell: WritableSignal<CatalogLocation>;
 
   readonly glyphsCell: Signal<readonly GlyphCatalogItem[]>;
@@ -22,6 +25,7 @@ export class PreviewGlyphCatalogSource implements GlyphCatalogSource {
   readonly atlas: PreviewGlyphAtlasSource;
 
   constructor(directory: CatalogDirectory, client: FontSessionClient, glyphInfo: GlyphInfo) {
+    this.#client = client;
     const metrics = directory.metrics;
     if (!metrics) throw new Error("preview source has no catalog metrics");
 
@@ -49,6 +53,13 @@ export class PreviewGlyphCatalogSource implements GlyphCatalogSource {
 
   get locationCell(): Signal<CatalogLocation> {
     return this.#locationCell;
+  }
+
+  async openGlyph(glyphKey: CatalogGlyphKey): Promise<GlyphRenderInput> {
+    if (typeof glyphKey !== "number") throw new Error("preview catalog received an authored ID");
+
+    const glyph = await this.#client.sourceGlyph(glyphKey, this.#locationCell.peek());
+    return new DisplayGlyphRenderModel(glyph);
   }
 
   async setLocation(location: CatalogLocation): Promise<void> {

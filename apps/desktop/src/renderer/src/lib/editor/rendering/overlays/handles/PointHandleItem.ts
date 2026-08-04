@@ -1,21 +1,22 @@
 import { Vec2, type Point2D } from "@shift/geo";
-import { Point as PointModel, type Point } from "@shift/glyph-state";
+import { Point as PointModel } from "@shift/glyph-state";
+import type { GlyphRenderPoint } from "@/types/glyphRender";
 import type { HandleState } from "@/types/graphics";
 import type { MarkerShape } from "../../markers/types";
 
 export class PointHandleItem {
-  point: Point;
-  prev: Point | null;
-  next: Point | null;
+  point: GlyphRenderPoint;
+  prev: GlyphRenderPoint | null;
+  next: GlyphRenderPoint | null;
   index: number;
   count: number;
   contourClosed: boolean;
   state: HandleState;
 
   constructor(
-    point: Point,
-    prev: Point | null,
-    next: Point | null,
+    point: GlyphRenderPoint,
+    prev: GlyphRenderPoint | null,
+    next: GlyphRenderPoint | null,
     index: number,
     count: number,
     contourClosed: boolean,
@@ -31,9 +32,9 @@ export class PointHandleItem {
   }
 
   reset(
-    point: Point,
-    prev: Point | null,
-    next: Point | null,
+    point: GlyphRenderPoint,
+    prev: GlyphRenderPoint | null,
+    next: GlyphRenderPoint | null,
     index: number,
     count: number,
     contourClosed: boolean,

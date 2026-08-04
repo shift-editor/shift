@@ -134,6 +134,8 @@ export class WorkspaceHost {
           this.#documentId === null ? null : this.#snapshot(this.#documentId),
         ),
       "source.snapshot": () => this.#serialize(() => this.#fontSource),
+      "source.glyph": ({ glyphIndex, coordinates }) =>
+        this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphIndex, coordinates)),
       "source.atlasPagePrepare": (request) =>
         this.#serialize(() => this.#prepareSourceAtlasPage(request)),
       "source.atlasPageStream": ({ generation, maximumLength }, context) =>

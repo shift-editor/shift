@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { useParams } from "react-router";
 
@@ -7,13 +7,21 @@ import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { DisplayGlyphCanvas } from "@/components/editor/DisplayGlyphCanvas";
+import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
+import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { useSignalState } from "@/lib/signals";
 import { asGlyphId, mintNodeId } from "@shift/types";
 
 export const Editor = () => {
+  const workspace = useFontSession().workspace;
+
+  return workspace ? <AuthoredEditor /> : <DisplayEditor />;
+};
+
+const AuthoredEditor = () => {
   const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
@@ -81,17 +89,17 @@ export const Editor = () => {
       toolManager,
     }));
 
-    const keyDownHandler = async (e: KeyboardEvent) => {
+    const keyDownHandler = async (event: KeyboardEvent) => {
       try {
-        await keyboardRouter.handleKeyDown(e);
+        await keyboardRouter.handleKeyDown(event);
       } catch (error) {
         console.error("keyboard keydown failed", error);
       }
     };
 
-    const keyUpHandler = async (e: KeyboardEvent) => {
+    const keyUpHandler = async (event: KeyboardEvent) => {
       try {
-        await keyboardRouter.handleKeyUp(e);
+        await keyboardRouter.handleKeyUp(event);
       } catch (error) {
         console.error("keyboard keyup failed", error);
       }
@@ -109,51 +117,84 @@ export const Editor = () => {
   if (!glyph) return null;
 
   return (
-    <div
-      className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
-      data-gesture={gesture.phase}
-      style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
-    >
-      <Toolbar />
-      <ResizablePanelGroup
-        direction="horizontal"
-        autoSaveId="shift:editor-layout"
-        className="flex-1 overflow-hidden"
-      >
-        <ResizablePanel
-          id="left-sidebar"
-          order={1}
-          defaultSize={15}
-          minSize={10}
-          maxSize={30}
-          collapsible
-          collapsedSize={0}
-        >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <LeftSidebar />
-          </ZoneContainer>
-        </ResizablePanel>
-        <ResizableHandle inset="start" />
-        <ResizablePanel id="canvas" order={2} minSize={30}>
-          <ZoneContainer zone="canvas" className="h-full">
-            <Canvas />
-          </ZoneContainer>
-        </ResizablePanel>
-        <ResizableHandle inset="end" />
-        <ResizablePanel
-          id="right-sidebar"
-          order={3}
-          defaultSize={15}
-          minSize={10}
-          maxSize={30}
-          collapsible
-          collapsedSize={0}
-        >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <RightSidebar />
-          </ZoneContainer>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </div>
+    <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
+      <Canvas />
+    </EditorLayout>
   );
 };
+
+const DisplayEditor = () => {
+  const { openedGlyph, metrics } = useGlyphCatalog();
+  const { claimZone } = useFocusZone();
+
+  useEffect(() => {
+    if (!openedGlyph) return;
+
+    claimZone("canvas");
+  }, [claimZone, openedGlyph]);
+
+  if (!openedGlyph) return null;
+
+  return (
+    <EditorLayout cursorStyle="default" gesture="idle">
+      <DisplayGlyphCanvas glyph={openedGlyph} metrics={metrics} />
+    </EditorLayout>
+  );
+};
+
+const EditorLayout = ({
+  cursorStyle,
+  gesture,
+  children,
+}: {
+  cursorStyle: string;
+  gesture: string;
+  children: ReactNode;
+}) => (
+  <div
+    className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
+    data-gesture={gesture}
+    style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
+  >
+    <Toolbar />
+    <ResizablePanelGroup
+      direction="horizontal"
+      autoSaveId="shift:editor-layout"
+      className="flex-1 overflow-hidden"
+    >
+      <ResizablePanel
+        id="left-sidebar"
+        order={1}
+        defaultSize={15}
+        minSize={10}
+        maxSize={30}
+        collapsible
+        collapsedSize={0}
+      >
+        <ZoneContainer zone="sidebar" className="h-full">
+          <LeftSidebar />
+        </ZoneContainer>
+      </ResizablePanel>
+      <ResizableHandle inset="start" />
+      <ResizablePanel id="canvas" order={2} minSize={30}>
+        <ZoneContainer zone="canvas" className="h-full">
+          {children}
+        </ZoneContainer>
+      </ResizablePanel>
+      <ResizableHandle inset="end" />
+      <ResizablePanel
+        id="right-sidebar"
+        order={3}
+        defaultSize={15}
+        minSize={10}
+        maxSize={30}
+        collapsible
+        collapsedSize={0}
+      >
+        <ZoneContainer zone="sidebar" className="h-full">
+          <RightSidebar />
+        </ZoneContainer>
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  </div>
+);

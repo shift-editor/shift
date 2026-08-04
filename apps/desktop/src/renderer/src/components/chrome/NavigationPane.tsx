@@ -3,10 +3,12 @@ import { useNavigate } from "react-router";
 import { Button } from "@shift/ui";
 import { routes } from "@/app/routes";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
+import { useFontSession } from "@/workspace/WorkspaceContext";
 
 export const NavigationPane = () => {
   const navigate = useNavigate();
   const settings = useSettingsNavigation();
+  const workspace = useFontSession().workspace;
 
   return (
     <section className="h-full flex flex-1 items-center ml-1">
@@ -36,6 +38,7 @@ export const NavigationPane = () => {
                 aria-label={route.description}
                 variant="ghost"
                 size="icon"
+                disabled={route.kind === "dialog" && !workspace}
                 onClick={onClick}
               />
             );

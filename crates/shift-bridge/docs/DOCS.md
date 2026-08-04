@@ -6,7 +6,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** The bridge does not own hidden edit sessions or durable font state directly. It owns an optional `FontWorkspace` and forwards mutation transactions into `shift-workspace`. **WHY:** Renderer selection state stays in TypeScript, transport stays in `shift-bridge`, and workspace/store synchronization has one Rust owner.
 
-**Architecture Invariant:** Public bridge DTOs live in `shift-wire`; NAPI-specific wrappers live under `shift-wire::bridges::napi`. **WHY:** Wire shapes remain independent of the native module implementation, while NAPI can still return efficient types such as `Float64Array`.
+**Architecture Invariant:** Public bridge DTOs live in `shift-wire`; NAPI-specific wrappers, including catalog, Slug atlas, and retained `DisplayGlyph` declarations, live under `shift-wire::bridges::napi`. **WHY:** Wire shapes remain independent of the native module implementation, while NAPI can still return efficient types such as `Float64Array`.
 
 **Architecture Invariant:** Bridge methods return native NAPI values, not JSON strings. Domain failures flow through `BridgeError` and are converted at the NAPI boundary. **WHY:** Rust keeps typed errors internally, and TypeScript receives normal exceptions plus generated declaration types.
 
@@ -14,7 +14,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW `FontSaveSnapshot`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
 
-**Architecture Invariant:** Glyph snapshot, projection, preview, and Slug preparation methods are explicit acquisition boundaries. They may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. Component closure comes from the relational reference index rather than BLOB scans, and acquired payloads remain resident in the workspace cache. Product Grid startup requests the complete directory as bounded `prepareSlugAtlasPage()` root batches and presents only after the entire page set is resident.
+**Architecture Invariant:** Glyph snapshot, projection, preview, retained-source display, and Slug preparation methods are explicit acquisition boundaries. Authored reads may load requested BLOBs in the serialized utility process; retained renderer glyph objects and synchronous getters never initiate I/O. `readFontSourceGlyph()` forwards to the existing `RandomAccessFont::read_glyph` operation and returns a validated `shift-wire::DisplayGlyph` arena without constructing authored state. Authored component closure comes from the relational reference index rather than BLOB scans, and acquired payloads remain resident in the workspace cache. Product Grid startup requests the complete directory as bounded fixed root pages and presents only after the entire page set is resident.
 
 **Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
@@ -51,6 +51,7 @@ crates/shift-bridge/
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
 - `NapiGlyphProjection` -- compact location-independent glyph backing with reusable interpolation, exact-source exceptions, and Rust-owned `GlyphComponents` relationships.
+- `NapiDisplayGlyph` -- NAPI adapter for the canonical `shift-wire::DisplayGlyph` selected-source arenas; dense coordinates use `Float64Array`, while component and contour references remain validated local indexes.
 - `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
 - `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, cache-serialized preview extents, and aligned resident-section layout.
 - `SlugAtlasGeneration` -- one aligned native atlas or page consumed by its stream API or released by its discard API.
@@ -92,7 +93,7 @@ crates/shift-bridge/
 2. Return native NAPI DTOs rather than serialized JSON.
 3. Keep editor/rendering concerns out of Rust; TypeScript owns canvas-specific interpretation.
 
-Glyph preview reads must stay location-independent. Do not add resolved SVG/path queries or location-keyed bridge caches: the renderer evaluates retained projections through its reactive location signals.
+Authored glyph preview reads must stay location-independent. Do not add resolved authored SVG/path caches: the renderer evaluates retained projections through its reactive location signals. Retained foreign sources are the separate exception: `readFontSourceGlyph()` resolves the selected source glyph at an explicit external location, returns one coherent value, and retains no location-keyed bridge cache.
 
 ## Verification
 
