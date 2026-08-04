@@ -42,6 +42,19 @@ test.describe("retained font source Grid preview", () => {
     await page.waitForURL(/#\/editor\//);
     await expect(page.locator("#scene-canvas")).toBeVisible();
     await expect(page.locator("#marker-canvas")).toBeVisible();
-    await expect(page.getByText("Advance")).toBeVisible();
+    await expect(page.locator("aside input:disabled")).toHaveCount(0);
+    await page.locator("aside input").last().click();
+    await expect(page.getByText("Read-only preview")).toBeVisible();
+    await page.getByRole("button", { name: "OK" }).click();
+
+    await page.getByLabel("Display all glyphs").click();
+    await page.waitForURL(/#\/home$/);
+    await expect(scrollViewport).toBeVisible({ timeout: 1_000 });
+    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 1_000,
+    });
+    await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true", {
+      timeout: 1_000,
+    });
   });
 });

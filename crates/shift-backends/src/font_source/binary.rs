@@ -670,7 +670,9 @@ fn normalize_glyf_contour(
             native_glyf_point(*point, kind, source_start + index)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    normalize_contour(points, true)
+    let mut contour = normalize_contour(points, true)?;
+    detect_smooth_points(&mut contour);
+    Ok(contour)
 }
 
 fn native_glyf_point(
@@ -690,6 +692,55 @@ fn native_glyf_point(
             ttf_point_index: Some(TrueTypePointIndex::new(index)),
         },
     })
+}
+
+/// Maximum tangent-angle difference used by the authored binary importer.
+const SMOOTH_ANGLE_TOLERANCE: f64 = 0.05;
+
+fn detect_smooth_points(contour: &mut SourceContour) {
+    let point_count = contour.points.len();
+    if point_count < 3 {
+        return;
+    }
+
+    for index in 0..point_count {
+        let point = &contour.points[index];
+        if point.kind != GlyphPointKind::OnCurve || point.provenance == PointProvenance::Implied {
+            continue;
+        }
+
+        let (previous_index, next_index) = if contour.closed {
+            (
+                (index + point_count - 1) % point_count,
+                (index + 1) % point_count,
+            )
+        } else {
+            if index == 0 || index + 1 == point_count {
+                continue;
+            }
+            (index - 1, index + 1)
+        };
+        let previous = &contour.points[previous_index];
+        let next = &contour.points[next_index];
+        if previous.kind == GlyphPointKind::OnCurve && next.kind == GlyphPointKind::OnCurve {
+            continue;
+        }
+
+        let incoming_x = point.x - previous.x;
+        let incoming_y = point.y - previous.y;
+        let outgoing_x = next.x - point.x;
+        let outgoing_y = next.y - point.y;
+        let length_product = incoming_x.hypot(incoming_y) * outgoing_x.hypot(outgoing_y);
+        if length_product == 0.0 {
+            continue;
+        }
+
+        let dot = incoming_x * outgoing_x + incoming_y * outgoing_y;
+        let cross = incoming_x * outgoing_y - incoming_y * outgoing_x;
+        if dot > 0.0 && cross.abs() <= length_product * SMOOTH_ANGLE_TOLERANCE.sin() {
+            contour.points[index].smooth = true;
+        }
+    }
 }
 
 fn component_transform(component: &skrifa::raw::tables::glyf::Component) -> AffineTransform {
@@ -731,10 +782,12 @@ impl CffPen {
                 self.current.pop();
             }
         }
-        self.contours.push(SourceContour {
+        let mut contour = SourceContour {
             points: std::mem::take(&mut self.current),
             closed,
-        });
+        };
+        detect_smooth_points(&mut contour);
+        self.contours.push(contour);
     }
 
     fn push(&mut self, x: f32, y: f32, kind: GlyphPointKind) {
@@ -869,6 +922,34 @@ mod tests {
     }
 
     #[test]
+    fn retained_binary_contours_detect_smooth_native_points() {
+        let native = |x, y, kind| ContourPoint {
+            x,
+            y,
+            kind,
+            smooth: false,
+            provenance: PointProvenance::Native {
+                ttf_point_index: None,
+            },
+        };
+        let mut contour = normalize_contour(
+            vec![
+                native(0.0, 0.0, GlyphPointKind::QuadraticControl),
+                native(100.0, 0.0, GlyphPointKind::OnCurve),
+                native(200.0, 0.0, GlyphPointKind::QuadraticControl),
+                native(300.0, 100.0, GlyphPointKind::OnCurve),
+            ],
+            true,
+        )
+        .unwrap();
+
+        detect_smooth_points(&mut contour);
+
+        assert!(contour.points[0].smooth);
+        assert!(!contour.points[2].smooth);
+    }
+
+    #[test]
     fn binary_directory_uses_gid_indexes_without_shift_identity() {
         let font = BinaryFont::open(&fixture("MutatorSans.ttf")).unwrap();
         assert!(!font.directory().glyphs.is_empty());
@@ -897,6 +978,7 @@ mod tests {
                 ttf_point_index: Some(_)
             } | PointProvenance::Implied
         )));
+        assert!(display.points.iter().any(|point| point.smooth));
         assert!(display.bounds.is_some());
     }
 

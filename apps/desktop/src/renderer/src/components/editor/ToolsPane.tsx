@@ -13,16 +13,8 @@ interface ToolbarIconProps {
   tooltip: string;
   activeTool: ToolName | null;
   onClick?: () => void;
-  disabled?: boolean;
 }
-export const ToolbarIcon: FC<ToolbarIconProps> = ({
-  Icon,
-  name,
-  tooltip,
-  activeTool,
-  onClick,
-  disabled = false,
-}) => {
+export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeTool, onClick }) => {
   const isActive = activeTool === name;
 
   return (
@@ -35,7 +27,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
           aria-label={tooltip}
           isActive={isActive}
           onClick={onClick}
-          disabled={disabled}
+          data-read-only-mutation={onClick ? undefined : true}
           size="icon"
         />
       </TooltipTrigger>
@@ -84,5 +76,5 @@ const AuthoredTools = () => {
 
 const DisplayTools = () =>
   BUILT_IN_TOOL_MANIFESTS.map(({ id, icon, tooltip }) => (
-    <ToolbarIcon key={id} Icon={icon} name={id} tooltip={tooltip} activeTool={null} disabled />
+    <ToolbarIcon key={id} Icon={icon} name={id} tooltip={tooltip} activeTool="select" />
   ));

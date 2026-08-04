@@ -397,6 +397,36 @@ mod tests {
     }
 
     #[test]
+    fn direct_pages_cover_every_host_grotesk_glyph() {
+        let source =
+            BinaryFont::open(&repository_root().join(
+                "apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
+            ))
+            .unwrap();
+        let location = source.directory().default_location();
+
+        for roots in source
+            .directory()
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.index)
+            .collect::<Vec<_>>()
+            .chunks(256)
+        {
+            let page = build_binary_atlas_page(&source, roots, DEFAULT_BAND_COUNT).unwrap();
+            assert_eq!(page.glyphs().len(), roots.len());
+            let weights = page.weights(location).unwrap();
+            for (glyph, atlas_glyph) in page.glyphs() {
+                let actual = page
+                    .atlas()
+                    .resolve_glyph_with_weights(*atlas_glyph, &weights)
+                    .unwrap();
+                assert_curves_close(&actual, &skrifa_curves(&source, *glyph, location));
+            }
+        }
+    }
+
+    #[test]
     fn direct_page_matches_a_uniform_host_grotesk_sample() {
         let source =
             BinaryFont::open(&repository_root().join(

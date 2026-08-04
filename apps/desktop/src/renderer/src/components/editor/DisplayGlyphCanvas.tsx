@@ -4,7 +4,7 @@ import type { CatalogMetrics } from "@shift/types";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { Camera } from "@/lib/editor/managers/Camera";
 import { Canvas as DrawingCanvas } from "@/lib/editor/rendering/Canvas";
-import { Canvas2DSurface, MarkerCanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
+import { Canvas2DSurface } from "@/lib/editor/rendering/CanvasSurface";
 import { DisplayGlyphRenderer } from "@/lib/editor/rendering/DisplayGlyphRenderer";
 import { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 import type { GlyphRenderInput } from "@/types/glyphRender";
@@ -30,14 +30,12 @@ export const DisplayGlyphCanvas = ({ glyph, metrics }: DisplayGlyphCanvasProps) 
     frameRef.current = null;
     const backgroundElement = backgroundRef.current;
     const sceneElement = sceneRef.current;
-    const markerElement = markerRef.current;
     const overlayElement = overlayRef.current;
-    if (!backgroundElement || !sceneElement || !markerElement || !overlayElement) return;
+    if (!backgroundElement || !sceneElement || !overlayElement) return;
 
     const backgroundSurface = Canvas2DSurface.from(backgroundElement);
     const sceneSurface = Canvas2DSurface.from(sceneElement);
     const overlaySurface = Canvas2DSurface.from(overlayElement);
-    const markerSurface = MarkerCanvasSurface.from(markerElement);
     const camera = cameraRef.current;
     camera.upm = metrics.unitsPerEm;
     camera.descender = metrics.descender;
@@ -55,7 +53,6 @@ export const DisplayGlyphCanvas = ({ glyph, metrics }: DisplayGlyphCanvasProps) 
       descender: camera.descender,
     };
     const markerLayer = markerLayerRef.current;
-    markerLayer.resizeCanvas(markerSurface.canvas);
 
     const backgroundCanvas = new DrawingCanvas(backgroundSurface.ctx, cameraTransform);
     backgroundSurface.ctx.clearRect(0, 0, backgroundSurface.width, backgroundSurface.height);

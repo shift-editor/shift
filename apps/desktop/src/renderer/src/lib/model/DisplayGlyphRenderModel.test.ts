@@ -29,7 +29,7 @@ const DISPLAY_GLYPH: DisplayGlyph = {
   components: [{ geometryIndex: 1, transform: new Float64Array([1, 0, 0, 1, 100, 20]) }],
   pointCoordinates: new Float64Array([0, 0, 10, 0, 0, 0, 5, 0]),
   pointKinds: ["onCurve", "onCurve", "onCurve", "onCurve"],
-  pointSmooth: [false, false, false, false],
+  pointSmooth: [true, false, false, false],
   pointProvenance: ["native", "native", "native", "native"],
   pointTrueTypeIndices: [0, 1, 0, 1],
   anchors: [{ name: "top", x: 5, y: 10 }],
@@ -43,6 +43,7 @@ describe("retained glyph rendering geometry", () => {
     const glyph = new DisplayGlyphRenderModel(DISPLAY_GLYPH);
 
     expect(glyph.contours.map((contour) => contour.root)).toEqual([true, false]);
+    expect(glyph.contours[0]?.contour.points[0]).toMatchObject({ smooth: true });
     expect(glyph.contours[0]?.contour.points[1]).toMatchObject({ x: 10, y: 0 });
     expect(glyph.contours[1]?.contour.points[0]).toMatchObject({ x: 100, y: 20 });
     expect(glyph.contours.map((contour) => contour.svgPath)).toEqual([

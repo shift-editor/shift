@@ -10,6 +10,7 @@ import { FontSessionProvider } from "@/workspace/FontSessionProvider";
 import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
+import { ReadOnlyNoticeDialog } from "@/components/chrome/ReadOnlyNoticeDialog";
 
 /**
  * Routes launcher and workspace windows to their screen trees.
@@ -62,6 +63,7 @@ const FontSessionScreens = () => {
         <div className={catalogActive ? undefined : "relative z-10"}>
           <Outlet />
         </div>
+        {session.workspace ? null : <ReadOnlyNoticeDialog />}
       </SettingsNavigationProvider>
     </GlyphCatalogProvider>
   );

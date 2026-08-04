@@ -25,6 +25,7 @@ export const GlyphCatalog = () => {
     selectedSubCategoryKey,
     setQuery,
     createQuickGlyph,
+    editable,
     selectAll,
     selectCategory,
     selectSubCategory,
@@ -53,7 +54,8 @@ export const GlyphCatalog = () => {
             size="sm"
             aria-label="Create glyph"
             title="Create glyph"
-            onClick={createQuickGlyph}
+            onClick={editable ? createQuickGlyph : undefined}
+            data-read-only-mutation={editable ? undefined : true}
           >
             <PlusIcon className="w-3 h-3 text-muted" />
           </Button>
