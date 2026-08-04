@@ -1,5 +1,5 @@
 import type { Canvas } from "../Canvas";
-import type { GlyphRenderContour } from "@/types/glyphRender";
+import type { GlyphRenderContourShape } from "@/types/glyphRender";
 import { Validate } from "@shift/validation";
 
 /**
@@ -9,7 +9,7 @@ import { Validate } from "@shift/validation";
 export class ControlLines {
   draw(
     canvas: Canvas,
-    contours: readonly GlyphRenderContour[],
+    contours: readonly GlyphRenderContourShape[],
     isLineVisible?: (from: { x: number; y: number }, to: { x: number; y: number }) => boolean,
   ): void {
     const { stroke, widthPx } = canvas.theme.glyph;

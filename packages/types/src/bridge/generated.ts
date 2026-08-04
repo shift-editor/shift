@@ -116,6 +116,8 @@ export interface BridgeApi {
   discardSlugAtlas(generation: number): void
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number): void
+  /** Resolves one source-local glyph without constructing authored font state. */
+  readFontSourceGlyph(glyphIndex: number, coordinates: Array<number>): DisplayGlyph
   /** Builds one source-neutral catalog page through the active format adapter. */
   prepareSourceAtlasPage(pageIndex: number, glyphIndices: Array<number>, coordinates: Array<number>, alignment: number): CatalogAtlasPage
   /** Streams one prepared source page through the same bounded atlas lane. */
@@ -133,65 +135,6 @@ export interface BridgeApi {
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
   mapLocation(location: Location): Location
   getSources(): Array<Source>
-}
-
-export interface CatalogAtlasGlyph {
-  glyphIndex: number
-  atlasGlyph: number
-}
-
-export interface CatalogAtlasPage {
-  generation: number
-  pageIndex: number
-  bandCount: number
-  weightCount: number
-  layout: SlugLayout
-  previewExtents: SlugPreviewExtents
-  glyphs: Array<CatalogAtlasGlyph>
-  weights: Array<number>
-  atlasGlyphCount: number
-  curveCount: number
-  componentCount: number
-}
-
-export interface CatalogAtlasWeights {
-  pageIndex: number
-  weights: Array<number>
-}
-
-export interface CatalogAxis {
-  index: number
-  tag: string
-  name: string
-  hidden: boolean
-  kind: string
-  minimum?: number
-  defaultValue: number
-  maximum?: number
-  values: Array<number>
-}
-
-export interface CatalogDirectory {
-  format: string
-  familyName?: string
-  styleName?: string
-  glyphs: Array<CatalogGlyph>
-  axes: Array<CatalogAxis>
-  defaultLocation: Array<number>
-  metrics?: CatalogMetrics
-}
-
-export interface CatalogGlyph {
-  index: number
-  name: string
-  unicodes: Array<number>
-}
-
-export interface CatalogMetrics {
-  unitsPerEm: number
-  ascender: number
-  descender: number
-  lineGap: number
 }
 
 export interface DocumentState {
@@ -228,62 +171,6 @@ export interface PackageIdentity {
   packageId: string
   canonicalPath: string
   fingerprint: string
-}
-
-export interface SlugAtlas {
-  generation: number
-  bandCount: number
-  weightCount: number
-  layout: SlugLayout
-  previewExtents: SlugPreviewExtents
-  glyphs: Array<SlugGlyph>
-  weightSets: Array<SlugWeightSet>
-  atlasGlyphCount: number
-  curveCount: number
-  componentCount: number
-}
-
-export interface SlugExactSource {
-  sourceId: SourceId
-  glyphIndex: number
-}
-
-export interface SlugGlyph {
-  glyphId: GlyphId
-  defaultGlyph: number
-  exactSources: Array<SlugExactSource>
-}
-
-export interface SlugLayout {
-  baseCurves: SlugSection
-  curveDeltas: SlugSection
-  sparseDeltas: SlugSection
-  glyphs: SlugSection
-  sources: SlugSection
-  sourceAdvances: SlugSection
-  componentGlyphs: SlugSection
-  componentParts: SlugSection
-  components: SlugSection
-  componentSources: SlugSection
-  anchorSources: SlugSection
-  lineBits: SlugSection
-  totalLength: number
-}
-
-export interface SlugPreviewExtents {
-  horizontal: number
-  minimumY: number
-  maximumY: number
-}
-
-export interface SlugSection {
-  offset: number
-  length: number
-}
-
-export interface SlugWeightSet {
-  basis: InterpolationBasis
-  sourceWeightIndices: Array<number>
 }
 export interface AddAnchorsIntent {
   layerId: LayerId
@@ -381,6 +268,65 @@ export interface BooleanOpIntent {
   operation: string
 }
 
+export interface CatalogAtlasGlyph {
+  glyphIndex: number
+  atlasGlyph: number
+}
+
+export interface CatalogAtlasPage {
+  generation: number
+  pageIndex: number
+  bandCount: number
+  weightCount: number
+  layout: SlugLayout
+  previewExtents: SlugPreviewExtents
+  glyphs: Array<CatalogAtlasGlyph>
+  weights: Array<number>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface CatalogAtlasWeights {
+  pageIndex: number
+  weights: Array<number>
+}
+
+export interface CatalogAxis {
+  index: number
+  tag: string
+  name: string
+  hidden: boolean
+  kind: string
+  minimum?: number
+  defaultValue: number
+  maximum?: number
+  values: Array<number>
+}
+
+export interface CatalogDirectory {
+  format: string
+  familyName?: string
+  styleName?: string
+  glyphs: Array<CatalogGlyph>
+  axes: Array<CatalogAxis>
+  defaultLocation: Array<number>
+  metrics?: CatalogMetrics
+}
+
+export interface CatalogGlyph {
+  index: number
+  name: string
+  unicodes: Array<number>
+}
+
+export interface CatalogMetrics {
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  lineGap: number
+}
+
 /** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
 export interface CloneGlyphLayerIntent {
   layerId: LayerId
@@ -476,6 +422,69 @@ export interface DeleteNamedInstanceIntent {
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
 export interface DeleteSourceIntent {
   sourceId: SourceId
+}
+
+export interface DisplayAnchor {
+  name?: string
+  x: number
+  y: number
+}
+
+export interface DisplayComponent {
+  geometryIndex: number
+  transform: Float64Array
+}
+
+export interface DisplayContour {
+  points: DisplayRange
+  closed: boolean
+}
+
+export interface DisplayGeometry {
+  glyphIndex: number
+  contours: DisplayRange
+  components: DisplayRange
+  anchors: DisplayRange
+  guides: DisplayRange
+}
+
+export interface DisplayGlyph {
+  glyphIndex: number
+  location: Float64Array
+  rootGeometry: number
+  geometries: Array<DisplayGeometry>
+  contours: Array<DisplayContour>
+  components: Array<DisplayComponent>
+  pointCoordinates: Float64Array
+  pointKinds: Array<DisplayPointKind>
+  pointSmooth: Array<boolean>
+  pointProvenance: Array<DisplayPointProvenance>
+  pointTrueTypeIndices: Array<number | undefined | null>
+  anchors: Array<DisplayAnchor>
+  guides: Array<DisplayGuide>
+  xAdvance: number
+  yAdvance?: number
+  bounds?: Array<number>
+}
+
+export interface DisplayGuide {
+  kind: DisplayGuideKind
+  x?: number
+  y?: number
+  degrees?: number
+  name?: string
+  color?: string
+}
+
+export type DisplayGuideKind = "horizontal" | "vertical" | "angled";
+
+export type DisplayPointKind = "onCurve" | "quadraticControl" | "cubicControl";
+
+export type DisplayPointProvenance = "native" | "implied";
+
+export interface DisplayRange {
+  start: number
+  count: number
 }
 
 /**
@@ -803,6 +812,62 @@ export interface SetPointSmoothIntent {
 export interface SetXAdvanceIntent {
   layerId: LayerId
   width: number
+}
+
+export interface SlugAtlas {
+  generation: number
+  bandCount: number
+  weightCount: number
+  layout: SlugLayout
+  previewExtents: SlugPreviewExtents
+  glyphs: Array<SlugGlyph>
+  weightSets: Array<SlugWeightSet>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface SlugExactSource {
+  sourceId: SourceId
+  glyphIndex: number
+}
+
+export interface SlugGlyph {
+  glyphId: GlyphId
+  defaultGlyph: number
+  exactSources: Array<SlugExactSource>
+}
+
+export interface SlugLayout {
+  baseCurves: SlugSection
+  curveDeltas: SlugSection
+  sparseDeltas: SlugSection
+  glyphs: SlugSection
+  sources: SlugSection
+  sourceAdvances: SlugSection
+  componentGlyphs: SlugSection
+  componentParts: SlugSection
+  components: SlugSection
+  componentSources: SlugSection
+  anchorSources: SlugSection
+  lineBits: SlugSection
+  totalLength: number
+}
+
+export interface SlugPreviewExtents {
+  horizontal: number
+  minimumY: number
+  maximumY: number
+}
+
+export interface SlugSection {
+  offset: number
+  length: number
+}
+
+export interface SlugWeightSet {
+  basis: InterpolationBasis
+  sourceWeightIndices: Array<number>
 }
 
 export interface Source {

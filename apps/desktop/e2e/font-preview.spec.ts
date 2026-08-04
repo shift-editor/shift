@@ -37,5 +37,11 @@ test.describe("retained font source Grid preview", () => {
 
     await expect(page.locator("header")).toBeVisible();
     await expect(page.locator("aside")).toHaveCount(2);
+
+    await scrollViewport.click({ position: { x: 50, y: 50 } });
+    await page.waitForURL(/#\/editor\//);
+    await expect(page.locator("#scene-canvas")).toBeVisible();
+    await expect(page.locator("#marker-canvas")).toBeVisible();
+    await expect(page.getByText("Advance")).toBeVisible();
   });
 });

@@ -4,7 +4,10 @@ import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphA
 import { computed, type ComputedSignal, type Signal } from "@/lib/signals";
 import type { Editor } from "@/lib/editor/Editor";
 import type { AxisLocation } from "@/types/variation";
+import type { CatalogGlyphKey } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
+import type { GlyphRenderInput } from "@/types/glyphRender";
+import { glyphRenderInput } from "@/lib/model/glyphRenderInput";
 import { glyphCatalogItem } from "./glyphCatalogItem";
 
 /** Projects the authored model into the immutable catalog boundary. */
@@ -77,6 +80,13 @@ export class ShiftGlyphCatalogSource implements GlyphCatalogSource {
       sourceCell,
       this.sourceIdCell,
     ];
+  }
+
+  async openGlyph(glyphKey: CatalogGlyphKey): Promise<GlyphRenderInput> {
+    if (typeof glyphKey !== "string") throw new Error("authored catalog received a glyph index");
+
+    const glyph = await this.#editor.font.loadGlyph(glyphKey);
+    return glyphRenderInput(glyph.renderModelAt(this.#editor.designLocationCell));
   }
 
   async setLocation(location: CatalogLocation): Promise<void> {

@@ -20,6 +20,7 @@ import type {
   AppliedChange,
   CatalogAtlasPage,
   CatalogAtlasWeights,
+  DisplayGlyph,
   FontIntent,
   GlyphId,
   GlyphPreview,
@@ -135,6 +136,16 @@ export class FontSessionClient {
     const snapshot = await this.#require().call("source.snapshot", undefined);
     this.sourceCell.set(snapshot);
     return snapshot;
+  }
+
+  /** Reads one retained source-local glyph at dense source coordinates. */
+  async sourceGlyph(glyphIndex: number, coordinates: readonly number[]): Promise<DisplayGlyph> {
+    await this.connect();
+
+    return this.#require().call("source.glyph", {
+      glyphIndex,
+      coordinates: [...coordinates],
+    });
   }
 
   /** Prepares one retained-source atlas page at dense source coordinates. */

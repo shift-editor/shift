@@ -4,9 +4,12 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{
-  build_binary_atlas_page, font_loader::FontLoader, AxisIndex as SourceAxisIndex, ExportFormat,
-  FontExportRequest, FontExportResult, FontExporter, FontSource, FontView, GlyphIndex,
+  build_binary_atlas_page, font_loader::FontLoader, AxisIndex as SourceAxisIndex,
+  DisplayGlyph as SourceDisplayGlyph, ExportFormat, FontDirectory, FontExportRequest,
+  FontExportResult, FontExporter, FontSource, FontView, GlyphGuide as SourceGlyphGuide, GlyphIndex,
+  GlyphPointKind as SourceGlyphPointKind, PointProvenance as SourcePointProvenance,
   RandomAccessFont, SourceAtlasDescriptor, VariationAxisKind, VariationCoordinate,
+  VariationLocation,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -24,16 +27,23 @@ use shift_slug::{
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
-    NapiFontIntent, NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview,
-    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiInterpolationBasis, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
-    NapiNamedInstance, NapiPointSeed, NapiSource, NapiSourceMetricsInterpolationReplacement,
-    NapiSourceMetricsInterpolationSnapshot,
+    NapiCatalogAtlasGlyph, NapiCatalogAtlasPage, NapiCatalogAtlasWeights, NapiCatalogAxis,
+    NapiCatalogDirectory, NapiCatalogGlyph, NapiCatalogMetrics, NapiDisplayGlyph, NapiFontIntent,
+    NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview, NapiGlyphProjection,
+    NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis,
+    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
+    NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout,
+    NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
+    NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
-  Axis, AxisMapping, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerSnapshot,
-  GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphState, GlyphStructure,
-  InterpolationBasis as WireInterpolationBasis, MetricDefinition, NamedInstance, Source,
-  SourceMetricsInterpolationSnapshot,
+  Axis, AxisMapping, DisplayAnchor as WireDisplayAnchor, DisplayComponent as WireDisplayComponent,
+  DisplayContour as WireDisplayContour, DisplayGeometry as WireDisplayGeometry,
+  DisplayGlyph as WireDisplayGlyph, DisplayGuide as WireDisplayGuide,
+  DisplayPointKind as WireDisplayPointKind, DisplayPointProvenance as WireDisplayPointProvenance,
+  DisplayRange as WireDisplayRange, FontMetadata, FontMetrics, GlyphChangedEntities,
+  GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
+  GlyphState, GlyphStructure, InterpolationBasis as WireInterpolationBasis, MetricDefinition,
+  NamedInstance, Source, SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   AcquireScope, FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError,
@@ -88,137 +98,6 @@ pub struct NapiPackageDraft {
   pub source_path: String,
   pub base_fingerprint: String,
   pub dirty: bool,
-}
-
-#[napi(object)]
-pub struct NapiSlugSection {
-  pub offset: u32,
-  pub length: u32,
-}
-
-#[napi(object)]
-pub struct NapiSlugLayout {
-  pub base_curves: NapiSlugSection,
-  pub curve_deltas: NapiSlugSection,
-  pub sparse_deltas: NapiSlugSection,
-  pub glyphs: NapiSlugSection,
-  pub sources: NapiSlugSection,
-  pub source_advances: NapiSlugSection,
-  pub component_glyphs: NapiSlugSection,
-  pub component_parts: NapiSlugSection,
-  pub components: NapiSlugSection,
-  pub component_sources: NapiSlugSection,
-  pub anchor_sources: NapiSlugSection,
-  pub line_bits: NapiSlugSection,
-  pub total_length: u32,
-}
-
-#[napi(object)]
-pub struct NapiSlugExactSource {
-  #[napi(ts_type = "SourceId")]
-  pub source_id: String,
-  pub glyph_index: u32,
-}
-
-#[napi(object)]
-pub struct NapiSlugGlyph {
-  #[napi(ts_type = "GlyphId")]
-  pub glyph_id: String,
-  pub default_glyph: u32,
-  pub exact_sources: Vec<NapiSlugExactSource>,
-}
-
-#[napi(object)]
-pub struct NapiSlugWeightSet {
-  pub basis: NapiInterpolationBasis,
-  pub source_weight_indices: Vec<u32>,
-}
-
-#[napi(object)]
-pub struct NapiSlugPreviewExtents {
-  pub horizontal: f64,
-  pub minimum_y: f64,
-  pub maximum_y: f64,
-}
-
-#[napi(object)]
-pub struct NapiSlugAtlas {
-  pub generation: u32,
-  pub band_count: u32,
-  pub weight_count: u32,
-  pub layout: NapiSlugLayout,
-  pub preview_extents: NapiSlugPreviewExtents,
-  pub glyphs: Vec<NapiSlugGlyph>,
-  pub weight_sets: Vec<NapiSlugWeightSet>,
-  pub atlas_glyph_count: u32,
-  pub curve_count: u32,
-  pub component_count: u32,
-}
-
-#[napi(object)]
-pub struct NapiCatalogGlyph {
-  pub index: u32,
-  pub name: String,
-  pub unicodes: Vec<u32>,
-}
-
-#[napi(object)]
-pub struct NapiCatalogAxis {
-  pub index: u32,
-  pub tag: String,
-  pub name: String,
-  pub hidden: bool,
-  pub kind: String,
-  pub minimum: Option<f64>,
-  pub default_value: f64,
-  pub maximum: Option<f64>,
-  pub values: Vec<f64>,
-}
-
-#[napi(object)]
-pub struct NapiCatalogMetrics {
-  pub units_per_em: f64,
-  pub ascender: f64,
-  pub descender: f64,
-  pub line_gap: f64,
-}
-
-#[napi(object)]
-pub struct NapiCatalogDirectory {
-  pub format: String,
-  pub family_name: Option<String>,
-  pub style_name: Option<String>,
-  pub glyphs: Vec<NapiCatalogGlyph>,
-  pub axes: Vec<NapiCatalogAxis>,
-  pub default_location: Vec<f64>,
-  pub metrics: Option<NapiCatalogMetrics>,
-}
-
-#[napi(object)]
-pub struct NapiCatalogAtlasGlyph {
-  pub glyph_index: u32,
-  pub atlas_glyph: u32,
-}
-
-#[napi(object)]
-pub struct NapiCatalogAtlasPage {
-  pub generation: u32,
-  pub page_index: u32,
-  pub band_count: u32,
-  pub weight_count: u32,
-  pub layout: NapiSlugLayout,
-  pub preview_extents: NapiSlugPreviewExtents,
-  pub glyphs: Vec<NapiCatalogAtlasGlyph>,
-  pub weights: Vec<f64>,
-  pub atlas_glyph_count: u32,
-  pub curve_count: u32,
-  pub component_count: u32,
-}
-
-#[napi(object)]
-pub struct NapiCatalogAtlasWeights {
-  pub page_index: u32,
-  pub weights: Vec<f64>,
 }
 
 struct SlugAtlasGeneration {
@@ -413,6 +292,151 @@ fn napi_catalog_directory(source: &FontSource) -> BridgeResult<NapiCatalogDirect
       line_gap: metrics.line_gap,
     }),
   })
+}
+
+fn source_location(
+  directory: &FontDirectory,
+  coordinates: Vec<f64>,
+) -> BridgeResult<VariationLocation> {
+  if coordinates.len() != directory.axes.len() {
+    return Err(BridgeError::InvalidInput {
+      kind: "catalog location coordinate count",
+      value: coordinates.len().to_string(),
+    });
+  }
+
+  let source_coordinates = coordinates
+    .into_iter()
+    .enumerate()
+    .map(|(index, value)| VariationCoordinate {
+      axis: SourceAxisIndex::new(index as u32),
+      value,
+    })
+    .collect::<Vec<_>>();
+  Ok(directory.location(&source_coordinates)?)
+}
+
+fn wire_display_glyph(glyph: SourceDisplayGlyph) -> WireDisplayGlyph {
+  WireDisplayGlyph {
+    glyph_index: glyph.glyph.to_u32(),
+    location: glyph.location.coordinates().to_vec(),
+    root_geometry: glyph.root_geometry.to_u32(),
+    geometries: glyph
+      .geometries
+      .into_vec()
+      .into_iter()
+      .map(|geometry| WireDisplayGeometry {
+        glyph_index: geometry.glyph.to_u32(),
+        contours: wire_display_range(geometry.contours.start, geometry.contours.count),
+        components: wire_display_range(geometry.components.start, geometry.components.count),
+        anchors: wire_display_range(geometry.anchors.start, geometry.anchors.count),
+        guides: wire_display_range(geometry.guides.start, geometry.guides.count),
+      })
+      .collect(),
+    contours: glyph
+      .contours
+      .into_vec()
+      .into_iter()
+      .map(|contour| WireDisplayContour {
+        points: wire_display_range(contour.points.start, contour.points.count),
+        closed: contour.closed,
+      })
+      .collect(),
+    components: glyph
+      .components
+      .into_vec()
+      .into_iter()
+      .map(|component| WireDisplayComponent {
+        geometry_index: component.geometry.to_u32(),
+        transform: [
+          component.transform.xx,
+          component.transform.xy,
+          component.transform.yx,
+          component.transform.yy,
+          component.transform.dx,
+          component.transform.dy,
+        ],
+      })
+      .collect(),
+    point_coordinates: glyph
+      .points
+      .iter()
+      .flat_map(|point| [point.x, point.y])
+      .collect(),
+    point_kinds: glyph
+      .points
+      .iter()
+      .map(|point| match point.kind {
+        SourceGlyphPointKind::OnCurve => WireDisplayPointKind::OnCurve,
+        SourceGlyphPointKind::QuadraticControl => WireDisplayPointKind::QuadraticControl,
+        SourceGlyphPointKind::CubicControl => WireDisplayPointKind::CubicControl,
+      })
+      .collect(),
+    point_smooth: glyph.points.iter().map(|point| point.smooth).collect(),
+    point_provenance: glyph
+      .points
+      .iter()
+      .map(|point| match point.provenance {
+        SourcePointProvenance::Native { .. } => WireDisplayPointProvenance::Native,
+        SourcePointProvenance::Implied => WireDisplayPointProvenance::Implied,
+      })
+      .collect(),
+    point_true_type_indices: glyph
+      .points
+      .iter()
+      .map(|point| match point.provenance {
+        SourcePointProvenance::Native { ttf_point_index } => {
+          ttf_point_index.map(|index| index.to_u32())
+        }
+        SourcePointProvenance::Implied => None,
+      })
+      .collect(),
+    anchors: glyph
+      .anchors
+      .into_vec()
+      .into_iter()
+      .map(|anchor| WireDisplayAnchor {
+        name: anchor.name,
+        x: anchor.x,
+        y: anchor.y,
+      })
+      .collect(),
+    guides: glyph
+      .guides
+      .into_vec()
+      .into_iter()
+      .map(|guide| match guide {
+        SourceGlyphGuide::Horizontal { y, name, color } => {
+          WireDisplayGuide::Horizontal { y, name, color }
+        }
+        SourceGlyphGuide::Vertical { x, name, color } => {
+          WireDisplayGuide::Vertical { x, name, color }
+        }
+        SourceGlyphGuide::Angled {
+          x,
+          y,
+          degrees,
+          name,
+          color,
+        } => WireDisplayGuide::Angled {
+          x,
+          y,
+          degrees,
+          name,
+          color,
+        },
+      })
+      .collect(),
+    x_advance: glyph.metrics.x_advance,
+    y_advance: glyph.metrics.y_advance,
+    bounds: glyph
+      .bounds
+      .map(|bounds| [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]),
+  }
+}
+
+fn wire_display_range(start: u32, count: u32) -> WireDisplayRange {
+  WireDisplayRange { start, count }
 }
 
 fn napi_source_atlas_page(
@@ -1260,6 +1284,19 @@ impl Bridge {
     self.discard_slug_atlas(generation);
   }
 
+  /// Resolves one source-local glyph without constructing authored font state.
+  #[napi]
+  pub fn read_font_source_glyph(
+    &self,
+    glyph_index: u32,
+    coordinates: Vec<f64>,
+  ) -> errors::Result<NapiDisplayGlyph> {
+    let source = self.font_source()?;
+    let location = source_location(source.directory(), coordinates)?;
+    let glyph = source.read_glyph(GlyphIndex::new(glyph_index), &location)?;
+    Ok(wire_display_glyph(glyph).into())
+  }
+
   /// Builds one source-neutral catalog page through the active format adapter.
   #[napi]
   pub fn prepare_source_atlas_page(
@@ -1276,22 +1313,7 @@ impl Bridge {
     let generation = self.slug_generation;
     let (atlas, descriptor, location, layout) = {
       let source = self.font_source()?;
-      let directory = source.directory();
-      if coordinates.len() != directory.axes.len() {
-        return Err(BridgeError::InvalidInput {
-          kind: "catalog location coordinate count",
-          value: coordinates.len().to_string(),
-        });
-      }
-      let source_coordinates = coordinates
-        .into_iter()
-        .enumerate()
-        .map(|(index, value)| VariationCoordinate {
-          axis: SourceAxisIndex::new(index as u32),
-          value,
-        })
-        .collect::<Vec<_>>();
-      let location = directory.location(&source_coordinates)?;
+      let location = source_location(source.directory(), coordinates)?;
       let roots = glyph_indices
         .into_iter()
         .map(GlyphIndex::new)
@@ -1355,22 +1377,7 @@ impl Bridge {
     coordinates: Vec<f64>,
   ) -> errors::Result<Vec<NapiCatalogAtlasWeights>> {
     let source = self.font_source()?;
-    let directory = source.directory();
-    if coordinates.len() != directory.axes.len() {
-      return Err(BridgeError::InvalidInput {
-        kind: "catalog location coordinate count",
-        value: coordinates.len().to_string(),
-      });
-    }
-    let source_coordinates = coordinates
-      .into_iter()
-      .enumerate()
-      .map(|(index, value)| VariationCoordinate {
-        axis: SourceAxisIndex::new(index as u32),
-        value,
-      })
-      .collect::<Vec<_>>();
-    let location = directory.location(&source_coordinates)?;
+    let location = source_location(source.directory(), coordinates)?;
 
     self
       .source_atlas_descriptors

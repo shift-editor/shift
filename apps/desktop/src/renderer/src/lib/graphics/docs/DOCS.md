@@ -6,17 +6,19 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 
 - **Architecture Invariant:** `ContourPath` is a non-reactive value for one transformed contour. It owns canonical path commands and independently lazy tight bounds, SVG text, and Canvas `Path2D`; glyph identity, component provenance, locations, and signal ownership remain in the model layer.
 
-- **Architecture Invariant:** `Renderer` owns the `MarkerLayer` lifecycle. `CanvasContextProvider` only reports DOM canvas mount, resize, and unmount events.
+- **Architecture Invariant:** Each selected-glyph canvas host owns its `MarkerLayer` lifecycle. Authored glyphs use `Renderer`; retained `DisplayGlyph` values use `DisplayGlyphCanvas`. Both feed the same `Handles`, `ControlLines`, `Anchors`, `Guides`, `OutlineRenderer`, `Canvas`, and marker backend rather than maintaining format-specific drawing code.
 
 - **Architecture Invariant:** `ResidentGlyphLayer` is the generic catalog-preview boundary. It owns one WebGPU adapter/device/context and independently replaceable root pages from `GlyphAtlasSource`; authored and retained-source acquisition remain behind adapters, and Slug names and packed-layout knowledge never enter React catalog components.
 
-- **Architecture Invariant:** Both session modes expose one immutable `GlyphCatalogSource`. The shared Grid consumes source-neutral glyph keys, dense external coordinates, catalog metrics, invalidation, and `GlyphAtlasSource`; retained `GlyphIndex` values never become authored `GlyphId` values.
+- **Architecture Invariant:** Both session modes expose one immutable `GlyphCatalogSource`. The shared Grid consumes source-neutral glyph keys, dense external coordinates, catalog metrics, invalidation, and `GlyphAtlasSource`; retained `GlyphIndex` values never become authored `GlyphId` values. The existing `openGlyph` interaction dispatches once through the catalog adapter: authored catalogs use `Font.loadGlyph`, while retained catalogs expose `RandomAccessFont::read_glyph` through the shared session lane.
 
 - **Architecture Invariant:** Catalog route activity and GPU readiness are independent. Leaving `/home` makes the catalog inert and keeps it painted behind the opaque editor without destroying the resident layer or resizing its canvas. Returning submits one cheap redraw because Chromium may discard the WebGPU canvas presentation. Initial readiness requires the complete fixed-page set and a completed submitted frame; after that, scrolling performs no atlas acquisition or geometry upload.
 
 - **Architecture Invariant:** Atlas invalidation never removes a presented root before every affected replacement page is uploaded. Axis, source, mapping, directory, and structural changes retain the prior complete frame, build the complete affected fixed-page set at the new authored revision, and install that set in one synchronous glyph-map replacement. One bounded native or cached page occupies the utility lane at a time, while page acquisition remains entirely outside the scroll path.
 
 - **Architecture Invariant:** Preview cell geometry is fixed. Axis and source changes redraw glyph contents without changing columns, row pitch, or cell dimensions. Each visible glyph unions its exact resolved bounds with the metrics-and-advance viewport, retains the metrics-derived default pixels per em when it fits, and otherwise scales down within its box.
+
+- **Architecture Invariant:** `DisplayGlyphRenderModel` validates the generated retained-glyph arenas before adapting them to root-space `ContourPath` values and source-independent handle points. Every root and component contour contributes to the outline, while only direct root contours contribute handles and control lines, matching authored `GlyphRenderModel` behavior.
 
 - **Architecture Invariant:** **CRITICAL**: The instance buffer layout (attribute offsets in the draw command) must exactly match the packing order in `MarkerHandleRenderer.#writeInstance`. If either side changes stride/offset, handles render garbage with no error.
 
@@ -37,6 +39,8 @@ graphics/
     AuthoredGlyphAtlasSource.ts — authored workspace page adapter
     PreviewGlyphAtlasSource.ts  — retained source page adapter
     ResidentGlyphLayer.ts       — WebGPU catalog device, complete page-set uploads, atomic replacement, draw, and teardown
+  ../model/DisplayGlyphRenderModel.ts — validated retained glyph arenas -> shared canvas inputs
+  ../../components/editor/DisplayGlyphCanvas.tsx — retained selected-glyph canvas host
 ```
 
 Supporting files live in the editor rendering module:
@@ -90,6 +94,10 @@ editor/rendering/markers/
 `GlyphCatalogLayout` owns fixed shared cell dimensions independent of atlas pages and design location. The preview shader reads each visible glyph's exact resolved scratch bounds, unions them with the metrics-and-advance viewport, and caps its fit scale at the metrics-derived `defaultPixelsPerEm`. Oversized glyphs shrink individually instead of clipping or resizing the Grid.
 
 Set `SHIFT_PROFILE_SLUG_ATLAS=1` for release measurements. Main propagates that opt-in to the renderer without adding a product DTO. Rust reports native acquisition/compilation/layout phases, utility reports cache lookup, bounded stream, cache finalization and publication, and renderer reports complete page-set prepare, stream/upload, atomic installation and first-frame GPU completion. Ordinary runs omit this profiling telemetry.
+
+### Retained selected-glyph rendering
+
+`GlyphCatalogSource.openGlyph` is the single Grid interaction. `ShiftGlyphCatalogSource` keeps the existing authored `Font.loadGlyph` path. `PreviewGlyphCatalogSource` requests one generated `DisplayGlyph` through `source.glyph`, then `DisplayGlyphRenderModel` traverses its validated component graph, applies transforms, and builds the same `ContourPath` and handle inputs used by authored rendering. `DisplayGlyphCanvas` retains the shared Home/editor shell, draws guides and the complete outline, and sends only direct-root points to `Handles` and `ControlLines`. Location changes retain the previous model until the replacement source read completes.
 
 ### Per-frame draw pipeline
 

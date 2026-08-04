@@ -5,6 +5,7 @@ import type {
   CatalogAtlasPage,
   CatalogAtlasWeights,
   CatalogDirectory,
+  DisplayGlyph,
   FontIntent,
   FontMetadata,
   FontMetrics,
@@ -196,6 +197,10 @@ export type ShellEventMap = {
 export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
   "source.snapshot": { request: void; response: FontSourceSnapshot | null };
+  "source.glyph": {
+    request: { glyphIndex: number; coordinates: number[] };
+    response: DisplayGlyph;
+  };
   "source.atlasPagePrepare": {
     request: FontSourceAtlasPageRequest;
     response: CatalogAtlasPage;

@@ -101,6 +101,8 @@ export declare class Bridge {
   discardSlugAtlas(generation: number): void
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number): void
+  /** Resolves one source-local glyph without constructing authored font state. */
+  readFontSourceGlyph(glyphIndex: number, coordinates: Array<number>): NapiDisplayGlyph
   /** Builds one source-neutral catalog page through the active format adapter. */
   prepareSourceAtlasPage(pageIndex: number, glyphIndices: Array<number>, coordinates: Array<number>, alignment: number): NapiCatalogAtlasPage
   /** Streams one prepared source page through the same bounded atlas lane. */
@@ -118,65 +120,6 @@ export declare class Bridge {
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
-}
-
-export interface NapiCatalogAtlasGlyph {
-  glyphIndex: number
-  atlasGlyph: number
-}
-
-export interface NapiCatalogAtlasPage {
-  generation: number
-  pageIndex: number
-  bandCount: number
-  weightCount: number
-  layout: NapiSlugLayout
-  previewExtents: NapiSlugPreviewExtents
-  glyphs: Array<NapiCatalogAtlasGlyph>
-  weights: Array<number>
-  atlasGlyphCount: number
-  curveCount: number
-  componentCount: number
-}
-
-export interface NapiCatalogAtlasWeights {
-  pageIndex: number
-  weights: Array<number>
-}
-
-export interface NapiCatalogAxis {
-  index: number
-  tag: string
-  name: string
-  hidden: boolean
-  kind: string
-  minimum?: number
-  defaultValue: number
-  maximum?: number
-  values: Array<number>
-}
-
-export interface NapiCatalogDirectory {
-  format: string
-  familyName?: string
-  styleName?: string
-  glyphs: Array<NapiCatalogGlyph>
-  axes: Array<NapiCatalogAxis>
-  defaultLocation: Array<number>
-  metrics?: NapiCatalogMetrics
-}
-
-export interface NapiCatalogGlyph {
-  index: number
-  name: string
-  unicodes: Array<number>
-}
-
-export interface NapiCatalogMetrics {
-  unitsPerEm: number
-  ascender: number
-  descender: number
-  lineGap: number
 }
 
 export interface NapiDocumentState {
@@ -213,62 +156,6 @@ export interface NapiPackageIdentity {
   packageId: string
   canonicalPath: string
   fingerprint: string
-}
-
-export interface NapiSlugAtlas {
-  generation: number
-  bandCount: number
-  weightCount: number
-  layout: NapiSlugLayout
-  previewExtents: NapiSlugPreviewExtents
-  glyphs: Array<NapiSlugGlyph>
-  weightSets: Array<NapiSlugWeightSet>
-  atlasGlyphCount: number
-  curveCount: number
-  componentCount: number
-}
-
-export interface NapiSlugExactSource {
-  sourceId: SourceId
-  glyphIndex: number
-}
-
-export interface NapiSlugGlyph {
-  glyphId: GlyphId
-  defaultGlyph: number
-  exactSources: Array<NapiSlugExactSource>
-}
-
-export interface NapiSlugLayout {
-  baseCurves: NapiSlugSection
-  curveDeltas: NapiSlugSection
-  sparseDeltas: NapiSlugSection
-  glyphs: NapiSlugSection
-  sources: NapiSlugSection
-  sourceAdvances: NapiSlugSection
-  componentGlyphs: NapiSlugSection
-  componentParts: NapiSlugSection
-  components: NapiSlugSection
-  componentSources: NapiSlugSection
-  anchorSources: NapiSlugSection
-  lineBits: NapiSlugSection
-  totalLength: number
-}
-
-export interface NapiSlugPreviewExtents {
-  horizontal: number
-  minimumY: number
-  maximumY: number
-}
-
-export interface NapiSlugSection {
-  offset: number
-  length: number
-}
-
-export interface NapiSlugWeightSet {
-  basis: NapiInterpolationBasis
-  sourceWeightIndices: Array<number>
 }
 export interface NapiAddAnchorsIntent {
   layerId: LayerId
@@ -372,6 +259,65 @@ export interface NapiBooleanOpIntent {
   operation: string
 }
 
+export interface NapiCatalogAtlasGlyph {
+  glyphIndex: number
+  atlasGlyph: number
+}
+
+export interface NapiCatalogAtlasPage {
+  generation: number
+  pageIndex: number
+  bandCount: number
+  weightCount: number
+  layout: NapiSlugLayout
+  previewExtents: NapiSlugPreviewExtents
+  glyphs: Array<NapiCatalogAtlasGlyph>
+  weights: Array<number>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface NapiCatalogAtlasWeights {
+  pageIndex: number
+  weights: Array<number>
+}
+
+export interface NapiCatalogAxis {
+  index: number
+  tag: string
+  name: string
+  hidden: boolean
+  kind: string
+  minimum?: number
+  defaultValue: number
+  maximum?: number
+  values: Array<number>
+}
+
+export interface NapiCatalogDirectory {
+  format: string
+  familyName?: string
+  styleName?: string
+  glyphs: Array<NapiCatalogGlyph>
+  axes: Array<NapiCatalogAxis>
+  defaultLocation: Array<number>
+  metrics?: NapiCatalogMetrics
+}
+
+export interface NapiCatalogGlyph {
+  index: number
+  name: string
+  unicodes: Array<number>
+}
+
+export interface NapiCatalogMetrics {
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  lineGap: number
+}
+
 /** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
 export interface NapiCloneGlyphLayerIntent {
   layerId: LayerId
@@ -467,6 +413,80 @@ export interface NapiDeleteNamedInstanceIntent {
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
 export interface NapiDeleteSourceIntent {
   sourceId: SourceId
+}
+
+export interface NapiDisplayAnchor {
+  name?: string
+  x: number
+  y: number
+}
+
+export interface NapiDisplayComponent {
+  geometryIndex: number
+  transform: Float64Array
+}
+
+export interface NapiDisplayContour {
+  points: NapiDisplayRange
+  closed: boolean
+}
+
+export interface NapiDisplayGeometry {
+  glyphIndex: number
+  contours: NapiDisplayRange
+  components: NapiDisplayRange
+  anchors: NapiDisplayRange
+  guides: NapiDisplayRange
+}
+
+export interface NapiDisplayGlyph {
+  glyphIndex: number
+  location: Float64Array
+  rootGeometry: number
+  geometries: Array<NapiDisplayGeometry>
+  contours: Array<NapiDisplayContour>
+  components: Array<NapiDisplayComponent>
+  pointCoordinates: Float64Array
+  pointKinds: Array<NapiDisplayPointKind>
+  pointSmooth: Array<boolean>
+  pointProvenance: Array<NapiDisplayPointProvenance>
+  pointTrueTypeIndices: Array<number | undefined | null>
+  anchors: Array<NapiDisplayAnchor>
+  guides: Array<NapiDisplayGuide>
+  xAdvance: number
+  yAdvance?: number
+  bounds?: Array<number>
+}
+
+export interface NapiDisplayGuide {
+  kind: NapiDisplayGuideKind
+  x?: number
+  y?: number
+  degrees?: number
+  name?: string
+  color?: string
+}
+
+export declare const enum NapiDisplayGuideKind {
+  Horizontal = 'horizontal',
+  Vertical = 'vertical',
+  Angled = 'angled'
+}
+
+export declare const enum NapiDisplayPointKind {
+  OnCurve = 'onCurve',
+  QuadraticControl = 'quadraticControl',
+  CubicControl = 'cubicControl'
+}
+
+export declare const enum NapiDisplayPointProvenance {
+  Native = 'native',
+  Implied = 'implied'
+}
+
+export interface NapiDisplayRange {
+  start: number
+  count: number
 }
 
 /**
@@ -804,6 +824,62 @@ export interface NapiSetPointSmoothIntent {
 export interface NapiSetXAdvanceIntent {
   layerId: LayerId
   width: number
+}
+
+export interface NapiSlugAtlas {
+  generation: number
+  bandCount: number
+  weightCount: number
+  layout: NapiSlugLayout
+  previewExtents: NapiSlugPreviewExtents
+  glyphs: Array<NapiSlugGlyph>
+  weightSets: Array<NapiSlugWeightSet>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface NapiSlugExactSource {
+  sourceId: SourceId
+  glyphIndex: number
+}
+
+export interface NapiSlugGlyph {
+  glyphId: GlyphId
+  defaultGlyph: number
+  exactSources: Array<NapiSlugExactSource>
+}
+
+export interface NapiSlugLayout {
+  baseCurves: NapiSlugSection
+  curveDeltas: NapiSlugSection
+  sparseDeltas: NapiSlugSection
+  glyphs: NapiSlugSection
+  sources: NapiSlugSection
+  sourceAdvances: NapiSlugSection
+  componentGlyphs: NapiSlugSection
+  componentParts: NapiSlugSection
+  components: NapiSlugSection
+  componentSources: NapiSlugSection
+  anchorSources: NapiSlugSection
+  lineBits: NapiSlugSection
+  totalLength: number
+}
+
+export interface NapiSlugPreviewExtents {
+  horizontal: number
+  minimumY: number
+  maximumY: number
+}
+
+export interface NapiSlugSection {
+  offset: number
+  length: number
+}
+
+export interface NapiSlugWeightSet {
+  basis: NapiInterpolationBasis
+  sourceWeightIndices: Array<number>
 }
 
 export interface NapiSource {

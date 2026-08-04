@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router";
 import type { GlyphCategory, GlyphCategoryCatalog } from "@shift/glyph-info";
-import type { GlyphName } from "@shift/types";
+import { asGlyphIndex, type GlyphIndex, type GlyphName } from "@shift/types";
 import { effect, useSignalState } from "@/lib/signals";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
@@ -16,6 +16,7 @@ export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
 const useGlyphCatalogState = (): GlyphCatalogState => {
   const session = useFontSession();
   const navigate = useNavigate();
+  const routeLocation = useLocation();
   const glyphInfo = getGlyphInfo();
   const catalog = session.catalog;
   const workspace = session.workspace;
@@ -25,6 +26,9 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   const axes = useSignalState(catalog.axesCell);
   const metrics = useSignalState(catalog.metricsCell);
   const sourceId = useSignalState(catalog.sourceIdCell);
+  const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogState["openedGlyph"]>(null);
+  const openedGlyphKeyRef = useRef<GlyphCatalogItem["id"] | null>(null);
+  const openGenerationRef = useRef(0);
   const observeAtlasInvalidation = useCallback<GlyphCatalogState["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
@@ -83,15 +87,86 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     selectedSubCategoryKey,
   ]);
 
-  const openGlyph = useMemo<GlyphCatalogState["openGlyph"]>(() => {
-    if (!workspace) return null;
+  const openGlyph = useCallback<GlyphCatalogState["openGlyph"]>(
+    async (glyph) => {
+      const generation = openGenerationRef.current + 1;
+      openGenerationRef.current = generation;
+      openedGlyphKeyRef.current = glyph.id;
+      const renderGlyph = await catalog.openGlyph(glyph.id);
+      if (openGenerationRef.current !== generation) return;
 
-    return async (glyph) => {
-      if (typeof glyph.id !== "string") throw new Error("authored catalog received a glyph index");
-      await workspace.font.loadGlyph(glyph.id);
+      setOpenedGlyph(renderGlyph);
       navigate(`/editor/${encodeURIComponent(glyph.id)}`);
+    },
+    [catalog, navigate],
+  );
+
+  useEffect(() => {
+    if (workspace) return;
+
+    const sourceGlyphIndex = retainedGlyphIndexFromPath(routeLocation.pathname);
+    if (sourceGlyphIndex === null) {
+      if (routeLocation.pathname.startsWith("/editor/")) {
+        openedGlyphKeyRef.current = null;
+        setOpenedGlyph(null);
+      }
+      return;
+    }
+    if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphIndex)) {
+      openedGlyphKeyRef.current = null;
+      setOpenedGlyph(null);
+      return;
+    }
+    const glyphIndex = sourceGlyphIndex;
+    if (openedGlyphKeyRef.current === glyphIndex) return;
+
+    openedGlyphKeyRef.current = glyphIndex;
+    const generation = openGenerationRef.current + 1;
+    openGenerationRef.current = generation;
+    let active = true;
+
+    async function openRouteGlyph(): Promise<void> {
+      try {
+        const renderGlyph = await catalog.openGlyph(glyphIndex);
+        if (!active || openGenerationRef.current !== generation) return;
+
+        setOpenedGlyph(renderGlyph);
+      } catch (error) {
+        console.error("failed to open route glyph", error);
+      }
+    }
+
+    void openRouteGlyph();
+    return () => {
+      active = false;
     };
-  }, [navigate, workspace]);
+  }, [availableGlyphs, catalog, routeLocation.pathname, workspace]);
+
+  useEffect(() => {
+    const glyphKey = openedGlyphKeyRef.current;
+    if (typeof glyphKey !== "number") return;
+    const sourceGlyphIndex = glyphKey;
+
+    const generation = openGenerationRef.current + 1;
+    openGenerationRef.current = generation;
+    let active = true;
+
+    async function refreshOpenedGlyph(): Promise<void> {
+      try {
+        const renderGlyph = await catalog.openGlyph(sourceGlyphIndex);
+        if (!active || openGenerationRef.current !== generation) return;
+
+        setOpenedGlyph(renderGlyph);
+      } catch (error) {
+        console.error("failed to refresh opened glyph", error);
+      }
+    }
+
+    void refreshOpenedGlyph();
+    return () => {
+      active = false;
+    };
+  }, [catalog, location]);
 
   const createQuickGlyph = useCallback<GlyphCatalogState["createQuickGlyph"]>(() => {
     if (!workspace) throw new Error("preview catalog cannot create glyphs");
@@ -118,6 +193,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     metrics,
     sourceId,
     editable: workspace !== null,
+    openedGlyph,
     openGlyph,
     createQuickGlyph,
     selectAll: () => {
@@ -137,4 +213,19 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
 
 function glyphKey(glyph: GlyphCatalogItem) {
   return glyph.id;
+}
+
+function retainedGlyphIndexFromPath(pathname: string): GlyphIndex | null {
+  const prefix = "/editor/";
+  if (!pathname.startsWith(prefix)) return null;
+
+  let value: string;
+  try {
+    value = decodeURIComponent(pathname.slice(prefix.length));
+  } catch {
+    return null;
+  }
+
+  const glyphIndex = Number(value);
+  return Number.isSafeInteger(glyphIndex) && glyphIndex >= 0 ? asGlyphIndex(glyphIndex) : null;
 }

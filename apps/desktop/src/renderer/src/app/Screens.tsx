@@ -9,6 +9,7 @@ import { useEditor, useFont, useFontSession } from "@/workspace/WorkspaceContext
 import { FontSessionProvider } from "@/workspace/FontSessionProvider";
 import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
+import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 
 /**
  * Routes launcher and workspace windows to their screen trees.
@@ -48,19 +49,21 @@ const FontSessionScreens = () => {
   const catalogActive = location.pathname === "/home";
 
   return (
-    <SettingsNavigationProvider>
-      {session.workspace ? <ShiftSessionSetup /> : null}
-      <div
-        aria-hidden={!catalogActive}
-        className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
-        inert={!catalogActive}
-      >
-        <Home />
-      </div>
-      <div className={catalogActive ? undefined : "relative z-10"}>
-        <Outlet />
-      </div>
-    </SettingsNavigationProvider>
+    <GlyphCatalogProvider>
+      <SettingsNavigationProvider>
+        {session.workspace ? <ShiftSessionSetup /> : null}
+        <div
+          aria-hidden={!catalogActive}
+          className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
+          inert={!catalogActive}
+        >
+          <Home />
+        </div>
+        <div className={catalogActive ? undefined : "relative z-10"}>
+          <Outlet />
+        </div>
+      </SettingsNavigationProvider>
+    </GlyphCatalogProvider>
   );
 };
 
