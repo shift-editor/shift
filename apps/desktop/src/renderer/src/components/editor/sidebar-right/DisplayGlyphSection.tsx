@@ -1,34 +1,63 @@
 import { useParams } from "react-router";
-import { SidebarSection } from "./SidebarSection";
+import { asGlyphIndex } from "@shift/types";
+import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
+import { EditableSidebarInput } from "./EditableSidebarInput";
+import { SidebarSection } from "./SidebarSection";
 
-/** Passive selected-glyph details shared by retained source sessions. */
+/** Authored Glyph sidebar presentation backed by retained display values. */
 export const DisplayGlyphSection = () => {
   const { glyphId } = useParams();
   const { availableGlyphs, openedGlyph } = useGlyphCatalog();
-  const glyphIndex = glyphId === undefined ? null : Number(glyphId);
+  const parsedIndex = glyphId === undefined ? Number.NaN : Number(glyphId);
+  const glyphIndex =
+    Number.isSafeInteger(parsedIndex) && parsedIndex >= 0 ? asGlyphIndex(parsedIndex) : null;
   const glyph =
-    glyphIndex === null || !Number.isSafeInteger(glyphIndex)
+    glyphIndex === null
       ? null
       : (availableGlyphs.find((candidate) => candidate.id === glyphIndex) ?? null);
+  const bounds = openedGlyph?.bounds ?? null;
+  const leftSidebearing = bounds ? Math.round(bounds.min.x) : null;
+  const rightSidebearing =
+    bounds && openedGlyph ? Math.round(openedGlyph.xAdvance - bounds.max.x) : null;
+  let unicode = "Unencoded";
+  let glyphName = "No glyph selected";
+  if (glyph) {
+    glyphName = glyph.displayName;
+    if (glyph.unicode !== null) unicode = formatCodepointAsUPlus(glyph.unicode);
+  }
 
   return (
     <SidebarSection title="Glyph">
-      {glyph && openedGlyph ? (
-        <div className="flex flex-col gap-2 text-ui">
-          <div className="font-medium text-primary">{glyph.name}</div>
-          <div className="font-mono text-muted">
-            {glyph.unicode === null ? "Unencoded" : formatCodepointAsUPlus(glyph.unicode)}
+      <main className="flex flex-col items-center">
+        <div className="flex flex-col items-center gap-0.5 mb-2">
+          <div className="font-mono text-sm">{unicode}</div>
+        </div>
+        <div className="flex justify-center items-center gap-2">
+          <div className="contents" data-read-only-mutation>
+            <EditableSidebarInput label="LSB" className="text-right" value={leftSidebearing} />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted">Advance</span>
-            <span className="font-mono text-primary">{Math.round(openedGlyph.xAdvance)}</span>
+          <div className="px-2">
+            <PlaceholderGlyph />
+          </div>
+          <div className="contents" data-read-only-mutation>
+            <EditableSidebarInput
+              label="RSB"
+              labelPosition="right"
+              className="text-left"
+              value={rightSidebearing}
+            />
           </div>
         </div>
-      ) : (
-        <p className="text-ui text-muted">No glyph selected</p>
-      )}
+        <div className="mt-2" data-read-only-mutation>
+          <EditableSidebarInput
+            className="text-center"
+            value={openedGlyph ? Math.round(openedGlyph.xAdvance) : null}
+          />
+        </div>
+        <div className="font-sans mt-2 text-sm">{glyphName}</div>
+      </main>
     </SidebarSection>
   );
 };

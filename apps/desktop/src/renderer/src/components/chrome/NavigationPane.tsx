@@ -38,8 +38,8 @@ export const NavigationPane = () => {
                 aria-label={route.description}
                 variant="ghost"
                 size="icon"
-                disabled={route.kind === "dialog" && !workspace}
-                onClick={onClick}
+                data-read-only-mutation={route.kind === "dialog" && !workspace ? true : undefined}
+                onClick={route.kind === "dialog" && !workspace ? undefined : onClick}
               />
             );
           })}

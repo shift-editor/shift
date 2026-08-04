@@ -21,7 +21,7 @@ export const RightSidebar = () => {
         {session.workspace ? (
           <AuthoredZoom />
         ) : (
-          <span className="text-ui text-muted">Read only</span>
+          <span className="text-ui font-medium text-muted">100%</span>
         )}
       </div>
       <Separator />
@@ -66,7 +66,10 @@ const AuthoredSections = () => {
 };
 
 const DisplaySections = () => (
-  <div className="px-3 py-3">
-    <DisplayGlyphSection />
-  </div>
+  <TransformOriginProvider>
+    <div className="px-3 py-3">
+      <DisplayGlyphSection />
+    </div>
+    <Separator />
+  </TransformOriginProvider>
 );

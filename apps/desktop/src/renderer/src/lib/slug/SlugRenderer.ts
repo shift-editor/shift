@@ -110,7 +110,7 @@ export class SlugRenderer {
     }
 
     const encoder = this.#device.createCommandEncoder({ label: "shift Slug frame" });
-    let rendered = false;
+    const renderCounts = new Map<SlugAtlasPage, number>();
     for (const [page, instances] of instancesByPage) {
       const packed = page.atlas.frame(instances);
       if (packed.instanceCount === 0) continue;
@@ -131,39 +131,28 @@ export class SlugRenderer {
         pass.dispatchWorkgroups(packed.instanceCount * page.atlas.bandCount * 2);
         pass.end();
       }
-      {
-        const pass = encoder.beginRenderPass({
-          label: "shift Slug render",
-          colorAttachments: [
-            {
-              view: this.#context.getCurrentTexture().createView(),
-              loadOp: rendered ? "load" : "clear",
-              clearValue: { r: 0, g: 0, b: 0, a: 0 },
-              storeOp: "store",
-            },
-          ],
-        });
-        pass.setPipeline(this.#pipelines.render);
-        setGroups(pass, page.buffers.renderGroups);
-        pass.draw(6, packed.instanceCount);
-        pass.end();
-      }
-      rendered = true;
+      renderCounts.set(page, packed.instanceCount);
     }
 
-    if (!rendered) {
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: this.#context.getCurrentTexture().createView(),
-            loadOp: "clear",
-            clearValue: { r: 0, g: 0, b: 0, a: 0 },
-            storeOp: "store",
-          },
-        ],
-      });
-      pass.end();
+    const pass = encoder.beginRenderPass({
+      label: "shift Slug render",
+      colorAttachments: [
+        {
+          view: this.#context.getCurrentTexture().createView(),
+          loadOp: "clear",
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          storeOp: "store",
+        },
+      ],
+    });
+    if (renderCounts.size > 0) {
+      pass.setPipeline(this.#pipelines.render);
+      for (const [page, instanceCount] of renderCounts) {
+        setGroups(pass, page.buffers.renderGroups);
+        pass.draw(6, instanceCount);
+      }
     }
+    pass.end();
     this.#device.queue.submit([encoder.finish({ label: "shift Slug frame" })]);
   }
 
