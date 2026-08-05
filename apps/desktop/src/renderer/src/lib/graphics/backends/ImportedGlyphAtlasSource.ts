@@ -1,15 +1,14 @@
-import { asGlyphIndex } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import type {
-  CatalogGlyphKey,
   GlyphAtlasPageDescriptor,
   GlyphAtlasPageRequest,
   GlyphAtlasPageWeights,
   GlyphAtlasSource,
 } from "@/types/glyphAtlas";
 
-/** Adapts retained source pages to the backend-neutral resident contract. */
-export class PreviewGlyphAtlasSource implements GlyphAtlasSource {
+/** Adapts immutable imported-source pages to the resident atlas contract. */
+export class ImportedGlyphAtlasSource implements GlyphAtlasSource {
   readonly #client: FontSessionClient;
 
   constructor(client: FontSessionClient) {
@@ -22,7 +21,7 @@ export class PreviewGlyphAtlasSource implements GlyphAtlasSource {
   ): Promise<GlyphAtlasPageDescriptor> {
     const descriptor = await this.#client.prepareSourceAtlasPage({
       pageIndex: request.pageIndex,
-      glyphIndices: request.glyphKeys.map(previewGlyphIndex),
+      glyphIds: [...request.glyphKeys],
       coordinates: [...request.coordinates],
       alignment,
     });
@@ -35,9 +34,9 @@ export class PreviewGlyphAtlasSource implements GlyphAtlasSource {
       layout: descriptor.layout,
       previewExtents: descriptor.previewExtents,
       glyphs: descriptor.glyphs.map((glyph) => ({
-        glyphKey: asGlyphIndex(glyph.glyphIndex),
+        glyphKey: glyph.glyphId as GlyphId,
         defaultGlyph: glyph.atlasGlyph,
-        exactSources: [],
+        exactSources: glyph.exactSources,
       })),
       weightSets: [],
       weightAxes: [],
@@ -60,9 +59,4 @@ export class PreviewGlyphAtlasSource implements GlyphAtlasSource {
   async weights(coordinates: readonly number[]): Promise<readonly GlyphAtlasPageWeights[]> {
     return this.#client.sourceAtlasWeights(coordinates);
   }
-}
-
-function previewGlyphIndex(key: CatalogGlyphKey): number {
-  if (typeof key !== "number") throw new Error("preview atlas received an authored glyph id");
-  return key;
 }

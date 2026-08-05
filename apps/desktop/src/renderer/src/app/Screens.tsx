@@ -52,7 +52,7 @@ const FontSessionScreens = () => {
   return (
     <GlyphCatalogProvider>
       <SettingsNavigationProvider>
-        {session.workspace ? <ShiftSessionSetup /> : null}
+        <ShiftSessionSetup />
         <div
           aria-hidden={!catalogActive}
           className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}

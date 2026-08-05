@@ -7,9 +7,11 @@ import type {
   AxisDefinition,
   AxisMapping,
   Source,
+  GlyphEntry,
   GlyphId,
   GlyphPreview,
   GlyphRecord,
+  GlyphSnapshotRequest,
   GlyphName,
   SourceId,
   Unicode,
@@ -42,7 +44,7 @@ import {
   type Signal,
 } from "@/lib/signals/signal";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
-import type { WorkspaceGlyphSnapshotRequest } from "@shared/workspace/protocol";
+import type { GlyphReader } from "@/types/engine";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -55,6 +57,7 @@ import {
   axisLocationsEqual,
   defaultAxisLocation,
   emptyAxisLocation,
+  mapAxisLocation,
 } from "@/lib/variation/location";
 import type { AxisLocation } from "@/types/variation";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
@@ -85,9 +88,12 @@ function getGlyphDatabase(): GlyphInfo {
 class GlyphDirectory {
   #glyphDatabase = getGlyphDatabase();
 
+  readonly entries: readonly GlyphEntry[];
   readonly records: readonly GlyphRecord[];
   readonly unicodes: readonly Unicode[];
 
+  readonly entriesByName: ReadonlyMap<GlyphName, GlyphEntry> = new Map();
+  readonly entriesById: ReadonlyMap<GlyphId, GlyphEntry> = new Map();
   readonly recordsByName: ReadonlyMap<GlyphName, GlyphRecord> = new Map();
   readonly recordsById: ReadonlyMap<GlyphId, GlyphRecord> = new Map();
   readonly nameById: ReadonlyMap<GlyphId, GlyphName> = new Map();
@@ -95,7 +101,9 @@ class GlyphDirectory {
   readonly componentBasesById: ReadonlyMap<GlyphId, readonly GlyphId[]> = new Map();
   readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>> = new Map();
 
-  private constructor(records: readonly GlyphRecord[]) {
+  private constructor(entries: readonly GlyphEntry[], records: readonly GlyphRecord[]) {
+    const entriesByName = new Map<GlyphName, GlyphEntry>();
+    const entriesById = new Map<GlyphId, GlyphEntry>();
     const recordsByName = new Map<GlyphName, GlyphRecord>();
     const recordsById = new Map<GlyphId, GlyphRecord>();
     const nameById = new Map<GlyphId, GlyphName>();
@@ -103,16 +111,19 @@ class GlyphDirectory {
     const componentBasesById = new Map<GlyphId, readonly GlyphId[]>();
     const dependentsById = new Map<GlyphId, Set<GlyphId>>();
 
+    for (const entry of entries) {
+      entriesByName.set(entry.name, entry);
+      entriesById.set(entry.id, entry);
+      nameById.set(entry.id, entry.name);
+
+      for (const unicode of entry.unicodes) {
+        if (!nameByUnicode.has(unicode)) nameByUnicode.set(unicode, entry.name);
+      }
+    }
+
     for (const record of records) {
       recordsByName.set(record.name, record);
       recordsById.set(record.id, record);
-      nameById.set(record.id, record.name);
-
-      for (const unicode of record.unicodes) {
-        if (!nameByUnicode.has(unicode)) {
-          nameByUnicode.set(unicode, record.name);
-        }
-      }
       componentBasesById.set(record.id, record.componentBaseGlyphIds);
       for (const baseId of record.componentBaseGlyphIds) {
         let dependents = dependentsById.get(baseId);
@@ -124,8 +135,11 @@ class GlyphDirectory {
       }
     }
 
+    this.entries = [...entries];
     this.records = [...records];
     this.unicodes = [...nameByUnicode.keys()].sort((a, b) => a - b);
+    this.entriesByName = entriesByName;
+    this.entriesById = entriesById;
     this.recordsByName = recordsByName;
     this.recordsById = recordsById;
     this.nameById = nameById;
@@ -140,8 +154,11 @@ class GlyphDirectory {
    * @param records - Committed glyph records from the current font snapshot.
    * @returns A new immutable lookup index; later record changes are not observed.
    */
-  static fromRecords(records: readonly GlyphRecord[]): GlyphDirectory {
-    return new GlyphDirectory(records);
+  static fromEntries(
+    entries: readonly GlyphEntry[],
+    records: readonly GlyphRecord[],
+  ): GlyphDirectory {
+    return new GlyphDirectory(entries, records);
   }
 
   /**
@@ -173,7 +190,7 @@ class GlyphDirectory {
    * @knipclassignore
    */
   hasGlyph(glyphId: GlyphId): boolean {
-    return this.recordsById.has(glyphId);
+    return this.entriesById.has(glyphId);
   }
 
   /**
@@ -183,11 +200,19 @@ class GlyphDirectory {
    * @returns The committed record, or `null` when the font does not contain the glyph.
    * @knipclassignore
    */
+  entryForName(name: GlyphName): GlyphEntry | null {
+    return this.entriesByName.get(name) ?? null;
+  }
+
   recordForName(name: GlyphName): GlyphRecord | null {
     return this.recordsByName.get(name) ?? null;
   }
 
-  /** Returns the committed glyph record for a stable glyph id. */
+  entryForId(glyphId: GlyphId): GlyphEntry | null {
+    return this.entriesById.get(glyphId) ?? null;
+  }
+
+  /** Returns the committed authored glyph record for a stable glyph id. */
   recordForId(glyphId: GlyphId): GlyphRecord | null {
     return this.recordsById.get(glyphId) ?? null;
   }
@@ -200,7 +225,7 @@ class GlyphDirectory {
    * @knipclassignore
    */
   unicodesForName(name: GlyphName): readonly Unicode[] {
-    return this.recordsByName.get(name)?.unicodes ?? [];
+    return this.entriesByName.get(name)?.unicodes ?? [];
   }
 
   /**
@@ -255,8 +280,8 @@ class GlyphDirectory {
    * @returns A handle suitable for opening, creating, or querying glyph state.
    */
   glyphHandleForName(name: GlyphName): GlyphHandle {
-    const record = this.recordForName(name);
-    const unicode = record
+    const entry = this.entryForName(name);
+    const unicode = entry
       ? this.primaryUnicodeForName(name)
       : (this.#glyphDatabase.getGlyphByName(name)?.codepoint ?? null);
     return unicode === null ? { name } : { name, unicode };
@@ -307,6 +332,7 @@ export class Font {
   readonly #namedInstancesCell: Signal<NamedInstance[]>;
 
   readonly #unicodesCell: Signal<Unicode[]>;
+  readonly #glyphEntriesCell: Signal<readonly GlyphEntry[]>;
   readonly #glyphRecordsCell: Signal<readonly GlyphRecord[]>;
   readonly #directoryCell: Signal<GlyphDirectory>;
   readonly #committedFontCell: ComputedSignal<Font>;
@@ -315,6 +341,7 @@ export class Font {
     this.#readGlyphsIntoStore(glyphIds),
   );
   readonly #store: FontStore;
+  readonly #reader: GlyphReader | null;
   readonly #editCoordinator: WorkspaceEditCoordinator | null;
   readonly #glyphsEffect: Effect;
 
@@ -325,12 +352,12 @@ export class Font {
    * @param editCoordinator - Optional sync lane used by authored layer edits to submit
    * committed changes to the utility workspace.
    */
-  constructor(store: FontStore, editCoordinator?: WorkspaceEditCoordinator) {
+  constructor(store: FontStore, editCoordinator?: WorkspaceEditCoordinator, reader?: GlyphReader) {
     this.#store = store;
-
+    this.#reader = reader ?? null;
     this.#editCoordinator = editCoordinator ?? null;
 
-    const workspaceCell = store.workspaceCell;
+    const fontCell = store.fontCell;
 
     this.#committedFontCell = computed(
       () => {
@@ -339,23 +366,23 @@ export class Font {
       },
       { name: "font.committed" },
     );
-    this.#loadedCell = computed(() => workspaceCell.value !== null);
+    this.#loadedCell = computed(() => fontCell.value !== null);
 
-    this.#metricsCell = computed(() => workspaceCell.value?.metrics ?? DEFAULT_FONT_METRICS);
-    this.#metricDefinitionsCell = computed(() => workspaceCell.value?.metricDefinitions ?? []);
+    this.#metricsCell = computed(() => fontCell.value?.metrics ?? DEFAULT_FONT_METRICS);
+    this.#metricDefinitionsCell = computed(() => fontCell.value?.metricDefinitions ?? []);
 
     this.#sourceMetricsInterpolationCell = computed(() => {
-      const workspace = workspaceCell.value;
+      const font = fontCell.value;
       return SourceMetricsInterpolation.from(
-        workspace?.sourceMetricsInterpolation ?? null,
-        workspace?.metricDefinitions ?? [],
-        workspace?.metrics ?? DEFAULT_FONT_METRICS,
+        font?.sourceMetricsInterpolation ?? null,
+        font?.metricDefinitions ?? [],
+        font?.metrics ?? DEFAULT_FONT_METRICS,
       );
     });
 
-    this.#metadataCell = computed(() => workspaceCell.value?.metadata ?? {});
-    this.#sourcesCell = computed(() => workspaceCell.value?.sources ?? []);
-    this.#axesCell = computed(() => workspaceCell.value?.axes ?? []);
+    this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
+    this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
+    this.#axesCell = computed(() => fontCell.value?.axes ?? []);
     this.#defaultSourceMetricsCell = computed(() => {
       const sources = this.#sourcesCell.value;
       const axes = this.#axesCell.value;
@@ -367,12 +394,13 @@ export class Font {
         sourceAtLocation(sources, axes, defaultAxisLocation(axes)) ?? sources[0] ?? null;
       return this.#metricsForSource(source);
     });
-    this.#axisMappingsCell = computed(() => workspaceCell.value?.axisMappings ?? []);
-    this.#namedInstancesCell = computed(() => workspaceCell.value?.namedInstances ?? []);
+    this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
+    this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#directoryCell = computed(() =>
-      GlyphDirectory.fromRecords(workspaceCell.value?.glyphs ?? []),
+      GlyphDirectory.fromEntries(fontCell.value?.glyphs ?? [], this.#store.records()),
     );
     this.#unicodesCell = computed(() => [...this.#directoryCell.value.unicodes]);
+    this.#glyphEntriesCell = computed(() => this.#directoryCell.value.entries);
     this.#glyphRecordsCell = computed(() => this.#directoryCell.value.records);
     this.#glyphsEffect = effect(
       () => {
@@ -463,7 +491,12 @@ export class Font {
     return this.#sourcesCell;
   }
 
-  /** Reactive committed glyph directory records for UI lists and grids. */
+  /** Reactive source-neutral glyph directory entries for UI lists and grids. */
+  get glyphEntriesCell(): Signal<readonly GlyphEntry[]> {
+    return this.#glyphEntriesCell;
+  }
+
+  /** Reactive committed authored glyph records. */
   get glyphRecordsCell(): Signal<readonly GlyphRecord[]> {
     return this.#glyphRecordsCell;
   }
@@ -541,6 +574,10 @@ export class Font {
    *
    * @returns A read-only record list rebuilt after load, create, rename, or reset.
    */
+  glyphEntries(): readonly GlyphEntry[] {
+    return this.#directoryCell.peek().entries;
+  }
+
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directoryCell.peek().records;
   }
@@ -577,6 +614,10 @@ export class Font {
    * @returns The committed record, or `null` when the font does not contain the glyph.
    * @knipclassignore
    */
+  entryForName(name: GlyphName): GlyphEntry | null {
+    return this.#directoryCell.peek().entryForName(name);
+  }
+
   recordForName(name: GlyphName): GlyphRecord | null {
     return this.#directoryCell.peek().recordForName(name);
   }
@@ -814,6 +855,10 @@ export class Font {
    * @param glyphId - Stable glyph identity to inspect.
    * @returns The committed glyph record, or `null` when the font does not contain the glyph.
    */
+  entryForId(glyphId: GlyphId): GlyphEntry | null {
+    return this.#directoryCell.peek().entryForId(glyphId);
+  }
+
   recordForId(glyphId: GlyphId): GlyphRecord | null {
     return this.#directoryCell.peek().recordForId(glyphId);
   }
@@ -829,19 +874,21 @@ export class Font {
   }
 
   #assembleGlyph(glyphId: GlyphId): Glyph | null {
-    const record = this.#directoryCell.peek().recordForId(glyphId);
-    if (!record) return null;
+    const entry = this.#directoryCell.peek().entryForId(glyphId);
+    if (!entry) return null;
 
-    const layers = this.#buildGlyphLayers(record);
+    const record = this.#directoryCell.peek().recordForId(glyphId);
+    const layers = record ? this.#buildGlyphLayers(record) : [];
     if (!layers) return null;
 
     return new Glyph({
-      record,
+      entry,
       layers,
       componentGlyphs: new Map(),
       axesCell: this.#axesCell,
+      axisMappingsCell: this.#axisMappingsCell,
       sourcesCell: this.#sourcesCell,
-      projectionCell: this.#store.projectionCell(record.id),
+      projectionCell: this.#store.projectionCell(entry.id),
       defaultSourceId: this.defaultSource.id,
     });
   }
@@ -871,12 +918,15 @@ export class Font {
   }
 
   #componentGlyphsFor(
-    record: GlyphRecord,
+    glyphId: GlyphId,
     glyphs?: ReadonlyMap<GlyphId, Glyph>,
   ): ReadonlyMap<GlyphId, Glyph> | null {
     const componentGlyphs = new Map<GlyphId, Glyph>();
+    const record = this.#directoryCell.peek().recordForId(glyphId);
+    const componentGlyphIds =
+      record?.componentBaseGlyphIds ?? this.#store.projection(glyphId)?.componentGlyphIds ?? [];
 
-    for (const componentGlyphId of record.componentBaseGlyphIds) {
+    for (const componentGlyphId of componentGlyphIds) {
       const componentGlyph =
         glyphs?.get(componentGlyphId) ?? this.#store.glyphForId(componentGlyphId);
       if (!componentGlyph) return null;
@@ -889,7 +939,7 @@ export class Font {
 
   async #readGlyphsIntoStore(glyphIds: readonly GlyphId[]): Promise<void> {
     const uniqueIds = uniqueInOrder(glyphIds).filter((glyphId) =>
-      Boolean(this.#store.recordForId(glyphId)),
+      Boolean(this.#store.entryForId(glyphId)),
     );
 
     const seen = await this.#readGlyphSnapshots(
@@ -908,7 +958,7 @@ export class Font {
     }
 
     for (const glyph of glyphs.values()) {
-      const componentGlyphs = this.#componentGlyphsFor(glyph.record, glyphs);
+      const componentGlyphs = this.#componentGlyphsFor(glyph.id, glyphs);
       if (!componentGlyphs) {
         throw new Error(`component glyphs for ${glyph.id} could not be read`);
       }
@@ -921,15 +971,16 @@ export class Font {
 
   #updateGlyphsFromStore(): void {
     batch(() => {
-      for (const record of this.#directoryCell.peek().records) {
-        const glyph = this.#store.glyphForId(record.id);
+      for (const entry of this.#directoryCell.peek().entries) {
+        const glyph = this.#store.glyphForId(entry.id);
         if (!glyph) continue;
 
-        const layers = this.#buildGlyphLayers(record);
-        const componentGlyphs = this.#componentGlyphsFor(record);
+        const record = this.#directoryCell.peek().recordForId(entry.id);
+        const layers = record ? this.#buildGlyphLayers(record) : [];
+        const componentGlyphs = this.#componentGlyphsFor(entry.id);
         if (!layers || !componentGlyphs) continue;
 
-        glyph.replaceRecord(record);
+        glyph.replaceEntry(entry);
         glyph.replaceLayers(layers);
         glyph.replaceComponentGlyphs(componentGlyphs);
       }
@@ -965,7 +1016,7 @@ export class Font {
    */
   async loadGlyphs(glyphIds: readonly GlyphId[]): Promise<readonly Glyph[]> {
     for (const glyphId of glyphIds) {
-      if (!this.#store.recordForId(glyphId)) {
+      if (!this.#store.entryForId(glyphId)) {
         throw new Error(`glyph ${glyphId} is not in the current font`);
       }
     }
@@ -1004,8 +1055,30 @@ export class Font {
 
   async #readGlyphSnapshots(glyphIds: readonly GlyphId[]): Promise<readonly GlyphId[]> {
     const queue = uniqueInOrder(glyphIds);
+    if (queue.length === 0) return [];
+
+    if (this.#reader) {
+      const snapshots = await this.#reader.read(queue);
+      const byGlyphId = new Map(snapshots.map((snapshot) => [snapshot.glyphId, snapshot]));
+      for (const glyphId of queue) {
+        if (!byGlyphId.get(glyphId)?.projection) {
+          throw new Error(`source did not return glyph projection ${glyphId}`);
+        }
+      }
+      for (const snapshot of snapshots) {
+        if (!this.#store.entryForId(snapshot.glyphId) || !snapshot.projection) {
+          throw new Error(`source returned invalid glyph projection ${snapshot.glyphId}`);
+        }
+      }
+
+      // Validate the entire closure before one batched publication. Failed reads
+      // publish nothing and remain retryable.
+      this.#store.applyGlyphSnapshots(snapshots);
+      return snapshots.map((snapshot) => snapshot.glyphId);
+    }
+
     const seen = new Set<GlyphId>(queue);
-    if (!this.#editCoordinator || queue.length === 0) return [...seen];
+    if (!this.#editCoordinator) return [...seen];
 
     // No settled() here: readGlyphSnapshots already orders reads behind
     // pending writes via the coordinator queue, and draining the queue first
@@ -1027,9 +1100,7 @@ export class Font {
     return [...seen];
   }
 
-  async #readAndApplyGlyphRequests(
-    requests: readonly WorkspaceGlyphSnapshotRequest[],
-  ): Promise<void> {
+  async #readAndApplyGlyphRequests(requests: readonly GlyphSnapshotRequest[]): Promise<void> {
     if (!this.#editCoordinator) return;
 
     const snapshots = await this.#editCoordinator.readGlyphSnapshots(requests);
@@ -1084,7 +1155,9 @@ export class Font {
    * @returns The exact matching source, or `null` when the location is interpolated.
    */
   sourceAt(location: AxisLocation): Source | null {
-    return sourceAtLocation(this.sources, this.getAxes(), location);
+    const axes = this.getAxes();
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+    return sourceAtLocation(this.sources, axes, mappedLocation);
   }
 
   /**
@@ -1095,7 +1168,11 @@ export class Font {
    */
   sourceAtCell(location: Signal<AxisLocation>): ComputedSignal<Source | null> {
     return computed(
-      () => sourceAtLocation(this.#sourcesCell.value, this.#axesCell.value, location.value),
+      () => {
+        const axes = this.#axesCell.value;
+        const mappedLocation = mapAxisLocation(location.value, axes, this.#axisMappingsCell.value);
+        return sourceAtLocation(this.#sourcesCell.value, axes, mappedLocation);
+      },
       { name: "font.sourceAt" },
     );
   }
@@ -1115,11 +1192,12 @@ export class Font {
 
   nearestSource(location: AxisLocation): Source | null {
     const axes = this.getAxes();
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
     let nearest: { source: Source; distance: number } | null = null;
 
     for (const source of this.sources) {
       const sourceLocation = axisLocationFromLocation(source.location);
-      const distance = axisLocationDistanceSquared(sourceLocation, location, axes);
+      const distance = axisLocationDistanceSquared(sourceLocation, mappedLocation, axes);
 
       if (!nearest || distance < nearest.distance) {
         nearest = { source, distance };
@@ -1392,16 +1470,17 @@ export class Font {
    * between sources; the model includes them only when every master authors a
    * value.
    *
-   * @param location - Internal design-space location used by source masters.
+   * @param location - External location displayed by editor controls.
    * @returns Resolved standard and technical metrics in font units.
    */
   metricsAtLocation(location: AxisLocation): SourceMetrics {
     const axes = this.#axesCell.peek();
-    const exactSource = sourceAtLocation(this.#sourcesCell.peek(), axes, location);
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+    const exactSource = sourceAtLocation(this.#sourcesCell.peek(), axes, mappedLocation);
     if (exactSource) return this.#metricsForSource(exactSource);
 
     return (
-      this.#sourceMetricsInterpolationCell.peek()?.resolve(location, axes) ??
+      this.#sourceMetricsInterpolationCell.peek()?.resolve(mappedLocation, axes) ??
       this.defaultSourceMetrics
     );
   }

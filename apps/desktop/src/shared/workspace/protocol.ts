@@ -4,9 +4,9 @@ import type {
   AxisMapping,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  CatalogDirectory,
-  DisplayGlyph,
   FontIntent,
+  FontSnapshot,
+  GlyphSnapshot as WorkspaceGlyphSnapshot,
   FontMetadata,
   FontMetrics,
   GlyphId,
@@ -22,6 +22,8 @@ import type {
   Source,
   SourceId,
 } from "@shift/types";
+
+export type { WorkspaceGlyphSnapshot };
 
 /**
  * Point-in-time view of the open workspace: identity and records, no geometry.
@@ -49,12 +51,6 @@ export type WorkspaceGlyphSnapshotRequest = {
   glyphId: GlyphId;
 };
 
-export type WorkspaceGlyphSnapshot = {
-  glyphId: GlyphId;
-  projection?: GlyphProjection;
-  layers: WorkspaceGlyphLayerSnapshot[];
-};
-
 /** Process-local origin required to stream or discard one prepared atlas page. */
 export type SlugAtlasOrigin = "native" | "cached";
 
@@ -75,7 +71,7 @@ export type WorkspaceSlugAtlasPageRequest = {
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
 
 /** Immutable product mode for one live font session. */
-export type FontSessionMode = "shift" | "preview";
+export type FontSessionMode = "shift" | "imported";
 
 /** Main-visible identity for one retained, read-only foreign source session. */
 export type FontSourceSessionState = {
@@ -85,13 +81,13 @@ export type FontSourceSessionState = {
 
 /** Renderer catch-up state for the retained backend of the shared catalog. */
 export type FontSourceSnapshot = FontSourceSessionState & {
-  directory: CatalogDirectory;
+  font: FontSnapshot;
 };
 
 /** One deterministic page request expressed in source-local glyph indexes. */
 export type FontSourceAtlasPageRequest = {
   pageIndex: number;
-  glyphIndices: number[];
+  glyphIds: GlyphId[];
   coordinates: number[];
   alignment: number;
 };
@@ -198,8 +194,8 @@ export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
   "source.snapshot": { request: void; response: FontSourceSnapshot | null };
   "source.glyph": {
-    request: { glyphIndex: number; coordinates: number[] };
-    response: DisplayGlyph;
+    request: { glyphId: GlyphId };
+    response: WorkspaceGlyphSnapshot[];
   };
   "source.atlasPagePrepare": {
     request: FontSourceAtlasPageRequest;

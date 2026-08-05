@@ -4,7 +4,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `FontSession` is the renderer's one immutable connection composition. Both `"shift"` and `"preview"` modes expose `GlyphCatalogSource`; only Shift mode composes the authored `Workspace`, `Font`, `FontStore`, and `Editor`. Preview mode never creates those authored services or synthesizes Shift IDs.
+- **Architecture Invariant:** `FontSession` is the renderer's one immutable connection composition. Both `"shift"` and `"imported"` modes use `FontStore → Font → Editor → Scene → Renderer` and expose one `GlyphCatalog`; only Shift mode also owns an authored `Workspace` and mutation coordinator. Imported sessions eagerly receive stable session `GlyphId` values but no authored `GlyphRecord` or `GlyphLayer`.
 - **Architecture Invariant:** `Font.loadGlyph()` is the asynchronous acquisition boundary. It returns one canonical `Glyph` only after every authored layer and transitive component dependency is available; retained calls return that same object without workspace I/O. `Editor.glyphForId()` may synchronously expose that object to runtime and plugin code after acquisition, but never initiates loading.
 - **Architecture Invariant:** A loaded `Glyph` owns all authored `GlyphLayer` objects and direct component-Glyph references. Its record and layer collections update reactively without replacing the Glyph; its synchronous properties never initiate I/O.
 - **Architecture Invariant:** `FontStore.#glyphs` contains only completely assembled Glyphs. Failed assembly installs nothing, and workspace replacement clears the complete object graph.
@@ -17,7 +17,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** Numeric authored edits flow through the existing `GlyphLayerState` signal graph. Do not add a revision signal, invalidate projections to `null`, or refetch native variation data for point, component-transform, advance, or metric value changes.
 - **Architecture Invariant:** `Font.committedFontCell` is an invalidation-only dependency for resources derived from the complete native font, including unloaded glyphs. It carries the stable Font value and notifies after committed echoes or workspace replacement; consumers use `track(...)`, never a revision counter.
 - **Architecture Invariant:** Structural glyph, source, or axis changes rebuild retained native projections behind the workspace FIFO and publish replacements atomically. The previous projection remains usable until its replacement arrives.
-- **Architecture Invariant:** The grid requests projections by glyph identity with virtualized overscan. Scrubbing is local signal evaluation, never a bridge request or a TanStack Query location key.
+- **Architecture Invariant:** Imported selected-glyph geometry is acquired lazily by stable glyph identity, then retained with its complete component closure until session disposal. External slider coordinates are mapped synchronously before exact-source matching and projection evaluation. Scrubbing is local signal evaluation, never a bridge, filesystem, or projection-acquisition request.
 
 ## Codemap
 
@@ -38,15 +38,14 @@ workspace/
   FontSession.ts             -- immutable mode/catalog/optional-workspace composition
   FontSessionProvider.tsx    -- one renderer bootstrap and context boundary
 lib/catalog/
-  ShiftGlyphCatalogSource.ts   -- projection over authored Font and Editor signals
-  PreviewGlyphCatalogSource.ts -- retained source directory and dense location
+  GlyphCatalog.ts              -- common Font/Editor projection consumed by the resident Grid
 components/home/
   GlyphGrid.tsx              -- shared complete-residency catalog consumer
 ```
 
 ## Key Types
 
-- `Glyph` -- stable, completely loaded renderer domain object containing every authored layer, direct references to its loaded component dependencies, and synchronous location-specific geometry backing.
+- `Glyph` -- stable, completely loaded renderer domain object containing zero or more authored layers, direct references to its loaded component dependencies, and synchronous location-specific geometry backing.
 - `GlyphLayer` -- editable geometry for one glyph/source pair.
 - `GlyphProjection` -- generated bridge DTO retained as compact backing: fallback, compatible interpolation, incompatible exact-source shapes, and component identities.
 - `InterpolationBasis` -- source contribution math shared by glyphs with the same ordered compatible sources.
@@ -57,7 +56,7 @@ components/home/
 
 ## Resolution and loading
 
-`Font.loadGlyph()` is the sole public asynchronous Glyph acquisition API. It reads complete authored layer snapshots for editing, follows the transitive component closure, assembles every required Glyph, connects component references, and installs the group into `FontStore` together. Each full snapshot includes the same projection backing used by lightweight consumers; loading a glyph does not create a second interpolation mechanism. A retained Glyph returns immediately through the same Promise API without another workspace read or waiting for unrelated queued edits. Callers that require queued workspace truth must await `WorkspaceEditCoordinator.settled()` explicitly.
+`Font.loadGlyph()` is the sole public asynchronous Glyph acquisition API. Authored reads acquire complete layer snapshots; imported reads acquire a location-independent root projection plus its complete transitive component closure. The full response is validated before one batched `FontStore` publication, so failures publish nothing and remain retryable. Each successful Glyph and dependency stays resident for the session, and later calls return through the same Promise API without another source read.
 
 Once acquired, `Glyph.layerForSource()`, `Glyph.layerForId()`, `Glyph.layerAt()`, and `Glyph.geometryAt()` are synchronous. `geometryAt()` prefers exact live authored geometry, then uses the Rust-computed projection for exact generated shapes or interpolation, and finally falls back to default or empty geometry. It never initiates workspace I/O.
 
@@ -87,7 +86,7 @@ Only observed render output is evaluated. Virtualized offscreen models do not su
 ## Boundaries
 
 - `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode.
-- `GlyphCatalogSource` is the only font-wide surface consumed by Home/Grid; preview directory values remain source-local and never populate `FontStore`.
+- `GlyphCatalog` is the only font-wide surface consumed by Home/Grid. Imported `GlyphEntry` directory values populate `FontStore`, while imported authored-record and layer collections remain empty.
 - Rust owns source compatibility and constructs bases/projections.
 - `shift-wire` and the workspace bridge transport those values without resolving a UI location.
 - `FontStore` owns renderer-local backing, reactive authored state, and canonical completely loaded Glyph objects; do not wrap it in another manager/store/cache.

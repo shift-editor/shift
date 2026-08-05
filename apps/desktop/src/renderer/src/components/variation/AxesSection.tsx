@@ -2,7 +2,6 @@ import { useState } from "react";
 import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { AxesPanel } from "./AxesPanel";
 import { CreateAxisMenu } from "./CreateAxisMenu";
-import { DisplayAxesPanel } from "./DisplayAxesPanel";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 
@@ -31,7 +30,7 @@ export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
         )
       }
     >
-      {workspace ? <AxesPanel /> : <DisplayAxesPanel />}
+      <AxesPanel />
     </CollapsibleSection>
   );
 };

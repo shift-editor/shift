@@ -1,48 +1,21 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::SystemTime;
 
 use glyphs_reader::{Font as ParsedGlyphsFont, Glyph as ParsedGlyph, Layer, Node, NodeType, Shape};
 
 use crate::font_source::geometry::{
-    build_display_glyph, normalize_contour, ContourPoint, SourceComponent, SourceContour,
-    SourceGeometry,
+    normalize_contour, ContourPoint, SourceComponent, SourceContour, SourceGeometry,
 };
-use crate::font_source::interpolation::{interpolation_weights, InterpolationAxis};
+use crate::font_source::interpolation::InterpolationAxis;
+use crate::font_source::projection::{project_layers, ProjectionLayer};
 use crate::font_source::{
-    AffineTransform, AxisIndex, DirectoryGlyph, DisplayGlyph, FontDirectory, FontImporter,
-    FontReadError, GlyphAnchor, GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance,
-    RandomAccessFont, VariationAxis, VariationAxisKind, VariationLocation,
+    AffineTransform, AxisIndex, DirectoryAxisMapping, DirectoryGlyph, DirectoryInstance,
+    DirectorySource, FontDirectory, FontImporter, FontReadError, FontSource, GlyphAnchor,
+    GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph, SourceIndex,
+    VariationAxis, VariationAxisKind,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
-
-#[derive(Clone, Copy)]
-struct SourceStamp {
-    length: u64,
-    modified: Option<SystemTime>,
-}
-
-impl SourceStamp {
-    fn read(path: &Path) -> Result<Self, FontReadError> {
-        let metadata = std::fs::metadata(path).map_err(|source| FontReadError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        Ok(Self {
-            length: metadata.len(),
-            modified: metadata.modified().ok(),
-        })
-    }
-
-    fn matches(self, path: &Path) -> bool {
-        let Ok(metadata) = std::fs::metadata(path) else {
-            return false;
-        };
-        metadata.len() == self.length && metadata.modified().ok() == self.modified
-    }
-}
 
 #[derive(Clone)]
 struct GlyphsAxisMapping {
@@ -50,10 +23,6 @@ struct GlyphsAxisMapping {
 }
 
 impl GlyphsAxisMapping {
-    fn map(&self, user: f64) -> f64 {
-        piecewise_map(&self.user_to_design, user)
-    }
-
     fn unmap(&self, design: f64) -> f64 {
         let mut design_to_user = self
             .user_to_design
@@ -73,19 +42,15 @@ impl GlyphsAxisMapping {
 /// One retained parsed Glyphs or Glyphspackage source.
 pub struct GlyphsFont {
     path: PathBuf,
-    stamp: SourceStamp,
-    changed: AtomicBool,
     source: Arc<ParsedGlyphsFont>,
     directory: FontDirectory,
     glyphs_by_name: HashMap<String, GlyphIndex>,
     master_locations: Vec<Vec<f64>>,
-    axis_mappings: Vec<GlyphsAxisMapping>,
     interpolation_axes: Vec<InterpolationAxis>,
 }
 
 impl GlyphsFont {
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
-        let stamp = SourceStamp::read(path)?;
         let source = Arc::new(
             ParsedGlyphsFont::load(path)
                 .map_err(|error| malformed(path, format!("failed to parse source: {error}")))?,
@@ -169,7 +134,7 @@ impl GlyphsFont {
                     .into_boxed_slice(),
             })
             .collect::<Vec<_>>();
-        let directory = FontDirectory::new(
+        let mut directory = FontDirectory::new(
             FontFormat::Glyphs,
             source
                 .get_default_name("familyNames")
@@ -196,30 +161,63 @@ impl GlyphsFont {
                             .map(|value| value.into_inner())
                             .unwrap_or(interpolation_axes[index].default)
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
-            .collect();
+            .collect::<Vec<_>>();
+        directory.set_sources(
+            source
+                .masters
+                .iter()
+                .zip(&master_locations)
+                .enumerate()
+                .map(|(index, (master, location))| DirectorySource {
+                    index: SourceIndex::new(index as u32),
+                    name: master.name.clone(),
+                    location: location.clone().into_boxed_slice(),
+                    filename: None,
+                })
+                .collect(),
+            SourceIndex::new(source.default_master_idx as u32),
+        )?;
+        directory.set_axis_mappings(
+            axis_mappings
+                .iter()
+                .enumerate()
+                .map(|(index, mapping)| DirectoryAxisMapping {
+                    axis: AxisIndex::new(index as u32),
+                    points: mapping.user_to_design.clone(),
+                })
+                .collect(),
+        );
+        directory.set_instances(
+            source
+                .instances
+                .iter()
+                .filter(|instance| instance.active)
+                .map(|instance| DirectoryInstance {
+                    name: instance.name.clone(),
+                    location: (0..source.axes.len())
+                        .map(|index| {
+                            instance
+                                .axes_values
+                                .get(index)
+                                .map(|value| value.into_inner())
+                                .unwrap_or_else(|| directory.axes[index].kind.default_value())
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    postscript_name: None,
+                })
+                .collect(),
+        );
         Ok(Self {
             path: path.to_path_buf(),
-            stamp,
-            changed: AtomicBool::new(false),
             source,
             directory,
             glyphs_by_name,
             master_locations,
-            axis_mappings,
             interpolation_axes,
         })
-    }
-
-    fn verify_source(&self) -> Result<(), FontReadError> {
-        if self.changed.load(Ordering::Acquire) || !self.stamp.matches(&self.path) {
-            self.changed.store(true, Ordering::Release);
-            return Err(FontReadError::SourceChanged {
-                path: self.path.clone(),
-            });
-        }
-        Ok(())
     }
 
     fn parsed_glyph(&self, glyph: GlyphIndex) -> Result<&ParsedGlyph, FontReadError> {
@@ -232,69 +230,149 @@ impl GlyphsFont {
                     glyph_count: self.directory.glyphs.len() as u32,
                 })?;
         self.source.glyphs.get(entry.name.as_str()).ok_or_else(|| {
-            FontReadError::InvalidDisplayGlyph {
+            FontReadError::InvalidProjection {
                 details: format!("Glyphs directory lost glyph {:?}", entry.name),
             }
         })
     }
 }
 
-impl RandomAccessFont for GlyphsFont {
+impl FontSource for GlyphsFont {
     fn directory(&self) -> &FontDirectory {
         &self.directory
     }
 
-    fn read_glyph(
-        &self,
-        glyph: GlyphIndex,
-        location: &VariationLocation,
-    ) -> Result<DisplayGlyph, FontReadError> {
-        self.verify_source()?;
-        if location.coordinates().len() != self.directory.axes.len() {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: format!(
-                    "location has {} coordinates for {} axes",
-                    location.coordinates().len(),
-                    self.directory.axes.len()
-                ),
+    fn glyph(&self, glyph: GlyphIndex) -> Result<ProjectedGlyph, FontReadError> {
+        if glyph.to_usize() >= self.directory.glyphs.len() {
+            return Err(FontReadError::GlyphOutOfRange {
+                glyph,
+                glyph_count: self.directory.glyphs.len() as u32,
             });
         }
-        for (axis, value) in self.directory.axes.iter().zip(location.coordinates()) {
-            axis.kind.validate_for_read(axis.index, *value)?;
-        }
-        let design_location = self
-            .axis_mappings
-            .iter()
-            .zip(location.coordinates())
-            .map(|(mapping, value)| mapping.map(*value))
-            .collect::<Vec<_>>();
-        let mut resolver = GlyphsResolver {
+        let mut resolver = GlyphsProjectionResolver {
             font: self,
-            location: &design_location,
-            indices: HashMap::new(),
-            states: Vec::new(),
-            geometries: Vec::new(),
-            root_metrics: None,
+            states: HashMap::new(),
+            projections: HashMap::new(),
         };
-        resolver.resolve_geometry(glyph)?;
-        let metrics = resolver
-            .root_metrics
-            .ok_or_else(|| FontReadError::InvalidDisplayGlyph {
-                details: "resolved Glyphs glyph has no metrics".into(),
-            })?;
-        build_display_glyph(glyph, location.clone(), resolver.geometries, metrics)
+        resolver.resolve(glyph)?;
+        let root = resolver.projections.remove(&glyph).ok_or_else(|| {
+            FontReadError::InvalidProjection {
+                details: "Glyphs projection root is unavailable".into(),
+            }
+        })?;
+        let mut components = resolver.projections.into_values().collect::<Vec<_>>();
+        components.sort_by_key(|projection| projection.glyph);
+        Ok(ProjectedGlyph {
+            root,
+            components: components.into_boxed_slice(),
+        })
     }
+}
+
+struct GlyphsProjectionResolver<'a> {
+    font: &'a GlyphsFont,
+    states: HashMap<GlyphIndex, u8>,
+    projections: HashMap<GlyphIndex, crate::font_source::GlyphProjection>,
+}
+
+impl GlyphsProjectionResolver<'_> {
+    fn resolve(&mut self, glyph: GlyphIndex) -> Result<(), FontReadError> {
+        match self.states.get(&glyph).copied() {
+            Some(1) => return Err(FontReadError::ComponentCycle { glyph }),
+            Some(2) => return Ok(()),
+            _ => {}
+        }
+        self.states.insert(glyph, 1);
+        let projection = project_glyphs_glyph(self.font, glyph)?;
+        let dependencies = projection
+            .fallback
+            .components
+            .iter()
+            .map(|component| component.glyph)
+            .chain(projection.exact_shapes.iter().flat_map(|shape| {
+                shape
+                    .shape
+                    .components
+                    .iter()
+                    .map(|component| component.glyph)
+            }))
+            .collect::<std::collections::HashSet<_>>();
+        for dependency in dependencies {
+            self.resolve(dependency)?;
+        }
+        self.projections.insert(glyph, projection);
+        self.states.insert(glyph, 2);
+        Ok(())
+    }
+}
+
+fn project_glyphs_glyph(
+    font: &GlyphsFont,
+    glyph: GlyphIndex,
+) -> Result<crate::font_source::GlyphProjection, FontReadError> {
+    let parsed = font.parsed_glyph(glyph)?;
+    if parsed.layers.iter().any(|layer| {
+        layer.is_intermediate()
+            || !layer.attributes.axis_rules.is_empty()
+            || !layer.smart_component_positions.is_empty()
+    }) {
+        return Err(malformed(
+            &font.path,
+            format!(
+                "glyph {:?} uses intermediate, bracket, or smart-component layers",
+                parsed.name
+            ),
+        ));
+    }
+    let mut layers = Vec::new();
+    for (master_index, master) in font.source.masters.iter().enumerate() {
+        let Some(layer) = parsed
+            .layers
+            .iter()
+            .find(|layer| layer.master_id() == master.id)
+        else {
+            continue;
+        };
+        let converted = convert_glyphs_layer(font, glyph, layer)?;
+        layers.push((
+            SourceIndex::new(master_index as u32),
+            font.master_locations[master_index].clone(),
+            ProjectionLayer {
+                geometry: converted.geometry,
+                metrics: converted.metrics,
+            },
+        ));
+    }
+    if layers.is_empty() {
+        layers.push((
+            SourceIndex::new(font.source.default_master_idx as u32),
+            font.master_locations
+                .get(font.source.default_master_idx)
+                .cloned()
+                .unwrap_or_else(|| vec![0.0; font.interpolation_axes.len()]),
+            ProjectionLayer {
+                geometry: SourceGeometry {
+                    glyph,
+                    contours: Vec::new(),
+                    components: Vec::new(),
+                    anchors: Vec::new(),
+                },
+                metrics: GlyphMetrics {
+                    x_advance: 0.0,
+                    y_advance: None,
+                },
+            },
+        ));
+    }
+    project_layers(
+        layers,
+        &font.interpolation_axes,
+        SourceIndex::new(font.source.default_master_idx as u32),
+    )
 }
 
 impl FontImporter for GlyphsFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        self.verify_source().map_err(|error| {
-            BackendError::load(
-                FontFormat::Glyphs,
-                self.path.clone(),
-                crate::FormatBackendError::Glyphs(error.to_string()),
-            )
-        })?;
         let (header, stream) = crate::glyphs::stream_retained(self.source.clone())
             .map_err(|source| BackendError::load(FontFormat::Glyphs, self.path.clone(), source))?;
         Ok(FontImport::new(
@@ -310,128 +388,6 @@ impl FontImporter for GlyphsFont {
 struct ResolvedLayer {
     geometry: SourceGeometry,
     metrics: GlyphMetrics,
-}
-
-struct GlyphsResolver<'a> {
-    font: &'a GlyphsFont,
-    location: &'a [f64],
-    indices: HashMap<GlyphIndex, usize>,
-    states: Vec<u8>,
-    geometries: Vec<SourceGeometry>,
-    root_metrics: Option<GlyphMetrics>,
-}
-
-impl GlyphsResolver<'_> {
-    fn resolve_geometry(&mut self, glyph: GlyphIndex) -> Result<usize, FontReadError> {
-        if let Some(index) = self.indices.get(&glyph).copied() {
-            return match self.states[index] {
-                1 => Err(FontReadError::ComponentCycle { glyph }),
-                2 => Ok(index),
-                _ => Err(FontReadError::InvalidDisplayGlyph {
-                    details: "Glyphs geometry has an invalid resolution state".into(),
-                }),
-            };
-        }
-        let parsed = self.font.parsed_glyph(glyph)?;
-        let layer = resolve_glyphs_layer(self.font, parsed, glyph, self.location)?;
-        let index = self.geometries.len();
-        self.indices.insert(glyph, index);
-        self.states.push(1);
-        self.geometries.push(SourceGeometry {
-            glyph,
-            contours: Vec::new(),
-            components: Vec::new(),
-            anchors: Vec::new(),
-            guides: Vec::new(),
-        });
-        if index == 0 {
-            self.root_metrics = Some(layer.metrics);
-        }
-        for component in &layer.geometry.components {
-            self.resolve_geometry(component.glyph)?;
-        }
-        self.geometries[index] = layer.geometry;
-        self.states[index] = 2;
-        Ok(index)
-    }
-}
-
-fn resolve_glyphs_layer(
-    font: &GlyphsFont,
-    glyph: &ParsedGlyph,
-    glyph_index: GlyphIndex,
-    location: &[f64],
-) -> Result<ResolvedLayer, FontReadError> {
-    if glyph.layers.iter().any(|layer| {
-        layer.is_intermediate()
-            || !layer.attributes.axis_rules.is_empty()
-            || !layer.smart_component_positions.is_empty()
-    }) {
-        return Err(malformed(
-            &font.path,
-            format!(
-                "glyph {:?} uses intermediate, bracket, or smart-component layers",
-                glyph.name
-            ),
-        ));
-    }
-    let layers = font
-        .source
-        .masters
-        .iter()
-        .enumerate()
-        .filter_map(|(master_index, master)| {
-            glyph
-                .layers
-                .iter()
-                .find(|layer| layer.master_id() == master.id)
-                .map(|layer| (master_index, layer))
-        })
-        .collect::<Vec<_>>();
-    if layers.is_empty() {
-        return Ok(ResolvedLayer {
-            geometry: SourceGeometry {
-                glyph: glyph_index,
-                contours: Vec::new(),
-                components: Vec::new(),
-                anchors: Vec::new(),
-                guides: Vec::new(),
-            },
-            metrics: GlyphMetrics {
-                x_advance: 0.0,
-                y_advance: None,
-            },
-        });
-    }
-
-    if let Some((_, layer)) = layers
-        .iter()
-        .find(|(master, _)| font.master_locations[*master] == location)
-    {
-        return convert_glyphs_layer(font, glyph_index, layer);
-    }
-    let reference_position = layers
-        .iter()
-        .position(|(master, _)| *master == font.source.default_master_idx)
-        .unwrap_or(0);
-    let reference = convert_glyphs_layer(font, glyph_index, layers[reference_position].1)?;
-    let mut compatible = Vec::new();
-    for (master, layer) in layers {
-        let converted = convert_glyphs_layer(font, glyph_index, layer)?;
-        if layer_compatible(&reference, &converted) {
-            compatible.push((master, converted));
-        }
-    }
-    let source_locations = compatible
-        .iter()
-        .map(|(master, _)| font.master_locations[*master].clone())
-        .collect::<Vec<_>>();
-    let Some(weights) =
-        interpolation_weights(&source_locations, &font.interpolation_axes, location)
-    else {
-        return Ok(reference);
-    };
-    interpolate_layers(&reference, &compatible, &weights)
 }
 
 fn convert_glyphs_layer(
@@ -493,120 +449,12 @@ fn convert_glyphs_layer(
                     y: anchor.pos.y,
                 })
                 .collect(),
-            guides: Vec::new(),
         },
         metrics: GlyphMetrics {
             x_advance: layer.width.into_inner(),
             y_advance: layer.vert_width.map(|value| value.into_inner()),
         },
     })
-}
-
-fn layer_compatible(reference: &ResolvedLayer, candidate: &ResolvedLayer) -> bool {
-    reference.geometry.contours.len() == candidate.geometry.contours.len()
-        && reference
-            .geometry
-            .contours
-            .iter()
-            .zip(&candidate.geometry.contours)
-            .all(|(left, right)| {
-                left.closed == right.closed
-                    && left.points.len() == right.points.len()
-                    && left
-                        .points
-                        .iter()
-                        .zip(&right.points)
-                        .all(|(left, right)| left.kind == right.kind)
-            })
-        && reference.geometry.components.len() == candidate.geometry.components.len()
-        && reference
-            .geometry
-            .components
-            .iter()
-            .zip(&candidate.geometry.components)
-            .all(|(left, right)| left.glyph == right.glyph)
-        && reference.geometry.anchors.len() == candidate.geometry.anchors.len()
-        && reference
-            .geometry
-            .anchors
-            .iter()
-            .zip(&candidate.geometry.anchors)
-            .all(|(left, right)| left.name == right.name)
-}
-
-fn interpolate_layers(
-    reference: &ResolvedLayer,
-    sources: &[(usize, ResolvedLayer)],
-    weights: &[f64],
-) -> Result<ResolvedLayer, FontReadError> {
-    if sources.len() != weights.len() {
-        return Err(FontReadError::InvalidDisplayGlyph {
-            details: "interpolation source and weight counts disagree".into(),
-        });
-    }
-    let mut result = reference.clone();
-    for (contour_index, contour) in result.geometry.contours.iter_mut().enumerate() {
-        for (point_index, point) in contour.points.iter_mut().enumerate() {
-            point.x = weighted(sources, weights, |source| {
-                source.geometry.contours[contour_index].points[point_index].x
-            });
-            point.y = weighted(sources, weights, |source| {
-                source.geometry.contours[contour_index].points[point_index].y
-            });
-        }
-    }
-    for (component_index, component) in result.geometry.components.iter_mut().enumerate() {
-        component.transform.xx = weighted(sources, weights, |source| {
-            source.geometry.components[component_index].transform.xx
-        });
-        component.transform.xy = weighted(sources, weights, |source| {
-            source.geometry.components[component_index].transform.xy
-        });
-        component.transform.yx = weighted(sources, weights, |source| {
-            source.geometry.components[component_index].transform.yx
-        });
-        component.transform.yy = weighted(sources, weights, |source| {
-            source.geometry.components[component_index].transform.yy
-        });
-        component.transform.dx = weighted(sources, weights, |source| {
-            source.geometry.components[component_index].transform.dx
-        });
-        component.transform.dy = weighted(sources, weights, |source| {
-            source.geometry.components[component_index].transform.dy
-        });
-    }
-    for (anchor_index, anchor) in result.geometry.anchors.iter_mut().enumerate() {
-        anchor.x = weighted(sources, weights, |source| {
-            source.geometry.anchors[anchor_index].x
-        });
-        anchor.y = weighted(sources, weights, |source| {
-            source.geometry.anchors[anchor_index].y
-        });
-    }
-    result.metrics.x_advance = weighted(sources, weights, |source| source.metrics.x_advance);
-    result.metrics.y_advance = if sources
-        .iter()
-        .all(|(_, source)| source.metrics.y_advance.is_some())
-    {
-        Some(weighted(sources, weights, |source| {
-            source.metrics.y_advance.unwrap_or_default()
-        }))
-    } else {
-        None
-    };
-    Ok(result)
-}
-
-fn weighted(
-    sources: &[(usize, ResolvedLayer)],
-    weights: &[f64],
-    value: impl Fn(&ResolvedLayer) -> f64,
-) -> f64 {
-    sources
-        .iter()
-        .zip(weights)
-        .map(|((_, source), weight)| value(source) * weight)
-        .sum()
 }
 
 fn piecewise_map(points: &[(f64, f64)], value: f64) -> f64 {
@@ -674,7 +522,7 @@ fn glyphs_point_kind(
             }
             NodeType::Curve | NodeType::CurveSmooth => return Ok(GlyphPointKind::CubicControl),
             NodeType::Line | NodeType::LineSmooth => {
-                return Err(FontReadError::InvalidDisplayGlyph {
+                return Err(FontReadError::InvalidProjection {
                     details: "off-curve Glyphs node is followed by a line endpoint".into(),
                 })
             }
@@ -683,7 +531,7 @@ fn glyphs_point_kind(
     if closed {
         return Ok(GlyphPointKind::QuadraticControl);
     }
-    Err(FontReadError::InvalidDisplayGlyph {
+    Err(FontReadError::InvalidProjection {
         details: "open Glyphs path ends with an off-curve node".into(),
     })
 }
@@ -708,6 +556,8 @@ fn malformed(path: &Path, details: String) -> FontReadError {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     fn fixture(name: &str) -> PathBuf {
@@ -721,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn glyphs_selected_glyph_resolves_without_shift_identity() {
+    fn glyphs_projection_resolves_component_closure_without_shift_identity() {
         let font = GlyphsFont::open(&fixture("Homenaje.glyphs")).unwrap();
         let glyph = font
             .directory()
@@ -729,17 +579,28 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name == "Aacute")
             .expect("fixture should contain Aacute");
-        let display = font
-            .read_glyph(glyph.index, font.directory().default_location())
-            .unwrap();
+        let projected = font.glyph(glyph.index).unwrap();
 
-        assert_eq!(display.glyph, glyph.index);
-        assert!(!display.geometries.is_empty());
-        assert!(!display.components.is_empty());
+        assert_eq!(projected.root.glyph, glyph.index);
+        assert!(!projected.root.fallback.components.is_empty());
+        assert!(!projected.components.is_empty());
     }
 
     #[test]
-    fn glyphs_selected_glyph_changes_at_a_non_default_location() {
+    fn glyphs_projection_uses_retained_source_after_removal() {
+        let temporary = tempfile::tempdir().unwrap();
+        let copied = temporary.path().join("Removed.glyphs");
+        fs::copy(fixture("Homenaje.glyphs"), &copied).unwrap();
+        let font = GlyphsFont::open(&copied).unwrap();
+        let glyph = font.directory().glyphs[0].index;
+        let expected = font.glyph(glyph).unwrap();
+        fs::remove_file(copied).unwrap();
+
+        assert_eq!(font.glyph(glyph).unwrap(), expected);
+    }
+
+    #[test]
+    fn glyphs_projection_retains_non_default_variation() {
         let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
         let glyph = font
             .directory()
@@ -747,23 +608,15 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name == "A")
             .expect("fixture should contain A");
-        let default = font
-            .read_glyph(glyph.index, font.directory().default_location())
-            .unwrap();
-        let axis = &font.directory().axes[0];
-        let maximum = match axis.kind {
-            VariationAxisKind::Continuous { maximum, .. } => maximum,
-            VariationAxisKind::Discrete { .. } => panic!("fixture axis should be continuous"),
-        };
-        let location = font
-            .directory()
-            .location(&[crate::font_source::VariationCoordinate {
-                axis: axis.index,
-                value: maximum,
-            }])
-            .unwrap();
-        let changed = font.read_glyph(glyph.index, &location).unwrap();
+        let projection = font.glyph(glyph.index).unwrap().root;
+        let variation = projection
+            .variation
+            .expect("variable Glyphs source should retain deltas");
 
-        assert_ne!(default.points, changed.points);
+        assert!(variation
+            .deltas
+            .iter()
+            .flat_map(|delta| delta.values.iter())
+            .any(|value| *value != 0.0));
     }
 }

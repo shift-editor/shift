@@ -31,11 +31,12 @@ Build the native bridge first with `pnpm build:native` when its binary is absent
 | `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on pull requests and `main` |
 | `perf`   | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only              |
 
-Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. The retained preview test defaults to MutatorSans TTF and accepts another source through `SHIFT_E2E_PREVIEW_FONT_PATH`:
+Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. Imported residency tests default to MutatorSans TTF through `SHIFT_E2E_PREVIEW_FONT_PATH`; variable imported scrubbing defaults to Host Grotesk through `SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH`:
 
 ```sh
 SHIFT_E2E_FONT_PATH=/path/to/font.designspace pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
 SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview.spec.ts
+SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
 Fixtures copy source files into a temporary workspace. Tests must not depend on a developer's existing Shift workspace or user-data directory.
@@ -50,7 +51,7 @@ After an intentional visual change:
 2. Review every changed image under `e2e/__screenshots__/`.
 3. Run `pnpm test:e2e:visual` without update mode.
 
-A snapshot match alone does not prove GPU content exists. Rendering tests that can pass with a blank canvas must also compare frames with and without the relevant canvas or assert equivalent semantic output.
+A snapshot match alone does not prove GPU content exists. Rendering tests that can pass with a blank canvas must also compare frames with and without the relevant canvas or assert equivalent semantic output. Route-return tests must make that comparison after navigation because residency attributes do not prove Chromium retained or repainted the WebGPU presentation.
 
 ## Interaction rules
 

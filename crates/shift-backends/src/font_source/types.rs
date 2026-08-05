@@ -26,7 +26,7 @@ macro_rules! index_type {
 
 index_type!(GlyphIndex);
 index_type!(AxisIndex);
-index_type!(GeometryIndex);
+index_type!(SourceIndex);
 index_type!(TrueTypePointIndex);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -69,7 +69,7 @@ impl VariationAxisKind {
                     || minimum > default
                     || default > maximum
                 {
-                    return Err(FontReadError::InvalidDisplayGlyph {
+                    return Err(FontReadError::InvalidProjection {
                         details: format!("continuous axis {axis:?} has invalid bounds"),
                     });
                 }
@@ -81,7 +81,7 @@ impl VariationAxisKind {
                     || values.windows(2).any(|pair| pair[0] >= pair[1])
                     || !values.contains(default)
                 {
-                    return Err(FontReadError::InvalidDisplayGlyph {
+                    return Err(FontReadError::InvalidProjection {
                         details: format!("discrete axis {axis:?} has invalid values"),
                     });
                 }
@@ -157,13 +157,41 @@ pub struct FontMetrics {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct DirectorySource {
+    pub index: SourceIndex,
+    pub name: String,
+    /// Internal design-space coordinates ordered like the directory axes.
+    pub location: Box<[f64]>,
+    pub filename: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DirectoryInstance {
+    pub name: String,
+    /// External user-space coordinates ordered like the directory axes.
+    pub location: Box<[f64]>,
+    pub postscript_name: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DirectoryAxisMapping {
+    pub axis: AxisIndex,
+    pub points: Box<[(f64, f64)]>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct FontDirectory {
     pub format: FontFormat,
     pub family_name: Option<String>,
     pub style_name: Option<String>,
     pub units_per_em: f64,
+    pub metrics: FontMetrics,
     pub glyphs: Box<[DirectoryGlyph]>,
     pub axes: Box<[VariationAxis]>,
+    pub sources: Box<[DirectorySource]>,
+    pub default_source: SourceIndex,
+    pub axis_mappings: Box<[DirectoryAxisMapping]>,
+    pub instances: Box<[DirectoryInstance]>,
     default_location: VariationLocation,
 }
 
@@ -177,14 +205,14 @@ impl FontDirectory {
         axes: Vec<VariationAxis>,
     ) -> Result<Self, FontReadError> {
         if !units_per_em.is_finite() || units_per_em <= 0.0 {
-            return Err(FontReadError::InvalidDisplayGlyph {
+            return Err(FontReadError::InvalidProjection {
                 details: format!("units per em must be positive and finite, got {units_per_em}"),
             });
         }
 
         for (position, glyph) in glyphs.iter().enumerate() {
             if glyph.index.to_usize() != position {
-                return Err(FontReadError::InvalidDisplayGlyph {
+                return Err(FontReadError::InvalidProjection {
                     details: format!(
                         "glyph directory index {:?} does not match position {position}",
                         glyph.index
@@ -195,7 +223,7 @@ impl FontDirectory {
         let mut axis_tags = HashSet::with_capacity(axes.len());
         for (position, axis) in axes.iter().enumerate() {
             if axis.index.to_usize() != position {
-                return Err(FontReadError::InvalidDisplayGlyph {
+                return Err(FontReadError::InvalidProjection {
                     details: format!(
                         "axis index {:?} does not match position {position}",
                         axis.index
@@ -203,7 +231,7 @@ impl FontDirectory {
                 });
             }
             if axis.tag.is_empty() || !axis_tags.insert(axis.tag.as_str()) {
-                return Err(FontReadError::InvalidDisplayGlyph {
+                return Err(FontReadError::InvalidProjection {
                     details: format!("axis {:?} has an empty or duplicate tag", axis.index),
                 });
             }
@@ -213,15 +241,68 @@ impl FontDirectory {
         let default_location = VariationLocation::from_coordinates(
             axes.iter().map(|axis| axis.kind.default_value()).collect(),
         );
+        let default_source = DirectorySource {
+            index: SourceIndex::new(0),
+            name: style_name.clone().unwrap_or_else(|| "Default".into()),
+            location: default_location.coordinates.clone(),
+            filename: None,
+        };
         Ok(Self {
             format,
             family_name,
             style_name,
             units_per_em,
+            metrics: FontMetrics {
+                units_per_em,
+                ascender: units_per_em * 0.8,
+                descender: units_per_em * -0.2,
+                line_gap: 0.0,
+            },
             glyphs: glyphs.into_boxed_slice(),
             axes: axes.into_boxed_slice(),
+            sources: vec![default_source].into_boxed_slice(),
+            default_source: SourceIndex::new(0),
+            axis_mappings: Box::new([]),
+            instances: Box::new([]),
             default_location,
         })
+    }
+
+    pub(crate) fn set_sources(
+        &mut self,
+        sources: Vec<DirectorySource>,
+        default_source: SourceIndex,
+    ) -> Result<(), FontReadError> {
+        if sources.is_empty() || default_source.to_usize() >= sources.len() {
+            return Err(FontReadError::InvalidProjection {
+                details: "font directory has no valid default source".into(),
+            });
+        }
+        for (position, source) in sources.iter().enumerate() {
+            if source.index.to_usize() != position
+                || source.location.len() != self.axes.len()
+                || source.location.iter().any(|value| !value.is_finite())
+            {
+                return Err(FontReadError::InvalidProjection {
+                    details: "font directory source is invalid".into(),
+                });
+            }
+        }
+        self.sources = sources.into_boxed_slice();
+        self.default_source = default_source;
+        Ok(())
+    }
+
+    pub(crate) fn set_axis_mappings(&mut self, mappings: Vec<DirectoryAxisMapping>) {
+        self.axis_mappings = mappings.into_boxed_slice();
+    }
+
+    pub(crate) fn set_instances(&mut self, instances: Vec<DirectoryInstance>) {
+        self.instances = instances.into_boxed_slice();
+    }
+
+    pub(crate) fn set_metrics(&mut self, metrics: FontMetrics) {
+        self.metrics = metrics;
     }
 
     pub fn default_location(&self) -> &VariationLocation {
@@ -254,50 +335,6 @@ impl FontDirectory {
         Ok(VariationLocation::from_coordinates(values))
     }
 }
-
-macro_rules! range_type {
-    ($name:ident) => {
-        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-        pub struct $name {
-            pub start: u32,
-            pub count: u32,
-        }
-
-        impl $name {
-            pub(crate) fn new(start: usize, count: usize) -> Result<Self, FontReadError> {
-                let start =
-                    u32::try_from(start).map_err(|_| FontReadError::InvalidDisplayGlyph {
-                        details: concat!(stringify!($name), " start exceeds u32").into(),
-                    })?;
-                let count =
-                    u32::try_from(count).map_err(|_| FontReadError::InvalidDisplayGlyph {
-                        details: concat!(stringify!($name), " count exceeds u32").into(),
-                    })?;
-                start
-                    .checked_add(count)
-                    .ok_or_else(|| FontReadError::InvalidDisplayGlyph {
-                        details: concat!(stringify!($name), " overflows u32").into(),
-                    })?;
-                Ok(Self { start, count })
-            }
-
-            pub(crate) fn checked_end(self, arena: &str) -> Result<usize, FontReadError> {
-                let end = self.start.checked_add(self.count).ok_or_else(|| {
-                    FontReadError::InvalidDisplayGlyph {
-                        details: format!("{arena} range overflows u32"),
-                    }
-                })?;
-                Ok(end as usize)
-            }
-        }
-    };
-}
-
-range_type!(PointRange);
-range_type!(ContourRange);
-range_type!(ComponentRange);
-range_type!(AnchorRange);
-range_type!(GuideRange);
 
 /// Column-vector affine transform in y-up design-space font units.
 ///
@@ -344,32 +381,11 @@ impl AffineTransform {
         )
     }
 
-    fn is_finite(self) -> bool {
+    pub fn is_finite(self) -> bool {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
             .into_iter()
             .all(f64::is_finite)
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct GlyphGeometry {
-    pub glyph: GlyphIndex,
-    pub contours: ContourRange,
-    pub components: ComponentRange,
-    pub anchors: AnchorRange,
-    pub guides: GuideRange,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct GlyphContour {
-    pub points: PointRange,
-    pub closed: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ComponentInstance {
-    pub geometry: GeometryIndex,
-    pub transform: AffineTransform,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -403,332 +419,172 @@ pub struct GlyphAnchor {
     pub y: f64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum GlyphGuide {
-    Horizontal {
-        y: f64,
-        name: Option<String>,
-        color: Option<String>,
-    },
-    Vertical {
-        x: f64,
-        name: Option<String>,
-        color: Option<String>,
-    },
-    Angled {
-        x: f64,
-        y: f64,
-        degrees: f64,
-        name: Option<String>,
-        color: Option<String>,
-    },
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GlyphMetrics {
     pub x_advance: f64,
     pub y_advance: Option<f64>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct GlyphBounds {
-    pub min_x: f64,
-    pub min_y: f64,
-    pub max_x: f64,
-    pub max_y: f64,
+/// Source structure for one point. Numeric coordinates live in [`GlyphShape::values`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GlyphShapePoint {
+    pub kind: GlyphPointKind,
+    pub smooth: bool,
+    pub provenance: PointProvenance,
 }
 
-/// One selected glyph resolved in design-space font units with a y-up axis.
-///
-/// The arenas contain only the selected root and its component closure. Every
-/// range and graph reference is validated by [`DisplayGlyph::validate`].
+/// Source structure for one contour in a location-independent projection.
 #[derive(Clone, Debug, PartialEq)]
-pub struct DisplayGlyph {
+pub struct GlyphShapeContour {
+    pub points: Box<[GlyphShapePoint]>,
+    pub closed: bool,
+}
+
+/// One direct component dependency in a location-independent projection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GlyphComponent {
     pub glyph: GlyphIndex,
-    pub location: VariationLocation,
-    pub root_geometry: GeometryIndex,
-    pub geometries: Box<[GlyphGeometry]>,
-    pub contours: Box<[GlyphContour]>,
-    pub components: Box<[ComponentInstance]>,
-    pub points: Box<[GlyphPoint]>,
-    pub anchors: Box<[GlyphAnchor]>,
-    pub guides: Box<[GlyphGuide]>,
-    pub metrics: GlyphMetrics,
-    pub bounds: Option<GlyphBounds>,
 }
 
-impl DisplayGlyph {
-    pub fn validate(&self) -> Result<(), FontReadError> {
-        if self
-            .location
-            .coordinates
+/// Immutable source shape with structure-separated interpolation values.
+///
+/// Values are ordered as horizontal advance, contour point x/y pairs, anchor
+/// x/y pairs, then component affine transforms as xx/xy/yx/yy/dx/dy.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphShape {
+    pub contours: Box<[GlyphShapeContour]>,
+    pub anchors: Box<[Option<String>]>,
+    pub components: Box<[GlyphComponent]>,
+    pub values: Box<[f64]>,
+}
+
+impl GlyphShape {
+    pub fn expected_value_count(&self) -> usize {
+        1 + self
+            .contours
             .iter()
-            .any(|value| !value.is_finite())
-        {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: "variation location contains a non-finite coordinate".into(),
-            });
-        }
-        let root = self.root_geometry.to_usize();
-        if root >= self.geometries.len() {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: format!("root geometry {root} does not exist"),
-            });
-        }
-        if root != 0 {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: "root geometry must be the first geometry".into(),
-            });
-        }
-        if self.geometries[root].glyph != self.glyph {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: "root geometry does not represent the requested glyph".into(),
-            });
-        }
+            .map(|contour| contour.points.len() * 2)
+            .sum::<usize>()
+            + self.anchors.len() * 2
+            + self.components.len() * 6
+    }
 
-        let mut glyphs = HashSet::with_capacity(self.geometries.len());
-        let mut contour_cursor = 0;
-        let mut component_cursor = 0;
-        let mut anchor_cursor = 0;
-        let mut guide_cursor = 0;
-        for geometry in &self.geometries {
-            if !glyphs.insert(geometry.glyph) {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: format!("glyph {:?} has duplicate geometries", geometry.glyph),
-                });
-            }
-            check_partition(
-                geometry.contours.start,
-                geometry.contours.checked_end("contour")?,
-                &mut contour_cursor,
-                self.contours.len(),
-                "contour",
-            )?;
-            check_partition(
-                geometry.components.start,
-                geometry.components.checked_end("component")?,
-                &mut component_cursor,
-                self.components.len(),
-                "component",
-            )?;
-            check_partition(
-                geometry.anchors.start,
-                geometry.anchors.checked_end("anchor")?,
-                &mut anchor_cursor,
-                self.anchors.len(),
-                "anchor",
-            )?;
-            check_partition(
-                geometry.guides.start,
-                geometry.guides.checked_end("guide")?,
-                &mut guide_cursor,
-                self.guides.len(),
-                "guide",
-            )?;
+    pub fn validate(&self) -> Result<(), FontReadError> {
+        let expected = self.expected_value_count();
+        if self.values.len() != expected {
+            return Err(FontReadError::InvalidProjection {
+                details: format!(
+                    "glyph projection shape has {} values, expected {expected}",
+                    self.values.len()
+                ),
+            });
         }
-        check_partition_end(contour_cursor, self.contours.len(), "contour")?;
-        check_partition_end(component_cursor, self.components.len(), "component")?;
-        check_partition_end(anchor_cursor, self.anchors.len(), "anchor")?;
-        check_partition_end(guide_cursor, self.guides.len(), "guide")?;
-
-        let mut point_cursor = 0;
+        if self.values.iter().any(|value| !value.is_finite()) {
+            return Err(FontReadError::InvalidProjection {
+                details: "glyph projection shape contains a non-finite value".into(),
+            });
+        }
         for contour in &self.contours {
-            let end = contour.points.checked_end("point")?;
-            check_partition(
-                contour.points.start,
-                end,
-                &mut point_cursor,
-                self.points.len(),
-                "point",
-            )?;
-            if contour.points.count == 0 {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "empty contour records are not canonical".into(),
-                });
-            }
-            validate_point_sequence(
-                &self.points[contour.points.start as usize..end],
-                contour.closed,
-            )?;
-        }
-        check_partition_end(point_cursor, self.points.len(), "point")?;
-
-        for component in &self.components {
-            if component.geometry.to_usize() >= self.geometries.len() {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: format!("component geometry {:?} does not exist", component.geometry),
-                });
-            }
-            if !component.transform.is_finite() {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "component transform contains a non-finite value".into(),
+            if contour.points.is_empty() {
+                return Err(FontReadError::InvalidProjection {
+                    details: "glyph projection contains an empty contour".into(),
                 });
             }
         }
-
-        for point in &self.points {
-            if !point.x.is_finite() || !point.y.is_finite() {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "point contains a non-finite coordinate".into(),
-                });
-            }
-            if point.provenance == PointProvenance::Implied
-                && (point.kind != GlyphPointKind::OnCurve || point.smooth)
-            {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "implied points must be non-smooth on-curve points".into(),
-                });
-            }
-        }
-
-        for anchor in &self.anchors {
-            if !anchor.x.is_finite() || !anchor.y.is_finite() {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "anchor contains a non-finite coordinate".into(),
-                });
-            }
-        }
-        for guide in &self.guides {
-            let finite = match guide {
-                GlyphGuide::Horizontal { y, .. } => y.is_finite(),
-                GlyphGuide::Vertical { x, .. } => x.is_finite(),
-                GlyphGuide::Angled { x, y, degrees, .. } => {
-                    x.is_finite() && y.is_finite() && degrees.is_finite()
-                }
-            };
-            if !finite {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "guide contains a non-finite value".into(),
-                });
-            }
-        }
-
-        if !self.metrics.x_advance.is_finite()
-            || self
-                .metrics
-                .y_advance
-                .is_some_and(|value| !value.is_finite())
-        {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: "glyph metrics contain a non-finite value".into(),
-            });
-        }
-        if let Some(bounds) = self.bounds {
-            if ![bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
-                .into_iter()
-                .all(f64::is_finite)
-                || bounds.min_x > bounds.max_x
-                || bounds.min_y > bounds.max_y
-            {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "glyph bounds are invalid".into(),
-                });
-            }
-        }
-
-        self.validate_graph()
-    }
-
-    fn validate_graph(&self) -> Result<(), FontReadError> {
-        let mut states = vec![0_u8; self.geometries.len()];
-        self.visit_geometry(self.root_geometry.to_usize(), &mut states)?;
-        if states.contains(&0) {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: "display glyph contains unreachable geometry".into(),
-            });
-        }
-        Ok(())
-    }
-
-    fn visit_geometry(&self, index: usize, states: &mut [u8]) -> Result<(), FontReadError> {
-        match states[index] {
-            1 => {
-                return Err(FontReadError::InvalidDisplayGlyph {
-                    details: "display glyph component graph contains a cycle".into(),
-                })
-            }
-            2 => return Ok(()),
-            _ => states[index] = 1,
-        }
-
-        let geometry = &self.geometries[index];
-        let start = geometry.components.start as usize;
-        let end = geometry.components.checked_end("component")?;
-        for component in &self.components[start..end] {
-            self.visit_geometry(component.geometry.to_usize(), states)?;
-        }
-        states[index] = 2;
         Ok(())
     }
 }
 
-fn check_partition(
-    start: u32,
-    end: usize,
-    cursor: &mut usize,
-    arena_len: usize,
-    arena: &str,
-) -> Result<(), FontReadError> {
-    if start as usize != *cursor || start as usize > end || end > arena_len {
-        return Err(FontReadError::InvalidDisplayGlyph {
-            details: format!(
-                "{arena} range {start}..{end} does not continue canonical partition at {} of {arena_len}",
-                *cursor
-            ),
-        });
-    }
-    *cursor = end;
-    Ok(())
+/// One normalized axis support in a source variation region.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VariationSupport {
+    pub axis: AxisIndex,
+    pub lower: f64,
+    pub peak: f64,
+    pub upper: f64,
 }
 
-fn check_partition_end(cursor: usize, arena_len: usize, arena: &str) -> Result<(), FontReadError> {
-    if cursor != arena_len {
-        return Err(FontReadError::InvalidDisplayGlyph {
-            details: format!("{arena} partition ends at {cursor}, not arena length {arena_len}"),
-        });
-    }
-    Ok(())
+/// Product of axis supports controlling one glyph delta vector.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VariationRegion {
+    pub supports: Box<[VariationSupport]>,
 }
 
-fn validate_point_sequence(points: &[GlyphPoint], closed: bool) -> Result<(), FontReadError> {
-    if points[0].kind != GlyphPointKind::OnCurve {
-        return Err(FontReadError::InvalidDisplayGlyph {
-            details: "contour does not begin on-curve".into(),
-        });
-    }
-    let limit = if closed {
-        points.len() + 1
-    } else {
-        points.len()
-    };
-    let mut cursor = 1;
-    while cursor < limit {
-        match points[cursor % points.len()].kind {
-            GlyphPointKind::OnCurve => cursor += 1,
-            GlyphPointKind::QuadraticControl => {
-                if cursor + 1 >= limit
-                    || points[(cursor + 1) % points.len()].kind != GlyphPointKind::OnCurve
+/// One structure-aligned numeric delta contribution.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphDelta {
+    pub region: VariationRegion,
+    pub values: Box<[f64]>,
+}
+
+/// Location-independent variation over one fallback structure.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphVariation {
+    pub deltas: Box<[GlyphDelta]>,
+}
+
+/// Exact source shape excluded from compatible interpolation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphSourceShape {
+    pub source: SourceIndex,
+    pub shape: GlyphShape,
+}
+
+/// One source-local location-independent glyph projection.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphProjection {
+    pub glyph: GlyphIndex,
+    pub fallback: GlyphShape,
+    pub variation: Option<GlyphVariation>,
+    pub exact_shapes: Box<[GlyphSourceShape]>,
+}
+
+impl GlyphProjection {
+    pub fn validate(&self, axis_count: usize, source_count: usize) -> Result<(), FontReadError> {
+        self.fallback.validate()?;
+        let value_count = self.fallback.values.len();
+        if let Some(variation) = &self.variation {
+            for delta in &variation.deltas {
+                if delta.values.len() != value_count
+                    || delta.values.iter().any(|value| !value.is_finite())
                 {
-                    return Err(FontReadError::InvalidDisplayGlyph {
-                        details: "quadratic control is not followed by an endpoint".into(),
+                    return Err(FontReadError::InvalidProjection {
+                        details: "glyph projection delta values are invalid".into(),
                     });
                 }
-                cursor += 2;
-            }
-            GlyphPointKind::CubicControl => {
-                if cursor + 2 >= limit
-                    || points[(cursor + 1) % points.len()].kind != GlyphPointKind::CubicControl
-                    || points[(cursor + 2) % points.len()].kind != GlyphPointKind::OnCurve
-                {
-                    return Err(FontReadError::InvalidDisplayGlyph {
-                        details: "invalid cubic point sequence".into(),
-                    });
+                for support in &delta.region.supports {
+                    if support.axis.to_usize() >= axis_count
+                        || ![support.lower, support.peak, support.upper]
+                            .into_iter()
+                            .all(f64::is_finite)
+                        || support.lower > support.peak
+                        || support.peak > support.upper
+                        || (support.lower < 0.0 && support.upper > 0.0)
+                    {
+                        return Err(FontReadError::InvalidProjection {
+                            details: "glyph projection variation support is invalid".into(),
+                        });
+                    }
                 }
-                cursor += 3;
             }
         }
+        for exact in &self.exact_shapes {
+            if exact.source.to_usize() >= source_count {
+                return Err(FontReadError::InvalidProjection {
+                    details: "glyph projection exact source is out of range".into(),
+                });
+            }
+            exact.shape.validate()?;
+        }
+        Ok(())
     }
-    Ok(())
+}
+
+/// Requested glyph projection plus every transitive component projection.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProjectedGlyph {
+    pub root: GlyphProjection,
+    pub components: Box<[GlyphProjection]>,
 }
 
 #[cfg(test)]

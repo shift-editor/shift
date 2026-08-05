@@ -1,10 +1,11 @@
 import type {
   AnchorId,
   Axis,
+  AxisMapping,
   ContourId,
+  GlyphEntry,
   GlyphId,
   GlyphProjection,
-  GlyphRecord,
   PointId,
   Source,
   SourceId,
@@ -21,10 +22,11 @@ export interface GlyphGeometrySelection {
 }
 
 export interface GlyphOptions {
-  readonly record: GlyphRecord;
+  readonly entry: GlyphEntry;
   readonly layers: readonly GlyphLayer[];
   readonly componentGlyphs: ReadonlyMap<GlyphId, Glyph>;
   readonly axesCell: Signal<Axis[]>;
+  readonly axisMappingsCell: Signal<AxisMapping[]>;
   readonly sourcesCell: Signal<Source[]>;
   readonly projectionCell: Signal<GlyphProjection | null>;
   readonly defaultSourceId: SourceId;

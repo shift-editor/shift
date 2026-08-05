@@ -22,9 +22,9 @@ export function useWorkspace(): Workspace {
 }
 
 export function useEditor(): Editor {
-  return useWorkspace().editor;
+  return useFontSession().editor;
 }
 
 export function useFont(): Font {
-  return useWorkspace().font;
+  return useFontSession().font;
 }

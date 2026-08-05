@@ -258,8 +258,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const snapshot = await sync.call("source.snapshot", undefined);
 
     expect(state.canonicalPath).toBe(fs.realpathSync(retainedFontPath));
-    expect(snapshot?.directory.format).toBe("ttf");
-    expect(snapshot?.directory.glyphs.length).toBeGreaterThan(0);
+    expect(snapshot?.font.metadata.familyName).toBeTruthy();
+    expect(snapshot?.font.glyphs.length).toBeGreaterThan(0);
     expect(await sync.call("workspace.snapshot", undefined)).toBeNull();
     expect(await sync.call("document.state", undefined)).toBeNull();
     expect(fs.existsSync(path.join(tmpRoot, "documents"))).toBe(false);
@@ -271,17 +271,15 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync = await connectSyncLane();
     const snapshot = await sync.call("source.snapshot", undefined);
     if (!snapshot) throw new Error("source.open did not create a snapshot");
-    const glyphIndex = snapshot.directory.glyphs.find((glyph) => glyph.name === "A")?.index;
-    if (glyphIndex === undefined) throw new Error("fixture has no A glyph");
+    const glyphId = snapshot.font.glyphs.find((glyph) => glyph.name === "A")?.id;
+    if (!glyphId) throw new Error("fixture has no A glyph");
 
-    const glyph = await sync.call("source.glyph", {
-      glyphIndex,
-      coordinates: snapshot.directory.defaultLocation,
-    });
+    const glyphs = await sync.call("source.glyph", { glyphId });
+    const glyph = glyphs.find((candidate) => candidate.glyphId === glyphId);
 
-    expect(glyph.glyphIndex).toBe(glyphIndex);
-    expect(glyph.pointCoordinates.length).toBe(glyph.pointKinds.length * 2);
-    expect(glyph.geometries[glyph.rootGeometry]?.glyphIndex).toBe(glyphIndex);
+    expect(glyph?.layers).toEqual([]);
+    expect(glyph?.projection?.glyphId).toBe(glyphId);
+    expect(glyph?.projection?.fallback.values.length).toBeGreaterThan(1);
     expect(await sync.call("workspace.snapshot", undefined)).toBeNull();
   });
 
@@ -290,15 +288,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync = await connectSyncLane();
     const snapshot = await sync.call("source.snapshot", undefined);
     if (!snapshot) throw new Error("source.open did not create a snapshot");
-    const coordinates = snapshot.directory.defaultLocation;
+    const coordinates = snapshot.font.axes.map((axis) => axis.default);
     const pages = [];
 
-    for (let start = 0, pageIndex = 0; start < snapshot.directory.glyphs.length; start += 256) {
+    for (let start = 0, pageIndex = 0; start < snapshot.font.glyphs.length; start += 256) {
       const page = await sync.call("source.atlasPagePrepare", {
         pageIndex,
-        glyphIndices: snapshot.directory.glyphs
-          .slice(start, start + 256)
-          .map((glyph) => glyph.index),
+        glyphIds: snapshot.font.glyphs.slice(start, start + 256).map((glyph) => glyph.id),
         coordinates,
         alignment: 256,
       });
@@ -309,9 +305,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     }
 
     const weights = await sync.call("source.atlasWeights", { coordinates });
-    const maximumCoordinates = snapshot.directory.axes.map(
-      (axis) => axis.maximum ?? axis.defaultValue,
-    );
+    const maximumCoordinates = snapshot.font.axes.map((axis) => axis.maximum ?? axis.default);
     const maximumWeights = await sync.call("source.atlasWeights", {
       coordinates: maximumCoordinates,
     });

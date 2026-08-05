@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use shift_slug::Curve;
 
 use crate::font_source::atlas::SourceAtlasError;
-use crate::font_source::GlyphPointKind;
+use crate::font_source::{inferred_smooth_point_indices, GlyphPointKind};
 
 use super::{
     invalid_geometry, VariableContour, VariableCurves, VariableGeometry, VariablePoint,
@@ -46,6 +46,14 @@ pub(super) fn normalize_contour(
         {
             normalized.push(VariablePoint::midpoint(point, &points[next]));
         }
+    }
+    for index in inferred_smooth_point_indices(
+        &normalized,
+        true,
+        |point| (point.position.x, point.position.y),
+        |point| point.kind == GlyphPointKind::OnCurve,
+    ) {
+        normalized[index].smooth = true;
     }
     Ok(VariableContour { points: normalized })
 }

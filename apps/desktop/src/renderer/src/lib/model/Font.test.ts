@@ -82,7 +82,7 @@ describe("Font projects the workspace snapshot", () => {
   });
 
   it("resets to fallback font values when the workspace goes null", () => {
-    const store = new FontStore(SNAPSHOT);
+    const store = new FontStore(null, SNAPSHOT);
     const font = new Font(store);
 
     expect(font.loaded).toBe(true);
@@ -97,7 +97,7 @@ describe("Font projects the workspace snapshot", () => {
   });
 
   it("an empty loaded font reports records, not the unloaded fallback", () => {
-    const store = new FontStore({
+    const store = new FontStore(null, {
       ...SNAPSHOT,
       glyphs: [],
     });
@@ -188,6 +188,31 @@ describe("font-level intents make the font variable", () => {
     expect(
       stack.font.recordForId(glyphId)?.layers.some((layer) => layer.sourceId === boldSourceId),
     ).toBe(false);
+  });
+
+  it("new sources inherit complete metrics after adding an axis", async () => {
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(
+      resolve(process.cwd(), "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace"),
+    );
+    const axisId = stack.font.createAxis({
+      tag: "opsz",
+      name: "Optical Size",
+      role: "external",
+      axisType: "continuous",
+      minimum: 8,
+      default: 14,
+      maximum: 72,
+      labels: [],
+      hidden: false,
+    });
+    await stack.editCoordinator.settled();
+
+    const sourceId = stack.font.createSource("Bold", { values: { [axisId]: 900 } });
+    await stack.editCoordinator.settled();
+
+    const source = stack.font.sources.find((candidate) => candidate.id === sourceId);
+    expect(source?.metricValues).toHaveLength(stack.font.metricDefinitions.length);
   });
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
@@ -350,7 +375,11 @@ describe("font-level intents make the font variable", () => {
     const layer = glyph.layerForSource(source.id);
     if (!layer) throw new Error("Expected default glyph layer");
 
-    expect(glyph.record).toEqual(record);
+    expect(glyph.entry).toEqual({
+      id: record.id,
+      name: record.name,
+      unicodes: record.unicodes,
+    });
     expect(glyph.layers).toEqual([layer]);
     expect(layer.id).toBe(record.layers[0]?.id);
     expect(glyph.layerForId(layer.id)).toBe(layer);
@@ -380,7 +409,7 @@ describe("font-level intents make the font variable", () => {
     ]);
 
     expect(await stack.font.loadGlyph(record.id)).toBe(glyph);
-    expect(glyph.record.name).toBe("A.alt");
+    expect(glyph.entry.name).toBe("A.alt");
     expect(glyph.name).toBe("A.alt");
     expect(glyph.unicode).toBe(0xe001);
     expect(glyph.layers).toEqual(layers);
@@ -511,7 +540,7 @@ describe("font-level intents make the font variable", () => {
     const glyph = await stack.font.loadGlyph(glyphId);
 
     expect(glyph.layers.map((layer) => layer.id)).toEqual(
-      glyph.record.layers.map((layer) => layer.id),
+      stack.font.recordForId(glyph.id)?.layers.map((layer) => layer.id),
     );
     expect(glyph.layerForSource(defaultSourceId)?.id).toBe(defaultLayerId);
     expect(glyph.layerForSource(boldSource.id)?.id).toBe(boldLayerId);
@@ -576,7 +605,7 @@ describe("font-level intents make the font variable", () => {
     expect(await stack.font.loadGlyph(glyph.id)).toBe(glyph);
     expect(glyph.layerForSource(sourceId)?.id).toBe(layerId);
     expect(glyph.layers.map((layer) => layer.id)).toEqual(
-      glyph.record.layers.map((layer) => layer.id),
+      stack.font.recordForId(glyph.id)?.layers.map((layer) => layer.id),
     );
   });
 

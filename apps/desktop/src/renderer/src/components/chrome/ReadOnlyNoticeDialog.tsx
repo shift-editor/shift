@@ -27,13 +27,9 @@ export const ReadOnlyNoticeDialog = () => {
       setReadOnlyNoticeOpen(true);
     };
 
-    document.addEventListener("pointerdown", showReadOnlyNotice, true);
     document.addEventListener("click", showReadOnlyNotice, true);
-    document.addEventListener("focusin", showReadOnlyNotice, true);
     return () => {
-      document.removeEventListener("pointerdown", showReadOnlyNotice, true);
       document.removeEventListener("click", showReadOnlyNotice, true);
-      document.removeEventListener("focusin", showReadOnlyNotice, true);
     };
   }, []);
 

@@ -4,18 +4,17 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{
-  build_binary_atlas_page, font_loader::FontLoader, AxisIndex as SourceAxisIndex,
-  DisplayGlyph as SourceDisplayGlyph, ExportFormat, FontDirectory, FontExportRequest,
-  FontExportResult, FontExporter, FontSource, FontView, GlyphGuide as SourceGlyphGuide, GlyphIndex,
-  GlyphPointKind as SourceGlyphPointKind, PointProvenance as SourcePointProvenance,
-  RandomAccessFont, SourceAtlasDescriptor, VariationAxisKind, VariationCoordinate,
-  VariationLocation,
+  font_loader::FontLoader, AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory,
+  FontExportRequest, FontExportResult, FontExporter, FontSource, FontView, GlyphIndex,
+  GlyphPointKind as SourceGlyphPointKind, GlyphProjection as SourceGlyphProjection,
+  GlyphShape as SourceGlyphShape, OpenedFont, ProjectedGlyph as SourceProjectedGlyph,
+  SourceAtlasDescriptor, VariationAxisKind, VariationCoordinate, VariationLocation,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
-  AxisRole, BooleanOp, ContourId, Font, FontChange, FontIntent, FontIntentSet,
+  AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChange, FontIntent, FontIntentSet,
   FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
@@ -27,30 +26,29 @@ use shift_slug::{
 use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
-    NapiCatalogAtlasGlyph, NapiCatalogAtlasPage, NapiCatalogAtlasWeights, NapiCatalogAxis,
-    NapiCatalogDirectory, NapiCatalogGlyph, NapiCatalogMetrics, NapiDisplayGlyph, NapiFontIntent,
-    NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiGlyphPreview, NapiGlyphProjection,
-    NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis,
-    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
-    NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout,
-    NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
+    NapiCatalogAtlasGlyph, NapiCatalogAtlasPage, NapiCatalogAtlasWeights, NapiFontIntent,
+    NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot, NapiGlyphPreview,
+    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
+    NapiInterpolationBasis, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
+    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
+    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
-  Axis, AxisMapping, DisplayAnchor as WireDisplayAnchor, DisplayComponent as WireDisplayComponent,
-  DisplayContour as WireDisplayContour, DisplayGeometry as WireDisplayGeometry,
-  DisplayGlyph as WireDisplayGlyph, DisplayGuide as WireDisplayGuide,
-  DisplayPointKind as WireDisplayPointKind, DisplayPointProvenance as WireDisplayPointProvenance,
-  DisplayRange as WireDisplayRange, FontMetadata, FontMetrics, GlyphChangedEntities,
+  AnchorData, Axis, AxisMapping, AxisMappingPoint, ComponentData, ComponentGlyph,
+  ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
+  GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerShape,
   GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
-  GlyphState, GlyphStructure, InterpolationBasis as WireInterpolationBasis, MetricDefinition,
-  NamedInstance, Source, SourceMetricsInterpolationSnapshot,
+  GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure,
+  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, Location as WireLocation,
+  MetricDefinition, MetricKind as WireMetricKind, NamedInstance, PointData, PointType, Source,
+  SourceMetricValue, SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   AcquireScope, FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError,
   WorkspaceSource,
 };
 use std::{
-  collections::{BTreeMap, HashSet, VecDeque},
+  collections::{BTreeMap, HashMap, HashSet, VecDeque},
   path::Path,
   sync::Arc,
   time::{Duration, Instant},
@@ -230,67 +228,201 @@ fn log_slug_atlas_profile(
   );
 }
 
-fn napi_catalog_directory(source: &FontSource) -> BridgeResult<NapiCatalogDirectory> {
+fn wire_font_snapshot(
+  source: &dyn FontSource,
+  identity: &SourceIdentity,
+) -> BridgeResult<FontSnapshot> {
   let directory = source.directory();
-  let metrics = match source {
-    FontSource::Binary(font) => Some(font.metrics(directory.default_location())?),
-    FontSource::Glif(_) | FontSource::Glyphs(_) => None,
+  let metadata = FontMetadata {
+    family_name: directory.family_name.clone(),
+    style_name: directory.style_name.clone(),
+    version_major: None,
+    version_minor: None,
+    copyright: None,
+    trademark: None,
+    designer: None,
+    designer_url: None,
+    manufacturer: None,
+    manufacturer_url: None,
+    license: None,
+    license_url: None,
+    description: None,
+    note: None,
   };
-  let glyphs = directory
-    .glyphs
+  let metric_rows = [
+    (
+      WireMetricKind::Ascender,
+      "Ascender",
+      directory.metrics.ascender,
+    ),
+    (
+      WireMetricKind::CapHeight,
+      "Cap Height",
+      directory.metrics.units_per_em * 0.7,
+    ),
+    (
+      WireMetricKind::XHeight,
+      "x-Height",
+      directory.metrics.units_per_em * 0.5,
+    ),
+    (WireMetricKind::Baseline, "Baseline", 0.0),
+    (
+      WireMetricKind::Descender,
+      "Descender",
+      directory.metrics.descender,
+    ),
+  ];
+  let metric_definitions = metric_rows
     .iter()
-    .map(|glyph| NapiCatalogGlyph {
-      index: glyph.index.to_u32(),
-      name: glyph.name.clone(),
-      unicodes: glyph.unicodes.to_vec(),
+    .zip(identity.metric_ids.iter())
+    .map(|((kind, name, _), id)| MetricDefinition {
+      id: id.clone(),
+      kind: *kind,
+      name: (*name).into(),
     })
-    .collect();
+    .collect::<Vec<_>>();
   let axes = directory
     .axes
     .iter()
-    .map(|axis| match &axis.kind {
+    .zip(identity.axis_ids.iter())
+    .map(|(axis, id)| match &axis.kind {
       VariationAxisKind::Continuous {
         minimum,
         default,
         maximum,
-      } => NapiCatalogAxis {
-        index: axis.index.to_u32(),
+      } => Axis {
+        id: id.clone(),
         tag: axis.tag.clone(),
         name: axis.name.clone(),
-        hidden: axis.hidden,
-        kind: "continuous".into(),
+        role: "external".into(),
+        axis_type: "continuous".into(),
         minimum: Some(*minimum),
-        default_value: *default,
+        default: *default,
         maximum: Some(*maximum),
-        values: Vec::new(),
+        values: None,
+        labels: Vec::new(),
+        hidden: axis.hidden,
       },
-      VariationAxisKind::Discrete { values, default } => NapiCatalogAxis {
-        index: axis.index.to_u32(),
+      VariationAxisKind::Discrete { values, default } => Axis {
+        id: id.clone(),
         tag: axis.tag.clone(),
         name: axis.name.clone(),
-        hidden: axis.hidden,
-        kind: "discrete".into(),
+        role: "external".into(),
+        axis_type: "discrete".into(),
         minimum: None,
-        default_value: *default,
+        default: *default,
         maximum: None,
-        values: values.to_vec(),
+        values: Some(values.to_vec()),
+        labels: Vec::new(),
+        hidden: axis.hidden,
       },
     })
+    .collect::<Vec<_>>();
+  let sources = directory
+    .sources
+    .iter()
+    .zip(identity.source_ids.iter())
+    .map(|(source, id)| {
+      let values = identity
+        .axis_ids
+        .iter()
+        .cloned()
+        .zip(source.location.iter().copied())
+        .collect::<HashMap<_, _>>();
+      Source {
+        id: id.clone(),
+        name: source.name.clone(),
+        location: WireLocation { values },
+        filename: source.filename.clone(),
+        metric_values: metric_rows
+          .iter()
+          .zip(identity.metric_ids.iter())
+          .map(|((_, _, position), metric_id)| SourceMetricValue {
+            metric_id: metric_id.clone(),
+            position: *position,
+            overshoot: 0.0,
+          })
+          .collect(),
+        italic_angle: None,
+        line_gap: Some(directory.metrics.line_gap),
+        underline_position: None,
+        underline_thickness: None,
+      }
+    })
+    .collect::<Vec<_>>();
+  let axis_mappings = directory
+    .axis_mappings
+    .iter()
+    .map(|mapping| {
+      let axis_id = identity
+        .axis_ids
+        .get(mapping.axis.to_usize())
+        .cloned()
+        .ok_or_else(|| BridgeError::InvalidInput {
+          kind: "source axis mapping",
+          value: mapping.axis.to_u32().to_string(),
+        })?;
+      Ok(AxisMapping {
+        id: AxisMappingId::new(),
+        name: format!("{} mapping", directory.axes[mapping.axis.to_usize()].name),
+        description: None,
+        inputs: vec![axis_id.clone()],
+        outputs: vec![axis_id.clone()],
+        points: mapping
+          .points
+          .iter()
+          .map(|(input, output)| AxisMappingPoint {
+            description: None,
+            input: WireLocation {
+              values: HashMap::from([(axis_id.clone(), *input)]),
+            },
+            output: WireLocation {
+              values: HashMap::from([(axis_id.clone(), *output)]),
+            },
+          })
+          .collect(),
+      })
+    })
+    .collect::<BridgeResult<Vec<_>>>()?;
+  let named_instances = directory
+    .instances
+    .iter()
+    .zip(identity.instance_ids.iter())
+    .map(|(instance, id)| NamedInstance {
+      id: id.clone(),
+      name: instance.name.clone(),
+      location: WireLocation {
+        values: identity
+          .axis_ids
+          .iter()
+          .cloned()
+          .zip(instance.location.iter().copied())
+          .collect(),
+      },
+      postscript_name: instance.postscript_name.clone(),
+    })
     .collect();
-
-  Ok(NapiCatalogDirectory {
-    format: directory.format.name().into(),
-    family_name: directory.family_name.clone(),
-    style_name: directory.style_name.clone(),
-    glyphs,
+  Ok(FontSnapshot {
+    metadata,
+    metrics: FontMetrics {
+      units_per_em: directory.metrics.units_per_em,
+    },
+    metric_definitions,
+    source_metrics_interpolation: None,
+    glyphs: directory
+      .glyphs
+      .iter()
+      .zip(identity.glyph_ids.iter())
+      .map(|(glyph, id)| GlyphEntry {
+        id: id.clone(),
+        name: glyph.name.clone().into(),
+        unicodes: glyph.unicodes.to_vec(),
+      })
+      .collect(),
+    sources,
     axes,
-    default_location: directory.default_location().coordinates().to_vec(),
-    metrics: metrics.map(|metrics| NapiCatalogMetrics {
-      units_per_em: metrics.units_per_em,
-      ascender: metrics.ascender,
-      descender: metrics.descender,
-      line_gap: metrics.line_gap,
-    }),
+    axis_mappings,
+    named_instances,
   })
 }
 
@@ -316,127 +448,330 @@ fn source_location(
   Ok(directory.location(&source_coordinates)?)
 }
 
-fn wire_display_glyph(glyph: SourceDisplayGlyph) -> WireDisplayGlyph {
-  WireDisplayGlyph {
-    glyph_index: glyph.glyph.to_u32(),
-    location: glyph.location.coordinates().to_vec(),
-    root_geometry: glyph.root_geometry.to_u32(),
-    geometries: glyph
-      .geometries
-      .into_vec()
-      .into_iter()
-      .map(|geometry| WireDisplayGeometry {
-        glyph_index: geometry.glyph.to_u32(),
-        contours: wire_display_range(geometry.contours.start, geometry.contours.count),
-        components: wire_display_range(geometry.components.start, geometry.components.count),
-        anchors: wire_display_range(geometry.anchors.start, geometry.anchors.count),
-        guides: wire_display_range(geometry.guides.start, geometry.guides.count),
+fn wire_source_glyph(
+  projected: SourceProjectedGlyph,
+  directory: &FontDirectory,
+  identity: &SourceIdentity,
+) -> BridgeResult<Vec<GlyphSnapshot>> {
+  let mut projections = Vec::with_capacity(projected.components.len() + 1);
+  projections.push(projected.root);
+  projections.extend(projected.components);
+  let by_index = projections
+    .iter()
+    .map(|projection| (projection.glyph, projection))
+    .collect::<HashMap<_, _>>();
+  let component_glyph_ids = projections
+    .iter()
+    .skip(1)
+    .map(|projection| identity.glyph_id(projection.glyph))
+    .collect::<BridgeResult<Vec<_>>>()?;
+  let exact_sources = projections
+    .iter()
+    .flat_map(|projection| projection.exact_shapes.iter().map(|shape| shape.source))
+    .collect::<HashSet<_>>();
+
+  projections
+    .iter()
+    .map(|projection| {
+      let glyph_id = identity.glyph_id(projection.glyph)?;
+      let fallback = wire_source_shape(
+        &projection.fallback,
+        projection.glyph,
+        "fallback",
+        directory,
+        identity,
+      )?;
+      let interpolation = projection
+        .variation
+        .as_ref()
+        .map(|variation| {
+          let source_ids = (0..=variation.deltas.len())
+            .map(|index| SourceId::from_raw(format!("{glyph_id}-variation-{index}")))
+            .collect::<Vec<_>>();
+          let mut regions = vec![Vec::new()];
+          regions.extend(
+            variation
+              .deltas
+              .iter()
+              .map(|delta| {
+                delta
+                  .region
+                  .supports
+                  .iter()
+                  .map(|support| {
+                    let axis_id = identity
+                      .axis_ids
+                      .get(support.axis.to_usize())
+                      .cloned()
+                      .ok_or_else(|| BridgeError::InvalidInput {
+                        kind: "source projection axis",
+                        value: support.axis.to_u32().to_string(),
+                      })?;
+                    Ok(InterpolationSupport {
+                      axis_id,
+                      lower: support.lower,
+                      peak: support.peak,
+                      upper: support.upper,
+                    })
+                  })
+                  .collect::<BridgeResult<Vec<_>>>()
+              })
+              .collect::<BridgeResult<Vec<_>>>()?,
+          );
+          let coefficients = (0..source_ids.len())
+            .map(|row| {
+              (0..source_ids.len())
+                .map(|column| if row == column { 1.0 } else { 0.0 })
+                .collect::<Vec<_>>()
+            })
+            .collect();
+          let mut sources = vec![GlyphSourceValues {
+            source_id: source_ids[0].clone(),
+            values: projection.fallback.values.to_vec(),
+          }];
+          sources.extend(variation.deltas.iter().zip(source_ids.iter().skip(1)).map(
+            |(delta, source_id)| GlyphSourceValues {
+              source_id: source_id.clone(),
+              values: delta.values.to_vec(),
+            },
+          ));
+          Ok::<_, BridgeError>(GlyphInterpolation {
+            basis: WireInterpolationBasis {
+              source_ids,
+              regions,
+              coefficients,
+            },
+            sources,
+          })
+        })
+        .transpose()?;
+      let exact_source_shapes = projection
+        .exact_shapes
+        .iter()
+        .map(|exact| {
+          let source_id = identity
+            .source_ids
+            .get(exact.source.to_usize())
+            .cloned()
+            .ok_or_else(|| BridgeError::InvalidInput {
+              kind: "source projection exact source",
+              value: exact.source.to_u32().to_string(),
+            })?;
+          Ok(GlyphSourceShape {
+            source_id,
+            shape: wire_source_shape(
+              &exact.shape,
+              projection.glyph,
+              &format!("source{}", exact.source.to_u32()),
+              directory,
+              identity,
+            )?,
+          })
+        })
+        .collect::<BridgeResult<Vec<_>>>()?;
+      let components = wire_source_components(projection.glyph, None, &by_index, identity)?;
+      let exact_source_components = exact_sources
+        .iter()
+        .map(|source| {
+          let source_id = identity
+            .source_ids
+            .get(source.to_usize())
+            .cloned()
+            .ok_or_else(|| BridgeError::InvalidInput {
+              kind: "source projection exact components",
+              value: source.to_u32().to_string(),
+            })?;
+          Ok(GlyphSourceComponents {
+            source_id,
+            components: wire_source_components(
+              projection.glyph,
+              Some(*source),
+              &by_index,
+              identity,
+            )?,
+          })
+        })
+        .collect::<BridgeResult<Vec<_>>>()?;
+      Ok(GlyphSnapshot {
+        glyph_id: glyph_id.clone(),
+        projection: Some(GlyphProjection {
+          glyph_id,
+          fallback,
+          interpolation,
+          exact_source_shapes,
+          components,
+          exact_source_components,
+          component_glyph_ids: component_glyph_ids.clone(),
+        }),
+        layers: Vec::new(),
       })
-      .collect(),
-    contours: glyph
-      .contours
-      .into_vec()
-      .into_iter()
-      .map(|contour| WireDisplayContour {
-        points: wire_display_range(contour.points.start, contour.points.count),
-        closed: contour.closed,
-      })
-      .collect(),
-    components: glyph
-      .components
-      .into_vec()
-      .into_iter()
-      .map(|component| WireDisplayComponent {
-        geometry_index: component.geometry.to_u32(),
-        transform: [
-          component.transform.xx,
-          component.transform.xy,
-          component.transform.yx,
-          component.transform.yy,
-          component.transform.dx,
-          component.transform.dy,
-        ],
-      })
-      .collect(),
-    point_coordinates: glyph
-      .points
-      .iter()
-      .flat_map(|point| [point.x, point.y])
-      .collect(),
-    point_kinds: glyph
-      .points
-      .iter()
-      .map(|point| match point.kind {
-        SourceGlyphPointKind::OnCurve => WireDisplayPointKind::OnCurve,
-        SourceGlyphPointKind::QuadraticControl => WireDisplayPointKind::QuadraticControl,
-        SourceGlyphPointKind::CubicControl => WireDisplayPointKind::CubicControl,
-      })
-      .collect(),
-    point_smooth: glyph.points.iter().map(|point| point.smooth).collect(),
-    point_provenance: glyph
-      .points
-      .iter()
-      .map(|point| match point.provenance {
-        SourcePointProvenance::Native { .. } => WireDisplayPointProvenance::Native,
-        SourcePointProvenance::Implied => WireDisplayPointProvenance::Implied,
-      })
-      .collect(),
-    point_true_type_indices: glyph
-      .points
-      .iter()
-      .map(|point| match point.provenance {
-        SourcePointProvenance::Native { ttf_point_index } => {
-          ttf_point_index.map(|index| index.to_u32())
-        }
-        SourcePointProvenance::Implied => None,
-      })
-      .collect(),
-    anchors: glyph
-      .anchors
-      .into_vec()
-      .into_iter()
-      .map(|anchor| WireDisplayAnchor {
-        name: anchor.name,
-        x: anchor.x,
-        y: anchor.y,
-      })
-      .collect(),
-    guides: glyph
-      .guides
-      .into_vec()
-      .into_iter()
-      .map(|guide| match guide {
-        SourceGlyphGuide::Horizontal { y, name, color } => {
-          WireDisplayGuide::Horizontal { y, name, color }
-        }
-        SourceGlyphGuide::Vertical { x, name, color } => {
-          WireDisplayGuide::Vertical { x, name, color }
-        }
-        SourceGlyphGuide::Angled {
-          x,
-          y,
-          degrees,
-          name,
-          color,
-        } => WireDisplayGuide::Angled {
-          x,
-          y,
-          degrees,
-          name,
-          color,
-        },
-      })
-      .collect(),
-    x_advance: glyph.metrics.x_advance,
-    y_advance: glyph.metrics.y_advance,
-    bounds: glyph
-      .bounds
-      .map(|bounds| [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]),
-  }
+    })
+    .collect()
 }
 
-fn wire_display_range(start: u32, count: u32) -> WireDisplayRange {
-  WireDisplayRange { start, count }
+fn wire_source_shape(
+  shape: &SourceGlyphShape,
+  glyph: GlyphIndex,
+  selector: &str,
+  directory: &FontDirectory,
+  identity: &SourceIdentity,
+) -> BridgeResult<GlyphLayerShape> {
+  let glyph_id = identity.glyph_id(glyph)?;
+  let mut point_index = 0_usize;
+  let contours = shape
+    .contours
+    .iter()
+    .enumerate()
+    .map(|(contour_index, contour)| {
+      let contour_id = ContourId::from_raw(format!("{glyph_id}-{selector}-c{contour_index}"));
+      let points = contour
+        .points
+        .iter()
+        .map(|point| {
+          let id = PointId::from_raw(format!("{glyph_id}-{selector}-p{point_index}"));
+          point_index += 1;
+          PointData {
+            id: id.to_string(),
+            point_type: match point.kind {
+              SourceGlyphPointKind::OnCurve => PointType::OnCurve,
+              SourceGlyphPointKind::QuadraticControl | SourceGlyphPointKind::CubicControl => {
+                PointType::OffCurve
+              }
+            },
+            smooth: point.smooth,
+          }
+        })
+        .collect();
+      ContourData {
+        id: contour_id.to_string(),
+        closed: contour.closed,
+        points,
+      }
+    })
+    .collect();
+  let anchors = shape
+    .anchors
+    .iter()
+    .enumerate()
+    .map(|(index, name)| AnchorData {
+      id: AnchorId::from_raw(format!("{glyph_id}-{selector}-a{index}")).to_string(),
+      name: name.clone(),
+    })
+    .collect();
+  let components = shape
+    .components
+    .iter()
+    .enumerate()
+    .map(|(index, component)| {
+      let base_glyph_id = identity.glyph_id(component.glyph)?;
+      let base_glyph_name = directory
+        .glyphs
+        .get(component.glyph.to_usize())
+        .ok_or_else(|| BridgeError::InvalidInput {
+          kind: "source component glyph",
+          value: component.glyph.to_u32().to_string(),
+        })?
+        .name
+        .clone()
+        .into();
+      Ok(ComponentData {
+        id: ComponentId::from_raw(format!("{glyph_id}-{selector}-m{index}")).to_string(),
+        base_glyph_id,
+        base_glyph_name,
+      })
+    })
+    .collect::<BridgeResult<Vec<_>>>()?;
+  Ok(GlyphLayerShape {
+    structure: GlyphStructure {
+      contours,
+      anchors,
+      components,
+    },
+    values: shape.values.to_vec(),
+    component_transform_kind: ComponentTransformKind::Affine,
+  })
+}
+
+fn wire_source_components(
+  root: GlyphIndex,
+  exact_source: Option<shift_backends::SourceIndex>,
+  projections: &HashMap<GlyphIndex, &SourceGlyphProjection>,
+  identity: &SourceIdentity,
+) -> BridgeResult<GlyphComponents> {
+  fn visit(
+    glyph: GlyphIndex,
+    exact_source: Option<shift_backends::SourceIndex>,
+    parent_path: Vec<ComponentId>,
+    output: &mut Vec<ComponentGlyph>,
+    visiting: &mut HashSet<GlyphIndex>,
+    projections: &HashMap<GlyphIndex, &SourceGlyphProjection>,
+    identity: &SourceIdentity,
+  ) -> BridgeResult<()> {
+    if !visiting.insert(glyph) {
+      return Err(BridgeError::InvalidInput {
+        kind: "source component graph",
+        value: format!("cycle at glyph {}", glyph.to_u32()),
+      });
+    }
+    let projection = projections
+      .get(&glyph)
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "source component closure",
+        value: glyph.to_u32().to_string(),
+      })?;
+    let selector = exact_source.and_then(|source| {
+      projection
+        .exact_shapes
+        .iter()
+        .find(|shape| shape.source == source)
+        .map(|shape| (source, &shape.shape))
+    });
+    let (selector_name, shape) = match selector {
+      Some((source, shape)) => (format!("source{}", source.to_u32()), shape),
+      None => ("fallback".into(), &projection.fallback),
+    };
+    let parent_glyph_id = identity.glyph_id(glyph)?;
+    for (index, component) in shape.components.iter().enumerate() {
+      let component_id =
+        ComponentId::from_raw(format!("{parent_glyph_id}-{selector_name}-m{index}"));
+      let mut component_path = parent_path.clone();
+      component_path.push(component_id.clone());
+      output.push(ComponentGlyph {
+        parent_glyph_id: parent_glyph_id.clone(),
+        component_id,
+        base_glyph_id: identity.glyph_id(component.glyph)?,
+        parent_path: parent_path.clone(),
+        component_path: component_path.clone(),
+        attachment: None,
+      });
+      visit(
+        component.glyph,
+        exact_source,
+        component_path,
+        output,
+        visiting,
+        projections,
+        identity,
+      )?;
+    }
+    visiting.remove(&glyph);
+    Ok(())
+  }
+
+  let mut components = Vec::new();
+  visit(
+    root,
+    exact_source,
+    Vec::new(),
+    &mut components,
+    &mut HashSet::new(),
+    projections,
+    identity,
+  )?;
+  Ok(GlyphComponents {
+    root_glyph_id: identity.glyph_id(root)?,
+    components,
+  })
 }
 
 fn napi_source_atlas_page(
@@ -446,6 +781,7 @@ fn napi_source_atlas_page(
   descriptor: &SourceAtlasDescriptor,
   location: &shift_backends::VariationLocation,
   layout: VariableLayout,
+  identity: &SourceIdentity,
 ) -> BridgeResult<NapiCatalogAtlasPage> {
   let statistics = atlas.statistics();
   let weights = descriptor
@@ -469,11 +805,32 @@ fn napi_source_atlas_page(
     glyphs: descriptor
       .glyphs()
       .iter()
-      .map(|(glyph, atlas_glyph)| NapiCatalogAtlasGlyph {
-        glyph_index: glyph.to_u32(),
-        atlas_glyph: *atlas_glyph,
+      .map(|(glyph, atlas_glyph)| {
+        Ok(NapiCatalogAtlasGlyph {
+          glyph_id: identity.glyph_id(*glyph)?.to_string(),
+          atlas_glyph: *atlas_glyph,
+          exact_sources: descriptor
+            .exact_glyphs()
+            .iter()
+            .filter(|(root, _, _)| root == glyph)
+            .map(|(_, source, glyph_index)| {
+              let source_id = identity
+                .source_ids
+                .get(source.to_usize())
+                .cloned()
+                .ok_or_else(|| BridgeError::InvalidInput {
+                  kind: "source atlas exact source",
+                  value: source.to_u32().to_string(),
+                })?;
+              Ok(NapiSlugExactSource {
+                source_id: source_id.to_string(),
+                glyph_index: *glyph_index,
+              })
+            })
+            .collect::<BridgeResult<Vec<_>>>()?,
+        })
       })
-      .collect(),
+      .collect::<BridgeResult<Vec<_>>>()?,
     weights,
     atlas_glyph_count: u32::try_from(statistics.glyph_count)
       .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
@@ -676,10 +1033,77 @@ impl Task for ExportFontTask {
   }
 }
 
+struct SourceIdentity {
+  glyph_ids: Box<[GlyphId]>,
+  glyph_indices: HashMap<GlyphId, GlyphIndex>,
+  axis_ids: Box<[AxisId]>,
+  source_ids: Box<[SourceId]>,
+  instance_ids: Box<[NamedInstanceId]>,
+  metric_ids: Box<[MetricId]>,
+}
+
+impl SourceIdentity {
+  fn new(directory: &FontDirectory) -> Self {
+    let glyph_ids = (0..directory.glyphs.len())
+      .map(|_| GlyphId::new())
+      .collect::<Vec<_>>()
+      .into_boxed_slice();
+    let glyph_indices = glyph_ids
+      .iter()
+      .cloned()
+      .enumerate()
+      .map(|(index, glyph_id)| (glyph_id, GlyphIndex::new(index as u32)))
+      .collect();
+    Self {
+      glyph_ids,
+      glyph_indices,
+      axis_ids: (0..directory.axes.len())
+        .map(|_| AxisId::new())
+        .collect::<Vec<_>>()
+        .into_boxed_slice(),
+      source_ids: (0..directory.sources.len())
+        .map(|_| SourceId::new())
+        .collect::<Vec<_>>()
+        .into_boxed_slice(),
+      instance_ids: (0..directory.instances.len())
+        .map(|_| NamedInstanceId::new())
+        .collect::<Vec<_>>()
+        .into_boxed_slice(),
+      metric_ids: (0..5)
+        .map(|_| MetricId::new())
+        .collect::<Vec<_>>()
+        .into_boxed_slice(),
+    }
+  }
+
+  fn glyph_id(&self, index: GlyphIndex) -> BridgeResult<GlyphId> {
+    self
+      .glyph_ids
+      .get(index.to_usize())
+      .cloned()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "source glyph index",
+        value: index.to_u32().to_string(),
+      })
+  }
+
+  fn glyph_index(&self, glyph_id: &GlyphId) -> BridgeResult<GlyphIndex> {
+    self
+      .glyph_indices
+      .get(glyph_id)
+      .copied()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "source glyph id",
+        value: glyph_id.to_string(),
+      })
+  }
+}
+
 #[napi]
 pub struct Bridge {
   workspace: Option<FontWorkspace>,
-  font_source: Option<FontSource>,
+  font_source: Option<OpenedFont>,
+  source_identity: Option<SourceIdentity>,
   live_version: DocumentVersion,
   saved_version: DocumentVersion,
   slug_generation: u32,
@@ -694,6 +1118,7 @@ impl Bridge {
     Self {
       workspace: None,
       font_source: None,
+      source_identity: None,
       live_version: DocumentVersion::default(),
       saved_version: DocumentVersion::default(),
       slug_generation: 0,
@@ -713,6 +1138,7 @@ impl Bridge {
       new_workspace_from_options(options),
     )?);
     self.font_source = None;
+    self.source_identity = None;
     self.reset_versions();
     Ok(())
   }
@@ -755,6 +1181,7 @@ impl Bridge {
   pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::open(path, store_path)?);
     self.font_source = None;
+    self.source_identity = None;
     self.reset_versions();
     Ok(())
   }
@@ -767,24 +1194,28 @@ impl Bridge {
   ) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::resume_for_source(store_path, source_path)?);
     self.font_source = None;
+    self.source_identity = None;
     self.reset_versions();
     Ok(())
   }
 
   #[napi]
-  pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiCatalogDirectory> {
+  pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiFontSnapshot> {
     let source = FontLoader::new().open_source(Path::new(&path))?;
-    let directory = napi_catalog_directory(&source)?;
+    let identity = SourceIdentity::new(source.directory());
+    let snapshot = wire_font_snapshot(&source, &identity)?;
     self.workspace = None;
     self.font_source = Some(source);
+    self.source_identity = Some(identity);
     self.slug_atlas = None;
     self.source_atlas_descriptors.clear();
-    Ok(directory)
+    Ok(snapshot.into())
   }
 
   #[napi]
   pub fn close_font_source(&mut self) {
     self.font_source = None;
+    self.source_identity = None;
     self.slug_atlas = None;
     self.source_atlas_descriptors.clear();
   }
@@ -1284,17 +1715,20 @@ impl Bridge {
     self.discard_slug_atlas(generation);
   }
 
-  /// Resolves one source-local glyph without constructing authored font state.
-  #[napi]
-  pub fn read_font_source_glyph(
-    &self,
-    glyph_index: u32,
-    coordinates: Vec<f64>,
-  ) -> errors::Result<NapiDisplayGlyph> {
+  /// Reads one location-independent source glyph and its complete component closure.
+  #[napi(ts_args_type = "glyphId: GlyphId")]
+  pub fn read_font_source_glyph(&self, glyph_id: String) -> errors::Result<Vec<NapiGlyphSnapshot>> {
+    let glyph_id = parse::<GlyphId>(&glyph_id)?;
     let source = self.font_source()?;
-    let location = source_location(source.directory(), coordinates)?;
-    let glyph = source.read_glyph(GlyphIndex::new(glyph_index), &location)?;
-    Ok(wire_display_glyph(glyph).into())
+    let identity = self.source_identity()?;
+    let glyph_index = identity.glyph_index(&glyph_id)?;
+    let projected = source.glyph(glyph_index)?;
+    Ok(
+      wire_source_glyph(projected, source.directory(), identity)?
+        .into_iter()
+        .map(Into::into)
+        .collect(),
+    )
   }
 
   /// Builds one source-neutral catalog page through the active format adapter.
@@ -1302,7 +1736,7 @@ impl Bridge {
   pub fn prepare_source_atlas_page(
     &mut self,
     page_index: u32,
-    glyph_indices: Vec<u32>,
+    glyph_ids: Vec<String>,
     coordinates: Vec<f64>,
     alignment: u32,
   ) -> errors::Result<NapiCatalogAtlasPage> {
@@ -1314,23 +1748,15 @@ impl Bridge {
     let (atlas, descriptor, location, layout) = {
       let source = self.font_source()?;
       let location = source_location(source.directory(), coordinates)?;
-      let roots = glyph_indices
-        .into_iter()
-        .map(GlyphIndex::new)
-        .collect::<Vec<_>>();
-      let page = match source {
-        FontSource::Binary(font) => {
-          build_binary_atlas_page(font, &roots, shift_slug::DEFAULT_BAND_COUNT)?
-        }
-        FontSource::Glif(_) | FontSource::Glyphs(_) => {
-          return Err(
-            shift_backends::SourceAtlasError::UnsupportedBinary {
-              details: "the active retained source does not yet have a Slug atlas adapter",
-            }
-            .into(),
-          );
-        }
-      };
+      let identity = self.source_identity()?;
+      let roots = glyph_ids
+        .iter()
+        .map(|glyph_id| parse::<GlyphId>(glyph_id))
+        .collect::<errors::Result<Vec<_>>>()?
+        .iter()
+        .map(|glyph_id| identity.glyph_index(glyph_id))
+        .collect::<BridgeResult<Vec<_>>>()?;
+      let page = source.atlas_page(&roots, shift_slug::DEFAULT_BAND_COUNT)?;
       let (atlas, descriptor) = page.into_parts();
       let layout = atlas.layout(alignment as usize)?;
       (atlas, descriptor, location, layout)
@@ -1342,6 +1768,7 @@ impl Bridge {
       &descriptor,
       &location,
       layout,
+      self.source_identity()?,
     )?;
     self.source_atlas_descriptors.insert(page_index, descriptor);
     self.slug_atlas = Some(SlugAtlasGeneration {
@@ -1512,12 +1939,22 @@ impl Bridge {
       })
   }
 
-  fn font_source(&self) -> BridgeResult<&FontSource> {
+  fn font_source(&self) -> BridgeResult<&OpenedFont> {
     self
       .font_source
       .as_ref()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "font source",
+        value: "no retained font source is open".to_string(),
+      })
+  }
+
+  fn source_identity(&self) -> BridgeResult<&SourceIdentity> {
+    self
+      .source_identity
+      .as_ref()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "font source identity",
         value: "no retained font source is open".to_string(),
       })
   }

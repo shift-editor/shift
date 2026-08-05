@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { GlyphCatalogCanvas } from "./GlyphCatalogCanvas";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
@@ -6,6 +7,7 @@ import { getShiftHost } from "@/host/shiftHost";
 
 /** Coordinates the native scroll viewport and its two canvas-owned catalog layers. */
 export const GlyphGrid = memo(function GlyphGrid() {
+  const catalogActive = useLocation().pathname === "/home";
   const {
     filteredGlyphs,
     location,
@@ -86,7 +88,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
         location={location}
         metrics={metrics}
         sourceId={sourceId}
-        active
+        active={catalogActive}
         atlasSource={atlasSource}
         observeAtlasInvalidation={observeAtlasInvalidation}
         editable={editable}

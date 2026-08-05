@@ -58,7 +58,7 @@ export class WorkspaceManager {
    * @returns a live session for the opened source; existing sessions are reused by workspace id.
    */
   async openPath(sourcePath: string): Promise<FontSession> {
-    if (isRetainedSourcePath(sourcePath)) return this.#openFontSource(sourcePath);
+    if (!isShiftPackagePath(sourcePath)) return this.#openFontSource(sourcePath);
 
     const workspaceProcess = new WorkspaceProcess();
     workspaceProcess.start(this.#documentsRoot());
@@ -280,7 +280,7 @@ export class WorkspaceManager {
       }
 
       const session = new FontSession({
-        mode: "preview",
+        mode: "imported",
         sessionId: state.sessionId,
         workspaceProcess,
       });
@@ -295,14 +295,4 @@ export class WorkspaceManager {
 
 function isShiftPackagePath(sourcePath: string): boolean {
   return path.extname(sourcePath).toLowerCase() === ".shift";
-}
-
-function isRetainedSourcePath(sourcePath: string): boolean {
-  switch (path.extname(sourcePath).toLowerCase()) {
-    case ".ttf":
-    case ".otf":
-      return true;
-    default:
-      return false;
-  }
 }

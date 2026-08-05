@@ -40,7 +40,7 @@ export interface BridgeApi {
   closeWorkspace(): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
-  openFontSource(path: string): CatalogDirectory
+  openFontSource(path: string): FontSnapshot
   closeFontSource(): void
   setDocumentId(documentId: string): DocumentState
   saveWorkspace(): DocumentState
@@ -116,10 +116,10 @@ export interface BridgeApi {
   discardSlugAtlas(generation: number): void
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number): void
-  /** Resolves one source-local glyph without constructing authored font state. */
-  readFontSourceGlyph(glyphIndex: number, coordinates: Array<number>): DisplayGlyph
+  /** Reads one location-independent source glyph and its complete component closure. */
+  readFontSourceGlyph(glyphId: GlyphId): Array<GlyphSnapshot>
   /** Builds one source-neutral catalog page through the active format adapter. */
-  prepareSourceAtlasPage(pageIndex: number, glyphIndices: Array<number>, coordinates: Array<number>, alignment: number): CatalogAtlasPage
+  prepareSourceAtlasPage(pageIndex: number, glyphIds: Array<string>, coordinates: Array<number>, alignment: number): CatalogAtlasPage
   /** Streams one prepared source page through the same bounded atlas lane. */
   streamSourceAtlasPage(generation: number, maximumLength: number): NativeReadableStream<Uint8Array>
   /** Releases a rejected source page and its retained weight descriptor. */
@@ -269,8 +269,9 @@ export interface BooleanOpIntent {
 }
 
 export interface CatalogAtlasGlyph {
-  glyphIndex: number
+  glyphId: GlyphId
   atlasGlyph: number
+  exactSources: Array<SlugExactSource>
 }
 
 export interface CatalogAtlasPage {
@@ -361,6 +362,8 @@ export interface ComponentGlyph {
   attachment?: ComponentAnchorAttachment
 }
 
+export type ComponentTransformKind = "decomposed" | "affine";
+
 export interface ContourData {
   id: ContourId
   points: Array<PointData>
@@ -422,69 +425,6 @@ export interface DeleteNamedInstanceIntent {
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
 export interface DeleteSourceIntent {
   sourceId: SourceId
-}
-
-export interface DisplayAnchor {
-  name?: string
-  x: number
-  y: number
-}
-
-export interface DisplayComponent {
-  geometryIndex: number
-  transform: Float64Array
-}
-
-export interface DisplayContour {
-  points: DisplayRange
-  closed: boolean
-}
-
-export interface DisplayGeometry {
-  glyphIndex: number
-  contours: DisplayRange
-  components: DisplayRange
-  anchors: DisplayRange
-  guides: DisplayRange
-}
-
-export interface DisplayGlyph {
-  glyphIndex: number
-  location: Float64Array
-  rootGeometry: number
-  geometries: Array<DisplayGeometry>
-  contours: Array<DisplayContour>
-  components: Array<DisplayComponent>
-  pointCoordinates: Float64Array
-  pointKinds: Array<DisplayPointKind>
-  pointSmooth: Array<boolean>
-  pointProvenance: Array<DisplayPointProvenance>
-  pointTrueTypeIndices: Array<number | undefined | null>
-  anchors: Array<DisplayAnchor>
-  guides: Array<DisplayGuide>
-  xAdvance: number
-  yAdvance?: number
-  bounds?: Array<number>
-}
-
-export interface DisplayGuide {
-  kind: DisplayGuideKind
-  x?: number
-  y?: number
-  degrees?: number
-  name?: string
-  color?: string
-}
-
-export type DisplayGuideKind = "horizontal" | "vertical" | "angled";
-
-export type DisplayPointKind = "onCurve" | "quadraticControl" | "cubicControl";
-
-export type DisplayPointProvenance = "native" | "implied";
-
-export interface DisplayRange {
-  start: number
-  count: number
 }
 
 /**
@@ -585,6 +525,18 @@ export interface FontReplacement {
   sources?: Array<Source>
 }
 
+export interface FontSnapshot {
+  metadata: FontMetadata
+  metrics: FontMetrics
+  metricDefinitions: Array<MetricDefinition>
+  sourceMetricsInterpolation?: SourceMetricsInterpolationSnapshot
+  glyphs: Array<GlyphEntry>
+  sources: Array<Source>
+  axes: Array<Axis>
+  axisMappings: Array<AxisMapping>
+  namedInstances: Array<NamedInstance>
+}
+
 export interface GlyphChangedEntities {
   pointIds: Array<PointId>
   contourIds: Array<ContourId>
@@ -596,6 +548,12 @@ export interface GlyphChangedEntities {
 export interface GlyphComponents {
   rootGlyphId: GlyphId
   components: Array<ComponentGlyph>
+}
+
+export interface GlyphEntry {
+  id: GlyphId
+  name: string
+  unicodes: Array<number>
 }
 
 export interface GlyphInterpolation {
@@ -611,6 +569,7 @@ export interface GlyphLayerRecord {
 export interface GlyphLayerShape {
   structure: GlyphStructure
   values: Float64Array
+  componentTransformKind: ComponentTransformKind
 }
 
 export interface GlyphLayerSnapshot {

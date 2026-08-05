@@ -7,21 +7,13 @@ import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
-import { DisplayGlyphCanvas } from "@/components/editor/DisplayGlyphCanvas";
-import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
-import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { useSignalState } from "@/lib/signals";
 import { asGlyphId, mintNodeId } from "@shift/types";
 
 export const Editor = () => {
-  const workspace = useFontSession().workspace;
-
-  return workspace ? <AuthoredEditor /> : <DisplayEditor />;
-};
-
-const AuthoredEditor = () => {
   const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
@@ -119,25 +111,6 @@ const AuthoredEditor = () => {
   return (
     <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
       <Canvas />
-    </EditorLayout>
-  );
-};
-
-const DisplayEditor = () => {
-  const { openedGlyph, metrics } = useGlyphCatalog();
-  const { claimZone } = useFocusZone();
-
-  useEffect(() => {
-    if (!openedGlyph) return;
-
-    claimZone("canvas");
-  }, [claimZone, openedGlyph]);
-
-  if (!openedGlyph) return null;
-
-  return (
-    <EditorLayout cursorStyle="default" gesture="idle">
-      <DisplayGlyphCanvas glyph={openedGlyph} metrics={metrics} />
     </EditorLayout>
   );
 };

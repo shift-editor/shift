@@ -15,17 +15,13 @@ export function selectedGeometryEdit(editor: Editor): SelectedGeometryEdit | nul
   const objects = editor.objects(editor.selection.ids);
   if (objects.length !== editor.selection.ids.length) return null;
 
-  let layer: GlyphLayer | null = null;
   let node: GlyphNode | null = null;
   const pointIds = new Set<PointId>();
   const anchorIds = new Set<AnchorId>();
 
-  const useGlyphContext = (nextLayer: GlyphLayer, nextNode: GlyphNode): boolean => {
-    if (nextLayer.sourceId !== editor.activeSourceId) return false;
-    if (layer && layer.id !== nextLayer.id) return false;
+  const useNode = (nextNode: GlyphNode): boolean => {
     if (node && node.id !== nextNode.id) return false;
 
-    layer = nextLayer;
     node = nextNode;
     return true;
   };
@@ -33,23 +29,23 @@ export function selectedGeometryEdit(editor: Editor): SelectedGeometryEdit | nul
   for (const object of objects) {
     switch (object.kind) {
       case "point":
-        if (!useGlyphContext(object.layer, object.node)) return null;
+        if (!useNode(object.node)) return null;
         pointIds.add(object.pointId);
         break;
 
       case "anchor":
-        if (!useGlyphContext(object.layer, object.node)) return null;
+        if (!useNode(object.node)) return null;
         anchorIds.add(object.anchorId);
         break;
 
       case "segment":
-        if (!useGlyphContext(object.layer, object.node)) return null;
+        if (!useNode(object.node)) return null;
         for (const pointId of object.pointIds) pointIds.add(pointId);
         break;
 
       case "contour": {
-        if (!useGlyphContext(object.layer, object.node)) return null;
-        const contour = object.layer.contour(object.contourId);
+        if (!useNode(object.node)) return null;
+        const contour = object.geometry.contour(object.contourId);
         if (!contour) return null;
 
         for (const point of contour.points) pointIds.add(point.id);
@@ -61,7 +57,10 @@ export function selectedGeometryEdit(editor: Editor): SelectedGeometryEdit | nul
     }
   }
 
-  if (!layer || !node) return null;
+  if (!node) return null;
+
+  const layer = editor.layerForGeometry({ points: pointIds, anchors: anchorIds });
+  if (!layer || layer.sourceId !== editor.activeSourceId) return null;
 
   return {
     layer,

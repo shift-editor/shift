@@ -4,9 +4,9 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `WorkspaceManager` owns live font sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender. A session's immutable mode is `"shift"` or `"preview"`.
-- **Architecture Invariant:** Every font session owns one `WorkspaceProcess`. Shift sessions additionally own one `DocumentClient` and one `DocumentSession`; preview sessions deliberately have no authored document, persistence, dirty state, save target, or export workflow. Main never reads or mutates font data directly.
-- **Architecture Invariant:** TTF/OTF paths open as retained preview sessions. They use the shared renderer sync lane and `/home` route, but never allocate a SQLite working document or authored Shift model.
+- **Architecture Invariant:** `WorkspaceManager` owns live font sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender. A session's immutable mode is `"shift"` or `"imported"`.
+- **Architecture Invariant:** Every font session owns one `WorkspaceProcess`. Shift sessions additionally own one `DocumentClient` and one `DocumentSession`; imported sessions deliberately have no authored document, persistence, dirty state, save target, or export workflow. Main never reads or mutates font data directly.
+- **Architecture Invariant:** Every non-`.shift` font path opens as an immutable imported session. It uses the shared renderer sync lane and `/home` route, but never allocates a SQLite working document or authored Shift model.
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
@@ -44,7 +44,7 @@ src/main/
 
 ## Key Types
 
-- `WorkspaceManager` -- registry for live Shift and preview font sessions and window attachments.
+- `WorkspaceManager` -- registry for live Shift and imported font sessions and window attachments.
 - `FontSession` -- owns the immutable mode, utility process, optional authored document services, and attached windows for one open font.
 - `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect package, open, close, and document state.
 - `DocumentClient` -- request client for renderer-served document state/save calls.
@@ -64,7 +64,7 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 File -> New asks `WorkspaceManager.createUntitled()` for a session. File -> Open shows `showOpenFontDialog()` and then asks `WorkspaceManager.openPath(path)`.
 
-For TTF/OTF paths, `WorkspaceManager` opens one retained source in the utility process and registers a `"preview"` session without a document lane. For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the process opens the package and the resulting state is registered. Main does not start monolithic Slug preparation: the renderer requests the complete fixed-page set before its first Grid presentation. The utility opens and validates a matching cache artifact once, serves independently verified Zstd pages through the bounded stream contract, or compiles native misses and stages them for atomic publication. Page boundaries keep compilation, streaming, cache replacement, and local edit invalidation bounded without putting page acquisition on the scroll path.
+For every non-`.shift` font path, `WorkspaceManager` opens one immutable retained source in the utility process and registers an `"imported"` session without a document lane. For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the process opens the package and the resulting state is registered. Main does not start monolithic Slug preparation: the renderer requests the complete fixed-page set before its first Grid presentation. The utility opens and validates a matching cache artifact once, serves independently verified Zstd pages through the bounded stream contract, or compiles native misses and stages them for atomic publication. Page boundaries keep compilation, streaming, cache replacement, and local edit invalidation bounded without putting page acquisition on the scroll path.
 
 ### Window Attachment
 

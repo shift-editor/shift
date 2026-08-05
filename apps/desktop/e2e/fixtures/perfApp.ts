@@ -16,6 +16,7 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
+import { copyImportedSource, createAuthoredPackage } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -25,6 +26,17 @@ const EDITABLE_FONT_PATH =
 const PREVIEW_FONT_PATH =
   process.env.SHIFT_E2E_PREVIEW_FONT_PATH ??
   path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
+const VARIABLE_PREVIEW_FONT_PATH =
+  process.env.SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH ??
+  path.resolve(APP_ROOT, "src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf");
+const UFO_PREVIEW_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
+);
+const GLYPHS_PREVIEW_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/MutatorSansVariable.glyphs",
+);
 
 const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 800;
@@ -32,32 +44,20 @@ const WINDOW_HEIGHT = 800;
 export type PerfFixtures = {
   electronApp: ElectronApplication;
   page: Page;
+  sourcePath: string;
 };
 
 /**
  * Perf test fixture — GPU enabled, no software rendering override.
  */
-function createAppTest(fontPath: string) {
+function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPackage) {
   return base.extend<PerfFixtures>({
     electronApp: async ({}, use) => {
       const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
       const userDataDir = path.join(testRoot, "user-data");
       const workspaceDirectory = path.join(testRoot, "workspace");
-      let workspacePath: string;
+      const workspacePath = prepareSource(fontPath, workspaceDirectory);
       let app: ElectronApplication | null = null;
-
-      if (path.extname(fontPath) === ".designspace") {
-        fs.cpSync(path.dirname(fontPath), workspaceDirectory, { recursive: true });
-        workspacePath = path.join(workspaceDirectory, path.basename(fontPath));
-      } else {
-        fs.mkdirSync(workspaceDirectory, { recursive: true });
-        workspacePath = path.join(workspaceDirectory, path.basename(fontPath));
-        if (fs.statSync(fontPath).isDirectory()) {
-          fs.cpSync(fontPath, workspacePath, { recursive: true });
-        } else {
-          fs.copyFileSync(fontPath, workspacePath, fs.constants.COPYFILE_FICLONE);
-        }
-      }
 
       try {
         app = await electron.launch({
@@ -70,23 +70,43 @@ function createAppTest(fontPath: string) {
           },
         });
 
-        await app.firstWindow();
+        const page = await app.firstWindow();
         const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
           electronApp.getPath("userData"),
         );
         if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
           throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
         }
-        await app.evaluate(
-          async ({ BrowserWindow }, { w, h }) => {
-            const win = BrowserWindow.getAllWindows()[0];
-            if (win) {
-              win.unmaximize();
-              win.setSize(w, h);
-              win.center();
-            }
+
+        const browserWindow = await app.browserWindow(page);
+        const initialContentSize = await browserWindow.evaluate(
+          (win, { w, h }) => {
+            win.unmaximize();
+            win.setSize(w, h);
+            win.center();
+            const [width, height] = win.getContentSize();
+            return { width, height };
           },
           { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+        );
+        await page.waitForFunction(
+          ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
+          initialContentSize,
+        );
+        await page.waitForFunction(() => document.visibilityState === "visible");
+        const visibleContentSize = await browserWindow.evaluate(
+          (win, { w, h }) => {
+            win.setSize(w, h);
+            win.center();
+            const [width, height] = win.getContentSize();
+            return { width, height };
+          },
+          { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+        );
+        await browserWindow.dispose();
+        await page.waitForFunction(
+          ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
+          visibleContentSize,
         );
 
         await use(app);
@@ -99,6 +119,13 @@ function createAppTest(fontPath: string) {
         }
         fs.rmSync(testRoot, { recursive: true, force: true });
       }
+    },
+
+    sourcePath: async ({ electronApp }, use) => {
+      const sourcePath = await electronApp.evaluate(() => process.env.SHIFT_E2E_FONT_PATH ?? null);
+      if (!sourcePath) throw new Error("E2E font source path is unavailable");
+
+      await use(sourcePath);
     },
 
     page: async ({ electronApp }, use) => {
@@ -114,8 +141,11 @@ function createAppTest(fontPath: string) {
   });
 }
 
-export const test = createAppTest(EDITABLE_FONT_PATH);
-export const previewTest = createAppTest(PREVIEW_FONT_PATH);
+export const test = createAppTest(EDITABLE_FONT_PATH, createAuthoredPackage);
+export const previewTest = createAppTest(PREVIEW_FONT_PATH, copyImportedSource);
+export const variablePreviewTest = createAppTest(VARIABLE_PREVIEW_FONT_PATH, copyImportedSource);
+export const ufoPreviewTest = createAppTest(UFO_PREVIEW_FONT_PATH, copyImportedSource);
+export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImportedSource);
 
 export { expect } from "@playwright/test";
 

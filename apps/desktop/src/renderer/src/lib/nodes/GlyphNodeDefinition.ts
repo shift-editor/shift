@@ -116,7 +116,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const view = this.#view(node);
     if (!view) return;
 
-    const unicode = glyph.record.unicodes[0] ?? null;
+    const unicode = glyph.entry.unicodes[0] ?? null;
     track(view.xAdvanceCell);
 
     const advance = displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);

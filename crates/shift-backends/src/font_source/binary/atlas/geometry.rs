@@ -10,7 +10,9 @@ use skrifa::raw::tables::loca::Loca;
 use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
-use crate::font_source::{AffineTransform, FontReadError, GlyphIndex, GlyphPointKind};
+use crate::font_source::{
+    AffineTransform, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance, TrueTypePointIndex,
+};
 
 use super::super::{approximate_hypot, component_transform, infer_tuple_deltas, malformed};
 use super::tuple_region;
@@ -24,6 +26,15 @@ pub(super) struct VariableCurves {
     pub(super) sources: BTreeMap<u32, Vec<Curve>>,
 }
 
+pub(super) fn static_curves(
+    contours: Vec<VariableContour>,
+) -> Result<VariableCurves, SourceAtlasError> {
+    curves_from_geometry(&VariableGeometry {
+        contours,
+        attachment_points: Vec::new(),
+    })
+}
+
 pub(super) fn resolve_variable_curves(
     path: &Path,
     loca: Loca<'_>,
@@ -32,15 +43,29 @@ pub(super) fn resolve_variable_curves(
     registry: &mut RegionRegistry,
     root: GlyphIndex,
 ) -> Result<VariableCurves, SourceAtlasError> {
-    let geometry = ExpressionResolver::new(path, loca, glyf, gvar, registry).resolve(root)?;
-    curves_from_geometry(&geometry)
+    let glyphs = ExpressionResolver::new(path, loca, glyf, gvar, registry).resolve(root)?;
+    let geometry = glyphs
+        .first()
+        .ok_or_else(|| invalid_geometry("binary atlas root geometry is unavailable"))?;
+    curves_from_geometry(&geometry.geometry)
+}
+
+pub(super) fn resolve_variable_glyphs(
+    path: &Path,
+    loca: Loca<'_>,
+    glyf: Glyf<'_>,
+    gvar: Option<Gvar<'_>>,
+    registry: &mut RegionRegistry,
+    root: GlyphIndex,
+) -> Result<Vec<VariableGlyph>, SourceAtlasError> {
+    ExpressionResolver::new(path, loca, glyf, gvar, registry).resolve(root)
 }
 
 #[derive(Clone, Debug, Default)]
-struct VariablePosition {
-    x: f64,
-    y: f64,
-    deltas: BTreeMap<u32, (f64, f64)>,
+pub(super) struct VariablePosition {
+    pub(super) x: f64,
+    pub(super) y: f64,
+    pub(super) deltas: BTreeMap<u32, (f64, f64)>,
 }
 
 impl VariablePosition {
@@ -115,9 +140,11 @@ impl VariablePosition {
 }
 
 #[derive(Clone, Debug)]
-struct VariablePoint {
-    position: VariablePosition,
-    kind: GlyphPointKind,
+pub(super) struct VariablePoint {
+    pub(super) position: VariablePosition,
+    pub(super) kind: GlyphPointKind,
+    pub(super) smooth: bool,
+    pub(super) provenance: PointProvenance,
 }
 
 impl VariablePoint {
@@ -125,19 +152,36 @@ impl VariablePoint {
         Self {
             position: VariablePosition::midpoint(&first.position, &second.position),
             kind: GlyphPointKind::OnCurve,
+            smooth: false,
+            provenance: PointProvenance::Implied,
         }
     }
 }
 
 #[derive(Clone, Debug)]
-struct VariableContour {
-    points: Vec<VariablePoint>,
+pub(super) struct VariableContour {
+    pub(super) points: Vec<VariablePoint>,
 }
 
 #[derive(Clone, Debug, Default)]
-struct VariableGeometry {
-    contours: Vec<VariableContour>,
-    attachment_points: Vec<VariablePosition>,
+pub(super) struct VariableGeometry {
+    pub(super) contours: Vec<VariableContour>,
+    pub(super) attachment_points: Vec<VariablePosition>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct VariableComponent {
+    pub(super) glyph: GlyphIndex,
+    pub(super) transform: AffineTransform,
+    pub(super) translation: VariablePosition,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct VariableGlyph {
+    pub(super) glyph: GlyphIndex,
+    pub(super) contours: Vec<VariableContour>,
+    pub(super) components: Vec<VariableComponent>,
+    pub(super) geometry: VariableGeometry,
 }
 
 struct ExpressionResolver<'a, 'registry> {
@@ -148,7 +192,7 @@ struct ExpressionResolver<'a, 'registry> {
     registry: &'registry mut RegionRegistry,
     indices: HashMap<GlyphIndex, usize>,
     states: Vec<u8>,
-    geometries: Vec<Option<VariableGeometry>>,
+    geometries: Vec<Option<VariableGlyph>>,
 }
 
 impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
@@ -171,11 +215,14 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
         }
     }
 
-    fn resolve(mut self, root: GlyphIndex) -> Result<VariableGeometry, SourceAtlasError> {
-        let index = self.resolve_geometry(root)?;
-        self.geometries[index]
+    fn resolve(mut self, root: GlyphIndex) -> Result<Vec<VariableGlyph>, SourceAtlasError> {
+        let root_index = self.resolve_geometry(root)?;
+        let root_glyph = self.geometries[root_index]
             .take()
-            .ok_or_else(|| invalid_geometry("binary atlas root geometry is unavailable"))
+            .ok_or_else(|| invalid_geometry("binary atlas root geometry is unavailable"))?;
+        let mut glyphs = vec![root_glyph];
+        glyphs.extend(self.geometries.into_iter().flatten());
+        Ok(glyphs)
     }
 
     fn resolve_geometry(&mut self, glyph: GlyphIndex) -> Result<usize, SourceAtlasError> {
@@ -197,13 +244,27 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
         let raw = self.loca.get_glyf(raw_id, &self.glyf).map_err(|error| {
             malformed(self.path, format!("failed to read glyph {raw_id}: {error}"))
         })?;
-        let geometry = match raw {
-            None => VariableGeometry::default(),
-            Some(GlyfGlyph::Simple(simple)) => self.resolve_simple(raw_id, &simple)?,
+        let glyph_record = match raw {
+            None => VariableGlyph {
+                glyph,
+                contours: Vec::new(),
+                components: Vec::new(),
+                geometry: VariableGeometry::default(),
+            },
+            Some(GlyfGlyph::Simple(simple)) => {
+                let geometry = self.resolve_simple(raw_id, &simple)?;
+                VariableGlyph {
+                    glyph,
+                    contours: geometry.contours.clone(),
+                    components: Vec::new(),
+                    geometry,
+                }
+            }
             Some(GlyfGlyph::Composite(composite)) => {
                 let components = composite.components().collect::<Vec<_>>();
                 let component_deltas = self.composite_deltas(raw_id, components.len())?;
                 let mut geometry = VariableGeometry::default();
+                let mut projected_components = Vec::with_capacity(components.len());
 
                 for (component_index, component) in components.into_iter().enumerate() {
                     let child_glyph = GlyphIndex::new(component.glyph.to_u32());
@@ -211,6 +272,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                     let child = self.geometries[child_index]
                         .as_ref()
                         .ok_or_else(|| invalid_geometry("resolved component is unavailable"))?
+                        .geometry
                         .clone();
                     let transform = component_transform(&component);
                     let translation = match component.anchor {
@@ -262,6 +324,11 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                         }
                     };
 
+                    projected_components.push(VariableComponent {
+                        glyph: child_glyph,
+                        transform,
+                        translation: translation.clone(),
+                    });
                     geometry.attachment_points.extend(
                         child
                             .attachment_points
@@ -282,15 +349,22 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                                             &translation,
                                         ),
                                         kind: point.kind,
+                                        smooth: point.smooth,
+                                        provenance: point.provenance,
                                     })
                                     .collect(),
                             }
                         }));
                 }
-                geometry
+                VariableGlyph {
+                    glyph,
+                    contours: Vec::new(),
+                    components: projected_components,
+                    geometry,
+                }
             }
         };
-        self.geometries[index] = Some(geometry);
+        self.geometries[index] = Some(glyph_record);
         self.states[index] = 2;
         Ok(index)
     }
@@ -324,12 +398,17 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
         let mut points = raw_points
             .iter()
             .zip(&flags)
-            .map(|(point, flags)| VariablePoint {
+            .enumerate()
+            .map(|(index, (point, flags))| VariablePoint {
                 position: VariablePosition::new(f64::from(point.x), f64::from(point.y)),
                 kind: if flags.is_on_curve() {
                     GlyphPointKind::OnCurve
                 } else {
                     GlyphPointKind::QuadraticControl
+                },
+                smooth: false,
+                provenance: PointProvenance::Native {
+                    ttf_point_index: Some(TrueTypePointIndex::new(index as u32)),
                 },
             })
             .collect::<Vec<_>>();
@@ -440,7 +519,7 @@ fn transform_and_translate(
 }
 
 fn invalid_geometry(details: &str) -> SourceAtlasError {
-    FontReadError::InvalidDisplayGlyph {
+    FontReadError::InvalidProjection {
         details: details.into(),
     }
     .into()

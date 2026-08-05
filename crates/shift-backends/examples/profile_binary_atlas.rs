@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use shift_backends::{
-    build_binary_atlas_page, BinaryFont, GlyphIndex, RandomAccessFont, SourceAtlasDescriptor,
+    build_binary_atlas_page, BinaryFont, FontSource, GlyphIndex, SourceAtlasDescriptor,
 };
 use shift_slug::{PackedVariableAtlas, DEFAULT_BAND_COUNT};
 

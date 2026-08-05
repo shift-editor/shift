@@ -432,8 +432,8 @@ async function createVariableDesignspace(
     if (!font) throw new Error("Expected font");
 
     const axisId = font.createAxis({
-      tag: "wght",
-      name: "Weight",
+      tag: "opsz",
+      name: "Optical Size",
       role: "external",
       axisType: "continuous",
       minimum: 100,
