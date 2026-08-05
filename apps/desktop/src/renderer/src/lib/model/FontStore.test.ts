@@ -39,7 +39,7 @@ const NEXT_SEGMENT_ID = segmentIdFor(NEXT_POINT_ID, POINT_4_ID);
 
 describe("FontStore glyph snapshot application", () => {
   it("only materializes layer snapshots that match current font records", () => {
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
 
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_B_ID)]);
 
@@ -52,7 +52,7 @@ describe("FontStore glyph snapshot application", () => {
   });
 
   it("removes concrete layer state when the layer record is removed", () => {
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
     store.applyWorkspaceChange({
@@ -68,7 +68,7 @@ describe("FontStore glyph snapshot application", () => {
 
 describe("FontStore glyph object ownership", () => {
   it("indexes concrete layer structure ids by owner", () => {
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
     expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
 
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
@@ -88,7 +88,7 @@ describe("FontStore glyph object ownership", () => {
   });
 
   it("rebuilds after a concrete layer structure replacement", () => {
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
     const nextStructure = structure({
@@ -126,7 +126,7 @@ describe("FontStore glyph object ownership", () => {
   });
 
   it("materializes added layer structure from the same workspace change", () => {
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
     const nextStructure = structure({
       contourId: NEXT_CONTOUR_ID,
       pointIds: [NEXT_POINT_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
@@ -160,7 +160,7 @@ describe("FontStore glyph object ownership", () => {
   });
 
   it("invalidates committed font dependents after a values-only native echo", () => {
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
     const font = new Font(store);
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
     let runs = 0;
@@ -178,7 +178,7 @@ describe("FontStore glyph object ownership", () => {
 
   it("publishes values-only roots and component dependents for atlas invalidation", () => {
     const dependentGlyphId = "glyph_dependent" as GlyphId;
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
     const font = new Font(store);
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
     let invalidGlyphIds: readonly GlyphId[] | null = null;
@@ -197,7 +197,7 @@ describe("FontStore glyph object ownership", () => {
   });
 
   it("forwards ownership queries through Font", () => {
-    const store = new FontStore(snapshot("document-a", LAYER_A_ID));
+    const store = new FontStore(null, snapshot("document-a", LAYER_A_ID));
     const font = new Font(store);
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 

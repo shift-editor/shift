@@ -9,6 +9,7 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
+import { createAuthoredPackage } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -42,19 +43,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     let app: ElectronApplication | null = null;
 
     if (startupFontPath) {
-      const workspaceDirectory = path.join(testRoot, "workspace");
-      if (path.extname(startupFontPath) === ".designspace") {
-        fs.cpSync(path.dirname(startupFontPath), workspaceDirectory, { recursive: true });
-        workspacePath = path.join(workspaceDirectory, path.basename(startupFontPath));
-      } else {
-        fs.mkdirSync(workspaceDirectory, { recursive: true });
-        workspacePath = path.join(workspaceDirectory, path.basename(startupFontPath));
-        if (fs.statSync(startupFontPath).isDirectory()) {
-          fs.cpSync(startupFontPath, workspacePath, { recursive: true });
-        } else {
-          fs.copyFileSync(startupFontPath, workspacePath, fs.constants.COPYFILE_FICLONE);
-        }
-      }
+      workspacePath = createAuthoredPackage(startupFontPath, path.join(testRoot, "workspace"));
     }
 
     const environment = {

@@ -1,6 +1,5 @@
 import type {
   GlyphId,
-  GlyphIndex,
   SlugLayout,
   Axis,
   SlugPreviewExtents,
@@ -8,8 +7,8 @@ import type {
   SourceId,
 } from "@shift/types";
 
-/** Opaque catalog address; retained indexes never become authored IDs. */
-export type CatalogGlyphKey = GlyphId | GlyphIndex;
+/** Session-local stable glyph identity shared by every font source. */
+export type CatalogGlyphKey = GlyphId;
 
 export interface GlyphAtlasExactSource {
   readonly sourceId: SourceId;

@@ -3,9 +3,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
-use shift_backends::{
-    BinaryFont, DisplayGlyph, RandomAccessFont, VariationAxisKind, VariationCoordinate,
-};
+use shift_backends::{BinaryFont, FontSource, ProjectedGlyph};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) {
@@ -34,36 +32,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("font directory is empty")?;
     let selected_index = selected.index;
     let selected_name = selected.name.clone();
-    let default_location = directory.default_location().clone();
-    let non_default_location = directory.axes.first().map(|axis| {
-        let value = match &axis.kind {
-            VariationAxisKind::Continuous { maximum, .. } => *maximum,
-            VariationAxisKind::Discrete { values, .. } => values[values.len() - 1],
-        };
-        directory.location(&[VariationCoordinate {
-            axis: axis.index,
-            value,
-        }])
-    });
     let glyphs = directory
         .glyphs
         .iter()
         .map(|glyph| glyph.index)
         .collect::<Vec<_>>();
 
-    black_box(font.read_glyph(selected_index, &default_location)?);
-    let default_samples = sample(iterations, || {
-        font.read_glyph(selected_index, &default_location)
-    })?;
-    let non_default_samples = non_default_location
-        .transpose()?
-        .map(|location| sample(iterations, || font.read_glyph(selected_index, &location)))
-        .transpose()?;
+    black_box(font.glyph(selected_index)?);
+    let selected_samples = sample(iterations, || font.glyph(selected_index))?;
 
     let sequential_started = Instant::now();
     let sequential = glyphs
         .iter()
-        .map(|glyph| font.read_glyph(*glyph, &default_location).map(summarize))
+        .map(|glyph| font.glyph(*glyph).map(summarize))
         .collect::<Result<Vec<_>, _>>()?;
     let sequential_elapsed = sequential_started.elapsed();
     let sequential_checksum = checksum(&sequential);
@@ -71,12 +52,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let parallel_started = Instant::now();
     let parallel = glyphs
         .par_iter()
-        .map(|glyph| font.read_glyph(*glyph, &default_location).map(summarize))
+        .map(|glyph| font.glyph(*glyph).map(summarize))
         .collect::<Result<Vec<_>, _>>()?;
     let parallel_elapsed = parallel_started.elapsed();
     let parallel_checksum = checksum(&parallel);
     if sequential_checksum != parallel_checksum {
-        return Err("sequential and parallel resolution checksums disagree".into());
+        return Err("sequential and parallel projection checksums disagree".into());
     }
 
     println!("source: {path}");
@@ -87,12 +68,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         millis(open_and_directory)
     );
     print_samples(
-        &format!("selected default ({selected_name}, {selected_index:?})"),
-        &default_samples,
+        &format!("selected projection ({selected_name}, {selected_index:?})"),
+        &selected_samples,
     );
-    if let Some(samples) = non_default_samples {
-        print_samples("selected non-default", &samples);
-    }
     println!(
         "complete sequential: {:.3} ms ({:.1} glyphs/ms)",
         millis(sequential_elapsed),
@@ -104,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         glyphs.len() as f64 / millis(parallel_elapsed),
         rayon::current_num_threads()
     );
-    println!("resolution checksum: {sequential_checksum}");
+    println!("projection checksum: {sequential_checksum}");
     if let Some(mebibytes) = peak_rss_mebibytes() {
         println!("peak RSS: {mebibytes:.1} MiB");
     }
@@ -113,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn sample(
     iterations: usize,
-    mut read: impl FnMut() -> Result<DisplayGlyph, shift_backends::FontReadError>,
+    mut read: impl FnMut() -> Result<ProjectedGlyph, shift_backends::FontReadError>,
 ) -> Result<Vec<Duration>, shift_backends::FontReadError> {
     let mut samples = Vec::with_capacity(iterations);
     for _ in 0..iterations {
@@ -137,20 +115,35 @@ fn print_samples(label: &str, samples: &[Duration]) {
     );
 }
 
-fn summarize(glyph: DisplayGlyph) -> (usize, usize, usize, i64) {
+fn summarize(glyph: ProjectedGlyph) -> (usize, usize, usize, i64) {
+    let projections = std::iter::once(&glyph.root).chain(glyph.components.iter());
+    let mut contour_count = 0;
+    let mut component_count = 0;
+    let mut value_count = 0;
+    for projection in projections {
+        contour_count += projection.fallback.contours.len();
+        component_count += projection.fallback.components.len();
+        value_count += projection.fallback.values.len();
+        value_count += projection
+            .variation
+            .iter()
+            .flat_map(|variation| variation.deltas.iter())
+            .map(|delta| delta.values.len())
+            .sum::<usize>();
+    }
     (
-        glyph.geometries.len(),
-        glyph.components.len(),
-        glyph.points.len(),
-        glyph.metrics.x_advance.round() as i64,
+        contour_count,
+        component_count,
+        value_count,
+        glyph.root.fallback.values[0].round() as i64,
     )
 }
 
 fn checksum(summaries: &[(usize, usize, usize, i64)]) -> i64 {
     summaries
         .iter()
-        .map(|(geometries, components, points, advance)| {
-            *geometries as i64 * 31 + *components as i64 * 37 + *points as i64 * 41 + *advance
+        .map(|(contours, components, values, advance)| {
+            *contours as i64 * 31 + *components as i64 * 37 + *values as i64 * 41 + *advance
         })
         .sum()
 }

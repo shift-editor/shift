@@ -22,8 +22,8 @@ pub enum FontReadError {
         details: String,
     },
 
-    #[error("font source changed after it was opened: {path}")]
-    SourceChanged { path: PathBuf },
+    #[error("unsupported location-independent font projection: {details}")]
+    UnsupportedProjection { details: &'static str },
 
     #[error("glyph index {glyph:?} is outside directory length {glyph_count}")]
     GlyphOutOfRange { glyph: GlyphIndex, glyph_count: u32 },
@@ -54,6 +54,6 @@ pub enum FontReadError {
     #[error("glyph {glyph:?} has a cyclic component reference")]
     ComponentCycle { glyph: GlyphIndex },
 
-    #[error("invalid display glyph: {details}")]
-    InvalidDisplayGlyph { details: String },
+    #[error("invalid glyph projection: {details}")]
+    InvalidProjection { details: String },
 }

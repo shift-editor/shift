@@ -6,15 +6,13 @@ use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
     AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, ComponentAnchorAttachment,
-    ComponentAnchorReference, ComponentData, ComponentGlyph, ContourData, DisplayAnchor,
-    DisplayComponent, DisplayContour, DisplayGeometry, DisplayGlyph, DisplayGuide,
-    DisplayPointKind, DisplayPointProvenance, DisplayRange, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphComponents, GlyphInterpolation, GlyphLayerRecord, GlyphLayerShape,
-    GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
-    GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure,
-    InterpolationBasis, InterpolationSupport, Location, MetricDefinition, MetricKind,
-    NamedInstance, PointData, PointType, Source, SourceMetricField, SourceMetricValue,
-    SourceMetricValues, SourceMetricsInterpolationSnapshot,
+    ComponentAnchorReference, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData,
+    FontMetadata, FontMetrics, FontSnapshot, GlyphChangedEntities, GlyphComponents, GlyphEntry,
+    GlyphInterpolation, GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection,
+    GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
+    GlyphSourceValues, GlyphState, GlyphStructure, InterpolationBasis, InterpolationSupport,
+    Location, MetricDefinition, MetricKind, NamedInstance, PointData, PointType, Source,
+    SourceMetricField, SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot,
 };
 
 #[napi(object)]
@@ -123,8 +121,10 @@ pub struct NapiCatalogDirectory {
 
 #[napi(object)]
 pub struct NapiCatalogAtlasGlyph {
-    pub glyph_index: u32,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
     pub atlas_glyph: u32,
+    pub exact_sources: Vec<NapiSlugExactSource>,
 }
 
 #[napi(object)]
@@ -582,221 +582,71 @@ impl From<GlyphSnapshot> for NapiGlyphSnapshot {
 }
 
 #[napi(object)]
-pub struct NapiDisplayRange {
-    pub start: u32,
-    pub count: u32,
+pub struct NapiGlyphEntry {
+    #[napi(ts_type = "GlyphId")]
+    pub id: String,
+    pub name: String,
+    pub unicodes: Vec<u32>,
 }
 
-impl From<DisplayRange> for NapiDisplayRange {
-    fn from(range: DisplayRange) -> Self {
+impl From<GlyphEntry> for NapiGlyphEntry {
+    fn from(entry: GlyphEntry) -> Self {
         Self {
-            start: range.start,
-            count: range.count,
+            id: entry.id.to_string(),
+            name: entry.name.to_string(),
+            unicodes: entry.unicodes,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiFontSnapshot {
+    pub metadata: NapiFontMetadata,
+    pub metrics: NapiFontMetrics,
+    pub metric_definitions: Vec<NapiMetricDefinition>,
+    pub source_metrics_interpolation: Option<NapiSourceMetricsInterpolationSnapshot>,
+    pub glyphs: Vec<NapiGlyphEntry>,
+    pub sources: Vec<NapiSource>,
+    pub axes: Vec<NapiAxis>,
+    pub axis_mappings: Vec<NapiAxisMapping>,
+    pub named_instances: Vec<NapiNamedInstance>,
+}
+
+impl From<FontSnapshot> for NapiFontSnapshot {
+    fn from(snapshot: FontSnapshot) -> Self {
+        Self {
+            metadata: snapshot.metadata.into(),
+            metrics: snapshot.metrics.into(),
+            metric_definitions: snapshot
+                .metric_definitions
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            source_metrics_interpolation: snapshot.source_metrics_interpolation.map(Into::into),
+            glyphs: snapshot.glyphs.into_iter().map(Into::into).collect(),
+            sources: snapshot.sources.into_iter().map(Into::into).collect(),
+            axes: snapshot.axes.into_iter().map(Into::into).collect(),
+            axis_mappings: snapshot.axis_mappings.into_iter().map(Into::into).collect(),
+            named_instances: snapshot
+                .named_instances
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
 
 #[napi(string_enum = "camelCase")]
-pub enum NapiDisplayPointKind {
-    OnCurve,
-    QuadraticControl,
-    CubicControl,
-}
-
-impl From<DisplayPointKind> for NapiDisplayPointKind {
-    fn from(kind: DisplayPointKind) -> Self {
-        match kind {
-            DisplayPointKind::OnCurve => Self::OnCurve,
-            DisplayPointKind::QuadraticControl => Self::QuadraticControl,
-            DisplayPointKind::CubicControl => Self::CubicControl,
-        }
-    }
-}
-
-#[napi(string_enum = "camelCase")]
-pub enum NapiDisplayPointProvenance {
-    Native,
-    Implied,
-}
-
-impl From<DisplayPointProvenance> for NapiDisplayPointProvenance {
-    fn from(provenance: DisplayPointProvenance) -> Self {
-        match provenance {
-            DisplayPointProvenance::Native => Self::Native,
-            DisplayPointProvenance::Implied => Self::Implied,
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiDisplayGeometry {
-    pub glyph_index: u32,
-    pub contours: NapiDisplayRange,
-    pub components: NapiDisplayRange,
-    pub anchors: NapiDisplayRange,
-    pub guides: NapiDisplayRange,
-}
-
-impl From<DisplayGeometry> for NapiDisplayGeometry {
-    fn from(geometry: DisplayGeometry) -> Self {
-        Self {
-            glyph_index: geometry.glyph_index,
-            contours: geometry.contours.into(),
-            components: geometry.components.into(),
-            anchors: geometry.anchors.into(),
-            guides: geometry.guides.into(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiDisplayContour {
-    pub points: NapiDisplayRange,
-    pub closed: bool,
-}
-
-impl From<DisplayContour> for NapiDisplayContour {
-    fn from(contour: DisplayContour) -> Self {
-        Self {
-            points: contour.points.into(),
-            closed: contour.closed,
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiDisplayComponent {
-    pub geometry_index: u32,
-    pub transform: Float64Array,
-}
-
-impl From<DisplayComponent> for NapiDisplayComponent {
-    fn from(component: DisplayComponent) -> Self {
-        Self {
-            geometry_index: component.geometry_index,
-            transform: component.transform.to_vec().into(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiDisplayAnchor {
-    pub name: Option<String>,
-    pub x: f64,
-    pub y: f64,
-}
-
-impl From<DisplayAnchor> for NapiDisplayAnchor {
-    fn from(anchor: DisplayAnchor) -> Self {
-        Self {
-            name: anchor.name,
-            x: anchor.x,
-            y: anchor.y,
-        }
-    }
-}
-
-#[napi(string_enum = "camelCase")]
-pub enum NapiDisplayGuideKind {
-    Horizontal,
-    Vertical,
-    Angled,
-}
-
-#[napi(object)]
-pub struct NapiDisplayGuide {
-    pub kind: NapiDisplayGuideKind,
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-    pub degrees: Option<f64>,
-    pub name: Option<String>,
-    pub color: Option<String>,
-}
-
-impl From<DisplayGuide> for NapiDisplayGuide {
-    fn from(guide: DisplayGuide) -> Self {
-        match guide {
-            DisplayGuide::Horizontal { y, name, color } => Self {
-                kind: NapiDisplayGuideKind::Horizontal,
-                x: None,
-                y: Some(y),
-                degrees: None,
-                name,
-                color,
-            },
-            DisplayGuide::Vertical { x, name, color } => Self {
-                kind: NapiDisplayGuideKind::Vertical,
-                x: Some(x),
-                y: None,
-                degrees: None,
-                name,
-                color,
-            },
-            DisplayGuide::Angled {
-                x,
-                y,
-                degrees,
-                name,
-                color,
-            } => Self {
-                kind: NapiDisplayGuideKind::Angled,
-                x: Some(x),
-                y: Some(y),
-                degrees: Some(degrees),
-                name,
-                color,
-            },
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiDisplayGlyph {
-    pub glyph_index: u32,
-    pub location: Float64Array,
-    pub root_geometry: u32,
-    pub geometries: Vec<NapiDisplayGeometry>,
-    pub contours: Vec<NapiDisplayContour>,
-    pub components: Vec<NapiDisplayComponent>,
-    pub point_coordinates: Float64Array,
-    pub point_kinds: Vec<NapiDisplayPointKind>,
-    pub point_smooth: Vec<bool>,
-    pub point_provenance: Vec<NapiDisplayPointProvenance>,
-    pub point_true_type_indices: Vec<Option<u32>>,
-    pub anchors: Vec<NapiDisplayAnchor>,
-    pub guides: Vec<NapiDisplayGuide>,
-    pub x_advance: f64,
-    pub y_advance: Option<f64>,
-    pub bounds: Option<Vec<f64>>,
-}
-
-impl From<DisplayGlyph> for NapiDisplayGlyph {
-    fn from(glyph: DisplayGlyph) -> Self {
-        Self {
-            glyph_index: glyph.glyph_index,
-            location: glyph.location.into(),
-            root_geometry: glyph.root_geometry,
-            geometries: glyph.geometries.into_iter().map(Into::into).collect(),
-            contours: glyph.contours.into_iter().map(Into::into).collect(),
-            components: glyph.components.into_iter().map(Into::into).collect(),
-            point_coordinates: glyph.point_coordinates.into(),
-            point_kinds: glyph.point_kinds.into_iter().map(Into::into).collect(),
-            point_smooth: glyph.point_smooth,
-            point_provenance: glyph.point_provenance.into_iter().map(Into::into).collect(),
-            point_true_type_indices: glyph.point_true_type_indices,
-            anchors: glyph.anchors.into_iter().map(Into::into).collect(),
-            guides: glyph.guides.into_iter().map(Into::into).collect(),
-            x_advance: glyph.x_advance,
-            y_advance: glyph.y_advance,
-            bounds: glyph.bounds.map(|bounds| bounds.to_vec()),
-        }
-    }
+pub enum NapiComponentTransformKind {
+    Decomposed,
+    Affine,
 }
 
 #[napi(object)]
 pub struct NapiGlyphLayerShape {
     pub structure: NapiGlyphStructure,
     pub values: Float64Array,
+    pub component_transform_kind: NapiComponentTransformKind,
 }
 
 impl From<GlyphLayerShape> for NapiGlyphLayerShape {
@@ -804,6 +654,10 @@ impl From<GlyphLayerShape> for NapiGlyphLayerShape {
         Self {
             structure: shape.structure.into(),
             values: shape.values.into(),
+            component_transform_kind: match shape.component_transform_kind {
+                ComponentTransformKind::Decomposed => NapiComponentTransformKind::Decomposed,
+                ComponentTransformKind::Affine => NapiComponentTransformKind::Affine,
+            },
         }
     }
 }

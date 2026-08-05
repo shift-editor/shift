@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { GlyphCategory, GlyphCategoryCatalog } from "@shift/glyph-info";
-import { asGlyphIndex, type GlyphIndex, type GlyphName } from "@shift/types";
+import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
 import { effect, useSignalState } from "@/lib/signals";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
@@ -16,6 +16,8 @@ export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
 const useGlyphCatalogState = (): GlyphCatalogState => {
   const session = useFontSession();
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const routeLocation = useLocation();
   const glyphInfo = getGlyphInfo();
   const catalog = session.catalog;
@@ -96,38 +98,36 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
       if (openGenerationRef.current !== generation) return;
 
       setOpenedGlyph(renderGlyph);
-      navigate(`/editor/${encodeURIComponent(glyph.id)}`);
+      navigateRef.current(`/editor/${encodeURIComponent(glyph.id)}`);
     },
-    [catalog, navigate],
+    [catalog],
   );
 
   useEffect(() => {
-    if (workspace) return;
-
-    const sourceGlyphIndex = retainedGlyphIndexFromPath(routeLocation.pathname);
-    if (sourceGlyphIndex === null) {
+    const sourceGlyphId = glyphIdFromPath(routeLocation.pathname);
+    if (sourceGlyphId === null) {
       if (routeLocation.pathname.startsWith("/editor/")) {
         openedGlyphKeyRef.current = null;
         setOpenedGlyph(null);
       }
       return;
     }
-    if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphIndex)) {
+    if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphId)) {
       openedGlyphKeyRef.current = null;
       setOpenedGlyph(null);
       return;
     }
-    const glyphIndex = sourceGlyphIndex;
-    if (openedGlyphKeyRef.current === glyphIndex) return;
+    const glyphId = sourceGlyphId;
+    if (openedGlyphKeyRef.current === glyphId) return;
 
-    openedGlyphKeyRef.current = glyphIndex;
+    openedGlyphKeyRef.current = glyphId;
     const generation = openGenerationRef.current + 1;
     openGenerationRef.current = generation;
     let active = true;
 
     async function openRouteGlyph(): Promise<void> {
       try {
-        const renderGlyph = await catalog.openGlyph(glyphIndex);
+        const renderGlyph = await catalog.openGlyph(glyphId);
         if (!active || openGenerationRef.current !== generation) return;
 
         setOpenedGlyph(renderGlyph);
@@ -140,12 +140,12 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     return () => {
       active = false;
     };
-  }, [availableGlyphs, catalog, routeLocation.pathname, workspace]);
+  }, [availableGlyphs, catalog, routeLocation.pathname]);
 
   useEffect(() => {
-    const glyphKey = openedGlyphKeyRef.current;
-    if (typeof glyphKey !== "number") return;
-    const sourceGlyphIndex = glyphKey;
+    const openedGlyphId = openedGlyphKeyRef.current;
+    if (openedGlyphId === null) return;
+    const glyphId = openedGlyphId;
 
     const generation = openGenerationRef.current + 1;
     openGenerationRef.current = generation;
@@ -153,7 +153,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
 
     async function refreshOpenedGlyph(): Promise<void> {
       try {
-        const renderGlyph = await catalog.openGlyph(sourceGlyphIndex);
+        const renderGlyph = await catalog.openGlyph(glyphId);
         if (!active || openGenerationRef.current !== generation) return;
 
         setOpenedGlyph(renderGlyph);
@@ -215,7 +215,7 @@ function glyphKey(glyph: GlyphCatalogItem) {
   return glyph.id;
 }
 
-function retainedGlyphIndexFromPath(pathname: string): GlyphIndex | null {
+function glyphIdFromPath(pathname: string): GlyphId | null {
   const prefix = "/editor/";
   if (!pathname.startsWith(prefix)) return null;
 
@@ -226,6 +226,5 @@ function retainedGlyphIndexFromPath(pathname: string): GlyphIndex | null {
     return null;
   }
 
-  const glyphIndex = Number(value);
-  return Number.isSafeInteger(glyphIndex) && glyphIndex >= 0 ? asGlyphIndex(glyphIndex) : null;
+  return value.length > 0 ? asGlyphId(value) : null;
 }

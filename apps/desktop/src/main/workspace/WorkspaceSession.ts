@@ -20,7 +20,7 @@ export type FontSessionOptions =
       readonly applicationName: () => string;
     }
   | {
-      readonly mode: "preview";
+      readonly mode: "imported";
       readonly sessionId: FontSessionId;
       readonly workspaceProcess: WorkspaceProcess;
     };
@@ -67,7 +67,7 @@ export class FontSession {
           this.documentClient?.dispose();
         });
         break;
-      case "preview":
+      case "imported":
         this.documentClient = null;
         this.document = null;
         this.#unlistenDocumentChanged = () => {};

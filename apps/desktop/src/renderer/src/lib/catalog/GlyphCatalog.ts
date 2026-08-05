@@ -1,17 +1,16 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { Axis, CatalogAxis, CatalogMetrics, GlyphId, SourceId } from "@shift/types";
-import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { computed, type ComputedSignal, type Signal } from "@/lib/signals";
 import type { Editor } from "@/lib/editor/Editor";
 import type { AxisLocation } from "@/types/variation";
-import type { CatalogGlyphKey } from "@/types/glyphAtlas";
+import type { CatalogGlyphKey, GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
 import type { GlyphRenderInput } from "@/types/glyphRender";
 import { glyphRenderInput } from "@/lib/model/glyphRenderInput";
 import { glyphCatalogItem } from "./glyphCatalogItem";
 
 /** Projects the authored model into the immutable catalog boundary. */
-export class ShiftGlyphCatalogSource implements GlyphCatalogSource {
+export class GlyphCatalog implements GlyphCatalogSource {
   readonly #editor: Editor;
   readonly #derived: readonly ComputedSignal<unknown>[];
 
@@ -23,16 +22,16 @@ export class ShiftGlyphCatalogSource implements GlyphCatalogSource {
   readonly styleNameCell: ComputedSignal<string | null>;
   readonly sourceIdCell: ComputedSignal<SourceId | null>;
   readonly invalidGlyphKeysCell: Signal<readonly GlyphId[] | null>;
-  readonly atlas: AuthoredGlyphAtlasSource;
+  readonly atlas: GlyphAtlasSource;
 
-  constructor(editor: Editor, glyphInfo: GlyphInfo) {
+  constructor(editor: Editor, glyphInfo: GlyphInfo, atlas: GlyphAtlasSource) {
     this.#editor = editor;
     const font = editor.font;
 
     this.glyphsCell = computed(
       () =>
-        font.glyphRecordsCell.value.map((record) =>
-          glyphCatalogItem(record.id, record.name, record.unicodes, glyphInfo),
+        font.glyphEntriesCell.value.map((entry) =>
+          glyphCatalogItem(entry.id, entry.name, entry.unicodes, glyphInfo),
         ),
       { name: "catalog.shift.glyphs" },
     );
@@ -69,7 +68,7 @@ export class ShiftGlyphCatalogSource implements GlyphCatalogSource {
       name: "catalog.shift.sourceId",
     });
     this.invalidGlyphKeysCell = font.invalidGlyphIdsCell;
-    this.atlas = new AuthoredGlyphAtlasSource(font.editCoordinator, () => font.getAxes());
+    this.atlas = atlas;
     this.#derived = [
       this.glyphsCell,
       this.axesCell,
@@ -83,8 +82,6 @@ export class ShiftGlyphCatalogSource implements GlyphCatalogSource {
   }
 
   async openGlyph(glyphKey: CatalogGlyphKey): Promise<GlyphRenderInput> {
-    if (typeof glyphKey !== "string") throw new Error("authored catalog received a glyph index");
-
     const glyph = await this.#editor.font.loadGlyph(glyphKey);
     return glyphRenderInput(glyph.renderModelAt(this.#editor.designLocationCell));
   }

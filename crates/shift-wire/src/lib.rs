@@ -411,12 +411,45 @@ pub struct GlyphSnapshot {
     pub layers: Vec<GlyphLayerSnapshot>,
 }
 
+/// Lightweight glyph identity present before geometry is acquired.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphEntry {
+    pub id: GlyphId,
+    pub name: GlyphName,
+    pub unicodes: Vec<u32>,
+}
+
+/// Source-neutral font state required to construct the renderer model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FontSnapshot {
+    pub metadata: FontMetadata,
+    pub metrics: FontMetrics,
+    pub metric_definitions: Vec<MetricDefinition>,
+    pub source_metrics_interpolation: Option<SourceMetricsInterpolationSnapshot>,
+    pub glyphs: Vec<GlyphEntry>,
+    pub sources: Vec<Source>,
+    pub axes: Vec<Axis>,
+    pub axis_mappings: Vec<AxisMapping>,
+    pub named_instances: Vec<NamedInstance>,
+}
+
+/// Numeric encoding used for component transforms in one projection shape.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ComponentTransformKind {
+    Decomposed,
+    Affine,
+}
+
 /// One compact glyph layer shape suitable for local projection evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlyphLayerShape {
     pub structure: GlyphStructure,
     pub values: GlyphValues,
+    pub component_transform_kind: ComponentTransformKind,
 }
 
 impl From<&GlyphLayer> for GlyphLayerShape {
@@ -424,6 +457,7 @@ impl From<&GlyphLayer> for GlyphLayerShape {
         Self {
             structure: GlyphStructure::from(layer),
             values: values_from_layer(layer),
+            component_transform_kind: ComponentTransformKind::Decomposed,
         }
     }
 }
@@ -601,115 +635,6 @@ impl From<&IrGlyphSourceComponents> for GlyphSourceComponents {
             components: source.components().into(),
         }
     }
-}
-
-/// One contiguous range within a selected-glyph arena.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DisplayRange {
-    pub start: u32,
-    pub count: u32,
-}
-
-/// Point role retained by a source-neutral selected glyph.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DisplayPointKind {
-    OnCurve,
-    QuadraticControl,
-    CubicControl,
-}
-
-/// Source provenance retained for passive point inspection.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DisplayPointProvenance {
-    Native,
-    Implied,
-}
-
-/// One geometry definition within a selected root and component closure.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DisplayGeometry {
-    pub glyph_index: u32,
-    pub contours: DisplayRange,
-    pub components: DisplayRange,
-    pub anchors: DisplayRange,
-    pub guides: DisplayRange,
-}
-
-/// One contour whose points occupy a range in the shared point arrays.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DisplayContour {
-    pub points: DisplayRange,
-    pub closed: bool,
-}
-
-/// One component edge in the selected glyph's indexed geometry graph.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DisplayComponent {
-    pub geometry_index: u32,
-    /// Column-vector affine transform ordered as xx, xy, yx, yy, dx, dy.
-    pub transform: [f64; 6],
-}
-
-/// One named anchor in design-space font units.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DisplayAnchor {
-    pub name: Option<String>,
-    pub x: f64,
-    pub y: f64,
-}
-
-/// One source guide in design-space font units.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum DisplayGuide {
-    Horizontal {
-        y: f64,
-        name: Option<String>,
-        color: Option<String>,
-    },
-    Vertical {
-        x: f64,
-        name: Option<String>,
-        color: Option<String>,
-    },
-    Angled {
-        x: f64,
-        y: f64,
-        degrees: f64,
-        name: Option<String>,
-        color: Option<String>,
-    },
-}
-
-/// Validated selected-glyph display data with no authored Shift identity.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DisplayGlyph {
-    pub glyph_index: u32,
-    pub location: Vec<f64>,
-    pub root_geometry: u32,
-    pub geometries: Vec<DisplayGeometry>,
-    pub contours: Vec<DisplayContour>,
-    pub components: Vec<DisplayComponent>,
-    /// Interleaved x/y pairs ordered like the point metadata arrays.
-    pub point_coordinates: Vec<f64>,
-    pub point_kinds: Vec<DisplayPointKind>,
-    pub point_smooth: Vec<bool>,
-    pub point_provenance: Vec<DisplayPointProvenance>,
-    /// Native TrueType point index, or `None` when the source has no such index.
-    pub point_true_type_indices: Vec<Option<u32>>,
-    pub anchors: Vec<DisplayAnchor>,
-    pub guides: Vec<DisplayGuide>,
-    pub x_advance: f64,
-    pub y_advance: Option<f64>,
-    pub bounds: Option<[f64; 4]>,
 }
 
 /// Location-independent glyph payload evaluated synchronously by renderers.

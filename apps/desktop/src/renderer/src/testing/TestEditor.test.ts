@@ -87,7 +87,8 @@ describe("TestEditor", () => {
 
       expect(object.id).toBe(point.id);
       expect(object.pointId).toBe(point.id);
-      expect(object.layer.id).toBe(layer.id);
+      expect(object.geometry.point(point.id)).toEqual(point);
+      expect(editor.layerForGeometry({ points: [point.id] })?.id).toBe(layer.id);
       expect(object.node).toEqual(node);
       expect(object.bounds()).toEqual({
         x: 100,
@@ -123,7 +124,8 @@ describe("TestEditor", () => {
       expect(segmentObject.id).toBe(segment.id);
       expect(segmentObject.segmentId).toBe(segment.id);
       expect(segmentObject.pointIds).toEqual(segment.pointIds);
-      expect(segmentObject.layer.id).toBe(layer.id);
+      expect(segmentObject.geometry.segment(segment.id)).toEqual(segment);
+      expect(editor.layerForGeometry({ segments: [segment.id] })?.id).toBe(layer.id);
       expect(segmentObject.node).toEqual(node);
 
       const contourObject = editor.object(contour.id);
@@ -132,7 +134,8 @@ describe("TestEditor", () => {
 
       expect(contourObject.id).toBe(contour.id);
       expect(contourObject.contourId).toBe(contour.id);
-      expect(contourObject.layer.id).toBe(layer.id);
+      expect(contourObject.geometry.contour(contour.id)).toEqual(contour);
+      expect(editor.layerForGeometry({ contours: [contour.id] })?.id).toBe(layer.id);
       expect(contourObject.node).toEqual(node);
     });
 

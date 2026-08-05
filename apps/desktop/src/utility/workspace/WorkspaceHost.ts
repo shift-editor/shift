@@ -134,8 +134,8 @@ export class WorkspaceHost {
           this.#documentId === null ? null : this.#snapshot(this.#documentId),
         ),
       "source.snapshot": () => this.#serialize(() => this.#fontSource),
-      "source.glyph": ({ glyphIndex, coordinates }) =>
-        this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphIndex, coordinates)),
+      "source.glyph": ({ glyphId }) =>
+        this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphId)),
       "source.atlasPagePrepare": (request) =>
         this.#serialize(() => this.#prepareSourceAtlasPage(request)),
       "source.atlasPageStream": ({ generation, maximumLength }, context) =>
@@ -419,7 +419,7 @@ export class WorkspaceHost {
     this.#requireFontSource();
     const descriptor = this.#bridge.prepareSourceAtlasPage(
       request.pageIndex,
-      request.glyphIndices,
+      request.glyphIds,
       request.coordinates,
       request.alignment,
     );
@@ -530,12 +530,12 @@ export class WorkspaceHost {
   #openFontSource(sourcePath: string): FontSourceSessionState {
     if (this.#documentId !== null) throw new Error("a workspace is already open");
     const canonicalPath = fs.realpathSync(sourcePath);
-    const directory = this.#bridge.openFontSource(canonicalPath);
+    const font = this.#bridge.openFontSource(canonicalPath);
     const state = {
       sessionId: `source:${canonicalPath}`,
       canonicalPath,
     };
-    this.#fontSource = { ...state, directory };
+    this.#fontSource = { ...state, font };
     this.#preparedSourcePages.clear();
     return state;
   }

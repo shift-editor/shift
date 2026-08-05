@@ -25,7 +25,7 @@ export declare class Bridge {
   closeWorkspace(): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
-  openFontSource(path: string): NapiCatalogDirectory
+  openFontSource(path: string): NapiFontSnapshot
   closeFontSource(): void
   setDocumentId(documentId: string): NapiDocumentState
   saveWorkspace(): NapiDocumentState
@@ -101,10 +101,10 @@ export declare class Bridge {
   discardSlugAtlas(generation: number): void
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number): void
-  /** Resolves one source-local glyph without constructing authored font state. */
-  readFontSourceGlyph(glyphIndex: number, coordinates: Array<number>): NapiDisplayGlyph
+  /** Reads one location-independent source glyph and its complete component closure. */
+  readFontSourceGlyph(glyphId: GlyphId): Array<NapiGlyphSnapshot>
   /** Builds one source-neutral catalog page through the active format adapter. */
-  prepareSourceAtlasPage(pageIndex: number, glyphIndices: Array<number>, coordinates: Array<number>, alignment: number): NapiCatalogAtlasPage
+  prepareSourceAtlasPage(pageIndex: number, glyphIds: Array<string>, coordinates: Array<number>, alignment: number): NapiCatalogAtlasPage
   /** Streams one prepared source page through the same bounded atlas lane. */
   streamSourceAtlasPage(generation: number, maximumLength: number): ReadableStream<Buffer>
   /** Releases a rejected source page and its retained weight descriptor. */
@@ -260,8 +260,9 @@ export interface NapiBooleanOpIntent {
 }
 
 export interface NapiCatalogAtlasGlyph {
-  glyphIndex: number
+  glyphId: GlyphId
   atlasGlyph: number
+  exactSources: Array<NapiSlugExactSource>
 }
 
 export interface NapiCatalogAtlasPage {
@@ -352,6 +353,11 @@ export interface NapiComponentGlyph {
   attachment?: NapiComponentAnchorAttachment
 }
 
+export declare const enum NapiComponentTransformKind {
+  Decomposed = 'decomposed',
+  Affine = 'affine'
+}
+
 export interface NapiContourData {
   id: ContourId
   points: Array<NapiPointData>
@@ -413,80 +419,6 @@ export interface NapiDeleteNamedInstanceIntent {
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
 export interface NapiDeleteSourceIntent {
   sourceId: SourceId
-}
-
-export interface NapiDisplayAnchor {
-  name?: string
-  x: number
-  y: number
-}
-
-export interface NapiDisplayComponent {
-  geometryIndex: number
-  transform: Float64Array
-}
-
-export interface NapiDisplayContour {
-  points: NapiDisplayRange
-  closed: boolean
-}
-
-export interface NapiDisplayGeometry {
-  glyphIndex: number
-  contours: NapiDisplayRange
-  components: NapiDisplayRange
-  anchors: NapiDisplayRange
-  guides: NapiDisplayRange
-}
-
-export interface NapiDisplayGlyph {
-  glyphIndex: number
-  location: Float64Array
-  rootGeometry: number
-  geometries: Array<NapiDisplayGeometry>
-  contours: Array<NapiDisplayContour>
-  components: Array<NapiDisplayComponent>
-  pointCoordinates: Float64Array
-  pointKinds: Array<NapiDisplayPointKind>
-  pointSmooth: Array<boolean>
-  pointProvenance: Array<NapiDisplayPointProvenance>
-  pointTrueTypeIndices: Array<number | undefined | null>
-  anchors: Array<NapiDisplayAnchor>
-  guides: Array<NapiDisplayGuide>
-  xAdvance: number
-  yAdvance?: number
-  bounds?: Array<number>
-}
-
-export interface NapiDisplayGuide {
-  kind: NapiDisplayGuideKind
-  x?: number
-  y?: number
-  degrees?: number
-  name?: string
-  color?: string
-}
-
-export declare const enum NapiDisplayGuideKind {
-  Horizontal = 'horizontal',
-  Vertical = 'vertical',
-  Angled = 'angled'
-}
-
-export declare const enum NapiDisplayPointKind {
-  OnCurve = 'onCurve',
-  QuadraticControl = 'quadraticControl',
-  CubicControl = 'cubicControl'
-}
-
-export declare const enum NapiDisplayPointProvenance {
-  Native = 'native',
-  Implied = 'implied'
-}
-
-export interface NapiDisplayRange {
-  start: number
-  count: number
 }
 
 /**
@@ -587,6 +519,18 @@ export interface NapiFontReplacement {
   sources?: Array<NapiSource>
 }
 
+export interface NapiFontSnapshot {
+  metadata: NapiFontMetadata
+  metrics: NapiFontMetrics
+  metricDefinitions: Array<NapiMetricDefinition>
+  sourceMetricsInterpolation?: NapiSourceMetricsInterpolationSnapshot
+  glyphs: Array<NapiGlyphEntry>
+  sources: Array<NapiSource>
+  axes: Array<NapiAxis>
+  axisMappings: Array<NapiAxisMapping>
+  namedInstances: Array<NapiNamedInstance>
+}
+
 export interface NapiGlyphChangedEntities {
   pointIds: Array<PointId>
   contourIds: Array<ContourId>
@@ -598,6 +542,12 @@ export interface NapiGlyphChangedEntities {
 export interface NapiGlyphComponents {
   rootGlyphId: GlyphId
   components: Array<NapiComponentGlyph>
+}
+
+export interface NapiGlyphEntry {
+  id: GlyphId
+  name: string
+  unicodes: Array<number>
 }
 
 export interface NapiGlyphInterpolation {
@@ -613,6 +563,7 @@ export interface NapiGlyphLayerRecord {
 export interface NapiGlyphLayerShape {
   structure: NapiGlyphStructure
   values: Float64Array
+  componentTransformKind: NapiComponentTransformKind
 }
 
 export interface NapiGlyphLayerSnapshot {

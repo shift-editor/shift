@@ -4,7 +4,7 @@ use shift_slug::VariableAtlas;
 use skrifa::raw::types::F2Dot14;
 
 use crate::font_source::{
-    FontReadError, GlyphIndex, VariationAxis, VariationAxisKind, VariationLocation,
+    FontReadError, GlyphIndex, SourceIndex, VariationAxis, VariationLocation,
 };
 
 /// A location-independent Slug page compiled directly from retained source semantics.
@@ -18,6 +18,7 @@ impl SourceAtlasPage {
     pub(crate) fn new(
         atlas: VariableAtlas,
         glyphs: Vec<(GlyphIndex, u32)>,
+        exact_glyphs: Vec<(GlyphIndex, SourceIndex, u32)>,
         axes: Vec<AtlasAxis>,
         regions: Vec<AtlasRegion>,
         complements: Vec<Box<[u32]>>,
@@ -26,6 +27,7 @@ impl SourceAtlasPage {
             atlas,
             descriptor: SourceAtlasDescriptor {
                 glyphs: glyphs.into_boxed_slice(),
+                exact_glyphs: exact_glyphs.into_boxed_slice(),
                 axes: axes.into_boxed_slice(),
                 regions: regions.into_boxed_slice(),
                 complements: complements.into_boxed_slice(),
@@ -39,6 +41,10 @@ impl SourceAtlasPage {
 
     pub fn glyphs(&self) -> &[(GlyphIndex, u32)] {
         self.descriptor.glyphs()
+    }
+
+    pub fn exact_glyphs(&self) -> &[(GlyphIndex, SourceIndex, u32)] {
+        self.descriptor.exact_glyphs()
     }
 
     /// Evaluates the small page-local weight buffer without rebuilding resident geometry.
@@ -56,6 +62,7 @@ impl SourceAtlasPage {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceAtlasDescriptor {
     glyphs: Box<[(GlyphIndex, u32)]>,
+    exact_glyphs: Box<[(GlyphIndex, SourceIndex, u32)]>,
     axes: Box<[AtlasAxis]>,
     regions: Box<[AtlasRegion]>,
     complements: Box<[Box<[u32]>]>,
@@ -66,10 +73,14 @@ impl SourceAtlasDescriptor {
         &self.glyphs
     }
 
+    pub fn exact_glyphs(&self) -> &[(GlyphIndex, SourceIndex, u32)] {
+        &self.exact_glyphs
+    }
+
     /// Evaluates the small page-local weight buffer without resident CPU geometry.
     pub fn weights(&self, location: &VariationLocation) -> Result<Vec<f32>, SourceAtlasError> {
         if location.coordinates().len() != self.axes.len() {
-            return Err(FontReadError::InvalidDisplayGlyph {
+            return Err(FontReadError::InvalidProjection {
                 details: format!(
                     "location has {} coordinates for {} source atlas axes",
                     location.coordinates().len(),
@@ -123,47 +134,80 @@ pub enum SourceAtlasError {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct AtlasAxis {
     axis: VariationAxis,
-    mapping: Box<[(i16, i16)]>,
+    user_mapping: Box<[(f64, f64)]>,
+    minimum: f64,
+    default: f64,
+    maximum: f64,
+    normalized_mapping: Box<[(i16, i16)]>,
 }
 
 impl AtlasAxis {
-    pub(crate) fn new(axis: VariationAxis, mapping: Vec<(i16, i16)>) -> Self {
+    pub(crate) fn new(
+        axis: VariationAxis,
+        user_mapping: Vec<(f64, f64)>,
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+        normalized_mapping: Vec<(i16, i16)>,
+    ) -> Self {
         Self {
             axis,
-            mapping: mapping.into_boxed_slice(),
+            user_mapping: user_mapping.into_boxed_slice(),
+            minimum,
+            default,
+            maximum,
+            normalized_mapping: normalized_mapping.into_boxed_slice(),
         }
     }
 
     fn normalize(&self, value: f64) -> Result<i16, FontReadError> {
         self.axis.kind.validate_for_read(self.axis.index, value)?;
-        let VariationAxisKind::Continuous {
-            minimum,
-            default,
-            maximum,
-        } = self.axis.kind
-        else {
-            return Err(FontReadError::InvalidDisplayGlyph {
-                details: format!(
-                    "binary source axis {:?} is unexpectedly discrete",
-                    self.axis.index
-                ),
+        self.normalize_internal(map_value(value, &self.user_mapping))
+    }
+
+    pub(crate) fn normalize_internal(&self, value: f64) -> Result<i16, FontReadError> {
+        if !value.is_finite() {
+            return Err(FontReadError::NonFiniteCoordinate {
+                axis: self.axis.index,
+                value,
             });
-        };
-        let normalized = if value == default {
+        }
+        let normalized = if value == self.default {
             0.0
-        } else if value < default {
-            if default == minimum {
+        } else if value < self.default {
+            if self.default == self.minimum {
                 0.0
             } else {
-                (value - default) / (default - minimum)
+                (value - self.default) / (self.default - self.minimum)
             }
-        } else if maximum == default {
+        } else if self.maximum == self.default {
             0.0
         } else {
-            (value - default) / (maximum - default)
+            (value - self.default) / (self.maximum - self.default)
         };
         let coordinate = F2Dot14::from_f32(normalized as f32).to_bits();
-        Ok(apply_mapping(coordinate, &self.mapping))
+        Ok(apply_mapping(coordinate, &self.normalized_mapping))
+    }
+}
+
+fn map_value(value: f64, points: &[(f64, f64)]) -> f64 {
+    match points {
+        [] => value,
+        [point] => point.1,
+        _ => {
+            let upper = points.partition_point(|point| point.0 < value);
+            let [left, right] = if upper == 0 {
+                [points[0], points[1]]
+            } else if upper == points.len() {
+                [points[points.len() - 2], points[points.len() - 1]]
+            } else {
+                [points[upper - 1], points[upper]]
+            };
+            if left.0 == right.0 {
+                return left.1;
+            }
+            left.1 + (right.1 - left.1) * (value - left.0) / (right.0 - left.0)
+        }
     }
 }
 
@@ -203,9 +247,13 @@ impl AtlasRegion {
         }
     }
 
-    fn scalar(&self, coordinates: &[i16]) -> Result<f32, SourceAtlasError> {
+    pub(crate) fn axes(&self) -> &[RegionAxis] {
+        &self.axes
+    }
+
+    pub(crate) fn scalar(&self, coordinates: &[i16]) -> Result<f32, SourceAtlasError> {
         if self.axes.len() != coordinates.len() {
-            return Err(FontReadError::InvalidDisplayGlyph {
+            return Err(FontReadError::InvalidProjection {
                 details: format!(
                     "source atlas region has {} axes for {} coordinates",
                     self.axes.len(),
@@ -272,6 +320,10 @@ impl RegionRegistry {
         self.regions.len()
     }
 
+    pub(crate) fn regions(&self) -> &[AtlasRegion] {
+        &self.regions
+    }
+
     pub(crate) fn into_regions(self) -> Vec<AtlasRegion> {
         self.regions
     }
@@ -300,7 +352,8 @@ mod tests {
         let page = SourceAtlasPage::new(
             VariableAtlas::default(),
             Vec::new(),
-            vec![AtlasAxis::new(axis, Vec::new())],
+            Vec::new(),
+            vec![AtlasAxis::new(axis, Vec::new(), -1.0, 0.0, 1.0, Vec::new())],
             vec![
                 AtlasRegion::new(vec![RegionAxis {
                     start: 0,

@@ -1,51 +1,60 @@
 mod atlas;
 mod binary;
 mod error;
-mod geometry;
+pub(crate) mod geometry;
 mod glif;
 mod glyphs;
 mod interpolation;
+mod projected_atlas;
+mod projection;
 mod types;
 
 pub use atlas::{SourceAtlasDescriptor, SourceAtlasError, SourceAtlasPage};
 pub use binary::{build_binary_atlas_page, BinaryFont};
 pub use error::FontReadError;
+pub(crate) use geometry::inferred_smooth_point_indices;
 pub use glif::GlifFont;
 pub use glyphs::GlyphsFont;
+pub use projected_atlas::build_projected_atlas_page;
 pub use types::{
-    AffineTransform, AnchorRange, AxisIndex, ComponentInstance, ComponentRange, ContourRange,
-    DirectoryGlyph, DisplayGlyph, FontDirectory, FontMetrics, GeometryIndex, GlyphAnchor,
-    GlyphBounds, GlyphContour, GlyphGeometry, GlyphGuide, GlyphIndex, GlyphMetrics, GlyphPoint,
-    GlyphPointKind, GuideRange, PointProvenance, PointRange, TrueTypePointIndex, VariationAxis,
-    VariationAxisKind, VariationCoordinate, VariationLocation,
+    AffineTransform, AxisIndex, DirectoryAxisMapping, DirectoryGlyph, DirectoryInstance,
+    DirectorySource, FontDirectory, FontMetrics, GlyphAnchor, GlyphComponent, GlyphDelta,
+    GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, GlyphProjection, GlyphShape,
+    GlyphShapeContour, GlyphShapePoint, GlyphSourceShape, GlyphVariation, PointProvenance,
+    ProjectedGlyph, SourceIndex, TrueTypePointIndex, VariationAxis, VariationAxisKind,
+    VariationCoordinate, VariationLocation, VariationRegion, VariationSupport,
 };
 
 use crate::{BackendResult, FontImport};
 
-/// Retained random access to one opened non-native font source.
-pub trait RandomAccessFont: Send + Sync {
+/// Immutable retained font source with location-independent glyph acquisition.
+pub trait FontSource: Send + Sync {
     fn directory(&self) -> &FontDirectory;
 
-    fn read_glyph(
+    fn glyph(&self, glyph: GlyphIndex) -> Result<ProjectedGlyph, FontReadError>;
+
+    fn atlas_page(
         &self,
-        glyph: GlyphIndex,
-        location: &VariationLocation,
-    ) -> Result<DisplayGlyph, FontReadError>;
+        roots: &[GlyphIndex],
+        band_count: u32,
+    ) -> Result<SourceAtlasPage, SourceAtlasError> {
+        build_projected_atlas_page(self, roots, band_count)
+    }
 }
 
 /// Exhaustive authored conversion from the original retained source semantics.
-pub trait FontImporter: RandomAccessFont {
+pub trait FontImporter: FontSource {
     fn begin_import(&self) -> BackendResult<FontImport>;
 }
 
 /// One retained source selected by [`crate::font_loader::FontLoader`].
-pub enum FontSource {
+pub enum OpenedFont {
     Binary(BinaryFont),
     Glif(GlifFont),
     Glyphs(GlyphsFont),
 }
 
-impl FontSource {
+impl OpenedFont {
     /// Returns exhaustive authored conversion only for product-convertible sources.
     pub fn importer(&self) -> Option<&dyn FontImporter> {
         match self {
@@ -56,7 +65,7 @@ impl FontSource {
     }
 }
 
-impl RandomAccessFont for FontSource {
+impl FontSource for OpenedFont {
     fn directory(&self) -> &FontDirectory {
         match self {
             Self::Binary(font) => font.directory(),
@@ -65,15 +74,23 @@ impl RandomAccessFont for FontSource {
         }
     }
 
-    fn read_glyph(
-        &self,
-        glyph: GlyphIndex,
-        location: &VariationLocation,
-    ) -> Result<DisplayGlyph, FontReadError> {
+    fn glyph(&self, glyph: GlyphIndex) -> Result<ProjectedGlyph, FontReadError> {
         match self {
-            Self::Binary(font) => font.read_glyph(glyph, location),
-            Self::Glif(font) => font.read_glyph(glyph, location),
-            Self::Glyphs(font) => font.read_glyph(glyph, location),
+            Self::Binary(font) => font.glyph(glyph),
+            Self::Glif(font) => font.glyph(glyph),
+            Self::Glyphs(font) => font.glyph(glyph),
+        }
+    }
+
+    fn atlas_page(
+        &self,
+        roots: &[GlyphIndex],
+        band_count: u32,
+    ) -> Result<SourceAtlasPage, SourceAtlasError> {
+        match self {
+            Self::Binary(font) => font.atlas_page(roots, band_count),
+            Self::Glif(font) => font.atlas_page(roots, band_count),
+            Self::Glyphs(font) => font.atlas_page(roots, band_count),
         }
     }
 }

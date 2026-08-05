@@ -15,12 +15,13 @@ import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useAxes } from "@/hooks/useAxes";
 import { useDesignLocation } from "@/hooks/useDesignLocation";
 import { axisValue, withAxisValue } from "@/lib/variation/location";
-import { useFont } from "@/workspace/WorkspaceContext";
+import { useFont, useFontSession } from "@/workspace/WorkspaceContext";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 export const AxesPanel = () => {
   const font = useFont();
+  const editable = useFontSession().workspace !== null;
   const axes = useAxes();
   const [location, setDesignLocation] = useDesignLocation();
   const settings = useSettingsNavigation();
@@ -61,12 +62,16 @@ export const AxesPanel = () => {
                 onChange={(value) => onAxisChange(axis, value)}
                 onReset={() => resetAxis(axis)}
               />
-              <AxisActionsMenu
-                axis={axis}
-                onEdit={() => settings.open({ category: "axes", axisId: axis.id })}
-                onReset={() => resetAxis(axis)}
-                onDelete={() => deleteAxis(axis)}
-              />
+              {editable ? (
+                <AxisActionsMenu
+                  axis={axis}
+                  onEdit={() => settings.open({ category: "axes", axisId: axis.id })}
+                  onReset={() => resetAxis(axis)}
+                  onDelete={() => deleteAxis(axis)}
+                />
+              ) : (
+                <span />
+              )}
             </div>
           </div>
         ))}

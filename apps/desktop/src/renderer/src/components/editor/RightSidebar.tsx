@@ -6,7 +6,6 @@ import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
-import { DisplayGlyphSection } from "./sidebar-right/DisplayGlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { BooleanOps } from "./BooleanOps";
 
@@ -18,14 +17,10 @@ export const RightSidebar = () => {
     <aside className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden">
       <div className="px-3 py-2 flex items-center justify-between">
         <span className="text-ui font-medium text-primary truncate">{familyName}</span>
-        {session.workspace ? (
-          <AuthoredZoom />
-        ) : (
-          <span className="text-ui font-medium text-muted">100%</span>
-        )}
+        <AuthoredZoom />
       </div>
       <Separator />
-      {session.workspace ? <AuthoredSections /> : <DisplaySections />}
+      <AuthoredSections />
     </aside>
   );
 };
@@ -64,12 +59,3 @@ const AuthoredSections = () => {
     </TransformOriginProvider>
   );
 };
-
-const DisplaySections = () => (
-  <TransformOriginProvider>
-    <div className="px-3 py-3">
-      <DisplayGlyphSection />
-    </div>
-    <Separator />
-  </TransformOriginProvider>
-);

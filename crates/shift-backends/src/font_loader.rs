@@ -6,7 +6,7 @@ use shift_source::ShiftSourcePackage;
 
 use crate::designspace::{DesignspaceReader, DesignspaceWriter};
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
-use crate::font_source::{BinaryFont, FontReadError, FontSource, GlifFont, GlyphsFont};
+use crate::font_source::{BinaryFont, FontReadError, GlifFont, GlyphsFont, OpenedFont};
 use crate::format::FontFormat;
 use crate::glyphs::GlyphsReader;
 use crate::import::{FontImport, GlyphStream};
@@ -158,7 +158,7 @@ impl FontLoader {
     }
 
     /// Opens a retained random-access source without constructing an authored Font.
-    pub fn open_source(&self, path: &Path) -> Result<FontSource, FontReadError> {
+    pub fn open_source(&self, path: &Path) -> Result<OpenedFont, FontReadError> {
         let extension = path
             .extension()
             .and_then(|extension| extension.to_str())
@@ -171,9 +171,9 @@ impl FontLoader {
             })?;
 
         match format {
-            FontFormat::Ttf | FontFormat::Otf => BinaryFont::open(path).map(FontSource::Binary),
-            FontFormat::Ufo | FontFormat::Designspace => GlifFont::open(path).map(FontSource::Glif),
-            FontFormat::Glyphs => GlyphsFont::open(path).map(FontSource::Glyphs),
+            FontFormat::Ttf | FontFormat::Otf => BinaryFont::open(path).map(OpenedFont::Binary),
+            FontFormat::Ufo | FontFormat::Designspace => GlifFont::open(path).map(OpenedFont::Glif),
+            FontFormat::Glyphs => GlyphsFont::open(path).map(OpenedFont::Glyphs),
             FontFormat::Shift => Err(FontReadError::UnsupportedFormat {
                 path: path.to_path_buf(),
             }),
@@ -254,7 +254,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{format_from_extension, FontLoader};
-    use crate::font_source::FontSource;
+    use crate::font_source::OpenedFont;
     use crate::format::FontFormat;
     use crate::ImportBatchLimit;
 
@@ -279,9 +279,9 @@ mod tests {
             .unwrap();
         let glyphs = loader.open_source(&fixture("Homenaje.glyphs")).unwrap();
 
-        assert!(matches!(&binary, FontSource::Binary(_)));
+        assert!(matches!(&binary, OpenedFont::Binary(_)));
         assert!(binary.importer().is_none());
-        assert!(matches!(&glif, FontSource::Glif(_)));
+        assert!(matches!(&glif, OpenedFont::Glif(_)));
         let mut glif_import = glif.importer().unwrap().begin_import().unwrap();
         assert!(glif_import.glyph_count() > 0);
         assert_eq!(
@@ -291,7 +291,7 @@ mod tests {
                 .len(),
             1
         );
-        assert!(matches!(&glyphs, FontSource::Glyphs(_)));
+        assert!(matches!(&glyphs, OpenedFont::Glyphs(_)));
         let mut glyphs_import = glyphs.importer().unwrap().begin_import().unwrap();
         assert!(glyphs_import.glyph_count() > 0);
         assert_eq!(

@@ -1,11 +1,20 @@
+import type { GlyphInfo } from "@shift/glyph-info";
+import type { GlyphId } from "@shift/types";
 import { electronSystemClipboard } from "@/lib/clipboard";
-import { PreviewGlyphCatalogSource } from "@/lib/catalog/PreviewGlyphCatalogSource";
-import { ShiftGlyphCatalogSource } from "@/lib/catalog/ShiftGlyphCatalogSource";
+import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
+import { ImportedGlyphAtlasSource } from "@/lib/graphics/backends/ImportedGlyphAtlasSource";
+import { Editor } from "@/lib/editor/Editor";
+import { Font } from "@/lib/model/Font";
+import { FontStore } from "@/lib/model/FontStore";
+import { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
+import { registerBuiltInTools } from "@/lib/tools/tools";
+import type { GlyphReader } from "@/types/engine";
+import type { WorkspaceGlyphSnapshot } from "@shared/workspace/protocol";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { getShiftHost } from "@/host/shiftHost";
-import { getGlyphInfo } from "./glyphInfo";
-import { FontSession } from "./FontSession";
 import { Workspace } from "./Workspace";
+import { FontSession } from "./FontSession";
+import { getGlyphInfo } from "./glyphInfo";
 
 declare global {
   var shiftFontSession: Promise<FontSession> | null;
@@ -23,30 +32,55 @@ async function connectFontSession(): Promise<FontSession> {
   const client = new FontSessionClient(host, { mode });
 
   try {
-    await client.connect();
-
-    switch (mode) {
-      case "shift": {
-        const workspace = new Workspace({
-          host,
-          client,
-          clipboard: electronSystemClipboard,
-        });
-        await workspace.connect();
-        const catalog = new ShiftGlyphCatalogSource(workspace.editor, getGlyphInfo());
-        return new FontSession(mode, catalog, workspace, client);
-      }
-      case "preview": {
-        const snapshot = client.sourceCell.peek();
-        if (!snapshot) throw new Error("preview connected without a source snapshot");
-
-        const catalog = new PreviewGlyphCatalogSource(snapshot.directory, client, getGlyphInfo());
-        return new FontSession(mode, catalog, null, client);
-      }
-    }
+    return await createFontSession(client, getGlyphInfo());
   } catch (error) {
     client.dispose();
     globalThis.shiftFontSession = null;
     throw error;
   }
+}
+
+async function createFontSession(
+  client: FontSessionClient,
+  glyphInfo: GlyphInfo,
+): Promise<FontSession> {
+  switch (client.mode) {
+    case "shift": {
+      const host = getShiftHost();
+      const workspace = new Workspace({ host, client, clipboard: electronSystemClipboard });
+      await workspace.connect();
+      const atlas = new AuthoredGlyphAtlasSource(workspace.font.editCoordinator, () =>
+        workspace.font.getAxes(),
+      );
+      const catalog = new GlyphCatalog(workspace.editor, glyphInfo, atlas);
+      return new FontSession("shift", catalog, workspace, client, workspace.font, workspace.editor);
+    }
+    case "imported": {
+      await client.connect();
+      const source = client.sourceCell.peek();
+      if (!source) throw new Error("font source connected without a snapshot");
+
+      const store = new FontStore(source.font);
+      const font = new Font(store, undefined, sourceGlyphReader(client));
+      const editor = new Editor({ font, fontStore: store, clipboard: electronSystemClipboard });
+      registerBuiltInTools(editor);
+      editor.setActiveTool("select");
+
+      const catalog = new GlyphCatalog(editor, glyphInfo, new ImportedGlyphAtlasSource(client));
+      return new FontSession("imported", catalog, null, client, font, editor);
+    }
+  }
+}
+
+function sourceGlyphReader(client: FontSessionClient): GlyphReader {
+  return {
+    async read(glyphIds: readonly GlyphId[]) {
+      const closures = await Promise.all(glyphIds.map((glyphId) => client.sourceGlyph(glyphId)));
+      const snapshots = new Map<GlyphId, WorkspaceGlyphSnapshot>();
+      for (const closure of closures) {
+        for (const snapshot of closure) snapshots.set(snapshot.glyphId, snapshot);
+      }
+      return [...snapshots.values()];
+    },
+  };
 }

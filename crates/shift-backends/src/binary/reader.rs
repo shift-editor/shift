@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
-    font_source::{BinaryFont, RandomAccessFont},
+    font_source::{inferred_smooth_point_indices, BinaryFont, FontSource},
     import::{collect_streamed_font, GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
 };
 use rayon::prelude::*;
@@ -154,51 +154,19 @@ impl OutlinePen for ShiftPen {
     }
 }
 
-/// Maximum angle difference (in radians, ~2.9°) between incoming and outgoing
-/// handles for a point to be classified as smooth. Matches the tolerance used
-/// by common font editors for auto-detecting tangent continuity.
-const SMOOTH_ANGLE_TOLERANCE: f64 = 0.05;
-
 fn detect_smooth_points(contours: &mut [Contour]) {
-    for contour in contours.iter_mut() {
-        let len = contour.len();
-        if len < 3 {
-            continue;
-        }
-
-        let is_closed = contour.is_closed();
-
-        for i in 0..len {
-            let point = contour.get_point_at(i).unwrap();
-
-            if !point.is_on_curve() {
-                continue;
-            }
-
-            let (prev_idx, next_idx) = match is_closed {
-                true => ((i + len - 1) % len, (i + 1) % len),
-                false if i == 0 || i == len - 1 => continue,
-                false => (i - 1, i + 1),
-            };
-
-            let prev = contour.get_point_at(prev_idx).unwrap();
-            let next = contour.get_point_at(next_idx).unwrap();
-
-            if prev.is_on_curve() && next.is_on_curve() {
-                continue;
-            }
-
-            let dx1 = point.x() - prev.x();
-            let dy1 = point.y() - prev.y();
-            let dx2 = next.x() - point.x();
-            let dy2 = next.y() - point.y();
-
-            let a1 = dy1.atan2(dx1);
-            let a2 = dy2.atan2(dx2);
-
-            if (a1 - a2).abs() < SMOOTH_ANGLE_TOLERANCE {
-                contour.get_point_at_mut(i).unwrap().set_smooth(true);
-            }
+    for contour in contours {
+        let smooth = inferred_smooth_point_indices(
+            contour.points(),
+            contour.is_closed(),
+            |point| (point.x(), point.y()),
+            |point| point.is_on_curve(),
+        );
+        for index in smooth {
+            contour
+                .get_point_at_mut(index)
+                .expect("smooth point index came from this contour")
+                .set_smooth(true);
         }
     }
 }
@@ -465,6 +433,7 @@ fn localized_string(font: &FontRef<'_>, id: StringId) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::font_source::geometry::SMOOTH_ANGLE_TOLERANCE;
     use shift_font::CurveSegment;
     use skrifa::outline::pen::PathElement;
     use std::path::PathBuf;

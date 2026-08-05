@@ -20,7 +20,6 @@ import type {
   AppliedChange,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  DisplayGlyph,
   FontIntent,
   GlyphId,
   GlyphPreview,
@@ -62,6 +61,10 @@ export class FontSessionClient {
     this.#mode = options.mode ?? "shift";
     this.#host = host;
     this.#transport = options.transport ?? null;
+  }
+
+  get mode(): FontSessionMode {
+    return this.#mode;
   }
 
   /**
@@ -138,14 +141,11 @@ export class FontSessionClient {
     return snapshot;
   }
 
-  /** Reads one retained source-local glyph at dense source coordinates. */
-  async sourceGlyph(glyphIndex: number, coordinates: readonly number[]): Promise<DisplayGlyph> {
+  /** Reads one retained location-independent glyph and its component closure. */
+  async sourceGlyph(glyphId: GlyphId): Promise<WorkspaceGlyphSnapshot[]> {
     await this.connect();
 
-    return this.#require().call("source.glyph", {
-      glyphIndex,
-      coordinates: [...coordinates],
-    });
+    return this.#require().call("source.glyph", { glyphId });
   }
 
   /** Prepares one retained-source atlas page at dense source coordinates. */
@@ -424,7 +424,7 @@ export class FontSessionClient {
         this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
         this.documentStateCell.set(await channel.call("document.state", undefined));
         return;
-      case "preview":
+      case "imported":
         this.sourceCell.set(await channel.call("source.snapshot", undefined));
         return;
     }

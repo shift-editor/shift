@@ -2,6 +2,7 @@ import { Bounds, type Bounds as BoundsType, Vec2, type Point2D } from "@shift/ge
 import type {
   AnchorId,
   ComponentId,
+  ComponentTransformKind,
   ContourId,
   GlyphState,
   GlyphStructure,
@@ -84,12 +85,18 @@ export class GlyphGeometry {
   readonly structure: GlyphStructure;
   readonly values: Float64Array;
 
+  readonly #componentTransformKind: ComponentTransformKind;
   readonly #cache: GeometryCache;
 
-  constructor(structure: GlyphStructure, values: Float64Array) {
+  constructor(
+    structure: GlyphStructure,
+    values: Float64Array,
+    componentTransformKind: ComponentTransformKind = "decomposed",
+  ) {
     this.structure = structure;
     this.values = values;
-    this.#cache = new GeometryCache(structure, values);
+    this.#componentTransformKind = componentTransformKind;
+    this.#cache = new GeometryCache(structure, values, componentTransformKind);
   }
 
   static fromState(state: GlyphState): GlyphGeometry {
@@ -293,7 +300,7 @@ export class GlyphGeometry {
       }
     }
 
-    return new GlyphGeometry(this.structure, values);
+    return new GlyphGeometry(this.structure, values, this.#componentTransformKind);
   }
 
   /**
@@ -323,7 +330,11 @@ class GeometryCache {
   #bounds: BoundsType | null | undefined;
   #sidebearings: GlyphSidebearings | null = null;
 
-  constructor(structure: GlyphStructure, values: Float64Array) {
+  constructor(
+    structure: GlyphStructure,
+    values: Float64Array,
+    componentTransformKind: ComponentTransformKind,
+  ) {
     this.#xAdvance = values[0] ?? 0;
 
     let contours: readonly Contour[] | null = null;
@@ -352,7 +363,7 @@ class GeometryCache {
 
     let components: readonly Component[] | null = null;
     this.#components = new IdIndex(
-      () => (components ??= Component.fromStructure(structure, values)),
+      () => (components ??= Component.fromStructure(structure, values, componentTransformKind)),
       (component) => component.id,
     );
   }
