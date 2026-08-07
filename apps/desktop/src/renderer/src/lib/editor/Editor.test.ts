@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintNodeId, type AxisId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
+import { effect } from "@/lib/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 
 describe("Editor scene bootstrap", () => {
@@ -68,6 +69,36 @@ describe("Editor scene bootstrap", () => {
     });
 
     expect(editor.scene.node(right)?.position).toEqual({ x: 730, y: 5 });
+  });
+
+  it("resolves authored points through the ownership index and keeps their bounds live", async () => {
+    editor.selectTool("pen");
+    editor.clickGlyphLocal(0, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(100, 0);
+    await editor.settle();
+    editor.clickGlyphLocal(100, 100);
+    await editor.settle();
+
+    const layer = editor.requireGlyphLayer();
+    const point = layer.allPoints[0];
+    if (!point) throw new Error("Expected an authored point");
+
+    const object = editor.object(point.id);
+    if (object?.kind !== "point") throw new Error("Expected a point object");
+
+    expect(object.layer).toBe(layer);
+
+    let x = object.bounds()?.x ?? Number.NaN;
+    const subscription = effect(() => {
+      x = object.bounds()?.x ?? Number.NaN;
+    });
+
+    layer.movePoints([point.id], { x: 25, y: 0 });
+
+    expect(x).toBe(point.x + 25);
+    expect(object.geometry.point(point.id)?.x).toBe(point.x + 25);
+    subscription.dispose();
   });
 
   it("creates and selects a source by materializing the opened glyph", async () => {

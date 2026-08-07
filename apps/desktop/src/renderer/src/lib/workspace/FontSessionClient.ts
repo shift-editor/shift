@@ -9,7 +9,6 @@ import type {
   SyncEventMap,
   WorkspaceDocumentState,
   WorkspaceExportResult,
-  WorkspaceGlyphSnapshot,
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
@@ -23,6 +22,7 @@ import type {
   FontIntent,
   GlyphId,
   GlyphPreview,
+  GlyphSnapshot,
   GlyphProjection,
   Location,
   SlugAtlas,
@@ -58,7 +58,7 @@ export class FontSessionClient {
   #connection: Promise<void> | null = null;
 
   constructor(host: ShiftHost | null, options: FontSessionClientOptions = {}) {
-    this.#mode = options.mode ?? "shift";
+    this.#mode = options.mode ?? "authored";
     this.#host = host;
     this.#transport = options.transport ?? null;
   }
@@ -142,7 +142,7 @@ export class FontSessionClient {
   }
 
   /** Reads one retained location-independent glyph and its component closure. */
-  async sourceGlyph(glyphId: GlyphId): Promise<WorkspaceGlyphSnapshot[]> {
+  async sourceGlyph(glyphId: GlyphId): Promise<GlyphSnapshot[]> {
     await this.connect();
 
     return this.#require().call("source.glyph", { glyphId });
@@ -234,7 +234,7 @@ export class FontSessionClient {
   /** Pulls replace-grade glyph snapshots by stable glyph id and exact sources. */
   async glyphSnapshots(
     requests: readonly WorkspaceGlyphSnapshotRequest[],
-  ): Promise<WorkspaceGlyphSnapshot[]> {
+  ): Promise<GlyphSnapshot[]> {
     await this.connect();
 
     return this.#require().call("workspace.glyphSnapshots", {
@@ -420,7 +420,7 @@ export class FontSessionClient {
 
   async #catchUp(channel: Channel<SyncCallMap, SyncEventMap>): Promise<void> {
     switch (this.#mode) {
-      case "shift":
+      case "authored":
         this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
         this.documentStateCell.set(await channel.call("document.state", undefined));
         return;

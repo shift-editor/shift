@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use shift_backends::{
-    build_binary_atlas_page, BinaryFont, FontSource, GlyphIndex, SourceAtlasDescriptor,
+    build_binary_atlas_page, FontSource, GlyphIndex, OpenTypeFont, SourceAtlasDescriptor,
 };
 use shift_slug::{PackedVariableAtlas, DEFAULT_BAND_COUNT};
 
@@ -19,7 +19,7 @@ fn main() -> Result<()> {
         .map(PathBuf::from)
         .ok_or("usage: profile_binary_atlas <font.ttf>")?;
     let open_started = Instant::now();
-    let source = BinaryFont::open(&path)?;
+    let source = OpenTypeFont::open(&path)?;
     let open_elapsed = open_started.elapsed();
     let roots = source
         .directory()
@@ -52,7 +52,7 @@ fn main() -> Result<()> {
         sources += statistics.source_count;
         maximum_weights = maximum_weights.max(
             descriptor
-                .weights(source.directory().default_location())?
+                .weights(source.directory().default_location().coordinates())?
                 .len(),
         );
 
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
     let complete_elapsed = complete_started.elapsed();
     let weights_started = Instant::now();
     for descriptor in &descriptors {
-        descriptor.weights(source.directory().default_location())?;
+        descriptor.weights(source.directory().default_location().coordinates())?;
     }
     let weights_elapsed = weights_started.elapsed();
     let build_total = build_samples.iter().sum::<Duration>();

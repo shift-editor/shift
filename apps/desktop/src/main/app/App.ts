@@ -21,7 +21,7 @@ import { createShiftLogger, type ShiftLogger } from "../logging";
 import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
-import type { FontSession } from "../workspace/WorkspaceSession";
+import type { FontSessionHost } from "../workspace/FontSessionHost";
 import { showOpenFontDialog } from "../document/openFontDialog";
 
 const APP_NAME = "Shift";
@@ -330,7 +330,7 @@ export class App {
     this.#openWorkspaceWindow(opener, session);
   }
 
-  #focusExistingWorkspaceWindow(opener: Window, session: FontSession): boolean {
+  #focusExistingWorkspaceWindow(opener: Window, session: FontSessionHost): boolean {
     const existingWindow = session.activeWindow();
     if (!existingWindow) return false;
 
@@ -339,7 +339,7 @@ export class App {
     return true;
   }
 
-  #openWorkspaceWindow(opener: Window, session: FontSession): void {
+  #openWorkspaceWindow(opener: Window, session: FontSessionHost): void {
     const closeOpener = this.#workspaces.getForBrowserWindow(opener.window) === null;
 
     const bounds = screen.getDisplayMatching(opener.window.getBounds()).workArea;
@@ -351,7 +351,7 @@ export class App {
     if (closeOpener) opener.close();
   }
 
-  #fontSessionForSender(sender: WebContents, operation: string): FontSession {
+  #fontSessionForSender(sender: WebContents, operation: string): FontSessionHost {
     const window = this.#requireWindowForWebContents(sender);
     const session = this.#workspaces.getForBrowserWindow(window.window);
     if (!session) {
@@ -361,7 +361,7 @@ export class App {
     return session;
   }
 
-  #activeFontSession(): FontSession | null {
+  #activeFontSession(): FontSessionHost | null {
     const window = this.#windows.activeWindow();
     return window ? this.#workspaces.getForBrowserWindow(window.window) : null;
   }

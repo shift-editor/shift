@@ -4,7 +4,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 ## Architecture Invariants
 
-**Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, edge-pan, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers.
+**Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers.
 
 **Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.
 
@@ -28,7 +28,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Camera and text-layout metrics resolve from the active design location through `Font.metricsAtLocation()`. Exact master locations use authored source values; intermediate locations evaluate the Rust-built source-metric interpolation model.
 
-**Architecture Invariant:** `Selection` uses discriminated `Selectable` unions (`{ kind: "point" | "anchor" | "segment", id }`). Mutations go through `select()`, `add()`, `remove()`, `toggle()`. Derived contour and bounds queries are computed from `stateCell` and the current glyph geometry.
+**Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
 
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
 
@@ -42,8 +42,7 @@ editor/
   lifecycle.ts           -- EventEmitter for fontLoaded/fontSaved/destroying
   sidebearings.ts        -- deriveGlyphSidebearings, roundSidebearing
   managers/
-    Camera.ts   -- UPM<->screen affine matrices, zoom, pan
-    EdgePanManager.ts    -- Auto-pan when dragging near canvas edges
+    Camera.ts             -- UPM<->screen affine matrices, zoom, pan
   rendering/
     Renderer.ts          -- Canvas layer orchestration and RAF scheduling
     Canvas.ts            -- 2D drawing API wrapping CanvasRenderingContext2D
@@ -61,7 +60,7 @@ editor/
 
 ## Key Types
 
-- **`Editor`** -- Facade class (~1750 lines). Owns `Selection`, `Hover`, `Camera`, `EdgePanManager`, `Renderer` (renderer), `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
+- **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
 - **`Scene`** -- Owns generic, serializable placed-node records and node-level queries. Glyph acquisition and retained object ownership remain outside Scene.
 - **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs.
 - **`FontStore`** -- Workspace-owned renderer mirror injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
@@ -69,14 +68,13 @@ editor/
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
 - **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `Theme`.
 - **`CameraTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, layoutHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
-- **`Selection`** -- Unified selection state for points, anchors, and segments. Computed `DerivedSelection` tracks selected contours and bounds. Exposes `stateCell` plus unwrapped ID getters.
-- **`Selectable`** -- Discriminated union: `{ kind: "point" | "anchor" | "segment", id }`.
+- **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
+- **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
 - **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
 - **`GlyphLayerEditDraft`** -- Transactional interface for continuous layer manipulation: `previewPositionPatch()` / `previewTranslate()` / `previewRotate()` / `previewScale()` during drag, `commit(label)` or `discard()` at end.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. Only the latest callback fires.
-- **`EdgePanManager`** -- During drags, auto-pans when the cursor is within 50px of canvas edges, using velocity proportional to distance from edge.
 - **`EventEmitter`** -- Typed emitter for `LifecycleEventMap` (`fontLoaded`, `fontSaved`, `destroying`).
 - **`Theme`** -- Shared visual config for editor-rendered elements. Tool-owned controls keep their own local style constants.
 
@@ -129,7 +127,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()
 
 ### Draft pattern (continuous manipulation)
 
-`Editor.beginGlyphLayerEditDraft(subject)` captures base point/anchor positions from the active `GlyphLayer`. During drag, `draft.preview*()` applies positions to the reactive glyph layer only. On commit, it syncs the final sparse patch through `GlyphLayer.commitPositionPatch()` and records a single `ApplyPositionPatchCommand`. On discard, it restores the frozen base positions as a preview.
+`Editor.beginGlyphLayerEditDraft(subject)` captures base point/anchor positions from the active `GlyphLayer`. During drag, `draft.preview*()` applies positions to the reactive glyph layer only. On commit, it syncs the final sparse patch through `GlyphLayer.commitPositionPatch()` as one workspace move-points intent. On discard, it restores the frozen base positions as a preview.
 
 ### Hit testing
 
@@ -153,10 +151,10 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ### Add a new selectable entity kind
 
-1. Extend the `Selectable` discriminated union.
-2. Add a `WritableSignal<ReadonlySet<NewId>>` to `Selection`.
-3. Update `select()`, `add()`, `remove()`, `toggle()`, `isSelected()`, `clear()`, `isEmpty`.
-4. Read the new signal in the appropriate rendering effect.
+1. Define or import its branded identity and guard.
+2. Add the identity to `ShiftId` and `SelectableId` in the object type boundary.
+3. Resolve it in `Editor.object()` and provide live object bounds.
+4. Add editor tests for lookup, selection bounds, and invalidation after edits.
 
 ## Gotchas
 
@@ -171,7 +169,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 - `npx vitest run apps/desktop/src/renderer/src/lib/editor/` -- unit tests for managers, hit testing, sidebearings, lifecycle, drafts.
 - `npx vitest run --testPathPattern="draft"` -- draft-specific tests.
-- `npx vitest run --testPathPattern="EdgePanManager|Camera"` -- manager unit tests.
+- `pnpm test:desktop src/renderer/src/lib/editor/managers/Camera.test.ts` -- camera manager tests.
 - Manual: open a font, zoom/pan, select points, drag, toggle preview mode, verify GPU/CPU handle rendering toggle.
 
 ## Related

@@ -29,11 +29,6 @@ export class ContourPath {
     this.commands = commands;
   }
 
-  /** Creates path output from already validated drawing commands. */
-  static fromCommands(commands: readonly PathCommand[]): ContourPath {
-    return new ContourPath(commands);
-  }
-
   /**
    * Creates path output for a contour in its destination coordinate space.
    *

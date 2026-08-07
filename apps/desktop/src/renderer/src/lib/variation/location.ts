@@ -1,4 +1,5 @@
 import { asAxisId, type Axis, type AxisMapping, type Location } from "@shift/types";
+import { mapAxisMappings } from "./mapping";
 import type { AxisLocation } from "@/types/variation";
 
 export function emptyAxisLocation(): AxisLocation {
@@ -41,61 +42,30 @@ export function mapAxisLocation(
   axes: readonly Axis[],
   mappings: readonly AxisMapping[],
 ): AxisLocation {
-  const mapped = new Map(
-    axes.map((axis) => [
-      axis.id,
-      axis.role === "external" ? axisValue(location, axis) : axis.default,
-    ]),
-  );
-  const axesById = new Map(axes.map((axis) => [axis.id, axis]));
-
-  for (const mapping of mappings) {
-    const [inputAxisId] = mapping.inputs;
-    const [outputAxisId] = mapping.outputs;
-    if (
-      mapping.inputs.length !== 1 ||
-      mapping.outputs.length !== 1 ||
-      inputAxisId !== outputAxisId ||
-      !inputAxisId
-    ) {
-      continue;
-    }
-
-    const axis = axesById.get(inputAxisId);
-    if (!axis) continue;
-    const points = mapping.points.map((point) => {
-      const input = point.input.values[inputAxisId] ?? axis.default;
-      return [input, point.output.values[outputAxisId] ?? input] as const;
-    });
-    mapped.set(outputAxisId, mapAxisValue(axisValue(location, axis), points));
-  }
-
-  return mapped;
+  return mapAxisMappings(location, axes, mappings);
 }
 
-/** Evaluates one scalar piecewise-linear mapping, including endpoint extrapolation. */
+/** Evaluates a Designspace scalar mapping with offset extrapolation. */
 export function mapAxisValue(
   value: number,
   points: readonly (readonly [number, number])[],
 ): number {
-  if (points.length === 0) return value;
-  if (points.length === 1) return points[0]?.[1] ?? value;
-
   const sorted = [...points].sort((left, right) => left[0] - right[0]);
-  let lower = sorted[0];
-  let upper = sorted[1];
-  if (value >= (sorted[sorted.length - 1]?.[0] ?? value)) {
-    lower = sorted[sorted.length - 2];
-    upper = sorted[sorted.length - 1];
-  } else if (value > (sorted[0]?.[0] ?? value)) {
-    const upperIndex = sorted.findIndex((point) => point[0] >= value);
-    lower = sorted[upperIndex - 1];
-    upper = sorted[upperIndex];
-  }
-  if (!lower || !upper) return value;
-  if (lower[0] === upper[0]) return lower[1];
+  const first = sorted[0];
+  if (!first) return value;
+  if (value <= first[0]) return value + first[1] - first[0];
 
-  return lower[1] + ((upper[1] - lower[1]) * (value - lower[0])) / (upper[0] - lower[0]);
+  for (let index = 1; index < sorted.length; index++) {
+    const lower = sorted[index - 1];
+    const upper = sorted[index];
+    if (!lower || !upper || value > upper[0]) continue;
+    if (lower[0] === upper[0]) return lower[1];
+
+    return lower[1] + ((upper[1] - lower[1]) * (value - lower[0])) / (upper[0] - lower[0]);
+  }
+
+  const last = sorted[sorted.length - 1];
+  return last ? value + last[1] - last[0] : value;
 }
 
 export function axisLocationsEqual(

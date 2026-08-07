@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import type { WorkspaceProcess } from "./WorkspaceProcess";
-import type { WorkspaceSession } from "./WorkspaceSession";
+import type { FontSessionHost } from "./FontSessionHost";
 import { WorkspaceManager } from "./WorkspaceManager";
 
 class DocumentChangeSource {
@@ -39,7 +39,7 @@ describe("WorkspaceManager package session cleanup", () => {
 
   function session(workspaceId: string): {
     source: DocumentChangeSource;
-    session: WorkspaceSession;
+    session: FontSessionHost;
   } {
     const source = new DocumentChangeSource();
     return {
@@ -52,7 +52,7 @@ describe("WorkspaceManager package session cleanup", () => {
         },
         windows: new Set(),
         dispose() {},
-      } as unknown as WorkspaceSession,
+      } as unknown as FontSessionHost,
     };
   }
 

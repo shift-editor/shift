@@ -2,7 +2,7 @@ import { utilityProcess, type MessagePortMain, type UtilityProcess } from "elect
 import path from "node:path";
 import { Channel, utilityProcessTransport } from "../../shared/workspace/channel";
 import type {
-  FontSourceSessionState,
+  FontSourceSession,
   ShellCallMap,
   ShellEventMap,
   WorkspaceDocumentState,
@@ -122,7 +122,7 @@ export class WorkspaceProcess {
   }
 
   /** Opens a retained read-only source without allocating a workspace document. */
-  openFontSource(path: string): Promise<FontSourceSessionState> {
+  openFontSource(path: string): Promise<FontSourceSession> {
     return this.#requireChannel().call("source.open", { path });
   }
 

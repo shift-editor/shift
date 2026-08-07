@@ -1,4 +1,5 @@
-import type { CatalogGlyphKey, GlyphAtlasPageWeights } from "@/types/glyphAtlas";
+import type { GlyphId } from "@shift/types";
+import type { GlyphAtlasPageWeights } from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame, GlyphPreviewInstance } from "@/types/glyphPreview";
 import { SlugAtlas } from "./SlugAtlas";
 import { SlugAtlasPage } from "./SlugAtlasPage";
@@ -11,7 +12,7 @@ export class SlugRenderer {
   readonly #onDeviceLost: (reason: string) => void;
   readonly #pipelines: SlugRendererPipelines;
   readonly #pages = new Set<SlugAtlasPage>();
-  readonly #pageByGlyph = new Map<CatalogGlyphKey, SlugAtlasPage>();
+  readonly #pageByGlyph = new Map<GlyphId, SlugAtlasPage>();
   #disposed = false;
 
   constructor(
@@ -57,7 +58,7 @@ export class SlugRenderer {
     const nextPageByGlyph = new Map(this.#pageByGlyph);
     const replaced = new Set<SlugAtlasPage>();
     for (const page of pages) {
-      for (const glyphId of page.glyphKeys) {
+      for (const glyphId of page.glyphIds) {
         const previous = nextPageByGlyph.get(glyphId);
         if (previous) replaced.add(previous);
         nextPageByGlyph.set(glyphId, page);
@@ -70,7 +71,7 @@ export class SlugRenderer {
     this.#removeUnusedPages(replaced);
   }
 
-  invalidate(glyphIds: readonly CatalogGlyphKey[]): void {
+  invalidate(glyphIds: readonly GlyphId[]): void {
     const affected = new Set<SlugAtlasPage>();
     for (const glyphId of glyphIds) {
       const page = this.#pageByGlyph.get(glyphId);
@@ -80,7 +81,7 @@ export class SlugRenderer {
     this.#removeUnusedPages(affected);
   }
 
-  hasGlyphs(glyphIds: readonly CatalogGlyphKey[]): boolean {
+  hasGlyphs(glyphIds: readonly GlyphId[]): boolean {
     return glyphIds.every((glyphId) => this.#pageByGlyph.has(glyphId));
   }
 

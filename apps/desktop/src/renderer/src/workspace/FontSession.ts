@@ -1,14 +1,14 @@
 import type { FontSessionMode } from "@shared/workspace/protocol";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
+import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
-import type { GlyphCatalogSource } from "@/types/glyphCatalog";
 import type { Workspace } from "./Workspace";
 
 /** Immutable renderer composition for one connected font session. */
 export class FontSession {
   readonly mode: FontSessionMode;
-  readonly catalog: GlyphCatalogSource;
+  readonly catalog: GlyphCatalog;
   readonly workspace: Workspace | null;
   readonly font: Font;
   readonly editor: Editor;
@@ -16,7 +16,7 @@ export class FontSession {
 
   constructor(
     mode: FontSessionMode,
-    catalog: GlyphCatalogSource,
+    catalog: GlyphCatalog,
     workspace: Workspace | null,
     client: FontSessionClient,
     font: Font,

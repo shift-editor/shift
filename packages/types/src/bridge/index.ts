@@ -35,8 +35,6 @@ export type {
   CatalogAtlasPage,
   CatalogAtlasWeights,
   CatalogAxis,
-  CatalogDirectory,
-  CatalogGlyph,
   CatalogMetrics,
   ComponentAnchorAttachment,
   ComponentAnchorReference,

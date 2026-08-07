@@ -34,13 +34,10 @@ EXPECTED_DOCS = [
     "crates/shift-bridge/docs/DOCS.md",
     "apps/desktop/src/main/docs/DOCS.md",
     "apps/desktop/src/preload/docs/DOCS.md",
-    "apps/desktop/src/shared/bridge/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/bridge/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/editor/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/tools/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/lib/commands/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md",
     "packages/types/docs/DOCS.md",
     "packages/geo/docs/DOCS.md",
@@ -323,6 +320,9 @@ def check_broken_links(doc_path: str, tokens: list) -> list[Issue]:
 def check_freshness(doc_path: str) -> list[Issue]:
     """Flag docs that are stale relative to their source code."""
     issues = []
+    if _has_worktree_changes(doc_path):
+        return issues
+
     doc_date = _last_commit_date(doc_path)
     if not doc_date:
         issues.append(Issue(
@@ -507,12 +507,23 @@ def _last_commit_date(path: str) -> str | None:
     return result.stdout.strip() or None
 
 
+def _has_worktree_changes(path: str) -> bool:
+    """Return whether a path differs from the current commit."""
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "--", path],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    return bool(result.stdout.strip())
+
+
 def _symbol_exists(symbol: str) -> bool:
-    """Check if a symbol exists anywhere in the codebase source files."""
+    """Check tracked and untracked source files in the current worktree."""
     result = subprocess.run(
         [
             "git",
             "grep",
+            "--untracked",
+            "--fixed-strings",
             "-lq",
             symbol,
             "--",

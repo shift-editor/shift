@@ -1,13 +1,9 @@
-import type { SlugSection, SourceId } from "@shift/types";
+import type { GlyphId, SlugSection, SourceId } from "@shift/types";
 import { interpolationWeights } from "@/lib/interpolation/InterpolationBasis";
 import type { AxisLocation } from "@/types/variation";
 import type { CatalogLocation } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
-import type {
-  CatalogGlyphKey,
-  GlyphAtlasGlyph,
-  GlyphAtlasPageDescriptor,
-} from "@/types/glyphAtlas";
+import type { GlyphAtlasGlyph, GlyphAtlasPage } from "@/types/glyphAtlas";
 
 const VARIABLE_GLYPH_BYTES = 32;
 const COMPONENT_GLYPH_BYTES = 24;
@@ -17,9 +13,9 @@ const GLYPH_OFFSET_MASK = 0x7fff_ffff;
 
 /** One concrete Slug atlas generation resident across two WebGPU bindings. */
 export class SlugAtlas {
-  readonly #descriptor: GlyphAtlasPageDescriptor;
-  readonly #glyphKeys: readonly CatalogGlyphKey[];
-  readonly #glyphs: ReadonlyMap<CatalogGlyphKey, GlyphAtlasGlyph>;
+  readonly #descriptor: GlyphAtlasPage;
+  readonly #glyphIds: readonly GlyphId[];
+  readonly #glyphs: ReadonlyMap<GlyphId, GlyphAtlasGlyph>;
   readonly #glyphBytes: Uint8Array<ArrayBuffer>;
   readonly #componentGlyphBytes: Uint8Array<ArrayBuffer>;
   readonly #firstBuffer: GPUBuffer;
@@ -29,14 +25,14 @@ export class SlugAtlas {
   #disposed = false;
 
   constructor(
-    descriptor: GlyphAtlasPageDescriptor,
+    descriptor: GlyphAtlasPage,
     firstBuffer: GPUBuffer,
     secondBuffer: GPUBuffer,
     splitOffset: number,
   ) {
     this.#descriptor = descriptor;
-    this.#glyphKeys = descriptor.glyphs.map((glyph) => glyph.glyphKey);
-    this.#glyphs = new Map(descriptor.glyphs.map((glyph) => [glyph.glyphKey, glyph]));
+    this.#glyphIds = descriptor.glyphs.map((glyph) => glyph.glyphId);
+    this.#glyphs = new Map(descriptor.glyphs.map((glyph) => [glyph.glyphId, glyph]));
     this.#resolvedWeights = descriptor.resolvedWeights
       ? new Float32Array(descriptor.resolvedWeights)
       : null;
@@ -48,7 +44,7 @@ export class SlugAtlas {
   }
 
   static create(
-    descriptor: GlyphAtlasPageDescriptor,
+    descriptor: GlyphAtlasPage,
     device: GPUDevice,
     maximumBindingSize: number,
   ): SlugAtlas {
@@ -97,8 +93,8 @@ export class SlugAtlas {
     return [splitOffset, Math.max(4, splitOffset), Math.max(4, remainingLength)];
   }
 
-  get glyphKeys(): readonly CatalogGlyphKey[] {
-    return this.#glyphKeys;
+  get glyphIds(): readonly GlyphId[] {
+    return this.#glyphIds;
   }
 
   get pageIndex(): number {

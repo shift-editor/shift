@@ -2,16 +2,15 @@ import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
 import type { CatalogAxis, CatalogMetrics, GlyphId, GlyphName, SourceId } from "@shift/types";
 import type { RefObject } from "react";
-import type { Signal } from "@/lib/signals";
-import type { GlyphRenderInput } from "./glyphRender";
+import type { RenderGlyph } from "./glyphRender";
 import type { ThemeName } from "./uiState";
-import type { CatalogGlyphKey, GlyphAtlasSource } from "./glyphAtlas";
+import type { GlyphAtlasSource } from "./glyphAtlas";
 
 export type GlyphCatalogCellArea = "preview" | "name";
 
 export interface GlyphCatalogItem {
-  readonly id: CatalogGlyphKey;
-  readonly name: string;
+  readonly id: GlyphId;
+  readonly name: GlyphName;
   readonly displayName: string;
   readonly unicode: number | null;
 }
@@ -19,24 +18,7 @@ export interface GlyphCatalogItem {
 /** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
 export type CatalogLocation = readonly number[];
 
-/** Immutable backend boundary consumed by the shared catalog and resident Grid. */
 export interface GlyphCatalogSource {
-  readonly glyphsCell: Signal<readonly GlyphCatalogItem[]>;
-  readonly axesCell: Signal<readonly CatalogAxis[]>;
-  readonly locationCell: Signal<CatalogLocation>;
-  readonly metricsCell: Signal<CatalogMetrics>;
-  readonly familyNameCell: Signal<string | null>;
-  readonly styleNameCell: Signal<string | null>;
-  readonly sourceIdCell: Signal<SourceId | null>;
-  readonly invalidGlyphKeysCell: Signal<readonly CatalogGlyphKey[] | null>;
-  readonly atlas: GlyphAtlasSource;
-
-  openGlyph(glyphKey: CatalogGlyphKey): Promise<GlyphRenderInput>;
-  setLocation(location: CatalogLocation): Promise<void>;
-  dispose(): void;
-}
-
-export interface GlyphCatalogState {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
@@ -50,17 +32,14 @@ export interface GlyphCatalogState {
   selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
   atlasSource: GlyphAtlasSource;
   observeAtlasInvalidation: (
-    listener: (
-      glyphKeys: readonly CatalogGlyphKey[] | null,
-      directory: readonly CatalogGlyphKey[],
-    ) => void,
+    listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
   ) => () => void;
   location: CatalogLocation;
   axes: readonly CatalogAxis[];
   metrics: CatalogMetrics;
   sourceId: SourceId | null;
   editable: boolean;
-  openedGlyph: GlyphRenderInput | null;
+  openedGlyph: RenderGlyph | null;
   openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
 }
 
@@ -109,16 +88,11 @@ export interface GlyphCatalogControllerFrame {
   readonly sourceId: SourceId | null;
   readonly themeName: ThemeName;
   readonly active: boolean;
-  readonly editingGlyphId: CatalogGlyphKey | null;
-}
-
-export interface EditableGlyphCatalogItem extends GlyphCatalogItem {
-  readonly id: GlyphId;
-  readonly name: GlyphName;
+  readonly editingGlyphId: GlyphId | null;
 }
 
 export interface GlyphNameInputProps {
-  readonly glyph: EditableGlyphCatalogItem;
+  readonly glyph: GlyphCatalogItem;
   readonly onFinished: () => void;
 }
 
@@ -130,7 +104,7 @@ export interface GlyphCatalogCanvasProps {
   readonly sourceId: SourceId | null;
   readonly active: boolean;
   readonly atlasSource: GlyphAtlasSource;
-  readonly observeAtlasInvalidation: GlyphCatalogState["observeAtlasInvalidation"];
+  readonly observeAtlasInvalidation: GlyphCatalogSource["observeAtlasInvalidation"];
   readonly editable: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;

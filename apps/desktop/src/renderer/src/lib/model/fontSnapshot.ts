@@ -1,7 +1,7 @@
-import type { FontSnapshot, GlyphEntry } from "@shift/types";
+import type { FontSnapshot, GlyphEntry, GlyphRecord } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 
-export function glyphEntry(record: WorkspaceSnapshot["glyphs"][number]): GlyphEntry {
+export function glyphEntry(record: GlyphRecord): GlyphEntry {
   return {
     id: record.id,
     name: record.name,

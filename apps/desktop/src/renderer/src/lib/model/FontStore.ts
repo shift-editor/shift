@@ -29,6 +29,7 @@ import {
   type WritableSignal,
 } from "@/lib/signals/signal";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "@/types";
+import type { FontStoreOptions } from "@/types/font";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { Glyph } from "./Glyph";
 import { fontSnapshotFromWorkspace } from "./fontSnapshot";
@@ -76,7 +77,7 @@ export class FontStore {
   readonly #projectionCells = new Map<GlyphId, WritableSignal<GlyphProjection | null>>();
   readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
-  constructor(font: FontSnapshot | null = null, workspace: WorkspaceSnapshot | null = null) {
+  constructor({ font = null, workspace = null }: FontStoreOptions = {}) {
     this.#font = signal(font ?? (workspace ? fontSnapshotFromWorkspace(workspace) : null), {
       name: "fontStore.font",
     });

@@ -2,27 +2,19 @@ import type {
   GlyphId,
   SlugLayout,
   Axis,
+  SlugExactSource,
   SlugPreviewExtents,
   SlugWeightSet,
-  SourceId,
 } from "@shift/types";
 
-/** Session-local stable glyph identity shared by every font source. */
-export type CatalogGlyphKey = GlyphId;
-
-export interface GlyphAtlasExactSource {
-  readonly sourceId: SourceId;
-  readonly glyphIndex: number;
-}
-
 export interface GlyphAtlasGlyph {
-  readonly glyphKey: CatalogGlyphKey;
+  readonly glyphId: GlyphId;
   readonly defaultGlyph: number;
-  readonly exactSources: readonly GlyphAtlasExactSource[];
+  readonly exactSources: readonly SlugExactSource[];
 }
 
 /** Backend-neutral metadata for one prepared resident page. */
-export interface GlyphAtlasPageDescriptor {
+export interface GlyphAtlasPage {
   readonly generation: number;
   readonly pageIndex: number;
   readonly bandCount: number;
@@ -36,7 +28,7 @@ export interface GlyphAtlasPageDescriptor {
 }
 
 export interface GlyphAtlasPageRequest {
-  readonly glyphKeys: readonly CatalogGlyphKey[];
+  readonly glyphIds: readonly GlyphId[];
   readonly pageIndex: number;
   readonly pageCount: number;
   readonly replacementPageIndices: readonly number[];
@@ -50,12 +42,12 @@ export interface GlyphAtlasPageWeights {
 
 /** Format-independent page producer consumed by the shared resident Grid. */
 export interface GlyphAtlasSource {
-  preparePage(request: GlyphAtlasPageRequest, alignment: number): Promise<GlyphAtlasPageDescriptor>;
+  preparePage(request: GlyphAtlasPageRequest, alignment: number): Promise<GlyphAtlasPage>;
   streamPage(
-    descriptor: GlyphAtlasPageDescriptor,
+    descriptor: GlyphAtlasPage,
     maximumLength: number,
     write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
   ): Promise<number>;
-  discardPage(descriptor: GlyphAtlasPageDescriptor): Promise<void>;
+  discardPage(descriptor: GlyphAtlasPage): Promise<void>;
   weights(coordinates: readonly number[]): Promise<readonly GlyphAtlasPageWeights[]>;
 }

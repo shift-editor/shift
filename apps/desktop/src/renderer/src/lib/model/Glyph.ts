@@ -62,7 +62,7 @@ import {
   Anchor,
   Component,
   Contour,
-  GlyphStateGeometry as GlyphGeometry,
+  GlyphGeometry,
   IdIndex,
   type GeometryAnchorHit,
   type GeometryPointHit,

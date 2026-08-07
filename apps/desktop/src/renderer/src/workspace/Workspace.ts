@@ -40,7 +40,7 @@ export class Workspace {
       edits: this.#edits,
     });
 
-    this.font = new Font(this.#store, this.#edits);
+    this.font = new Font({ store: this.#store, editCoordinator: this.#edits });
     this.editor = new Editor({
       font: this.font,
       fontStore: this.#store,

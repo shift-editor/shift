@@ -78,6 +78,39 @@ pub(crate) fn inferred_smooth_point_indices<T>(
     smooth
 }
 
+pub(crate) fn control_point_kind<T>(
+    points: &[T],
+    index: usize,
+    closed: bool,
+    classify: impl Fn(&T) -> Result<Option<GlyphPointKind>, FontReadError>,
+    open_contour_details: &'static str,
+) -> Result<GlyphPointKind, FontReadError> {
+    let mut next = next_contour_index(index, points.len(), closed);
+    for _ in 0..points.len() {
+        let Some(next_index) = next else {
+            break;
+        };
+        if let Some(kind) = classify(&points[next_index])? {
+            return Ok(kind);
+        }
+        next = next_contour_index(next_index, points.len(), closed);
+    }
+    if closed {
+        return Ok(GlyphPointKind::QuadraticControl);
+    }
+    Err(invalid_segment(open_contour_details))
+}
+
+fn next_contour_index(index: usize, count: usize, closed: bool) -> Option<usize> {
+    if index + 1 < count {
+        Some(index + 1)
+    } else if closed {
+        Some(0)
+    } else {
+        None
+    }
+}
+
 pub(crate) fn normalize_contour(
     points: Vec<ContourPoint>,
     closed: bool,

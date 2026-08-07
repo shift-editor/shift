@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use crate::designspace::DesignspaceError;
 use crate::format::FontFormat;
+use crate::formats::designspace::DesignspaceError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {

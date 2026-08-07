@@ -4,11 +4,12 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{
-  font_loader::FontLoader, AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory,
-  FontExportRequest, FontExportResult, FontExporter, FontSource, FontView, GlyphIndex,
-  GlyphPointKind as SourceGlyphPointKind, GlyphProjection as SourceGlyphProjection,
-  GlyphShape as SourceGlyphShape, OpenedFont, ProjectedGlyph as SourceProjectedGlyph,
-  SourceAtlasDescriptor, VariationAxisKind, VariationCoordinate, VariationLocation,
+  build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
+  AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
+  FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
+  GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
+  ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, VariationAxisKind,
+  VariationCoordinate, VariationLocation,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -20,8 +21,9 @@ use shift_font::{
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
 };
 use shift_slug::{
-  build_authored_atlas_page_profiled, build_authored_atlas_profiled, AuthoredAtlas,
-  AuthoredAtlasProfile, Section as SlugSection, VariableAtlas, VariableLayout,
+  build_authored_atlas_page_profiled, build_authored_atlas_profiled,
+  retained::compile_page as compile_retained_page, AuthoredAtlas, AuthoredAtlasProfile,
+  Section as SlugSection, VariableAtlas, VariableLayout,
 };
 use shift_wire::{
   bridges::napi::{
@@ -785,10 +787,11 @@ fn napi_source_atlas_page(
 ) -> BridgeResult<NapiCatalogAtlasPage> {
   let statistics = atlas.statistics();
   let weights = descriptor
-    .weights(location)?
+    .weights(location.coordinates())?
     .into_iter()
     .map(f64::from)
     .collect::<Vec<_>>();
+  let preview_extents = descriptor.preview_extents(atlas)?;
 
   Ok(NapiCatalogAtlasPage {
     generation,
@@ -798,17 +801,17 @@ fn napi_source_atlas_page(
       .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
     layout: napi_slug_layout(layout)?,
     preview_extents: NapiSlugPreviewExtents {
-      horizontal: 0.0,
-      minimum_y: 0.0,
-      maximum_y: 0.0,
+      horizontal: f64::from(preview_extents.horizontal),
+      minimum_y: f64::from(preview_extents.minimum_y),
+      maximum_y: f64::from(preview_extents.maximum_y),
     },
     glyphs: descriptor
       .glyphs()
       .iter()
-      .map(|(glyph, atlas_glyph)| {
+      .map(|(glyph, default_glyph)| {
         Ok(NapiCatalogAtlasGlyph {
-          glyph_id: identity.glyph_id(*glyph)?.to_string(),
-          atlas_glyph: *atlas_glyph,
+          glyph_id: identity.glyph_id(GlyphIndex::new(*glyph))?.to_string(),
+          default_glyph: *default_glyph,
           exact_sources: descriptor
             .exact_glyphs()
             .iter()
@@ -816,11 +819,11 @@ fn napi_source_atlas_page(
             .map(|(_, source, glyph_index)| {
               let source_id = identity
                 .source_ids
-                .get(source.to_usize())
+                .get(*source as usize)
                 .cloned()
                 .ok_or_else(|| BridgeError::InvalidInput {
                   kind: "source atlas exact source",
-                  value: source.to_u32().to_string(),
+                  value: source.to_string(),
                 })?;
               Ok(NapiSlugExactSource {
                 source_id: source_id.to_string(),
@@ -1732,7 +1735,9 @@ impl Bridge {
   }
 
   /// Builds one source-neutral catalog page through the active format adapter.
-  #[napi]
+  #[napi(
+    ts_args_type = "pageIndex: number, glyphIds: Array<GlyphId>, coordinates: Array<number>, alignment: number"
+  )]
   pub fn prepare_source_atlas_page(
     &mut self,
     page_index: u32,
@@ -1756,7 +1761,15 @@ impl Bridge {
         .iter()
         .map(|glyph_id| identity.glyph_index(glyph_id))
         .collect::<BridgeResult<Vec<_>>>()?;
-      let page = source.atlas_page(&roots, shift_slug::DEFAULT_BAND_COUNT)?;
+      let page = match source {
+        OpenedFont::OpenType(font) => {
+          build_binary_atlas_page(font, &roots, shift_slug::DEFAULT_BAND_COUNT)?
+        }
+        source => {
+          let input = variable_glyph_inputs(source, &roots)?;
+          compile_retained_page(&input, shift_slug::DEFAULT_BAND_COUNT)?
+        }
+      };
       let (atlas, descriptor) = page.into_parts();
       let layout = atlas.layout(alignment as usize)?;
       (atlas, descriptor, location, layout)
@@ -1813,7 +1826,7 @@ impl Bridge {
         Ok(NapiCatalogAtlasWeights {
           page_index: *page_index,
           weights: descriptor
-            .weights(&location)?
+            .weights(location.coordinates())?
             .into_iter()
             .map(f64::from)
             .collect(),

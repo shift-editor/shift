@@ -47,7 +47,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
 
 describe("Font projects the workspace snapshot", () => {
   it("is unloaded with default metrics while no workspace is open", () => {
-    const font = new Font(new FontStore());
+    const font = new Font({ store: new FontStore() });
 
     expect(font.loaded).toBe(false);
     expect(font.metrics.unitsPerEm).toBe(1000);
@@ -56,7 +56,7 @@ describe("Font projects the workspace snapshot", () => {
 
   it("follows a snapshot: loaded, metrics, metadata, directory, sources", () => {
     const store = new FontStore();
-    const font = new Font(store);
+    const font = new Font({ store });
 
     store.replaceWorkspace(SNAPSHOT);
 
@@ -72,7 +72,7 @@ describe("Font projects the workspace snapshot", () => {
 
   it("loadedCell flips reactively when the snapshot changes", () => {
     const store = new FontStore();
-    const font = new Font(store);
+    const font = new Font({ store });
 
     expect(font.loadedCell.value).toBe(false);
 
@@ -82,8 +82,8 @@ describe("Font projects the workspace snapshot", () => {
   });
 
   it("resets to fallback font values when the workspace goes null", () => {
-    const store = new FontStore(null, SNAPSHOT);
-    const font = new Font(store);
+    const store = new FontStore({ workspace: SNAPSHOT });
+    const font = new Font({ store });
 
     expect(font.loaded).toBe(true);
 
@@ -97,11 +97,13 @@ describe("Font projects the workspace snapshot", () => {
   });
 
   it("an empty loaded font reports records, not the unloaded fallback", () => {
-    const store = new FontStore(null, {
-      ...SNAPSHOT,
-      glyphs: [],
+    const store = new FontStore({
+      workspace: {
+        ...SNAPSHOT,
+        glyphs: [],
+      },
     });
-    const font = new Font(store);
+    const font = new Font({ store });
 
     expect(font.loaded).toBe(true);
     expect(font.glyphRecords()).toEqual([]);

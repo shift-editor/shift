@@ -1,7 +1,7 @@
 import type { GlyphId } from "@shift/types";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import type {
-  GlyphAtlasPageDescriptor,
+  GlyphAtlasPage,
   GlyphAtlasPageRequest,
   GlyphAtlasPageWeights,
   GlyphAtlasSource,
@@ -15,13 +15,10 @@ export class ImportedGlyphAtlasSource implements GlyphAtlasSource {
     this.#client = client;
   }
 
-  async preparePage(
-    request: GlyphAtlasPageRequest,
-    alignment: number,
-  ): Promise<GlyphAtlasPageDescriptor> {
+  async preparePage(request: GlyphAtlasPageRequest, alignment: number): Promise<GlyphAtlasPage> {
     const descriptor = await this.#client.prepareSourceAtlasPage({
       pageIndex: request.pageIndex,
-      glyphIds: [...request.glyphKeys],
+      glyphIds: [...request.glyphIds],
       coordinates: [...request.coordinates],
       alignment,
     });
@@ -34,8 +31,8 @@ export class ImportedGlyphAtlasSource implements GlyphAtlasSource {
       layout: descriptor.layout,
       previewExtents: descriptor.previewExtents,
       glyphs: descriptor.glyphs.map((glyph) => ({
-        glyphKey: glyph.glyphId as GlyphId,
-        defaultGlyph: glyph.atlasGlyph,
+        glyphId: glyph.glyphId as GlyphId,
+        defaultGlyph: glyph.defaultGlyph,
         exactSources: glyph.exactSources,
       })),
       weightSets: [],
@@ -45,14 +42,14 @@ export class ImportedGlyphAtlasSource implements GlyphAtlasSource {
   }
 
   async streamPage(
-    descriptor: GlyphAtlasPageDescriptor,
+    descriptor: GlyphAtlasPage,
     maximumLength: number,
     write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
   ): Promise<number> {
     return this.#client.streamSourceAtlasPage(descriptor.generation, maximumLength, write);
   }
 
-  async discardPage(descriptor: GlyphAtlasPageDescriptor): Promise<void> {
+  async discardPage(descriptor: GlyphAtlasPage): Promise<void> {
     await this.#client.discardSourceAtlasPage(descriptor.pageIndex, descriptor.generation);
   }
 

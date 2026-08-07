@@ -1,6 +1,8 @@
 import { Bounds, Vec2, type Rect2D } from "@shift/geo";
-import type { GlyphStateGeometry as GlyphGeometry } from "@shift/glyph-state";
+import type { GlyphGeometry } from "@shift/glyph-state";
 import type { ContourId, PointId } from "@shift/types";
+import { track } from "@/lib/signals";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { ShiftObjectOf } from "@/types";
 import type { GlyphNode } from "@/types/node";
 
@@ -8,8 +10,9 @@ import type { GlyphNode } from "@/types/node";
 export class PointObject implements ShiftObjectOf<"point"> {
   readonly kind = "point";
   readonly id: PointId;
-  readonly geometry: GlyphGeometry;
+  readonly #geometry: GlyphGeometry;
   readonly contourId: ContourId;
+  readonly layer: GlyphLayer | null;
   readonly node: GlyphNode;
 
   constructor(
@@ -17,11 +20,21 @@ export class PointObject implements ShiftObjectOf<"point"> {
     contourId: ContourId,
     geometry: GlyphGeometry,
     node: GlyphNode,
+    layer: GlyphLayer | null = null,
   ) {
     this.id = pointId;
     this.contourId = contourId;
-    this.geometry = geometry;
+    this.#geometry = geometry;
     this.node = node;
+    this.layer = layer;
+  }
+
+  get geometry(): GlyphGeometry {
+    if (!this.layer) return this.#geometry;
+
+    track(this.layer.structureCell);
+    track(this.layer.coordinateBuffersChangedCell);
+    return this.layer.geometry;
   }
 
   bounds(): Rect2D | null {

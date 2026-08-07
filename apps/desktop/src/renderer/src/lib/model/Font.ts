@@ -44,7 +44,8 @@ import {
   type Signal,
 } from "@/lib/signals/signal";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
-import type { GlyphReader } from "@/types/engine";
+import type { FontOptions } from "@/types/font";
+import type { GlyphReader } from "@/types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -352,7 +353,7 @@ export class Font {
    * @param editCoordinator - Optional sync lane used by authored layer edits to submit
    * committed changes to the utility workspace.
    */
-  constructor(store: FontStore, editCoordinator?: WorkspaceEditCoordinator, reader?: GlyphReader) {
+  constructor({ store, editCoordinator, reader }: FontOptions) {
     this.#store = store;
     this.#reader = reader ?? null;
     this.#editCoordinator = editCoordinator ?? null;

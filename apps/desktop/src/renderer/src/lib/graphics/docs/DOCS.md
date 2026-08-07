@@ -94,7 +94,7 @@ Set `SHIFT_PROFILE_SLUG_ATLAS=1` for release measurements. Main propagates that 
 
 ### Imported selected-glyph rendering
 
-`GlyphCatalog.openGlyph` calls the common `Font.loadGlyph()` acquisition boundary. Imported reads validate and publish the root projection and complete component closure atomically; later location changes evaluate the retained projection synchronously. The regular editor scene draws guides, outlines, bounds, points, and components from source-neutral geometry. View-only controls remain functional, while controls marked `data-read-only-mutation` have no mutation handler and are intercepted by `ReadOnlyNoticeDialog` without changing their normal appearance.
+`GlyphCatalog.openGlyph` calls the common `Font.loadGlyph()` acquisition boundary. Imported reads validate and publish the root projection and complete component closure atomically; later location changes evaluate the retained projection synchronously. The regular editor scene draws guides, outlines, bounds, points, and components from source-neutral geometry. Editability follows exact authored-layer availability for the current glyph and location rather than a separate editor-wide read-only state. Controls without an authored target have no mutation handler and are marked `data-read-only-mutation` for `ReadOnlyNoticeDialog`.
 
 ### Per-frame draw pipeline
 

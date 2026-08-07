@@ -1,10 +1,8 @@
 import type { GlyphContour } from "@/lib/model/ComponentGlyph";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
-import type { Point2D } from "@shift/geo";
 import type { GlyphNode } from "@/types/node";
 import type { RenderContext } from "@/types/rendering";
-import type { GlyphRenderContourShape } from "@/types/glyphRender";
 import { HandleItems } from "./handles/HandleItems";
 import { MarkerHandleRenderer } from "./handles/MarkerHandleRenderer";
 import { CanvasHandleRenderer } from "./handles/CanvasHandleRenderer";
@@ -36,17 +34,6 @@ export class Handles {
     );
 
     if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position)) return;
-
-    this.#canvas.draw(ctx.canvas, list.items);
-  }
-
-  drawShapes(
-    ctx: RenderContext,
-    contours: readonly GlyphRenderContourShape[],
-    drawOffset: Point2D,
-  ): void {
-    const list = this.#items.fromShapes(contours);
-    if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, drawOffset)) return;
 
     this.#canvas.draw(ctx.canvas, list.items);
   }

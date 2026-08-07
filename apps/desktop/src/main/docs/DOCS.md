@@ -4,8 +4,8 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `WorkspaceManager` owns live font sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender. A session's immutable mode is `"shift"` or `"imported"`.
-- **Architecture Invariant:** Every font session owns one `WorkspaceProcess`. Shift sessions additionally own one `DocumentClient` and one `DocumentSession`; imported sessions deliberately have no authored document, persistence, dirty state, save target, or export workflow. Main never reads or mutates font data directly.
+- **Architecture Invariant:** `WorkspaceManager` owns live font sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender. A session's immutable mode is `"authored"` or `"imported"`.
+- **Architecture Invariant:** Every font session owns one `WorkspaceProcess`. Authored sessions additionally own one `DocumentClient` and one `DocumentSession`; imported sessions deliberately have no authored document, persistence, dirty state, save target, or export workflow. Main never reads or mutates font data directly.
 - **Architecture Invariant:** Every non-`.shift` font path opens as an immutable imported session. It uses the shared renderer sync lane and `/home` route, but never allocates a SQLite working document or authored Shift model.
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
@@ -39,13 +39,13 @@ src/main/
   workspace/
     WorkspaceManager.ts           -- live workspace session registry and package-session dedupe
     WorkspaceProcess.ts           -- utility-process shell-lane controller
-    WorkspaceSession.ts           -- process/mode/optional-document/window grouping for one font session
+    FontSessionHost.ts            -- process/mode/optional-document/window grouping for one font session
 ```
 
 ## Key Types
 
 - `WorkspaceManager` -- registry for live Shift and imported font sessions and window attachments.
-- `FontSession` -- owns the immutable mode, utility process, optional authored document services, and attached windows for one open font.
+- `FontSessionHost` -- owns the immutable mode, utility process, optional authored document services, and attached windows for one open font.
 - `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect package, open, close, and document state.
 - `DocumentClient` -- request client for renderer-served document state/save calls.
 - `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
@@ -68,7 +68,7 @@ For every non-`.shift` font path, `WorkspaceManager` opens one immutable retaine
 
 ### Window Attachment
 
-`App` creates a BrowserWindow, attaches it to the returned `WorkspaceSession`, and loads the workspace route. Multiple windows may attach to the same session. Closing one of several windows does not close the document; closing the last window does.
+`App` creates a BrowserWindow, attaches it to the returned `FontSessionHost`, and loads the workspace route. Multiple windows may attach to the same session. Closing one of several windows does not close the document; closing the last window does.
 
 ### Save, Export, And Close
 

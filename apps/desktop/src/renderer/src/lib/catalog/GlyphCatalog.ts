@@ -3,14 +3,14 @@ import type { Axis, CatalogAxis, CatalogMetrics, GlyphId, SourceId } from "@shif
 import { computed, type ComputedSignal, type Signal } from "@/lib/signals";
 import type { Editor } from "@/lib/editor/Editor";
 import type { AxisLocation } from "@/types/variation";
-import type { CatalogGlyphKey, GlyphAtlasSource } from "@/types/glyphAtlas";
-import type { CatalogLocation, GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
-import type { GlyphRenderInput } from "@/types/glyphRender";
-import { glyphRenderInput } from "@/lib/model/glyphRenderInput";
+import type { GlyphAtlasSource } from "@/types/glyphAtlas";
+import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
+import type { RenderGlyph } from "@/types/glyphRender";
+import { renderGlyph } from "@/lib/model/renderGlyph";
 import { glyphCatalogItem } from "./glyphCatalogItem";
 
 /** Projects the authored model into the immutable catalog boundary. */
-export class GlyphCatalog implements GlyphCatalogSource {
+export class GlyphCatalog {
   readonly #editor: Editor;
   readonly #derived: readonly ComputedSignal<unknown>[];
 
@@ -21,7 +21,7 @@ export class GlyphCatalog implements GlyphCatalogSource {
   readonly familyNameCell: ComputedSignal<string | null>;
   readonly styleNameCell: ComputedSignal<string | null>;
   readonly sourceIdCell: ComputedSignal<SourceId | null>;
-  readonly invalidGlyphKeysCell: Signal<readonly GlyphId[] | null>;
+  readonly invalidGlyphIdsCell: Signal<readonly GlyphId[] | null>;
   readonly atlas: GlyphAtlasSource;
 
   constructor(editor: Editor, glyphInfo: GlyphInfo, atlas: GlyphAtlasSource) {
@@ -33,17 +33,17 @@ export class GlyphCatalog implements GlyphCatalogSource {
         font.glyphEntriesCell.value.map((entry) =>
           glyphCatalogItem(entry.id, entry.name, entry.unicodes, glyphInfo),
         ),
-      { name: "catalog.shift.glyphs" },
+      { name: "catalog.glyphs" },
     );
     this.axesCell = computed(() => font.axesCell.value.map(catalogAxis), {
-      name: "catalog.shift.axes",
+      name: "catalog.axes",
     });
     this.locationCell = computed(
       () => {
         const location = editor.designLocationCell.value;
         return font.axesCell.value.map((axis) => location.get(axis.id) ?? axis.default);
       },
-      { name: "catalog.shift.location" },
+      { name: "catalog.location" },
     );
     this.metricsCell = computed(
       () => {
@@ -55,19 +55,19 @@ export class GlyphCatalog implements GlyphCatalogSource {
           lineGap: metrics.lineGap ?? 0,
         };
       },
-      { name: "catalog.shift.metrics" },
+      { name: "catalog.metrics" },
     );
     this.familyNameCell = computed(() => font.metadataCell.value.familyName ?? null, {
-      name: "catalog.shift.familyName",
+      name: "catalog.familyName",
     });
     this.styleNameCell = computed(() => font.metadataCell.value.styleName ?? null, {
-      name: "catalog.shift.styleName",
+      name: "catalog.styleName",
     });
     const sourceCell = font.sourceAtCell(editor.designLocationCell);
     this.sourceIdCell = computed(() => sourceCell.value?.id ?? null, {
-      name: "catalog.shift.sourceId",
+      name: "catalog.sourceId",
     });
-    this.invalidGlyphKeysCell = font.invalidGlyphIdsCell;
+    this.invalidGlyphIdsCell = font.invalidGlyphIdsCell;
     this.atlas = atlas;
     this.#derived = [
       this.glyphsCell,
@@ -81,9 +81,9 @@ export class GlyphCatalog implements GlyphCatalogSource {
     ];
   }
 
-  async openGlyph(glyphKey: CatalogGlyphKey): Promise<GlyphRenderInput> {
-    const glyph = await this.#editor.font.loadGlyph(glyphKey);
-    return glyphRenderInput(glyph.renderModelAt(this.#editor.designLocationCell));
+  async openGlyph(glyphId: GlyphId): Promise<RenderGlyph> {
+    const glyph = await this.#editor.font.loadGlyph(glyphId);
+    return renderGlyph(glyph.renderModelAt(this.#editor.designLocationCell));
   }
 
   async setLocation(location: CatalogLocation): Promise<void> {
@@ -109,9 +109,9 @@ function catalogAxis(axis: Axis, index: number): CatalogAxis {
     tag: axis.tag,
     name: axis.name,
     hidden: axis.hidden,
-    kind: axis.axisType,
+    axisType: axis.axisType,
     minimum: axis.minimum,
-    defaultValue: axis.default,
+    default: axis.default,
     maximum: axis.maximum,
     values: axis.values ?? [],
   };

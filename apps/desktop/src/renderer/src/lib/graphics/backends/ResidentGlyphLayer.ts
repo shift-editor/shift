@@ -1,9 +1,5 @@
-import type {
-  CatalogGlyphKey,
-  GlyphAtlasPageDescriptor,
-  GlyphAtlasPageRequest,
-  GlyphAtlasSource,
-} from "@/types/glyphAtlas";
+import type { GlyphId } from "@shift/types";
+import type { GlyphAtlasPage, GlyphAtlasPageRequest, GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame } from "@/types/glyphPreview";
 import { SlugAtlas } from "@/lib/slug/SlugAtlas";
 import { SlugRenderer } from "@/lib/slug/SlugRenderer";
@@ -105,7 +101,7 @@ export class ResidentGlyphLayer {
     const atlases: SlugAtlas[] = [];
     let prepareDurationMs = 0;
     let streamAndUploadDurationMs = 0;
-    let preparedDescriptor: GlyphAtlasPageDescriptor | null = null;
+    let preparedDescriptor: GlyphAtlasPage | null = null;
     let atlas: SlugAtlas | null = null;
 
     try {
@@ -155,7 +151,7 @@ export class ResidentGlyphLayer {
         installationDurationMs,
         pageCount: pages.length,
         prepareDurationMs,
-        rootCount: pages.reduce((count, page) => count + page.glyphKeys.length, 0),
+        rootCount: pages.reduce((count, page) => count + page.glyphIds.length, 0),
         streamAndUploadDurationMs,
       };
       if (SLUG_ATLAS_PROFILING_ENABLED) {
@@ -179,11 +175,11 @@ export class ResidentGlyphLayer {
     }
   }
 
-  invalidate(glyphIds: readonly CatalogGlyphKey[]): void {
+  invalidate(glyphIds: readonly GlyphId[]): void {
     this.#renderer.invalidate(glyphIds);
   }
 
-  hasGlyphs(glyphIds: readonly CatalogGlyphKey[]): boolean {
+  hasGlyphs(glyphIds: readonly GlyphId[]): boolean {
     return this.#renderer.hasGlyphs(glyphIds);
   }
 

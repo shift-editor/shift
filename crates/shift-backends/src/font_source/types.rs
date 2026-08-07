@@ -154,6 +154,8 @@ pub struct FontMetrics {
     pub ascender: f64,
     pub descender: f64,
     pub line_gap: f64,
+    pub cap_height: Option<f64>,
+    pub x_height: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -257,6 +259,8 @@ impl FontDirectory {
                 ascender: units_per_em * 0.8,
                 descender: units_per_em * -0.2,
                 line_gap: 0.0,
+                cap_height: None,
+                x_height: None,
             },
             glyphs: glyphs.into_boxed_slice(),
             axes: axes.into_boxed_slice(),

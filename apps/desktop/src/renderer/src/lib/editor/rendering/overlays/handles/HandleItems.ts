@@ -2,7 +2,7 @@ import type { SelectableId } from "@/types";
 import type { HandleState } from "@/types/graphics";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
-import type { GlyphRenderContour, GlyphRenderContourShape } from "@/types/glyphRender";
+import type { GlyphRenderContour } from "@/types/glyphRender";
 import { PointHandleItem } from "./PointHandleItem";
 
 export interface HandleStateSource {
@@ -29,12 +29,8 @@ export class HandleItems {
     );
   }
 
-  fromShapes(contours: readonly GlyphRenderContourShape[]): HandleDisplayList {
-    return this.#fromShapes(contours, () => "idle");
-  }
-
   #fromShapes(
-    contours: readonly GlyphRenderContourShape[],
+    contours: readonly GlyphRenderContour[],
     stateForPoint: (contourIndex: number, pointIndex: number) => HandleState,
   ): HandleDisplayList {
     let itemCount = 0;

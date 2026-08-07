@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { GlyphId, SlugSection, SourceId } from "@shift/types";
-import type { GlyphAtlasPageDescriptor } from "@/types/glyphAtlas";
+import type { GlyphAtlasPage } from "@/types/glyphAtlas";
 import { SlugAtlas } from "./SlugAtlas";
 
 const emptySection = (): SlugSection => ({ offset: 0, length: 0 });
 
 function residentFixture(): {
-  descriptor: GlyphAtlasPageDescriptor;
+  descriptor: GlyphAtlasPage;
   bytes: Uint8Array<ArrayBuffer>;
 } {
   const glyphs = { offset: 256, length: 64 };
   const componentGlyphs = { offset: 512, length: 24 };
-  const descriptor: GlyphAtlasPageDescriptor = {
+  const descriptor: GlyphAtlasPage = {
     generation: 7,
     pageIndex: 0,
     bandCount: 8,
@@ -34,7 +34,7 @@ function residentFixture(): {
     previewExtents: { horizontal: 0, minimumY: 0, maximumY: 0 },
     glyphs: [
       {
-        glyphKey: "glyph-a" as GlyphId,
+        glyphId: "glyph-a" as GlyphId,
         defaultGlyph: 0,
         exactSources: [{ sourceId: "source-heavy" as SourceId, glyphIndex: 1 }],
       },

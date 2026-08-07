@@ -4,16 +4,15 @@ use std::path::Path;
 use shift_font::Font;
 use shift_source::ShiftSourcePackage;
 
-use crate::designspace::{DesignspaceReader, DesignspaceWriter};
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
-use crate::font_source::{BinaryFont, FontReadError, GlifFont, GlyphsFont, OpenedFont};
+use crate::font_source::{FontReadError, OpenedFont};
 use crate::format::FontFormat;
-use crate::glyphs::GlyphsReader;
+use crate::formats::designspace::{DesignspaceFont, DesignspaceReader, DesignspaceWriter};
+use crate::formats::glyphs::{GlyphsFont, GlyphsReader};
+use crate::formats::opentype::{BytesFontAdaptor, OpenTypeFont};
+use crate::formats::ufo::{UfoFont, UfoReader, UfoWriter};
 use crate::import::{FontImport, GlyphStream};
 use crate::traits::{FontReader, FontWriter};
-use crate::ufo::{UfoReader, UfoWriter};
-
-use crate::binary::BytesFontAdaptor;
 
 pub(crate) trait FontAdaptor {
     fn read_font(&self, path: &str) -> FormatBackendResult<Font>;
@@ -51,7 +50,7 @@ impl FontAdaptor for UfoFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
-        let (header, stream) = crate::ufo::stream_font(path)?;
+        let (header, stream) = crate::formats::ufo::stream_font(path)?;
         Ok(Some((header, Box::new(stream))))
     }
 }
@@ -66,7 +65,7 @@ impl FontAdaptor for GlyphsFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
-        let (header, stream) = crate::glyphs::stream_font(path)?;
+        let (header, stream) = crate::formats::glyphs::stream_font(path)?;
         Ok(Some((header, Box::new(stream))))
     }
 }
@@ -81,7 +80,7 @@ impl FontAdaptor for DesignspaceFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
-        let (header, stream) = crate::designspace::stream_font(path)?;
+        let (header, stream) = crate::formats::designspace::stream_font(path)?;
         Ok(Some((header, Box::new(stream))))
     }
 }
@@ -171,8 +170,9 @@ impl FontLoader {
             })?;
 
         match format {
-            FontFormat::Ttf | FontFormat::Otf => BinaryFont::open(path).map(OpenedFont::Binary),
-            FontFormat::Ufo | FontFormat::Designspace => GlifFont::open(path).map(OpenedFont::Glif),
+            FontFormat::Ttf | FontFormat::Otf => OpenTypeFont::open(path).map(OpenedFont::OpenType),
+            FontFormat::Ufo => UfoFont::open(path).map(OpenedFont::Ufo),
+            FontFormat::Designspace => DesignspaceFont::open(path).map(OpenedFont::Designspace),
             FontFormat::Glyphs => GlyphsFont::open(path).map(OpenedFont::Glyphs),
             FontFormat::Shift => Err(FontReadError::UnsupportedFormat {
                 path: path.to_path_buf(),
@@ -271,21 +271,21 @@ mod tests {
     #[test]
     fn retained_source_dispatch_preserves_import_capabilities() {
         let loader = FontLoader::new();
-        let binary = loader
+        let open_type = loader
             .open_source(&fixture("mutatorsans/MutatorSans.ttf"))
             .unwrap();
-        let glif = loader
+        let ufo = loader
             .open_source(&fixture("mutatorsans/MutatorSansLightCondensed.ufo"))
             .unwrap();
         let glyphs = loader.open_source(&fixture("Homenaje.glyphs")).unwrap();
 
-        assert!(matches!(&binary, OpenedFont::Binary(_)));
-        assert!(binary.importer().is_none());
-        assert!(matches!(&glif, OpenedFont::Glif(_)));
-        let mut glif_import = glif.importer().unwrap().begin_import().unwrap();
-        assert!(glif_import.glyph_count() > 0);
+        assert!(matches!(&open_type, OpenedFont::OpenType(_)));
+        assert!(open_type.importer().is_none());
+        assert!(matches!(&ufo, OpenedFont::Ufo(_)));
+        let mut ufo_import = ufo.importer().unwrap().begin_import().unwrap();
+        assert!(ufo_import.glyph_count() > 0);
         assert_eq!(
-            glif_import
+            ufo_import
                 .next_batch(ImportBatchLimit::new(1, 1))
                 .unwrap()
                 .len(),

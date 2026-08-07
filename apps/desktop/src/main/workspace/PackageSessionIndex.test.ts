@@ -4,7 +4,7 @@ import type {
   WorkspacePackageIdentity,
 } from "../../shared/workspace/protocol";
 import { PackageSessionIndex, type IndexedPackageSession } from "./PackageSessionIndex";
-import type { WorkspaceId } from "./WorkspaceSession";
+import type { FontSessionId } from "./FontSessionHost";
 
 class DocumentChangeSource {
   readonly #listeners = new Set<(state: WorkspaceDocumentState | null) => void>();
@@ -23,7 +23,7 @@ class DocumentChangeSource {
 }
 
 describe("PackageSessionIndex keeps one live session per package address", () => {
-  function session(workspaceId: WorkspaceId): {
+  function session(workspaceId: FontSessionId): {
     source: DocumentChangeSource;
     session: IndexedPackageSession;
   } {
@@ -46,7 +46,7 @@ describe("PackageSessionIndex keeps one live session per package address", () =>
   }
 
   function packageState(
-    workspaceId: WorkspaceId,
+    workspaceId: FontSessionId,
     packageId: string,
     canonicalPath: string,
   ): WorkspaceDocumentState {
@@ -61,7 +61,7 @@ describe("PackageSessionIndex keeps one live session per package address", () =>
     };
   }
 
-  function untitledState(workspaceId: WorkspaceId): WorkspaceDocumentState {
+  function untitledState(workspaceId: FontSessionId): WorkspaceDocumentState {
     return {
       documentId: workspaceId,
       sourceKind: "untitled",

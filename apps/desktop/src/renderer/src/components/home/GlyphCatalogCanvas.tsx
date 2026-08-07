@@ -2,11 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { GlyphCatalogController } from "./GlyphCatalogController";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { useTheme } from "@/context/ThemeContext";
-import type {
-  EditableGlyphCatalogItem,
-  GlyphCatalogCanvasProps,
-  GlyphCatalogItem,
-} from "@/types/glyphCatalog";
+import type { GlyphCatalogCanvasProps, GlyphCatalogItem } from "@/types/glyphCatalog";
 
 /** Thin React shell around the imperative, canvas-owned glyph catalog. */
 export function GlyphCatalogCanvas({
@@ -30,7 +26,7 @@ export function GlyphCatalogCanvas({
   const inputRef = useRef<HTMLInputElement>(null);
   const controllerRef = useRef<GlyphCatalogController | null>(null);
   const [ready, setReady] = useState(false);
-  const [editingGlyph, setEditingGlyph] = useState<EditableGlyphCatalogItem | null>(null);
+  const [editingGlyph, setEditingGlyph] = useState<GlyphCatalogItem | null>(null);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -46,7 +42,7 @@ export function GlyphCatalogCanvas({
       observeAtlasInvalidation,
       editable
         ? (glyph) => {
-            if (isEditableGlyph(glyph)) setEditingGlyph(glyph);
+            setEditingGlyph(glyph);
           }
         : null,
       () => {
@@ -126,8 +122,4 @@ export function GlyphCatalogCanvas({
       ) : null}
     </>
   );
-}
-
-function isEditableGlyph(glyph: GlyphCatalogItem): glyph is EditableGlyphCatalogItem {
-  return typeof glyph.id === "string";
 }

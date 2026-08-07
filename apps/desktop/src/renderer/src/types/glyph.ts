@@ -6,6 +6,7 @@ import type {
   GlyphEntry,
   GlyphId,
   GlyphProjection,
+  GlyphSnapshot,
   PointId,
   Source,
   SourceId,
@@ -13,6 +14,11 @@ import type {
 import type { SegmentId } from "@shift/glyph-state";
 import type { Glyph, GlyphLayer } from "@/lib/model/Glyph";
 import type { Signal } from "@/lib/signals/signal";
+
+/** Acquires complete root and component projections from the session boundary. */
+export interface GlyphReader {
+  read(glyphIds: readonly GlyphId[]): Promise<readonly GlyphSnapshot[]>;
+}
 
 export interface GlyphGeometrySelection {
   readonly points?: Iterable<PointId>;

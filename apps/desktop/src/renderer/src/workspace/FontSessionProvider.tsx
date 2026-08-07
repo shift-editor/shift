@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
+import "@/types/window";
 import { getShiftHost } from "@/host/shiftHost";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import type { FontSession } from "./FontSession";
 import { FontSessionContext, WorkspaceContext } from "./WorkspaceContext";
 import { getFontSession } from "./runtime";
-import type { Workspace } from "./Workspace";
 
 export function FontSessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<FontSession | null>(null);
@@ -64,13 +64,4 @@ export function FontSessionProvider({ children }: { children: ReactNode }) {
       <WorkspaceContext.Provider value={session.workspace}>{children}</WorkspaceContext.Provider>
     </FontSessionContext.Provider>
   );
-}
-
-declare global {
-  interface Window {
-    /** Active authored workspace for renderer-console experiments and e2e tests. */
-    shift?: Workspace;
-    /** Active immutable font-session composition. */
-    shiftSession?: FontSession;
-  }
 }

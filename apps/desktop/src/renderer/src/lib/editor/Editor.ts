@@ -4,6 +4,7 @@ import {
   isContourId,
   isNodeId,
   isPointId,
+  type AnchorId,
   type PointId,
   type ContourId,
   type Location,
@@ -14,7 +15,7 @@ import {
   type GlyphRecord,
   type LayerId,
 } from "@shift/types";
-import { isSegmentId } from "@shift/glyph-state";
+import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates, NodePoint, ScenePoint } from "@/types/coordinates";
 import {
@@ -71,7 +72,7 @@ import { ShiftStore } from "@/lib/store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "@/types/target";
 import type { SelectableId, ShiftEditorRecord, ShiftId, ShiftObject } from "@/types";
-import type { NodeKind } from "@/types/node";
+import type { GlyphNode, NodeKind } from "@/types/node";
 import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
 import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
@@ -487,6 +488,13 @@ export class Editor {
     }
 
     if (isPointId(id)) {
+      const layer = this.#layerForPoint(id);
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+      const contourId = this.font.contourIdForPoint(id);
+      if (layer && authoredNode && contourId) {
+        return new PointObject(id, contourId, layer.geometry, authoredNode, layer);
+      }
+
       for (const node of this.scene.nodesOfKind("glyph")) {
         const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.designLocation);
         if (!geometry?.point(id)) continue;
@@ -500,6 +508,12 @@ export class Editor {
     }
 
     if (isAnchorId(id)) {
+      const layer = this.#layerForAnchor(id);
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+      if (layer && authoredNode) {
+        return new AnchorObject(id, layer.geometry, authoredNode, layer);
+      }
+
       for (const node of this.scene.nodesOfKind("glyph")) {
         const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.designLocation);
         if (!geometry?.anchor(id)) continue;
@@ -510,6 +524,14 @@ export class Editor {
     }
 
     if (isSegmentId(id)) {
+      const layer = this.#layerForSegment(id);
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+      const pointIds = this.font.pointIdsForSegment(id);
+      const contourId = this.font.contourIdForSegment(id);
+      if (layer && authoredNode && pointIds && contourId) {
+        return new SegmentObject(id, contourId, pointIds, layer.geometry, authoredNode, layer);
+      }
+
       for (const node of this.scene.nodesOfKind("glyph")) {
         const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.designLocation);
         const segment = geometry?.segment(id);
@@ -526,6 +548,12 @@ export class Editor {
     }
 
     if (isContourId(id)) {
+      const layer = this.#layerForContour(id);
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+      if (layer && authoredNode) {
+        return new ContourObject(id, layer.geometry, authoredNode, layer);
+      }
+
       for (const node of this.scene.nodesOfKind("glyph")) {
         const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.designLocation);
         if (!geometry?.contour(id)) continue;
@@ -570,10 +598,53 @@ export class Editor {
     return owner === null ? null : this.#layerForId(owner);
   }
 
+  #layerForPoint(pointId: PointId): GlyphLayer | null {
+    const layerId = this.font.layerIdForPoint(pointId);
+    if (!layerId) return null;
+
+    const layer = this.#layerForId(layerId);
+    return layer?.point(pointId) ? layer : null;
+  }
+
+  #layerForAnchor(anchorId: AnchorId): GlyphLayer | null {
+    const layerId = this.font.layerIdForAnchor(anchorId);
+    if (!layerId) return null;
+
+    const layer = this.#layerForId(layerId);
+    return layer?.anchor(anchorId) ? layer : null;
+  }
+
+  #layerForSegment(segmentId: SegmentId): GlyphLayer | null {
+    const layerId = this.font.layerIdForSegment(segmentId);
+    if (!layerId) return null;
+
+    const layer = this.#layerForId(layerId);
+    return layer?.segment(segmentId) ? layer : null;
+  }
+
+  #layerForContour(contourId: ContourId): GlyphLayer | null {
+    const layerId = this.font.layerIdForContour(contourId);
+    if (!layerId) return null;
+
+    const layer = this.#layerForId(layerId);
+    return layer?.contour(contourId) ? layer : null;
+  }
+
   #layerForId(layerId: LayerId): GlyphLayer | null {
     for (const node of this.scene.nodesOfKind("glyph")) {
       const layer = this.glyphForId(node.glyphId)?.layerForId(layerId);
       if (layer) return layer;
+    }
+
+    return null;
+  }
+
+  #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
+    for (const node of this.scene.nodesOfKind("glyph")) {
+      if (node.sourceId !== layer.sourceId) continue;
+
+      const nodeLayer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+      if (nodeLayer?.id === layer.id) return node;
     }
 
     return null;

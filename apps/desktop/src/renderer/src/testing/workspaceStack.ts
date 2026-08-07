@@ -46,7 +46,7 @@ export function createWorkspaceStack(): WorkspaceStack {
   });
   const store = new FontStore();
   const editCoordinator = new WorkspaceEditCoordinator(client, store);
-  const font = new Font(store, editCoordinator);
+  const font = new Font({ store, editCoordinator });
 
   return {
     client,

@@ -119,7 +119,7 @@ export interface BridgeApi {
   /** Reads one location-independent source glyph and its complete component closure. */
   readFontSourceGlyph(glyphId: GlyphId): Array<GlyphSnapshot>
   /** Builds one source-neutral catalog page through the active format adapter. */
-  prepareSourceAtlasPage(pageIndex: number, glyphIds: Array<string>, coordinates: Array<number>, alignment: number): CatalogAtlasPage
+  prepareSourceAtlasPage(pageIndex: number, glyphIds: Array<GlyphId>, coordinates: Array<number>, alignment: number): CatalogAtlasPage
   /** Streams one prepared source page through the same bounded atlas lane. */
   streamSourceAtlasPage(generation: number, maximumLength: number): NativeReadableStream<Uint8Array>
   /** Releases a rejected source page and its retained weight descriptor. */
@@ -270,7 +270,7 @@ export interface BooleanOpIntent {
 
 export interface CatalogAtlasGlyph {
   glyphId: GlyphId
-  atlasGlyph: number
+  defaultGlyph: number
   exactSources: Array<SlugExactSource>
 }
 
@@ -298,27 +298,11 @@ export interface CatalogAxis {
   tag: string
   name: string
   hidden: boolean
-  kind: string
+  axisType: string
   minimum?: number
-  defaultValue: number
+  default: number
   maximum?: number
   values: Array<number>
-}
-
-export interface CatalogDirectory {
-  format: string
-  familyName?: string
-  styleName?: string
-  glyphs: Array<CatalogGlyph>
-  axes: Array<CatalogAxis>
-  defaultLocation: Array<number>
-  metrics?: CatalogMetrics
-}
-
-export interface CatalogGlyph {
-  index: number
-  name: string
-  unicodes: Array<number>
 }
 
 export interface CatalogMetrics {

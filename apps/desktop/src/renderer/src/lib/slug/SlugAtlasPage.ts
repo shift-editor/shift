@@ -1,4 +1,4 @@
-import type { CatalogGlyphKey } from "@/types/glyphAtlas";
+import type { GlyphId } from "@shift/types";
 import { SlugAtlas } from "./SlugAtlas";
 import { SlugRendererBuffers, SlugRendererPipelines } from "./SlugRendererResources";
 
@@ -12,8 +12,8 @@ export class SlugAtlasPage {
     this.buffers = new SlugRendererBuffers(device, atlas, pipelines);
   }
 
-  get glyphKeys(): readonly CatalogGlyphKey[] {
-    return this.atlas.glyphKeys;
+  get glyphIds(): readonly GlyphId[] {
+    return this.atlas.glyphIds;
   }
 
   get pageIndex(): number {

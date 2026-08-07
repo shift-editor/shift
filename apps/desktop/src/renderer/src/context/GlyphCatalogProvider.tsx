@@ -6,14 +6,14 @@ import { effect, useSignalState } from "@/lib/signals";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { GlyphCatalogContext } from "./GlyphCatalogContext";
-import type { GlyphCatalogItem, GlyphCatalogState } from "@/types/glyphCatalog";
+import type { GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
 
 export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
-  const value = useGlyphCatalogState();
+  const value = useGlyphCatalogSource();
   return <GlyphCatalogContext.Provider value={value}>{children}</GlyphCatalogContext.Provider>;
 };
 
-const useGlyphCatalogState = (): GlyphCatalogState => {
+const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const session = useFontSession();
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -28,13 +28,13 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   const axes = useSignalState(catalog.axesCell);
   const metrics = useSignalState(catalog.metricsCell);
   const sourceId = useSignalState(catalog.sourceIdCell);
-  const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogState["openedGlyph"]>(null);
+  const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogSource["openedGlyph"]>(null);
   const openedGlyphKeyRef = useRef<GlyphCatalogItem["id"] | null>(null);
   const openGenerationRef = useRef(0);
-  const observeAtlasInvalidation = useCallback<GlyphCatalogState["observeAtlasInvalidation"]>(
+  const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
-        () => listener(catalog.invalidGlyphKeysCell.value, catalog.glyphsCell.value.map(glyphKey)),
+        () => listener(catalog.invalidGlyphIdsCell.value, catalog.glyphsCell.value.map(glyphId)),
         { name: "glyphCatalog.atlas" },
       );
       return () => subscription.dispose();
@@ -89,7 +89,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     selectedSubCategoryKey,
   ]);
 
-  const openGlyph = useCallback<GlyphCatalogState["openGlyph"]>(
+  const openGlyph = useCallback<GlyphCatalogSource["openGlyph"]>(
     async (glyph) => {
       const generation = openGenerationRef.current + 1;
       openGenerationRef.current = generation;
@@ -168,7 +168,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
     };
   }, [catalog, location]);
 
-  const createQuickGlyph = useCallback<GlyphCatalogState["createQuickGlyph"]>(() => {
+  const createQuickGlyph = useCallback<GlyphCatalogSource["createQuickGlyph"]>(() => {
     if (!workspace) throw new Error("preview catalog cannot create glyphs");
 
     const record = workspace.editor.createGlyph("newGlyph" as GlyphName);
@@ -211,7 +211,7 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   };
 };
 
-function glyphKey(glyph: GlyphCatalogItem) {
+function glyphId(glyph: GlyphCatalogItem) {
   return glyph.id;
 }
 

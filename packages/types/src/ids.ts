@@ -18,7 +18,6 @@ declare const AxisMappingIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
-declare const GlyphIndexBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
 declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
@@ -85,11 +84,6 @@ export type GuidelineId = string & {
  * Branded string type - can't be confused with names or other IDs.
  */
 export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
-
-/** Dense, handle-local glyph address for one retained foreign source. */
-export type GlyphIndex = number & {
-  readonly [GlyphIndexBrand]: typeof GlyphIndexBrand;
-};
 
 /**
  * A layer identifier from Rust.
@@ -194,11 +188,6 @@ export function asGuidelineId(id: string): GuidelineId {
  */
 export function asGlyphId(id: string): GlyphId {
   return id as GlyphId;
-}
-
-/** Adopts a validated Rust source index without minting authored identity. */
-export function asGlyphIndex(index: number): GlyphIndex {
-  return index as GlyphIndex;
 }
 
 /**

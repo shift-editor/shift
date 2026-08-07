@@ -104,7 +104,7 @@ export declare class Bridge {
   /** Reads one location-independent source glyph and its complete component closure. */
   readFontSourceGlyph(glyphId: GlyphId): Array<NapiGlyphSnapshot>
   /** Builds one source-neutral catalog page through the active format adapter. */
-  prepareSourceAtlasPage(pageIndex: number, glyphIds: Array<string>, coordinates: Array<number>, alignment: number): NapiCatalogAtlasPage
+  prepareSourceAtlasPage(pageIndex: number, glyphIds: Array<GlyphId>, coordinates: Array<number>, alignment: number): NapiCatalogAtlasPage
   /** Streams one prepared source page through the same bounded atlas lane. */
   streamSourceAtlasPage(generation: number, maximumLength: number): ReadableStream<Buffer>
   /** Releases a rejected source page and its retained weight descriptor. */
@@ -261,7 +261,7 @@ export interface NapiBooleanOpIntent {
 
 export interface NapiCatalogAtlasGlyph {
   glyphId: GlyphId
-  atlasGlyph: number
+  defaultGlyph: number
   exactSources: Array<NapiSlugExactSource>
 }
 
@@ -289,27 +289,11 @@ export interface NapiCatalogAxis {
   tag: string
   name: string
   hidden: boolean
-  kind: string
+  axisType: string
   minimum?: number
-  defaultValue: number
+  default: number
   maximum?: number
   values: Array<number>
-}
-
-export interface NapiCatalogDirectory {
-  format: string
-  familyName?: string
-  styleName?: string
-  glyphs: Array<NapiCatalogGlyph>
-  axes: Array<NapiCatalogAxis>
-  defaultLocation: Array<number>
-  metrics?: NapiCatalogMetrics
-}
-
-export interface NapiCatalogGlyph {
-  index: number
-  name: string
-  unicodes: Array<number>
 }
 
 export interface NapiCatalogMetrics {

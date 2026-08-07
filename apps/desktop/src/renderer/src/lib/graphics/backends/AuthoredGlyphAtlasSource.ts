@@ -1,9 +1,8 @@
-import type { Axis, GlyphId } from "@shift/types";
+import type { Axis } from "@shift/types";
 import type { SlugAtlasOrigin } from "@shared/workspace/protocol";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type {
-  CatalogGlyphKey,
-  GlyphAtlasPageDescriptor,
+  GlyphAtlasPage,
   GlyphAtlasPageRequest,
   GlyphAtlasPageWeights,
   GlyphAtlasSource,
@@ -20,11 +19,8 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
     this.#axes = axes;
   }
 
-  async preparePage(
-    request: GlyphAtlasPageRequest,
-    alignment: number,
-  ): Promise<GlyphAtlasPageDescriptor> {
-    const glyphIds = request.glyphKeys.map(authoredGlyphId);
+  async preparePage(request: GlyphAtlasPageRequest, alignment: number): Promise<GlyphAtlasPage> {
+    const glyphIds = [...request.glyphIds];
     const descriptor = await this.#edits.prepareSlugAtlasPage({
       glyphIds,
       alignment,
@@ -42,7 +38,7 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
       layout: descriptor.layout,
       previewExtents: descriptor.previewExtents,
       glyphs: descriptor.glyphs.map((glyph) => ({
-        glyphKey: glyph.glyphId,
+        glyphId: glyph.glyphId,
         defaultGlyph: glyph.defaultGlyph,
         exactSources: glyph.exactSources,
       })),
@@ -53,7 +49,7 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
   }
 
   async streamPage(
-    descriptor: GlyphAtlasPageDescriptor,
+    descriptor: GlyphAtlasPage,
     maximumLength: number,
     write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
   ): Promise<number> {
@@ -70,7 +66,7 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
     }
   }
 
-  async discardPage(descriptor: GlyphAtlasPageDescriptor): Promise<void> {
+  async discardPage(descriptor: GlyphAtlasPage): Promise<void> {
     const origin = this.#origins.get(descriptor.generation);
     this.#origins.delete(descriptor.generation);
     if (!origin) return;
@@ -87,9 +83,4 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
     if (!origin) throw new Error(`unknown authored atlas generation ${generation}`);
     return origin;
   }
-}
-
-function authoredGlyphId(key: CatalogGlyphKey): GlyphId {
-  if (typeof key !== "string") throw new Error("authored atlas received a retained glyph index");
-  return key;
 }

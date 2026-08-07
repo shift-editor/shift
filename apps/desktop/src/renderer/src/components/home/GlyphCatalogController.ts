@@ -1,4 +1,5 @@
 import type { Point2D } from "@shift/geo";
+import type { GlyphId } from "@shift/types";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphCatalogOverlay } from "./GlyphCatalogOverlay";
@@ -13,7 +14,7 @@ import type {
   GridReadiness,
 } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance } from "@/types/glyphPreview";
-import type { CatalogGlyphKey, GlyphAtlasPageRequest, GlyphAtlasSource } from "@/types/glyphAtlas";
+import type { GlyphAtlasPageRequest, GlyphAtlasSource } from "@/types/glyphAtlas";
 
 const ATLAS_PAGE_ROOT_COUNT = 256;
 const SLUG_ATLAS_PROFILING_ENABLED =
@@ -33,13 +34,13 @@ export class GlyphCatalogController {
   readonly #frames = new FrameHandler();
   readonly #resizeObserver: ResizeObserver;
   readonly #unobserveAtlas: () => void;
-  readonly #invalidGlyphIds = new Set<CatalogGlyphKey>();
+  readonly #invalidGlyphIds = new Set<GlyphId>();
   readonly #replacementPageIndices = new Set<number>();
-  readonly #pageIndexByGlyph = new Map<CatalogGlyphKey, number>();
+  readonly #pageIndexByGlyph = new Map<GlyphId, number>();
 
   #targetFrame: GlyphCatalogControllerFrame | null = null;
   #activeFrame: GlyphCatalogControllerFrame | null = null;
-  #fontGlyphIds: readonly CatalogGlyphKey[] = [];
+  #fontGlyphIds: readonly GlyphId[] = [];
   #layer: ResidentGlyphLayer | null = null;
   /** Device initialization; aborted work retains this slot until it settles. */
   #refresh: AbortController | null = null;
@@ -58,10 +59,7 @@ export class GlyphCatalogController {
     overlayCanvas: HTMLCanvasElement,
     atlasSource: GlyphAtlasSource,
     observeAtlasInvalidation: (
-      listener: (
-        glyphKeys: readonly CatalogGlyphKey[] | null,
-        directory: readonly CatalogGlyphKey[],
-      ) => void,
+      listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
     ) => () => void,
     onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null,
     onEditingUnavailable: () => void,
@@ -93,8 +91,8 @@ export class GlyphCatalogController {
     document.fonts.addEventListener("loadingdone", this.#handleFontsLoaded);
     void this.#redrawWhenFontsReady();
 
-    this.#unobserveAtlas = observeAtlasInvalidation((glyphKeys, directory) => {
-      this.#invalidate(glyphKeys, directory);
+    this.#unobserveAtlas = observeAtlasInvalidation((glyphIds, directory) => {
+      this.#invalidate(glyphIds, directory);
     });
     this.#startLayer();
   }
@@ -161,10 +159,7 @@ export class GlyphCatalogController {
     document.fonts.removeEventListener("loadingdone", this.#handleFontsLoaded);
   }
 
-  #invalidate(
-    glyphIds: readonly CatalogGlyphKey[] | null,
-    fontGlyphIds: readonly CatalogGlyphKey[],
-  ): void {
+  #invalidate(glyphIds: readonly GlyphId[] | null, fontGlyphIds: readonly GlyphId[]): void {
     const directoryChanged = !sameGlyphIds(this.#fontGlyphIds, fontGlyphIds);
     this.#fontGlyphIds = fontGlyphIds;
     if (directoryChanged) {
@@ -272,7 +267,7 @@ export class GlyphCatalogController {
 
       for (const request of pageRequests) {
         this.#replacementPageIndices.delete(request.pageIndex);
-        for (const glyphId of request.glyphKeys) this.#invalidGlyphIds.delete(glyphId);
+        for (const glyphId of request.glyphIds) this.#invalidGlyphIds.delete(glyphId);
       }
       await this.#synchronizeResolvedWeights(layer);
       if (this.#disposed || this.#atlasBuild !== atlasBuild || atlasBuild.signal.aborted) return;
@@ -334,7 +329,7 @@ export class GlyphCatalogController {
   #pageRequest(pageIndex: number): GlyphAtlasPageRequest {
     const start = pageIndex * ATLAS_PAGE_ROOT_COUNT;
     return {
-      glyphKeys: this.#fontGlyphIds.slice(start, start + ATLAS_PAGE_ROOT_COUNT),
+      glyphIds: this.#fontGlyphIds.slice(start, start + ATLAS_PAGE_ROOT_COUNT),
       pageIndex,
       pageCount: this.#pageCount(),
       replacementPageIndices: [...this.#replacementPageIndices].sort((left, right) => left - right),
@@ -342,7 +337,7 @@ export class GlyphCatalogController {
     };
   }
 
-  #pageIndex(glyphId: CatalogGlyphKey): number | null {
+  #pageIndex(glyphId: GlyphId): number | null {
     return this.#pageIndexByGlyph.get(glyphId) ?? null;
   }
 
@@ -590,10 +585,7 @@ export class GlyphCatalogController {
   }
 }
 
-function sameGlyphIds(
-  left: readonly CatalogGlyphKey[],
-  right: readonly CatalogGlyphKey[],
-): boolean {
+function sameGlyphIds(left: readonly GlyphId[], right: readonly GlyphId[]): boolean {
   return left.length === right.length && left.every((glyphId, index) => glyphId === right[index]);
 }
 

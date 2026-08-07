@@ -4,7 +4,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `FontSession` is the renderer's one immutable connection composition. Both `"shift"` and `"imported"` modes use `FontStore → Font → Editor → Scene → Renderer` and expose one `GlyphCatalog`; only Shift mode also owns an authored `Workspace` and mutation coordinator. Imported sessions eagerly receive stable session `GlyphId` values but no authored `GlyphRecord` or `GlyphLayer`.
+- **Architecture Invariant:** `FontSession` is the renderer's one immutable connection composition. Both `"authored"` and `"imported"` modes use `FontStore → Font → Editor → Scene → Renderer` and expose one concrete `GlyphCatalog`; only authored mode also owns a `Workspace` and mutation coordinator. Imported sessions eagerly receive stable session `GlyphId` values but no authored `GlyphRecord` or `GlyphLayer`.
 - **Architecture Invariant:** `Font.loadGlyph()` is the asynchronous acquisition boundary. It returns one canonical `Glyph` only after every authored layer and transitive component dependency is available; retained calls return that same object without workspace I/O. `Editor.glyphForId()` may synchronously expose that object to runtime and plugin code after acquisition, but never initiates loading.
 - **Architecture Invariant:** A loaded `Glyph` owns all authored `GlyphLayer` objects and direct component-Glyph references. Its record and layer collections update reactively without replacing the Glyph; its synchronous properties never initiate I/O.
 - **Architecture Invariant:** `FontStore.#glyphs` contains only completely assembled Glyphs. Failed assembly installs nothing, and workspace replacement clears the complete object graph.
@@ -18,6 +18,8 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** `Font.committedFontCell` is an invalidation-only dependency for resources derived from the complete native font, including unloaded glyphs. It carries the stable Font value and notifies after committed echoes or workspace replacement; consumers use `track(...)`, never a revision counter.
 - **Architecture Invariant:** Structural glyph, source, or axis changes rebuild retained native projections behind the workspace FIFO and publish replacements atomically. The previous projection remains usable until its replacement arrives.
 - **Architecture Invariant:** Imported selected-glyph geometry is acquired lazily by stable glyph identity, then retained with its complete component closure until session disposal. External slider coordinates are mapped synchronously before exact-source matching and projection evaluation. Scrubbing is local signal evaluation, never a bridge, filesystem, or projection-acquisition request.
+- **Architecture Invariant:** Authored object IDs resolve through `FontStore` ownership indexes before imported-geometry fallback. Point, anchor, segment, and contour objects retain their authored `GlyphLayer` and read its live structure and coordinate signals, so object bounds and overlays remain reactive without rescanning complete geometry.
+- **Architecture Invariant:** Selected-glyph sidebearing and advance controls read the editor's single glyph scene node. Values stay live through the glyph model; mutations are available only when that glyph has an exact authored layer at the current location.
 
 ## Codemap
 
@@ -28,19 +30,24 @@ lib/model/
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
   GlyphLayerState.ts         -- reactive authored structure and numeric buffers
+  renderGlyph.ts             -- minimal passive RenderGlyph projection
 lib/graphics/
   ContourPath.ts             -- canonical transformed commands and lazy path outputs
 lib/interpolation/
   InterpolationBasis.ts      -- local support evaluation and source-value combination
 types/
-  glyphRender.ts             -- contour and anchor contracts consumed by renderers
+  glyph.ts                   -- GlyphReader and model construction contracts
+  glyphRender.ts             -- renderer contour/anchor contracts plus passive RenderGlyph
 workspace/
   FontSession.ts             -- immutable mode/catalog/optional-workspace composition
   FontSessionProvider.tsx    -- one renderer bootstrap and context boundary
 lib/catalog/
   GlyphCatalog.ts              -- common Font/Editor projection consumed by the resident Grid
-components/home/
-  GlyphGrid.tsx              -- shared complete-residency catalog consumer
+components/home/glyph-catalog/
+  GlyphCatalogView.tsx       -- shared complete-residency catalog consumer
+hooks/
+  useGlyphSidebearings.ts    -- live selected-glyph sidebearing values and layer availability
+  useGlyphXAdvance.ts        -- live selected-glyph advance and layer availability
 ```
 
 ## Key Types

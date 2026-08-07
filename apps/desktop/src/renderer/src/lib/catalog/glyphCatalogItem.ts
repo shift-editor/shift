@@ -1,10 +1,10 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type { CatalogGlyphKey } from "@/types/glyphAtlas";
+import type { GlyphId, GlyphName } from "@shift/types";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 
 export function glyphCatalogItem(
-  id: CatalogGlyphKey,
-  name: string,
+  id: GlyphId,
+  name: GlyphName,
   unicodes: readonly number[],
   glyphInfo: GlyphInfo,
 ): GlyphCatalogItem {

@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
-use shift_backends::{BinaryFont, FontSource, ProjectedGlyph};
+use shift_backends::{FontSource, OpenTypeFont, ProjectedGlyph};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(debug_assertions) {
@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max(1);
 
     let open_started = Instant::now();
-    let font = BinaryFont::open(Path::new(&path))?;
+    let font = OpenTypeFont::open(Path::new(&path))?;
     let open_and_directory = open_started.elapsed();
     let directory = font.directory();
     let selected = requested_glyph

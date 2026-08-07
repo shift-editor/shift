@@ -8,15 +8,130 @@ use fontdrasil::variations::{RoundingBehaviour, VariationModel};
 use super::geometry::SourceGeometry;
 use super::interpolation::InterpolationAxis;
 use super::{
-    FontReadError, GlyphComponent, GlyphDelta, GlyphMetrics, GlyphProjection, GlyphShape,
-    GlyphShapeContour, GlyphShapePoint, GlyphSourceShape, GlyphVariation, SourceIndex,
-    VariationRegion, VariationSupport,
+    DirectoryGlyph, FontDirectory, FontReadError, GlyphComponent, GlyphDelta, GlyphIndex,
+    GlyphMetrics, GlyphProjection, GlyphShape, GlyphShapeContour, GlyphShapePoint,
+    GlyphSourceShape, GlyphVariation, ProjectedGlyph, SourceIndex, VariationAxis, VariationRegion,
+    VariationSupport,
 };
+use crate::FontFormat;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ProjectionLayer {
     pub(crate) geometry: SourceGeometry,
     pub(crate) metrics: GlyphMetrics,
+}
+
+pub(crate) fn empty_projection_layer(glyph: GlyphIndex) -> ProjectionLayer {
+    ProjectionLayer {
+        geometry: SourceGeometry {
+            glyph,
+            contours: Vec::new(),
+            components: Vec::new(),
+            anchors: Vec::new(),
+        },
+        metrics: GlyphMetrics {
+            x_advance: 0.0,
+            y_advance: None,
+        },
+    }
+}
+
+pub(crate) fn build_directory(
+    format: FontFormat,
+    family_name: Option<String>,
+    style_name: Option<String>,
+    units_per_em: f64,
+    glyphs: Vec<(String, Box<[u32]>)>,
+    axes: Vec<VariationAxis>,
+) -> Result<(FontDirectory, HashMap<String, GlyphIndex>), FontReadError> {
+    let glyphs = glyphs
+        .into_iter()
+        .enumerate()
+        .map(|(index, (name, unicodes))| DirectoryGlyph {
+            index: GlyphIndex::new(index as u32),
+            name,
+            unicodes,
+        })
+        .collect();
+    let directory =
+        FontDirectory::new(format, family_name, style_name, units_per_em, glyphs, axes)?;
+    let glyphs_by_name = directory
+        .glyphs
+        .iter()
+        .map(|glyph| (glyph.name.clone(), glyph.index))
+        .collect();
+    Ok((directory, glyphs_by_name))
+}
+
+pub(crate) fn resolve_projection_closure(
+    directory: &FontDirectory,
+    root: GlyphIndex,
+    missing_root_details: &'static str,
+    project: impl FnMut(GlyphIndex) -> Result<GlyphProjection, FontReadError>,
+) -> Result<ProjectedGlyph, FontReadError> {
+    if directory.glyphs.get(root.to_usize()).is_none() {
+        return Err(FontReadError::GlyphOutOfRange {
+            glyph: root,
+            glyph_count: directory.glyphs.len() as u32,
+        });
+    }
+
+    let mut resolver = ProjectionResolver {
+        states: HashMap::new(),
+        projections: HashMap::new(),
+        project,
+    };
+    resolver.resolve(root)?;
+    let root = resolver
+        .projections
+        .remove(&root)
+        .ok_or_else(|| invalid(missing_root_details))?;
+    let mut components = resolver.projections.into_values().collect::<Vec<_>>();
+    components.sort_by_key(|projection| projection.glyph);
+    Ok(ProjectedGlyph {
+        root,
+        components: components.into_boxed_slice(),
+    })
+}
+
+struct ProjectionResolver<F> {
+    states: HashMap<GlyphIndex, u8>,
+    projections: HashMap<GlyphIndex, GlyphProjection>,
+    project: F,
+}
+
+impl<F> ProjectionResolver<F>
+where
+    F: FnMut(GlyphIndex) -> Result<GlyphProjection, FontReadError>,
+{
+    fn resolve(&mut self, glyph: GlyphIndex) -> Result<(), FontReadError> {
+        match self.states.get(&glyph).copied() {
+            Some(1) => return Err(FontReadError::ComponentCycle { glyph }),
+            Some(2) => return Ok(()),
+            _ => {}
+        }
+        self.states.insert(glyph, 1);
+        let projection = (self.project)(glyph)?;
+        let dependencies = projection
+            .fallback
+            .components
+            .iter()
+            .map(|component| component.glyph)
+            .chain(projection.exact_shapes.iter().flat_map(|shape| {
+                shape
+                    .shape
+                    .components
+                    .iter()
+                    .map(|component| component.glyph)
+            }))
+            .collect::<HashSet<_>>();
+        for dependency in dependencies {
+            self.resolve(dependency)?;
+        }
+        self.projections.insert(glyph, projection);
+        self.states.insert(glyph, 2);
+        Ok(())
+    }
 }
 
 pub(crate) fn project_layers(

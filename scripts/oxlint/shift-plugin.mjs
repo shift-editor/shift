@@ -8,11 +8,7 @@
  */
 
 /** Files where raw .pointType checks are expected (validation implementation). */
-const POINT_TYPE_ALLOWED = [
-  "packages/validation/",
-  "packages/glyph-state/",
-  "packages/rules/",
-];
+const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/", "packages/rules/"];
 
 function checkParam(context, node) {
   // Handle destructured or rest patterns — only check simple identifiers
@@ -38,18 +34,17 @@ function checkParam(context, node) {
   }
 }
 
-/** Files where GlyphSnapshot usage is expected (bridge/generated layers). */
-const SNAPSHOT_ALLOWED = [
+/** Boundaries that acquire, transport, synchronize, or hydrate glyph snapshots. */
+const GLYPH_SNAPSHOT_ALLOWED = [
   "bridge/",
   "shared/bridge/",
-  "packages/types/",
+  "shared/workspace/protocol.ts",
+  "utility/workspace/WorkspaceHost.ts",
+  "renderer/src/types/glyph.ts",
+  "renderer/src/lib/model/",
+  "renderer/src/lib/workspace/",
+  "renderer/src/workspace/runtime.ts",
   "testing/",
-  "draft.ts",
-  "commands/", // undo/redo deals with raw snapshots
-  "behaviors/", // tool behaviors capture snapshots for undo via drafts
-  "types/engine.ts", // engine response types
-  "lib/model/", // reactive model uses snapshots for sync
-  "interpolation/", // interpolation produces snapshots by blending masters
 ];
 
 function isAllowedFile(filename, allowList) {
@@ -81,10 +76,7 @@ function classExtendsCanvasItem(node) {
   const superclass = node.superClass;
   if (!superclass) return false;
   if (superclass.type === "Identifier") return superclass.name === "CanvasItem";
-  if (
-    superclass.type === "MemberExpression" &&
-    superclass.property?.type === "Identifier"
-  ) {
+  if (superclass.type === "MemberExpression" && superclass.property?.type === "Identifier") {
     return superclass.property.name === "CanvasItem";
   }
   return false;
@@ -110,10 +102,7 @@ function methodOwnerClass(method) {
 function calleeName(callee) {
   if (!callee) return null;
   if (callee.type === "Identifier") return callee.name;
-  if (
-    callee.type === "MemberExpression" &&
-    callee.property?.type === "Identifier"
-  ) {
+  if (callee.type === "MemberExpression" && callee.property?.type === "Identifier") {
     return callee.property.name;
   }
   return null;
@@ -132,10 +121,8 @@ function isInsideReactiveBoundary(node) {
 
     if (current.type === "MethodDefinition") {
       const name = methodName(current);
-      if (name === "props" && classExtendsCanvasItem(methodOwnerClass(current)))
-        return true;
-      if (name === "dependencies" || name?.endsWith("Dependencies"))
-        return true;
+      if (name === "props" && classExtendsCanvasItem(methodOwnerClass(current))) return true;
+      if (name === "dependencies" || name?.endsWith("Dependencies")) return true;
       if (name === "getCursor") return true;
       if (name === "trackViewportTransform") return true;
     }
@@ -153,11 +140,7 @@ function isCanvasItemPropsCellValueRead(node) {
 
   const object = node.object;
   if (object?.type !== "MemberExpression") return false;
-  if (
-    object.property?.type !== "Identifier" ||
-    object.property.name !== "propsCell"
-  )
-    return false;
+  if (object.property?.type !== "Identifier" || object.property.name !== "propsCell") return false;
   return object.object?.type === "ThisExpression";
 }
 
@@ -168,10 +151,7 @@ function isDomValueRead(node) {
   if (object.type === "Identifier" && object.name === "textarea") return true;
   if (object.type !== "MemberExpression") return false;
   if (object.property?.type !== "Identifier") return false;
-  return (
-    object.property.name === "target" ||
-    object.property.name === "currentTarget"
-  );
+  return object.property.name === "target" || object.property.name === "currentTarget";
 }
 
 function isIteratorValueRead(node) {
@@ -180,9 +160,7 @@ function isIteratorValueRead(node) {
   if (object?.type !== "CallExpression") return false;
   const callee = object.callee;
   if (callee?.type !== "MemberExpression") return false;
-  return (
-    callee.property?.type === "Identifier" && callee.property.name === "next"
-  );
+  return callee.property?.type === "Identifier" && callee.property.name === "next";
 }
 
 export default {
@@ -218,8 +196,7 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
 
         function suggestedName(methodName) {
           if (/^get[A-Z]/.test(methodName)) {
@@ -244,8 +221,7 @@ export default {
           const ret = stmt.argument;
           if (ret.type !== "MemberExpression") return false;
           if (!ret.property || ret.property.type !== "Identifier") return false;
-          if (ret.property.name !== "value" && ret.property.name !== "peek")
-            return false;
+          if (ret.property.name !== "value" && ret.property.name !== "peek") return false;
           // Return object must itself be a MemberExpression (this.#foo or this.$foo)
           return ret.object && ret.object.type === "MemberExpression";
         }
@@ -294,8 +270,7 @@ export default {
         const filename = context.getFilename();
 
         if (isAllowedFile(filename, REACTIVE_VALUE_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
         if (filename.includes("/docs/")) return {};
 
         return {
@@ -347,7 +322,6 @@ export default {
           "commands/", // undo/redo snapshots
           "behaviors/", // drag handlers read base snapshots
           "testing/",
-          "types/engine.ts",
         ];
 
         if (isAllowedFile(filename, PREFER_INSTANCE_ALLOWED)) return {};
@@ -448,10 +422,7 @@ export default {
             }
 
             // parseContourSegments(...)
-            if (
-              callee.type === "Identifier" &&
-              callee.name === "parseContourSegments"
-            ) {
+            if (callee.type === "Identifier" && callee.name === "parseContourSegments") {
               context.report({
                 node: callee,
                 messageId: "useGenerator",
@@ -481,8 +452,7 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
 
         return {
           /**
@@ -512,36 +482,37 @@ export default {
     },
 
     /**
-     * Ban GlyphSnapshot in domain/tool/UI code.
-     *
-     * App code should use the immutable `Glyph` domain type from @shift/types.
-     * GlyphSnapshot is the mutable engine representation and should only
-     * appear in engine/, bridge/, types/, testing/, and draft code.
+     * Keep the GlyphSnapshot transport DTO inside acquisition, synchronization,
+     * and model-hydration boundaries. Renderer domain and UI code consume the
+     * reactive Glyph model instead.
      */
     "no-snapshot-in-domain": {
       meta: {
         type: "suggestion",
         messages: {
           useGlyph:
-            "Use the immutable Glyph domain type from @shift/types instead of GlyphSnapshot in app code.",
+            "GlyphSnapshot is a transport DTO. Use the reactive Glyph model outside snapshot acquisition, synchronization, and hydration boundaries.",
         },
         schema: [],
       },
       create(context) {
         const filename = context.getFilename();
 
-        if (isAllowedFile(filename, SNAPSHOT_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (isAllowedFile(filename, GLYPH_SNAPSHOT_ALLOWED)) return {};
+        if (filename.includes(".test.")) return {};
 
         return {
-          /**
-           * Match type annotations that reference GlyphSnapshot.
-           * Catches: (snapshot: GlyphSnapshot), Map<GlyphSnapshot, ...>, etc.
-           * Does NOT catch import statements — only usage in type positions.
-           */
-          'TSTypeReference > Identifier[name="GlyphSnapshot"]'(node) {
-            context.report({ node, messageId: "useGlyph" });
+          ImportDeclaration(node) {
+            if (node.source?.value !== "@shift/types") return;
+
+            for (const specifier of node.specifiers ?? []) {
+              if (specifier.type !== "ImportSpecifier") continue;
+
+              const importedName = specifier.imported?.name ?? specifier.imported?.value;
+              if (importedName !== "GlyphSnapshot") continue;
+
+              context.report({ node: specifier, messageId: "useGlyph" });
+            }
           },
         };
       },
@@ -566,8 +537,7 @@ export default {
         const filename = context.getFilename();
 
         if (isAllowedFile(filename, POINT_TYPE_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
 
         return {
           /**
@@ -595,8 +565,7 @@ export default {
 
             // The other side must be a string literal ("onCurve" / "offCurve")
             const other = hasPropLeft ? right : left;
-            if (other.type !== "Literal" || typeof other.value !== "string")
-              return;
+            if (other.type !== "Literal" || typeof other.value !== "string") return;
 
             context.report({
               node: hasPropLeft ? left : right,
@@ -624,15 +593,13 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
 
         /** Find the first returned ObjectExpression in a block body. */
         function findReturnedObject(block) {
           for (const stmt of block.body) {
             if (stmt.type === "ReturnStatement" && stmt.argument) {
-              if (stmt.argument.type === "ObjectExpression")
-                return stmt.argument;
+              if (stmt.argument.type === "ObjectExpression") return stmt.argument;
               // Parenthesized: return ({ ... })
               if (
                 stmt.argument.type === "SequenceExpression" &&
@@ -653,10 +620,7 @@ export default {
           while (current && depth < 8) {
             if (current.type === "ConditionalExpression") return true;
             // Stop at statement boundaries — the ternary must be in the same expression
-            if (
-              current.type.endsWith("Statement") ||
-              current.type.endsWith("Declaration")
-            ) {
+            if (current.type.endsWith("Statement") || current.type.endsWith("Declaration")) {
               return false;
             }
             current = current.parent;
@@ -704,9 +668,7 @@ export default {
             if (!expr || expr.type !== "ObjectExpression") return;
 
             // Must have a spread element (structural clone pattern)
-            const hasSpread = expr.properties.some(
-              (p) => p.type === "SpreadElement",
-            );
+            const hasSpread = expr.properties.some((p) => p.type === "SpreadElement");
             if (!hasSpread) return;
 
             // Must have a property whose value contains a .map() call
@@ -763,8 +725,7 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
 
         return {
           /**
@@ -792,11 +753,7 @@ export default {
             const yVal = yProp.value;
 
             // Both must be binary expressions (arithmetic on coordinates)
-            if (
-              xVal.type !== "BinaryExpression" ||
-              yVal.type !== "BinaryExpression"
-            )
-              return;
+            if (xVal.type !== "BinaryExpression" || yVal.type !== "BinaryExpression") return;
 
             // Both must involve member access (a.x, b.x, etc.)
             const hasMemberX =
@@ -810,11 +767,7 @@ export default {
 
             // Only flag +, -, * (not / or %)
             const mathOps = ["+", "-", "*"];
-            if (
-              !mathOps.includes(xVal.operator) ||
-              !mathOps.includes(yVal.operator)
-            )
-              return;
+            if (!mathOps.includes(xVal.operator) || !mathOps.includes(yVal.operator)) return;
 
             context.report({ node, messageId: "useVec2" });
           },
@@ -844,8 +797,7 @@ export default {
         const filename = context.getFilename();
 
         if (!filename.endsWith(".tsx")) return {};
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
 
         const THRESHOLD = 3;
 
@@ -857,10 +809,7 @@ export default {
 
           function walk(n) {
             if (!n || typeof n !== "object") return;
-            if (
-              n.type === "ChainExpression" &&
-              n.expression?.type === "MemberExpression"
-            ) {
+            if (n.type === "ChainExpression" && n.expression?.type === "MemberExpression") {
               const obj = n.expression.object;
               if (obj?.type === "Identifier") {
                 counts.set(obj.name, (counts.get(obj.name) || 0) + 1);
@@ -917,17 +866,14 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/"))
-          return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
 
         const sourceCode = context.getSourceCode();
         if (!sourceCode) return {};
 
         return {
           Program() {
-            const comments = sourceCode.getAllComments
-              ? sourceCode.getAllComments()
-              : [];
+            const comments = sourceCode.getAllComments ? sourceCode.getAllComments() : [];
             for (const comment of comments) {
               if (comment.type !== "Line") continue;
               const text = comment.value.trim();
@@ -969,11 +915,7 @@ export default {
 
         return {
           NewExpression(node) {
-            if (
-              node.callee &&
-              node.callee.type === "Identifier" &&
-              node.callee.name === "Editor"
-            ) {
+            if (node.callee && node.callee.type === "Identifier" && node.callee.name === "Editor") {
               context.report({ node, messageId: "useTestEditor" });
             }
           },

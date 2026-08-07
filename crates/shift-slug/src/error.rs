@@ -40,6 +40,21 @@ pub enum SlugError {
     GlyphIndexOutOfRange(u32),
     VariableWeightIndexOutOfRange(u32),
     NonFiniteVariableWeight,
+    RetainedLocationAxisCountMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    RetainedRegionAxisCountMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    NonFiniteRetainedCoordinate {
+        axis_index: usize,
+    },
+    RetainedShapeValueCountMismatch {
+        expected: usize,
+        actual: usize,
+    },
     LengthOverflow,
 }
 
@@ -113,6 +128,22 @@ impl fmt::Display for SlugError {
             Self::NonFiniteVariableWeight => {
                 formatter.write_str("Slug variable source weight must be finite")
             }
+            Self::RetainedLocationAxisCountMismatch { expected, actual } => write!(
+                formatter,
+                "retained location needs {expected} axis coordinates, got {actual}"
+            ),
+            Self::RetainedRegionAxisCountMismatch { expected, actual } => write!(
+                formatter,
+                "retained region needs {expected} axis supports, got {actual}"
+            ),
+            Self::NonFiniteRetainedCoordinate { axis_index } => write!(
+                formatter,
+                "retained coordinate for axis {axis_index} is not finite"
+            ),
+            Self::RetainedShapeValueCountMismatch { expected, actual } => write!(
+                formatter,
+                "retained shape needs {expected} values, got {actual}"
+            ),
             Self::LengthOverflow => formatter.write_str("Slug atlas length exceeds u32 limits"),
         }
     }

@@ -6,7 +6,6 @@ import type {
   CatalogAtlasWeights,
   FontIntent,
   FontSnapshot,
-  GlyphSnapshot as WorkspaceGlyphSnapshot,
   FontMetadata,
   FontMetrics,
   GlyphId,
@@ -14,6 +13,7 @@ import type {
   GlyphProjection,
   GlyphRecord,
   GlyphState,
+  GlyphSnapshot,
   Location,
   MetricDefinition,
   SourceMetricsInterpolationSnapshot,
@@ -22,8 +22,6 @@ import type {
   Source,
   SourceId,
 } from "@shift/types";
-
-export type { WorkspaceGlyphSnapshot };
 
 /**
  * Point-in-time view of the open workspace: identity and records, no geometry.
@@ -71,16 +69,16 @@ export type WorkspaceSlugAtlasPageRequest = {
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
 
 /** Immutable product mode for one live font session. */
-export type FontSessionMode = "shift" | "imported";
+export type FontSessionMode = "authored" | "imported";
 
 /** Main-visible identity for one retained, read-only foreign source session. */
-export type FontSourceSessionState = {
+export type FontSourceSession = {
   sessionId: string;
   canonicalPath: string;
 };
 
 /** Renderer catch-up state for the retained backend of the shared catalog. */
-export type FontSourceSnapshot = FontSourceSessionState & {
+export type FontSourceSnapshot = FontSourceSession & {
   font: FontSnapshot;
 };
 
@@ -170,7 +168,7 @@ export type ShellCallMap = {
   "workspace.close": { request: { discard: boolean }; response: null };
   "source.open": {
     request: { path: string };
-    response: FontSourceSessionState;
+    response: FontSourceSession;
   };
   "source.close": { request: void; response: null };
   "workspace.connect": { request: void; response: void };
@@ -195,7 +193,7 @@ export type SyncCallMap = {
   "source.snapshot": { request: void; response: FontSourceSnapshot | null };
   "source.glyph": {
     request: { glyphId: GlyphId };
-    response: WorkspaceGlyphSnapshot[];
+    response: GlyphSnapshot[];
   };
   "source.atlasPagePrepare": {
     request: FontSourceAtlasPageRequest;
@@ -256,7 +254,7 @@ export type SyncCallMap = {
   };
   "workspace.glyphSnapshots": {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };
-    response: WorkspaceGlyphSnapshot[];
+    response: GlyphSnapshot[];
   };
   "workspace.glyphProjections": {
     request: { glyphIds: GlyphId[] };

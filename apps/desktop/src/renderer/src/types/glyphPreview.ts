@@ -1,10 +1,9 @@
-import type { SourceId } from "@shift/types";
-import type { CatalogGlyphKey } from "./glyphAtlas";
+import type { GlyphId, SourceId } from "@shift/types";
 import type { CatalogLocation } from "./glyphCatalog";
 
 /** One visible glyph preview and its destination rectangle in physical pixels. */
 export interface GlyphPreviewInstance {
-  readonly glyphId: CatalogGlyphKey;
+  readonly glyphId: GlyphId;
   readonly sourceId: SourceId | null;
   readonly pixelRect: readonly [number, number, number, number];
 }

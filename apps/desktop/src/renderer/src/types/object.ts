@@ -1,6 +1,7 @@
 import type { Rect2D } from "@shift/geo";
-import type { GlyphStateGeometry as GlyphGeometry, SegmentId } from "@shift/glyph-state";
+import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
 import type { AnchorId, ContourId, NodeId, PointId } from "@shift/types";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { GlyphNode, ShiftNode } from "./node";
 
 declare const SelectionIdBrand: unique symbol;
@@ -33,6 +34,7 @@ export interface ShiftObjectKindMap {
   readonly point: ShiftObjectBase<"point", PointId> & {
     readonly node: GlyphNode;
     readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
     readonly pointId: PointId;
   };
@@ -40,12 +42,14 @@ export interface ShiftObjectKindMap {
   readonly anchor: ShiftObjectBase<"anchor", AnchorId> & {
     readonly node: GlyphNode;
     readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly anchorId: AnchorId;
   };
 
   readonly segment: ShiftObjectBase<"segment", SegmentId> & {
     readonly node: GlyphNode;
     readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
     readonly segmentId: SegmentId;
     readonly pointIds: readonly PointId[];
@@ -54,6 +58,7 @@ export interface ShiftObjectKindMap {
   readonly contour: ShiftObjectBase<"contour", ContourId> & {
     readonly node: GlyphNode;
     readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
   };
 }

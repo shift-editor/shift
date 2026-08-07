@@ -4,6 +4,7 @@ import type {
   GlyphId,
   GlyphPreview,
   GlyphProjection,
+  GlyphSnapshot,
   Location,
   SlugAtlas,
 } from "@shift/types";
@@ -11,7 +12,6 @@ import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
   SlugAtlasOrigin,
-  WorkspaceGlyphSnapshot,
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
@@ -39,7 +39,7 @@ export type { WorkspaceCommitState } from "@/lib/model/FontStore";
  * watermark.
  */
 export class WorkspaceEditCoordinator {
-  readonly #workspace: FontSessionClient;
+  readonly #session: FontSessionClient;
   readonly #store: FontStore;
   readonly #settledCell: WritableSignal<boolean>;
   readonly #commitState: WritableSignal<WorkspaceCommitState>;
@@ -51,8 +51,8 @@ export class WorkspaceEditCoordinator {
     readonly intents: FontIntent[];
   } | null = null;
 
-  constructor(workspace: FontSessionClient, store: FontStore) {
-    this.#workspace = workspace;
+  constructor(session: FontSessionClient, store: FontStore) {
+    this.#session = session;
     this.#store = store;
     this.#settledCell = signal(true);
     this.#commitState = signal<WorkspaceCommitState>("idle", {
@@ -153,7 +153,7 @@ export class WorkspaceEditCoordinator {
    */
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
     return this.#withFlush(async () => {
-      const applied = await this.#workspace.apply(intents, label);
+      const applied = await this.#session.apply(intents, label);
       await this.#applyChange(applied);
       return applied;
     });
@@ -162,7 +162,7 @@ export class WorkspaceEditCoordinator {
   /** Replays the latest undo entry after pending pushes flush. */
   undo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
-      const applied = await this.#workspace.undo();
+      const applied = await this.#session.undo();
       if (applied) await this.#applyChange(applied);
       return applied;
     });
@@ -171,16 +171,16 @@ export class WorkspaceEditCoordinator {
   /** Pulls replace-grade glyph snapshots by glyph id, serialized behind pending writes. */
   async readGlyphSnapshots(
     requests: readonly WorkspaceGlyphSnapshotRequest[],
-  ): Promise<WorkspaceGlyphSnapshot[]> {
+  ): Promise<GlyphSnapshot[]> {
     if (requests.length === 0) return [];
-    return this.#withFlush(() => this.#workspace.glyphSnapshots(requests));
+    return this.#withFlush(() => this.#session.glyphSnapshots(requests));
   }
 
   /** Pulls reusable glyph projection models behind pending authored edits. */
   async readGlyphProjections(glyphIds: readonly GlyphId[]): Promise<GlyphProjection[]> {
     if (glyphIds.length === 0) return [];
 
-    return this.#withFlush(() => this.#workspace.glyphProjections(glyphIds));
+    return this.#withFlush(() => this.#session.glyphProjections(glyphIds));
   }
 
   /** Pulls drawable previews at one internal location behind pending edits. */
@@ -190,17 +190,17 @@ export class WorkspaceEditCoordinator {
   ): Promise<GlyphPreview[]> {
     if (glyphIds.length === 0) return [];
 
-    return this.#withFlush(() => this.#workspace.glyphPreviews(glyphIds, location));
+    return this.#withFlush(() => this.#session.glyphPreviews(glyphIds, location));
   }
 
   /** Builds one authored Slug generation behind every pending edit. */
   prepareSlugAtlas(alignment: number): Promise<SlugAtlas> {
-    return this.#withFlush(() => this.#workspace.prepareSlugAtlas(alignment));
+    return this.#withFlush(() => this.#session.prepareSlugAtlas(alignment));
   }
 
   /** Opens or builds one deterministic root-glyph page behind every pending edit. */
   prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
-    return this.#withFlush(() => this.#workspace.prepareSlugAtlasPage(request));
+    return this.#withFlush(() => this.#session.prepareSlugAtlasPage(request));
   }
 
   /** Streams a prepared generation without constructing a contiguous JS atlas. */
@@ -209,7 +209,7 @@ export class WorkspaceEditCoordinator {
     maximumLength: number,
     write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
   ): Promise<number> {
-    return this.#withFlush(() => this.#workspace.streamSlugAtlas(generation, maximumLength, write));
+    return this.#withFlush(() => this.#session.streamSlugAtlas(generation, maximumLength, write));
   }
 
   /** Streams one prepared page without constructing a contiguous JS atlas. */
@@ -220,18 +220,18 @@ export class WorkspaceEditCoordinator {
     write: (offset: number, bytes: Uint8Array<ArrayBuffer>) => void,
   ): Promise<number> {
     return this.#withFlush(() =>
-      this.#workspace.streamSlugAtlasPage(generation, origin, maximumLength, write),
+      this.#session.streamSlugAtlasPage(generation, origin, maximumLength, write),
     );
   }
 
   /** Releases native atlas residency after device/limit rejection. */
   discardSlugAtlas(generation: number): Promise<void> {
-    return this.#withFlush(() => this.#workspace.discardSlugAtlas(generation));
+    return this.#withFlush(() => this.#session.discardSlugAtlas(generation));
   }
 
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number, origin: SlugAtlasOrigin): Promise<void> {
-    return this.#withFlush(() => this.#workspace.discardSlugAtlasPage(generation, origin));
+    return this.#withFlush(() => this.#session.discardSlugAtlasPage(generation, origin));
   }
 
   /**
@@ -241,13 +241,13 @@ export class WorkspaceEditCoordinator {
    * @returns The mapped location after queued edits have settled.
    */
   mapLocation(location: Location): Promise<Location> {
-    return this.#withFlush(() => this.#workspace.mapLocation(location));
+    return this.#withFlush(() => this.#session.mapLocation(location));
   }
 
   /** Replays the latest redo entry after pending pushes flush. */
   redo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
-      const applied = await this.#workspace.redo();
+      const applied = await this.#session.redo();
       if (applied) await this.#applyChange(applied);
       return applied;
     });
@@ -255,7 +255,7 @@ export class WorkspaceEditCoordinator {
 
   /** Reads document state behind every queued and in-flight edit. */
   state(): Promise<WorkspaceDocumentState | null> {
-    return this.#withFlush(() => this.#workspace.documentState());
+    return this.#withFlush(() => this.#session.documentState());
   }
 
   /**
@@ -265,7 +265,7 @@ export class WorkspaceEditCoordinator {
    */
   save(path: string | null): Promise<WorkspaceDocumentState> {
     return this.#withFlush(() =>
-      path === null ? this.#workspace.save() : this.#workspace.saveAs(path),
+      path === null ? this.#session.save() : this.#session.saveAs(path),
     );
   }
 
@@ -277,7 +277,7 @@ export class WorkspaceEditCoordinator {
    * @throws {Error} when a transaction is open or compilation fails.
    */
   async export(path: string): Promise<WorkspaceExportResult> {
-    const { completion } = await this.#withFlush(() => this.#workspace.startExport(path));
+    const { completion } = await this.#withFlush(() => this.#session.startExport(path));
     return completion;
   }
 
@@ -297,7 +297,7 @@ export class WorkspaceEditCoordinator {
     void this.#serialize(async () => {
       try {
         this.#commitState.set("applying");
-        const applied = await this.#workspace.apply(intents);
+        const applied = await this.#session.apply(intents);
         await this.#applyChange(applied);
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
@@ -322,7 +322,7 @@ export class WorkspaceEditCoordinator {
     const glyphIds = this.#store.applyWorkspaceChange(applied);
     if (glyphIds.length === 0) return;
 
-    const projections = await this.#workspace.glyphProjections(glyphIds);
+    const projections = await this.#session.glyphProjections(glyphIds);
     this.#store.replaceGlyphProjections(glyphIds, projections);
   }
 
@@ -343,6 +343,6 @@ export class WorkspaceEditCoordinator {
 
   /** Recovery: discard loaded projections and reload the workspace summary from utility. */
   async #resync(): Promise<void> {
-    this.#store.replaceWorkspace(await this.#workspace.snapshot());
+    this.#store.replaceWorkspace(await this.#session.snapshot());
   }
 }

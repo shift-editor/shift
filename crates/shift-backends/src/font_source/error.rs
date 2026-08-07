@@ -1,7 +1,28 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::font_source::{AxisIndex, GlyphIndex};
 use crate::FontFormat;
+
+pub(crate) fn malformed(path: &Path, details: String) -> FontReadError {
+    let format = match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("ufo") => FontFormat::Ufo,
+        Some("glyphs" | "glyphspackage") => FontFormat::Glyphs,
+        Some("designspace") => FontFormat::Designspace,
+        Some("shift") => FontFormat::Shift,
+        Some("otf") => FontFormat::Otf,
+        Some("ttf") | None | Some(_) => FontFormat::Ttf,
+    };
+    FontReadError::MalformedSource {
+        format,
+        path: path.to_path_buf(),
+        details,
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum FontReadError {

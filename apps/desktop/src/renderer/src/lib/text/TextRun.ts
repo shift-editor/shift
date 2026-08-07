@@ -20,7 +20,7 @@ import { TextInteraction } from "./TextInteraction";
 import { Caret, glyphTextItem, TextLayout } from "./layout";
 import type { TextItem, GlyphAnchor, GlyphTextItem, Positioner, TextRunId } from "./layout";
 import type { Editor } from "@/lib/editor/Editor";
-import type { GlyphHandle } from "@shared/bridge/BridgeApi";
+import type { GlyphHandle } from "@shift/types";
 import type { Point2D } from "@shift/geo";
 
 export interface SelectionRect {

@@ -76,7 +76,7 @@ export type GlyphHit = GeometryHit;
 /**
  * Immutable geometry view over a glyph structure and value buffer.
  *
- * `GlyphStateGeometry` is the pure data shape used by rendering, hit testing,
+ * `GlyphGeometry` is the pure data shape used by rendering, hit testing,
  * transforms, clipboard, and edit previews. It does not talk to the bridge and
  * does not mutate its input values. Methods that apply changes return a new
  * geometry object or packed data for another layer to commit.

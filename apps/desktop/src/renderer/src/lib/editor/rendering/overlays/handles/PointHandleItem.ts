@@ -1,22 +1,21 @@
 import { Vec2, type Point2D } from "@shift/geo";
-import { Point as PointModel } from "@shift/glyph-state";
-import type { GlyphRenderPoint } from "@/types/glyphRender";
+import { Point } from "@shift/glyph-state";
 import type { HandleState } from "@/types/graphics";
 import type { MarkerShape } from "../../markers/types";
 
 export class PointHandleItem {
-  point: GlyphRenderPoint;
-  prev: GlyphRenderPoint | null;
-  next: GlyphRenderPoint | null;
+  point: Point;
+  prev: Point | null;
+  next: Point | null;
   index: number;
   count: number;
   contourClosed: boolean;
   state: HandleState;
 
   constructor(
-    point: GlyphRenderPoint,
-    prev: GlyphRenderPoint | null,
-    next: GlyphRenderPoint | null,
+    point: Point,
+    prev: Point | null,
+    next: Point | null,
     index: number,
     count: number,
     contourClosed: boolean,
@@ -32,9 +31,9 @@ export class PointHandleItem {
   }
 
   reset(
-    point: GlyphRenderPoint,
-    prev: GlyphRenderPoint | null,
-    next: GlyphRenderPoint | null,
+    point: Point,
+    prev: Point | null,
+    next: Point | null,
     index: number,
     count: number,
     contourClosed: boolean,
@@ -53,7 +52,7 @@ export class PointHandleItem {
     if (this.count === 1) return "corner";
     if (this.index === 0) return this.contourClosed ? "direction" : "first";
     if (this.index === this.count - 1 && !this.contourClosed) return "last";
-    if (PointModel.isOnCurve(this.point)) return this.point.smooth ? "smooth" : "corner";
+    if (Point.isOnCurve(this.point)) return this.point.smooth ? "smooth" : "corner";
     return "control";
   }
 

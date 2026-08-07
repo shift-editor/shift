@@ -1,10 +1,11 @@
 import { createBridge, type ShiftBridge } from "@shift/bridge";
+import type { GlyphSnapshot } from "@shift/types";
 import fs from "node:fs";
 import path from "node:path";
 import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
 import type {
   FontSourceAtlasPageRequest,
-  FontSourceSessionState,
+  FontSourceSession,
   FontSourceSnapshot,
   ShellCallMap,
   ShellEventMap,
@@ -14,7 +15,6 @@ import type {
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
   WorkspaceExportResult,
-  WorkspaceGlyphSnapshot,
   WorkspacePackageIdentity,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
@@ -173,7 +173,7 @@ export class WorkspaceHost {
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.export": ({ path }) => this.#export(path),
       "workspace.glyphSnapshots": ({ requests }) =>
-        this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[]),
+        this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]),
       "workspace.glyphProjections": ({ glyphIds }) =>
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
       "workspace.glyphPreviews": ({ glyphIds, location }) =>
@@ -527,7 +527,7 @@ export class WorkspaceHost {
     }
   }
 
-  #openFontSource(sourcePath: string): FontSourceSessionState {
+  #openFontSource(sourcePath: string): FontSourceSession {
     if (this.#documentId !== null) throw new Error("a workspace is already open");
     const canonicalPath = fs.realpathSync(sourcePath);
     const font = this.#bridge.openFontSource(canonicalPath);

@@ -81,21 +81,14 @@ pub struct NapiSlugAtlas {
 }
 
 #[napi(object)]
-pub struct NapiCatalogGlyph {
-    pub index: u32,
-    pub name: String,
-    pub unicodes: Vec<u32>,
-}
-
-#[napi(object)]
 pub struct NapiCatalogAxis {
     pub index: u32,
     pub tag: String,
     pub name: String,
     pub hidden: bool,
-    pub kind: String,
+    pub axis_type: String,
     pub minimum: Option<f64>,
-    pub default_value: f64,
+    pub default: f64,
     pub maximum: Option<f64>,
     pub values: Vec<f64>,
 }
@@ -109,21 +102,10 @@ pub struct NapiCatalogMetrics {
 }
 
 #[napi(object)]
-pub struct NapiCatalogDirectory {
-    pub format: String,
-    pub family_name: Option<String>,
-    pub style_name: Option<String>,
-    pub glyphs: Vec<NapiCatalogGlyph>,
-    pub axes: Vec<NapiCatalogAxis>,
-    pub default_location: Vec<f64>,
-    pub metrics: Option<NapiCatalogMetrics>,
-}
-
-#[napi(object)]
 pub struct NapiCatalogAtlasGlyph {
     #[napi(ts_type = "GlyphId")]
     pub glyph_id: String,
-    pub atlas_glyph: u32,
+    pub default_glyph: u32,
     pub exact_sources: Vec<NapiSlugExactSource>,
 }
 
