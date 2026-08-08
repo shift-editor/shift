@@ -33,10 +33,9 @@ const UFO_PREVIEW_FONT_PATH = path.resolve(
   APP_ROOT,
   "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
 );
-const GLYPHS_PREVIEW_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/MutatorSansVariable.glyphs",
-);
+const GLYPHS_PREVIEW_FONT_PATH =
+  process.env.SHIFT_E2E_GLYPHS_PREVIEW_FONT_PATH ??
+  path.resolve(APP_ROOT, "../../fixtures/fonts/MutatorSansVariable.glyphs");
 
 /** Fixed CSS content size; canvas backing dimensions continue to follow the host DPR. */
 const CONTENT_WIDTH = 1280;
@@ -136,6 +135,7 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPac
 export const test = createAppTest(EDITABLE_FONT_PATH, createAuthoredPackage);
 export const previewTest = createAppTest(PREVIEW_FONT_PATH, copyImportedSource);
 export const variablePreviewTest = createAppTest(VARIABLE_PREVIEW_FONT_PATH, copyImportedSource);
+export const designspacePreviewTest = createAppTest(EDITABLE_FONT_PATH, copyImportedSource);
 export const ufoPreviewTest = createAppTest(UFO_PREVIEW_FONT_PATH, copyImportedSource);
 export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImportedSource);
 
