@@ -30,14 +30,26 @@ test.describe("variable imported font projection", () => {
     const slider = page.getByRole("slider").first();
     await expect(slider).toBeVisible();
 
+    const variationSidebar = page.locator("aside").first();
+    await expect(variationSidebar.getByText("Regular", { exact: true })).toHaveCount(2);
+    await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
+    await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveCount(0);
+    await variationSidebar.getByText("Medium", { exact: true }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.shiftSession?.editor.externalLocation.values().next().value),
+      )
+      .toBe(500);
+    await page.evaluate(() => window.shiftSession?.editor.setSourceToDefault());
+
     const before = await page.evaluate((selectedGlyphId) => {
       const session = window.shiftSession;
       const glyph = session?.editor.glyphForId(selectedGlyphId);
       if (!session || !glyph) throw new Error("Expected resident variable glyph");
 
       return {
-        location: Array.from(session.editor.designLocation.values()),
-        values: Array.from(glyph.geometryAt(session.editor.designLocation).values),
+        location: Array.from(session.editor.externalLocation.values()),
+        values: Array.from(glyph.geometryAt(session.editor.externalLocation).values),
       };
     }, glyphId);
     const beforeFrame = await sceneCanvas.screenshot();
@@ -58,7 +70,9 @@ test.describe("variable imported font projection", () => {
     await slider.press("End");
     await expect
       .poll(() =>
-        page.evaluate(() => Array.from(window.shiftSession?.editor.designLocation.values() ?? [])),
+        page.evaluate(() =>
+          Array.from(window.shiftSession?.editor.externalLocation.values() ?? []),
+        ),
       )
       .not.toEqual(before.location);
     await page.evaluate(
@@ -73,7 +87,7 @@ test.describe("variable imported font projection", () => {
       const glyph = session?.editor.glyphForId(selectedGlyphId);
       if (!session || !glyph) throw new Error("Expected resident variable glyph");
 
-      return Array.from(glyph.geometryAt(session.editor.designLocation).values);
+      return Array.from(glyph.geometryAt(session.editor.externalLocation).values);
     }, glyphId);
     expect(afterValues).not.toEqual(before.values);
 

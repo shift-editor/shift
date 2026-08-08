@@ -14,13 +14,14 @@ pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendR
 pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter};
 pub use font_source::{
     build_binary_atlas_page, variable_glyph_inputs, AffineTransform, AxisIndex, DesignspaceFont,
-    DirectoryAxisMapping, DirectoryGlyph, DirectoryInstance, DirectorySource, FontDirectory,
-    FontImporter, FontMetrics, FontReadError, FontSource, GlyphAnchor, GlyphComponent, GlyphDelta,
-    GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, GlyphProjection, GlyphShape,
-    GlyphShapeContour, GlyphShapePoint, GlyphSourceShape, GlyphVariation, GlyphsFont, OpenTypeFont,
-    OpenedFont, PointProvenance, ProjectedGlyph, SourceAtlasDescriptor, SourceAtlasError,
-    SourceAtlasPage, SourceIndex, TrueTypePointIndex, UfoFont, VariationAxis, VariationAxisKind,
-    VariationCoordinate, VariationLocation, VariationRegion, VariationSupport,
+    DirectoryGlyph, DirectoryInstance, DirectoryMapping, DirectoryMappingPoint, DirectorySource,
+    FontDirectory, FontImporter, FontMetrics, FontReadError, FontSource, GlyphAnchor,
+    GlyphComponent, GlyphDelta, GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind,
+    GlyphProjection, GlyphShape, GlyphShapeContour, GlyphShapePoint, GlyphSourceShape,
+    GlyphVariation, GlyphsFont, OpenTypeFont, OpenedFont, PointProvenance, ProjectedGlyph,
+    SourceAtlasDescriptor, SourceAtlasError, SourceAtlasPage, SourceIndex, TrueTypePointIndex,
+    UfoFont, VariationAxis, VariationAxisKind, VariationCoordinate, VariationLocation,
+    VariationRegion, VariationSupport,
 };
 pub use format::FontFormat;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};

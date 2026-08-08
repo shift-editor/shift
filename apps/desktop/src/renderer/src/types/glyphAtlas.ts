@@ -2,6 +2,7 @@ import type {
   GlyphId,
   SlugLayout,
   Axis,
+  AxisMappingBasis,
   SlugExactSource,
   SlugPreviewExtents,
   SlugWeightSet,
@@ -24,6 +25,7 @@ export interface GlyphAtlasPage {
   readonly glyphs: readonly GlyphAtlasGlyph[];
   readonly weightSets: readonly SlugWeightSet[];
   readonly weightAxes: readonly Axis[];
+  readonly weightMappingBases: readonly AxisMappingBasis[];
   readonly resolvedWeights: readonly number[] | null;
 }
 

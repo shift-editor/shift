@@ -23,7 +23,7 @@ fn main() -> Result<()> {
     let open_elapsed = open_started.elapsed();
     let roots = source
         .directory()
-        .glyphs
+        .glyphs()
         .iter()
         .map(|glyph| glyph.index)
         .collect::<Vec<GlyphIndex>>();

@@ -10,7 +10,10 @@ use fontdrasil::variations::{
     RoundingBehaviour, VariationModel, VariationRegion as FontdrasilVariationRegion,
 };
 
-use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location, SourceId};
+use crate::{
+    Axis, AxisId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphLayer, Location,
+    SourceId,
+};
 
 mod compatibility;
 mod metrics;
@@ -169,7 +172,7 @@ impl InterpolationBasis {
     /// This constructor is value-agnostic: glyph coordinates, metrics, and
     /// other interpolated domains remain separate source vectors.
     pub(crate) fn from_source_locations(
-        sources: &[(SourceId, Location)],
+        sources: &[(SourceId, DesignLocation)],
         axes: &[Axis],
     ) -> Option<Self> {
         let normalized_sources = sources
@@ -199,8 +202,8 @@ impl InterpolationBasis {
     ///
     /// Returns [`CoreError::AxisNotFound`] when `axes` omits an axis referenced
     /// by an interpolation region.
-    pub fn weights_at(&self, location: &Location, axes: &[Axis]) -> CoreResult<Vec<f64>> {
-        self.basis.evaluate(location, axes)
+    pub fn weights_at(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<Vec<f64>> {
+        self.basis.evaluate(location.as_untyped(), axes)
     }
 }
 
@@ -258,7 +261,7 @@ impl GlyphInterpolation {
     /// Returns [`CoreError::AxisNotFound`] if `axes` does not contain every
     /// support axis, or a glyph-value shape error if the interpolation model
     /// and its structural reference layer are inconsistent.
-    pub fn resolve(&self, location: &Location, axes: &[Axis]) -> CoreResult<GlyphLayer> {
+    pub fn resolve(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<GlyphLayer> {
         let mut layer = self.reference_layer.as_ref().clone();
         let values = self.values_at(location, axes)?;
         layer.apply_interpolation_values(&values)?;
@@ -267,7 +270,7 @@ impl GlyphInterpolation {
 
     fn values_at(
         &self,
-        location: &Location,
+        location: &DesignLocation,
         axes: &[Axis],
     ) -> CoreResult<GlyphInterpolationValues> {
         let value_count = self
@@ -443,7 +446,7 @@ fn interpolation_basis(
             return None;
         }
     }
-    let default_location = normalized_location(&Location::new(), axes);
+    let default_location = normalized_location(&DesignLocation::new(), axes);
     if let Entry::Vacant(entry) = points.entry(default_location) {
         entry.insert(virtual_default_coefficients(sources)?);
     }
@@ -517,7 +520,7 @@ fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> O
     Some(coefficients)
 }
 
-fn normalized_location(location: &Location, axes: &[Axis]) -> NormalizedLocation {
+fn normalized_location(location: &DesignLocation, axes: &[Axis]) -> NormalizedLocation {
     axes.iter()
         .filter_map(|axis| {
             let tag = Tag::from_str(axis.tag()).ok()?;
@@ -573,7 +576,7 @@ fn region_scalar(
 #[cfg(test)]
 mod tests {
     use crate::test_support::sample_variable_font;
-    use crate::{GlyphInterpolationValues, Location};
+    use crate::{DesignLocation, GlyphInterpolationValues};
 
     #[test]
     fn layer_values_roundtrip_without_changing_topology() {
@@ -659,7 +662,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let axis_id = font.axes()[0].id();
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         location.set(axis_id, 600.0);
 
         let layer = font
@@ -707,7 +710,9 @@ mod tests {
         let glyph = font.glyph_by_name("A").unwrap();
         let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
 
-        let error = interpolation.resolve(&Location::new(), &[]).unwrap_err();
+        let error = interpolation
+            .resolve(&DesignLocation::new(), &[])
+            .unwrap_err();
 
         assert!(matches!(error, crate::CoreError::AxisNotFound(_)));
     }

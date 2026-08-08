@@ -40,7 +40,7 @@ export const GlyphSection = () => {
           <div className="font-mono text-sm">{unicode}</div>
         </div>
         <div className="flex justify-center items-center gap-2">
-          <div className="contents" data-read-only-mutation={!sidebearingsEditable || undefined}>
+          <div className="contents">
             <EditableSidebarInput
               label="LSB"
               className="text-right"
@@ -54,7 +54,7 @@ export const GlyphSection = () => {
           <div className="px-2">
             <PlaceholderGlyph />
           </div>
-          <div className="contents" data-read-only-mutation={!sidebearingsEditable || undefined}>
+          <div className="contents">
             <EditableSidebarInput
               label="RSB"
               labelPosition="right"
@@ -67,7 +67,7 @@ export const GlyphSection = () => {
             />
           </div>
         </div>
-        <div className="mt-2" data-read-only-mutation={!xAdvance.hasLayer || undefined}>
+        <div className="mt-2">
           <EditableSidebarInput
             className="text-center"
             value={Math.round(xAdvance.xAdvance)}

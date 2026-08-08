@@ -11,7 +11,7 @@ import {
   interpolateSourceValues,
   interpolationWeights,
 } from "@/lib/interpolation/InterpolationBasis";
-import type { AxisLocation } from "@/types/variation";
+import type { DesignAxisLocation } from "@/types/variation";
 
 /**
  * Decodes a Rust-built numeric interpolation model into source-level metrics.
@@ -93,7 +93,7 @@ export class SourceMetricsInterpolation {
   }
 
   /** Resolves interpolated source metrics at one internal design-space location. */
-  resolve(location: AxisLocation, axes: readonly Axis[]): SourceMetrics | null {
+  resolve(location: DesignAxisLocation, axes: readonly Axis[]): SourceMetrics | null {
     const weights = interpolationWeights(this.#snapshot.basis, location, axes);
     const values = interpolateSourceValues(
       this.#snapshot.basis,

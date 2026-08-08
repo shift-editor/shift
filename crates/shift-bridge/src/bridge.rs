@@ -9,7 +9,6 @@ use shift_backends::{
   FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
   ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, VariationAxisKind,
-  VariationCoordinate, VariationLocation,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -237,8 +236,8 @@ fn wire_font_snapshot(
 ) -> BridgeResult<FontSnapshot> {
   let directory = source.directory();
   let metadata = FontMetadata {
-    family_name: directory.family_name.clone(),
-    style_name: directory.style_name.clone(),
+    family_name: directory.family_name().map(str::to_string),
+    style_name: directory.style_name().map(str::to_string),
     version_major: None,
     version_minor: None,
     copyright: None,
@@ -252,30 +251,25 @@ fn wire_font_snapshot(
     description: None,
     note: None,
   };
-  let metric_rows = [
-    (
-      WireMetricKind::Ascender,
-      "Ascender",
-      directory.metrics.ascender,
-    ),
-    (
-      WireMetricKind::CapHeight,
-      "Cap Height",
-      directory.metrics.units_per_em * 0.7,
-    ),
-    (
-      WireMetricKind::XHeight,
-      "x-Height",
-      directory.metrics.units_per_em * 0.5,
-    ),
-    (WireMetricKind::Baseline, "Baseline", 0.0),
-    (
-      WireMetricKind::Descender,
-      "Descender",
-      directory.metrics.descender,
-    ),
-  ];
-  let metric_definitions = metric_rows
+  let metric_rows = |metrics: &shift_backends::FontMetrics| {
+    [
+      (WireMetricKind::Ascender, "Ascender", metrics.ascender),
+      (
+        WireMetricKind::CapHeight,
+        "Cap Height",
+        metrics.cap_height.unwrap_or(metrics.units_per_em * 0.7),
+      ),
+      (
+        WireMetricKind::XHeight,
+        "x-Height",
+        metrics.x_height.unwrap_or(metrics.units_per_em * 0.5),
+      ),
+      (WireMetricKind::Baseline, "Baseline", 0.0),
+      (WireMetricKind::Descender, "Descender", metrics.descender),
+    ]
+  };
+  let default_metric_rows = metric_rows(&directory.metrics());
+  let metric_definitions = default_metric_rows
     .iter()
     .zip(identity.metric_ids.iter())
     .map(|((kind, name, _), id)| MetricDefinition {
@@ -284,8 +278,96 @@ fn wire_font_snapshot(
       name: (*name).into(),
     })
     .collect::<Vec<_>>();
-  let font_axes = directory
-    .axes
+  let font_axes = identity.font_axes.to_vec();
+  let axes = font_axes.iter().map(Axis::from).collect::<Vec<_>>();
+  let sources = directory
+    .sources()
+    .iter()
+    .zip(identity.source_ids.iter())
+    .map(|(source, id)| {
+      let values = identity
+        .axis_ids
+        .iter()
+        .cloned()
+        .zip(source.location.iter().copied())
+        .collect::<HashMap<_, _>>();
+      Source {
+        id: id.clone(),
+        name: source.name.clone(),
+        location: WireLocation { values },
+        filename: source.filename.clone(),
+        metric_values: metric_rows(&source.metrics)
+          .iter()
+          .zip(identity.metric_ids.iter())
+          .map(|((_, _, position), metric_id)| SourceMetricValue {
+            metric_id: metric_id.clone(),
+            position: *position,
+            overshoot: 0.0,
+          })
+          .collect(),
+        italic_angle: source.metrics.italic_angle,
+        line_gap: Some(source.metrics.line_gap),
+        underline_position: source.metrics.underline_position,
+        underline_thickness: source.metrics.underline_thickness,
+      }
+    })
+    .collect::<Vec<_>>();
+  let font_axis_mappings = source_axis_mappings(directory, identity)?;
+  let axis_mappings = font_axis_mappings
+    .iter()
+    .map(AxisMapping::from)
+    .collect::<Vec<_>>();
+  let axis_mapping_bases = identity
+    .mapping_bases
+    .iter()
+    .map(AxisMappingBasis::from)
+    .collect();
+  let named_instances = directory
+    .instances()
+    .iter()
+    .zip(identity.instance_ids.iter())
+    .map(|(instance, id)| NamedInstance {
+      id: id.clone(),
+      name: instance.name.clone(),
+      location: WireLocation {
+        values: identity
+          .axis_ids
+          .iter()
+          .cloned()
+          .zip(instance.location.iter().copied())
+          .collect(),
+      },
+      postscript_name: instance.postscript_name.clone(),
+    })
+    .collect();
+  Ok(FontSnapshot {
+    metadata,
+    metrics: FontMetrics {
+      units_per_em: directory.metrics().units_per_em,
+    },
+    metric_definitions,
+    source_metrics_interpolation: None,
+    glyphs: directory
+      .glyphs()
+      .iter()
+      .zip(identity.glyph_ids.iter())
+      .map(|(glyph, id)| GlyphEntry {
+        id: id.clone(),
+        name: glyph.name.clone().into(),
+        unicodes: glyph.unicodes.to_vec(),
+      })
+      .collect(),
+    sources,
+    axes,
+    axis_mappings,
+    axis_mapping_bases,
+    named_instances,
+  })
+}
+
+fn source_font_axes(directory: &FontDirectory, identity: &SourceIdentity) -> Vec<FontAxis> {
+  directory
+    .axes()
     .iter()
     .zip(identity.axis_ids.iter())
     .map(|(axis, id)| {
@@ -313,143 +395,100 @@ fn wire_font_snapshot(
       mapped.set_hidden(axis.hidden);
       mapped
     })
-    .collect::<Vec<_>>();
-  let axes = font_axes.iter().map(Axis::from).collect::<Vec<_>>();
-  let sources = directory
-    .sources
+    .collect()
+}
+
+fn source_axis_mappings(
+  directory: &FontDirectory,
+  identity: &SourceIdentity,
+) -> BridgeResult<Vec<FontAxisMapping>> {
+  directory
+    .mappings()
     .iter()
-    .zip(identity.source_ids.iter())
-    .map(|(source, id)| {
-      let values = identity
-        .axis_ids
+    .zip(identity.mapping_ids.iter())
+    .map(|(mapping, mapping_id)| {
+      let input_axis_ids = mapping
+        .input_axes
         .iter()
-        .cloned()
-        .zip(source.location.iter().copied())
-        .collect::<HashMap<_, _>>();
-      Source {
-        id: id.clone(),
-        name: source.name.clone(),
-        location: WireLocation { values },
-        filename: source.filename.clone(),
-        metric_values: metric_rows
-          .iter()
-          .zip(identity.metric_ids.iter())
-          .map(|((_, _, position), metric_id)| SourceMetricValue {
-            metric_id: metric_id.clone(),
-            position: *position,
-            overshoot: 0.0,
-          })
-          .collect(),
-        italic_angle: None,
-        line_gap: Some(directory.metrics.line_gap),
-        underline_position: None,
-        underline_thickness: None,
-      }
+        .map(|axis| source_axis_id(identity, *axis))
+        .collect::<BridgeResult<Vec<_>>>()?;
+      let output_axis_ids = mapping
+        .output_axes
+        .iter()
+        .map(|axis| source_axis_id(identity, *axis))
+        .collect::<BridgeResult<Vec<_>>>()?;
+      let points = mapping
+        .points
+        .iter()
+        .map(|point| FontAxisMappingPoint {
+          description: point.description.clone(),
+          input: FontLocation::from_map(
+            input_axis_ids
+              .iter()
+              .cloned()
+              .zip(point.input.iter().copied())
+              .collect(),
+          ),
+          output: FontLocation::from_map(
+            output_axis_ids
+              .iter()
+              .cloned()
+              .zip(point.output.iter().copied())
+              .collect(),
+          ),
+        })
+        .collect();
+      let mut mapped = FontAxisMapping::with_id(
+        mapping_id.clone(),
+        mapping.name.clone(),
+        input_axis_ids,
+        output_axis_ids,
+        points,
+      );
+      mapped.set_description(mapping.description.clone());
+      Ok(mapped)
     })
-    .collect::<Vec<_>>();
-  let font_axis_mappings = directory
-    .axis_mappings
-    .iter()
-    .map(|mapping| {
-      let axis_id = identity
-        .axis_ids
-        .get(mapping.axis.to_usize())
-        .cloned()
-        .ok_or_else(|| BridgeError::InvalidInput {
-          kind: "source axis mapping",
-          value: mapping.axis.to_u32().to_string(),
-        })?;
-      Ok(FontAxisMapping::with_id(
-        AxisMappingId::new(),
-        format!("{} mapping", directory.axes[mapping.axis.to_usize()].name),
-        vec![axis_id.clone()],
-        vec![axis_id.clone()],
-        mapping
-          .points
-          .iter()
-          .map(|(input, output)| FontAxisMappingPoint {
-            description: None,
-            input: FontLocation::from_map(HashMap::from([(axis_id.clone(), *input)])),
-            output: FontLocation::from_map(HashMap::from([(axis_id.clone(), *output)])),
-          })
-          .collect(),
-      ))
+    .collect()
+}
+
+fn source_axis_id(identity: &SourceIdentity, axis: SourceAxisIndex) -> BridgeResult<AxisId> {
+  identity
+    .axis_ids
+    .get(axis.to_usize())
+    .cloned()
+    .ok_or_else(|| BridgeError::InvalidInput {
+      kind: "source axis mapping",
+      value: axis.to_u32().to_string(),
     })
-    .collect::<BridgeResult<Vec<_>>>()?;
-  let axis_mappings = font_axis_mappings
-    .iter()
-    .map(AxisMapping::from)
-    .collect::<Vec<_>>();
-  let axis_mapping_bases = font_axis_mappings
-    .iter()
-    .map(|mapping| shift_font::AxisMappingBasis::try_from((mapping, font_axes.as_slice())))
-    .collect::<std::result::Result<Vec<_>, _>>()?
-    .iter()
-    .map(AxisMappingBasis::from)
-    .collect();
-  let named_instances = directory
-    .instances
-    .iter()
-    .zip(identity.instance_ids.iter())
-    .map(|(instance, id)| NamedInstance {
-      id: id.clone(),
-      name: instance.name.clone(),
-      location: WireLocation {
-        values: identity
-          .axis_ids
-          .iter()
-          .cloned()
-          .zip(instance.location.iter().copied())
-          .collect(),
-      },
-      postscript_name: instance.postscript_name.clone(),
-    })
-    .collect();
-  Ok(FontSnapshot {
-    metadata,
-    metrics: FontMetrics {
-      units_per_em: directory.metrics.units_per_em,
-    },
-    metric_definitions,
-    source_metrics_interpolation: None,
-    glyphs: directory
-      .glyphs
-      .iter()
-      .zip(identity.glyph_ids.iter())
-      .map(|(glyph, id)| GlyphEntry {
-        id: id.clone(),
-        name: glyph.name.clone().into(),
-        unicodes: glyph.unicodes.to_vec(),
-      })
-      .collect(),
-    sources,
-    axes,
-    axis_mappings,
-    axis_mapping_bases,
-    named_instances,
-  })
 }
 
 fn source_location(
   directory: &FontDirectory,
+  identity: &SourceIdentity,
   coordinates: Vec<f64>,
-) -> BridgeResult<VariationLocation> {
-  if coordinates.len() != directory.axes.len() {
+) -> BridgeResult<Vec<f64>> {
+  if coordinates.len() != directory.axes().len() {
     return Err(BridgeError::InvalidInput {
       kind: "catalog location coordinate count",
       value: coordinates.len().to_string(),
     });
   }
 
-  let source_coordinates = coordinates
-    .into_iter()
-    .enumerate()
-    .map(|(index, value)| VariationCoordinate {
-      axis: SourceAxisIndex::new(index as u32),
-      value,
-    })
-    .collect::<Vec<_>>();
-  Ok(directory.location(&source_coordinates)?)
+  let external = shift_font::ExternalLocation::from_map(
+    identity.axis_ids.iter().cloned().zip(coordinates).collect(),
+  );
+  let design = shift_font::ir::variation::map_location_with_bases(
+    &external,
+    &identity.font_axes,
+    &identity.mapping_bases,
+  )?;
+  Ok(
+    identity
+      .font_axes
+      .iter()
+      .map(|axis| design.get(&axis.id()).unwrap_or(axis.default()))
+      .collect(),
+  )
 }
 
 fn wire_source_glyph(
@@ -646,7 +685,7 @@ fn wire_source_shape(
     .map(|(index, component)| {
       let base_glyph_id = identity.glyph_id(component.glyph)?;
       let base_glyph_name = directory
-        .glyphs
+        .glyphs()
         .get(component.glyph.to_usize())
         .ok_or_else(|| BridgeError::InvalidInput {
           kind: "source component glyph",
@@ -760,13 +799,13 @@ fn napi_source_atlas_page(
   page_index: u32,
   atlas: &VariableAtlas,
   descriptor: &SourceAtlasDescriptor,
-  location: &shift_backends::VariationLocation,
+  location: &[f64],
   layout: VariableLayout,
   identity: &SourceIdentity,
 ) -> BridgeResult<NapiCatalogAtlasPage> {
   let statistics = atlas.statistics();
   let weights = descriptor
-    .weights(location.coordinates())?
+    .design_weights(location)?
     .into_iter()
     .map(f64::from)
     .collect::<Vec<_>>();
@@ -1020,13 +1059,16 @@ struct SourceIdentity {
   glyph_indices: HashMap<GlyphId, GlyphIndex>,
   axis_ids: Box<[AxisId]>,
   source_ids: Box<[SourceId]>,
+  mapping_ids: Box<[AxisMappingId]>,
   instance_ids: Box<[NamedInstanceId]>,
   metric_ids: Box<[MetricId]>,
+  font_axes: Box<[FontAxis]>,
+  mapping_bases: Box<[shift_font::AxisMappingBasis]>,
 }
 
 impl SourceIdentity {
-  fn new(directory: &FontDirectory) -> Self {
-    let glyph_ids = (0..directory.glyphs.len())
+  fn new(directory: &FontDirectory) -> BridgeResult<Self> {
+    let glyph_ids = (0..directory.glyphs().len())
       .map(|_| GlyphId::new())
       .collect::<Vec<_>>()
       .into_boxed_slice();
@@ -1036,18 +1078,22 @@ impl SourceIdentity {
       .enumerate()
       .map(|(index, glyph_id)| (glyph_id, GlyphIndex::new(index as u32)))
       .collect();
-    Self {
+    let mut identity = Self {
       glyph_ids,
       glyph_indices,
-      axis_ids: (0..directory.axes.len())
+      axis_ids: (0..directory.axes().len())
         .map(|_| AxisId::new())
         .collect::<Vec<_>>()
         .into_boxed_slice(),
-      source_ids: (0..directory.sources.len())
+      source_ids: (0..directory.sources().len())
         .map(|_| SourceId::new())
         .collect::<Vec<_>>()
         .into_boxed_slice(),
-      instance_ids: (0..directory.instances.len())
+      mapping_ids: (0..directory.mappings().len())
+        .map(|_| AxisMappingId::new())
+        .collect::<Vec<_>>()
+        .into_boxed_slice(),
+      instance_ids: (0..directory.instances().len())
         .map(|_| NamedInstanceId::new())
         .collect::<Vec<_>>()
         .into_boxed_slice(),
@@ -1055,7 +1101,16 @@ impl SourceIdentity {
         .map(|_| MetricId::new())
         .collect::<Vec<_>>()
         .into_boxed_slice(),
-    }
+      font_axes: Box::new([]),
+      mapping_bases: Box::new([]),
+    };
+    identity.font_axes = source_font_axes(directory, &identity).into_boxed_slice();
+    identity.mapping_bases = source_axis_mappings(directory, &identity)?
+      .iter()
+      .map(|mapping| shift_font::AxisMappingBasis::try_from((mapping, identity.font_axes.as_ref())))
+      .collect::<std::result::Result<Vec<_>, _>>()?
+      .into_boxed_slice();
+    Ok(identity)
   }
 
   fn glyph_id(&self, index: GlyphIndex) -> BridgeResult<GlyphId> {
@@ -1184,7 +1239,7 @@ impl Bridge {
   #[napi]
   pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiFontSnapshot> {
     let source = FontLoader::new().open_source(Path::new(&path))?;
-    let identity = SourceIdentity::new(source.directory());
+    let identity = SourceIdentity::new(source.directory())?;
     let snapshot = wire_font_snapshot(&source, &identity)?;
     self.workspace = None;
     self.font_source = Some(source);
@@ -1511,7 +1566,7 @@ impl Bridge {
       .iter()
       .map(|glyph_id| parse::<GlyphId>(glyph_id))
       .collect::<errors::Result<Vec<_>>>()?;
-    let location = map_location(location)?;
+    let location = shift_font::DesignLocation::from_untyped(map_location(location)?);
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let mut projection = font.projection(&location);
     let previews = projection
@@ -1734,8 +1789,8 @@ impl Bridge {
     let generation = self.slug_generation;
     let (atlas, descriptor, location, layout) = {
       let source = self.font_source()?;
-      let location = source_location(source.directory(), coordinates)?;
       let identity = self.source_identity()?;
+      let location = source_location(source.directory(), identity, coordinates)?;
       let roots = glyph_ids
         .iter()
         .map(|glyph_id| parse::<GlyphId>(glyph_id))
@@ -1799,7 +1854,8 @@ impl Bridge {
     coordinates: Vec<f64>,
   ) -> errors::Result<Vec<NapiCatalogAtlasWeights>> {
     let source = self.font_source()?;
-    let location = source_location(source.directory(), coordinates)?;
+    let identity = self.source_identity()?;
+    let location = source_location(source.directory(), identity, coordinates)?;
 
     self
       .source_atlas_descriptors
@@ -1808,7 +1864,7 @@ impl Bridge {
         Ok(NapiCatalogAtlasWeights {
           page_index: *page_index,
           weights: descriptor
-            .weights(location.coordinates())?
+            .design_weights(&location)?
             .into_iter()
             .map(f64::from)
             .collect(),
@@ -1903,9 +1959,9 @@ impl Bridge {
 
   #[napi]
   pub fn map_location(&self, location: NapiLocation) -> errors::Result<NapiLocation> {
-    let external = map_location(location)?;
+    let external = shift_font::ExternalLocation::from_untyped(map_location(location)?);
     let mapped = self.font()?.mapped_location(&external)?;
-    Ok(shift_wire::Location::from(&mapped).into())
+    Ok(shift_wire::Location::from(mapped.as_untyped()).into())
   }
 
   #[napi]
@@ -2269,7 +2325,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
       Ok(FontIntent::CreateSource {
         source_id: parse::<SourceId>(&payload.source_id)?,
         name: payload.name,
-        location: map_location(payload.location)?,
+        location: shift_font::DesignLocation::from_untyped(map_location(payload.location)?),
       })
     }
     "updateSource" => {
@@ -2289,7 +2345,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
       Ok(FontIntent::UpdateSource {
         source_id: parse::<SourceId>(&payload.source_id)?,
         name: payload.name,
-        location: map_location(payload.location)?,
+        location: shift_font::DesignLocation::from_untyped(map_location(payload.location)?),
         metric_values,
         italic_angle: payload.italic_angle,
         line_gap: payload.line_gap,
@@ -2476,7 +2532,7 @@ fn map_named_instance(instance: NapiNamedInstance) -> errors::Result<FontNamedIn
   Ok(FontNamedInstance::with_id(
     parse::<NamedInstanceId>(&instance.id)?,
     instance.name,
-    map_location(instance.location)?,
+    shift_font::ExternalLocation::from_untyped(map_location(instance.location)?),
     instance.postscript_name,
   ))
 }

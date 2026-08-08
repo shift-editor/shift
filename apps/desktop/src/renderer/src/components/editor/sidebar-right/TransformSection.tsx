@@ -4,7 +4,6 @@ import { EditableSidebarInput, type EditableSidebarInputHandle } from "./Editabl
 import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { useSignalState } from "@/lib/signals";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
@@ -93,8 +92,6 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 
 export const TransformSection = () => {
   const editor = useEditor();
-  const sourceId = useActiveSourceId();
-  const scene = useSignalState(editor.scene.cell);
   const { anchor } = useTransformOrigin();
   const selection = useSignalState(editor.selection.stateCell);
   const selectedPointIds = useMemo(() => selection.ids.filter(isPointId), [selection]);
@@ -103,17 +100,10 @@ export const TransformSection = () => {
 
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
-  const layer = useMemo(() => {
-    if (!sourceId) return null;
-
-    const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
-    if (glyphNodes.length !== 1) return null;
-
-    const [node] = glyphNodes;
-    if (!node) return null;
-
-    return editor.glyphForId(node.glyphId)?.layerForSource(sourceId) ?? null;
-  }, [editor, scene, sourceId]);
+  const layer = useMemo(
+    () => editor.layerForGeometry({ points: selectedPointIds }),
+    [editor, selectedPointIds],
+  );
 
   useEffect(() => {
     if (selectedPointIds.length === 0) {
@@ -128,7 +118,8 @@ export const TransformSection = () => {
     yRef.current?.setValue(Math.round(selectionBounds.min.y));
   }, [selectedPointIds, selectionBounds]);
 
-  const canDistribute = selectedPointIds.length >= 3;
+  const editable = layer !== null;
+  const canDistribute = editable && selectedPointIds.length >= 3;
 
   const handleAlign = useCallback(
     (alignment: AlignmentType) => {
@@ -209,11 +200,13 @@ export const TransformSection = () => {
           <EditableSidebarInput
             ref={xRef}
             label="X"
+            disabled={!editable}
             onValueChange={(v) => handlePositionChange("x", v)}
           />
           <EditableSidebarInput
             ref={yRef}
             label="Y"
+            disabled={!editable}
             onValueChange={(v) => handlePositionChange("y", v)}
           />
         </div>
@@ -227,13 +220,14 @@ export const TransformSection = () => {
             value={rotation}
             suffix="°"
             defaultValue={0}
+            disabled={!editable}
             onValueChange={handleRotate}
             icon={<RotateIcon className="w-5 h-5" />}
           />
           <div className="flex w-full items-center justify-start gap-1">
-            <IconButton icon={RotateCwIcon} onClick={handleRotate90} />
-            <IconButton icon={FlipHIcon} onClick={handleFlipH} />
-            <IconButton icon={FlipVIcon} onClick={handleFlipV} />
+            <IconButton icon={RotateCwIcon} disabled={!editable} onClick={handleRotate90} />
+            <IconButton icon={FlipHIcon} disabled={!editable} onClick={handleFlipH} />
+            <IconButton icon={FlipVIcon} disabled={!editable} onClick={handleFlipV} />
           </div>
         </div>
       </div>

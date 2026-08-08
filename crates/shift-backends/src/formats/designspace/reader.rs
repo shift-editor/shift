@@ -7,7 +7,8 @@ use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use shift_font::{
-    Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, Font, Location, NamedInstance,
+    Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, DesignLocation, ExternalLocation,
+    Font, Location, NamedInstance,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -86,8 +87,8 @@ fn external_location_from_dimensions(
     dimensions: &[norad::designspace::Dimension],
     doc: &DesignSpaceDocument,
     axes: &[Axis],
-) -> DesignspaceResult<Location> {
-    let mut location = Location::new();
+) -> DesignspaceResult<ExternalLocation> {
+    let mut location = ExternalLocation::new();
     for ds_axis in &doc.axes {
         let Some(axis) = axes.iter().find(|axis| axis.tag() == ds_axis.tag) else {
             continue;
@@ -410,8 +411,8 @@ pub(super) fn location_from_dimensions(
     dimensions: &[norad::designspace::Dimension],
     doc: &DesignSpaceDocument,
     axes: &[Axis],
-) -> Location {
-    let mut location = Location::new();
+) -> DesignLocation {
+    let mut location = DesignLocation::new();
     for ds_axis in &doc.axes {
         let Some(axis) = axes.iter().find(|candidate| candidate.tag() == ds_axis.tag) else {
             continue;

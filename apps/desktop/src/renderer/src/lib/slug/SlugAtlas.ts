@@ -1,6 +1,6 @@
 import type { GlyphId, SlugSection, SourceId } from "@shift/types";
 import { interpolationWeights } from "@/lib/interpolation/InterpolationBasis";
-import type { AxisLocation } from "@/types/variation";
+import { externalAxisLocationFromRecord, mapAxisLocation } from "@/lib/variation/location";
 import type { CatalogLocation } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
 import type { GlyphAtlasGlyph, GlyphAtlasPage } from "@/types/glyphAtlas";
@@ -155,13 +155,18 @@ export class SlugAtlas {
         `resident Slug page ${this.pageIndex} received ${coordinates.length} coordinates for ${axes.length} axes`,
       );
     }
-    const location: AxisLocation = new Map(
-      axes.map((axis, index) => [axis.id, coordinates[index] ?? axis.default]),
+    const externalLocation = externalAxisLocationFromRecord(
+      Object.fromEntries(axes.map((axis, index) => [axis.id, coordinates[index] ?? axis.default])),
+    );
+    const designLocation = mapAxisLocation(
+      externalLocation,
+      axes,
+      this.#descriptor.weightMappingBases,
     );
     const weights = new Float32Array(this.#descriptor.weightCount);
     weights[0] = 1;
     for (const set of this.#descriptor.weightSets) {
-      const basisWeights = interpolationWeights(set.basis, location, axes);
+      const basisWeights = interpolationWeights(set.basis, designLocation, axes);
       for (let sourceIndex = 0; sourceIndex < set.sourceWeightIndices.length; sourceIndex += 1) {
         const weightIndex = set.sourceWeightIndices[sourceIndex];
         if (weightIndex === undefined || weightIndex >= weights.length) {

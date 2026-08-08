@@ -60,6 +60,7 @@ hooks/
 - `VariationBasis` -- normalized supports and numeric vectors compiled in Rust and evaluated locally without bridge traffic.
 - `InterpolationBasis` -- real source identities plus a `VariationBasis` producing source contribution weights.
 - `AxisMappingBasis` -- mapping input/output identities plus a `VariationBasis` producing normalized output adjustments.
+- `ExternalAxisLocation` / `DesignAxisLocation` -- nominally distinct renderer maps. `mapAxisLocation` is the one-way external-to-design boundary; source matching and interpolation receive only the appropriate space.
 - `GlyphVariation` -- imported fallback-relative numeric variation with no fabricated authored source identities.
 - `GlyphRenderModel` -- internal reactive render cache bound to a location signal. Its contours, bounds, paths, advance, and sidebearings describe the complete displayed Glyph; root point/segment lookup remains root-owned.
 - `ComponentGlyph` -- one ordered component occurrence with a full `ComponentId[]` ancestry, current local/resolved transforms, direct contours, children, and bounds.

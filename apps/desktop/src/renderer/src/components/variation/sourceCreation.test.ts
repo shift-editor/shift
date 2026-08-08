@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Axis, AxisId, Source } from "@shift/types";
-import { mintAxisId, mintAxisLabelId, mintSourceId } from "@shift/types";
-import { axisLocationFromLocation } from "@/lib/variation/location";
+import type { Axis, AxisId, AxisMappingBasis, Source } from "@shift/types";
+import { mintAxisId, mintAxisLabelId, mintAxisMappingId, mintSourceId } from "@shift/types";
+import { externalAxisLocationFromLocation } from "@/lib/variation/location";
 import { sourceCreationIssue, sourceLocation, suggestedSourceName } from "./sourceCreation";
 
 function weightAxis(): Axis {
@@ -39,9 +39,7 @@ describe("source creation", () => {
   it("parses finite axis fields and rejects incomplete numeric input", () => {
     const axis = weightAxis();
 
-    expect(sourceLocation([axis], { [axis.id]: "550" })).toEqual({
-      values: { [axis.id]: 550 },
-    });
+    expect([...(sourceLocation([axis], { [axis.id]: "550" }) ?? [])]).toEqual([[axis.id, 550]]);
     expect(sourceLocation([axis], { [axis.id]: "not a number" })).toBeNull();
     expect(sourceLocation([axis], { [axis.id]: "" })).toBeNull();
   });
@@ -50,17 +48,39 @@ describe("source creation", () => {
     const axis = weightAxis();
     const regular = source("Regular", {} as Record<AxisId, number>);
 
-    expect(sourceCreationIssue("Book", { [axis.id]: "400" }, [axis], [regular])).toEqual({
+    expect(sourceCreationIssue("Book", { [axis.id]: "400" }, [axis], [regular], [])).toEqual({
       kind: "location",
       sourceId: regular.id,
       message: "Regular already exists at this location",
     });
   });
 
+  it("maps external coordinates before checking duplicate design locations", () => {
+    const axis = weightAxis();
+    const black = source("Black", { [axis.id]: 800 } as Record<AxisId, number>);
+    const mapping: AxisMappingBasis = {
+      mappingId: mintAxisMappingId(),
+      inputAxisIds: [axis.id],
+      outputAxisIds: [axis.id],
+      basis: {
+        deltas: [
+          {
+            region: [{ axisId: axis.id, lower: 0, peak: 1, upper: 1 }],
+            values: Float64Array.of(-0.2),
+          },
+        ],
+      },
+    };
+
+    expect(
+      sourceCreationIssue("Book", { [axis.id]: "900" }, [axis], [black], [mapping]),
+    ).toMatchObject({ kind: "location", sourceId: black.id });
+  });
+
   it("targets the axis whose coordinate is invalid", () => {
     const axis = weightAxis();
 
-    expect(sourceCreationIssue("Book", { [axis.id]: "" }, [axis], [])).toEqual({
+    expect(sourceCreationIssue("Book", { [axis.id]: "" }, [axis], [], [])).toEqual({
       kind: "axis",
       axisId: axis.id,
       message: "Enter a number for Weight",
@@ -70,7 +90,7 @@ describe("source creation", () => {
   it("targets invalid source names independently of location", () => {
     const axis = weightAxis();
 
-    expect(sourceCreationIssue("", { [axis.id]: "400" }, [axis], [])).toEqual({
+    expect(sourceCreationIssue("", { [axis.id]: "400" }, [axis], [], [])).toEqual({
       kind: "name",
       message: "Enter a source name",
     });
@@ -81,7 +101,11 @@ describe("source creation", () => {
     const location = { values: { [axis.id]: 700 } as Record<AxisId, number> };
     const bold = source("Bold", { [axis.id]: 800 } as Record<AxisId, number>);
 
-    expect(suggestedSourceName([axis], [], axisLocationFromLocation(location))).toBe("Bold");
-    expect(suggestedSourceName([axis], [bold], axisLocationFromLocation(location))).toBe("Bold 2");
+    expect(suggestedSourceName([axis], [], externalAxisLocationFromLocation(location))).toBe(
+      "Bold",
+    );
+    expect(suggestedSourceName([axis], [bold], externalAxisLocationFromLocation(location))).toBe(
+      "Bold 2",
+    );
   });
 });

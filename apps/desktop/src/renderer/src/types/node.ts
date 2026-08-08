@@ -53,7 +53,7 @@ export interface GlyphNode extends Node {
  * @remarks
  * A text run node is the movable proofing container for text-domain layout. It
  * points at document-scoped run content and carries placement styling such as
- * size and design location.
+ * size and external location.
  */
 export interface TextRunNode extends Node {
   readonly kind: "textRun";
@@ -65,7 +65,7 @@ export interface TextRunNode extends Node {
   readonly size: number;
 
   /** Pinned variation location used when shaping and drawing this placement. */
-  readonly designLocation: Location;
+  readonly externalLocation: Location;
 }
 
 /** Represents every scene node kind known to this build. */

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Axis, AxisId, InterpolationBasis, SourceId } from "@shift/types";
 import { mintAxisId, mintSourceId } from "@shift/types";
-import { axisLocationFromLocation } from "@/lib/variation/location";
+import { designAxisLocationFromLocation } from "@/lib/variation/location";
 import { interpolateSourceValues, interpolationWeights } from "./InterpolationBasis";
 
 interface ParityMaster {
@@ -24,17 +24,17 @@ describe("InterpolationBasis", () => {
 
     const regular = interpolationWeights(
       basis,
-      axisLocationFromLocation({ values: { [axis.id]: 400 } }),
+      designAxisLocationFromLocation({ values: { [axis.id]: 400 } }),
       [axis],
     );
     const halfway = interpolationWeights(
       basis,
-      axisLocationFromLocation({ values: { [axis.id]: 650 } }),
+      designAxisLocationFromLocation({ values: { [axis.id]: 650 } }),
       [axis],
     );
     const bold = interpolationWeights(
       basis,
-      axisLocationFromLocation({ values: { [axis.id]: 900 } }),
+      designAxisLocationFromLocation({ values: { [axis.id]: 900 } }),
       [axis],
     );
 
@@ -48,7 +48,7 @@ describe("InterpolationBasis", () => {
     const regularId = mintSourceId();
     const boldId = mintSourceId();
     const basis = twoSourceBasis(axis.id, regularId, boldId);
-    const location = axisLocationFromLocation({ values: { [axis.id]: 650 } });
+    const location = designAxisLocationFromLocation({ values: { [axis.id]: 650 } });
     const weights = interpolationWeights(basis, location, [axis]);
 
     const values = interpolateSourceValues(basis, weights, (sourceId) =>
@@ -68,7 +68,7 @@ describe("InterpolationBasis", () => {
     const weight = continuousAxis(mintAxisId(), "wght", 0, 0, 1000);
     const sourceIds = fixture.masters.map(() => mintSourceId());
     const basis = twoAxisBasis(width.id, weight.id, sourceIds);
-    const location = axisLocationFromLocation({
+    const location = designAxisLocationFromLocation({
       values: { [width.id]: 500, [weight.id]: 500 },
     });
     const weights = interpolationWeights(basis, location, [width, weight]);

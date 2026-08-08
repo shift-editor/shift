@@ -1,10 +1,9 @@
-import type { Axis, InterpolationSupport, VariationBasis } from "@shift/types";
-import type { AxisLocation } from "@/types/variation";
+import type { Axis, AxisId, InterpolationSupport, VariationBasis } from "@shift/types";
 
 /** Evaluates a Rust/Fontdrasil-compiled numeric variation basis. */
 export function evaluateVariationBasis(
   basis: VariationBasis,
-  location: AxisLocation,
+  location: ReadonlyMap<AxisId, number>,
   axes: readonly Axis[],
 ): Float64Array {
   const valueCount = basis.deltas[0]?.values.length ?? 0;
@@ -25,7 +24,7 @@ export function evaluateVariationBasis(
 
 function regionScalar(
   region: readonly InterpolationSupport[],
-  location: AxisLocation,
+  location: ReadonlyMap<AxisId, number>,
   axesById: ReadonlyMap<Axis["id"], Axis>,
 ): number {
   let scalar = 1;

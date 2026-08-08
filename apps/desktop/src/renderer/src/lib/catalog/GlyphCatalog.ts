@@ -2,7 +2,7 @@ import type { GlyphInfo } from "@shift/glyph-info";
 import type { Axis, CatalogAxis, CatalogMetrics, GlyphId, GlyphName, SourceId } from "@shift/types";
 import { computed, type ComputedSignal, type Signal } from "@/lib/signals";
 import type { Editor } from "@/lib/editor/Editor";
-import type { AxisLocation } from "@/types/variation";
+import { externalAxisLocationFromRecord } from "@/lib/variation/location";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
 import { RenderGlyph } from "@/lib/model/RenderGlyph";
@@ -38,14 +38,17 @@ export class GlyphCatalog {
     });
     this.locationCell = computed(
       () => {
-        const location = editor.designLocationCell.value;
+        const location = editor.externalLocationCell.value;
         return font.axesCell.value.map((axis) => location.get(axis.id) ?? axis.default);
       },
       { name: "catalog.location" },
     );
     this.metricsCell = computed(
       () => {
-        const metrics = font.metricsAtLocation(editor.designLocationCell.value);
+        const activeSourceId = editor.activeSourceIdCell.value;
+        const metrics = activeSourceId
+          ? font.metricsForSource(activeSourceId)
+          : font.metricsAtLocation(editor.externalLocationCell.value);
         return {
           unitsPerEm: metrics.unitsPerEm,
           ascender: metrics.ascender,
@@ -61,8 +64,7 @@ export class GlyphCatalog {
     this.styleNameCell = computed(() => font.metadataCell.value.styleName ?? null, {
       name: "catalog.styleName",
     });
-    const sourceCell = font.sourceAtCell(editor.designLocationCell);
-    this.sourceIdCell = computed(() => sourceCell.value?.id ?? null, {
+    this.sourceIdCell = computed(() => editor.activeSourceIdCell.value, {
       name: "catalog.sourceId",
     });
     this.invalidGlyphIdsCell = font.invalidGlyphIdsCell;
@@ -74,14 +76,15 @@ export class GlyphCatalog {
       this.metricsCell,
       this.familyNameCell,
       this.styleNameCell,
-      sourceCell,
       this.sourceIdCell,
     ];
   }
 
   async openGlyph(glyphId: GlyphId): Promise<RenderGlyph> {
     const glyph = await this.#editor.font.loadGlyph(glyphId);
-    return new RenderGlyph(glyph.renderModelAt(this.#editor.designLocationCell));
+    return new RenderGlyph(
+      glyph.renderModelAt(this.#editor.externalLocationCell, this.#editor.activeSourceIdCell),
+    );
   }
 
   async setLocation(location: CatalogLocation): Promise<void> {
@@ -90,10 +93,10 @@ export class GlyphCatalog {
       throw new Error(`catalog received ${location.length} coordinates for ${axes.length} axes`);
     }
 
-    const axisLocation: AxisLocation = new Map(
-      axes.map((axis, index) => [axis.id, location[index] ?? axis.default]),
+    const axisLocation = externalAxisLocationFromRecord(
+      Object.fromEntries(axes.map((axis, index) => [axis.id, location[index] ?? axis.default])),
     );
-    this.#editor.setDesignLocation(axisLocation);
+    this.#editor.setExternalLocation(axisLocation);
   }
 
   dispose(): void {

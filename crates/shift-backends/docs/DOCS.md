@@ -6,6 +6,8 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Backends never expose format-specific types (`norad`, `glyphs-reader`) to callers. Authored conversion returns `shift-font` values; retained source reading returns a source-neutral `FontDirectory` plus location-independent `ProjectedGlyph` values without constructing authored objects. WHY: editing needs one authored model, while read-only inspection must not eagerly convert a complete source.
 
+**Architecture Invariant:** `FontDirectory::from_font` is the sole projection from a format's canonical `shift-font::Font` header into retained metadata. Format adapters supply only ordered glyph names/Unicode values and retained geometry handles. Directory source order must match the source IDs used by retained layers, and sparse mapping coordinates are completed with the same axis-default/base semantics as the authored mapping model. WHY: separate format-specific directory builders silently lose metadata or misaddress source geometry.
+
 **Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
 
 **Architecture Invariant:** Eager reader/writer backends are stateless unit structs. `OpenTypeFont` retains compiled bytes, `UfoFont` and `DesignspaceFont` retain their indexed GLIF payloads, and `GlyphsFont` retains one upstream-parsed source. Paths are provenance and error context only after open. A `FontImport` is a separate exhaustive bounded conversion cursor; OpenType sources intentionally expose no `FontImporter` capability. WHY: imported sessions must remain coherent and readable after the original path changes or disappears.
@@ -68,7 +70,7 @@ src/
 - `FontSource` -- immutable directory plus lazy `glyph(GlyphIndex) -> ProjectedGlyph` acquisition, implemented by every retained foreign handle
 - `FontImporter` -- optional authored-conversion capability implemented by GLIF and Glyphs handles, but not binary handles
 - `OpenedFont` -- dispatched `OpenType`, `Ufo`, `Designspace`, or `Glyphs` retained handle returned by `FontLoader::open_source`
-- `FontDirectory` / `GlyphIndex` -- source-local immutable directory and private backend addressing
+- `FontDirectory` / `GlyphIndex` -- source-local immutable directory built by `FontDirectory::from_font`, with private fields, read-only accessors, and backend-local addressing
 - `GlyphProjection` -- one fallback shape, optional normalized deltas, and exact-source topology exceptions
 - `ProjectedGlyph` -- requested root projection plus its deduplicated transitive component projections
 - `SourceAtlasPage` -- immutable source-indexed `VariableAtlas` page plus location-to-weight evaluation; its ordered roots contain no Shift IDs

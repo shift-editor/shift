@@ -16,13 +16,15 @@ pub use error::FontReadError;
 pub(crate) use geometry::inferred_smooth_point_indices;
 pub use inputs::variable_glyph_inputs;
 pub(crate) use interpolation::piecewise_map;
+pub(crate) use types::DirectoryGlyphInput;
 pub use types::{
-    AffineTransform, AxisIndex, DirectoryAxisMapping, DirectoryGlyph, DirectoryInstance,
-    DirectorySource, FontDirectory, FontMetrics, GlyphAnchor, GlyphComponent, GlyphDelta,
-    GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, GlyphProjection, GlyphShape,
-    GlyphShapeContour, GlyphShapePoint, GlyphSourceShape, GlyphVariation, PointProvenance,
-    ProjectedGlyph, SourceIndex, TrueTypePointIndex, VariationAxis, VariationAxisKind,
-    VariationCoordinate, VariationLocation, VariationRegion, VariationSupport,
+    AffineTransform, AxisIndex, DirectoryGlyph, DirectoryInstance, DirectoryMapping,
+    DirectoryMappingPoint, DirectorySource, FontDirectory, FontMetrics, GlyphAnchor,
+    GlyphComponent, GlyphDelta, GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind,
+    GlyphProjection, GlyphShape, GlyphShapeContour, GlyphShapePoint, GlyphSourceShape,
+    GlyphVariation, PointProvenance, ProjectedGlyph, SourceIndex, TrueTypePointIndex,
+    VariationAxis, VariationAxisKind, VariationCoordinate, VariationLocation, VariationRegion,
+    VariationSupport,
 };
 
 use crate::{BackendResult, FontImport};

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GlyphId, SlugSection, SourceId } from "@shift/types";
+import { mintAxisId, mintAxisMappingId, mintSourceId } from "@shift/types";
 import type { GlyphAtlasPage } from "@/types/glyphAtlas";
 import { SlugAtlas } from "./SlugAtlas";
 
@@ -41,6 +42,7 @@ function residentFixture(): {
     ],
     weightSets: [],
     weightAxes: [],
+    weightMappingBases: [],
     resolvedWeights: null,
   };
   const bytes = new Uint8Array(descriptor.layout.totalLength);
@@ -54,6 +56,61 @@ function residentFixture(): {
 
 function buffer(): GPUBuffer {
   return { destroy() {} } as GPUBuffer;
+}
+
+function mappedWeightFixture(): GlyphAtlasPage {
+  const { descriptor } = residentFixture();
+  const axisId = mintAxisId();
+
+  return {
+    ...descriptor,
+    weightCount: 2,
+    weightAxes: [
+      {
+        id: axisId,
+        tag: "wght",
+        name: "Weight",
+        role: "external",
+        axisType: "continuous",
+        minimum: 100,
+        default: 400,
+        maximum: 900,
+        labels: [],
+        hidden: false,
+      },
+    ],
+    weightMappingBases: [
+      {
+        mappingId: mintAxisMappingId(),
+        inputAxisIds: [axisId],
+        outputAxisIds: [axisId],
+        basis: {
+          deltas: [
+            {
+              region: [{ axisId, lower: 0, peak: 1, upper: 1 }],
+              values: Float64Array.of(-0.2),
+            },
+          ],
+        },
+      },
+    ],
+    weightSets: [
+      {
+        basis: {
+          sourceIds: [mintSourceId()],
+          basis: {
+            deltas: [
+              {
+                region: [{ axisId, lower: 0, peak: 0.8, upper: 0.8 }],
+                values: Float64Array.of(1),
+              },
+            ],
+          },
+        },
+        sourceWeightIndices: [1],
+      },
+    ],
+  };
 }
 
 describe("resident atlas binding layout", () => {
@@ -112,6 +169,12 @@ describe("resident atlas frame planning", () => {
     expect(Array.from(atlas.weights([]))).toEqual([0.25]);
     atlas.setResolvedWeights([0.75]);
     expect(Array.from(atlas.weights([]))).toEqual([0.75]);
+  });
+
+  it("maps external coordinates once before evaluating authored weights", () => {
+    const atlas = new SlugAtlas(mappedWeightFixture(), buffer(), buffer(), 128);
+
+    expect(Array.from(atlas.weights([650]))).toEqual([1, 0.5]);
   });
 
   it("captures split descriptors and plans an exact component variant", () => {

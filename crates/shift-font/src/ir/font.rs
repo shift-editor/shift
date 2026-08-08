@@ -1,4 +1,4 @@
-use crate::axis::{Axis, AxisMapping, Location};
+use crate::axis::{Axis, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
 use crate::entity::{
@@ -365,7 +365,7 @@ impl Default for Font {
     fn default() -> Self {
         let metric_definitions = MetricDefinition::defaults();
         let metrics = FontMetrics::default();
-        let mut default_source = Source::new("Regular".to_string(), Location::new());
+        let mut default_source = Source::new("Regular".to_string(), DesignLocation::new());
         default_source.fill_metric_values(&metric_definitions, metrics.units_per_em);
         let default_source_id = default_source.id();
 
@@ -645,7 +645,10 @@ impl Font {
             .collect()
     }
 
-    pub fn mapped_location(&self, external: &Location) -> CoreResult<Location> {
+    pub fn mapped_location(
+        &self,
+        external: &crate::ExternalLocation,
+    ) -> CoreResult<DesignLocation> {
         crate::variation::map_location(external, self.axes(), self.axis_mappings())
     }
 
@@ -1453,7 +1456,8 @@ mod tests {
     use super::*;
     use crate::{
         test_support::sample_font, Anchor, AxisMappingPoint, AxisRole, Component, ComponentId,
-        Contour, ContourId, GlyphLayer, GuidelineId, LayerId, PointId, PointType,
+        Contour, ContourId, ExternalLocation, GlyphLayer, GuidelineId, LayerId, Location, PointId,
+        PointType,
     };
     use std::sync::Arc;
     use std::time::{Duration, Instant};
@@ -1700,10 +1704,10 @@ mod tests {
         font.add_axis(weight).expect("weight axis should be valid");
         font.add_axis(width).expect("width axis should be valid");
 
-        let mut narrow = Location::new();
+        let mut narrow = ExternalLocation::new();
         narrow.set(weight_id.clone(), 400.0);
         narrow.set(width_id.clone(), 75.0);
-        let mut wide = Location::new();
+        let mut wide = ExternalLocation::new();
         wide.set(weight_id, 400.0);
         wide.set(width_id.clone(), 125.0);
         font.set_named_instances(vec![
@@ -2417,7 +2421,7 @@ mod tests {
         };
         let mut font = synthetic_point_heavy_font(mark);
         let glyph_id = font.glyph_id_by_name("g00000").unwrap();
-        let source_id = font.add_source(Source::new("Bold".to_string(), Location::new()));
+        let source_id = font.add_source(Source::new("Bold".to_string(), DesignLocation::new()));
         let start = Instant::now();
 
         let layer_id = LayerId::new();

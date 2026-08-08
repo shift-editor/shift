@@ -1,4 +1,4 @@
-use crate::axis::{Axis, Location};
+use crate::axis::{Axis, DesignLocation};
 use crate::entity::{MetricId, SourceId};
 use crate::lib_data::LibData;
 use crate::metrics::{MetricDefinition, MetricValue};
@@ -24,7 +24,7 @@ pub enum SourceRole {
 pub struct Source {
     id: SourceId,
     name: String,
-    location: Location,
+    location: DesignLocation,
     #[serde(default)]
     metric_values: BTreeMap<MetricId, MetricValue>,
     #[serde(default)]
@@ -47,7 +47,7 @@ pub struct Source {
 }
 
 impl Source {
-    pub fn new(name: String, location: Location) -> Self {
+    pub fn new(name: String, location: DesignLocation) -> Self {
         Self {
             id: SourceId::new(),
             name,
@@ -65,7 +65,7 @@ impl Source {
         }
     }
 
-    pub fn with_filename(name: String, location: Location, filename: String) -> Self {
+    pub fn with_filename(name: String, location: DesignLocation, filename: String) -> Self {
         Self {
             id: SourceId::new(),
             name,
@@ -86,7 +86,7 @@ impl Source {
     pub fn with_id(
         id: SourceId,
         name: String,
-        location: Location,
+        location: DesignLocation,
         filename: Option<String>,
     ) -> Self {
         Self {
@@ -112,7 +112,7 @@ impl Source {
         Self {
             id: SourceId::new(),
             name,
-            location: Location::new(),
+            location: DesignLocation::new(),
             metric_values: BTreeMap::new(),
             italic_angle: None,
             line_gap: None,
@@ -134,7 +134,7 @@ impl Source {
         &self.name
     }
 
-    pub fn location(&self) -> &Location {
+    pub fn location(&self) -> &DesignLocation {
         &self.location
     }
 
@@ -252,7 +252,7 @@ impl Source {
         self.name = name;
     }
 
-    pub fn set_location(&mut self, location: Location) {
+    pub fn set_location(&mut self, location: DesignLocation) {
         self.location = location;
     }
 
@@ -265,7 +265,11 @@ impl Source {
 ///
 /// A small tolerance absorbs serialization noise while preserving the domain
 /// invariant that two master sources cannot occupy the same design location.
-pub(crate) fn source_locations_equal(left: &Location, right: &Location, axes: &[Axis]) -> bool {
+pub(crate) fn source_locations_equal(
+    left: &DesignLocation,
+    right: &DesignLocation,
+    axes: &[Axis],
+) -> bool {
     axes.iter().all(|axis| {
         let left = left.get(&axis.id()).unwrap_or(axis.default());
         let right = right.get(&axis.id()).unwrap_or(axis.default());
@@ -280,7 +284,7 @@ mod tests {
 
     #[test]
     fn source_creation() {
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         let axis_id = AxisId::from_raw("wght");
         location.set(axis_id.clone(), 400.0);
 

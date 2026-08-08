@@ -37,6 +37,7 @@ export class ImportedGlyphAtlasSource implements GlyphAtlasSource {
       })),
       weightSets: [],
       weightAxes: [],
+      weightMappingBases: [],
       resolvedWeights: descriptor.weights,
     };
   }

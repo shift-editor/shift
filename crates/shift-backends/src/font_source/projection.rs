@@ -4,14 +4,16 @@ use std::str::FromStr;
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
 use fontdrasil::variations::{RoundingBehaviour, VariationModel};
+use shift_font::{AxisId, AxisKind, Font, Location, MetricKind, Source as FontSource, SourceRole};
 
 use super::geometry::SourceGeometry;
 use super::interpolation::InterpolationAxis;
 use super::{
-    DirectoryGlyph, FontDirectory, FontReadError, GlyphComponent, GlyphDelta, GlyphIndex,
-    GlyphMetrics, GlyphProjection, GlyphShape, GlyphShapeContour, GlyphShapePoint,
-    GlyphSourceShape, GlyphVariation, ProjectedGlyph, SourceIndex, VariationAxis, VariationRegion,
-    VariationSupport,
+    AxisIndex, DirectoryGlyph, DirectoryGlyphInput, DirectoryInstance, DirectoryMapping,
+    DirectoryMappingPoint, DirectorySource, FontDirectory, FontMetrics, FontReadError,
+    GlyphComponent, GlyphDelta, GlyphIndex, GlyphMetrics, GlyphProjection, GlyphShape,
+    GlyphShapeContour, GlyphShapePoint, GlyphSourceShape, GlyphVariation, ProjectedGlyph,
+    SourceIndex, VariationAxis, VariationAxisKind, VariationRegion, VariationSupport,
 };
 use crate::FontFormat;
 
@@ -36,31 +38,205 @@ pub(crate) fn empty_projection_layer(glyph: GlyphIndex) -> ProjectionLayer {
     }
 }
 
-pub(crate) fn build_directory(
-    format: FontFormat,
-    family_name: Option<String>,
-    style_name: Option<String>,
-    units_per_em: f64,
-    glyphs: Vec<(String, Box<[u32]>)>,
-    axes: Vec<VariationAxis>,
-) -> Result<(FontDirectory, HashMap<String, GlyphIndex>), FontReadError> {
-    let glyphs = glyphs
-        .into_iter()
-        .enumerate()
-        .map(|(index, (name, unicodes))| DirectoryGlyph {
-            index: GlyphIndex::new(index as u32),
-            name,
-            unicodes,
-        })
-        .collect();
-    let directory =
-        FontDirectory::new(format, family_name, style_name, units_per_em, glyphs, axes)?;
-    let glyphs_by_name = directory
-        .glyphs
+impl FontDirectory {
+    pub(crate) fn from_font(
+        format: FontFormat,
+        font: &Font,
+        glyphs: Vec<DirectoryGlyphInput>,
+    ) -> Result<(Self, HashMap<String, GlyphIndex>), FontReadError> {
+        let glyphs = glyphs
+            .into_iter()
+            .enumerate()
+            .map(|(index, (name, unicodes))| DirectoryGlyph {
+                index: GlyphIndex::new(index as u32),
+                name,
+                unicodes,
+            })
+            .collect();
+        let axes = font
+            .axes()
+            .iter()
+            .enumerate()
+            .map(|(index, axis)| VariationAxis {
+                index: AxisIndex::new(index as u32),
+                tag: axis.tag().to_string(),
+                name: axis.name().to_string(),
+                hidden: axis.is_hidden(),
+                kind: match axis.kind() {
+                    AxisKind::Continuous {
+                        minimum,
+                        default,
+                        maximum,
+                    } => VariationAxisKind::Continuous {
+                        minimum: *minimum,
+                        default: *default,
+                        maximum: *maximum,
+                    },
+                    AxisKind::Discrete { values, default } => VariationAxisKind::Discrete {
+                        values: values.clone().into_boxed_slice(),
+                        default: *default,
+                    },
+                },
+            })
+            .collect::<Vec<_>>();
+        let mut directory = FontDirectory::new(
+            format,
+            font.metadata().family_name.clone(),
+            font.metadata().style_name.clone(),
+            font.metrics().units_per_em,
+            glyphs,
+            axes,
+        )?;
+        let font_sources = font
+            .sources()
+            .iter()
+            .filter(|source| source.role() == SourceRole::Master)
+            .collect::<Vec<_>>();
+        let default_source_id = font.default_source_id();
+        let default_source = font_sources
+            .iter()
+            .position(|source| Some(source.id()) == default_source_id)
+            .unwrap_or(0);
+        directory.set_sources(
+            font_sources
+                .iter()
+                .enumerate()
+                .map(|(index, source)| DirectorySource {
+                    index: SourceIndex::new(index as u32),
+                    name: source.name().to_string(),
+                    location: font
+                        .axes()
+                        .iter()
+                        .map(|axis| source.location().get(&axis.id()).unwrap_or(axis.default()))
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    filename: source.filename().map(str::to_string),
+                    metrics: directory_metrics(font, source),
+                })
+                .collect(),
+            SourceIndex::new(default_source as u32),
+        )?;
+        directory.set_mappings(directory_mappings(font)?);
+        directory.set_instances(
+            font.named_instances()
+                .iter()
+                .map(|instance| DirectoryInstance {
+                    name: instance.name().to_string(),
+                    location: font
+                        .axes()
+                        .iter()
+                        .map(|axis| {
+                            instance
+                                .location()
+                                .get(&axis.id())
+                                .unwrap_or(axis.default())
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    postscript_name: instance.postscript_name().map(str::to_string),
+                })
+                .collect(),
+        );
+        let glyphs_by_name = directory
+            .glyphs
+            .iter()
+            .map(|glyph| (glyph.name.clone(), glyph.index))
+            .collect();
+        Ok((directory, glyphs_by_name))
+    }
+}
+
+fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadError> {
+    let axis_indices = font
+        .axes()
         .iter()
-        .map(|glyph| (glyph.name.clone(), glyph.index))
-        .collect();
-    Ok((directory, glyphs_by_name))
+        .enumerate()
+        .map(|(index, axis)| (axis.id(), AxisIndex::new(index as u32)))
+        .collect::<HashMap<_, _>>();
+    let axis_index = |axis_id: &AxisId| {
+        axis_indices
+            .get(axis_id)
+            .copied()
+            .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
+    };
+    let coordinate = |location: &Location, axis_id: &AxisId| {
+        font.axis(axis_id.clone())
+            .map(|axis| location.get(axis_id).unwrap_or(axis.default()))
+            .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
+    };
+
+    font.axis_mappings()
+        .iter()
+        .map(|mapping| {
+            let points = mapping
+                .points()
+                .iter()
+                .map(|point| {
+                    let input = mapping
+                        .inputs()
+                        .iter()
+                        .map(|axis_id| coordinate(&point.input, axis_id))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let output = mapping
+                        .outputs()
+                        .iter()
+                        .map(|axis_id| {
+                            point
+                                .output
+                                .get(axis_id)
+                                .map(Ok)
+                                .unwrap_or_else(|| coordinate(&point.input, axis_id))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(DirectoryMappingPoint {
+                        description: point.description.clone(),
+                        input: input.into_boxed_slice(),
+                        output: output.into_boxed_slice(),
+                    })
+                })
+                .collect::<Result<Vec<_>, FontReadError>>()?;
+
+            Ok(DirectoryMapping {
+                name: mapping.name().to_string(),
+                description: mapping.description().map(str::to_string),
+                input_axes: mapping
+                    .inputs()
+                    .iter()
+                    .map(axis_index)
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_boxed_slice(),
+                output_axes: mapping
+                    .outputs()
+                    .iter()
+                    .map(axis_index)
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_boxed_slice(),
+                points: points.into_boxed_slice(),
+            })
+        })
+        .collect()
+}
+
+fn directory_metrics(font: &Font, source: &FontSource) -> FontMetrics {
+    let metric = |kind| {
+        font.metric_definitions()
+            .iter()
+            .find(|definition| definition.kind() == kind)
+            .and_then(|definition| source.metric_value(&definition.id()))
+            .map(|value| value.position)
+    };
+    let units_per_em = font.metrics().units_per_em;
+    FontMetrics {
+        units_per_em,
+        ascender: metric(MetricKind::Ascender).unwrap_or(units_per_em * 0.8),
+        descender: metric(MetricKind::Descender).unwrap_or(units_per_em * -0.2),
+        line_gap: source.line_gap().unwrap_or(0.0),
+        cap_height: metric(MetricKind::CapHeight),
+        x_height: metric(MetricKind::XHeight),
+        italic_angle: source.italic_angle(),
+        underline_position: source.underline_position(),
+        underline_thickness: source.underline_thickness(),
+    }
 }
 
 pub(crate) fn resolve_projection_closure(
@@ -480,8 +656,259 @@ mod tests {
     use super::*;
     use crate::font_source::geometry::{SourceContour, SourceGeometry};
     use crate::font_source::{
-        GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance, SourceIndex,
+        GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance, SourceIndex, VariationLocation,
     };
+    use shift_font::{
+        Axis, AxisId, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Location,
+        MetricKind, MetricValue, NamedInstance, Source,
+    };
+
+    #[test]
+    fn canonical_directory_preserves_the_complete_font_header() {
+        let mut font = Font::empty();
+        font.metadata_mut().family_name = Some("Dogfood Sans".to_string());
+        font.metadata_mut().style_name = Some("Regular".to_string());
+        font.metrics_mut().units_per_em = 2048.0;
+
+        let mut weight = Axis::weight();
+        weight.set_hidden(true);
+        let weight_id = weight.id();
+        font.add_axis(weight).unwrap();
+        let italic = Axis::discrete_with_id(
+            AxisId::new(),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0, 1.0],
+            0.0,
+        );
+        let italic_id = italic.id();
+        font.add_axis(italic).unwrap();
+
+        let mut regular_location = DesignLocation::new();
+        regular_location.set(weight_id.clone(), 400.0);
+        regular_location.set(italic_id.clone(), 0.0);
+        let mut regular = Source::with_filename(
+            "Regular".to_string(),
+            regular_location,
+            "Regular.ufo".to_string(),
+        );
+        set_metrics(&font, &mut regular, [1500.0, -500.0, 1400.0, 1000.0]);
+        regular.set_line_gap(Some(40.0));
+        regular.set_italic_angle(Some(-2.0));
+        regular.set_underline_position(Some(-120.0));
+        regular.set_underline_thickness(Some(60.0));
+        let regular_id = font.add_source(regular);
+
+        let mut bold_location = DesignLocation::new();
+        bold_location.set(weight_id.clone(), 800.0);
+        bold_location.set(italic_id.clone(), 1.0);
+        let mut bold =
+            Source::with_filename("Bold".to_string(), bold_location, "Bold.ufo".to_string());
+        set_metrics(&font, &mut bold, [1600.0, -550.0, 1450.0, 1050.0]);
+        bold.set_line_gap(Some(55.0));
+        bold.set_italic_angle(Some(-12.0));
+        bold.set_underline_position(Some(-140.0));
+        bold.set_underline_thickness(Some(70.0));
+        font.add_source(bold);
+        font.set_default_source_id(regular_id);
+
+        let independent = AxisMapping::new(
+            "Weight curve".to_string(),
+            vec![weight_id.clone()],
+            vec![weight_id.clone()],
+            vec![
+                mapping_point(&[(weight_id.clone(), 100.0)], &[(weight_id.clone(), 100.0)]),
+                mapping_point(&[(weight_id.clone(), 400.0)], &[(weight_id.clone(), 400.0)]),
+                mapping_point(&[(weight_id.clone(), 900.0)], &[(weight_id.clone(), 800.0)]),
+            ],
+        );
+        let mut cross = AxisMapping::new(
+            "Italic compensation".to_string(),
+            vec![weight_id.clone(), italic_id.clone()],
+            vec![weight_id.clone()],
+            vec![mapping_point(
+                &[(weight_id.clone(), 800.0), (italic_id.clone(), 1.0)],
+                &[(weight_id.clone(), 750.0)],
+            )],
+        );
+        cross.set_description(Some("Reduce italic weight".to_string()));
+        font.set_axis_mappings(vec![independent, cross]).unwrap();
+
+        let mut instance_location = ExternalLocation::new();
+        instance_location.set(weight_id, 900.0);
+        instance_location.set(italic_id, 1.0);
+        font.set_named_instances(vec![NamedInstance::new(
+            "Black Italic".to_string(),
+            instance_location,
+            Some("DogfoodSans-BlackItalic".to_string()),
+        )])
+        .unwrap();
+
+        let (actual, _) = FontDirectory::from_font(
+            FontFormat::Designspace,
+            &font,
+            vec![
+                ("A".to_string(), vec![0x41, 0x391].into_boxed_slice()),
+                ("B".to_string(), vec![0x42].into_boxed_slice()),
+            ],
+        )
+        .unwrap();
+        let regular_metrics = FontMetrics {
+            units_per_em: 2048.0,
+            ascender: 1500.0,
+            descender: -500.0,
+            line_gap: 40.0,
+            cap_height: Some(1400.0),
+            x_height: Some(1000.0),
+            italic_angle: Some(-2.0),
+            underline_position: Some(-120.0),
+            underline_thickness: Some(60.0),
+        };
+        let expected = FontDirectory {
+            format: FontFormat::Designspace,
+            family_name: Some("Dogfood Sans".to_string()),
+            style_name: Some("Regular".to_string()),
+            units_per_em: 2048.0,
+            metrics: regular_metrics,
+            glyphs: vec![
+                DirectoryGlyph {
+                    index: GlyphIndex::new(0),
+                    name: "A".to_string(),
+                    unicodes: vec![0x41, 0x391].into_boxed_slice(),
+                },
+                DirectoryGlyph {
+                    index: GlyphIndex::new(1),
+                    name: "B".to_string(),
+                    unicodes: vec![0x42].into_boxed_slice(),
+                },
+            ]
+            .into_boxed_slice(),
+            axes: vec![
+                VariationAxis {
+                    index: AxisIndex::new(0),
+                    tag: "wght".to_string(),
+                    name: "Weight".to_string(),
+                    hidden: true,
+                    kind: VariationAxisKind::Continuous {
+                        minimum: 100.0,
+                        default: 400.0,
+                        maximum: 900.0,
+                    },
+                },
+                VariationAxis {
+                    index: AxisIndex::new(1),
+                    tag: "ital".to_string(),
+                    name: "Italic".to_string(),
+                    hidden: false,
+                    kind: VariationAxisKind::Discrete {
+                        values: vec![0.0, 1.0].into_boxed_slice(),
+                        default: 0.0,
+                    },
+                },
+            ]
+            .into_boxed_slice(),
+            sources: vec![
+                DirectorySource {
+                    index: SourceIndex::new(0),
+                    name: "Regular".to_string(),
+                    location: vec![400.0, 0.0].into_boxed_slice(),
+                    filename: Some("Regular.ufo".to_string()),
+                    metrics: regular_metrics,
+                },
+                DirectorySource {
+                    index: SourceIndex::new(1),
+                    name: "Bold".to_string(),
+                    location: vec![800.0, 1.0].into_boxed_slice(),
+                    filename: Some("Bold.ufo".to_string()),
+                    metrics: FontMetrics {
+                        units_per_em: 2048.0,
+                        ascender: 1600.0,
+                        descender: -550.0,
+                        line_gap: 55.0,
+                        cap_height: Some(1450.0),
+                        x_height: Some(1050.0),
+                        italic_angle: Some(-12.0),
+                        underline_position: Some(-140.0),
+                        underline_thickness: Some(70.0),
+                    },
+                },
+            ]
+            .into_boxed_slice(),
+            default_source: SourceIndex::new(0),
+            mappings: vec![
+                DirectoryMapping {
+                    name: "Weight curve".to_string(),
+                    description: None,
+                    input_axes: vec![AxisIndex::new(0)].into_boxed_slice(),
+                    output_axes: vec![AxisIndex::new(0)].into_boxed_slice(),
+                    points: vec![
+                        directory_mapping_point(&[100.0], &[100.0]),
+                        directory_mapping_point(&[400.0], &[400.0]),
+                        directory_mapping_point(&[900.0], &[800.0]),
+                    ]
+                    .into_boxed_slice(),
+                },
+                DirectoryMapping {
+                    name: "Italic compensation".to_string(),
+                    description: Some("Reduce italic weight".to_string()),
+                    input_axes: vec![AxisIndex::new(0), AxisIndex::new(1)].into_boxed_slice(),
+                    output_axes: vec![AxisIndex::new(0)].into_boxed_slice(),
+                    points: vec![directory_mapping_point(&[800.0, 1.0], &[750.0])]
+                        .into_boxed_slice(),
+                },
+            ]
+            .into_boxed_slice(),
+            instances: vec![DirectoryInstance {
+                name: "Black Italic".to_string(),
+                location: vec![900.0, 1.0].into_boxed_slice(),
+                postscript_name: Some("DogfoodSans-BlackItalic".to_string()),
+            }]
+            .into_boxed_slice(),
+            default_location: VariationLocation::from_coordinates(vec![400.0, 0.0]),
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn canonical_directory_completes_sparse_mapping_coordinates() {
+        let mut font = Font::empty();
+        let weight = Axis::weight();
+        let weight_id = weight.id();
+        font.add_axis(weight).unwrap();
+        let italic = Axis::discrete_with_id(
+            AxisId::new(),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0, 1.0],
+            0.0,
+        );
+        let italic_id = italic.id();
+        font.add_axis(italic).unwrap();
+        let source_id = font.add_source(Source::new("Regular".to_string(), DesignLocation::new()));
+        font.set_default_source_id(source_id);
+        font.set_axis_mappings(vec![AxisMapping::new(
+            "Sparse mapping".to_string(),
+            vec![weight_id.clone(), italic_id.clone()],
+            vec![weight_id.clone(), italic_id.clone()],
+            vec![
+                mapping_point(&[(italic_id.clone(), 1.0)], &[(weight_id.clone(), 450.0)]),
+                mapping_point(&[(weight_id, 700.0)], &[(italic_id, 1.0)]),
+            ],
+        )])
+        .unwrap();
+
+        let (directory, _) =
+            FontDirectory::from_font(FontFormat::Designspace, &font, Vec::new()).unwrap();
+
+        assert_eq!(
+            directory.mappings[0].points.as_ref(),
+            [
+                directory_mapping_point(&[400.0, 1.0], &[450.0, 1.0]),
+                directory_mapping_point(&[700.0, 0.0], &[700.0, 1.0]),
+            ]
+        );
+    }
 
     #[test]
     fn incompatible_topology_is_retained_as_an_exact_source_shape() {
@@ -531,6 +958,41 @@ mod tests {
         );
 
         assert!(result.is_err());
+    }
+
+    fn set_metrics(font: &Font, source: &mut Source, values: [f64; 4]) {
+        for (kind, position) in [
+            MetricKind::Ascender,
+            MetricKind::Descender,
+            MetricKind::CapHeight,
+            MetricKind::XHeight,
+        ]
+        .into_iter()
+        .zip(values)
+        {
+            let definition = font
+                .metric_definitions()
+                .iter()
+                .find(|definition| definition.kind() == kind)
+                .unwrap();
+            source.set_metric_value(definition.id(), MetricValue::new(position, 0.0));
+        }
+    }
+
+    fn mapping_point(input: &[(AxisId, f64)], output: &[(AxisId, f64)]) -> AxisMappingPoint {
+        AxisMappingPoint {
+            description: None,
+            input: Location::from_map(input.iter().cloned().collect()),
+            output: Location::from_map(output.iter().cloned().collect()),
+        }
+    }
+
+    fn directory_mapping_point(input: &[f64], output: &[f64]) -> DirectoryMappingPoint {
+        DirectoryMappingPoint {
+            description: None,
+            input: input.to_vec().into_boxed_slice(),
+            output: output.to_vec().into_boxed_slice(),
+        }
     }
 
     fn axis() -> InterpolationAxis {

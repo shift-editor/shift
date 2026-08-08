@@ -29,6 +29,8 @@ index_type!(AxisIndex);
 index_type!(SourceIndex);
 index_type!(TrueTypePointIndex);
 
+pub(crate) type DirectoryGlyphInput = (String, Box<[u32]>);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct DirectoryGlyph {
     pub index: GlyphIndex,
@@ -156,6 +158,9 @@ pub struct FontMetrics {
     pub line_gap: f64,
     pub cap_height: Option<f64>,
     pub x_height: Option<f64>,
+    pub italic_angle: Option<f64>,
+    pub underline_position: Option<f64>,
+    pub underline_thickness: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -165,6 +170,7 @@ pub struct DirectorySource {
     /// Internal design-space coordinates ordered like the directory axes.
     pub location: Box<[f64]>,
     pub filename: Option<String>,
+    pub metrics: FontMetrics,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -176,28 +182,82 @@ pub struct DirectoryInstance {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct DirectoryAxisMapping {
-    pub axis: AxisIndex,
-    pub points: Box<[(f64, f64)]>,
+pub struct DirectoryMappingPoint {
+    pub description: Option<String>,
+    pub input: Box<[f64]>,
+    pub output: Box<[f64]>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DirectoryMapping {
+    pub name: String,
+    pub description: Option<String>,
+    pub input_axes: Box<[AxisIndex]>,
+    pub output_axes: Box<[AxisIndex]>,
+    pub points: Box<[DirectoryMappingPoint]>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FontDirectory {
-    pub format: FontFormat,
-    pub family_name: Option<String>,
-    pub style_name: Option<String>,
-    pub units_per_em: f64,
-    pub metrics: FontMetrics,
-    pub glyphs: Box<[DirectoryGlyph]>,
-    pub axes: Box<[VariationAxis]>,
-    pub sources: Box<[DirectorySource]>,
-    pub default_source: SourceIndex,
-    pub axis_mappings: Box<[DirectoryAxisMapping]>,
-    pub instances: Box<[DirectoryInstance]>,
-    default_location: VariationLocation,
+    pub(crate) format: FontFormat,
+    pub(crate) family_name: Option<String>,
+    pub(crate) style_name: Option<String>,
+    pub(crate) units_per_em: f64,
+    pub(crate) metrics: FontMetrics,
+    pub(crate) glyphs: Box<[DirectoryGlyph]>,
+    pub(crate) axes: Box<[VariationAxis]>,
+    pub(crate) sources: Box<[DirectorySource]>,
+    pub(crate) default_source: SourceIndex,
+    pub(crate) mappings: Box<[DirectoryMapping]>,
+    pub(crate) instances: Box<[DirectoryInstance]>,
+    pub(crate) default_location: VariationLocation,
 }
 
 impl FontDirectory {
+    pub fn format(&self) -> FontFormat {
+        self.format
+    }
+
+    pub fn family_name(&self) -> Option<&str> {
+        self.family_name.as_deref()
+    }
+
+    pub fn style_name(&self) -> Option<&str> {
+        self.style_name.as_deref()
+    }
+
+    pub fn units_per_em(&self) -> f64 {
+        self.units_per_em
+    }
+
+    pub fn metrics(&self) -> FontMetrics {
+        self.metrics
+    }
+
+    pub fn glyphs(&self) -> &[DirectoryGlyph] {
+        &self.glyphs
+    }
+
+    pub fn axes(&self) -> &[VariationAxis] {
+        &self.axes
+    }
+
+    pub fn sources(&self) -> &[DirectorySource] {
+        &self.sources
+    }
+
+    pub fn default_source(&self) -> SourceIndex {
+        self.default_source
+    }
+
+    pub fn mappings(&self) -> &[DirectoryMapping] {
+        &self.mappings
+    }
+
+    pub fn instances(&self) -> &[DirectoryInstance] {
+        &self.instances
+    }
+
     pub(crate) fn new(
         format: FontFormat,
         family_name: Option<String>,
@@ -243,30 +303,35 @@ impl FontDirectory {
         let default_location = VariationLocation::from_coordinates(
             axes.iter().map(|axis| axis.kind.default_value()).collect(),
         );
+        let metrics = FontMetrics {
+            units_per_em,
+            ascender: units_per_em * 0.8,
+            descender: units_per_em * -0.2,
+            line_gap: 0.0,
+            cap_height: None,
+            x_height: None,
+            italic_angle: None,
+            underline_position: None,
+            underline_thickness: None,
+        };
         let default_source = DirectorySource {
             index: SourceIndex::new(0),
             name: style_name.clone().unwrap_or_else(|| "Default".into()),
             location: default_location.coordinates.clone(),
             filename: None,
+            metrics,
         };
         Ok(Self {
             format,
             family_name,
             style_name,
             units_per_em,
-            metrics: FontMetrics {
-                units_per_em,
-                ascender: units_per_em * 0.8,
-                descender: units_per_em * -0.2,
-                line_gap: 0.0,
-                cap_height: None,
-                x_height: None,
-            },
+            metrics,
             glyphs: glyphs.into_boxed_slice(),
             axes: axes.into_boxed_slice(),
             sources: vec![default_source].into_boxed_slice(),
             default_source: SourceIndex::new(0),
-            axis_mappings: Box::new([]),
+            mappings: Box::new([]),
             instances: Box::new([]),
             default_location,
         })
@@ -292,21 +357,24 @@ impl FontDirectory {
                 });
             }
         }
+        self.metrics = sources[default_source.to_usize()].metrics;
         self.sources = sources.into_boxed_slice();
         self.default_source = default_source;
         Ok(())
     }
 
-    pub(crate) fn set_axis_mappings(&mut self, mappings: Vec<DirectoryAxisMapping>) {
-        self.axis_mappings = mappings.into_boxed_slice();
+    pub(crate) fn set_mappings(&mut self, mappings: Vec<DirectoryMapping>) {
+        self.mappings = mappings.into_boxed_slice();
     }
 
     pub(crate) fn set_instances(&mut self, instances: Vec<DirectoryInstance>) {
         self.instances = instances.into_boxed_slice();
     }
 
-    pub(crate) fn set_metrics(&mut self, metrics: FontMetrics) {
-        self.metrics = metrics;
+    pub(crate) fn independent_mapping(&self, axis: AxisIndex) -> Option<&DirectoryMapping> {
+        self.mappings.iter().find(|mapping| {
+            mapping.input_axes.as_ref() == [axis] && mapping.output_axes.as_ref() == [axis]
+        })
     }
 
     pub fn default_location(&self) -> &VariationLocation {

@@ -202,6 +202,31 @@ pub(super) fn weights(
     complements: &[Box<[u32]>],
     location: &[f64],
 ) -> Result<Vec<f32>, SlugError> {
+    weights_with(axes, regions, complements, location, AtlasAxis::normalize)
+}
+
+pub(super) fn design_weights(
+    axes: &[AtlasAxis],
+    regions: &[AtlasRegion],
+    complements: &[Box<[u32]>],
+    location: &[f64],
+) -> Result<Vec<f32>, SlugError> {
+    weights_with(
+        axes,
+        regions,
+        complements,
+        location,
+        AtlasAxis::normalize_design,
+    )
+}
+
+fn weights_with(
+    axes: &[AtlasAxis],
+    regions: &[AtlasRegion],
+    complements: &[Box<[u32]>],
+    location: &[f64],
+    normalize: impl Fn(&AtlasAxis, f64, usize) -> Result<i16, SlugError>,
+) -> Result<Vec<f32>, SlugError> {
     if location.len() != axes.len() {
         return Err(SlugError::RetainedLocationAxisCountMismatch {
             expected: axes.len(),
@@ -213,7 +238,7 @@ pub(super) fn weights(
         .iter()
         .zip(location)
         .enumerate()
-        .map(|(axis_index, (axis, value))| axis.normalize(*value, axis_index))
+        .map(|(axis_index, (axis, value))| normalize(axis, *value, axis_index))
         .collect::<Result<Vec<_>, _>>()?;
     let mut weights = Vec::with_capacity(
         1_usize

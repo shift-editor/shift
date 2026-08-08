@@ -4,7 +4,7 @@ mod reader;
 mod source;
 
 pub(crate) use conversion::{
-    anchor_parts, component_transform, default_design_value, master_design_values,
+    anchor_parts, component_transform, default_design_value, font_header, master_design_values,
     master_location_values, missing_component_details,
 };
 pub(crate) use import::{stream_font, stream_retained};

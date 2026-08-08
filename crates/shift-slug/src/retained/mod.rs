@@ -151,6 +151,10 @@ impl RetainedAtlasDescriptor {
     pub fn weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
         weights::weights(&self.axes, &self.regions, &self.complements, location)
     }
+
+    pub fn design_weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
+        weights::design_weights(&self.axes, &self.regions, &self.complements, location)
+    }
 }
 
 pub struct PageCompiler {
@@ -517,6 +521,35 @@ mod tests {
             descriptor.weights(&[1.0]).unwrap(),
             vec![1.0, 1.0, 0.0, 0.0, 1.0]
         );
+    }
+
+    #[test]
+    fn design_weights_do_not_apply_the_external_mapping_twice() {
+        let descriptor = RetainedAtlasPage::from_parts(
+            VariableAtlas::default(),
+            Vec::new(),
+            Vec::new(),
+            vec![AtlasAxis::new(
+                vec![(100.0, 100.0), (400.0, 400.0), (900.0, 800.0)],
+                100.0,
+                400.0,
+                800.0,
+                Vec::new(),
+            )],
+            vec![AtlasRegion::new(vec![RegionAxis {
+                start: 0,
+                peak: 16384,
+                end: 16384,
+            }])],
+            Vec::new(),
+        )
+        .into_parts()
+        .1;
+
+        assert_eq!(descriptor.weights(&[650.0]).unwrap(), vec![1.0, 0.5]);
+        assert_eq!(descriptor.design_weights(&[600.0]).unwrap(), vec![1.0, 0.5]);
+        let remapped = descriptor.weights(&[600.0]).unwrap();
+        assert!((remapped[1] - 0.4).abs() < 0.001);
     }
 
     #[test]

@@ -77,7 +77,7 @@ const ShiftSessionSetup = () => {
   useEffect(() => {
     if (!documentLoaded) return;
 
-    editor.setDesignLocation(font.defaultLocation());
+    editor.setExternalLocation(font.defaultLocation());
   }, [documentLoaded, editor, font]);
 
   return null;

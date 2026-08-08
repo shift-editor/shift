@@ -8,8 +8,8 @@ use fontdrasil::{
 };
 
 use crate::{
-    Axis, AxisId, AxisMapping, AxisMappingId, AxisRole, CoreError, CoreResult, Location,
-    VariationBasis,
+    Axis, AxisId, AxisMapping, AxisMappingId, AxisRole, CoreError, CoreResult, DesignLocation,
+    ExternalLocation, Location, VariationBasis,
 };
 
 pub fn to_fd_location(loc: &Location, axes: &[Axis]) -> NormalizedLocation {
@@ -145,10 +145,10 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
 }
 
 pub fn map_location(
-    external: &Location,
+    external: &ExternalLocation,
     axes: &[Axis],
     mappings: &[AxisMapping],
-) -> CoreResult<Location> {
+) -> CoreResult<DesignLocation> {
     let bases = mappings
         .iter()
         .map(|mapping| AxisMappingBasis::try_from((mapping, axes)))
@@ -156,12 +156,13 @@ pub fn map_location(
     map_location_with_bases(external, axes, &bases)
 }
 
-fn map_location_with_bases(
-    external: &Location,
+/// Evaluates precompiled mapping bases without reconstructing their variation models.
+pub fn map_location_with_bases(
+    external: &ExternalLocation,
     axes: &[Axis],
     bases: &[AxisMappingBasis],
-) -> CoreResult<Location> {
-    let mut mapped = Location::new();
+) -> CoreResult<DesignLocation> {
+    let mut mapped = DesignLocation::new();
     for axis in axes {
         let value = match axis.role() {
             AxisRole::External => external.get(&axis.id()).unwrap_or(axis.default()),
@@ -171,7 +172,7 @@ fn map_location_with_bases(
     }
 
     for basis in bases.iter().filter(|basis| basis.is_independent()) {
-        let outputs = basis.evaluate(external, axes)?;
+        let outputs = basis.evaluate(external.as_untyped(), axes)?;
         for (axis_id, value) in outputs.iter() {
             mapped.set(axis_id.clone(), *value);
         }
@@ -179,7 +180,7 @@ fn map_location_with_bases(
 
     let independently_mapped = mapped.clone();
     for basis in bases.iter().filter(|basis| !basis.is_independent()) {
-        let outputs = basis.evaluate(&independently_mapped, axes)?;
+        let outputs = basis.evaluate(independently_mapped.as_untyped(), axes)?;
         for (axis_id, value) in outputs.iter() {
             mapped.set(axis_id.clone(), *value);
         }
@@ -268,7 +269,7 @@ mod tests {
             )],
         );
 
-        let external = location(&[
+        let external = external_location(&[
             (weight.id(), 900.0),
             (width.id(), 125.0),
             (optical.id(), 40.0),
@@ -423,7 +424,7 @@ mod tests {
             72.0,
         );
         optical.set_role(AxisRole::Internal);
-        let external = location(&[(optical.id(), 40.0)]);
+        let external = external_location(&[(optical.id(), 40.0)]);
 
         let mapped = map_location(&external, &[optical.clone()], &[]).unwrap();
 
@@ -491,6 +492,10 @@ mod tests {
             input: location(input),
             output: location(output),
         }
+    }
+
+    fn external_location(values: &[(AxisId, f64)]) -> ExternalLocation {
+        ExternalLocation::from_untyped(location(values))
     }
 
     fn location(values: &[(AxisId, f64)]) -> Location {

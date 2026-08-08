@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Axis, AxisKind, AxisRole, CoreError, CoreResult, Location, NamedInstanceId};
+use crate::{Axis, AxisKind, AxisRole, CoreError, CoreResult, ExternalLocation, NamedInstanceId};
 
 /// An authored product preset at a complete external variation location.
 ///
@@ -14,13 +14,13 @@ use crate::{Axis, AxisKind, AxisRole, CoreError, CoreResult, Location, NamedInst
 pub struct NamedInstance {
     id: NamedInstanceId,
     name: String,
-    location: Location,
+    location: ExternalLocation,
     postscript_name: Option<String>,
 }
 
 impl NamedInstance {
     /// Creates a named instance with newly minted stable identity.
-    pub fn new(name: String, location: Location, postscript_name: Option<String>) -> Self {
+    pub fn new(name: String, location: ExternalLocation, postscript_name: Option<String>) -> Self {
         Self::with_id(NamedInstanceId::new(), name, location, postscript_name)
     }
 
@@ -28,7 +28,7 @@ impl NamedInstance {
     pub fn with_id(
         id: NamedInstanceId,
         name: String,
-        location: Location,
+        location: ExternalLocation,
         postscript_name: Option<String>,
     ) -> Self {
         Self {
@@ -50,7 +50,7 @@ impl NamedInstance {
     }
 
     /// Returns the complete external location authored for this product.
-    pub fn location(&self) -> &Location {
+    pub fn location(&self) -> &ExternalLocation {
         &self.location
     }
 
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn complete_external_location_is_valid() {
         let axis = Axis::weight();
-        let mut location = Location::new();
+        let mut location = ExternalLocation::new();
         location.set(axis.id(), 700.0);
         let instance = NamedInstance::new("Bold".to_string(), location, None);
 
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn missing_external_axis_is_invalid() {
         let axis = Axis::weight();
-        let instance = NamedInstance::new("Bold".to_string(), Location::new(), None);
+        let instance = NamedInstance::new("Bold".to_string(), ExternalLocation::new(), None);
 
         assert!(matches!(
             instance.validate(&[axis]),
@@ -215,7 +215,7 @@ mod tests {
     fn internal_axis_coordinate_is_invalid() {
         let mut axis = Axis::weight();
         axis.set_role(AxisRole::Internal);
-        let mut location = Location::new();
+        let mut location = ExternalLocation::new();
         location.set(axis.id(), 400.0);
         let instance = NamedInstance::new("Regular".to_string(), location, None);
 
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn postscript_name_uses_font_naming_constraints() {
         let axis = Axis::weight();
-        let mut location = Location::new();
+        let mut location = ExternalLocation::new();
         location.set(axis.id(), 700.0);
         let instance = NamedInstance::new(
             "Bold".to_string(),
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn collection_rejects_two_products_at_the_same_location() {
         let axis = Axis::weight();
-        let mut location = Location::new();
+        let mut location = ExternalLocation::new();
         location.set(axis.id(), 700.0);
         let first = NamedInstance::new("Bold".to_string(), location.clone(), None);
         let second = NamedInstance::new("Display".to_string(), location, None);

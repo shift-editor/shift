@@ -290,7 +290,7 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setDesignLocation(new Map([[axisId, 900]]));
+      workspace.editor.setExternalLocation(new Map([[axisId, 900]]));
       workspace.font.deleteSource(sourceId);
       await workspace.font.editCoordinator.settled();
     }, variable);
@@ -318,7 +318,7 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setDesignLocation(new Map([[axisId, 750]]));
+      workspace.editor.setExternalLocation(new Map([[axisId, 750]]));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       workspace.font.deleteAxis(axisId);
       await workspace.font.editCoordinator.settled();
@@ -396,7 +396,7 @@ test.describe("Resident Glyph Grid", () => {
 
       const samples: Array<{ previewHeight: number; scrollHeight: number }> = [];
       for (const value of [400, 500, 650, 800, 900, 650, 400]) {
-        workspace.editor.setDesignLocation(new Map([[axisId, value]]));
+        workspace.editor.setExternalLocation(new Map([[axisId, value]]));
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         samples.push({
           previewHeight: Number(canvas.dataset.previewHeight),

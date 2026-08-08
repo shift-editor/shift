@@ -509,18 +509,26 @@ fn atlas_axes(source: &OpenTypeFont) -> Result<Vec<AtlasAxis>, SourceAtlasError>
             };
             let normalized_mapping = source
                 .directory
-                .axis_mappings
-                .iter()
-                .find(|mapping| mapping.axis == axis.index)
+                .independent_mapping(axis.index)
                 .map(|mapping| {
                     mapping
                         .points
                         .iter()
-                        .map(|(input, output)| {
-                            (
-                                normalize_user_coordinate(*input, *minimum, *default, *maximum),
-                                normalize_user_coordinate(*output, *minimum, *default, *maximum),
-                            )
+                        .filter_map(|point| {
+                            Some((
+                                normalize_user_coordinate(
+                                    *point.input.first()?,
+                                    *minimum,
+                                    *default,
+                                    *maximum,
+                                ),
+                                normalize_user_coordinate(
+                                    *point.output.first()?,
+                                    *minimum,
+                                    *default,
+                                    *maximum,
+                                ),
+                            ))
                         })
                         .collect()
                 })
@@ -755,12 +763,12 @@ mod tests {
             ))
             .unwrap();
         assert_eq!(
-            source.directory().axis_mappings.len(),
+            source.directory().mappings.len(),
             source.directory().axes.len()
         );
         assert!(source
             .directory()
-            .axis_mappings
+            .mappings
             .iter()
             .all(|mapping| !mapping.points.is_empty()));
 

@@ -37,6 +37,7 @@ crates/shift-font/src/
 - `Axis` has stable identity, an external/internal role, a continuous or discrete kind, and optional external/user-space value labels.
 - `AxisLabel` has font-wide stable identity so UI rows and later instance recipes survive renames and reordering.
 - `AxisMapping` owns an ordered set of mapping points. Independent mappings transform one external axis; the optional cross-axis group maps one design-space location to another.
+- `ExternalLocation` and `DesignLocation` are serde-transparent nominal wrappers around `Location`. Mapping accepts only the former and interpolation/projection accepts only the latter.
 - `NamedInstance` is an explicit named product preset at a complete external location. It owns no source, layer, or compiler representation.
 - `MetricDefinition` gives one metric row stable identity and a standard or custom semantic role.
 - `Source` is an editable designspace position with a name, location, complete metric values, and optional technical metrics.
@@ -88,7 +89,7 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 
 `Font::source_metric_interpolation()` combines the same coordinate-independent basis with complete master-source metric vectors. Optional technical fields participate only when every master authors them, so interpolation does not invent sparse values.
 
-`Font::axis_mapping_bases()` compiles authored independent and cross-axis mappings through Fontdrasil. External locations evaluate independent bases first, then cross-axis bases against the independently mapped location. Raw mapping points remain authoring data and never become renderer evaluation input. Output parity does not authorize another language or bridge layer to reconstruct the same model.
+`Font::axis_mapping_bases()` compiles authored independent and cross-axis mappings through Fontdrasil. `map_location` and `map_location_with_bases` are the only external-to-design boundaries: external locations evaluate independent bases first, then cross-axis bases against the independently mapped location, and the resulting `DesignLocation` must not be mapped again. Raw mapping points remain authoring data and never become renderer evaluation input. Output parity does not authorize another language or bridge layer to reconstruct the same model.
 
 `Font::projection(location)` expects an internal authoring location. Apply external axis mappings before constructing it. Resolution prefers an exact authored layer, then compatible interpolation, then the default or preferred fallback. A globally authored source with no glyph layer is not blank by definition: it uses interpolation/fallback while remaining non-editable at that source. Component branches resolve independently at the same location and are flattened through the same `GlyphComponents` semantics exposed to renderers.
 

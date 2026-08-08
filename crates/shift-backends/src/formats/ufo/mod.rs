@@ -215,7 +215,7 @@ mod tests {
         let default_source_id = font.default_source_id().unwrap();
         let bold_source_id = font.add_source(shift_font::Source::new(
             "Bold".to_string(),
-            shift_font::Location::new(),
+            shift_font::DesignLocation::new(),
         ));
 
         for (name, unicode) in [("B", 0x0042_u32), ("C", 0x0043)] {

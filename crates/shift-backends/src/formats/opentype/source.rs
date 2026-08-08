@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -9,17 +10,21 @@ use skrifa::{FontRef, MetadataProvider};
 
 use super::localized_string;
 use crate::font_source::{
-    malformed, AxisIndex, DirectoryAxisMapping, DirectoryGlyph, DirectoryInstance, FontDirectory,
-    FontMetrics, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, VariationAxis,
-    VariationAxisKind,
+    malformed, FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
 };
+use crate::metrics::set_metric_position;
 use crate::FontFormat;
+use shift_font::{
+    Axis, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Font as ShiftFont,
+    Location, MetricKind, NamedInstance,
+};
 
 /// Retained bytes and indexes for one OpenType TTF, OTF, or variable font.
 pub struct OpenTypeFont {
     pub(super) path: PathBuf,
     bytes: Arc<[u8]>,
     pub(super) directory: FontDirectory,
+    pub(super) header: ShiftFont,
     pub(super) avar_version: Option<MajorMinor>,
 }
 
@@ -33,11 +38,12 @@ impl OpenTypeFont {
             .into();
         let font = FontRef::new(bytes.as_ref())
             .map_err(|error| malformed(path, format!("failed to parse font: {error}")))?;
-        let (directory, avar_version) = binary_directory(path, &font)?;
+        let (directory, header, avar_version) = binary_directory(path, &font)?;
         Ok(Self {
             path: path.to_path_buf(),
             bytes,
             directory,
+            header,
             avar_version,
         })
     }
@@ -60,7 +66,7 @@ impl FontSource for OpenTypeFont {
 fn binary_directory(
     path: &Path,
     font: &FontRef<'_>,
-) -> Result<(FontDirectory, Option<MajorMinor>), FontReadError> {
+) -> Result<(FontDirectory, ShiftFont, Option<MajorMinor>), FontReadError> {
     let format = format_for_path(path)?;
     font.hmtx()
         .map_err(|error| malformed(path, format!("failed to read hmtx table: {error}")))?;
@@ -80,70 +86,74 @@ fn binary_directory(
         .enumerate()
         .map(|(index, unicodes)| {
             let raw_id = GlyphId::new(index as u32);
-            DirectoryGlyph {
-                index: GlyphIndex::new(index as u32),
-                name: names
+            (
+                names
                     .get(raw_id)
                     .map(|name| name.to_string())
                     .unwrap_or_else(|| format!("gid{index}")),
-                unicodes: unicodes.into_boxed_slice(),
-            }
-        })
-        .collect();
-    let axes = font
-        .axes()
-        .iter()
-        .enumerate()
-        .map(|(index, axis)| VariationAxis {
-            index: AxisIndex::new(index as u32),
-            tag: axis.tag().to_string(),
-            name: localized_string(font, axis.name_id()).unwrap_or_else(|| axis.tag().to_string()),
-            hidden: axis.is_hidden(),
-            kind: VariationAxisKind::Continuous {
-                minimum: axis.min_value() as f64,
-                default: axis.default_value() as f64,
-                maximum: axis.max_value() as f64,
-            },
+                unicodes.into_boxed_slice(),
+            )
         })
         .collect();
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
-    let mut directory = FontDirectory::new(
-        format,
-        localized_string(font, StringId::FAMILY_NAME),
-        localized_string(font, StringId::SUBFAMILY_NAME),
-        metrics.units_per_em as f64,
-        glyphs,
-        axes,
-    )?;
-    directory.set_metrics(FontMetrics {
-        units_per_em: metrics.units_per_em as f64,
-        ascender: metrics.ascent as f64,
-        descender: metrics.descent as f64,
-        line_gap: metrics.leading as f64,
-        cap_height: metrics.cap_height.map(|value| value as f64),
-        x_height: metrics.x_height.map(|value| value as f64),
-    });
-    directory.set_instances(
-        font.named_instances()
-            .iter()
-            .enumerate()
-            .map(|(index, instance)| DirectoryInstance {
-                name: localized_string(font, instance.subfamily_name_id())
-                    .unwrap_or_else(|| format!("Instance {}", index + 1)),
-                location: instance
-                    .user_coords()
-                    .map(|coordinate| coordinate as f64)
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                postscript_name: instance
-                    .postscript_name_id()
-                    .and_then(|id| localized_string(font, id)),
-            })
-            .collect(),
-    );
+    let family_name = localized_string(font, StringId::FAMILY_NAME);
+    let style_name = localized_string(font, StringId::SUBFAMILY_NAME);
+    let mut header = ShiftFont::new();
+    header.metadata_mut().family_name = family_name;
+    header.metadata_mut().style_name = style_name.clone();
+    header.metrics_mut().units_per_em = metrics.units_per_em as f64;
+
+    let default_source_id = header
+        .default_source_id()
+        .expect("new font should have a default source");
+    let metric_definitions = header.metric_definitions().to_vec();
+    let default_source = header
+        .source_mut(default_source_id.clone())
+        .expect("new font should contain its default source");
+    default_source.set_name(style_name.unwrap_or_else(|| "Default".to_string()));
+    for (kind, value) in [
+        (MetricKind::Ascender, Some(metrics.ascent as f64)),
+        (MetricKind::Descender, Some(metrics.descent as f64)),
+        (
+            MetricKind::CapHeight,
+            metrics.cap_height.map(|value| value as f64),
+        ),
+        (
+            MetricKind::XHeight,
+            metrics.x_height.map(|value| value as f64),
+        ),
+    ] {
+        set_metric_position(&metric_definitions, default_source, kind, value);
+    }
+    default_source.set_line_gap(Some(metrics.leading as f64));
+
+    let mut axis_ids = Vec::new();
+    let mut default_location = DesignLocation::new();
+    for source_axis in font.axes().iter() {
+        let mut axis = Axis::new(
+            source_axis.tag().to_string(),
+            localized_string(font, source_axis.name_id())
+                .unwrap_or_else(|| source_axis.tag().to_string()),
+            source_axis.min_value() as f64,
+            source_axis.default_value() as f64,
+            source_axis.max_value() as f64,
+        );
+        axis.set_hidden(source_axis.is_hidden());
+        let axis_id = axis.id();
+        default_location.set(axis_id.clone(), source_axis.default_value() as f64);
+        header
+            .add_axis(axis)
+            .map_err(|error| malformed(path, error.to_string()))?;
+        axis_ids.push(axis_id);
+    }
+    header
+        .source_mut(default_source_id)
+        .expect("new font should contain its default source")
+        .set_location(default_location);
+
     let avar_version = match font.avar() {
         Ok(avar) if avar.version() == MajorMinor::VERSION_1_0 => {
-            if avar.axis_count() as usize != directory.axes.len() {
+            if avar.axis_count() as usize != axis_ids.len() {
                 return Err(malformed(
                     path,
                     "avar axis count does not match fvar".into(),
@@ -157,20 +167,11 @@ fn binary_directory(
                     let mapping = mapping.map_err(|error| {
                         malformed(path, format!("failed to read avar segment map: {error}"))
                     })?;
-                    let axis = &directory.axes[index];
-                    let (minimum, default, maximum) = match &axis.kind {
-                        VariationAxisKind::Continuous {
-                            minimum,
-                            default,
-                            maximum,
-                        } => (*minimum, *default, *maximum),
-                        VariationAxisKind::Discrete { .. } => {
-                            return Err(malformed(
-                                path,
-                                "avar mapping references a discrete axis".into(),
-                            ))
-                        }
-                    };
+                    let axis = &header.axes()[index];
+                    let axis_id = axis_ids[index].clone();
+                    let minimum = axis.minimum();
+                    let default = axis.default();
+                    let maximum = axis.maximum();
                     let user_value = |normalized: f64| {
                         if normalized < 0.0 {
                             default + normalized * (default - minimum)
@@ -178,23 +179,31 @@ fn binary_directory(
                             default + normalized * (maximum - default)
                         }
                     };
-                    Ok(DirectoryAxisMapping {
-                        axis: AxisIndex::new(index as u32),
-                        points: mapping
+                    Ok(AxisMapping::new(
+                        format!("{} mapping", axis.name()),
+                        vec![axis_id.clone()],
+                        vec![axis_id.clone()],
+                        mapping
                             .axis_value_maps()
                             .iter()
-                            .map(|value| {
-                                (
+                            .map(|value| AxisMappingPoint {
+                                description: None,
+                                input: Location::from_map(HashMap::from([(
+                                    axis_id.clone(),
                                     user_value(f64::from(value.from_coordinate().to_f32())),
+                                )])),
+                                output: Location::from_map(HashMap::from([(
+                                    axis_id.clone(),
                                     user_value(f64::from(value.to_coordinate().to_f32())),
-                                )
+                                )])),
                             })
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice(),
-                    })
+                            .collect(),
+                    ))
                 })
                 .collect::<Result<Vec<_>, FontReadError>>()?;
-            directory.set_axis_mappings(mappings);
+            header
+                .set_axis_mappings(mappings)
+                .map_err(|error| malformed(path, error.to_string()))?;
             Some(avar.version())
         }
         Ok(avar) => Some(avar.version()),
@@ -206,7 +215,35 @@ fn binary_directory(
             ))
         }
     };
-    Ok((directory, avar_version))
+
+    let instances = font
+        .named_instances()
+        .iter()
+        .enumerate()
+        .map(|(index, instance)| {
+            let location = ExternalLocation::from_map(
+                axis_ids
+                    .iter()
+                    .cloned()
+                    .zip(instance.user_coords().map(|coordinate| coordinate as f64))
+                    .collect(),
+            );
+            NamedInstance::new(
+                localized_string(font, instance.subfamily_name_id())
+                    .unwrap_or_else(|| format!("Instance {}", index + 1)),
+                location,
+                instance
+                    .postscript_name_id()
+                    .and_then(|id| localized_string(font, id)),
+            )
+        })
+        .collect();
+    header
+        .set_named_instances(instances)
+        .map_err(|error| malformed(path, error.to_string()))?;
+
+    let (directory, _) = FontDirectory::from_font(format, &header, glyphs)?;
+    Ok((directory, header, avar_version))
 }
 
 fn format_for_path(path: &Path) -> Result<FontFormat, FontReadError> {

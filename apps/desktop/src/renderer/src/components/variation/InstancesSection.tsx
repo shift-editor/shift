@@ -30,7 +30,7 @@ export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps)
         )
       }
     >
-      {workspace ? <Instances /> : <p className="text-ui text-muted pl-2">No instances defined</p>}
+      <Instances editable={workspace !== null} />
     </CollapsibleSection>
   );
 };

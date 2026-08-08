@@ -2,15 +2,13 @@ use std::{path::Path, sync::Arc};
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
-    font_source::{
-        inferred_smooth_point_indices, FontDirectory, FontSource, OpenTypeFont, VariationAxisKind,
-    },
+    font_source::{inferred_smooth_point_indices, FontSource, OpenTypeFont},
     import::{collect_streamed_font, GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
 };
 use rayon::prelude::*;
 use shift_font::{
-    Axis, Contour, ContourId, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, LayerId,
-    Location, MetricKind, NamedInstance, PointId, PointType, SourceId,
+    Contour, ContourId, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, LayerId,
+    PointId, PointType, SourceId,
 };
 use skrifa::{
     outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
@@ -18,8 +16,6 @@ use skrifa::{
     raw::{tables::hmtx::Hmtx, types::GlyphId, TableProvider},
     FontRef, MetadataProvider,
 };
-
-use crate::metrics::set_metric_position;
 
 pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
     let (header, mut stream) = stream_font_file(path)?;
@@ -172,80 +168,6 @@ fn detect_smooth_points(contours: &mut [Contour]) {
     }
 }
 
-fn font_header_from_directory(directory: &FontDirectory) -> FormatBackendResult<Font> {
-    let mut font = Font::new();
-    let default_source_id = font
-        .default_source_id()
-        .expect("new font should have a default source");
-
-    font.metrics_mut().units_per_em = directory.metrics.units_per_em;
-    font.metadata_mut().family_name = directory.family_name.clone();
-    font.metadata_mut().style_name = directory.style_name.clone();
-
-    let metric_definitions = font.metric_definitions().to_vec();
-    let default_source = font
-        .source_mut(default_source_id.clone())
-        .expect("new font should contain its default source");
-    for (kind, value) in [
-        (MetricKind::Ascender, Some(directory.metrics.ascender)),
-        (MetricKind::Descender, Some(directory.metrics.descender)),
-        (MetricKind::CapHeight, directory.metrics.cap_height),
-        (MetricKind::XHeight, directory.metrics.x_height),
-    ] {
-        set_metric_position(&metric_definitions, default_source, kind, value);
-    }
-    default_source.set_line_gap(Some(directory.metrics.line_gap));
-
-    let mut axis_ids = Vec::with_capacity(directory.axes.len());
-    let mut default_location = Location::new();
-    for source_axis in &directory.axes {
-        let VariationAxisKind::Continuous {
-            minimum,
-            default,
-            maximum,
-        } = source_axis.kind
-        else {
-            return Err(FormatBackendError::Binary(
-                "OpenType retained directory contains a discrete axis".into(),
-            ));
-        };
-        let mut axis = Axis::new(
-            source_axis.tag.clone(),
-            source_axis.name.clone(),
-            minimum,
-            default,
-            maximum,
-        );
-        axis.set_hidden(source_axis.hidden);
-        let axis_id = axis.id();
-        default_location.set(axis_id.clone(), default);
-        font.add_axis(axis)?;
-        axis_ids.push(axis_id);
-    }
-    font.source_mut(default_source_id)
-        .expect("new font should contain its default source")
-        .set_location(default_location);
-
-    let instances = directory
-        .instances
-        .iter()
-        .map(|source_instance| {
-            let mut location = Location::new();
-            for (axis_id, coordinate) in axis_ids.iter().zip(&source_instance.location) {
-                location.set(axis_id.clone(), *coordinate);
-            }
-            NamedInstance::new(
-                source_instance.name.clone(),
-                location,
-                source_instance.postscript_name.clone(),
-            )
-        })
-        .collect();
-    font.set_named_instances(instances)?;
-
-    Ok(font)
-}
-
 #[derive(Clone)]
 struct BinaryGlyphRecord {
     raw_id: GlyphId,
@@ -266,7 +188,7 @@ pub(crate) fn stream_font_file(path: &str) -> FormatBackendResult<(Font, BinaryG
         OpenTypeFont::open(Path::new(path))
             .map_err(|error| FormatBackendError::Binary(error.to_string()))?,
     );
-    let header = font_header_from_directory(retained.directory())?;
+    let header = retained.header.clone();
     let source_id = header.default_source_id().ok_or_else(|| {
         FormatBackendError::Binary("binary font header is missing its default source".into())
     })?;
@@ -379,7 +301,7 @@ fn glyph_from_skrifa(
 mod tests {
     use super::*;
     use crate::font_source::geometry::SMOOTH_ANGLE_TOLERANCE;
-    use shift_font::CurveSegment;
+    use shift_font::{CurveSegment, MetricKind};
     use skrifa::outline::pen::PathElement;
     use std::path::PathBuf;
 
@@ -393,10 +315,10 @@ mod tests {
     }
 
     #[test]
-    fn retained_directory_drives_authored_header_metadata() {
+    fn canonical_retained_directory_matches_authored_header_metadata() {
         let retained = OpenTypeFont::open(&mutatorsans_ttf_path()).unwrap();
         let directory = retained.directory();
-        let header = font_header_from_directory(directory).unwrap();
+        let header = retained.header.clone();
         let default_source_id = header.default_source_id().unwrap();
         let default_source = header
             .sources()

@@ -53,15 +53,15 @@ import type { GlyphLayerState } from "./GlyphLayerState";
 import type { GlyphHandle } from "@shift/bridge";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
-  axisLocationDistanceSquared,
-  axisLocationFromLocation,
-  locationFromAxisLocation,
-  axisLocationsEqual,
-  defaultAxisLocation,
-  emptyAxisLocation,
+  designAxisLocationDistanceSquared,
+  designAxisLocationFromLocation,
+  designAxisLocationsEqual,
+  locationFromDesignAxisLocation,
+  defaultExternalAxisLocation,
+  emptyExternalAxisLocation,
   mapAxisLocation,
 } from "@/lib/variation/location";
-import type { AxisLocation } from "@/types/variation";
+import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { uniqueInOrder } from "@/lib/utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
@@ -386,19 +386,23 @@ export class Font {
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
     this.#axesCell = computed(() => fontCell.value?.axes ?? []);
+    this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
+    this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
     this.#defaultSourceMetricsCell = computed(() => {
       const sources = this.#sourcesCell.value;
       const axes = this.#axesCell.value;
+      const location = mapAxisLocation(
+        defaultExternalAxisLocation(axes),
+        axes,
+        this.#axisMappingBasesCell.value,
+      );
 
       track(this.#metricsCell);
       track(this.#metricDefinitionsCell);
 
-      const source =
-        sourceAtLocation(sources, axes, defaultAxisLocation(axes)) ?? sources[0] ?? null;
+      const source = sourceAtLocation(sources, axes, location) ?? sources[0] ?? null;
       return this.#metricsForSource(source);
     });
-    this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
-    this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#directoryCell = computed(() =>
       GlyphDirectory.fromEntries(fontCell.value?.glyphs ?? [], this.#store.records()),
@@ -790,20 +794,20 @@ export class Font {
    * @param glyphId - Glyph that will own the sparse authored layer.
    * @param sourceId - Source where the layer becomes editable.
    * @param fromLayerId - Compatible authored layer whose structure is retained.
-   * @param location - Internal design-space location to materialize.
+   * @param values - Resolved numeric geometry values to materialize.
    * @returns The minted layer id submitted to the workspace.
    */
   materializeGlyphLayer(
     glyphId: GlyphId,
     sourceId: SourceId,
     fromLayerId: LayerId,
-    location: AxisLocation,
+    values: Float64Array,
   ): LayerId {
-    const glyph = this.#glyph(glyphId);
-    if (!glyph) throw new Error(`glyph ${glyphId} must be acquired before materializing a layer`);
+    if (!this.#glyph(glyphId)) {
+      throw new Error(`glyph ${glyphId} must be acquired before materializing a layer`);
+    }
 
     const layerId = mintLayerId();
-    const geometry = glyph.geometryAt(location);
     this.editCoordinator.push({
       kind: "materializeGlyphLayer",
       materializeGlyphLayer: {
@@ -811,7 +815,7 @@ export class Font {
         glyphId,
         sourceId,
         fromLayerId,
-        values: geometry.values,
+        values,
       },
     });
     return layerId;
@@ -1050,11 +1054,14 @@ export class Font {
    */
   async glyphPreviews(
     glyphIds: readonly GlyphId[],
-    location: AxisLocation,
+    location: DesignAxisLocation,
   ): Promise<readonly GlyphPreview[]> {
     if (!this.#editCoordinator) return [];
 
-    return this.#editCoordinator.readGlyphPreviews(glyphIds, locationFromAxisLocation(location));
+    return this.#editCoordinator.readGlyphPreviews(
+      glyphIds,
+      locationFromDesignAxisLocation(location),
+    );
   }
 
   async #readGlyphSnapshots(glyphIds: readonly GlyphId[]): Promise<readonly GlyphId[]> {
@@ -1150,7 +1157,7 @@ export class Font {
   }
 
   /**
-   * Find the source whose designspace location exactly matches a location.
+   * Find the source whose designspace location matches an external location after mapping.
    *
    * Use this when exact source identity matters, for example before editing a
    * specific source. Use {@link sourceAtOrDefault} when UI code can fall back to
@@ -1158,19 +1165,19 @@ export class Font {
    *
    * @returns The exact matching source, or `null` when the location is interpolated.
    */
-  sourceAt(location: AxisLocation): Source | null {
+  sourceAt(location: ExternalAxisLocation): Source | null {
     const axes = this.getAxes();
     const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     return sourceAtLocation(this.sources, axes, mappedLocation);
   }
 
   /**
-   * Returns a reactive exact source for a design location cell.
+   * Returns a reactive exact source for an external location cell.
    *
-   * @param location - Cell containing the designspace location to match exactly.
+   * @param location - Cell containing the external location to map and match exactly.
    * @returns A cell whose value is the exact source, or `null` when interpolated.
    */
-  sourceAtCell(location: Signal<AxisLocation>): ComputedSignal<Source | null> {
+  sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null> {
     return computed(
       () => {
         const axes = this.#axesCell.value;
@@ -1194,18 +1201,18 @@ export class Font {
    *
    * @returns The matching source or the font's default source.
    */
-  sourceAtOrDefault(location: AxisLocation): Source {
+  sourceAtOrDefault(location: ExternalAxisLocation): Source {
     return this.sourceAt(location) ?? this.defaultSource;
   }
 
-  nearestSource(location: AxisLocation): Source | null {
+  nearestSource(location: ExternalAxisLocation): Source | null {
     const axes = this.getAxes();
     const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     let nearest: { source: Source; distance: number } | null = null;
 
     for (const source of this.sources) {
-      const sourceLocation = axisLocationFromLocation(source.location);
-      const distance = axisLocationDistanceSquared(sourceLocation, mappedLocation, axes);
+      const sourceLocation = designAxisLocationFromLocation(source.location);
+      const distance = designAxisLocationDistanceSquared(sourceLocation, mappedLocation, axes);
 
       if (!nearest || distance < nearest.distance) {
         nearest = { source, distance };
@@ -1247,15 +1254,18 @@ export class Font {
    * workflows, usually when a glyph is first edited or selected at the source.
    *
    * @param name - Display name for the source.
-   * @param location - Design-space location owned by the source.
+   * @param location - External user-space location for the source.
    * @returns The minted source id submitted to the workspace.
    */
-  createSource(name: string, location: Location): SourceId {
+  createSource(name: string, externalLocation: ExternalAxisLocation): SourceId {
     const sourceId = mintSourceId();
-    const metrics = this.metricsAtLocation(axisLocationFromLocation(location));
+    const metrics = this.metricsAtLocation(externalLocation);
+    const designLocation = locationFromDesignAxisLocation(
+      mapAxisLocation(externalLocation, this.#axesCell.peek(), this.#axisMappingBasesCell.peek()),
+    );
     this.editCoordinator.push({
       kind: "createSource",
-      createSource: { sourceId, name, location },
+      createSource: { sourceId, name, location: designLocation },
     });
     if (metrics.metricValues.length === this.#metricDefinitionsCell.peek().length) {
       this.editCoordinator.push({
@@ -1263,7 +1273,7 @@ export class Font {
         updateSource: {
           sourceId,
           name,
-          location,
+          location: designLocation,
           metricValues: [...metrics.metricValues],
           italicAngle: metrics.italicAngle,
           lineGap: metrics.lineGap,
@@ -1435,6 +1445,11 @@ export class Font {
     return this.#axisMappingsCell.peek();
   }
 
+  /** Returns the Rust-compiled mapping bases for external-to-design evaluation. */
+  getAxisMappingBases(): AxisMappingBasis[] {
+    return this.#axisMappingBasesCell.peek();
+  }
+
   /** Returns font-owned identities and semantics for authored metric rows. */
   get metricDefinitions(): MetricDefinition[] {
     return this.#metricDefinitionsCell.peek();
@@ -1481,7 +1496,7 @@ export class Font {
    * @param location - External location displayed by editor controls.
    * @returns Resolved standard and technical metrics in font units.
    */
-  metricsAtLocation(location: AxisLocation): SourceMetrics {
+  metricsAtLocation(location: ExternalAxisLocation): SourceMetrics {
     const axes = this.#axesCell.peek();
     const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     const exactSource = sourceAtLocation(this.#sourcesCell.peek(), axes, mappedLocation);
@@ -1524,8 +1539,10 @@ export class Font {
     this.#committedFontCell.dispose();
   }
 
-  defaultLocation(): AxisLocation {
-    return this.isVariable() ? defaultAxisLocation(this.getAxes()) : emptyAxisLocation();
+  defaultLocation(): ExternalAxisLocation {
+    return this.isVariable()
+      ? defaultExternalAxisLocation(this.getAxes())
+      : emptyExternalAxisLocation();
   }
 }
 
@@ -1540,11 +1557,11 @@ function sourceById(sources: readonly Source[], sourceId: SourceId): Source | nu
 function sourceAtLocation(
   sources: readonly Source[],
   axes: readonly Axis[],
-  location: AxisLocation,
+  location: DesignAxisLocation,
 ): Source | null {
   for (const source of sources) {
-    const sourceLocation = axisLocationFromLocation(source.location);
-    if (axisLocationsEqual(sourceLocation, location, axes)) return source;
+    const sourceLocation = designAxisLocationFromLocation(source.location);
+    if (designAxisLocationsEqual(sourceLocation, location, axes)) return source;
   }
 
   return null;

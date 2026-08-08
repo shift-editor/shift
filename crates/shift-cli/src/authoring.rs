@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde::Serialize;
-use shift_font::{Axis, Font, FontChange, FontIntent, FontIntentSet, Location, SourceId};
+use shift_font::{Axis, DesignLocation, Font, FontChange, FontIntent, FontIntentSet, SourceId};
 use shift_source::ShiftSourcePackage;
 
 use crate::cli::{AddAxisArgs, AddSourceArgs, CreateFontArgs, MutationArgs};
@@ -320,8 +320,8 @@ fn report_changes(font: &Font, changes: Vec<FontChange>) -> Vec<AuthoringChange>
         .collect()
 }
 
-fn parse_location(font: &Font, coordinates: &[String]) -> Result<Location> {
-    let mut location = Location::new();
+fn parse_location(font: &Font, coordinates: &[String]) -> Result<DesignLocation> {
+    let mut location = DesignLocation::new();
     for axis in font.axes() {
         location.set(axis.id(), axis.default());
     }

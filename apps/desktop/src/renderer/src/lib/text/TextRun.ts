@@ -60,7 +60,8 @@ export class TextRun {
     this.#cursorVisible = signal(false);
 
     this.#layout = computed(() => {
-      track(this.#editor.designLocationCell);
+      track(this.#editor.externalLocationCell);
+      track(this.#editor.activeSourceIdCell);
 
       const items = this.buffer.itemsCell.value;
       if (items.length === 0) return null;
@@ -69,7 +70,7 @@ export class TextRun {
         origin: { x: this.buffer.originXCell.value, y: 0 },
         editor: this.#editor,
         positioner: this.#positioner,
-        designLocation: this.#editor.designLocationCell,
+        externalLocation: this.#editor.externalLocationCell,
       });
     });
 

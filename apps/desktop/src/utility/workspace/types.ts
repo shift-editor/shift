@@ -24,7 +24,7 @@ export type CachedAtlasPage = {
 
 /** One complete, indexed disposable atlas revision. */
 export type CachedAtlas = CachedAtlasKey & {
-  format: "shift.slug-atlas-cache.v2";
+  format: "shift.slug-atlas-cache.v1";
   bandCount: number;
   alignment: number;
   pageCount: number;

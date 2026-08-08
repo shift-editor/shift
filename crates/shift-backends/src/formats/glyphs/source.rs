@@ -5,47 +5,23 @@ use std::sync::Arc;
 use glyphs_reader::{Font as ParsedGlyphsFont, Glyph as ParsedGlyph, Layer, Node, NodeType, Shape};
 
 use super::{
-    anchor_parts, component_transform, default_design_value, master_design_values,
+    anchor_parts, component_transform, default_design_value, font_header, master_design_values,
     master_location_values, missing_component_details,
 };
 use crate::font_source::geometry::{
     control_point_kind, normalize_contour, ContourPoint, SourceComponent, SourceContour,
     SourceGeometry,
 };
-use crate::font_source::interpolation::{piecewise_map, InterpolationAxis};
+use crate::font_source::interpolation::InterpolationAxis;
 use crate::font_source::projection::{
-    build_directory, empty_projection_layer, project_layers, resolve_projection_closure,
-    ProjectionLayer,
+    empty_projection_layer, project_layers, resolve_projection_closure, ProjectionLayer,
 };
 use crate::font_source::{
-    malformed, AffineTransform, AxisIndex, DirectoryAxisMapping, DirectoryInstance,
-    DirectorySource, FontDirectory, FontImporter, FontReadError, FontSource, GlyphAnchor,
-    GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph, SourceIndex,
-    VariationAxis, VariationAxisKind,
+    malformed, AffineTransform, FontDirectory, FontImporter, FontReadError, FontSource,
+    GlyphAnchor, GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph,
+    SourceIndex,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
-
-#[derive(Clone)]
-struct GlyphsAxisMapping {
-    user_to_design: Box<[(f64, f64)]>,
-}
-
-impl GlyphsAxisMapping {
-    fn unmap(&self, design: f64) -> f64 {
-        let mut design_to_user = self
-            .user_to_design
-            .iter()
-            .map(|(user, design)| (*design, *user))
-            .collect::<Vec<_>>();
-        design_to_user.sort_by(|left, right| left.0.total_cmp(&right.0));
-        design_to_user.dedup_by(|left, right| left.0 == right.0);
-        piecewise_map(design, &design_to_user)
-    }
-
-    fn user_values(&self) -> impl Iterator<Item = f64> + '_ {
-        self.user_to_design.iter().map(|(user, _)| *user)
-    }
-}
 
 /// One retained parsed Glyphs or Glyphspackage source.
 pub struct GlyphsFont {
@@ -63,61 +39,21 @@ impl GlyphsFont {
             ParsedGlyphsFont::load(path)
                 .map_err(|error| malformed(path, format!("failed to parse source: {error}")))?,
         );
-        let default_master = source.masters.get(source.default_master_idx);
-        let mut axes = Vec::with_capacity(source.axes.len());
-        let mut axis_mappings = Vec::with_capacity(source.axes.len());
-        let mut interpolation_axes = Vec::with_capacity(source.axes.len());
-        for (index, axis) in source.axes.iter().enumerate() {
-            let design_values = master_design_values(&source, index);
-            let design_default = default_design_value(&source, index, &design_values);
-            let design_minimum = design_values.iter().copied().fold(design_default, f64::min);
-            let design_maximum = design_values.iter().copied().fold(design_default, f64::max);
-            let mut mapping = source
-                .axis_mappings
-                .get(&axis.name)
-                .map(|mapping| {
-                    mapping
-                        .iter()
-                        .map(|(user, design)| (user.into_inner(), design.into_inner()))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_else(|| {
-                    design_values
-                        .iter()
-                        .copied()
-                        .map(|value| (value, value))
-                        .collect()
-                });
-            if mapping.is_empty() {
-                mapping.push((design_default, design_default));
-            }
-            mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
-            mapping.dedup_by(|left, right| left.0 == right.0);
-            let mapping = GlyphsAxisMapping {
-                user_to_design: mapping.into_boxed_slice(),
-            };
-            let user_default = mapping.unmap(design_default);
-            let user_minimum = mapping.user_values().fold(user_default, f64::min);
-            let user_maximum = mapping.user_values().fold(user_default, f64::max);
-            axes.push(VariationAxis {
-                index: AxisIndex::new(index as u32),
-                tag: axis.tag.clone(),
-                name: axis.name.clone(),
-                hidden: axis.hidden.unwrap_or(false),
-                kind: VariationAxisKind::Continuous {
-                    minimum: user_minimum,
-                    default: user_default,
-                    maximum: user_maximum,
-                },
-            });
-            axis_mappings.push(mapping);
-            interpolation_axes.push(InterpolationAxis {
-                tag: axis.tag.clone(),
-                minimum: design_minimum,
-                default: design_default,
-                maximum: design_maximum,
-            });
-        }
+        let interpolation_axes = source
+            .axes
+            .iter()
+            .enumerate()
+            .map(|(index, axis)| {
+                let design_values = master_design_values(&source, index);
+                let design_default = default_design_value(&source, index, &design_values);
+                InterpolationAxis {
+                    tag: axis.tag.clone(),
+                    minimum: design_values.iter().copied().fold(design_default, f64::min),
+                    default: design_default,
+                    maximum: design_values.iter().copied().fold(design_default, f64::max),
+                }
+            })
+            .collect::<Vec<_>>();
         let glyphs = source
             .glyphs
             .values()
@@ -133,16 +69,10 @@ impl GlyphsFont {
                 )
             })
             .collect::<Vec<_>>();
-        let (mut directory, glyphs_by_name) = build_directory(
-            FontFormat::Glyphs,
-            source
-                .get_default_name("familyNames")
-                .map(ToString::to_string),
-            default_master.map(|master| master.name.clone()),
-            f64::from(source.units_per_em),
-            glyphs,
-            axes,
-        )?;
+        let (header, _) =
+            font_header(&source).map_err(|error| malformed(path, error.to_string()))?;
+        let (directory, glyphs_by_name) =
+            FontDirectory::from_font(FontFormat::Glyphs, &header, glyphs)?;
         let master_locations = source
             .masters
             .iter()
@@ -154,52 +84,6 @@ impl GlyphsFont {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        directory.set_sources(
-            source
-                .masters
-                .iter()
-                .zip(&master_locations)
-                .enumerate()
-                .map(|(index, (master, location))| DirectorySource {
-                    index: SourceIndex::new(index as u32),
-                    name: master.name.clone(),
-                    location: location.clone().into_boxed_slice(),
-                    filename: None,
-                })
-                .collect(),
-            SourceIndex::new(source.default_master_idx as u32),
-        )?;
-        directory.set_axis_mappings(
-            axis_mappings
-                .iter()
-                .enumerate()
-                .map(|(index, mapping)| DirectoryAxisMapping {
-                    axis: AxisIndex::new(index as u32),
-                    points: mapping.user_to_design.clone(),
-                })
-                .collect(),
-        );
-        directory.set_instances(
-            source
-                .instances
-                .iter()
-                .filter(|instance| instance.active)
-                .map(|instance| DirectoryInstance {
-                    name: instance.name.clone(),
-                    location: (0..source.axes.len())
-                        .map(|index| {
-                            instance
-                                .axes_values
-                                .get(index)
-                                .map(|value| value.into_inner())
-                                .unwrap_or_else(|| directory.axes[index].kind.default_value())
-                        })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
-                    postscript_name: None,
-                })
-                .collect(),
-        );
         Ok(Self {
             path: path.to_path_buf(),
             source,
@@ -432,6 +316,35 @@ mod tests {
             .unwrap()
             .join("fixtures/fonts")
             .join(name)
+    }
+
+    #[test]
+    fn directory_sources_keep_retained_master_order() {
+        let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
+        let expected_names = font
+            .source
+            .masters
+            .iter()
+            .map(|master| master.name.as_str())
+            .collect::<Vec<_>>();
+        let directory_names = font
+            .directory
+            .sources
+            .iter()
+            .map(|source| source.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(directory_names, expected_names);
+        for (index, (source, location)) in font
+            .directory
+            .sources
+            .iter()
+            .zip(&font.master_locations)
+            .enumerate()
+        {
+            assert_eq!(source.index, SourceIndex::new(index as u32));
+            assert_eq!(source.location.as_ref(), location);
+        }
     }
 
     #[test]

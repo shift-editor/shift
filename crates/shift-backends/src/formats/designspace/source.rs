@@ -1,24 +1,20 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use norad::designspace::DesignSpaceDocument;
 
 use crate::font_source::interpolation::InterpolationAxis;
-use crate::font_source::projection::{build_directory, resolve_projection_closure};
+use crate::font_source::projection::resolve_projection_closure;
 use crate::font_source::{
-    malformed, AxisIndex, DirectoryAxisMapping, DirectorySource, FontDirectory, FontImporter,
-    FontReadError, FontSource, GlyphIndex, ProjectedGlyph, SourceIndex, VariationAxis,
+    malformed, FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
 };
 use crate::formats::ufo::glif::{
-    load_norad_header, project_glif_glyph, retained_layer, RetainedUfoLayer,
+    glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
-use super::{
-    derive_axis_range, find_default_source_index, map_axis_value, source_axis_design_value,
-    source_name, stream_retained, variation_axis_kind,
-};
+use super::{derive_axis_range, find_default_source_index, map_axis_value, stream_retained};
 
 /// Retained source locations and UFO glyph bytes for one Designspace.
 pub struct DesignspaceFont {
@@ -59,37 +55,30 @@ impl DesignspaceFont {
         let directory_path = path
             .parent()
             .ok_or_else(|| malformed(path, "Designspace path has no parent directory".into()))?;
-        let default_descriptor = &document.sources[default_source];
-        let default_ufo = directory_path.join(&default_descriptor.filename);
-        let header = load_norad_header(&default_ufo)?;
-        let mut source_paths = Vec::with_capacity(document.sources.len());
-        let mut names = Vec::new();
-        let mut seen_names = HashSet::new();
-        for descriptor in &document.sources {
-            let ufo = directory_path.join(&descriptor.filename);
-            let paths = crate::formats::ufo::read_glyph_paths(&ufo, descriptor.layer.as_deref())
-                .map_err(|error| malformed(path, error.to_string()))?;
-            for name in paths.keys() {
-                if seen_names.insert(name.clone()) {
-                    names.push(name.clone());
-                }
-            }
-            source_paths.push(paths);
-        }
-        names.sort();
-
-        let axes = document
-            .axes
+        let source_paths = document
+            .sources
             .iter()
-            .enumerate()
-            .map(|(index, axis)| VariationAxis {
-                index: AxisIndex::new(index as u32),
-                tag: axis.tag.clone(),
-                name: axis.name.clone(),
-                hidden: axis.hidden,
-                kind: variation_axis_kind(axis),
+            .map(|descriptor| {
+                let ufo = directory_path.join(&descriptor.filename);
+                crate::formats::ufo::read_glyph_paths(&ufo, descriptor.layer.as_deref())
+                    .map_err(|error| malformed(path, error.to_string()))
             })
+            .collect::<Result<Vec<_>, _>>()?;
+        let import_paths: Arc<[BTreeMap<String, PathBuf>]> = Arc::from(source_paths.clone());
+        let (header, _) = stream_retained(path, import_paths.clone())
+            .map_err(|error| malformed(path, error.to_string()))?;
+        let source_order = std::iter::once(default_source)
+            .chain((0..document.sources.len()).filter(|index| *index != default_source))
             .collect::<Vec<_>>();
+        let ordered_source_paths = source_order
+            .iter()
+            .map(|index| source_paths[*index].clone())
+            .collect::<Vec<_>>();
+        let (directory, glyphs_by_name) = FontDirectory::from_font(
+            FontFormat::Designspace,
+            &header,
+            glyph_directory(&ordered_source_paths)?,
+        )?;
         let interpolation_axes = document
             .axes
             .iter()
@@ -112,87 +101,15 @@ impl DesignspaceFont {
                 }
             })
             .collect::<Vec<_>>();
-        let family_name = default_descriptor
-            .familyname
-            .clone()
-            .or_else(|| header.font_info.family_name.clone());
-        let (mut directory, glyphs_by_name) = build_directory(
-            FontFormat::Designspace,
-            family_name,
-            header.font_info.style_name.clone(),
-            header
-                .font_info
-                .units_per_em
-                .map(|value| *value)
-                .unwrap_or(1_000.0),
-            names
-                .into_iter()
-                .map(|name| (name, Vec::new().into_boxed_slice()))
-                .collect(),
-            axes,
-        )?;
-        let source_locations = document
-            .sources
-            .iter()
-            .map(|descriptor| {
-                document
-                    .axes
-                    .iter()
-                    .map(|axis| source_axis_design_value(&descriptor.location, axis))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let sources = source_paths
-            .iter()
-            .cloned()
-            .zip(&source_locations)
-            .map(|(paths, location)| {
+        let sources = ordered_source_paths
+            .into_iter()
+            .zip(&directory.sources)
+            .map(|(paths, source)| {
                 retained_layer(&directory, paths)
-                    .map(|layer| (location.clone(), vec![layer].into_boxed_slice()))
+                    .map(|layer| (source.location.to_vec(), vec![layer].into_boxed_slice()))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let import_paths = Arc::from(
-            sources
-                .iter()
-                .map(|(_, layers)| layers[0].paths.clone())
-                .collect::<Vec<_>>(),
-        );
-        let mut source_names = HashSet::new();
-        let directory_sources = document
-            .sources
-            .iter()
-            .zip(source_locations)
-            .enumerate()
-            .map(|(index, (descriptor, location))| {
-                let name = source_name(descriptor, None, &source_names, index);
-                source_names.insert(name.clone());
-                DirectorySource {
-                    index: SourceIndex::new(index as u32),
-                    name,
-                    location: location.into_boxed_slice(),
-                    filename: Some(descriptor.filename.clone()),
-                }
-            })
-            .collect();
-        directory.set_sources(directory_sources, SourceIndex::new(default_source as u32))?;
-        directory.set_axis_mappings(
-            document
-                .axes
-                .iter()
-                .enumerate()
-                .filter_map(|(index, axis)| {
-                    let points = axis.map.as_ref()?;
-                    Some(DirectoryAxisMapping {
-                        axis: AxisIndex::new(index as u32),
-                        points: points
-                            .iter()
-                            .map(|point| (f64::from(point.input), f64::from(point.output)))
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice(),
-                    })
-                })
-                .collect(),
-        );
+        let default_source = directory.default_source.to_usize();
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -259,6 +176,29 @@ mod tests {
             .unwrap()
             .join("fixtures/fonts")
             .join(path)
+    }
+
+    #[test]
+    fn directory_sources_keep_retained_ufo_order() {
+        let path = fixture("mutatorsans-variable/MutatorSans.designspace");
+        let document = DesignSpaceDocument::load(&path).unwrap();
+        let default_source = find_default_source_index(&document).unwrap();
+        let expected_filenames = std::iter::once(default_source)
+            .chain((0..document.sources.len()).filter(|index| *index != default_source))
+            .map(|index| document.sources[index].filename.as_str())
+            .collect::<Vec<_>>();
+        let font = DesignspaceFont::open(&path).unwrap();
+        let directory_filenames = font
+            .directory
+            .sources
+            .iter()
+            .map(|source| source.filename.as_deref().unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(directory_filenames, expected_filenames);
+        for ((location, _), source) in font.sources.iter().zip(&font.directory.sources) {
+            assert_eq!(location.as_slice(), source.location.as_ref());
+        }
     }
 
     #[test]

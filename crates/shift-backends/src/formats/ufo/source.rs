@@ -1,15 +1,15 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::font_source::projection::{build_directory, resolve_projection_closure};
+use crate::font_source::projection::resolve_projection_closure;
 use crate::font_source::{
     malformed, FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
-use super::glif::{load_norad_header, project_glif_glyph, retained_layer, RetainedUfoLayer};
-use super::{read_ufo_layer_directories, stream_retained, UfoLayerDirectory};
+use super::glif::{glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer};
+use super::{load_header, read_ufo_layer_directories, stream_retained, UfoLayerDirectory};
 
 /// Retained paths and glyph bytes for one UFO.
 pub struct UfoFont {
@@ -34,33 +34,16 @@ impl UfoFont {
             });
         }
 
-        let header = load_norad_header(path)?;
+        let header = load_header(path).map_err(|error| malformed(path, error.to_string()))?;
         let layers: Arc<[UfoLayerDirectory]> = Arc::from(
             read_ufo_layer_directories(path).map_err(|error| malformed(path, error.to_string()))?,
         );
-        let mut names = Vec::new();
-        let mut seen_names = HashSet::new();
-        for name in layers.iter().flat_map(|layer| layer.glyphs.keys()) {
-            if seen_names.insert(name.clone()) {
-                names.push(name.clone());
-            }
-        }
-        names.sort();
-        let (directory, glyphs_by_name) = build_directory(
-            FontFormat::Ufo,
-            header.font_info.family_name.clone(),
-            header.font_info.style_name.clone(),
-            header
-                .font_info
-                .units_per_em
-                .map(|value| *value)
-                .unwrap_or(1_000.0),
-            names
-                .into_iter()
-                .map(|name| (name, Vec::new().into_boxed_slice()))
-                .collect(),
-            Vec::new(),
-        )?;
+        let glyph_layers = layers
+            .iter()
+            .map(|layer| layer.glyphs.clone())
+            .collect::<Vec<_>>();
+        let (directory, glyphs_by_name) =
+            FontDirectory::from_font(FontFormat::Ufo, &header, glyph_directory(&glyph_layers)?)?;
         let retained_layers = layers
             .iter()
             .map(|layer| retained_layer(&directory, layer.glyphs.clone()))

@@ -76,7 +76,7 @@ export class Text {
       origin: { x: 0, y: 0 },
       editor: this.#editor,
       positioner: this.#positioner,
-      designLocation: this.#editor.designLocationCell,
+      externalLocation: this.#editor.externalLocationCell,
     });
   }
 }

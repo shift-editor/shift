@@ -13,8 +13,9 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
 use serde::Serialize;
 use shift_font::{
-    Axis, AxisKind, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph,
-    Guideline, KerningData, LibData, Location, MetricDefinition, NamedInstance, Source, SourceId,
+    Axis, AxisKind, AxisMapping, BinaryData, DesignLocation, ExternalLocation, FeatureData, Font,
+    FontMetadata, FontMetrics, Glyph, Guideline, KerningData, LibData, Location, MetricDefinition,
+    NamedInstance, Source, SourceId,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -330,7 +331,7 @@ impl DesignspaceWriter {
         })
     }
 
-    fn location(location: &Location, axes: &[Axis]) -> Vec<Dimension> {
+    fn location(location: &DesignLocation, axes: &[Axis]) -> Vec<Dimension> {
         axes.iter()
             .map(|axis| Dimension {
                 name: axis.name().to_string(),
@@ -340,7 +341,7 @@ impl DesignspaceWriter {
             .collect()
     }
 
-    fn user_location(location: &Location, axes: &[Axis]) -> Vec<Dimension> {
+    fn user_location(location: &ExternalLocation, axes: &[Axis]) -> Vec<Dimension> {
         axes.iter()
             .map(|axis| Dimension {
                 name: axis.name().to_string(),
@@ -557,7 +558,7 @@ impl DesignspaceWriter {
                 stylename: Some("Regular".to_string()),
                 name: Some("Regular".to_string()),
                 filename: groups[0].filename.clone(),
-                location: Self::location(&Location::new(), axes),
+                location: Self::location(&DesignLocation::new(), axes),
                 ..Default::default()
             });
         }

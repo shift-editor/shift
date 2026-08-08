@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{Axis, CoreResult, Font, Location, MetricId, MetricValue, Source, SourceId};
+use crate::{Axis, CoreResult, DesignLocation, Font, MetricId, MetricValue, Source, SourceId};
 
 use super::InterpolationBasis;
 
@@ -105,7 +105,11 @@ impl SourceMetricInterpolation {
     ///
     /// Returns [`crate::CoreError::AxisNotFound`] when `axes` omits an axis
     /// referenced by an interpolation region.
-    pub fn resolve(&self, location: &Location, axes: &[Axis]) -> CoreResult<ResolvedSourceMetrics> {
+    pub fn resolve(
+        &self,
+        location: &DesignLocation,
+        axes: &[Axis],
+    ) -> CoreResult<ResolvedSourceMetrics> {
         let value_count = self
             .sources
             .first()
@@ -238,7 +242,7 @@ fn technical_metric(source: &Source, field: SourceMetricField) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Font, Location, MetricKind, MetricValue, Source};
+    use crate::{DesignLocation, Font, MetricKind, MetricValue, Source};
 
     use super::SourceMetricField;
 
@@ -256,14 +260,14 @@ mod tests {
             .unwrap()
             .id();
         let default_id = font.default_source_id().unwrap();
-        let mut default_location = Location::new();
+        let mut default_location = DesignLocation::new();
         default_location.set(axis_id.clone(), 400.0);
         let default_source = font.source_mut(default_id).unwrap();
         default_source.set_location(default_location);
         default_source.set_metric_value(ascender_id.clone(), MetricValue::new(800.0, 16.0));
         default_source.set_line_gap(Some(20.0));
 
-        let mut bold_location = Location::new();
+        let mut bold_location = DesignLocation::new();
         bold_location.set(axis_id.clone(), 700.0);
         let bold_id = font.add_source(Source::new("Bold".to_string(), bold_location));
         font.source_mut(bold_id)
@@ -271,7 +275,7 @@ mod tests {
             .set_metric_value(ascender_id.clone(), MetricValue::new(900.0, 20.0));
 
         let interpolation = font.source_metric_interpolation().unwrap();
-        let mut middle = Location::new();
+        let mut middle = DesignLocation::new();
         middle.set(axis_id, 550.0);
         let resolved = interpolation.resolve(&middle, font.axes()).unwrap();
 

@@ -17,13 +17,17 @@ export function useGlyphXAdvance(): GlyphXAdvanceState {
         const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
         if (!node) return { xAdvance: 0, hasLayer: false };
 
-        const location = editor.designLocationCell.value;
+        const externalLocation = editor.externalLocationCell.value;
+        const activeSourceId = editor.activeSourceIdCell.value;
         const glyph = editor.glyphForId(node.glyphId);
         if (!glyph) return { xAdvance: 0, hasLayer: false };
 
         return {
-          xAdvance: glyph.geometryAt(location).xAdvance,
-          hasLayer: glyph.layerAt(location) !== null,
+          xAdvance: glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell)
+            .xAdvance,
+          hasLayer: activeSourceId
+            ? glyph.layerForSource(activeSourceId) !== null
+            : glyph.layerAt(externalLocation) !== null,
         };
       }),
     [editor],

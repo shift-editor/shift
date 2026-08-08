@@ -1,11 +1,11 @@
 import type { Axis, InterpolationBasis, SourceId } from "@shift/types";
-import type { AxisLocation } from "@/types/variation";
+import type { DesignAxisLocation } from "@/types/variation";
 import { evaluateVariationBasis } from "./VariationBasis";
 
 /** Evaluates one contribution weight per ordered source in an interpolation basis. */
 export function interpolationWeights(
   basis: InterpolationBasis,
-  location: AxisLocation,
+  location: DesignAxisLocation,
   axes: readonly Axis[],
 ): Float64Array {
   return evaluateVariationBasis(basis.basis, location, axes);

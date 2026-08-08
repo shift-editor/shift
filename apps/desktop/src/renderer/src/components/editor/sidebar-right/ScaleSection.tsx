@@ -4,7 +4,6 @@ import { TransformGrid } from "./TransformGrid";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { useSignalState } from "@/lib/signals";
 import { Bounds } from "@shift/geo";
@@ -14,26 +13,18 @@ import { isPointId } from "@shift/types";
 
 export const ScaleSection = () => {
   const editor = useEditor();
-  const sourceId = useActiveSourceId();
-  const scene = useSignalState(editor.scene.cell);
   const selection = useSignalState(editor.selection.stateCell);
   const { anchor, setAnchor } = useTransformOrigin();
   const selectionBounds = useSelectionBounds();
 
   const widthRef = useRef<EditableSidebarInputHandle>(null);
   const heightRef = useRef<EditableSidebarInputHandle>(null);
-  const layer = useMemo(() => {
-    if (!sourceId) return null;
-
-    const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
-    if (glyphNodes.length !== 1) return null;
-
-    const [node] = glyphNodes;
-    if (!node) return null;
-
-    return editor.glyphForId(node.glyphId)?.layerForSource(sourceId) ?? null;
-  }, [editor, scene, sourceId]);
   const selectedPointIds = useMemo(() => selection.ids.filter(isPointId), [selection]);
+  const layer = useMemo(
+    () => editor.layerForGeometry({ points: selectedPointIds }),
+    [editor, selectedPointIds],
+  );
+  const editable = layer !== null;
 
   useEffect(() => {
     if (!widthRef.current || !heightRef.current) return;
@@ -80,11 +71,13 @@ export const ScaleSection = () => {
           <EditableSidebarInput
             ref={widthRef}
             label={<span className="text-xs text-secondary">W</span>}
+            disabled={!editable}
             onValueChange={(v) => handleSizeChange("width", v)}
           />
           <EditableSidebarInput
             ref={heightRef}
             label="H"
+            disabled={!editable}
             onValueChange={(v) => handleSizeChange("height", v)}
           />
         </div>
@@ -99,6 +92,7 @@ export const ScaleSection = () => {
             suffix="x"
             icon={<ScaleIcon className="w-3.5 h-3.5" />}
             iconPosition="left"
+            disabled={!editable}
             onValueChange={handleScaleChange}
           />
         </div>
@@ -106,7 +100,7 @@ export const ScaleSection = () => {
         <div className="flex flex-col gap-2">
           <div className="text-xs text-secondary">Anchor point</div>
           <div className="w-full h-full bg-input p-1.5 rounded-sm">
-            <TransformGrid activeAnchor={anchor} onChange={setAnchor} />
+            <TransformGrid activeAnchor={anchor} onChange={editable ? setAnchor : undefined} />
           </div>
         </div>
       </div>

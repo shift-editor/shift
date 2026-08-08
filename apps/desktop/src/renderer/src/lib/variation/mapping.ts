@@ -1,12 +1,14 @@
 import type { Axis, AxisId, AxisMappingBasis } from "@shift/types";
 import { evaluateVariationBasis } from "@/lib/interpolation/VariationBasis";
-import type { AxisLocation } from "@/types/variation";
+import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
+
+type MappingInputLocation = ExternalAxisLocation | DesignAxisLocation;
 
 export function mapAxisMappings(
-  location: AxisLocation,
+  location: ExternalAxisLocation,
   axes: readonly Axis[],
   bases: readonly AxisMappingBasis[],
-): AxisLocation {
+): DesignAxisLocation {
   const mapped = new Map(
     axes.map((axis) => [
       axis.id,
@@ -18,20 +20,20 @@ export function mapAxisMappings(
     applyMapping(mapped, evaluateAxisMappingBasis(basis, location, axes));
   }
 
-  const independentlyMapped = new Map(mapped);
+  const independentlyMapped = new Map(mapped) as unknown as DesignAxisLocation;
   for (const basis of bases.filter((basis) => !isIndependent(basis))) {
     applyMapping(mapped, evaluateAxisMappingBasis(basis, independentlyMapped, axes));
   }
 
-  return mapped;
+  return mapped as unknown as DesignAxisLocation;
 }
 
 /** Evaluates one Rust/Fontdrasil-compiled axis mapping basis. */
 export function evaluateAxisMappingBasis(
   mapping: AxisMappingBasis,
-  location: AxisLocation,
+  location: MappingInputLocation,
   axes: readonly Axis[],
-): AxisLocation {
+): DesignAxisLocation {
   const axesById = new Map(axes.map((axis) => [axis.id, axis]));
   const adjustments = evaluateVariationBasis(mapping.basis, location, axes);
 
@@ -46,10 +48,10 @@ export function evaluateAxisMappingBasis(
         denormalizeAxis(normalizeAxis(base, axis) + (adjustments[index] ?? 0), axis),
       ];
     }),
-  );
+  ) as unknown as DesignAxisLocation;
 }
 
-function applyMapping(target: Map<AxisId, number>, output: AxisLocation): void {
+function applyMapping(target: Map<AxisId, number>, output: DesignAxisLocation): void {
   for (const [axisId, value] of output) target.set(axisId, value);
 }
 
@@ -61,7 +63,7 @@ function isIndependent(basis: AxisMappingBasis): boolean {
   );
 }
 
-function axisLocationValue(location: AxisLocation, axis: Axis): number {
+function axisLocationValue(location: MappingInputLocation, axis: Axis): number {
   return location.get(axis.id) ?? axis.default;
 }
 

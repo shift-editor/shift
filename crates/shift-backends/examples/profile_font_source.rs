@@ -27,13 +27,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let directory = font.directory();
     let selected = requested_glyph
         .as_deref()
-        .and_then(|name| directory.glyphs.iter().find(|glyph| glyph.name == name))
-        .or_else(|| directory.glyphs.get(directory.glyphs.len() / 2))
+        .and_then(|name| directory.glyphs().iter().find(|glyph| glyph.name == name))
+        .or_else(|| directory.glyphs().get(directory.glyphs().len() / 2))
         .ok_or("font directory is empty")?;
     let selected_index = selected.index;
     let selected_name = selected.name.clone();
     let glyphs = directory
-        .glyphs
+        .glyphs()
         .iter()
         .map(|glyph| glyph.index)
         .collect::<Vec<_>>();
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "directory: {} glyphs, {} axes, {:.3} ms open + directory",
         glyphs.len(),
-        directory.axes.len(),
+        directory.axes().len(),
         millis(open_and_directory)
     );
     print_samples(

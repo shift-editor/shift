@@ -52,7 +52,9 @@ test.describe("retained font source Grid preview", () => {
     const sceneCanvas = page.locator("#scene-canvas");
     await expect(sceneCanvas).toBeVisible();
     await expect(page.locator("#marker-canvas")).toBeVisible();
-    await expect(page.locator("aside input:disabled")).toHaveCount(0);
+    const readOnlyGlyphInputs = page.locator("aside").last().locator("input:disabled");
+    await expect(readOnlyGlyphInputs).toHaveCount(3);
+    expect((await readOnlyGlyphInputs.allInputValues()).every((value) => value !== "")).toBe(true);
 
     const selected = await page.evaluate(() => {
       const session = window.shiftSession;
@@ -81,7 +83,7 @@ test.describe("retained font source Grid preview", () => {
       const node = editor.scene.nodesOfKind("glyph")[0];
       if (!node) throw new Error("Expected glyph node");
       const glyph = editor.glyphForId(node.glyphId);
-      const geometry = glyph?.geometryAt(editor.designLocation);
+      const geometry = glyph?.geometryAt(editor.externalLocation);
       const point = geometry?.allPoints[0];
       if (!geometry || !point) throw new Error("Expected imported point geometry");
 
@@ -142,13 +144,13 @@ test.describe("retained font source Grid preview", () => {
     if ((await axisSlider.count()) > 0) {
       const beforeScrub = await sceneCanvas.screenshot();
       const beforeLocation = await page.evaluate(() =>
-        Array.from(window.shiftSession?.editor.designLocation.values() ?? []),
+        Array.from(window.shiftSession?.editor.externalLocation.values() ?? []),
       );
       await axisSlider.press("End");
       await expect
         .poll(() =>
           page.evaluate(() =>
-            Array.from(window.shiftSession?.editor.designLocation.values() ?? []),
+            Array.from(window.shiftSession?.editor.externalLocation.values() ?? []),
           ),
         )
         .not.toEqual(beforeLocation);
@@ -162,7 +164,7 @@ test.describe("retained font source Grid preview", () => {
       expect(afterScrub.equals(beforeScrub)).toBe(false);
     }
 
-    await editorSurface.locator("[data-read-only-mutation] input").first().click();
+    await editorSurface.getByLabel("Create source").click();
     await expect(page.getByText("Read-only preview")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByText("Read-only preview")).toBeHidden();

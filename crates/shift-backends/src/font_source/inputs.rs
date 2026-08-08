@@ -229,10 +229,14 @@ fn atlas_axes(directory: &FontDirectory) -> Result<Vec<AtlasAxis>, SourceAtlasEr
         .iter()
         .map(|axis| {
             let mut mapping = directory
-                .axis_mappings
-                .iter()
-                .find(|mapping| mapping.axis == axis.index)
-                .map(|mapping| mapping.points.to_vec())
+                .independent_mapping(axis.index)
+                .map(|mapping| {
+                    mapping
+                        .points
+                        .iter()
+                        .filter_map(|point| Some((*point.input.first()?, *point.output.first()?)))
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
             mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
             mapping.dedup_by(|left, right| left.0 == right.0);
@@ -759,14 +763,14 @@ mod tests {
             .enumerate()
             .map(|(axis_index, design_value)| {
                 let mut mapping = directory
-                    .axis_mappings
-                    .iter()
-                    .find(|mapping| mapping.axis.to_usize() == axis_index)
+                    .independent_mapping(super::super::AxisIndex::new(axis_index as u32))
                     .map(|mapping| {
                         mapping
                             .points
                             .iter()
-                            .map(|(user, design)| (*design, *user))
+                            .filter_map(|point| {
+                                Some((*point.output.first()?, *point.input.first()?))
+                            })
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();

@@ -8,7 +8,7 @@ use std::{
 use norad::designspace::DesignSpaceDocument;
 use rayon::prelude::*;
 use shift_font::{
-    Axis, AxisId, Font, GlyphId, LayerId, Location, MetricDefinition, Source, SourceId,
+    Axis, AxisId, DesignLocation, Font, GlyphId, LayerId, MetricDefinition, Source, SourceId,
 };
 
 use crate::{
@@ -267,7 +267,7 @@ fn stream_axisless_designspace(
             let descriptor = &sources[index];
             let name = axisless_source_name(descriptor, style_name, source_names, index);
             let mut source =
-                Source::with_filename(name, Location::new(), descriptor.filename.clone());
+                Source::with_filename(name, DesignLocation::new(), descriptor.filename.clone());
             source.set_layer_name(descriptor.layer.clone());
             source
         },

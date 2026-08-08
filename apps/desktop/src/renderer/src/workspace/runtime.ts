@@ -48,8 +48,10 @@ async function createFontSession(
       const host = getShiftHost();
       const workspace = new Workspace({ host, client, clipboard: electronSystemClipboard });
       await workspace.connect();
-      const atlas = new AuthoredGlyphAtlasSource(workspace.font.editCoordinator, () =>
-        workspace.font.getAxes(),
+      const atlas = new AuthoredGlyphAtlasSource(
+        workspace.font.editCoordinator,
+        () => workspace.font.getAxes(),
+        () => workspace.font.getAxisMappingBases(),
       );
       const catalog = new GlyphCatalog(workspace.editor, glyphInfo, atlas);
       return new FontSession(

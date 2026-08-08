@@ -2,7 +2,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Axis, AxisMappingBasis } from "@shift/types";
-import { axisLocationFromRecord, mapAxisLocation } from "./location";
+import { externalAxisLocationFromRecord, mapAxisLocation } from "./location";
+import type {
+  CoordinateSpacesRemainDistinct,
+  MappingAcceptsExternalLocation,
+  MappingReturnsDesignLocation,
+} from "./location.typecheck";
+
+const coordinateSpaceContract: readonly [
+  MappingAcceptsExternalLocation,
+  MappingReturnsDesignLocation,
+  CoordinateSpacesRemainDistinct,
+] = [true, true, true];
+void coordinateSpaceContract;
 
 interface MappingCase {
   readonly basisIds: string[];
@@ -23,7 +35,7 @@ describe("external axis locations use Rust-compiled mapping bases", () => {
     for (const mappingCase of fixture.cases) {
       const bases = fixture.bases.filter((basis) => mappingCase.basisIds.includes(basis.mappingId));
       const mapped = mapAxisLocation(
-        axisLocationFromRecord(mappingCase.location),
+        externalAxisLocationFromRecord(mappingCase.location),
         fixture.axes,
         bases,
       );

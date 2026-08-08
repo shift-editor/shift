@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { mintNodeId, type AxisId } from "@shift/types";
+import { mintNodeId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { effect } from "@/lib/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
+import { externalAxisLocationFromRecord } from "@/lib/variation/location";
 
 describe("Editor scene bootstrap", () => {
   let editor: TestEditor;
@@ -123,9 +124,7 @@ describe("Editor scene bootstrap", () => {
 
     const axisId = editor.font.createAxis(weightAxis());
     await editor.settle();
-    const sourceId = editor.createSource("Bold", {
-      values: { [axisId]: 700 } as Record<AxisId, number>,
-    });
+    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
     await editor.settle();
 
     expect(editor.activeSourceId).toBe(sourceId);
@@ -176,9 +175,10 @@ describe("Editor scene bootstrap", () => {
 
     const axisId = editor.font.createAxis(weightAxis());
     await editor.settle();
-    const sourceId = editor.font.createSource("Bold", {
-      values: { [axisId]: 700 } as Record<AxisId, number>,
-    });
+    const sourceId = editor.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 700 }),
+    );
     await editor.settle();
 
     expect(editor.glyphForId(node.glyphId)?.layerForSource(sourceId)).toBeNull();

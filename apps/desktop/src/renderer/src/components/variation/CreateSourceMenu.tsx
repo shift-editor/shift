@@ -19,10 +19,10 @@ import PlusIcon from "@/assets/general/plus.svg";
 import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useAxes } from "@/hooks/useAxes";
-import { useDesignLocation } from "@/hooks/useDesignLocation";
+import { useExternalLocation } from "@/hooks/useExternalLocation";
 import { useSources } from "@/hooks/useSources";
 import { axisValue } from "@/lib/variation/location";
-import type { AxisLocation } from "@/types/variation";
+import type { ExternalAxisLocation } from "@/types/variation";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { sourceCreationIssue, sourceLocation, suggestedSourceName } from "./sourceCreation";
 
@@ -45,12 +45,12 @@ const SOURCE_CREATION_ERROR_ID = "create-source-error";
 function defaultValues(
   axes: readonly Axis[],
   sources: readonly Source[],
-  designLocation: AxisLocation,
+  externalLocation: ExternalAxisLocation,
 ): CreateSourceFormValues {
   return {
-    name: suggestedSourceName(axes, sources, designLocation),
+    name: suggestedSourceName(axes, sources, externalLocation),
     location: Object.fromEntries(
-      axes.map((axis) => [axis.id, String(axisValue(designLocation, axis))]),
+      axes.map((axis) => [axis.id, String(axisValue(externalLocation, axis))]),
     ),
   };
 }
@@ -59,7 +59,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const editor = useEditor();
   const axes = useAxes();
   const sources = useSources();
-  const [designLocation] = useDesignLocation();
+  const [externalLocation] = useExternalLocation();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<CreateSourceFormValues>(emptyValues);
   const [validationVisible, setValidationVisible] = useState(false);
@@ -67,7 +67,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const axisInputRefs = useRef(new Map<AxisId, HTMLInputElement>());
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen) setValues(defaultValues(axes, sources, designLocation));
+    if (nextOpen) setValues(defaultValues(axes, sources, externalLocation));
     setValidationVisible(false);
     setOpen(nextOpen);
     if (onOpenChange) onOpenChange(nextOpen);
@@ -88,7 +88,13 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
 
   const trimmedName = values.name.trim();
   const location = sourceLocation(axes, values.location);
-  const issue = sourceCreationIssue(values.name, values.location, axes, sources);
+  const issue = sourceCreationIssue(
+    values.name,
+    values.location,
+    axes,
+    sources,
+    editor.font.getAxisMappingBases(),
+  );
   const visibleIssue = validationVisible ? issue : null;
   const nameIssue = visibleIssue && visibleIssue.kind === "name" ? visibleIssue : null;
   const locationIssue = visibleIssue && visibleIssue.kind === "location" ? visibleIssue : null;

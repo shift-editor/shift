@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use norad::{DataRequest, Font as NoradFont, PointType};
+use norad::PointType;
 
 use crate::font_source::geometry::{
     control_point_kind, normalize_contour, ContourPoint, SourceComponent, SourceContour,
@@ -11,8 +11,8 @@ use crate::font_source::geometry::{
 use crate::font_source::interpolation::InterpolationAxis;
 use crate::font_source::projection::{empty_projection_layer, project_layers, ProjectionLayer};
 use crate::font_source::{
-    malformed, AffineTransform, FontDirectory, FontReadError, GlyphAnchor, GlyphIndex,
-    GlyphMetrics, GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex,
+    malformed, AffineTransform, DirectoryGlyphInput, FontDirectory, FontReadError, GlyphAnchor,
+    GlyphIndex, GlyphMetrics, GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex,
 };
 
 pub(crate) struct RetainedGlif {
@@ -21,7 +21,6 @@ pub(crate) struct RetainedGlif {
 }
 
 pub(crate) struct RetainedUfoLayer {
-    pub(crate) paths: BTreeMap<String, PathBuf>,
     glyphs: Box<[Option<RetainedGlif>]>,
 }
 
@@ -90,14 +89,37 @@ pub(crate) fn retained_layer(
         })
         .collect::<Result<Vec<_>, FontReadError>>()?;
     Ok(RetainedUfoLayer {
-        paths,
         glyphs: glyphs.into_boxed_slice(),
     })
 }
 
-pub(crate) fn load_norad_header(path: &Path) -> Result<NoradFont, FontReadError> {
-    NoradFont::load_requested_data(path, DataRequest::none())
-        .map_err(|error| malformed(path, error.to_string()))
+pub(crate) fn glyph_directory(
+    layers: &[BTreeMap<String, PathBuf>],
+) -> Result<Vec<DirectoryGlyphInput>, FontReadError> {
+    let names = layers
+        .iter()
+        .flat_map(|layer| layer.keys().cloned())
+        .collect::<std::collections::BTreeSet<_>>();
+    names
+        .into_iter()
+        .map(|name| {
+            let path = layers
+                .iter()
+                .find_map(|layer| layer.get(&name))
+                .ok_or_else(|| malformed(Path::new(&name), "glyph path is unavailable".into()))?;
+            let glyph = norad::Glyph::load(path)
+                .map_err(|error| malformed(path, format!("failed to read glyph: {error}")))?;
+            Ok((
+                name,
+                glyph
+                    .codepoints
+                    .iter()
+                    .map(u32::from)
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            ))
+        })
+        .collect()
 }
 
 fn convert_norad_layer(

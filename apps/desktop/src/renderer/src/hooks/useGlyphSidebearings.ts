@@ -20,13 +20,17 @@ export function useGlyphSidebearings(): GlyphSidebearingsState {
         const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
         if (!node) return { sidebearings: EMPTY_SIDEBEARINGS, hasLayer: false };
 
-        const location = editor.designLocationCell.value;
+        const externalLocation = editor.externalLocationCell.value;
+        const activeSourceId = editor.activeSourceIdCell.value;
         const glyph = editor.glyphForId(node.glyphId);
         if (!glyph) return { sidebearings: EMPTY_SIDEBEARINGS, hasLayer: false };
 
         return {
-          sidebearings: glyph.renderModelAt(editor.designLocationCell).sidebearingsCell.value,
-          hasLayer: glyph.layerAt(location) !== null,
+          sidebearings: glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell)
+            .sidebearingsCell.value,
+          hasLayer: activeSourceId
+            ? glyph.layerForSource(activeSourceId) !== null
+            : glyph.layerAt(externalLocation) !== null,
         };
       }),
     [editor],

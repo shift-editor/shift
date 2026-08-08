@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 use shift_font::{
     Anchor, Axis, AxisId, AxisKind, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
     AxisMappingId, AxisMappingPoint, AxisRole, Component, Contour, DecomposedTransform,
-    FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, Guideline,
-    KerningData, KerningPair, KerningSide, LibData, LibValue, Location, MetricDefinition, MetricId,
-    MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point, PointType, Source, SourceId,
-    SourceRole,
+    DesignLocation, ExternalLocation, FeatureData, Font, FontMetadata, FontMetrics, Glyph,
+    GlyphLayer, GlyphName, Guideline, KerningData, KerningPair, KerningSide, LibData, LibValue,
+    Location, MetricDefinition, MetricId, MetricKind, MetricValue, NamedInstance, NamedInstanceId,
+    Point, PointType, Source, SourceId, SourceRole,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, result::ZipError, write::SimpleFileOptions};
 
@@ -2091,7 +2091,10 @@ impl TryFrom<&NamedInstance> for NamedInstanceDoc {
         Ok(Self {
             id: instance.id().to_string(),
             name: instance.name().to_string(),
-            location: location_to_doc("namedInstances[].location", instance.location())?,
+            location: location_to_doc(
+                "namedInstances[].location",
+                instance.location().as_untyped(),
+            )?,
             postscript_name: instance.postscript_name().map(str::to_string),
         })
     }
@@ -2104,7 +2107,10 @@ impl TryFrom<NamedInstanceDoc> for NamedInstance {
         Ok(Self::with_id(
             parse_id::<NamedInstanceId>("named instance", &instance.id)?,
             instance.name,
-            location_from_doc("namedInstances[].location", instance.location)?,
+            ExternalLocation::from_untyped(location_from_doc(
+                "namedInstances[].location",
+                instance.location,
+            )?),
             instance.postscript_name,
         ))
     }
@@ -2303,7 +2309,7 @@ impl TryFrom<SourceDoc> for Source {
         let mut source = Self::with_id(
             source_id,
             doc.name,
-            Location::from_map(location),
+            DesignLocation::from_map(location),
             doc.filename,
         );
         source.set_metric_values(metric_values);

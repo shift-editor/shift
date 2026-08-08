@@ -5,11 +5,15 @@ use glyphs_reader::{
     FontMaster, Glyph as GlyphsGlyph, NodeType, Shape,
 };
 use shift_font::{
-    Anchor, Axis, Component, Contour, FeatureData, Font, Glyph, GlyphId, GlyphLayer, KerningData,
-    KerningPair, KerningSide, LayerId, Location, MetricKind, Source, SourceId, Transform,
+    Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
+    ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, KerningData, KerningPair,
+    KerningSide, LayerId, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
 };
 
-use crate::{metrics::set_metric_position, FormatBackendError, FormatBackendResult};
+use crate::{
+    font_source::piecewise_map, metrics::set_metric_position, FormatBackendError,
+    FormatBackendResult,
+};
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
 const GLYPHS_SIDE2_PREFIX: &str = "@MMK_R_";
@@ -31,6 +35,61 @@ pub(crate) fn default_design_value(font: &GlyphsFont, axis_index: usize, values:
         .map(|value| value.into_inner())
         .or_else(|| values.first().copied())
         .unwrap_or(0.0)
+}
+
+#[derive(Clone)]
+pub(crate) struct GlyphsAxisMapping {
+    pub(crate) user_to_design: Box<[(f64, f64)]>,
+}
+
+impl GlyphsAxisMapping {
+    pub(crate) fn unmap(&self, design: f64) -> f64 {
+        let mut design_to_user = self
+            .user_to_design
+            .iter()
+            .map(|(user, design)| (*design, *user))
+            .collect::<Vec<_>>();
+        design_to_user.sort_by(|left, right| left.0.total_cmp(&right.0));
+        design_to_user.dedup_by(|left, right| left.0 == right.0);
+        piecewise_map(design, &design_to_user)
+    }
+
+    pub(crate) fn user_values(&self) -> impl Iterator<Item = f64> + '_ {
+        self.user_to_design.iter().map(|(user, _)| *user)
+    }
+}
+
+pub(crate) fn glyphs_axis_mapping(
+    font: &GlyphsFont,
+    axis_index: usize,
+    design_values: &[f64],
+    design_default: f64,
+) -> GlyphsAxisMapping {
+    let axis = &font.axes[axis_index];
+    let mut mapping = font
+        .axis_mappings
+        .get(&axis.name)
+        .map(|mapping| {
+            mapping
+                .iter()
+                .map(|(user, design)| (user.into_inner(), design.into_inner()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| {
+            design_values
+                .iter()
+                .copied()
+                .map(|value| (value, value))
+                .collect()
+        });
+    if mapping.is_empty() {
+        mapping.push((design_default, design_default));
+    }
+    mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
+    mapping.dedup_by(|left, right| left.0 == right.0);
+    GlyphsAxisMapping {
+        user_to_design: mapping.into_boxed_slice(),
+    }
 }
 
 pub(crate) fn master_location_values(master: &FontMaster, axis_count: usize) -> Vec<Option<f64>> {
@@ -60,7 +119,7 @@ pub(crate) fn anchor_parts(anchor: &GlyphsAnchor) -> (Option<String>, f64, f64) 
     )
 }
 
-pub(super) fn font_header(
+pub(crate) fn font_header(
     glyphs_font: &GlyphsFont,
 ) -> FormatBackendResult<(Font, HashMap<String, SourceId>)> {
     let mut font = Font::empty();
@@ -76,33 +135,69 @@ pub(super) fn font_header(
     font.metrics_mut().units_per_em = glyphs_font.units_per_em as f64;
 
     let mut axis_ids_by_index = Vec::new();
+    let mut axis_mappings = Vec::new();
     for (index, glyphs_axis) in glyphs_font.axes.iter().enumerate() {
-        let axis_values = master_design_values(glyphs_font, index);
-        if axis_values.is_empty() {
+        let design_values = master_design_values(glyphs_font, index);
+        if design_values.is_empty() {
             continue;
         }
 
-        let default = default_design_value(glyphs_font, index, &axis_values);
-        let minimum = axis_values.iter().copied().fold(f64::INFINITY, f64::min);
-        let maximum = axis_values
+        let design_default = default_design_value(glyphs_font, index, &design_values);
+        let mapping = glyphs_axis_mapping(glyphs_font, index, &design_values, design_default);
+        let user_default = mapping.unmap(design_default);
+        let instance_values = glyphs_font
+            .instances
             .iter()
-            .copied()
-            .fold(f64::NEG_INFINITY, f64::max);
+            .filter(|instance| instance.active)
+            .filter_map(|instance| instance.axes_values.get(index))
+            .map(|value| value.into_inner());
+        let external_values = mapping
+            .user_values()
+            .chain(design_values.iter().map(|value| mapping.unmap(*value)))
+            .chain(instance_values);
+        let (user_minimum, user_maximum) = external_values
+            .fold((user_default, user_default), |(minimum, maximum), value| {
+                (minimum.min(value), maximum.max(value))
+            });
         let mut axis = Axis::new(
             glyphs_axis.tag.clone(),
             glyphs_axis.name.clone(),
-            minimum,
-            default,
-            maximum,
+            user_minimum,
+            user_default,
+            user_maximum,
         );
         axis.set_hidden(glyphs_axis.hidden.unwrap_or(false));
         axis_ids_by_index.push(axis.id());
+        axis_mappings.push(mapping);
         font.add_axis(axis)?;
     }
+    font.set_axis_mappings(
+        axis_ids_by_index
+            .iter()
+            .zip(&axis_mappings)
+            .zip(&glyphs_font.axes)
+            .map(|((axis_id, mapping), axis)| {
+                AxisMapping::new(
+                    format!("{} mapping", axis.name),
+                    vec![axis_id.clone()],
+                    vec![axis_id.clone()],
+                    mapping
+                        .user_to_design
+                        .iter()
+                        .map(|(user, design)| AxisMappingPoint {
+                            description: None,
+                            input: Location::from_map(HashMap::from([(axis_id.clone(), *user)])),
+                            output: Location::from_map(HashMap::from([(axis_id.clone(), *design)])),
+                        })
+                        .collect(),
+                )
+            })
+            .collect(),
+    )?;
 
     let mut source_ids_by_master_id = HashMap::new();
     for (master_index, master) in glyphs_font.masters.iter().enumerate() {
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         for (axis_id, value) in axis_ids_by_index
             .iter()
             .zip(master_location_values(master, axis_ids_by_index.len()))
@@ -147,6 +242,33 @@ pub(super) fn font_header(
         }
     }
 
+    font.set_named_instances(
+        glyphs_font
+            .instances
+            .iter()
+            .filter(|instance| instance.active)
+            .map(|instance| {
+                NamedInstance::new(
+                    instance.name.clone(),
+                    ExternalLocation::from_map(
+                        axis_ids_by_index
+                            .iter()
+                            .enumerate()
+                            .map(|(index, axis_id)| {
+                                let value = instance
+                                    .axes_values
+                                    .get(index)
+                                    .map(|value| value.into_inner())
+                                    .unwrap_or_else(|| font.axes()[index].default());
+                                (axis_id.clone(), value)
+                            })
+                            .collect(),
+                    ),
+                    None,
+                )
+            })
+            .collect(),
+    )?;
     *font.features_mut() = convert_features(glyphs_font);
     *font.kerning_mut() = convert_kerning(glyphs_font);
     Ok((font, source_ids_by_master_id))

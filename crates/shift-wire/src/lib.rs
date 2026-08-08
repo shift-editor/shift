@@ -228,7 +228,7 @@ impl From<&IrNamedInstance> for NamedInstance {
         Self {
             id: instance.id(),
             name: instance.name().to_string(),
-            location: instance.location().into(),
+            location: instance.location().as_untyped().into(),
             postscript_name: instance.postscript_name().map(str::to_string),
         }
     }
@@ -314,7 +314,7 @@ impl From<&IrSource> for Source {
         Self {
             id: source.id(),
             name: source.name().to_string(),
-            location: source.location().into(),
+            location: source.location().as_untyped().into(),
             filename: source.filename().map(str::to_string),
             metric_values: source
                 .metric_values()

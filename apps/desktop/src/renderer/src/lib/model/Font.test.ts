@@ -18,7 +18,7 @@ import { Font } from "./Font";
 import { FontStore } from "./FontStore";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 import { signal } from "@/lib/signals/signal";
-import { axisLocationFromLocation } from "@/lib/variation/location";
+import { externalAxisLocationFromRecord } from "@/lib/variation/location";
 
 const SNAPSHOT: WorkspaceSnapshot = {
   documentId: "11111111-2222-3333-4444-555555555555",
@@ -211,7 +211,10 @@ describe("font-level intents make the font variable", () => {
     });
     await stack.editCoordinator.settled();
 
-    const sourceId = stack.font.createSource("Bold", { values: { [axisId]: 900 } });
+    const sourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 900 }),
+    );
     await stack.editCoordinator.settled();
 
     const source = stack.font.sources.find((candidate) => candidate.id === sourceId);
@@ -389,7 +392,7 @@ describe("font-level intents make the font variable", () => {
     expect(glyph.layers).toEqual([layer]);
     expect(layer.id).toBe(record.layers[0]?.id);
     expect(glyph.layerForId(layer.id)).toBe(layer);
-    expect(glyph.layerAt(axisLocationFromLocation(source.location))).toBe(layer);
+    expect(glyph.layerAt(externalAxisLocationFromRecord(source.location.values))).toBe(layer);
     expect(glyph.xAdvance).toBe(stack.font.defaultXAdvance);
     expect(glyph.allPoints).toEqual([]);
   });
@@ -476,7 +479,7 @@ describe("font-level intents make the font variable", () => {
 
     const bold = stack.font.source(sourceId);
     if (!bold) throw new Error("Expected created source");
-    const location = axisLocationFromLocation(bold.location);
+    const location = externalAxisLocationFromRecord(bold.location.values);
     const renderModel = glyph.renderModelAt(signal(location));
 
     expect(glyph.layerAt(location)).toBeNull();
@@ -553,8 +556,10 @@ describe("font-level intents make the font variable", () => {
     expect(glyph.layerForId(defaultLayerId)?.sourceId).toBe(defaultSourceId);
     expect(glyph.layerForId(boldLayerId)?.sourceId).toBe(boldSourceId);
     expect(glyph.primaryGeometryForFont).toBe(glyph.layerForSource(defaultSourceId)?.geometry);
-    expect(glyph.layerAt(axisLocationFromLocation(boldSource.location))?.id).toBe(boldLayerId);
-    const locationCell = signal(axisLocationFromLocation(boldSource.location));
+    expect(glyph.layerAt(externalAxisLocationFromRecord(boldSource.location.values))?.id).toBe(
+      boldLayerId,
+    );
+    const locationCell = signal(externalAxisLocationFromRecord(boldSource.location.values));
     expect(glyph.geometryAt(locationCell.peek())).toBe(glyph.layerForId(boldLayerId)?.geometry);
     expect(glyph.renderModelAt(locationCell)).toBe(glyph.renderModelAt(locationCell));
   });

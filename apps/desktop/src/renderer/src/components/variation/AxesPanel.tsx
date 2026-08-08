@@ -13,8 +13,8 @@ import {
 import { EditableSidebarInput } from "@/components/editor/sidebar-right/EditableSidebarInput";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useAxes } from "@/hooks/useAxes";
-import { useDesignLocation } from "@/hooks/useDesignLocation";
-import { axisValue, withAxisValue } from "@/lib/variation/location";
+import { useExternalLocation } from "@/hooks/useExternalLocation";
+import { axisValue, withExternalAxisValue } from "@/lib/variation/location";
 import { useFont, useFontSession } from "@/workspace/WorkspaceContext";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
@@ -23,14 +23,14 @@ export const AxesPanel = () => {
   const font = useFont();
   const editable = useFontSession().workspace !== null;
   const axes = useAxes();
-  const [location, setDesignLocation] = useDesignLocation();
+  const [location, setExternalLocation] = useExternalLocation();
   const settings = useSettingsNavigation();
 
   if (axes.length === 0) return <p className="text-ui text-muted pl-2">No axes defined</p>;
 
   const onAxisChange = (axis: Axis, value: number) => {
-    const nextLocation = withAxisValue(location, axis, value);
-    setDesignLocation(nextLocation);
+    const nextLocation = withExternalAxisValue(location, axis, value);
+    setExternalLocation(nextLocation);
   };
 
   const resetAxis = (axis: Axis) => {

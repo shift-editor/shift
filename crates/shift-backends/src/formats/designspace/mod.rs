@@ -8,10 +8,7 @@ mod writer;
 pub use error::DesignspaceError;
 pub(crate) use import::{stream_font, stream_retained};
 pub use reader::DesignspaceReader;
-pub(crate) use reader::{
-    derive_axis_range, find_default_source_index, map_axis_value, source_axis_design_value,
-    source_name, variation_axis_kind,
-};
+pub(crate) use reader::{derive_axis_range, find_default_source_index, map_axis_value};
 pub use source::DesignspaceFont;
 pub use writer::DesignspaceWriter;
 
@@ -20,8 +17,8 @@ mod tests {
     use super::*;
     use crate::traits::{FontReader, FontWriter};
     use shift_font::{
-        Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, Contour, Font,
-        Glyph, GlyphLayer, LayerId, Location, NamedInstance, PointType,
+        Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, Contour,
+        ExternalLocation, Font, Glyph, GlyphLayer, LayerId, Location, NamedInstance, PointType,
     };
     use std::fs;
 
@@ -135,7 +132,10 @@ mod tests {
         font.set_axis_mappings(vec![independent, cross]).unwrap();
         font.set_named_instances(vec![NamedInstance::new(
             "Black Italic".to_string(),
-            location(&[(weight_id.clone(), 900.0), (italic_id.clone(), 1.0)]),
+            ExternalLocation::from_untyped(location(&[
+                (weight_id.clone(), 900.0),
+                (italic_id.clone(), 1.0),
+            ])),
             Some("PlaceholderSans-BlackItalic".to_string()),
         )])
         .unwrap();

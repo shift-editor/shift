@@ -22,7 +22,8 @@ pub mod variation;
 
 pub use anchor::Anchor;
 pub use axis::{
-    Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, AxisRole, Location,
+    Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, AxisRole,
+    DesignLocation, ExternalLocation, Location,
 };
 pub use binary_data::BinaryData;
 pub use boolean::{boolean, BooleanOp};
