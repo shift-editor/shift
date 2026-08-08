@@ -38,8 +38,9 @@ const GLYPHS_PREVIEW_FONT_PATH = path.resolve(
   "../../fixtures/fonts/MutatorSansVariable.glyphs",
 );
 
-const WINDOW_WIDTH = 1280;
-const WINDOW_HEIGHT = 800;
+/** Fixed CSS content size; canvas backing dimensions continue to follow the host DPR. */
+const CONTENT_WIDTH = 1280;
+const CONTENT_HEIGHT = 800;
 
 export type PerfFixtures = {
   electronApp: ElectronApplication;
@@ -78,35 +79,26 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPac
           throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
         }
 
+        const contentSize = { width: CONTENT_WIDTH, height: CONTENT_HEIGHT };
         const browserWindow = await app.browserWindow(page);
-        const initialContentSize = await browserWindow.evaluate(
-          (win, { w, h }) => {
-            win.unmaximize();
-            win.setSize(w, h);
-            win.center();
-            const [width, height] = win.getContentSize();
-            return { width, height };
-          },
-          { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-        );
+        await browserWindow.evaluate((win, { width, height }) => {
+          win.unmaximize();
+          win.setContentSize(width, height);
+          win.center();
+        }, contentSize);
         await page.waitForFunction(
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
-          initialContentSize,
+          contentSize,
         );
         await page.waitForFunction(() => document.visibilityState === "visible");
-        const visibleContentSize = await browserWindow.evaluate(
-          (win, { w, h }) => {
-            win.setSize(w, h);
-            win.center();
-            const [width, height] = win.getContentSize();
-            return { width, height };
-          },
-          { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-        );
+        await browserWindow.evaluate((win, { width, height }) => {
+          win.setContentSize(width, height);
+          win.center();
+        }, contentSize);
         await browserWindow.dispose();
         await page.waitForFunction(
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
-          visibleContentSize,
+          contentSize,
         );
 
         await use(app);

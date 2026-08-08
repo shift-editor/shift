@@ -26,15 +26,31 @@ test.describe("Resident Glyph Grid", () => {
     await page.evaluate(() => document.fonts.ready);
     await afterNextPaint(page);
 
+    const viewportBox = await scrollViewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    if (!viewportBox) throw new Error("Expected catalog viewport bounds");
+
+    await page.mouse.move(viewportBox.x + 20, viewportBox.y + 20);
+    await afterNextPaint(page);
+    await expect
+      .poll(() =>
+        glyphCanvas.evaluate((canvas) => {
+          const bounds = canvas.getBoundingClientRect();
+          const scale = window.devicePixelRatio;
+          return (
+            canvas.width === Math.floor(bounds.width * scale) &&
+            canvas.height === Math.floor(bounds.height * scale)
+          );
+        }),
+      )
+      .toBe(true);
+
     const initialSize = await glyphCanvas.evaluate((canvas) => ({
       width: canvas.width,
       height: canvas.height,
     }));
     expect(initialSize.width).toBeGreaterThan(1);
     expect(initialSize.height).toBeGreaterThan(1);
-    const viewportBox = await scrollViewport.boundingBox();
-    expect(viewportBox).not.toBeNull();
-    if (!viewportBox) throw new Error("Expected catalog viewport bounds");
 
     for (let index = 0; index < 12; index += 1) {
       await page.mouse.move(
