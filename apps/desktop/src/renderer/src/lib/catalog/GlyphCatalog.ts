@@ -1,15 +1,13 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type { Axis, CatalogAxis, CatalogMetrics, GlyphId, SourceId } from "@shift/types";
+import type { Axis, CatalogAxis, CatalogMetrics, GlyphId, GlyphName, SourceId } from "@shift/types";
 import { computed, type ComputedSignal, type Signal } from "@/lib/signals";
 import type { Editor } from "@/lib/editor/Editor";
 import type { AxisLocation } from "@/types/variation";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
-import type { RenderGlyph } from "@/types/glyphRender";
-import { renderGlyph } from "@/lib/model/renderGlyph";
-import { glyphCatalogItem } from "./glyphCatalogItem";
+import { RenderGlyph } from "@/lib/model/RenderGlyph";
 
-/** Projects the authored model into the immutable catalog boundary. */
+/** Projects the editor model into the source-independent catalog boundary. */
 export class GlyphCatalog {
   readonly #editor: Editor;
   readonly #derived: readonly ComputedSignal<unknown>[];
@@ -83,7 +81,7 @@ export class GlyphCatalog {
 
   async openGlyph(glyphId: GlyphId): Promise<RenderGlyph> {
     const glyph = await this.#editor.font.loadGlyph(glyphId);
-    return renderGlyph(glyph.renderModelAt(this.#editor.designLocationCell));
+    return new RenderGlyph(glyph.renderModelAt(this.#editor.designLocationCell));
   }
 
   async setLocation(location: CatalogLocation): Promise<void> {
@@ -101,6 +99,22 @@ export class GlyphCatalog {
   dispose(): void {
     for (const cell of this.#derived) cell.dispose();
   }
+}
+
+function glyphCatalogItem(
+  id: GlyphId,
+  name: GlyphName,
+  unicodes: readonly number[],
+  glyphInfo: GlyphInfo,
+): GlyphCatalogItem {
+  const unicode = unicodes[0] ?? null;
+
+  return {
+    id,
+    name,
+    displayName: glyphInfo.resolveGlyphName(name, unicode),
+    unicode,
+  };
 }
 
 function catalogAxis(axis: Axis, index: number): CatalogAxis {

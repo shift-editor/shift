@@ -11,7 +11,7 @@ export class UpgradeSegment implements SelectBehavior {
     const object = ctx.editor.object(event.target.id);
     if (!objectIsKindOf(object, "segment")) return false;
 
-    const layer = ctx.editor.layerForGeometry({ segments: [object.segmentId] });
+    const layer = object.layer;
     if (!layer || layer.sourceId !== ctx.editor.activeSourceId) return false;
 
     return layer.upgradeLineToCubic(object.segmentId);

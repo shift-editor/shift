@@ -14,13 +14,6 @@ export function useFontSession(): FontSession {
   return session;
 }
 
-export function useWorkspace(): Workspace {
-  const workspace = useContext(WorkspaceContext);
-  if (!workspace) throw new Error("the current font session has no authored workspace");
-
-  return workspace;
-}
-
 export function useEditor(): Editor {
   return useFontSession().editor;
 }

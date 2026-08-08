@@ -16,7 +16,7 @@ export class BendCurve implements SelectBehavior {
     const object = ctx.editor.object(event.target.id);
     if (!objectIsKindOf(object, "segment")) return false;
 
-    const layer = ctx.editor.layerForGeometry({ segments: [object.segmentId] });
+    const layer = object.layer;
     if (!layer || layer.sourceId !== ctx.editor.activeSourceId) return false;
 
     const segment = layer.segment(object.segmentId);

@@ -11,51 +11,38 @@ import { BooleanOps } from "./BooleanOps";
 
 export const RightSidebar = () => {
   const session = useFontSession();
+  const editor = useEditor();
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
-
-  return (
-    <aside className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden">
-      <div className="px-3 py-2 flex items-center justify-between">
-        <span className="text-ui font-medium text-primary truncate">{familyName}</span>
-        <AuthoredZoom />
-      </div>
-      <Separator />
-      <AuthoredSections />
-    </aside>
-  );
-};
-
-const AuthoredZoom = () => {
-  const editor = useEditor();
   const zoom = useSignalState(editor.zoomCell);
-
-  return <span className="text-ui font-medium text-muted">{Math.round(zoom * 100)}%</span>;
-};
-
-const AuthoredSections = () => {
-  const editor = useEditor();
   const selection = useSignalState(editor.selection.stateCell);
   const hasPointSelection = selection.ids.some(isPointId);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
 
   return (
-    <TransformOriginProvider>
-      <div className="px-3 py-3">
-        <GlyphSection />
+    <aside className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden">
+      <div className="px-3 py-2 flex items-center justify-between">
+        <span className="text-ui font-medium text-primary truncate">{familyName}</span>
+        <span className="text-ui font-medium text-muted">{Math.round(zoom * 100)}%</span>
       </div>
       <Separator />
-      {hasPointSelection && (
-        <div className="px-3 py-3 flex flex-col gap-4">
-          <BooleanOps />
-          <TransformSection />
-          <ScaleSection />
+      <TransformOriginProvider>
+        <div className="px-3 py-3">
+          <GlyphSection />
         </div>
-      )}
-      {!hasPointSelection && hasAnchorSelection && (
-        <div className="px-3 py-3 flex flex-col gap-4">
-          <AnchorSection />
-        </div>
-      )}
-    </TransformOriginProvider>
+        <Separator />
+        {hasPointSelection && (
+          <div className="px-3 py-3 flex flex-col gap-4">
+            <BooleanOps />
+            <TransformSection />
+            <ScaleSection />
+          </div>
+        )}
+        {!hasPointSelection && hasAnchorSelection && (
+          <div className="px-3 py-3 flex flex-col gap-4">
+            <AnchorSection />
+          </div>
+        )}
+      </TransformOriginProvider>
+    </aside>
   );
 };

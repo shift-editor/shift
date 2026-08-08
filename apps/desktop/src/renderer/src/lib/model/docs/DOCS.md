@@ -31,7 +31,7 @@ lib/model/
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
   GlyphLayerState.ts         -- reactive authored structure and numeric buffers
-  renderGlyph.ts             -- minimal passive RenderGlyph projection
+  RenderGlyph.ts             -- source-independent live selected-glyph view
 lib/graphics/
   ContourPath.ts             -- canonical transformed commands and lazy path outputs
 lib/interpolation/

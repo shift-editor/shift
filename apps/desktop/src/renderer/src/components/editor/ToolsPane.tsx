@@ -2,10 +2,9 @@ import { FC } from "react";
 
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from "@shift/ui";
 import { useSignalState } from "@/lib/signals";
-import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import { SVG } from "@/types/common";
 import type { ToolName } from "@/lib/tools/core";
-import { BUILT_IN_TOOL_MANIFESTS } from "@/lib/tools/tools";
 
 interface ToolbarIconProps {
   Icon: SVG;
@@ -43,38 +42,27 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeT
 };
 
 export const ToolsPane: FC = () => {
-  const workspace = useFontSession().workspace;
+  const editor = useEditor();
+  const activeTool = useSignalState(editor.activeToolCell);
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
       <TooltipProvider delayDuration={2000}>
         <div className="flex items-center gap-2 bg-white rounded-lg border-b border-line p-0.5">
-          {workspace ? <AuthoredTools /> : <DisplayTools />}
+          {Array.from(editor.toolRegistry.entries()).map(([name, { icon, tooltip }]) => (
+            <ToolbarIcon
+              key={name}
+              Icon={icon}
+              name={name}
+              tooltip={tooltip}
+              activeTool={activeTool}
+              onClick={() => {
+                editor.setActiveTool(name);
+              }}
+            />
+          ))}
         </div>
       </TooltipProvider>
     </section>
   );
 };
-
-const AuthoredTools = () => {
-  const editor = useEditor();
-  const activeTool = useSignalState(editor.activeToolCell);
-
-  return Array.from(editor.toolRegistry.entries()).map(([name, { icon, tooltip }]) => (
-    <ToolbarIcon
-      key={name}
-      Icon={icon}
-      name={name}
-      tooltip={tooltip}
-      activeTool={activeTool}
-      onClick={() => {
-        editor.setActiveTool(name);
-      }}
-    />
-  ));
-};
-
-const DisplayTools = () =>
-  BUILT_IN_TOOL_MANIFESTS.map(({ id, icon, tooltip }) => (
-    <ToolbarIcon key={id} Icon={icon} name={id} tooltip={tooltip} activeTool="select" />
-  ));

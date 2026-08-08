@@ -16,7 +16,7 @@ export class ToggleSmooth implements SelectBehavior {
     const object = ctx.editor.object(event.target.id);
     if (!objectIsKindOf(object, "point")) return false;
 
-    const layer = ctx.editor.layerForGeometry({ points: [object.pointId] });
+    const layer = object.layer;
     if (!layer || layer.sourceId !== ctx.editor.activeSourceId) return false;
 
     const point = layer.point(object.pointId);

@@ -32,7 +32,6 @@ import type { GlyphObjectIndex, GlyphObjectSegment } from "@/types";
 import type { FontStoreOptions } from "@/types/font";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { Glyph } from "./Glyph";
-import { fontSnapshotFromWorkspace } from "./fontSnapshot";
 
 export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
@@ -662,4 +661,29 @@ function isOnCurve(point: PointData): boolean {
 
 function isOffCurve(point: PointData): boolean {
   return Validate.isOffCurve(point);
+}
+
+function glyphEntry(record: GlyphRecord): GlyphEntry {
+  return {
+    id: record.id,
+    name: record.name,
+    unicodes: [...record.unicodes],
+  };
+}
+
+function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
+  return {
+    metadata: workspace.metadata,
+    metrics: workspace.metrics,
+    metricDefinitions: workspace.metricDefinitions,
+    ...(workspace.sourceMetricsInterpolation
+      ? { sourceMetricsInterpolation: workspace.sourceMetricsInterpolation }
+      : {}),
+    glyphs: workspace.glyphs.map(glyphEntry),
+    sources: workspace.sources,
+    axes: workspace.axes,
+    axisMappings: workspace.axisMappings,
+    axisMappingBases: workspace.axisMappingBases,
+    namedInstances: workspace.namedInstances,
+  };
 }
