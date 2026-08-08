@@ -39,7 +39,7 @@ export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
         <SidebarActionRow
           key={s.id}
           isActive={s.id === activeSourceId}
-          onClick={canAuthor ? () => editor.selectSource(s.id) : undefined}
+          onClick={() => editor.selectSource(s.id)}
           contentClassName="h-6 text-ui"
           actions={
             canAuthor ? (

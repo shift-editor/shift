@@ -31,7 +31,10 @@ test.describe("variable imported font projection", () => {
     await expect(slider).toBeVisible();
 
     const variationSidebar = page.locator(".shift-editor-shell aside").first();
-    await expect(variationSidebar.getByText("Regular", { exact: true })).toHaveCount(2);
+    const regularLabels = variationSidebar.getByText("Regular", { exact: true });
+    await expect(regularLabels).toHaveCount(2);
+    await expect(regularLabels.first()).toHaveRole("button");
+    await expect(regularLabels.first()).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
     await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveCount(0);
     await variationSidebar.getByText("Medium", { exact: true }).click();
@@ -68,6 +71,17 @@ test.describe("variable imported font projection", () => {
     });
 
     await slider.press("End");
+    await expect
+      .poll(() =>
+        slider.evaluate((input) => {
+          const thumbBounds = input.parentElement?.getBoundingClientRect();
+          const trackBounds = input.parentElement?.parentElement?.getBoundingClientRect();
+          if (!thumbBounds || !trackBounds) return false;
+
+          return thumbBounds.left >= trackBounds.left && thumbBounds.right <= trackBounds.right;
+        }),
+      )
+      .toBe(true);
     await expect
       .poll(() =>
         page.evaluate(() =>
