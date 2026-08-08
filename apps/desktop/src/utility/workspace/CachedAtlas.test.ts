@@ -42,7 +42,7 @@ describe("CachedAtlas keeps only validated latest document pages", () => {
     try {
       const page = await loadCachedAtlasPage(opened, request);
       expect(page?.atlas.glyphs.map((glyph) => glyph.glyphId)).toEqual([glyphB]);
-      expect(page?.atlas.weightSets[0]?.basis.coefficients[0]).toBeInstanceOf(Float64Array);
+      expect(page?.atlas.weightSets[0]?.basis.basis.deltas[0]?.values).toBeInstanceOf(Float64Array);
       expect(await readOpened(page)).toEqual(Uint8Array.of(4, 5));
     } finally {
       await closeCachedAtlas(opened);
@@ -251,8 +251,14 @@ function descriptor(glyphIds: GlyphId[], totalLength: number): SlugAtlas {
       {
         basis: {
           sourceIds: [source],
-          regions: [[{ axisId: axis, lower: -1, peak: 0, upper: 1 }]],
-          coefficients: [new Float64Array([1])],
+          basis: {
+            deltas: [
+              {
+                region: [{ axisId: axis, lower: -1, peak: 0, upper: 1 }],
+                values: new Float64Array([1]),
+              },
+            ],
+          },
         },
         sourceWeightIndices: [0],
       },

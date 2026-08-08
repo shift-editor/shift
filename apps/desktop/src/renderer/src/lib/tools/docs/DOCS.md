@@ -47,7 +47,7 @@ tools/
 - `Behavior<S>` — interface with optional per-event handlers (`onClick`, `onDrag`, `onDragStart`, `onDragEnd`, `onDragCancel`, `onPointerMove`, `onDoubleClick`, `onKeyDown`, `onKeyUp`) plus lifecycle hooks (`onStateExit`, `onStateEnter`). Each handler receives `(state, ctx, event)` and returns `boolean` (true = handled).
 - `ToolContext<S>` — `{ editor, getState, setState }`. Passed to behaviors during the event loop and lifecycle hooks.
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
-- `ToolEventOf<T>` — utility type extracting a single variant from `ToolEvent` by its `type` string.
+- `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
 - `ToolManager` — owns the active tool, `GestureDetector`, rAF pointer coalescing, and temporary tool switching.
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
 - `ToolManifest` — `{ id, create, icon, tooltip, shortcut? }`. Registration descriptor passed to `editor.registerTool`.
@@ -155,7 +155,7 @@ For complex tools (Select, Pen) where behaviors need private helper methods or h
 
 ```typescript
 export class MyBehavior implements Behavior<MyState> {
-  onDragStart(state: MyState, ctx: ToolContext<MyState>, event: ToolEventOf<"dragStart">): boolean {
+  onDragStart(state: MyState, ctx: ToolContext<MyState>, event: DragStartEvent): boolean {
     if (state.type !== "ready") return false;
     ctx.setState({ type: "dragging", startPos: event.point });
     return true;
@@ -240,5 +240,5 @@ onDragCancel(state, ctx) {
 - `Canvas` — rendering target passed to `drawOverlay` / `drawScene` / `drawBackground`.
 - `GlyphLayerEditDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
-- `TextRunController` — text input controller used by Text tool.
+- `TextTool` — text input tool backed by the editor's active text run.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

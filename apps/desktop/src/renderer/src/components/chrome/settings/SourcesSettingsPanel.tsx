@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, MetricDefinition, Source, SourceId, SourceMetricValue } from "@shift/types";
 import { Input, cn } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
+import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
 import { CreateSourceMenu } from "@/components/variation/CreateSourceMenu";
 import { useAxes } from "@/hooks/useAxes";
@@ -12,9 +13,10 @@ import { useSettingsForm } from "./useSettingsForm";
 
 interface SourcesSettingsPanelProps {
   initialSourceId?: SourceId;
+  canAuthor: boolean;
 }
 
-export const SourcesSettingsPanel = ({ initialSourceId }: SourcesSettingsPanelProps) => {
+export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSettingsPanelProps) => {
   const font = useFont();
   const axes = useAxes();
   const sources = useSignalState(font.sourcesCell);
@@ -45,7 +47,13 @@ export const SourcesSettingsPanel = ({ initialSourceId }: SourcesSettingsPanelPr
       <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Sources</h2>
-          <CreateSourceMenu onSourceCreated={setPendingSourceId} />
+          {canAuthor ? (
+            <CreateSourceMenu onSourceCreated={setPendingSourceId} />
+          ) : (
+            <SidebarActionButton label="Create source" disabled>
+              <PlusIcon className="h-3 w-3" />
+            </SidebarActionButton>
+          )}
         </div>
 
         <div className="scrollbar-hidden min-h-0 overflow-y-auto px-2 pb-2">
@@ -64,7 +72,7 @@ export const SourcesSettingsPanel = ({ initialSourceId }: SourcesSettingsPanelPr
                 <SidebarActionButton
                   label={`Delete ${source.name}`}
                   className="h-8 hover:bg-icon-button-hover"
-                  disabled={sources.length === 1}
+                  disabled={!canAuthor || sources.length === 1}
                   onClick={(event) => {
                     event.stopPropagation();
                     font.deleteSource(source.id);
@@ -86,6 +94,7 @@ export const SourcesSettingsPanel = ({ initialSourceId }: SourcesSettingsPanelPr
           source={selectedSource}
           axes={axes}
           definitions={definitions}
+          canAuthor={canAuthor}
         />
       ) : (
         <div className="grid place-items-center text-xs text-secondary">No sources</div>
@@ -98,9 +107,10 @@ interface SourceEditorProps {
   source: Source;
   axes: readonly Axis[];
   definitions: readonly MetricDefinition[];
+  canAuthor: boolean;
 }
 
-const SourceEditor = ({ source, axes, definitions }: SourceEditorProps) => {
+const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProps) => {
   const font = useFont();
   const form = useSettingsForm<Source>({
     canonical: source,
@@ -116,7 +126,7 @@ const SourceEditor = ({ source, axes, definitions }: SourceEditorProps) => {
   };
 
   return (
-    <section className="scrollbar-hidden min-h-0 overflow-y-auto p-5 pr-8">
+    <fieldset disabled={!canAuthor} className="scrollbar-hidden min-h-0 overflow-y-auto p-5 pr-8">
       <div className="mb-5 flex items-center justify-between">
         <h2 className="text-sm font-medium text-primary">{draft.name || "Source"}</h2>
       </div>
@@ -212,7 +222,7 @@ const SourceEditor = ({ source, axes, definitions }: SourceEditorProps) => {
           />
         </div>
       </SettingsSection>
-    </section>
+    </fieldset>
   );
 };
 

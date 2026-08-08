@@ -17,7 +17,7 @@ import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
-export const Sources = () => {
+export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
   const sources = useSources();
   const activeSourceId = useActiveSourceId();
   const editor = useEditor();
@@ -39,15 +39,17 @@ export const Sources = () => {
         <SidebarActionRow
           key={s.id}
           isActive={s.id === activeSourceId}
-          onClick={() => editor.selectSource(s.id)}
+          onClick={canAuthor ? () => editor.selectSource(s.id) : undefined}
           contentClassName="h-6 text-ui"
           actions={
-            <SourceActionsMenu
-              sourceName={s.name}
-              canDelete={sources.length > 1}
-              onEdit={() => settings.open({ category: "sources", sourceId: s.id })}
-              onDelete={() => deleteSource(s.id)}
-            />
+            canAuthor ? (
+              <SourceActionsMenu
+                sourceName={s.name}
+                canDelete={sources.length > 1}
+                onEdit={() => settings.open({ category: "sources", sourceId: s.id })}
+                onDelete={() => deleteSource(s.id)}
+              />
+            ) : undefined
           }
         >
           {s.name}

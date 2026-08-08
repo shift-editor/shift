@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { GlyphRecord, PointId } from "@shift/types";
 import type { Point } from "@shift/glyph-state";
 import { effect, signal } from "@/lib/signals/signal";
-import { axisLocationFromLocation } from "@/lib/variation/location";
+import { emptyExternalAxisLocation } from "@/lib/variation/location";
 import { TestEditor } from "@/testing/TestEditor";
 import type { GlyphLayer } from "./Glyph";
+import { RenderGlyph } from "./RenderGlyph";
 
 /**
  * Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on
@@ -255,13 +256,23 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     expect(pointPosition(layer, second!.id)).toEqual({ x: 35, y: 80 });
   });
 
+  it("keeps the source-independent RenderGlyph view live", async () => {
+    await addTriangle(editor, layer);
+    const glyph = editor.glyphForId(record.id);
+    if (!glyph) throw new Error("Expected Glyph");
+    const rendered = new RenderGlyph(glyph.renderModelAt(signal(emptyExternalAxisLocation())));
+
+    layer.setXAdvance(530);
+    await editor.settle();
+
+    expect(rendered.xAdvance).toBe(530);
+  });
+
   it("keeps source-backed render contours fresh after position edits", async () => {
     const [, second] = await addTriangle(editor, layer);
     const glyph = editor.glyphForId(record.id);
     if (!glyph) throw new Error("Expected Glyph");
-    const renderModel = glyph.renderModelAt(
-      signal(axisLocationFromLocation(layer.source.location)),
-    );
+    const renderModel = glyph.renderModelAt(signal(emptyExternalAxisLocation()));
 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
     await editor.settle();
@@ -280,9 +291,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     const [, second] = await addTriangle(editor, layer);
     const glyph = editor.glyphForId(record.id);
     if (!glyph) throw new Error("Expected Glyph");
-    const renderModel = glyph.renderModelAt(
-      signal(axisLocationFromLocation(layer.source.location)),
-    );
+    const renderModel = glyph.renderModelAt(signal(emptyExternalAxisLocation()));
 
     expect(
       renderModel.contours.at(-1)?.contour.points.find((point) => point.id === second!.id),

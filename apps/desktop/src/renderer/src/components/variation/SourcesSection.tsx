@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { CollapsibleSection } from "@/components/sidebar";
+import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { CreateSourceMenu } from "./CreateSourceMenu";
 import { Sources } from "./Sources";
+import { useFontSession } from "@/workspace/WorkspaceContext";
+import PlusIcon from "@/assets/general/plus.svg";
 
 interface SourcesSectionProps {
   defaultOpen?: boolean;
@@ -10,6 +12,7 @@ interface SourcesSectionProps {
 export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
+  const canAuthor = useFontSession().canAuthor;
 
   return (
     <CollapsibleSection
@@ -17,9 +20,17 @@ export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => 
       open={open || sourceMenuOpen}
       onOpenChange={setOpen}
       isActive={sourceMenuOpen}
-      actions={<CreateSourceMenu onOpenChange={setSourceMenuOpen} />}
+      actions={
+        canAuthor ? (
+          <CreateSourceMenu onOpenChange={setSourceMenuOpen} />
+        ) : (
+          <SidebarActionButton label="Create source" data-read-only-mutation>
+            <PlusIcon className="h-3 w-3" />
+          </SidebarActionButton>
+        )
+      }
     >
-      <Sources />
+      <Sources canAuthor={canAuthor} />
     </CollapsibleSection>
   );
 };

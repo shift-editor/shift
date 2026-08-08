@@ -3,10 +3,8 @@ import { GlyphGrid } from "@/components/home/GlyphGrid";
 import { LeftSidebar } from "@/components/home/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
-import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
-
-export const Home = () => (
-  <GlyphCatalogProvider>
+export const Home = () => {
+  return (
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
       <Toolbar />
       <ResizablePanelGroup
@@ -43,5 +41,5 @@ export const Home = () => (
         </ResizablePanel>
       </ResizablePanelGroup>
     </main>
-  </GlyphCatalogProvider>
-);
+  );
+};

@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
-import { useSignalState } from "@/lib/signals";
-import { useEditor, useWorkspace } from "@/workspace/WorkspaceContext";
+import { effect, useSignalState } from "@/lib/signals";
+import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { WorkspaceCommitState } from "@/lib/workspace/WorkspaceEditCoordinator";
@@ -16,13 +16,46 @@ type DocumentChromeState = {
 };
 
 export function useDocumentChromeState(): DocumentChromeState {
-  const workspace = useWorkspace();
+  const session = useFontSession();
+  const workspace = session.workspace;
   const editor = useEditor();
-  const documentState = useSignalState(workspace.documentStateCell);
+  const metadata = useSignalState(editor.font.metadataCell);
+  const documentState = useSyncExternalStore(
+    (callback) => {
+      if (!workspace) return () => {};
+
+      const subscription = effect(() => {
+        workspace.documentStateCell.value;
+        callback();
+      });
+      return () => subscription.dispose();
+    },
+    () => workspace?.documentStateCell.peek() ?? null,
+  );
+  const commitState = useSyncExternalStore(
+    (callback) => {
+      if (!workspace) return () => {};
+
+      const subscription = effect(() => {
+        workspace.commitStateCell.value;
+        callback();
+      });
+      return () => subscription.dispose();
+    },
+    () => workspace?.commitStateCell.peek() ?? "idle",
+  );
   const isEditing = useSignalState(editor.isEditingCell);
-  const commitState = useSignalState(workspace.commitStateCell);
 
   return useMemo(() => {
+    if (!workspace) {
+      return {
+        documentState: null,
+        filename: metadata.styleName ?? "Preview",
+        activity: "clean",
+        dirty: false,
+      };
+    }
+
     const activity = activityForDocument(documentState, isEditing, commitState);
 
     return {
@@ -31,7 +64,7 @@ export function useDocumentChromeState(): DocumentChromeState {
       activity,
       dirty: activity !== "clean",
     };
-  }, [documentState, isEditing, commitState]);
+  }, [workspace, metadata.styleName, documentState, isEditing, commitState]);
 }
 
 function activityForDocument(

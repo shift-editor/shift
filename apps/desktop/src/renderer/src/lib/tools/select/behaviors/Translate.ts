@@ -89,7 +89,7 @@ export class Translate implements SelectBehavior {
  * Construction is where edit scoping happens. Builders resolve identity-only
  * hit and selection ids through font ownership queries and refuse to produce
  * an operation when the ids span layers, are absent from current layer state,
- * or the resolved layer is not the one displayed at the current design location. Node
+ * or the resolved layer is not the one displayed at the current external location. Node
  * translation is a separate future operation kind; node targets never
  * produce one of these.
  */

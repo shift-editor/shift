@@ -1,7 +1,7 @@
-import type { GlyphSidebearings } from "@/lib/model/Glyph";
+import type { GlyphSidebearings } from "@shift/glyph-state";
+import { useMemo } from "react";
 import { computed, useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { useMemo } from "react";
 
 const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
 
@@ -10,15 +10,7 @@ export interface GlyphSidebearingsState {
   readonly hasLayer: boolean;
 }
 
-/**
- * Current glyph sidebearings (LSB/RSB), live-updating.
- *
- * Subscribes to the displayed glyph instance. Interpolated instances still
- * expose resolved values, but report `editable: false` so inputs can display
- * them without mutating a missing authored glyph layer.
- *
- * @returns Current values and whether the displayed instance can be edited.
- */
+/** Returns live sidebearings and whether the displayed glyph has an authored layer. */
 export function useGlyphSidebearings(): GlyphSidebearingsState {
   const editor = useEditor();
   const sidebearingsCell = useMemo(
@@ -28,15 +20,17 @@ export function useGlyphSidebearings(): GlyphSidebearingsState {
         const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
         if (!node) return { sidebearings: EMPTY_SIDEBEARINGS, hasLayer: false };
 
-        const location = editor.designLocationCell.value;
+        const externalLocation = editor.externalLocationCell.value;
+        const activeSourceId = editor.activeSourceIdCell.value;
         const glyph = editor.glyphForId(node.glyphId);
         if (!glyph) return { sidebearings: EMPTY_SIDEBEARINGS, hasLayer: false };
 
-        const renderModel = glyph.renderModelAt(editor.designLocationCell);
-
         return {
-          sidebearings: renderModel.sidebearingsCell.value,
-          hasLayer: glyph.layerAt(location) !== null,
+          sidebearings: glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell)
+            .sidebearingsCell.value,
+          hasLayer: activeSourceId
+            ? glyph.layerForSource(activeSourceId) !== null
+            : glyph.layerAt(externalLocation) !== null,
         };
       }),
     [editor],

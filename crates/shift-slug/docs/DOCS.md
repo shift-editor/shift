@@ -13,6 +13,7 @@ GPU-independent preprocessing for the experimental Slug home/catalog glyph grid.
 - **Deterministic topology conversion.** Lines become quadratics. Cubics use the conservative third-derivative error bound from Kurbo's `CubicBez::to_quads`, with a one-font-unit tolerance and equal parameter intervals. Compatible authored sources freeze the maximum subdivision count required by any source so variable topology remains identical.
 - **No shaping.** The grid addresses glyphs by dense atlas index and does not need a text shaper.
 - **Command ownership.** `OutlineCommand` is a Slug preprocessing input. No standalone packed-outline storage format exists.
+- **Retained compilation ownership.** `retained::compile_page` and `retained::PageCompiler` are the single page-compilation boundary for projected and directly streamed source geometry. Backends acquire source semantics; Slug owns weights, complements, descriptors, atlas insertion, and page output.
 
 ## Codemap
 
@@ -28,8 +29,10 @@ src/
   render.rs              shared uniform and visible-instance byte layouts
   variable.rs            multi-source resident base/delta model and aligned packing
   variable/component.rs  component records, CPU oracle, and component packing
+  retained/mod.rs        source-neutral page inputs, PageCompiler, descriptors, and page output
+  retained/weights.rs    axes, regions, complements, and location weight evaluation
   resident.rs            complete authored atlas, edit patches, identity maps, and basis deduplication
-  error.rs     strict conversion and size failures
+  error.rs               strict conversion and size failures
 shaders/
   slug.wgsl           shared static native-wgpu/Electron-WebGPU renderer
   slug-variable.wgsl  visible curve resolve, GPU re-banding, and variable renderer
@@ -56,6 +59,14 @@ Band[]        u32 start + u32 count                        8 bytes each
 Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical ranges. Empty glyphs have zero curves and empty ranges but retain a descriptor, so dense glyph indexing remains stable.
 
 `CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses wide indexes by default and exposes compact indexes through `--compact-indices`.
+
+## Retained source page compilation
+
+`retained::compile_page(PageInput, band_count)` compiles materialized source-neutral glyph values. `PageCompiler` exposes the equivalent streaming path through `new`, `add_glyph`, `add_exact_variant`, and `finish`; OpenType uses it to convert raw curves without first materializing projection descriptors. Both paths produce the same `RetainedAtlasPage`, including root mappings, exact-source variants, location weights, complement weights, preview extents, and disposable atlas geometry. A parity test keeps `PageCompiler` output equal to `compile_page` output.
+
+The backend boundary intentionally ends at acquisition: projected UFO, Designspace, and Glyphs sources provide `PageInput`, while OpenType supplies curves and source weights directly. Neither path owns packing or retained descriptor semantics. The bridge chooses the acquisition path and consumes the common Slug page.
+
+`RetainedAtlasDescriptor::weights` accepts external coordinates and applies its source-format mapping before normalization. `design_weights` accepts coordinates already mapped by the Rust-owned variation model and skips that external mapping. Callers must select the method at the coordinate-space boundary; passing a mapped location to `weights` applies nonlinear mappings twice.
 
 ## Resident variable execution
 

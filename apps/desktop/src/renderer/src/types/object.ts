@@ -1,6 +1,6 @@
 import type { Rect2D } from "@shift/geo";
-import type { SegmentId } from "@shift/glyph-state";
-import type { AnchorId, ContourId, LayerId, NodeId, PointId } from "@shift/types";
+import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
+import type { AnchorId, ContourId, NodeId, PointId } from "@shift/types";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { GlyphNode, ShiftNode } from "./node";
 
@@ -10,7 +10,7 @@ export type SelectionId = string & { readonly [SelectionIdBrand]: typeof Selecti
 
 export const currentSelectionId = "selection:current" as SelectionId;
 
-/** Identifies an editor-addressable scene node or authored glyph object. */
+/** Identifies an editor-addressable scene node or glyph object. */
 export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId;
 
 /** Identifies objects that can be selected by the editor. */
@@ -20,9 +20,9 @@ export type SelectableId = ShiftId;
  * Defines the shared contract for a resolved editor object.
  *
  * @remarks
- * Resolved objects combine a stable ID, a discriminating kind, and enough live
- * ownership or placement context to answer object-level behavior without
- * callers passing editor plumbing into each method.
+ * Resolved objects combine stable identity, a discriminating kind, and live
+ * scene placement. Glyph objects also carry displayed geometry independently
+ * from whether an authored layer is available.
  *
  * @template K - Kind string used for discriminated narrowing.
  * @template I - Stable identity for this object.
@@ -43,11 +43,14 @@ export interface ShiftObjectBase<K extends string, I extends ShiftId> {
 }
 
 /**
- * Maps object kind strings to their resolved object interfaces.
+ * Maps object kind strings to their source-neutral resolved object interfaces.
  *
  * @remarks
  * Built-in kinds live here. Compiled extensions can augment this interface so
  * `objectIsKindOf(object, kind)` narrows plugin-defined object kinds too.
+ * Displayed geometry is always available for glyph objects. `layer` is present
+ * only when the object has an exact authored owner and therefore represents
+ * edit capability rather than display identity.
  */
 export interface ShiftObjectKindMap {
   /**
@@ -63,63 +66,62 @@ export interface ShiftObjectKindMap {
   };
 
   /**
-   * Represents an editable glyph point resolved through its layer and scene node.
+   * Represents a glyph point resolved through displayed geometry and its scene node.
    *
    * @remarks
-   * The point's coordinates should be read from `layer` when behavior runs. This
-   * object carries `node` so glyph-local geometry can be interpreted in scene
-   * coordinates without restoring editor-global glyph state.
+   * Read coordinates from `geometry`. Single-object mutations use `layer` when
+   * non-null; imported or interpolated points remain addressable but immutable.
    */
   readonly point: ShiftObjectBase<"point", PointId> & {
     readonly node: GlyphNode;
-    readonly layer: GlyphLayer;
-    readonly layerId: LayerId;
+    readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
     readonly pointId: PointId;
   };
 
   /**
-   * Represents a glyph anchor resolved through its layer and scene node.
+   * Represents a glyph anchor resolved through displayed geometry and its scene node.
    *
    * @remarks
-   * Anchors are glyph-internal objects, not scene nodes. The paired glyph node
-   * supplies placement when rendering indicators or computing scene-space bounds.
+   * The paired glyph node supplies scene placement. A non-null `layer` identifies
+   * the exact authored owner available for mutation.
    */
   readonly anchor: ShiftObjectBase<"anchor", AnchorId> & {
     readonly node: GlyphNode;
-    readonly layer: GlyphLayer;
-    readonly layerId: LayerId;
+    readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly anchorId: AnchorId;
   };
 
   /**
-   * Represents a glyph segment resolved through its layer and endpoint IDs.
+   * Represents a glyph segment resolved through displayed geometry and endpoint IDs.
    *
    * @remarks
    * Segment IDs are derived geometry identities. `pointIds` records the endpoint
-   * ownership needed for operations that expand a selected segment to its points
-   * without changing selection semantics.
+   * ownership needed to expand a segment operation without changing selection
+   * semantics. Mutation requires a non-null `layer`.
    */
   readonly segment: ShiftObjectBase<"segment", SegmentId> & {
     readonly node: GlyphNode;
-    readonly layer: GlyphLayer;
-    readonly layerId: LayerId;
+    readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
     readonly segmentId: SegmentId;
     readonly pointIds: readonly PointId[];
   };
 
   /**
-   * Represents a glyph contour resolved through its layer and scene node.
+   * Represents a glyph contour resolved through displayed geometry and its scene node.
    *
    * @remarks
-   * Contours are authored glyph structure. Bounds and content behavior should use
-   * the current layer structure rather than cached contour objects.
+   * Bounds and read behavior use `geometry`. Authored mutations require the
+   * optional `layer` capability rather than inferring ownership from identity.
    */
   readonly contour: ShiftObjectBase<"contour", ContourId> & {
     readonly node: GlyphNode;
-    readonly layer: GlyphLayer;
-    readonly layerId: LayerId;
+    readonly geometry: GlyphGeometry;
+    readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
   };
 }

@@ -126,10 +126,10 @@ fn load_glif_glyph(
         if index == 0 {
             glyph.set_unicodes(norad_glyph.codepoints.iter().map(u32::from).collect());
             if !norad_glyph.lib.is_empty() {
-                *glyph.lib_mut() = crate::ufo::UfoReader::convert_lib(&norad_glyph.lib);
+                *glyph.lib_mut() = crate::formats::ufo::UfoReader::convert_lib(&norad_glyph.lib);
             }
         }
-        let layer = crate::ufo::UfoReader::convert_stream_layer(
+        let layer = crate::formats::ufo::UfoReader::convert_stream_layer(
             &norad_glyph,
             layer_record.layer_id.clone(),
             layer_record.source_id.clone(),

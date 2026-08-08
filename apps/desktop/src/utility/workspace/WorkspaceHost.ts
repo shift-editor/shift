@@ -1,8 +1,12 @@
 import { createBridge, type ShiftBridge } from "@shift/bridge";
+import type { GlyphSnapshot } from "@shift/types";
 import fs from "node:fs";
 import path from "node:path";
 import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
 import type {
+  FontSourceAtlasPageRequest,
+  FontSourceSession,
+  FontSourceSnapshot,
   ShellCallMap,
   ShellEventMap,
   SlugAtlasOrigin,
@@ -11,7 +15,6 @@ import type {
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
   WorkspaceExportResult,
-  WorkspaceGlyphSnapshot,
   WorkspacePackageIdentity,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
@@ -78,6 +81,7 @@ export class WorkspaceHost {
   #shell: ChannelServer<ShellEventMap> | null = null;
   #sync: ChannelServer<SyncEventMap> | null = null;
   #documentId: string | null = null;
+  #fontSource: FontSourceSnapshot | null = null;
   #packageAddress: PackageAddress | null = null;
   #atlasCacheRevision: string | null = null;
   #cachedGeneration = 0;
@@ -85,6 +89,7 @@ export class WorkspaceHost {
   #openedCachedAtlasKey: string | null = null;
   #openedCachedAtlas: OpenedCachedAtlas | null = null;
   #preparedPages = new Map<number, PreparedAtlasPage>();
+  #preparedSourcePages = new Map<number, number>();
   #atlasBuilds = new Map<string, CachedAtlasBuild>();
   #operations: Promise<void> = Promise.resolve();
 
@@ -105,6 +110,8 @@ export class WorkspaceHost {
       "workspace.inspectPackage": ({ path }) => this.#serialize(() => this.#inspectPackage(path)),
       "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
+      "source.open": ({ path }) => this.#serialize(() => this.#openFontSource(path)),
+      "source.close": () => this.#serialize(() => this.#closeFontSource()),
       "workspace.connect": (_payload, context) => {
         this.#connectSyncLane(context.ports);
       },
@@ -126,6 +133,19 @@ export class WorkspaceHost {
         this.#serialize(() =>
           this.#documentId === null ? null : this.#snapshot(this.#documentId),
         ),
+      "source.snapshot": () => this.#serialize(() => this.#fontSource),
+      "source.glyph": ({ glyphId }) =>
+        this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphId)),
+      "source.atlasPagePrepare": (request) =>
+        this.#serialize(() => this.#prepareSourceAtlasPage(request)),
+      "source.atlasPageStream": ({ generation, maximumLength }, context) =>
+        this.#serialize(() =>
+          this.#streamSourceAtlasPage(generation, maximumLength, context.ports),
+        ),
+      "source.atlasPageDiscard": ({ pageIndex, generation }) =>
+        this.#serialize(() => this.#discardSourceAtlasPage(pageIndex, generation)),
+      "source.atlasWeights": ({ coordinates }) =>
+        this.#serialize(() => this.#bridge.sourceAtlasWeights(coordinates)),
       "document.state": () => this.#serialize(() => this.#documentState()),
       "workspace.apply": ({ intents, label }) =>
         this.#serialize(() => {
@@ -153,7 +173,7 @@ export class WorkspaceHost {
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.export": ({ path }) => this.#export(path),
       "workspace.glyphSnapshots": ({ requests }) =>
-        this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as WorkspaceGlyphSnapshot[]),
+        this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]),
       "workspace.glyphProjections": ({ glyphIds }) =>
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
       "workspace.glyphPreviews": ({ glyphIds, location }) =>
@@ -395,6 +415,49 @@ export class WorkspaceHost {
     }
   }
 
+  #prepareSourceAtlasPage(request: FontSourceAtlasPageRequest) {
+    this.#requireFontSource();
+    const descriptor = this.#bridge.prepareSourceAtlasPage(
+      request.pageIndex,
+      request.glyphIds,
+      request.coordinates,
+      request.alignment,
+    );
+    this.#preparedSourcePages.set(descriptor.generation, request.pageIndex);
+    return descriptor;
+  }
+
+  async #streamSourceAtlasPage(
+    generation: number,
+    maximumLength: number,
+    ports: readonly unknown[],
+  ): Promise<null> {
+    const port = ports.at(0);
+    if (!port) throw new Error("source.atlasPageStream requires a transferred response port");
+    if (!this.#preparedSourcePages.has(generation)) {
+      throw new Error(`unknown source atlas generation ${generation}`);
+    }
+    this.#preparedSourcePages.delete(generation);
+
+    const stream = new PortByteStream(this.#portTransport(port));
+    try {
+      await stream.send(
+        this.#bridge.streamSourceAtlasPage(generation, maximumLength),
+        undefined,
+        maximumLength,
+      );
+      return null;
+    } finally {
+      stream.close();
+    }
+  }
+
+  #discardSourceAtlasPage(pageIndex: number, generation: number): null {
+    this.#preparedSourcePages.delete(generation);
+    this.#bridge.discardSourceAtlasPage(pageIndex, generation);
+    return null;
+  }
+
   async #discardSlugAtlasPage(generation: number, origin: SlugAtlasOrigin): Promise<null> {
     if (origin === "cached") {
       const cached = this.#cachedPages.get(generation);
@@ -464,6 +527,26 @@ export class WorkspaceHost {
     }
   }
 
+  #openFontSource(sourcePath: string): FontSourceSession {
+    if (this.#documentId !== null) throw new Error("a workspace is already open");
+    const canonicalPath = fs.realpathSync(sourcePath);
+    const font = this.#bridge.openFontSource(canonicalPath);
+    const state = {
+      sessionId: `source:${canonicalPath}`,
+      canonicalPath,
+    };
+    this.#fontSource = { ...state, font };
+    this.#preparedSourcePages.clear();
+    return state;
+  }
+
+  #closeFontSource(): null {
+    this.#bridge.closeFontSource();
+    this.#fontSource = null;
+    this.#preparedSourcePages.clear();
+    return null;
+  }
+
   #create(): WorkspaceDocumentState {
     const document = this.#documents.createDocument();
 
@@ -496,6 +579,7 @@ export class WorkspaceHost {
       sources: this.#bridge.getSources(),
       axes: this.#bridge.getAxes(),
       axisMappings: this.#bridge.getAxisMappings(),
+      axisMappingBases: this.#bridge.getAxisMappingBases(),
       namedInstances: this.#bridge.getNamedInstances(),
     };
   }
@@ -646,6 +730,11 @@ export class WorkspaceHost {
     }
 
     return this.#documentId;
+  }
+
+  #requireFontSource(): FontSourceSnapshot {
+    if (!this.#fontSource) throw new Error("no retained font source is open");
+    return this.#fontSource;
   }
 }
 

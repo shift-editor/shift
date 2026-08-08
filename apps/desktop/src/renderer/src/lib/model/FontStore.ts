@@ -3,9 +3,12 @@ import type {
   AnchorId,
   ContourData,
   ContourId,
+  FontSnapshot,
+  GlyphEntry,
   GlyphId,
   GlyphProjection,
   GlyphRecord,
+  GlyphSnapshot,
   GlyphStructure,
   GlyphState,
   InterpolationBasis,
@@ -16,11 +19,7 @@ import type {
 } from "@shift/types";
 import { segmentIdFor, type SegmentId } from "@shift/glyph-state";
 import { Validate } from "@shift/validation";
-import type {
-  WorkspaceGlyphLayerSnapshot,
-  WorkspaceGlyphSnapshot,
-  WorkspaceSnapshot,
-} from "@shared/workspace/protocol";
+import type { WorkspaceGlyphLayerSnapshot, WorkspaceSnapshot } from "@shared/workspace/protocol";
 import {
   batch,
   computed,
@@ -30,6 +29,7 @@ import {
   type WritableSignal,
 } from "@/lib/signals/signal";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "@/types";
+import type { FontStoreOptions } from "@/types/font";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { Glyph } from "./Glyph";
 
@@ -45,6 +45,7 @@ type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
  * into layer state and indexes objects from that concrete state.
  */
 export class FontStore {
+  readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
   readonly #committedFont: WritableSignal<FontStore>;
   readonly #invalidGlyphIds: WritableSignal<readonly GlyphId[] | null>;
@@ -68,13 +69,17 @@ export class FontStore {
   readonly #layerByGlyphSource = new Map<GlyphSourceKey, LayerId>();
 
   readonly #glyphByLayer = new Map<LayerId, GlyphId>();
-  readonly #glyphById = new Map<GlyphId, GlyphRecord>();
+  readonly #glyphById = new Map<GlyphId, GlyphEntry>();
+  readonly #recordsById = new Map<GlyphId, GlyphRecord>();
   readonly #glyphs = new Map<GlyphId, Glyph>();
 
   readonly #projectionCells = new Map<GlyphId, WritableSignal<GlyphProjection | null>>();
   readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
-  constructor(workspace: WorkspaceSnapshot | null = null) {
+  constructor({ font = null, workspace = null }: FontStoreOptions = {}) {
+    this.#font = signal(font ?? (workspace ? fontSnapshotFromWorkspace(workspace) : null), {
+      name: "fontStore.font",
+    });
     this.#workspace = signal(workspace, { name: "fontStore.workspace" });
     this.#committedFont = signal(this, {
       name: "fontStore.committedFont",
@@ -85,7 +90,15 @@ export class FontStore {
       name: "fontStore.invalidGlyphIds",
       equals: () => false,
     });
-    if (workspace) this.#indexWorkspace(workspace);
+    if (workspace) {
+      this.#indexWorkspace(workspace);
+    } else if (font) {
+      this.#indexFont(font);
+    }
+  }
+
+  get fontCell(): Signal<FontSnapshot | null> {
+    return this.#font;
   }
 
   get workspaceCell(): Signal<WorkspaceSnapshot | null> {
@@ -132,8 +145,9 @@ export class FontStore {
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
-      this.#workspace.set(snapshot);
       this.#indexWorkspace(snapshot);
+      this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
+      this.#workspace.set(snapshot);
       this.#clearLayerStates();
       this.#clearProjections();
       this.#interpolationBases.clear();
@@ -143,7 +157,21 @@ export class FontStore {
     this.#committedFont.set(this);
   }
 
-  applyGlyphSnapshots(snapshots: readonly WorkspaceGlyphSnapshot[]): void {
+  replaceFont(snapshot: FontSnapshot): void {
+    batch(() => {
+      this.#indexFont(snapshot);
+      this.#font.set(snapshot);
+      this.#workspace.set(null);
+      this.#clearLayerStates();
+      this.#clearProjections();
+      this.#interpolationBases.clear();
+      this.#glyphs.clear();
+    });
+    this.#invalidGlyphIds.set(null);
+    this.#committedFont.set(this);
+  }
+
+  applyGlyphSnapshots(snapshots: readonly GlyphSnapshot[]): void {
     batch(() => {
       for (const snapshot of snapshots) {
         if (!this.#glyphById.has(snapshot.glyphId)) continue;
@@ -233,6 +261,7 @@ export class FontStore {
             glyphs: next.glyphs ?? current.glyphs,
             axes: next.axes ?? current.axes,
             axisMappings: next.axisMappings ?? current.axisMappings,
+            axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
             metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
             sourceMetricsInterpolation: next.sourceMetricsInterpolation
               ? (next.sourceMetricsInterpolation.snapshot ?? null)
@@ -243,8 +272,9 @@ export class FontStore {
         : current;
 
       if (nextWorkspace !== current) {
-        this.#workspace.set(nextWorkspace);
         this.#indexWorkspace(nextWorkspace);
+        this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
+        this.#workspace.set(nextWorkspace);
       }
 
       if (nextWorkspace !== current) {
@@ -312,8 +342,16 @@ export class FontStore {
     return this.#glyphById.has(glyphId);
   }
 
-  recordForId(glyphId: GlyphId): GlyphRecord | null {
+  entryForId(glyphId: GlyphId): GlyphEntry | null {
     return this.#glyphById.get(glyphId) ?? null;
+  }
+
+  recordForId(glyphId: GlyphId): GlyphRecord | null {
+    return this.#recordsById.get(glyphId) ?? null;
+  }
+
+  records(): readonly GlyphRecord[] {
+    return [...this.#recordsById.values()];
   }
 
   projection(glyphId: GlyphId): GlyphProjection | null {
@@ -493,15 +531,29 @@ export class FontStore {
     this.#layerByGlyphSource.clear();
     this.#glyphByLayer.clear();
     this.#glyphById.clear();
+    this.#recordsById.clear();
     if (!snapshot) return;
 
     for (const glyph of snapshot.glyphs) {
-      this.#glyphById.set(glyph.id, glyph);
+      this.#glyphById.set(glyph.id, {
+        id: glyph.id,
+        name: glyph.name,
+        unicodes: [...glyph.unicodes],
+      });
+      this.#recordsById.set(glyph.id, glyph);
       for (const layer of glyph.layers) {
         this.#layerByGlyphSource.set(glyphSourceKey(glyph.id, layer.sourceId), layer.id);
         this.#glyphByLayer.set(layer.id, glyph.id);
       }
     }
+  }
+
+  #indexFont(snapshot: FontSnapshot): void {
+    this.#layerByGlyphSource.clear();
+    this.#glyphByLayer.clear();
+    this.#glyphById.clear();
+    this.#recordsById.clear();
+    for (const glyph of snapshot.glyphs) this.#glyphById.set(glyph.id, glyph);
   }
 }
 
@@ -609,4 +661,29 @@ function isOnCurve(point: PointData): boolean {
 
 function isOffCurve(point: PointData): boolean {
   return Validate.isOffCurve(point);
+}
+
+function glyphEntry(record: GlyphRecord): GlyphEntry {
+  return {
+    id: record.id,
+    name: record.name,
+    unicodes: [...record.unicodes],
+  };
+}
+
+function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
+  return {
+    metadata: workspace.metadata,
+    metrics: workspace.metrics,
+    metricDefinitions: workspace.metricDefinitions,
+    ...(workspace.sourceMetricsInterpolation
+      ? { sourceMetricsInterpolation: workspace.sourceMetricsInterpolation }
+      : {}),
+    glyphs: workspace.glyphs.map(glyphEntry),
+    sources: workspace.sources,
+    axes: workspace.axes,
+    axisMappings: workspace.axisMappings,
+    axisMappingBases: workspace.axisMappingBases,
+    namedInstances: workspace.namedInstances,
+  };
 }

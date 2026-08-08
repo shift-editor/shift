@@ -1,24 +1,23 @@
 # Preload
 
-Electron preload script that exposes the native Rust bridge and Shift host API to the renderer through `contextBridge`.
+Electron preload script that exposes the typed Shift host API and relays session ports to the renderer.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** The native bridge is created through `@shift/bridge`, not by importing the raw `shift-bridge` NAPI package here. **WHY:** native loading and native-module typing stay in one package boundary.
-- **Architecture Invariant:** `buildContextBridgeApi` flattens prototype methods into a plain object before exposing them. **WHY:** `contextBridge` does not preserve class prototype semantics across the isolated context boundary.
-- **Architecture Invariant:** Two separate globals are exposed: `window.shiftBridge` for Rust bridge calls and `window.shiftHost` for app shell calls. **WHY:** native bridge calls and Electron app-shell IPC have different lifecycles and failure modes.
+- **Architecture Invariant:** Preload exposes only `window.shiftHost`; the native bridge lives in the utility process behind the typed font-session lane. **WHY:** renderer isolation must not expose native font methods directly.
+- **Architecture Invariant:** Every `shiftHost` method delegates through typed IPC helpers and contains only context-bridge-compatible functions and values.
+- **Architecture Invariant:** Session and document `MessagePort`s are relayed with `window.postMessage` because ports cannot cross Electron's context bridge. Renderer listeners authenticate the same window and expected message type before accepting a port.
 
 ## Codemap
 
 ```
 preload/
-  preload.ts -- creates BridgeApi, flattens it for contextBridge, exposes shiftHost
+  preload.ts -- exposes shiftHost and relays session/document MessagePorts
 ```
 
 ## Key Types
 
-- `BridgeApi` -- native bridge API generated from Rust declarations and exposed by `@shift/bridge`.
-- `ShiftHost` -- renderer-facing app shell API.
+- `ShiftHost` -- renderer-facing app-shell API for commands, documents, sessions, UI events, and clipboard access.
 - `RendererToMain` -- renderer-to-main request/response channel map.
 - `MainToRenderer` -- main-to-renderer broadcast channel map.
 
@@ -26,17 +25,14 @@ preload/
 
 The preload runs once before the renderer loads:
 
-1. Calls `createBridge()` from `@shift/bridge`.
-2. Converts the bridge class instance into a plain method object with `buildContextBridgeApi`.
-3. Exposes that object as `window.shiftBridge`.
-4. Builds the Shift host API and exposes it as `window.shiftHost`.
-5. Relays workspace/document `MessagePort`s into the page. Because packaged `file://` pages have opaque origins, receivers authenticate these relays with `event.source === window` plus the expected message type rather than comparing origin strings.
+1. Builds `ShiftHost` methods from typed `invoke` and `listen` IPC helpers.
+2. Exposes that object as `window.shiftHost` through `contextBridge`.
+3. Relays session and document `MessagePort`s into the page. Because packaged `file://` pages have opaque origins, receivers authenticate these relays with `event.source === window` plus the expected message type rather than comparing origin strings.
 
 ## Gotchas
 
-- `buildContextBridgeApi` only wraps prototype methods. If a native method is added as an own property, it will not be exposed.
-- `contextBridge` values must be plain data/functions. Do not expose the native class instance directly.
-- `window.shiftBridge` is the raw bridge boundary. Editor/reactive behavior belongs in renderer-side model code, not preload.
+- `contextBridge` values must remain plain data and functions.
+- Native font access belongs to `WorkspaceHost` in the utility process, not preload.
 - Port relays use `"*"` only as the `postMessage` delivery target required by opaque `file://` origins. Renderer listeners must retain the same-window source and message-type checks before accepting transferred ports.
 
 ## Verification
@@ -48,7 +44,7 @@ pnpm --filter @shift/desktop lint
 
 ## Related
 
-- `@shift/bridge` -- runtime native bridge loader and bridge type exports.
-- `@shift/types` -- generated bridge DTO/API facade plus shared primitive DTO types.
-- `ShiftHost` -- app shell API surface exposed as `window.shiftHost`.
+- `ShiftHost` -- app-shell API surface exposed as `window.shiftHost`.
+- `WorkspaceHost` -- utility-process owner of the native bridge and font-session service.
+- `FontSessionClient` -- renderer consumer of relayed session ports.
 - `Window` -- loads this preload script through `webPreferences.preload`.

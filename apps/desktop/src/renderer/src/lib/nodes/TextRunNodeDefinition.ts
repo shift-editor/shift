@@ -49,7 +49,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
           const renderModel = this.editor
             .glyphForId(glyph.glyphId)
-            ?.renderModelAt(this.editor.designLocationCell);
+            ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell);
           if (!renderModel) continue;
 
           renderModel.trackShape();

@@ -7,7 +7,7 @@ import { SettingsNumberField } from "./SettingsNumberField";
 import type { NumberMetadataKey, TextMetadataKey } from "./types";
 import { useSettingsForm } from "./useSettingsForm";
 
-export const FontSettingsPanel = () => {
+export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
   const font = useFont();
   const metadata = useSignalState(font.metadataCell);
   const form = useSettingsForm<FontMetadata>({
@@ -37,7 +37,7 @@ export const FontSettingsPanel = () => {
   };
 
   return (
-    <section className="flex min-w-0 flex-col gap-4 p-5 pr-8">
+    <fieldset disabled={!canAuthor} className="flex min-w-0 flex-col gap-4 p-5 pr-8">
       <h2 className="text-sm font-medium text-primary">Font</h2>
       {form.error && <p className="text-xs text-red-600">{form.error}</p>}
 
@@ -167,7 +167,7 @@ export const FontSettingsPanel = () => {
           className="min-h-20 bg-white text-sm text-black"
         />
       </MetadataField>
-    </section>
+    </fieldset>
   );
 };
 

@@ -17,23 +17,28 @@ export const BooleanOps = () => {
   const [contourIdA, contourIdB] = selectedContourIds;
   if (!contourIdA || !contourIdB) return null;
 
+  const editable = editor.layerForGeometry({ contours: selectedContourIds }) !== null;
+
   return (
     <SidebarSection title="Boolean">
       <div className="flex gap-2">
         <IconButton
           icon={UnionIcon}
+          disabled={!editable}
           onClick={() => {
             editor.boolean(contourIdA, contourIdB, "union");
           }}
         />
         <IconButton
           icon={IntersectIcon}
+          disabled={!editable}
           onClick={() => {
             editor.boolean(contourIdA, contourIdB, "intersect");
           }}
         />
         <IconButton
           icon={SubtractIcon}
+          disabled={!editable}
           onClick={() => {
             editor.boolean(contourIdA, contourIdB, "subtract");
           }}

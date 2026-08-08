@@ -61,7 +61,7 @@ export class Marquee implements SelectBehavior {
       const glyph = ctx.editor.glyphForId(node.glyphId);
       if (!glyph) continue;
 
-      for (const point of glyph.geometryAt(ctx.editor.designLocation).allPoints) {
+      for (const point of glyph.geometryAt(ctx.editor.externalLocation).allPoints) {
         const scenePoint = Vec2.add(point, node.position);
         if (!Rect.containsPoint(rect, scenePoint)) continue;
 

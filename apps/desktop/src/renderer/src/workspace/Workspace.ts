@@ -5,7 +5,7 @@ import { Editor } from "@/lib/editor/Editor";
 import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { WorkspaceClient } from "@/lib/workspace/WorkspaceClient";
+import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import {
   WorkspaceEditCoordinator,
   type WorkspaceCommitState,
@@ -15,11 +15,12 @@ import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 
 export interface WorkspaceOptions {
   readonly host: ShiftHost;
+  readonly client: FontSessionClient;
   readonly clipboard: SystemClipboard;
 }
 
 export class Workspace {
-  readonly #client: WorkspaceClient;
+  readonly #client: FontSessionClient;
   readonly #store: FontStore;
   readonly #edits: WorkspaceEditCoordinator;
   readonly #documentBridge: WorkspaceDocumentBridge;
@@ -31,7 +32,7 @@ export class Workspace {
   readonly commitStateCell: Signal<WorkspaceCommitState>;
 
   constructor(options: WorkspaceOptions) {
-    this.#client = new WorkspaceClient(options.host);
+    this.#client = options.client;
     this.#store = new FontStore();
     this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store);
     this.#documentBridge = new WorkspaceDocumentBridge({
@@ -39,7 +40,7 @@ export class Workspace {
       edits: this.#edits,
     });
 
-    this.font = new Font(this.#store, this.#edits);
+    this.font = new Font({ store: this.#store, editCoordinator: this.#edits });
     this.editor = new Editor({
       font: this.font,
       fontStore: this.#store,
@@ -63,7 +64,6 @@ export class Workspace {
   dispose(): void {
     this.font.dispose();
     this.#documentBridge.dispose();
-    this.#client.dispose();
   }
 
   async #connect(): Promise<void> {

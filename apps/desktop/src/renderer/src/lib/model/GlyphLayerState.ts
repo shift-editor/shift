@@ -8,7 +8,7 @@ import type {
 } from "@shift/types";
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
 import {
-  GlyphStateGeometry as GlyphGeometry,
+  GlyphGeometry,
   type GlyphPosition,
   type GlyphPositionTarget,
   type GlyphPositions,

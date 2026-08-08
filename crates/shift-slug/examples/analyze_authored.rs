@@ -1,7 +1,7 @@
 use std::{env, error::Error};
 
 use shift_backends::font_loader::FontLoader;
-use shift_font::{GlyphId, Location};
+use shift_font::{DesignLocation, GlyphId};
 use shift_slug::{
     authored_glyph_requirements, curves_from_resolved_contours, AuthoredAtlasBuilder,
     AuthoredGlyph, AuthoredSlugError, AuthoredWeightSet,
@@ -145,7 +145,7 @@ fn collect_weight_sets(
     Ok((sets, next_weight_index))
 }
 
-fn validation_locations(font: &shift_font::Font) -> Vec<Location> {
+fn validation_locations(font: &shift_font::Font) -> Vec<DesignLocation> {
     let mut locations = font
         .sources()
         .iter()
@@ -153,7 +153,7 @@ fn validation_locations(font: &shift_font::Font) -> Vec<Location> {
         .map(|source| source.location().clone())
         .collect::<Vec<_>>();
     for step in 0..17 {
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         for (axis_index, axis) in font.axes().iter().enumerate() {
             let numerator = (step * 7 + axis_index * 11) % 17;
             let fraction = numerator as f64 / 16.0;
@@ -171,7 +171,7 @@ fn validate_locations(
     font: &shift_font::Font,
     atlas: &shift_slug::VariableAtlas,
     glyphs: &[ValidationGlyph],
-    locations: &[Location],
+    locations: &[DesignLocation],
     weight_sets: &[AuthoredWeightSet],
     weight_count: usize,
 ) -> Result<(f32, f32), Box<dyn Error>> {

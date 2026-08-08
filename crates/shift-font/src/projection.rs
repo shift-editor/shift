@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use crate::composite::{resolved_contours_from_layers, GlyphComponents, ResolvedContour};
 use crate::{
-    Axis, CoreError, CoreResult, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer,
-    InterpolationBasis, Location, Source, SourceId,
+    Axis, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation,
+    GlyphLayer, InterpolationBasis, Source, SourceId,
 };
 
 /// One exact-source shape that cannot be represented by compatible variation.
@@ -68,7 +68,7 @@ struct GlyphLayerProjection {
 impl GlyphLayerProjection {
     fn resolve(
         &self,
-        location: &Location,
+        location: &DesignLocation,
         axes: &[Axis],
         sources: &[Source],
     ) -> CoreResult<GlyphLayer> {
@@ -162,7 +162,7 @@ impl GlyphProjection {
     /// reference layer disagree, or when an interpolation support axis is absent.
     pub fn resolve(
         &self,
-        location: &Location,
+        location: &DesignLocation,
         axes: &[Axis],
         sources: &[Source],
     ) -> CoreResult<GlyphLayer> {
@@ -177,7 +177,7 @@ impl GlyphProjection {
 /// persistence, or compiler state.
 pub struct FontProjection<'a> {
     font: &'a Font,
-    location: Location,
+    location: DesignLocation,
     layers: HashMap<GlyphId, GlyphLayer>,
     interpolation_bases: HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
 }
@@ -268,7 +268,7 @@ impl Font {
     fn resolved_layer_at_with_bases(
         &self,
         glyph_id: &GlyphId,
-        location: &Location,
+        location: &DesignLocation,
         interpolation_bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
     ) -> CoreResult<Option<GlyphLayer>> {
         let Some(projection) =
@@ -466,7 +466,7 @@ impl Font {
     ///
     /// Missing axis coordinates use axis defaults. External axis mappings must
     /// be evaluated before constructing the projection.
-    pub fn projection(&self, location: &Location) -> FontProjection<'_> {
+    pub fn projection(&self, location: &DesignLocation) -> FontProjection<'_> {
         FontProjection {
             font: self,
             location: location.clone(),
@@ -496,7 +496,7 @@ impl GlyphProjectionSet {
     pub fn resolve_glyph(
         &self,
         glyph_id: &GlyphId,
-        location: &Location,
+        location: &DesignLocation,
         axes: &[Axis],
         sources: &[Source],
     ) -> CoreResult<Option<ResolvedGlyph>> {
@@ -518,7 +518,7 @@ impl GlyphProjectionSet {
     fn prepare_layer_tree(
         &self,
         glyph_id: &GlyphId,
-        location: &Location,
+        location: &DesignLocation,
         axes: &[Axis],
         sources: &[Source],
         layers: &mut HashMap<GlyphId, GlyphLayer>,
@@ -558,7 +558,7 @@ impl GlyphProjectionSet {
 
 impl FontProjection<'_> {
     /// Returns the internal authoring location fixed for this projection.
-    pub fn location(&self) -> &Location {
+    pub fn location(&self) -> &DesignLocation {
         &self.location
     }
 
@@ -703,7 +703,11 @@ fn source_for_id<'a>(font: &'a Font, source_id: &SourceId) -> Option<&'a Source>
         .find(|source| source.id() == *source_id)
 }
 
-fn exact_source_id(location: &Location, axes: &[Axis], sources: &[Source]) -> Option<SourceId> {
+fn exact_source_id(
+    location: &DesignLocation,
+    axes: &[Axis],
+    sources: &[Source],
+) -> Option<SourceId> {
     sources
         .iter()
         .filter(|source| source.is_master())
@@ -715,8 +719,8 @@ fn exact_source_id(location: &Location, axes: &[Axis], sources: &[Source]) -> Op
 mod tests {
     use crate::test_support::sample_variable_font;
     use crate::{
-        Anchor, Axis, AxisId, Component, Contour, CoreError, Font, Glyph, GlyphId, GlyphLayer,
-        LayerId, Location, PointType, Source, SourceId, Transform,
+        Anchor, Axis, AxisId, Component, Contour, CoreError, DesignLocation, Font, Glyph, GlyphId,
+        GlyphLayer, LayerId, PointType, Source, SourceId, Transform,
     };
 
     fn variable_font() -> (Font, AxisId, SourceId, SourceId, SourceId) {
@@ -743,8 +747,8 @@ mod tests {
         (font, axis_id, light_id, regular_id, bold_id)
     }
 
-    fn location(axis_id: &AxisId, value: f64) -> Location {
-        let mut location = Location::new();
+    fn location(axis_id: &AxisId, value: f64) -> DesignLocation {
+        let mut location = DesignLocation::new();
         location.set(axis_id.clone(), value);
         location
     }
@@ -805,7 +809,7 @@ mod tests {
                 .basis(),
         ));
 
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         location.set(font.axes()[0].id(), 600.0);
         let expected = font
             .projection(&location)
@@ -829,7 +833,7 @@ mod tests {
     fn projection_interpolates_when_an_exact_source_has_no_glyph_layer() {
         let font = sample_variable_font();
         let glyph_id = font.glyph_by_name("A").unwrap().id();
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         location.set(font.axes()[0].id(), 600.0);
 
         let glyph = font
@@ -990,7 +994,7 @@ mod tests {
         let bold = projection
             .resolve(bold_source.location(), font.axes(), font.sources())
             .unwrap();
-        let mut midpoint = Location::new();
+        let mut midpoint = DesignLocation::new();
         midpoint.set(font.axes()[0].id(), 600.0);
         let interpolated = projection
             .resolve(&midpoint, font.axes(), font.sources())
@@ -1195,7 +1199,7 @@ mod tests {
         font.insert_glyph(blank).unwrap();
 
         let glyphs = font
-            .projection(&Location::new())
+            .projection(&DesignLocation::new())
             .glyphs(&[
                 GlyphId::from_raw("missing"),
                 blank_id.clone(),
@@ -1235,7 +1239,7 @@ mod tests {
         font.insert_glyph(root).unwrap();
 
         let glyph = font
-            .projection(&Location::new())
+            .projection(&DesignLocation::new())
             .glyph(&root_id)
             .unwrap()
             .unwrap();

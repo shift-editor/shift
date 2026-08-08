@@ -1,5 +1,5 @@
 use shift_font::{
-    test_support::sample_variable_font, CurveSegment, CurveSegmentIter, GlyphId, Location,
+    test_support::sample_variable_font, CurveSegment, CurveSegmentIter, DesignLocation, GlyphId,
 };
 use shift_slug::{AtlasBuilder, OutlineCommand, VariableAtlasBuilder};
 
@@ -50,7 +50,7 @@ fn resident_two_source_model_matches_shift_projection_at_midpoint() {
 fn commands_at(
     font: &shift_font::Font,
     glyph_id: &GlyphId,
-    location: &Location,
+    location: &DesignLocation,
 ) -> Vec<OutlineCommand<f32>> {
     let glyph = font
         .projection(location)
@@ -97,8 +97,8 @@ fn commands_at(
     commands
 }
 
-fn location(axis_id: &shift_font::AxisId, value: f64) -> Location {
-    let mut location = Location::new();
+fn location(axis_id: &shift_font::AxisId, value: f64) -> DesignLocation {
+    let mut location = DesignLocation::new();
     location.set(axis_id.clone(), value);
     location
 }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { useParams } from "react-router";
 
@@ -81,17 +81,17 @@ export const Editor = () => {
       toolManager,
     }));
 
-    const keyDownHandler = async (e: KeyboardEvent) => {
+    const keyDownHandler = async (event: KeyboardEvent) => {
       try {
-        await keyboardRouter.handleKeyDown(e);
+        await keyboardRouter.handleKeyDown(event);
       } catch (error) {
         console.error("keyboard keydown failed", error);
       }
     };
 
-    const keyUpHandler = async (e: KeyboardEvent) => {
+    const keyUpHandler = async (event: KeyboardEvent) => {
       try {
-        await keyboardRouter.handleKeyUp(e);
+        await keyboardRouter.handleKeyUp(event);
       } catch (error) {
         console.error("keyboard keyup failed", error);
       }
@@ -109,51 +109,65 @@ export const Editor = () => {
   if (!glyph) return null;
 
   return (
-    <div
-      className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
-      data-gesture={gesture.phase}
-      style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
-    >
-      <Toolbar />
-      <ResizablePanelGroup
-        direction="horizontal"
-        autoSaveId="shift:editor-layout"
-        className="flex-1 overflow-hidden"
-      >
-        <ResizablePanel
-          id="left-sidebar"
-          order={1}
-          defaultSize={15}
-          minSize={10}
-          maxSize={30}
-          collapsible
-          collapsedSize={0}
-        >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <LeftSidebar />
-          </ZoneContainer>
-        </ResizablePanel>
-        <ResizableHandle inset="start" />
-        <ResizablePanel id="canvas" order={2} minSize={30}>
-          <ZoneContainer zone="canvas" className="h-full">
-            <Canvas />
-          </ZoneContainer>
-        </ResizablePanel>
-        <ResizableHandle inset="end" />
-        <ResizablePanel
-          id="right-sidebar"
-          order={3}
-          defaultSize={15}
-          minSize={10}
-          maxSize={30}
-          collapsible
-          collapsedSize={0}
-        >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <RightSidebar />
-          </ZoneContainer>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </div>
+    <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
+      <Canvas />
+    </EditorLayout>
   );
 };
+
+const EditorLayout = ({
+  cursorStyle,
+  gesture,
+  children,
+}: {
+  cursorStyle: string;
+  gesture: string;
+  children: ReactNode;
+}) => (
+  <div
+    className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
+    data-gesture={gesture}
+    style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
+  >
+    <Toolbar />
+    <ResizablePanelGroup
+      direction="horizontal"
+      autoSaveId="shift:editor-layout"
+      className="flex-1 overflow-hidden"
+    >
+      <ResizablePanel
+        id="left-sidebar"
+        order={1}
+        defaultSize={15}
+        minSize={10}
+        maxSize={30}
+        collapsible
+        collapsedSize={0}
+      >
+        <ZoneContainer zone="sidebar" className="h-full">
+          <LeftSidebar />
+        </ZoneContainer>
+      </ResizablePanel>
+      <ResizableHandle inset="start" />
+      <ResizablePanel id="canvas" order={2} minSize={30}>
+        <ZoneContainer zone="canvas" className="h-full">
+          {children}
+        </ZoneContainer>
+      </ResizablePanel>
+      <ResizableHandle inset="end" />
+      <ResizablePanel
+        id="right-sidebar"
+        order={3}
+        defaultSize={15}
+        minSize={10}
+        maxSize={30}
+        collapsible
+        collapsedSize={0}
+      >
+        <ZoneContainer zone="sidebar" className="h-full">
+          <RightSidebar />
+        </ZoneContainer>
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  </div>
+);

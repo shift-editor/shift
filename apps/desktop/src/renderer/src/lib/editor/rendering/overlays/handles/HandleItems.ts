@@ -24,9 +24,19 @@ export class HandleItems {
     contours: readonly GlyphRenderContour[],
     source: HandleStateSource,
   ): HandleDisplayList {
+    return this.#fromShapes(contours, (contourIndex, pointIndex) =>
+      this.#state(contours[contourIndex]!.points[pointIndex]!.id, source),
+    );
+  }
+
+  #fromShapes(
+    contours: readonly GlyphRenderContour[],
+    stateForPoint: (contourIndex: number, pointIndex: number) => HandleState,
+  ): HandleDisplayList {
     let itemCount = 0;
 
-    for (const contour of contours) {
+    for (let contourIndex = 0; contourIndex < contours.length; contourIndex += 1) {
+      const contour = contours[contourIndex]!;
       const points = contour.points;
       const count = points.length;
       if (count === 0) continue;
@@ -35,7 +45,7 @@ export class HandleItems {
         const point = points[index]!;
         const prev = index > 0 ? points[index - 1]! : contour.closed ? points[count - 1]! : null;
         const next = index + 1 < count ? points[index + 1]! : contour.closed ? points[0]! : null;
-        const state = this.#state(point.id, source);
+        const state = stateForPoint(contourIndex, index);
         const item = this.#pool[itemCount];
 
         if (item) {

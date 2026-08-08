@@ -5,7 +5,7 @@ export { IdIndex } from "./IdIndex";
 export { Point, type NewPoint, type PointHit, type PointWithNeighbors } from "./Point";
 export type { ContourGeometry, SegmentedContour } from "./types/contour";
 export {
-  GlyphGeometry as GlyphStateGeometry,
+  GlyphGeometry,
   type GeometryAnchorHit,
   type GeometryHit,
   type GeometryPointHit,

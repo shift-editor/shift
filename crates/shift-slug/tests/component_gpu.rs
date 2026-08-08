@@ -3,8 +3,8 @@
 use std::sync::mpsc;
 
 use shift_font::{
-    test_support::sample_variable_font, Anchor, Component, Contour, DecomposedTransform, Glyph,
-    GlyphId, GlyphLayer, LayerId, Location, PointType,
+    test_support::sample_variable_font, Anchor, Component, Contour, DecomposedTransform,
+    DesignLocation, Glyph, GlyphId, GlyphLayer, LayerId, PointType,
 };
 use shift_slug::{
     add_authored_glyph_with_weight_sets, pack_render_instances, pack_variable_params,
@@ -33,7 +33,7 @@ fn gpu_resolves_varying_component_transforms_and_attachments() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = Location::new();
+    let mut location = DesignLocation::new();
     location.set(font.axes()[0].id(), 600.0);
     let source_weights = interpolation
         .basis()

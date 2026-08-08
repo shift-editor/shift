@@ -858,7 +858,7 @@ pub fn add_authored_glyph(
 fn source_location<'a>(
     font: &'a Font,
     source_id: &SourceId,
-) -> Result<&'a shift_font::Location, AuthoredSlugError> {
+) -> Result<&'a shift_font::DesignLocation, AuthoredSlugError> {
     font.sources()
         .iter()
         .find(|source| source.id() == *source_id)

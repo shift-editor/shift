@@ -1,0 +1,236 @@
+{
+  "axes": [
+    {
+      "axisType": "continuous",
+      "default": 400.0,
+      "hidden": false,
+      "id": "axis_weight",
+      "labels": [],
+      "maximum": 900.0,
+      "minimum": 100.0,
+      "name": "Weight",
+      "role": "external",
+      "tag": "wght"
+    },
+    {
+      "axisType": "continuous",
+      "default": 100.0,
+      "hidden": false,
+      "id": "axis_width",
+      "labels": [],
+      "maximum": 200.0,
+      "minimum": 50.0,
+      "name": "Width",
+      "role": "external",
+      "tag": "wdth"
+    },
+    {
+      "axisType": "continuous",
+      "default": 12.0,
+      "hidden": false,
+      "id": "axis_optical",
+      "labels": [],
+      "maximum": 72.0,
+      "minimum": 8.0,
+      "name": "Optical size",
+      "role": "internal",
+      "tag": "opsz"
+    }
+  ],
+  "bases": [
+    {
+      "basis": {
+        "deltas": [
+          {
+            "region": [
+              {
+                "axisId": "axis_weight",
+                "lower": 0.0,
+                "peak": 0.0,
+                "upper": 0.0
+              }
+            ],
+            "values": [
+              0.0
+            ]
+          },
+          {
+            "region": [
+              {
+                "axisId": "axis_weight",
+                "lower": -1.0,
+                "peak": -1.0,
+                "upper": 0.0
+              }
+            ],
+            "values": [
+              0.0
+            ]
+          },
+          {
+            "region": [
+              {
+                "axisId": "axis_weight",
+                "lower": 0.0,
+                "peak": 1.0,
+                "upper": 1.0
+              }
+            ],
+            "values": [
+              -0.19999999999999996
+            ]
+          }
+        ]
+      },
+      "inputAxisIds": [
+        "axis_weight"
+      ],
+      "mappingId": "axisMapping_weight",
+      "outputAxisIds": [
+        "axis_weight"
+      ]
+    },
+    {
+      "basis": {
+        "deltas": [
+          {
+            "region": [
+              {
+                "axisId": "axis_weight",
+                "lower": 0.0,
+                "peak": 0.0,
+                "upper": 0.0
+              }
+            ],
+            "values": [
+              0.0
+            ]
+          },
+          {
+            "region": [
+              {
+                "axisId": "axis_weight",
+                "lower": -1.0,
+                "peak": -1.0,
+                "upper": 0.0
+              }
+            ],
+            "values": [
+              2.0
+            ]
+          },
+          {
+            "region": [
+              {
+                "axisId": "axis_weight",
+                "lower": 0.0,
+                "peak": 1.0,
+                "upper": 1.0
+              }
+            ],
+            "values": [
+              -2.0
+            ]
+          }
+        ]
+      },
+      "inputAxisIds": [
+        "axis_weight"
+      ],
+      "mappingId": "axisMapping_reversed",
+      "outputAxisIds": [
+        "axis_weight"
+      ]
+    },
+    {
+      "basis": {
+        "deltas": [
+          {
+            "region": [
+              {
+                "axisId": "axis_width",
+                "lower": 0.0,
+                "peak": 0.0,
+                "upper": 0.0
+              },
+              {
+                "axisId": "axis_weight",
+                "lower": 0.0,
+                "peak": 0.0,
+                "upper": 0.0
+              }
+            ],
+            "values": [
+              0.0
+            ]
+          },
+          {
+            "region": [
+              {
+                "axisId": "axis_width",
+                "lower": 0.0,
+                "peak": 0.25,
+                "upper": 0.25
+              },
+              {
+                "axisId": "axis_weight",
+                "lower": 0.0,
+                "peak": 0.8,
+                "upper": 0.8
+              }
+            ],
+            "values": [
+              1.0
+            ]
+          }
+        ]
+      },
+      "inputAxisIds": [
+        "axis_weight",
+        "axis_width"
+      ],
+      "mappingId": "axisMapping_optical",
+      "outputAxisIds": [
+        "axis_optical"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "basisIds": [
+        "axisMapping_weight"
+      ],
+      "expected": {
+        "axis_weight": 600.0
+      },
+      "location": {
+        "axis_weight": 650.0
+      }
+    },
+    {
+      "basisIds": [
+        "axisMapping_reversed"
+      ],
+      "expected": {
+        "axis_weight": 650.0
+      },
+      "location": {
+        "axis_weight": 250.0
+      }
+    },
+    {
+      "basisIds": [
+        "axisMapping_weight",
+        "axisMapping_optical"
+      ],
+      "expected": {
+        "axis_optical": 72.0,
+        "axis_weight": 800.0
+      },
+      "location": {
+        "axis_weight": 900.0,
+        "axis_width": 125.0
+      }
+    }
+  ]
+}

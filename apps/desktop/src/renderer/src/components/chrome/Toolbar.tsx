@@ -2,12 +2,13 @@ import { NavigationPane } from "./NavigationPane";
 import { Titlebar } from "./Titlebar";
 import { ToolsPane } from "@/components/editor/ToolsPane";
 import { useDocumentChromeState } from "@/hooks/useDocumentChromeState";
+import { useSignalState } from "@/lib/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 
 export const Toolbar = () => {
   const font = useFont();
+  const metadata = useSignalState(font.metadataCell);
   const { filename, dirty } = useDocumentChromeState();
-  const familyName = font.metadata.familyName;
   const editedFilename = `${filename} — Edited`;
 
   return (
@@ -21,7 +22,7 @@ export const Toolbar = () => {
               <span className="invisible col-start-1 row-start-1">{editedFilename}</span>
               <span className="col-start-1 row-start-1">{dirty ? editedFilename : filename}</span>
             </p>
-            <p className="text-ui font-medium">{familyName}</p>
+            <p className="text-ui font-medium">{metadata.familyName ?? "Untitled"}</p>
           </div>
         </div>
       </div>

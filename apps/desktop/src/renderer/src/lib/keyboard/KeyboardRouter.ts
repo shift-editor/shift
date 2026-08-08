@@ -15,6 +15,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
     closest?: (selector: string) => unknown;
   };
   if (element.isContentEditable === true) return true;
+  if (element.closest?.('[role="dialog"], [aria-modal="true"]')) return true;
   const tag = (element.tagName ?? "").toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
   return !!element.closest?.('[contenteditable="true"], input, textarea, select');

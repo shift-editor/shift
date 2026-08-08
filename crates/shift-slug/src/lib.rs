@@ -13,6 +13,7 @@ mod outline;
 mod pack;
 mod render;
 mod resident;
+pub mod retained;
 mod variable;
 
 pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};

@@ -2267,6 +2267,7 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
+ "shift-slug",
  "shift-source",
  "skrifa",
  "tempfile",

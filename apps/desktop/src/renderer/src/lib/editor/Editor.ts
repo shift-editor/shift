@@ -7,7 +7,6 @@ import {
   type AnchorId,
   type PointId,
   type ContourId,
-  type Location,
   type Source,
   type SourceId,
   type GlyphId,
@@ -16,13 +15,9 @@ import {
   type LayerId,
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
-import type { AxisLocation } from "@/types/variation";
+import type { ExternalAxisLocation } from "@/types/variation";
 import type { Coordinates, NodePoint, ScenePoint } from "@/types/coordinates";
-import {
-  axisLocationFromLocation,
-  cloneAxisLocation,
-  emptyAxisLocation,
-} from "@/lib/variation/location";
+import { cloneExternalAxisLocation, emptyExternalAxisLocation } from "@/lib/variation/location";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
@@ -172,7 +167,7 @@ export class Editor {
    */
   #camera: Camera;
 
-  #designLocation: WritableSignal<AxisLocation>;
+  #externalLocation: WritableSignal<ExternalAxisLocation>;
   #activeSourceId: WritableSignal<SourceId | null>;
 
   #cursorEffect: Effect;
@@ -204,13 +199,13 @@ export class Editor {
     this.#fontStore = options.fontStore;
     this.scene = new Scene(this.#store);
 
-    const initialDesignLocation = emptyAxisLocation();
+    const initialExternalLocation = emptyExternalAxisLocation();
 
-    this.#designLocation = signal(initialDesignLocation, {
-      name: "editor.designLocation",
+    this.#externalLocation = signal(initialExternalLocation, {
+      name: "editor.externalLocation",
     });
     this.#activeSourceId = signal<SourceId | null>(
-      this.#sourceIdAtLocation(initialDesignLocation),
+      this.#sourceIdAtLocation(initialExternalLocation),
       {
         name: "editor.source.active",
       },
@@ -278,7 +273,7 @@ export class Editor {
         track(this.font.metricDefinitionsCell);
         track(this.font.sourcesCell);
         track(this.font.sourceMetricsInterpolationCell);
-        this.updateMetricsFromFont(this.#designLocation.value);
+        this.updateMetricsFromFont(this.#externalLocation.value);
       },
       { name: "editor.cameraMetrics" },
     );
@@ -442,8 +437,8 @@ export class Editor {
     return this.font.createGlyph(name);
   }
 
-  public get designLocationCell(): Signal<AxisLocation> {
-    return this.#designLocation;
+  public get externalLocationCell(): Signal<ExternalAxisLocation> {
+    return this.#externalLocation;
   }
 
   public get activeSourceIdCell(): Signal<SourceId | null> {
@@ -459,17 +454,15 @@ export class Editor {
     return sourceId ? this.font.source(sourceId) : null;
   }
 
-  /** Current designspace coordinate used for displayed glyph data. */
-  public get designLocation(): AxisLocation {
-    return this.#designLocation.peek();
+  /** Current external user-space coordinate used for displayed font data. */
+  public get externalLocation(): ExternalAxisLocation {
+    return this.#externalLocation.peek();
   }
 
-  /**
-   * Set the displayed designspace coordinate shared by editor views.
-   */
-  public setDesignLocation(location: AxisLocation): void {
-    const next = cloneAxisLocation(location);
-    this.#designLocation.set(next);
+  /** Sets the external user-space coordinate shared by editor views. */
+  public setExternalLocation(location: ExternalAxisLocation): void {
+    const next = cloneExternalAxisLocation(location);
+    this.#externalLocation.set(next);
     this.#activeSourceId.set(this.#sourceIdAtLocation(next));
   }
 
@@ -489,51 +482,78 @@ export class Editor {
 
     if (isPointId(id)) {
       const layer = this.#layerForPoint(id);
-      if (!layer) return null;
-
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
       const contourId = this.font.contourIdForPoint(id);
-      if (!contourId) return null;
+      if (layer && authoredNode && contourId) {
+        return new PointObject(id, contourId, layer.geometry, authoredNode, layer);
+      }
 
-      const node = this.#placedGlyphNodeForLayer(layer);
-      if (!node) return null;
+      for (const node of this.scene.nodesOfKind("glyph")) {
+        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        if (!geometry?.point(id)) continue;
 
-      return new PointObject(id, contourId, layer, node);
+        const contourId = geometry.contourIdOfPoint(id);
+        if (!contourId) continue;
+
+        return new PointObject(id, contourId, geometry, node);
+      }
+      return null;
     }
 
     if (isAnchorId(id)) {
       const layer = this.#layerForAnchor(id);
-      if (!layer) return null;
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+      if (layer && authoredNode) {
+        return new AnchorObject(id, layer.geometry, authoredNode, layer);
+      }
 
-      const node = this.#placedGlyphNodeForLayer(layer);
-      if (!node) return null;
+      for (const node of this.scene.nodesOfKind("glyph")) {
+        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        if (!geometry?.anchor(id)) continue;
 
-      return new AnchorObject(id, layer, node);
+        return new AnchorObject(id, geometry, node);
+      }
+      return null;
     }
 
     if (isSegmentId(id)) {
       const layer = this.#layerForSegment(id);
-      if (!layer) return null;
-
-      const node = this.#placedGlyphNodeForLayer(layer);
-      if (!node) return null;
-
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
       const pointIds = this.font.pointIdsForSegment(id);
-      if (!pointIds) return null;
-
       const contourId = this.font.contourIdForSegment(id);
-      if (!contourId) return null;
+      if (layer && authoredNode && pointIds && contourId) {
+        return new SegmentObject(id, contourId, pointIds, layer.geometry, authoredNode, layer);
+      }
 
-      return new SegmentObject(id, contourId, pointIds, layer, node);
+      for (const node of this.scene.nodesOfKind("glyph")) {
+        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const segment = geometry?.segment(id);
+        if (!geometry || !segment) continue;
+
+        const contour = geometry.contours.find((candidate) =>
+          candidate.segments().some((candidateSegment) => candidateSegment.id === id),
+        );
+        if (!contour) continue;
+
+        return new SegmentObject(id, contour.id, segment.pointIds, geometry, node);
+      }
+      return null;
     }
 
     if (isContourId(id)) {
       const layer = this.#layerForContour(id);
-      if (!layer) return null;
+      const authoredNode = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+      if (layer && authoredNode) {
+        return new ContourObject(id, layer.geometry, authoredNode, layer);
+      }
 
-      const node = this.#placedGlyphNodeForLayer(layer);
-      if (!node) return null;
+      for (const node of this.scene.nodesOfKind("glyph")) {
+        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        if (!geometry?.contour(id)) continue;
 
-      return new ContourObject(id, layer, node);
+        return new ContourObject(id, geometry, node);
+      }
+      return null;
     }
 
     return null;
@@ -576,9 +596,7 @@ export class Editor {
     if (!layerId) return null;
 
     const layer = this.#layerForId(layerId);
-    if (!layer?.point(pointId)) return null;
-
-    return layer;
+    return layer?.point(pointId) ? layer : null;
   }
 
   #layerForAnchor(anchorId: AnchorId): GlyphLayer | null {
@@ -586,9 +604,7 @@ export class Editor {
     if (!layerId) return null;
 
     const layer = this.#layerForId(layerId);
-    if (!layer?.anchor(anchorId)) return null;
-
-    return layer;
+    return layer?.anchor(anchorId) ? layer : null;
   }
 
   #layerForSegment(segmentId: SegmentId): GlyphLayer | null {
@@ -596,9 +612,7 @@ export class Editor {
     if (!layerId) return null;
 
     const layer = this.#layerForId(layerId);
-    if (!layer?.segment(segmentId)) return null;
-
-    return layer;
+    return layer?.segment(segmentId) ? layer : null;
   }
 
   #layerForContour(contourId: ContourId): GlyphLayer | null {
@@ -606,9 +620,7 @@ export class Editor {
     if (!layerId) return null;
 
     const layer = this.#layerForId(layerId);
-    if (!layer?.contour(contourId)) return null;
-
-    return layer;
+    return layer?.contour(contourId) ? layer : null;
   }
 
   #layerForId(layerId: LayerId): GlyphLayer | null {
@@ -743,9 +755,12 @@ export class Editor {
     if (!source) return;
 
     this.font.editCoordinator.transaction("Select source", () => {
-      this.#ensureCurrentGlyphLayerAtSource(source.id, source.location);
+      this.#ensureCurrentGlyphLayer(
+        source.id,
+        (glyph) => glyph.geometryForSource(source.id).values,
+      );
     });
-    this.#setActiveSource(source.id, source.location);
+    this.#activeSourceId.set(source.id);
   }
 
   /**
@@ -758,19 +773,20 @@ export class Editor {
    * from the editor sidebar.
    *
    * @param name - Display name for the new source.
-   * @param location - Design-space location for the new source.
+   * @param location - External user-space location for the new source.
    * @returns The source id submitted to the workspace.
    */
-  public createSource(name: string, location: Location): SourceId {
+  public createSource(name: string, externalLocation: ExternalAxisLocation): SourceId {
     return this.font.editCoordinator.transaction("Create source", () => {
-      const sourceId = this.font.createSource(name, location);
-      this.#ensureCurrentGlyphLayerAtSource(sourceId, location);
-      this.#setActiveSource(sourceId, location);
+      const sourceId = this.font.createSource(name, externalLocation);
+      this.#ensureCurrentGlyphLayer(sourceId, (glyph) => glyph.geometryAt(externalLocation).values);
+      this.setExternalLocation(externalLocation);
+      this.#activeSourceId.set(sourceId);
       return sourceId;
     });
   }
 
-  #ensureCurrentGlyphLayerAtSource(sourceId: SourceId, location: Location): void {
+  #ensureCurrentGlyphLayer(sourceId: SourceId, valuesFor: (glyph: Glyph) => Float64Array): void {
     const glyphNodes = this.scene.nodesOfKind("glyph");
     if (glyphNodes.length !== 1) return;
 
@@ -780,37 +796,24 @@ export class Editor {
     const glyph = this.#fontStore.glyphForId(node.glyphId);
     if (!glyph) return;
 
-    const liveLayer = glyph.layerForSource(sourceId);
-
-    if (!liveLayer) {
+    if (!glyph.layerForSource(sourceId)) {
       const defaultLayer = glyph.layerForSource(this.font.defaultSource.id);
       if (!defaultLayer) return;
 
-      this.font.materializeGlyphLayer(
-        node.glyphId,
-        sourceId,
-        defaultLayer.id,
-        axisLocationFromLocation(location),
-      );
+      this.font.materializeGlyphLayer(node.glyphId, sourceId, defaultLayer.id, valuesFor(glyph));
     }
 
     this.scene.updateNode({ id: node.id, sourceId });
   }
 
-  #setActiveSource(sourceId: SourceId, location: Location): void {
-    const nextLocation = axisLocationFromLocation(location);
-    this.setDesignLocation(nextLocation);
-    this.#activeSourceId.set(sourceId);
-  }
-
   /**
-   * Return the shared design location to the font default.
+   * Return the shared external location to the font default.
    */
   public setSourceToDefault(): void {
-    this.setDesignLocation(this.font.defaultLocation());
+    this.setExternalLocation(this.font.defaultLocation());
   }
 
-  #sourceIdAtLocation(location: AxisLocation): SourceId | null {
+  #sourceIdAtLocation(location: ExternalAxisLocation): SourceId | null {
     return this.font.sourceAt(location)?.id ?? null;
   }
 
@@ -976,7 +979,7 @@ export class Editor {
     this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setRightSidebearing(value);
   }
 
-  public updateMetricsFromFont(location: AxisLocation = this.designLocation): void {
+  public updateMetricsFromFont(location: ExternalAxisLocation = this.externalLocation): void {
     const metrics = this.font.metricsAtLocation(location);
     this.#camera.upm = metrics.unitsPerEm;
     this.#camera.descender = metrics.descender;
@@ -1126,34 +1129,20 @@ export class Editor {
     const objects = this.objects(ids);
     if (objects.length === 0 || objects.length !== ids.length) return null;
 
-    let layer: GlyphLayer | null = null;
     const pointIds = new Set<PointId>();
-
-    const useLayer = (next: GlyphLayer): boolean => {
-      if (layer && layer.id !== next.id) return false;
-
-      layer = next;
-      return true;
-    };
 
     for (const object of objects) {
       switch (object.kind) {
         case "point":
-          if (!useLayer(object.layer)) return null;
-
           pointIds.add(object.pointId);
           break;
 
         case "segment":
-          if (!useLayer(object.layer)) return null;
-
           for (const pointId of object.pointIds) pointIds.add(pointId);
           break;
 
         case "contour": {
-          if (!useLayer(object.layer)) return null;
-
-          const contour = object.layer.contour(object.contourId);
+          const contour = object.geometry.contour(object.contourId);
           if (!contour) return null;
 
           for (const point of contour.points) pointIds.add(point.id);
@@ -1166,6 +1155,7 @@ export class Editor {
       }
     }
 
+    const layer = this.layerForGeometry({ points: pointIds });
     if (!layer) return null;
 
     return { layer, pointIds: [...pointIds] };

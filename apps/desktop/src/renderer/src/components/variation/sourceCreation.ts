@@ -1,6 +1,12 @@
-import type { Axis, Location, Source } from "@shift/types";
-import type { AxisLocation, SourceCreationIssue } from "@/types/variation";
-import { axisLocationFromLocation, axisLocationsEqual, axisValue } from "@/lib/variation/location";
+import type { Axis, AxisMappingBasis, Source } from "@shift/types";
+import type { ExternalAxisLocation, SourceCreationIssue } from "@/types/variation";
+import {
+  axisValue,
+  designAxisLocationFromLocation,
+  designAxisLocationsEqual,
+  externalAxisLocationFromRecord,
+  mapAxisLocation,
+} from "@/lib/variation/location";
 
 const LOCATION_TOLERANCE = 1e-6;
 
@@ -14,7 +20,7 @@ const LOCATION_TOLERANCE = 1e-6;
 export function sourceLocation(
   axes: readonly Axis[],
   values: Readonly<Record<string, string>>,
-): Location | null {
+): ExternalAxisLocation | null {
   const entries = axes.map((axis) => {
     const input = values[axis.id];
     const value = input?.trim() ? Number(input) : Number.NaN;
@@ -22,7 +28,7 @@ export function sourceLocation(
   });
   if (entries.some(([, value]) => !Number.isFinite(value))) return null;
 
-  return { values: Object.fromEntries(entries) } as Location;
+  return externalAxisLocationFromRecord(Object.fromEntries(entries));
 }
 
 /**
@@ -39,6 +45,7 @@ export function sourceCreationIssue(
   values: Readonly<Record<string, string>>,
   axes: readonly Axis[],
   sources: readonly Source[],
+  mappingBases: readonly AxisMappingBasis[],
 ): SourceCreationIssue | null {
   const trimmedName = name.trim();
   if (!trimmedName) return { kind: "name", message: "Enter a source name" };
@@ -58,13 +65,17 @@ export function sourceCreationIssue(
     };
   }
 
-  const location = {
-    values: Object.fromEntries(axes.map((axis) => [axis.id, Number(values[axis.id])])),
-  } as Location;
-
-  const target = axisLocationFromLocation(location);
+  const external = externalAxisLocationFromRecord(
+    Object.fromEntries(axes.map((axis) => [axis.id, Number(values[axis.id])])),
+  );
+  const target = mapAxisLocation(external, axes, mappingBases);
   const existing = sources.find((source) =>
-    axisLocationsEqual(axisLocationFromLocation(source.location), target, axes, LOCATION_TOLERANCE),
+    designAxisLocationsEqual(
+      designAxisLocationFromLocation(source.location),
+      target,
+      axes,
+      LOCATION_TOLERANCE,
+    ),
   );
   return existing
     ? {
@@ -86,7 +97,7 @@ export function sourceCreationIssue(
 export function suggestedSourceName(
   axes: readonly Axis[],
   sources: readonly Source[],
-  location: AxisLocation,
+  location: ExternalAxisLocation,
 ): string {
   const labels = axes.flatMap((axis) => {
     const value = axisValue(location, axis);

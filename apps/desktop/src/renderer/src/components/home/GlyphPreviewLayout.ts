@@ -1,4 +1,4 @@
-import type { SourceMetrics } from "@shift/types";
+import type { CatalogMetrics } from "@shift/types";
 
 const MARGIN_TOP_RATIO = 0.2;
 const MARGIN_BOTTOM_RATIO = 0.05;
@@ -10,7 +10,7 @@ export class GlyphPreviewLayout {
   readonly height: number;
   readonly viewBox: string;
 
-  constructor(metrics: SourceMetrics, xAdvance: number, height: number) {
+  constructor(metrics: CatalogMetrics, xAdvance: number, height: number) {
     const marginSide = GlyphPreviewLayout.sideMargin(metrics);
     const viewBoxX = -marginSide;
     const viewBoxWidth = Math.max(1, xAdvance + 2 * marginSide);
@@ -22,12 +22,12 @@ export class GlyphPreviewLayout {
   }
 
   /** Shared horizontal margin used by fallback and resident previews. */
-  static sideMargin(metrics: SourceMetrics): number {
+  static sideMargin(metrics: CatalogMetrics): number {
     return metrics.unitsPerEm * MARGIN_SIDE_RATIO;
   }
 
   /** Shared font-space viewport used by fallback and resident previews. */
-  static fontViewport(metrics: SourceMetrics): readonly [viewHeight: number, fontTop: number] {
+  static fontViewport(metrics: CatalogMetrics): readonly [viewHeight: number, fontTop: number] {
     const marginTop = metrics.unitsPerEm * MARGIN_TOP_RATIO;
     const marginBottom = metrics.unitsPerEm * MARGIN_BOTTOM_RATIO;
     return [

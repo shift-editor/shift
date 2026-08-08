@@ -1,15 +1,13 @@
+import { useMemo } from "react";
 import { computed, useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { useMemo } from "react";
 
 export interface GlyphXAdvanceState {
   readonly xAdvance: number;
   readonly hasLayer: boolean;
 }
 
-/**
- * Current glyph xAdvance, live-updating. Returns `0` when no glyph is loaded.
- */
+/** Returns the live x-advance and whether the displayed glyph has an authored layer. */
 export function useGlyphXAdvance(): GlyphXAdvanceState {
   const editor = useEditor();
   const xAdvanceCell = useMemo(
@@ -19,13 +17,17 @@ export function useGlyphXAdvance(): GlyphXAdvanceState {
         const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
         if (!node) return { xAdvance: 0, hasLayer: false };
 
-        const location = editor.designLocationCell.value;
+        const externalLocation = editor.externalLocationCell.value;
+        const activeSourceId = editor.activeSourceIdCell.value;
         const glyph = editor.glyphForId(node.glyphId);
         if (!glyph) return { xAdvance: 0, hasLayer: false };
 
         return {
-          xAdvance: glyph.geometryAt(location).xAdvance,
-          hasLayer: glyph.layerAt(location) !== null,
+          xAdvance: glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell)
+            .xAdvance,
+          hasLayer: activeSourceId
+            ? glyph.layerForSource(activeSourceId) !== null
+            : glyph.layerAt(externalLocation) !== null,
         };
       }),
     [editor],

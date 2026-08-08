@@ -1,5 +1,5 @@
 import { Vec2, type Point2D } from "@shift/geo";
-import { Point as PointModel, type Point } from "@shift/glyph-state";
+import { Point } from "@shift/glyph-state";
 import type { HandleState } from "@/types/graphics";
 import type { MarkerShape } from "../../markers/types";
 
@@ -52,7 +52,7 @@ export class PointHandleItem {
     if (this.count === 1) return "corner";
     if (this.index === 0) return this.contourClosed ? "direction" : "first";
     if (this.index === this.count - 1 && !this.contourClosed) return "last";
-    if (PointModel.isOnCurve(this.point)) return this.point.smooth ? "smooth" : "corner";
+    if (Point.isOnCurve(this.point)) return this.point.smooth ? "smooth" : "corner";
     return "control";
   }
 

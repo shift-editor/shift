@@ -16,13 +16,16 @@ export class BendCurve implements SelectBehavior {
     const object = ctx.editor.object(event.target.id);
     if (!objectIsKindOf(object, "segment")) return false;
 
-    const segment = object.layer.segment(object.segmentId);
+    const layer = object.layer;
+    if (!layer || layer.sourceId !== ctx.editor.activeSourceId) return false;
+
+    const segment = layer.segment(object.segmentId);
     const cubic = segment?.asCubic();
     if (!cubic) return false;
 
     const { controlStart, controlEnd } = cubic;
 
-    this.#draft = new GlyphLayerEditDraft(object.layer, {
+    this.#draft = new GlyphLayerEditDraft(layer, {
       points: [controlStart.id, controlEnd.id],
     });
     this.#hasChanges = false;

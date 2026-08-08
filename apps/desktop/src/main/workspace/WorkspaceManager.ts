@@ -7,7 +7,7 @@ import type {
   WorkspacePackageIdentity,
 } from "../../shared/workspace/protocol";
 import { WorkspaceProcess } from "./WorkspaceProcess";
-import { type WorkspaceId, WorkspaceSession } from "./WorkspaceSession";
+import { FontSessionHost, type FontSessionId } from "./FontSessionHost";
 import { PackageSessionIndex } from "./PackageSessionIndex";
 
 /** Provides app-owned values required when a workspace session is created. */
@@ -28,8 +28,8 @@ export interface WorkspaceManagerOptions {
 export class WorkspaceManager {
   readonly #documentsRoot: () => string;
   readonly #applicationName: () => string;
-  readonly #sessionsById = new Map<WorkspaceId, WorkspaceSession>();
-  readonly #sessionIdByWindowId = new Map<number, WorkspaceId>();
+  readonly #sessionsById = new Map<FontSessionId, FontSessionHost>();
+  readonly #sessionIdByWindowId = new Map<number, FontSessionId>();
   readonly #packageSessions = new PackageSessionIndex();
 
   /**
@@ -47,7 +47,7 @@ export class WorkspaceManager {
    *
    * @returns the live session that owns the new workspace.
    */
-  async createUntitled(): Promise<WorkspaceSession> {
+  async createUntitled(): Promise<FontSessionHost> {
     return this.#createSession((workspaceProcess) => workspaceProcess.createWorkspace());
   }
 
@@ -57,7 +57,9 @@ export class WorkspaceManager {
    * @param sourcePath - User-selected font source path.
    * @returns a live session for the opened source; existing sessions are reused by workspace id.
    */
-  async openPath(sourcePath: string): Promise<WorkspaceSession> {
+  async openPath(sourcePath: string): Promise<FontSessionHost> {
+    if (!isShiftPackagePath(sourcePath)) return this.#openFontSource(sourcePath);
+
     const workspaceProcess = new WorkspaceProcess();
     workspaceProcess.start(this.#documentsRoot());
 
@@ -77,6 +79,9 @@ export class WorkspaceManager {
       const existingAfterOpen = this.#sessionForDocumentState(state);
       if (existingAfterOpen) {
         workspaceProcess.stop();
+        if (!existingAfterOpen.document) {
+          throw new Error(`Font session identity collision: ${state.documentId}`);
+        }
         existingAfterOpen.document.acceptState(state);
         return existingAfterOpen;
       }
@@ -94,7 +99,7 @@ export class WorkspaceManager {
    * @param workspaceId - Stable identity minted for a loaded workspace session.
    * @returns null when no live session is registered for the id.
    */
-  get(workspaceId: WorkspaceId): WorkspaceSession | null {
+  get(workspaceId: FontSessionId): FontSessionHost | null {
     return this.#sessionsById.get(workspaceId) ?? null;
   }
 
@@ -104,12 +109,12 @@ export class WorkspaceManager {
    * @param session - Workspace session that is not already registered.
    * @throws {Error} when another session already uses the same workspace id.
    */
-  register(session: WorkspaceSession): void {
+  register(session: FontSessionHost): void {
     if (this.#sessionsById.has(session.workspaceId)) {
       throw new Error(`Workspace session already registered: ${session.workspaceId}`);
     }
 
-    this.#packageSessions.track(session);
+    if (session.mode === "authored") this.#packageSessions.track(session);
     this.#sessionsById.set(session.workspaceId, session);
   }
 
@@ -118,7 +123,7 @@ export class WorkspaceManager {
    *
    * @param workspaceId - Stable identity for the session to remove.
    */
-  unregister(workspaceId: WorkspaceId): void {
+  unregister(workspaceId: FontSessionId): void {
     const session = this.#sessionsById.get(workspaceId);
     if (!session) return;
 
@@ -137,7 +142,7 @@ export class WorkspaceManager {
    * @param window - Native window wrapper to associate with the session.
    * @throws {Error} when the session is missing or the window belongs to another session.
    */
-  attachWindow(workspaceId: WorkspaceId, window: Window): void {
+  attachWindow(workspaceId: FontSessionId, window: Window): void {
     const session = this.#requireWorkspace(workspaceId);
     const currentWorkspaceId = this.#sessionIdByWindowId.get(window.window.id);
 
@@ -168,7 +173,7 @@ export class WorkspaceManager {
    * @param window - BrowserWindow that may be attached to a workspace session.
    * @returns null when the window is unbound or unknown.
    */
-  getForBrowserWindow(window: BrowserWindow): WorkspaceSession | null {
+  getForBrowserWindow(window: BrowserWindow): FontSessionHost | null {
     const workspaceId = this.#sessionIdByWindowId.get(window.id);
     return workspaceId ? this.get(workspaceId) : null;
   }
@@ -179,7 +184,7 @@ export class WorkspaceManager {
    * @param webContents - Renderer sender from an Electron IPC event.
    * @returns null when the sender does not belong to a bound workspace window.
    */
-  getForWebContents(webContents: WebContents): WorkspaceSession | null {
+  getForWebContents(webContents: WebContents): FontSessionHost | null {
     const window = BrowserWindow.fromWebContents(webContents);
     return window ? this.getForBrowserWindow(window) : null;
   }
@@ -189,11 +194,11 @@ export class WorkspaceManager {
    *
    * @returns a fresh array; mutating it does not change the registry.
    */
-  list(): readonly WorkspaceSession[] {
+  list(): readonly FontSessionHost[] {
     return [...this.#sessionsById.values()];
   }
 
-  #requireWorkspace(workspaceId: WorkspaceId): WorkspaceSession {
+  #requireWorkspace(workspaceId: FontSessionId): FontSessionHost {
     const session = this.#sessionsById.get(workspaceId);
     if (!session) throw new Error(`Workspace session is not registered: ${workspaceId}`);
     return session;
@@ -201,7 +206,7 @@ export class WorkspaceManager {
 
   async #createSession(
     load: (workspaceProcess: WorkspaceProcess) => Promise<WorkspaceDocumentState>,
-  ): Promise<WorkspaceSession> {
+  ): Promise<FontSessionHost> {
     const workspaceProcess = new WorkspaceProcess();
     workspaceProcess.start(this.#documentsRoot());
 
@@ -211,6 +216,8 @@ export class WorkspaceManager {
       const existing = this.get(state.documentId);
       if (existing) {
         workspaceProcess.stop();
+        if (!existing.document)
+          throw new Error(`Font session identity collision: ${state.documentId}`);
         existing.document.acceptState(state);
         return existing;
       }
@@ -225,15 +232,16 @@ export class WorkspaceManager {
   #registerLoadedSession(
     workspaceProcess: WorkspaceProcess,
     state: WorkspaceDocumentState,
-  ): WorkspaceSession {
-    const session = new WorkspaceSession({
-      workspaceId: state.documentId,
+  ): FontSessionHost {
+    const session = new FontSessionHost({
+      mode: "authored",
+      sessionId: state.documentId,
       workspaceProcess,
       documentClient: new DocumentClient(),
       applicationName: this.#applicationName,
     });
 
-    session.document.acceptState(state);
+    session.document?.acceptState(state);
     this.register(session);
     try {
       this.#packageSessions.update(session.workspaceId, state);
@@ -245,7 +253,7 @@ export class WorkspaceManager {
     return session;
   }
 
-  #sessionForDocumentState(state: WorkspaceDocumentState): WorkspaceSession | null {
+  #sessionForDocumentState(state: WorkspaceDocumentState): FontSessionHost | null {
     const byDocumentId = this.get(state.documentId);
     if (byDocumentId) return byDocumentId;
 
@@ -253,9 +261,35 @@ export class WorkspaceManager {
     return workspaceId ? this.get(workspaceId) : null;
   }
 
-  #sessionForPackage(identity: WorkspacePackageIdentity): WorkspaceSession | null {
+  #sessionForPackage(identity: WorkspacePackageIdentity): FontSessionHost | null {
     const workspaceId = this.#packageSessions.workspaceIdForPackage(identity);
     return workspaceId ? this.get(workspaceId) : null;
+  }
+
+  async #openFontSource(sourcePath: string): Promise<FontSessionHost> {
+    const workspaceProcess = new WorkspaceProcess();
+    workspaceProcess.start(this.#documentsRoot());
+
+    try {
+      await workspaceProcess.whenReady();
+      const state = await workspaceProcess.openFontSource(sourcePath);
+      const existing = this.get(state.sessionId);
+      if (existing) {
+        workspaceProcess.stop();
+        return existing;
+      }
+
+      const session = new FontSessionHost({
+        mode: "imported",
+        sessionId: state.sessionId,
+        workspaceProcess,
+      });
+      this.register(session);
+      return session;
+    } catch (error) {
+      workspaceProcess.stop();
+      throw error;
+    }
   }
 }
 

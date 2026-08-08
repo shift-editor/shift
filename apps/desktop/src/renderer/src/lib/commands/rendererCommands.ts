@@ -35,10 +35,13 @@ export function runRendererCommand(editor: Editor, id: RendererCommandId): boole
 
       if (contours.length === 0) return false;
 
+      const layer = editor.layerForGeometry({
+        contours: contours.map((contour) => contour.contourId),
+      });
+      if (!layer || layer.sourceId !== editor.activeSourceId) return false;
+
       editor.transaction("Reverse Contours", () => {
-        for (const contour of contours) {
-          contour.layer.reverseContour(contour.contourId);
-        }
+        for (const contour of contours) layer.reverseContour(contour.contourId);
       });
 
       return true;

@@ -3,21 +3,18 @@ import type { GlyphId } from "@shift/types";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphCatalogOverlay } from "./GlyphCatalogOverlay";
-import type { Font } from "@/lib/model/Font";
-import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
-import { effect, type Effect } from "@/lib/signals";
 import { CanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
 import { FrameHandler } from "@/lib/editor/rendering/FrameHandler";
 import { parseCssColor } from "@/lib/editor/rendering/markers/color";
 import { ResidentGlyphLayer } from "@/lib/graphics/backends/ResidentGlyphLayer";
 import type {
-  GlyphCatalogAtlasPage,
   GlyphCatalogControllerFrame,
   GlyphCatalogFrame,
   GlyphCatalogItem,
   GridReadiness,
 } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance } from "@/types/glyphPreview";
+import type { GlyphAtlasPageRequest, GlyphAtlasSource } from "@/types/glyphAtlas";
 
 const ATLAS_PAGE_ROOT_COUNT = 256;
 const SLUG_ATLAS_PROFILING_ENABLED =
@@ -27,16 +24,16 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 export class GlyphCatalogController {
   readonly #container: HTMLDivElement;
   readonly #glyphCanvas: HTMLCanvasElement;
-  readonly #edits: WorkspaceEditCoordinator;
-  readonly #onEditGlyph: (glyph: GlyphCatalogItem) => void;
+  readonly #atlasSource: GlyphAtlasSource;
+  readonly #onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null;
   readonly #onEditingUnavailable: () => void;
-  readonly #openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  readonly #openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
   readonly #onReadyChange: (ready: boolean) => void;
   readonly #onUnavailable: () => void;
   readonly #overlay: GlyphCatalogOverlay;
   readonly #frames = new FrameHandler();
   readonly #resizeObserver: ResizeObserver;
-  readonly #fontEffect: Effect;
+  readonly #unobserveAtlas: () => void;
   readonly #invalidGlyphIds = new Set<GlyphId>();
   readonly #replacementPageIndices = new Set<number>();
   readonly #pageIndexByGlyph = new Map<GlyphId, number>();
@@ -52,6 +49,7 @@ export class GlyphCatalogController {
   #pointer: Point2D | null = null;
   #hoveredCatalogIndex: number | null = null;
   #firstFrameStarted = false;
+  #weightRevision = 0;
   #needsRedraw = true;
   #disposed = false;
 
@@ -59,16 +57,19 @@ export class GlyphCatalogController {
     container: HTMLDivElement,
     glyphCanvas: HTMLCanvasElement,
     overlayCanvas: HTMLCanvasElement,
-    font: Font,
-    onEditGlyph: (glyph: GlyphCatalogItem) => void,
+    atlasSource: GlyphAtlasSource,
+    observeAtlasInvalidation: (
+      listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
+    ) => () => void,
+    onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null,
     onEditingUnavailable: () => void,
-    openGlyph: (glyph: GlyphCatalogItem) => Promise<void>,
+    openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
     onReadyChange: (ready: boolean) => void,
     onUnavailable: () => void,
   ) {
     this.#container = container;
     this.#glyphCanvas = glyphCanvas;
-    this.#edits = font.editCoordinator;
+    this.#atlasSource = atlasSource;
     this.#onEditGlyph = onEditGlyph;
     this.#onEditingUnavailable = onEditingUnavailable;
     this.#openGlyph = openGlyph;
@@ -90,14 +91,9 @@ export class GlyphCatalogController {
     document.fonts.addEventListener("loadingdone", this.#handleFontsLoaded);
     void this.#redrawWhenFontsReady();
 
-    this.#fontEffect = effect(
-      () =>
-        this.#invalidate(
-          font.invalidGlyphIdsCell.value,
-          font.glyphRecords().map((glyph) => glyph.id),
-        ),
-      { name: "glyphCatalog.residentFont" },
-    );
+    this.#unobserveAtlas = observeAtlasInvalidation((glyphIds, directory) => {
+      this.#invalidate(glyphIds, directory);
+    });
     this.#startLayer();
   }
 
@@ -108,8 +104,7 @@ export class GlyphCatalogController {
     if (
       !previousTarget ||
       previousTarget.glyphs !== frame.glyphs ||
-      previousTarget.location !== frame.location ||
-      previousTarget.axes !== frame.axes ||
+      !sameCoordinates(previousTarget.location, frame.location) ||
       previousTarget.metrics !== frame.metrics ||
       previousTarget.sourceId !== frame.sourceId ||
       previousTarget.themeName !== frame.themeName
@@ -117,9 +112,14 @@ export class GlyphCatalogController {
       this.#needsRedraw = true;
     }
 
+    const locationChanged = !sameCoordinates(previousTarget?.location ?? null, frame.location);
     if (this.#layer && !this.#atlasBuild && this.#invalidGlyphIds.size === 0) {
-      this.#activeFrame = frame;
-      this.#updateResidency();
+      if (locationChanged) {
+        void this.#refreshResolvedWeights(frame);
+      } else {
+        this.#activeFrame = frame;
+        this.#updateResidency();
+      }
     }
 
     this.#overlay.setInputContainer(inputContainer);
@@ -143,7 +143,7 @@ export class GlyphCatalogController {
   destroy(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    this.#fontEffect.dispose();
+    this.#unobserveAtlas();
     this.#refresh?.abort(new Error("glyph catalog disposed"));
     this.#atlasBuild?.abort(new Error("glyph catalog disposed"));
     this.#layer?.destroy();
@@ -213,7 +213,7 @@ export class GlyphCatalogController {
     try {
       const layer = await ResidentGlyphLayer.create(
         this.#glyphCanvas,
-        this.#edits,
+        this.#atlasSource,
         (reason) => this.#handleDeviceLoss(reason),
         refresh.signal,
       );
@@ -269,6 +269,8 @@ export class GlyphCatalogController {
         this.#replacementPageIndices.delete(request.pageIndex);
         for (const glyphId of request.glyphIds) this.#invalidGlyphIds.delete(glyphId);
       }
+      await this.#synchronizeResolvedWeights(layer);
+      if (this.#disposed || this.#atlasBuild !== atlasBuild || atlasBuild.signal.aborted) return;
       this.#activeFrame = this.#targetFrame;
       this.#needsRedraw = true;
       this.#updateResidency();
@@ -282,19 +284,56 @@ export class GlyphCatalogController {
     if (atlasBuild.signal.aborted) void this.#refreshAtlas();
   }
 
-  #pageRequests(): GlyphCatalogAtlasPage[] {
+  async #refreshResolvedWeights(frame: GlyphCatalogControllerFrame): Promise<void> {
+    const layer = this.#layer;
+    const coordinates = frame.location;
+    if (!layer || this.#atlasBuild) return;
+    const revision = ++this.#weightRevision;
+
+    try {
+      await layer.updateResolvedWeights(coordinates);
+      if (
+        this.#disposed ||
+        this.#layer !== layer ||
+        revision !== this.#weightRevision ||
+        !sameCoordinates(this.#targetFrame?.location ?? null, coordinates)
+      ) {
+        return;
+      }
+
+      this.#activeFrame = this.#targetFrame;
+      this.#needsRedraw = true;
+      this.#updateResidency();
+      this.redraw();
+    } catch (error) {
+      if (revision === this.#weightRevision) this.#handleReplacementFailure(error);
+    }
+  }
+
+  async #synchronizeResolvedWeights(layer: ResidentGlyphLayer): Promise<void> {
+    while (true) {
+      const coordinates = this.#targetFrame?.location;
+      if (!coordinates) return;
+
+      await layer.updateResolvedWeights(coordinates);
+      if (sameCoordinates(this.#targetFrame?.location ?? null, coordinates)) return;
+    }
+  }
+
+  #pageRequests(): GlyphAtlasPageRequest[] {
     return [...this.#replacementPageIndices]
       .sort((left, right) => left - right)
       .map((pageIndex) => this.#pageRequest(pageIndex));
   }
 
-  #pageRequest(pageIndex: number): GlyphCatalogAtlasPage {
+  #pageRequest(pageIndex: number): GlyphAtlasPageRequest {
     const start = pageIndex * ATLAS_PAGE_ROOT_COUNT;
     return {
       glyphIds: this.#fontGlyphIds.slice(start, start + ATLAS_PAGE_ROOT_COUNT),
       pageIndex,
       pageCount: this.#pageCount(),
       replacementPageIndices: [...this.#replacementPageIndices].sort((left, right) => left - right),
+      coordinates: this.#targetFrame?.location ?? [],
     };
   }
 
@@ -395,7 +434,6 @@ export class GlyphCatalogController {
         const [viewHeight, metricsTop] = GlyphPreviewLayout.fontViewport(input.metrics);
         layer.draw({
           location: input.location,
-          axes: input.axes,
           instances,
           style: {
             defaultPixelsPerEm: (frame.layout.previewHeight * ratio) / Math.max(1, viewHeight),
@@ -479,7 +517,8 @@ export class GlyphCatalogController {
   #updateHoveredCatalogIndex(nextIndex: number | null): void {
     if (this.#hoveredCatalogIndex === nextIndex) return;
     this.#hoveredCatalogIndex = nextIndex;
-    this.#container.style.cursor = nextIndex === null ? "" : "pointer";
+    const interactive = this.#onEditGlyph !== null || this.#openGlyph !== null;
+    this.#container.style.cursor = nextIndex === null || !interactive ? "" : "pointer";
   }
 
   #handleScroll = (): void => {
@@ -512,20 +551,23 @@ export class GlyphCatalogController {
       y: event.clientY,
     });
     const nameCell = layout.hit(frame, point, "name");
-    if (nameCell) {
+    if (nameCell && this.#onEditGlyph) {
       this.#activeFrame = { ...input, editingGlyphId: nameCell.glyph.id };
       this.#onEditGlyph(nameCell.glyph);
       return;
     }
 
     const previewCell = layout.hit(frame, point, "preview");
-    if (!previewCell) return;
+    if (!previewCell || !this.#openGlyph) return;
     void this.#open(previewCell.glyph);
   };
 
   async #open(glyph: GlyphCatalogItem): Promise<void> {
+    const openGlyph = this.#openGlyph;
+    if (!openGlyph) return;
+
     try {
-      await this.#openGlyph(glyph);
+      await openGlyph(glyph);
     } catch (error) {
       console.error("failed to open catalog Glyph", error);
     }
@@ -545,4 +587,10 @@ export class GlyphCatalogController {
 
 function sameGlyphIds(left: readonly GlyphId[], right: readonly GlyphId[]): boolean {
   return left.length === right.length && left.every((glyphId, index) => glyphId === right[index]);
+}
+
+function sameCoordinates(left: readonly number[] | null, right: readonly number[] | null): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
 }
