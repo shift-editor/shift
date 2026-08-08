@@ -9,10 +9,19 @@ export type {
   GlyphCatalogFrame,
   GlyphCatalogItem,
   GlyphCatalogLayoutMetrics,
-  GlyphCatalogState,
+  GlyphCatalogSource,
   GlyphNameInputProps,
 } from "./glyphCatalog";
 export type { EditingId } from "./editing";
+export type { FontOptions, FontStoreOptions } from "./font";
+export type { GlyphGeometrySelection, GlyphOptions, GlyphReader } from "./glyph";
+export type {
+  GlyphAtlasGlyph,
+  GlyphAtlasPage,
+  GlyphAtlasPageRequest,
+  GlyphAtlasPageWeights,
+  GlyphAtlasSource,
+} from "./glyphAtlas";
 export type {
   GlyphRenderAnchor,
   GlyphRenderAnchorInput,

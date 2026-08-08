@@ -17,7 +17,7 @@ import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
-export const Sources = () => {
+export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
   const sources = useSources();
   const activeSourceId = useActiveSourceId();
   const editor = useEditor();
@@ -25,10 +25,19 @@ export const Sources = () => {
 
   if (sources.length === 0) return null;
 
+  const selectSource = (sourceId: SourceId) => {
+    if (canAuthor) {
+      editor.selectSourceForEditing(sourceId);
+      return;
+    }
+
+    editor.selectSource(sourceId);
+  };
+
   const deleteSource = (sourceId: SourceId) => {
     const fallbackSource = sources.find((source) => source.id !== sourceId);
     if (activeSourceId === sourceId && fallbackSource) {
-      editor.selectSource(fallbackSource.id);
+      selectSource(fallbackSource.id);
     }
     editor.font.deleteSource(sourceId);
   };
@@ -39,15 +48,17 @@ export const Sources = () => {
         <SidebarActionRow
           key={s.id}
           isActive={s.id === activeSourceId}
-          onClick={() => editor.selectSource(s.id)}
+          onClick={() => selectSource(s.id)}
           contentClassName="h-6 text-ui"
           actions={
-            <SourceActionsMenu
-              sourceName={s.name}
-              canDelete={sources.length > 1}
-              onEdit={() => settings.open({ category: "sources", sourceId: s.id })}
-              onDelete={() => deleteSource(s.id)}
-            />
+            canAuthor ? (
+              <SourceActionsMenu
+                sourceName={s.name}
+                canDelete={sources.length > 1}
+                onEdit={() => settings.open({ category: "sources", sourceId: s.id })}
+                onDelete={() => deleteSource(s.id)}
+              />
+            ) : undefined
           }
         >
           {s.name}

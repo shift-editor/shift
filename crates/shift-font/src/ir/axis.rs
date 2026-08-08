@@ -637,6 +637,66 @@ impl Location {
     }
 }
 
+macro_rules! typed_location {
+    ($name:ident) => {
+        #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(transparent)]
+        pub struct $name(Location);
+
+        impl $name {
+            pub fn new() -> Self {
+                Self::default()
+            }
+
+            pub fn from_map(values: HashMap<AxisId, f64>) -> Self {
+                Self(Location::from_map(values))
+            }
+
+            pub fn from_untyped(location: Location) -> Self {
+                Self(location)
+            }
+
+            pub fn into_untyped(self) -> Location {
+                self.0
+            }
+
+            pub fn as_untyped(&self) -> &Location {
+                &self.0
+            }
+
+            pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
+                self.0.get(axis_id)
+            }
+
+            pub fn set(&mut self, axis_id: AxisId, value: f64) {
+                self.0.set(axis_id, value);
+            }
+
+            pub fn remove(&mut self, axis_id: &AxisId) -> Option<f64> {
+                self.0.remove(axis_id)
+            }
+
+            pub fn is_empty(&self) -> bool {
+                self.0.is_empty()
+            }
+
+            pub fn iter(&self) -> impl Iterator<Item = (&AxisId, &f64)> {
+                self.0.iter()
+            }
+        }
+    };
+}
+
+typed_location!(ExternalLocation);
+typed_location!(DesignLocation);
+
+impl DesignLocation {
+    /// Returns whether two design locations address the same position on `axes`.
+    pub fn is_equivalent_to(&self, other: &Self, axes: &[Axis]) -> bool {
+        self.0.is_equivalent_to(&other.0, axes)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

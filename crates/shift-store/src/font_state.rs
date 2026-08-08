@@ -287,7 +287,7 @@ fn load_source_metric_values(
 fn load_source_location(
     conn: &rusqlite::Connection,
     source_id: &font::SourceId,
-) -> rusqlite::Result<font::Location> {
+) -> rusqlite::Result<font::DesignLocation> {
     let mut stmt = conn.prepare(
         "
         SELECT axis_id, value
@@ -297,7 +297,7 @@ fn load_source_location(
         ",
     )?;
 
-    let mut location = font::Location::new();
+    let mut location = font::DesignLocation::new();
     let rows = stmt.query_map([source_id.to_string()], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
     })?;

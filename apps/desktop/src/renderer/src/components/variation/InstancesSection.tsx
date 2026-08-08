@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { CollapsibleSection } from "@/components/sidebar";
+import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { CreateInstanceMenu } from "./CreateInstanceMenu";
 import { Instances } from "./Instances";
+import { useFontSession } from "@/workspace/WorkspaceContext";
+import PlusIcon from "@/assets/general/plus.svg";
 
 interface InstancesSectionProps {
   defaultOpen?: boolean;
@@ -10,6 +12,7 @@ interface InstancesSectionProps {
 export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
+  const canAuthor = useFontSession().canAuthor;
 
   return (
     <CollapsibleSection
@@ -17,9 +20,17 @@ export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps)
       open={open || instanceMenuOpen}
       onOpenChange={setOpen}
       isActive={instanceMenuOpen}
-      actions={<CreateInstanceMenu onOpenChange={setInstanceMenuOpen} />}
+      actions={
+        canAuthor ? (
+          <CreateInstanceMenu onOpenChange={setInstanceMenuOpen} />
+        ) : (
+          <SidebarActionButton label="Create instance" data-read-only-mutation>
+            <PlusIcon className="h-3 w-3" />
+          </SidebarActionButton>
+        )
+      }
     >
-      <Instances />
+      <Instances canAuthor={canAuthor} />
     </CollapsibleSection>
   );
 };

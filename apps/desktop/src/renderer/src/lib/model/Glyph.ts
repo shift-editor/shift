@@ -1,15 +1,17 @@
 import type {
   AnchorId,
   Axis,
+  AxisMappingBasis,
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
   ContourData,
   ContourId,
   GlyphComponents,
   GlyphId,
+  GlyphLayerShape,
   GlyphName,
   GlyphProjection,
-  GlyphRecord,
+  GlyphEntry,
   GlyphState,
   GlyphStructure,
   LayerId,
@@ -33,12 +35,17 @@ import {
   type WritableSignal,
 } from "@/lib/signals";
 import type { GlyphOptions } from "@/types/glyph";
-import type { AxisLocation } from "@/types/variation";
-import { axisLocationFromLocation, axisLocationsEqual } from "@/lib/variation/location";
+import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
+import {
+  designAxisLocationFromLocation,
+  designAxisLocationsEqual,
+  mapAxisLocation,
+} from "@/lib/variation/location";
 import {
   interpolateSourceValues,
   interpolationWeights,
 } from "@/lib/interpolation/InterpolationBasis";
+import { evaluateVariationBasis } from "@/lib/interpolation/VariationBasis";
 import { Transform } from "@/lib/transform/Transform";
 import { Alignment } from "@/lib/transform/Alignment";
 import type { AlignmentType, DistributeType, ReflectAxis } from "@/types/transform";
@@ -56,7 +63,7 @@ import {
   Anchor,
   Component,
   Contour,
-  GlyphStateGeometry as GlyphGeometry,
+  GlyphGeometry,
   IdIndex,
   type GeometryAnchorHit,
   type GeometryPointHit,
@@ -919,6 +926,7 @@ export class GlyphLayer {
 }
 
 const IDENTITY_GLYPH_TRANSFORM_CELL = signal<MatModel>(Mat.Identity());
+const NO_ACTIVE_SOURCE_CELL = signal<SourceId | null>(null);
 
 /**
  * Represents one glyph, including component occurrences, at a designspace location.
@@ -931,13 +939,25 @@ const IDENTITY_GLYPH_TRANSFORM_CELL = signal<MatModel>(Mat.Identity());
 export class GlyphRenderModel {
   readonly #glyphId: GlyphId;
 
-  readonly #location: Signal<AxisLocation>;
+  readonly #externalLocation: Signal<ExternalAxisLocation>;
+  readonly #activeSourceId: Signal<SourceId | null>;
 
   readonly #projectionCell: Signal<GlyphProjection | null>;
 
-  readonly #exactSourceId: (location: AxisLocation) => SourceId | null;
-  readonly #layerAt: (glyphId: GlyphId, location: AxisLocation) => GlyphLayer | null;
-  readonly #geometryAt: (glyphId: GlyphId, location: AxisLocation) => GlyphGeometry;
+  readonly #exactSourceId: (
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ) => SourceId | null;
+  readonly #layerAt: (
+    glyphId: GlyphId,
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ) => GlyphLayer | null;
+  readonly #geometryAt: (
+    glyphId: GlyphId,
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ) => GlyphGeometry;
 
   readonly #geometry: GlyphRenderGeometry;
 
@@ -953,29 +973,40 @@ export class GlyphRenderModel {
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
 
   /**
-   * Creates a Glyph render model tied to a live designspace location.
+   * Creates a Glyph render model tied to a live external location and optional exact source.
    *
    * @param glyphId - Stable identity of the root glyph.
-   * @param location - Live designspace location followed by the render model.
-   * @param layer - Exact authored root layer at the location, when one exists.
-   * @param geometry - Resolved root geometry at the location.
+   * @param externalLocation - Live external location followed by the render model.
+   * @param activeSourceId - Exact authored source override selected by the editor.
+   * @param layer - Exact authored root layer at the current position, when one exists.
+   * @param geometry - Resolved root geometry at the current position.
    * @param projectionCell - Rust-owned component relationships for the root glyph.
-   * @param exactSourceId - Resolves an exact master identity at a location.
+   * @param exactSourceId - Resolves an exact master identity at the current position.
    * @param layerAt - Resolves exact authored layers for root or component glyphs.
-   * @param geometryAt - Resolves root or component geometry at the shared location.
+   * @param geometryAt - Resolves root or component geometry at the current position.
    */
   constructor(
     glyphId: GlyphId,
-    location: Signal<AxisLocation>,
+    externalLocation: Signal<ExternalAxisLocation>,
+    activeSourceId: Signal<SourceId | null>,
     layer: Signal<GlyphLayer | null>,
     geometry: Signal<GlyphGeometry>,
     projectionCell: Signal<GlyphProjection | null>,
-    exactSourceId: (location: AxisLocation) => SourceId | null,
-    layerAt: (glyphId: GlyphId, location: AxisLocation) => GlyphLayer | null,
-    geometryAt: (glyphId: GlyphId, location: AxisLocation) => GlyphGeometry,
+    exactSourceId: (location: ExternalAxisLocation, sourceId: SourceId | null) => SourceId | null,
+    layerAt: (
+      glyphId: GlyphId,
+      location: ExternalAxisLocation,
+      sourceId: SourceId | null,
+    ) => GlyphLayer | null,
+    geometryAt: (
+      glyphId: GlyphId,
+      location: ExternalAxisLocation,
+      sourceId: SourceId | null,
+    ) => GlyphGeometry,
   ) {
     this.#glyphId = glyphId;
-    this.#location = location;
+    this.#externalLocation = externalLocation;
+    this.#activeSourceId = activeSourceId;
     this.#projectionCell = projectionCell;
     this.#exactSourceId = exactSourceId;
     this.#layerAt = layerAt;
@@ -985,10 +1016,14 @@ export class GlyphRenderModel {
     this.#componentCache = keyedCache<ComponentGlyphDefinition, string, ComponentGlyph>({
       name: "glyph.renderModel.components",
       key: (definition) => componentPathKey(definition.componentPath),
-      create: (definitionCell) => new ComponentGlyph(definitionCell, this.#location, this),
+      create: (definitionCell) => new ComponentGlyph(definitionCell, this.#externalLocation, this),
     });
     this.#componentsCell = computed(() => {
-      const components = this.#componentsAt(this.#location.value, this.#projectionCell.value);
+      const components = this.#componentsAt(
+        this.#externalLocation.value,
+        this.#activeSourceId.value,
+        this.#projectionCell.value,
+      );
       return this.#componentCache.map(components.components);
     });
     const rootContoursCell = this.contoursAt(
@@ -1032,14 +1067,16 @@ export class GlyphRenderModel {
   }
 
   /** @internal Resolves numeric geometry for component occurrence arithmetic. */
-  geometryAt(glyphId: GlyphId, location: AxisLocation): GlyphGeometry {
-    const layer = this.#layerAt(glyphId, location);
+  geometryAt(glyphId: GlyphId, location: ExternalAxisLocation): GlyphGeometry {
+    track(this.#activeSourceId);
+    const sourceId = this.#activeSourceId.peek();
+    const layer = this.#layerAt(glyphId, location, sourceId);
     if (layer) {
       track(layer.geometryCell);
       return layer.geometryCell.peek();
     }
 
-    return this.#geometryAt(glyphId, location);
+    return this.#geometryAt(glyphId, location, sourceId);
   }
 
   /** @internal Builds contour occurrences owned directly by one glyph occurrence. */
@@ -1068,11 +1105,12 @@ export class GlyphRenderModel {
       create: (inputCell) => new LayerRenderContour(inputCell),
     });
     const contoursCell = computed(() => {
-      const location = this.#location.value;
-      const source = this.#layerAt(glyphId, location);
+      const location = this.#externalLocation.value;
+      const sourceId = this.#activeSourceId.value;
+      const source = this.#layerAt(glyphId, location, sourceId);
       if (!source) {
         layerContourCache.clear();
-        return geometryRenderContours(this.#geometryAt(glyphId, location));
+        return geometryRenderContours(this.#geometryAt(glyphId, location, sourceId));
       }
 
       track(source.structureCell);
@@ -1113,18 +1151,22 @@ export class GlyphRenderModel {
     return components.filter((component) => componentPathKey(component.parentPath) === parentKey);
   }
 
-  #componentsAt(location: AxisLocation, projection: GlyphProjection | null): GlyphComponents {
+  #componentsAt(
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+    projection: GlyphProjection | null,
+  ): GlyphComponents {
     if (!projection) return { rootGlyphId: this.#glyphId, components: [] };
 
-    const exactSourceId = this.#exactSourceId(location);
+    const exactSourceId = this.#exactSourceId(location, sourceId);
     const exact = projection.exactSourceComponents.find(
       (source) => source.sourceId === exactSourceId,
     );
     return exact?.components ?? projection.components;
   }
 
-  get location(): AxisLocation {
-    return this.#location.peek();
+  get location(): ExternalAxisLocation {
+    return this.#externalLocation.peek();
   }
 
   get contours(): readonly GlyphContour[] {
@@ -1615,21 +1657,26 @@ class ContourCache {
  * layer geometry continues to update through each GlyphLayerState signal graph.
  */
 export class Glyph {
-  readonly #recordCell: WritableSignal<GlyphRecord>;
+  readonly #entryCell: WritableSignal<GlyphEntry>;
   readonly #layersCell: WritableSignal<readonly GlyphLayer[]>;
   readonly #axesCell: Signal<Axis[]>;
+  readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
   readonly #sourcesCell: Signal<Source[]>;
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
   readonly #layersBySourceId = new Map<SourceId, GlyphLayer>();
   readonly #layersById = new Map<LayerId, GlyphLayer>();
   readonly #componentGlyphsById = new Map<GlyphId, Glyph>();
-  readonly #renderModels = new WeakMap<Signal<AxisLocation>, GlyphRenderModel>();
+  readonly #renderModels = new WeakMap<
+    Signal<ExternalAxisLocation>,
+    WeakMap<Signal<SourceId | null>, GlyphRenderModel>
+  >();
 
   constructor(options: GlyphOptions) {
-    this.#recordCell = signal(options.record, { name: "glyph.record" });
+    this.#entryCell = signal(options.entry, { name: "glyph.entry" });
     this.#layersCell = signal(options.layers, { name: "glyph.layers" });
     this.#axesCell = options.axesCell;
+    this.#axisMappingBasesCell = options.axisMappingBasesCell;
     this.#sourcesCell = options.sourcesCell;
     this.#projectionCell = options.projectionCell;
     this.#defaultSourceId = options.defaultSourceId;
@@ -1638,25 +1685,25 @@ export class Glyph {
   }
 
   get id(): GlyphId {
-    return this.#recordCell.peek().id;
+    return this.#entryCell.peek().id;
   }
 
-  get record(): GlyphRecord {
-    return this.#recordCell.peek();
+  get entry(): GlyphEntry {
+    return this.#entryCell.peek();
   }
 
   get handle(): GlyphHandle {
-    const record = this.#recordCell.peek();
-    const unicode = record.unicodes[0];
-    return unicode === undefined ? { name: record.name } : { name: record.name, unicode };
+    const entry = this.#entryCell.peek();
+    const unicode = entry.unicodes[0];
+    return unicode === undefined ? { name: entry.name } : { name: entry.name, unicode };
   }
 
   get name(): GlyphName {
-    return this.#recordCell.peek().name;
+    return this.#entryCell.peek().name;
   }
 
   get unicode(): Unicode | null {
-    return this.#recordCell.peek().unicodes[0] ?? null;
+    return this.#entryCell.peek().unicodes[0] ?? null;
   }
 
   get layers(): readonly GlyphLayer[] {
@@ -1671,16 +1718,19 @@ export class Glyph {
     return this.#layersById.get(layerId) ?? null;
   }
 
-  layerAt(location: AxisLocation): GlyphLayer | null {
+  layerAt(location: ExternalAxisLocation): GlyphLayer | null {
     track(this.#layersCell);
     track(this.#axesCell);
+    track(this.#axisMappingBasesCell);
 
+    const axes = this.#axesCell.peek();
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     for (const layer of this.#layersCell.peek()) {
       if (
-        axisLocationsEqual(
-          axisLocationFromLocation(layer.source.location),
-          location,
-          this.#axesCell.peek(),
+        designAxisLocationsEqual(
+          designAxisLocationFromLocation(layer.source.location),
+          mappedLocation,
+          axes,
         )
       ) {
         return layer;
@@ -1690,18 +1740,67 @@ export class Glyph {
     return null;
   }
 
-  geometryAt(location: AxisLocation): GlyphGeometry {
+  geometryAt(externalLocation: ExternalAxisLocation): GlyphGeometry {
     track(this.#layersCell);
     track(this.#axesCell);
+    track(this.#axisMappingBasesCell);
     track(this.#sourcesCell);
     track(this.#projectionCell);
 
-    const layer = this.layerAt(location);
+    const layer = this.layerAt(externalLocation);
     if (layer) {
       track(layer.geometryCell);
       return layer.geometry;
     }
 
+    const axes = this.#axesCell.peek();
+    const designLocation = mapAxisLocation(
+      externalLocation,
+      axes,
+      this.#axisMappingBasesCell.peek(),
+    );
+    const exactSource = this.#sourcesCell
+      .peek()
+      .find((source) =>
+        designAxisLocationsEqual(
+          designAxisLocationFromLocation(source.location),
+          designLocation,
+          axes,
+        ),
+      );
+    return this.#geometryAtDesignLocation(designLocation, exactSource?.id ?? null);
+  }
+
+  geometryForSource(sourceId: SourceId): GlyphGeometry {
+    track(this.#layersCell);
+    track(this.#axesCell);
+    track(this.#sourcesCell);
+    track(this.#projectionCell);
+
+    const layer = this.layerForSource(sourceId);
+    if (layer) {
+      track(layer.geometryCell);
+      return layer.geometry;
+    }
+
+    const source = this.#sourcesCell.peek().find((candidate) => candidate.id === sourceId);
+    if (!source) {
+      return (
+        this.primaryGeometryForFont ??
+        new GlyphGeometry({ contours: [], anchors: [], components: [] }, new Float64Array([0]))
+      );
+    }
+
+    return this.#geometryAtDesignLocation(
+      designAxisLocationFromLocation(source.location),
+      sourceId,
+    );
+  }
+
+  #geometryAtDesignLocation(
+    designLocation: DesignAxisLocation,
+    exactSourceId: SourceId | null,
+  ): GlyphGeometry {
     const projection = this.#projectionCell.peek();
     if (!projection) {
       return (
@@ -1710,99 +1809,128 @@ export class Glyph {
       );
     }
 
-    const axes = this.#axesCell.peek();
-    const exactSource = this.#sourcesCell
-      .peek()
-      .find((source) =>
-        axisLocationsEqual(axisLocationFromLocation(source.location), location, axes),
-      );
-    if (exactSource?.id === this.#defaultSourceId) {
-      return new GlyphGeometry(projection.fallback.structure, projection.fallback.values);
+    if (exactSourceId === this.#defaultSourceId) {
+      return projectionGeometry(projection.fallback);
     }
 
     const exactShape = projection.exactSourceShapes.find(
-      (sourceShape) => sourceShape.sourceId === exactSource?.id,
+      (sourceShape) => sourceShape.sourceId === exactSourceId,
     );
-    if (exactShape) {
-      return new GlyphGeometry(exactShape.shape.structure, exactShape.shape.values);
-    }
+    if (exactShape) return projectionGeometry(exactShape.shape);
 
+    const axes = this.#axesCell.peek();
     const interpolation = projection.interpolation;
-    if (!interpolation) {
-      return new GlyphGeometry(projection.fallback.structure, projection.fallback.values);
+    if (interpolation) {
+      const weights = interpolationWeights(interpolation.basis, designLocation, axes);
+      const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
+        const sourceLayer = this.#layersBySourceId.get(sourceId);
+        if (sourceLayer) {
+          track(sourceLayer.geometryCell);
+          return sourceLayer.state.values;
+        }
+
+        return interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
+      });
+      if (!values) return projectionGeometry(projection.fallback);
+
+      return new GlyphGeometry(
+        projection.fallback.structure,
+        values,
+        projection.fallback.componentTransformKind,
+      );
     }
 
-    const weights = interpolationWeights(interpolation.basis, location, axes);
-    const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
-      const sourceLayer = this.#layersBySourceId.get(sourceId);
-      if (sourceLayer) {
-        track(sourceLayer.geometryCell);
-        return sourceLayer.state.values;
-      }
+    const variation = projection.variation;
+    if (!variation) return projectionGeometry(projection.fallback);
 
-      return interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
-    });
-    if (!values) {
-      return new GlyphGeometry(projection.fallback.structure, projection.fallback.values);
+    const adjustments = evaluateVariationBasis(variation.basis, designLocation, axes);
+    const values = new Float64Array(projection.fallback.values);
+    for (let index = 0; index < values.length; index++) {
+      values[index] += adjustments[index] ?? 0;
     }
 
-    return new GlyphGeometry(projection.fallback.structure, values);
+    return new GlyphGeometry(
+      projection.fallback.structure,
+      values,
+      projection.fallback.componentTransformKind,
+    );
   }
 
-  /** @internal Returns the location-bound render model for editor infrastructure. */
-  renderModelAt(locationCell: Signal<AxisLocation>): GlyphRenderModel {
-    const existing = this.#renderModels.get(locationCell);
+  /** @internal Returns the position-bound render model for editor infrastructure. */
+  renderModelAt(
+    externalLocationCell: Signal<ExternalAxisLocation>,
+    activeSourceIdCell: Signal<SourceId | null> = NO_ACTIVE_SOURCE_CELL,
+  ): GlyphRenderModel {
+    let renderModels = this.#renderModels.get(externalLocationCell);
+    if (!renderModels) {
+      renderModels = new WeakMap();
+      this.#renderModels.set(externalLocationCell, renderModels);
+    }
+    const existing = renderModels.get(activeSourceIdCell);
     if (existing) return existing;
 
     const layerCell = computed(
       () => {
-        const location = locationCell.value;
-        return this.layerAt(location);
+        const sourceId = activeSourceIdCell.value;
+        return sourceId ? this.layerForSource(sourceId) : this.layerAt(externalLocationCell.value);
       },
       { name: "glyph.renderModel.layer" },
     );
     const geometryCell = computed(
       () => {
-        const location = locationCell.value;
-        return this.geometryAt(location);
+        const sourceId = activeSourceIdCell.value;
+        return sourceId
+          ? this.geometryForSource(sourceId)
+          : this.geometryAt(externalLocationCell.value);
       },
       { name: "glyph.renderModel.geometry" },
     );
     const renderModel = new GlyphRenderModel(
       this.id,
-      locationCell,
+      externalLocationCell,
+      activeSourceIdCell,
       layerCell,
       geometryCell,
       this.#projectionCell,
-      (location) => {
+      (location, sourceId) => {
+        if (sourceId) return sourceId;
+
         track(this.#sourcesCell);
         track(this.#axesCell);
+        track(this.#axisMappingBasesCell);
         const axes = this.#axesCell.peek();
+        const designLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
         const source = this.#sourcesCell
           .peek()
           .find((candidate) =>
-            axisLocationsEqual(axisLocationFromLocation(candidate.location), location, axes),
+            designAxisLocationsEqual(
+              designAxisLocationFromLocation(candidate.location),
+              designLocation,
+              axes,
+            ),
           );
         return source?.id ?? null;
       },
-      (glyphId, location) => {
+      (glyphId, location, sourceId) => {
         const glyph = glyphId === this.id ? this : this.#componentGlyphsById.get(glyphId);
-        return glyph?.layerAt(location) ?? null;
+        return sourceId
+          ? (glyph?.layerForSource(sourceId) ?? null)
+          : (glyph?.layerAt(location) ?? null);
       },
-      (glyphId, location) => {
+      (glyphId, location, sourceId) => {
         const glyph = glyphId === this.id ? this : this.#componentGlyphsById.get(glyphId);
         return (
-          glyph?.geometryAt(location) ??
+          (sourceId ? glyph?.geometryForSource(sourceId) : glyph?.geometryAt(location)) ??
           new GlyphGeometry({ contours: [], anchors: [], components: [] }, new Float64Array([0]))
         );
       },
     );
-    this.#renderModels.set(locationCell, renderModel);
+    renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;
   }
 
-  replaceRecord(record: GlyphRecord): void {
-    this.#recordCell.set(record);
+  replaceEntry(entry: GlyphEntry): void {
+    this.#entryCell.set(entry);
   }
 
   replaceLayers(layers: readonly GlyphLayer[]): void {
@@ -1891,4 +2019,8 @@ export class Glyph {
 
     return layer.state;
   }
+}
+
+function projectionGeometry(shape: GlyphLayerShape): GlyphGeometry {
+  return new GlyphGeometry(shape.structure, shape.values, shape.componentTransformKind);
 }

@@ -13,10 +13,10 @@ import VerticalEllipsis from "@/assets/general/vertical-ellipsis.svg";
 import { SidebarActionRow } from "@/components/sidebar";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
-import { axisLocationFromLocation } from "@/lib/variation/location";
+import { externalAxisLocationFromLocation } from "@/lib/variation/location";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
-export const Instances = () => {
+export const Instances = ({ canAuthor }: { canAuthor: boolean }) => {
   const editor = useEditor();
   const instances = useNamedInstances();
   const settings = useSettingsNavigation();
@@ -25,13 +25,8 @@ export const Instances = () => {
     return <p className="pl-2 text-ui text-muted">No instances defined</p>;
   }
 
-  const previewInstance = async (instance: NamedInstance) => {
-    try {
-      const mapped = await editor.font.mapLocation(instance.location);
-      editor.setDesignLocation(axisLocationFromLocation(mapped));
-    } catch (cause) {
-      console.error("Unable to preview named instance", cause);
-    }
+  const previewInstance = (instance: NamedInstance) => {
+    editor.setExternalLocation(externalAxisLocationFromLocation(instance.location));
   };
 
   return (
@@ -39,21 +34,21 @@ export const Instances = () => {
       {instances.map((instance) => (
         <SidebarActionRow
           key={instance.id}
-          onClick={async () => {
-            await previewInstance(instance);
-          }}
+          onClick={() => previewInstance(instance)}
           contentClassName="h-6 text-ui"
           actions={
-            <InstanceActionsMenu
-              instanceName={instance.name}
-              onEdit={() =>
-                settings.open({
-                  category: "instances",
-                  instanceId: instance.id,
-                })
-              }
-              onDelete={() => editor.font.deleteNamedInstance(instance.id)}
-            />
+            canAuthor ? (
+              <InstanceActionsMenu
+                instanceName={instance.name}
+                onEdit={() =>
+                  settings.open({
+                    category: "instances",
+                    instanceId: instance.id,
+                  })
+                }
+                onDelete={() => editor.font.deleteNamedInstance(instance.id)}
+              />
+            ) : undefined
           }
         >
           <span className="truncate">{instance.name}</span>

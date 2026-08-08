@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 
 use shift_font::{
-    Axis, AxisId, Font, KerningPair, LibValue, Location, Source, SourceId, SourceRole,
+    Axis, AxisId, DesignLocation, Font, KerningPair, LibValue, Source, SourceId, SourceRole,
     test_support::sample_font,
 };
 use shift_source::{
@@ -371,7 +371,7 @@ fn rejects_non_finite_source_location_values() {
         900.0,
     ))
     .unwrap();
-    let mut location = Location::new();
+    let mut location = DesignLocation::new();
     location.set(axis_id, f64::INFINITY);
     font.add_source(Source::with_id(
         SourceId::from_raw("bad"),
@@ -505,7 +505,7 @@ fn shift_round_trip_preserves_source_roles_and_layer_names() {
     let mut font = Font::new();
     let mut medium = Source::with_filename(
         "Medium".to_string(),
-        Location::new(),
+        DesignLocation::new(),
         "Family-Bold.ufo".to_string(),
     );
     medium.set_layer_name(Some("Medium".to_string()));

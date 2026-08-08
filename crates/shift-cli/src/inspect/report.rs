@@ -302,7 +302,7 @@ impl NamedInstanceSummary {
         Self {
             id: instance.id().to_string(),
             name: instance.name().to_string(),
-            location: location_values(instance.location(), axes_by_id),
+            location: location_values(instance.location().as_untyped(), axes_by_id),
             postscript_name: instance.postscript_name().map(str::to_string),
         }
     }
@@ -351,7 +351,7 @@ impl SourceSummary {
         Self {
             id: source.id().to_string(),
             name: source.name().to_string(),
-            location: location_values(source.location(), axes_by_id),
+            location: location_values(source.location().as_untyped(), axes_by_id),
             filename: source.filename().map(ToOwned::to_owned),
             is_default: default_source_id
                 .as_ref()

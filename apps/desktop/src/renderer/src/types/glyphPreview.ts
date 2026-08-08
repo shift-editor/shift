@@ -1,5 +1,5 @@
-import type { Axis, GlyphId, SourceId } from "@shift/types";
-import type { AxisLocation } from "./variation";
+import type { GlyphId, SourceId } from "@shift/types";
+import type { CatalogLocation } from "./glyphCatalog";
 
 /** One visible glyph preview and its destination rectangle in physical pixels. */
 export interface GlyphPreviewInstance {
@@ -18,8 +18,7 @@ export interface GlyphPreviewStyle {
 
 /** Complete input for one resident glyph preview frame. */
 export interface GlyphPreviewFrame {
-  readonly location: AxisLocation;
-  readonly axes: readonly Axis[];
+  readonly location: CatalogLocation;
   readonly instances: readonly GlyphPreviewInstance[];
   readonly style: GlyphPreviewStyle;
   readonly viewportWidth: number;

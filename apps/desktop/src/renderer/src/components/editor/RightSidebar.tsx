@@ -3,29 +3,26 @@ import { isAnchorId, isPointId } from "@shift/types";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { BooleanOps } from "./BooleanOps";
 
 export const RightSidebar = () => {
+  const session = useFontSession();
   const editor = useEditor();
+  const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
   const zoom = useSignalState(editor.zoomCell);
   const selection = useSignalState(editor.selection.stateCell);
-  const zoomPercent = Math.round(zoom * 100);
-  const { familyName } = editor.font.metadata;
-
   const hasPointSelection = selection.ids.some(isPointId);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
 
   return (
     <aside className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden">
       <div className="px-3 py-2 flex items-center justify-between">
-        <span className="text-ui font-medium text-primary truncate">
-          {familyName ?? "Untitled"}
-        </span>
-        <span className="text-ui font-medium text-muted">{zoomPercent}%</span>
+        <span className="text-ui font-medium text-primary truncate">{familyName}</span>
+        <span className="text-ui font-medium text-muted">{Math.round(zoom * 100)}%</span>
       </div>
       <Separator />
       <TransformOriginProvider>

@@ -40,6 +40,8 @@ export interface BridgeApi {
   closeWorkspace(): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
+  openFontSource(path: string): FontSnapshot
+  closeFontSource(): void
   setDocumentId(documentId: string): DocumentState
   saveWorkspace(): DocumentState
   saveWorkspaceAs(path: string): DocumentState
@@ -114,9 +116,20 @@ export interface BridgeApi {
   discardSlugAtlas(generation: number): void
   /** Releases one rejected prepared page. */
   discardSlugAtlasPage(generation: number): void
+  /** Reads one location-independent source glyph and its complete component closure. */
+  readFontSourceGlyph(glyphId: GlyphId): Array<GlyphSnapshot>
+  /** Builds one source-neutral catalog page through the active format adapter. */
+  prepareSourceAtlasPage(pageIndex: number, glyphIds: Array<GlyphId>, coordinates: Array<number>, alignment: number): CatalogAtlasPage
+  /** Streams one prepared source page through the same bounded atlas lane. */
+  streamSourceAtlasPage(generation: number, maximumLength: number): NativeReadableStream<Uint8Array>
+  /** Releases a rejected source page and its retained weight descriptor. */
+  discardSourceAtlasPage(pageIndex: number, generation: number): void
+  /** Evaluates every resident page's small weight buffer at one source location. */
+  sourceAtlasWeights(coordinates: Array<number>): Array<CatalogAtlasWeights>
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
+  getAxisMappingBases(): Array<AxisMappingBasis>
   getMetricDefinitions(): Array<MetricDefinition>
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
@@ -159,62 +172,6 @@ export interface PackageIdentity {
   packageId: string
   canonicalPath: string
   fingerprint: string
-}
-
-export interface SlugAtlas {
-  generation: number
-  bandCount: number
-  weightCount: number
-  layout: SlugLayout
-  previewExtents: SlugPreviewExtents
-  glyphs: Array<SlugGlyph>
-  weightSets: Array<SlugWeightSet>
-  atlasGlyphCount: number
-  curveCount: number
-  componentCount: number
-}
-
-export interface SlugExactSource {
-  sourceId: SourceId
-  glyphIndex: number
-}
-
-export interface SlugGlyph {
-  glyphId: GlyphId
-  defaultGlyph: number
-  exactSources: Array<SlugExactSource>
-}
-
-export interface SlugLayout {
-  baseCurves: SlugSection
-  curveDeltas: SlugSection
-  sparseDeltas: SlugSection
-  glyphs: SlugSection
-  sources: SlugSection
-  sourceAdvances: SlugSection
-  componentGlyphs: SlugSection
-  componentParts: SlugSection
-  components: SlugSection
-  componentSources: SlugSection
-  anchorSources: SlugSection
-  lineBits: SlugSection
-  totalLength: number
-}
-
-export interface SlugPreviewExtents {
-  horizontal: number
-  minimumY: number
-  maximumY: number
-}
-
-export interface SlugSection {
-  offset: number
-  length: number
-}
-
-export interface SlugWeightSet {
-  basis: InterpolationBasis
-  sourceWeightIndices: Array<number>
 }
 export interface AddAnchorsIntent {
   layerId: LayerId
@@ -294,6 +251,13 @@ export interface AxisMapping {
   points: Array<AxisMappingPoint>
 }
 
+export interface AxisMappingBasis {
+  mappingId: AxisMappingId
+  inputAxisIds: Array<AxisId>
+  outputAxisIds: Array<AxisId>
+  basis: VariationBasis
+}
+
 export interface AxisMappingPoint {
   description?: string
   input: Location
@@ -310,6 +274,50 @@ export interface BooleanOpIntent {
   contourIdB: ContourId
   /** "union" | "subtract" | "intersect" | "difference" */
   operation: string
+}
+
+export interface CatalogAtlasGlyph {
+  glyphId: GlyphId
+  defaultGlyph: number
+  exactSources: Array<SlugExactSource>
+}
+
+export interface CatalogAtlasPage {
+  generation: number
+  pageIndex: number
+  bandCount: number
+  weightCount: number
+  layout: SlugLayout
+  previewExtents: SlugPreviewExtents
+  glyphs: Array<CatalogAtlasGlyph>
+  weights: Array<number>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface CatalogAtlasWeights {
+  pageIndex: number
+  weights: Array<number>
+}
+
+export interface CatalogAxis {
+  index: number
+  tag: string
+  name: string
+  hidden: boolean
+  axisType: string
+  minimum?: number
+  default: number
+  maximum?: number
+  values: Array<number>
+}
+
+export interface CatalogMetrics {
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  lineGap: number
 }
 
 /** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
@@ -345,6 +353,8 @@ export interface ComponentGlyph {
   componentPath: Array<ComponentId>
   attachment?: ComponentAnchorAttachment
 }
+
+export type ComponentTransformKind = "decomposed" | "affine";
 
 export interface ContourData {
   id: ContourId
@@ -494,6 +504,8 @@ export interface FontReplacement {
   axes?: Array<Axis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
   axisMappings?: Array<AxisMapping>
+  /** Rust-compiled mapping bases when axes or mappings changed; absent otherwise. */
+  axisMappingBases?: Array<AxisMappingBasis>
   /** Full font-owned metric definitions when their identity or order changed. */
   metricDefinitions?: Array<MetricDefinition>
   /** Refreshed source-metric interpolation model when any of its inputs changed. */
@@ -505,6 +517,19 @@ export interface FontReplacement {
    * reshapes locations, createSource adds one); absent otherwise.
    */
   sources?: Array<Source>
+}
+
+export interface FontSnapshot {
+  metadata: FontMetadata
+  metrics: FontMetrics
+  metricDefinitions: Array<MetricDefinition>
+  sourceMetricsInterpolation?: SourceMetricsInterpolationSnapshot
+  glyphs: Array<GlyphEntry>
+  sources: Array<Source>
+  axes: Array<Axis>
+  axisMappings: Array<AxisMapping>
+  axisMappingBases: Array<AxisMappingBasis>
+  namedInstances: Array<NamedInstance>
 }
 
 export interface GlyphChangedEntities {
@@ -520,6 +545,12 @@ export interface GlyphComponents {
   components: Array<ComponentGlyph>
 }
 
+export interface GlyphEntry {
+  id: GlyphId
+  name: string
+  unicodes: Array<number>
+}
+
 export interface GlyphInterpolation {
   basis: InterpolationBasis
   sources: Array<GlyphSourceValues>
@@ -533,6 +564,7 @@ export interface GlyphLayerRecord {
 export interface GlyphLayerShape {
   structure: GlyphStructure
   values: Float64Array
+  componentTransformKind: ComponentTransformKind
 }
 
 export interface GlyphLayerSnapshot {
@@ -555,6 +587,7 @@ export interface GlyphProjection {
   glyphId: GlyphId
   fallback: GlyphLayerShape
   interpolation?: GlyphInterpolation
+  variation?: GlyphVariation
   exactSourceShapes: Array<GlyphSourceShape>
   components: GlyphComponents
   exactSourceComponents: Array<GlyphSourceComponents>
@@ -607,10 +640,13 @@ export interface GlyphStructure {
   components: Array<ComponentData>
 }
 
+export interface GlyphVariation {
+  basis: VariationBasis
+}
+
 export interface InterpolationBasis {
   sourceIds: Array<SourceId>
-  regions: Array<Array<InterpolationSupport>>
-  coefficients: Array<Float64Array>
+  basis: VariationBasis
 }
 
 export interface InterpolationSupport {
@@ -736,6 +772,62 @@ export interface SetXAdvanceIntent {
   width: number
 }
 
+export interface SlugAtlas {
+  generation: number
+  bandCount: number
+  weightCount: number
+  layout: SlugLayout
+  previewExtents: SlugPreviewExtents
+  glyphs: Array<SlugGlyph>
+  weightSets: Array<SlugWeightSet>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface SlugExactSource {
+  sourceId: SourceId
+  glyphIndex: number
+}
+
+export interface SlugGlyph {
+  glyphId: GlyphId
+  defaultGlyph: number
+  exactSources: Array<SlugExactSource>
+}
+
+export interface SlugLayout {
+  baseCurves: SlugSection
+  curveDeltas: SlugSection
+  sparseDeltas: SlugSection
+  glyphs: SlugSection
+  sources: SlugSection
+  sourceAdvances: SlugSection
+  componentGlyphs: SlugSection
+  componentParts: SlugSection
+  components: SlugSection
+  componentSources: SlugSection
+  anchorSources: SlugSection
+  lineBits: SlugSection
+  totalLength: number
+}
+
+export interface SlugPreviewExtents {
+  horizontal: number
+  minimumY: number
+  maximumY: number
+}
+
+export interface SlugSection {
+  offset: number
+  length: number
+}
+
+export interface SlugWeightSet {
+  basis: InterpolationBasis
+  sourceWeightIndices: Array<number>
+}
+
 export interface Source {
   id: SourceId
   name: string
@@ -818,4 +910,13 @@ export interface UpdateSourceIntent {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface VariationBasis {
+  deltas: Array<VariationDelta>
+}
+
+export interface VariationDelta {
+  region: Array<InterpolationSupport>
+  values: Float64Array
 }

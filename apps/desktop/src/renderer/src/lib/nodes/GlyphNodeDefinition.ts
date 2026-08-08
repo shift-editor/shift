@@ -36,10 +36,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   hit(node: GlyphNode, point: NodePoint): PointerTarget | null {
-    const glyph = this.editor.glyphForId(node.glyphId);
-    if (!glyph) return null;
+    const geometry = this.#view(node);
+    if (!geometry) return null;
 
-    const geometry = glyph.geometryAt(this.editor.designLocation);
     const hit = geometry.hitAt(point, this.editor.hitRadius);
     if (!hit) return null;
 
@@ -101,7 +100,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   #view(node: GlyphNode): GlyphRenderModel | null {
     return (
-      this.editor.glyphForId(node.glyphId)?.renderModelAt(this.editor.designLocationCell) ?? null
+      this.editor
+        .glyphForId(node.glyphId)
+        ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell) ?? null
     );
   }
 
@@ -116,13 +117,17 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const view = this.#view(node);
     if (!view) return;
 
-    const unicode = glyph.record.unicodes[0] ?? null;
+    const unicode = glyph.entry.unicodes[0] ?? null;
     track(view.xAdvanceCell);
 
     const advance = displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);
-    track(this.editor.designLocationCell);
+    track(this.editor.externalLocationCell);
+    track(this.editor.activeSourceIdCell);
     track(this.editor.font.sourceMetricsInterpolationCell);
-    const metrics = this.editor.font.metricsAtLocation(this.editor.designLocation);
+    const activeSourceId = this.editor.activeSourceId;
+    const metrics = activeSourceId
+      ? this.editor.font.metricsForSource(activeSourceId)
+      : this.editor.font.metricsAtLocation(this.editor.externalLocation);
     this.#guides.draw(ctx.canvas, metrics, advance);
   }
 

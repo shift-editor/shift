@@ -6,9 +6,14 @@ use std::sync::Arc;
 
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
-use fontdrasil::variations::{RoundingBehaviour, VariationModel};
+use fontdrasil::variations::{
+    RoundingBehaviour, VariationModel, VariationRegion as FontdrasilVariationRegion,
+};
 
-use crate::{Axis, AxisId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, Location, SourceId};
+use crate::{
+    Axis, AxisId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphLayer, Location,
+    SourceId,
+};
 
 mod compatibility;
 mod metrics;
@@ -64,17 +69,101 @@ impl InterpolationRegion {
     }
 }
 
+/// One coordinate-independent contribution produced by Fontdrasil.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VariationDelta {
+    region: InterpolationRegion,
+    values: Vec<f64>,
+}
+
+impl VariationDelta {
+    /// Returns the normalized support region for this contribution.
+    pub fn region(&self) -> &InterpolationRegion {
+        &self.region
+    }
+
+    /// Returns the numeric contribution vector evaluated within the region.
+    pub fn values(&self) -> &[f64] {
+        &self.values
+    }
+}
+
+/// Coordinate-independent variation supports and numeric contributions.
+///
+/// Fontdrasil exclusively constructs this basis. Consumers may evaluate it at
+/// a normalized location but never rebuild its sample ordering or regions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VariationBasis {
+    deltas: Vec<VariationDelta>,
+}
+
+impl VariationBasis {
+    pub(crate) fn from_fontdrasil(
+        deltas: Vec<(FontdrasilVariationRegion, Vec<f64>)>,
+        axis_ids_by_tag: &HashMap<Tag, AxisId>,
+    ) -> Self {
+        Self {
+            deltas: deltas
+                .into_iter()
+                .map(|(region, values)| VariationDelta {
+                    region: InterpolationRegion {
+                        supports: region
+                            .iter()
+                            .filter_map(|(tag, support)| {
+                                let axis_id = axis_ids_by_tag.get(tag)?;
+                                Some(AxisSupport {
+                                    axis_id: axis_id.clone(),
+                                    minimum: support.min.into_inner().into_inner(),
+                                    peak: support.peak.into_inner().into_inner(),
+                                    maximum: support.max.into_inner().into_inner(),
+                                })
+                            })
+                            .collect(),
+                    },
+                    values,
+                })
+                .collect(),
+        }
+    }
+
+    /// Returns the ordered support contributions produced by Fontdrasil.
+    pub fn deltas(&self) -> &[VariationDelta] {
+        &self.deltas
+    }
+
+    pub(crate) fn evaluate(&self, location: &Location, axes: &[Axis]) -> CoreResult<Vec<f64>> {
+        let value_count = self
+            .deltas
+            .first()
+            .map(|delta| delta.values.len())
+            .unwrap_or(0);
+        let mut values = vec![0.0; value_count];
+
+        for delta in &self.deltas {
+            let scalar = region_scalar(&delta.region, location, axes)?;
+            if scalar == 0.0 {
+                continue;
+            }
+
+            for (value, contribution) in values.iter_mut().zip(&delta.values) {
+                *value += scalar * contribution;
+            }
+        }
+
+        Ok(values)
+    }
+}
+
 /// Coordinate-independent interpolation weights for an ordered source set.
 ///
-/// The basis depends only on source locations and authoring axes. Its
-/// coefficients contain no glyph coordinates or metric values, so renderers
+/// The basis depends only on source locations and authoring axes. Its numeric
+/// contributions contain no glyph coordinates or metric values, so renderers
 /// can combine it with live source-value signals without rebuilding native
 /// variation data after ordinary numeric edits.
 #[derive(Clone, Debug, PartialEq)]
 pub struct InterpolationBasis {
     source_ids: Vec<SourceId>,
-    regions: Vec<InterpolationRegion>,
-    coefficients: Vec<Vec<f64>>,
+    basis: VariationBasis,
 }
 
 impl InterpolationBasis {
@@ -83,7 +172,7 @@ impl InterpolationBasis {
     /// This constructor is value-agnostic: glyph coordinates, metrics, and
     /// other interpolated domains remain separate source vectors.
     pub(crate) fn from_source_locations(
-        sources: &[(SourceId, Location)],
+        sources: &[(SourceId, DesignLocation)],
         axes: &[Axis],
     ) -> Option<Self> {
         let normalized_sources = sources
@@ -99,14 +188,9 @@ impl InterpolationBasis {
         &self.source_ids
     }
 
-    /// Returns the normalized support regions evaluated at each location.
-    pub fn regions(&self) -> &[InterpolationRegion] {
-        &self.regions
-    }
-
-    /// Returns one source-coefficient row for each interpolation region.
-    pub fn coefficients(&self) -> &[Vec<f64>] {
-        &self.coefficients
+    /// Returns the Fontdrasil-compiled source-weight basis.
+    pub fn variation_basis(&self) -> &VariationBasis {
+        &self.basis
     }
 
     /// Evaluates one scalar weight per source at an internal location.
@@ -118,20 +202,8 @@ impl InterpolationBasis {
     ///
     /// Returns [`CoreError::AxisNotFound`] when `axes` omits an axis referenced
     /// by an interpolation region.
-    pub fn weights_at(&self, location: &Location, axes: &[Axis]) -> CoreResult<Vec<f64>> {
-        let mut weights = vec![0.0; self.source_ids.len()];
-        for (region, coefficients) in self.regions.iter().zip(&self.coefficients) {
-            let scalar = region_scalar(region, location, axes)?;
-            if scalar == 0.0 {
-                continue;
-            }
-
-            for (weight, coefficient) in weights.iter_mut().zip(coefficients) {
-                *weight += scalar * coefficient;
-            }
-        }
-
-        Ok(weights)
+    pub fn weights_at(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<Vec<f64>> {
+        self.basis.evaluate(location.as_untyped(), axes)
     }
 }
 
@@ -189,7 +261,7 @@ impl GlyphInterpolation {
     /// Returns [`CoreError::AxisNotFound`] if `axes` does not contain every
     /// support axis, or a glyph-value shape error if the interpolation model
     /// and its structural reference layer are inconsistent.
-    pub fn resolve(&self, location: &Location, axes: &[Axis]) -> CoreResult<GlyphLayer> {
+    pub fn resolve(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<GlyphLayer> {
         let mut layer = self.reference_layer.as_ref().clone();
         let values = self.values_at(location, axes)?;
         layer.apply_interpolation_values(&values)?;
@@ -198,7 +270,7 @@ impl GlyphInterpolation {
 
     fn values_at(
         &self,
-        location: &Location,
+        location: &DesignLocation,
         axes: &[Axis],
     ) -> CoreResult<GlyphInterpolationValues> {
         let value_count = self
@@ -374,7 +446,7 @@ fn interpolation_basis(
             return None;
         }
     }
-    let default_location = normalized_location(&Location::new(), axes);
+    let default_location = normalized_location(&DesignLocation::new(), axes);
     if let Entry::Vacant(entry) = points.entry(default_location) {
         entry.insert(virtual_default_coefficients(sources)?);
     }
@@ -388,35 +460,12 @@ fn interpolation_basis(
     let model_coefficients = model
         .deltas_with_rounding::<f64, f64>(&points, RoundingBehaviour::None)
         .ok()?;
-    let regions = model_coefficients
-        .iter()
-        .map(|(region, _)| InterpolationRegion {
-            supports: region
-                .iter()
-                .filter_map(|(tag, support)| {
-                    let axis_id = axis_ids_by_tag.get(tag)?;
-                    Some(AxisSupport {
-                        axis_id: axis_id.clone(),
-                        minimum: support.min.into_inner().into_inner(),
-                        peak: support.peak.into_inner().into_inner(),
-                        maximum: support.max.into_inner().into_inner(),
-                    })
-                })
-                .collect(),
-        })
-        .collect();
-    let coefficients = model_coefficients
-        .into_iter()
-        .map(|(_, coefficients)| coefficients)
-        .collect();
-
     Some(InterpolationBasis {
         source_ids: sources
             .iter()
             .map(|(source_id, _)| source_id.clone())
             .collect(),
-        regions,
-        coefficients,
+        basis: VariationBasis::from_fontdrasil(model_coefficients, &axis_ids_by_tag),
     })
 }
 
@@ -471,7 +520,7 @@ fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> O
     Some(coefficients)
 }
 
-fn normalized_location(location: &Location, axes: &[Axis]) -> NormalizedLocation {
+fn normalized_location(location: &DesignLocation, axes: &[Axis]) -> NormalizedLocation {
     axes.iter()
         .filter_map(|axis| {
             let tag = Tag::from_str(axis.tag()).ok()?;
@@ -527,7 +576,7 @@ fn region_scalar(
 #[cfg(test)]
 mod tests {
     use crate::test_support::sample_variable_font;
-    use crate::{GlyphInterpolationValues, Location};
+    use crate::{DesignLocation, GlyphInterpolationValues};
 
     #[test]
     fn layer_values_roundtrip_without_changing_topology() {
@@ -613,7 +662,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let axis_id = font.axes()[0].id();
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         location.set(axis_id, 600.0);
 
         let layer = font
@@ -661,7 +710,9 @@ mod tests {
         let glyph = font.glyph_by_name("A").unwrap();
         let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
 
-        let error = interpolation.resolve(&Location::new(), &[]).unwrap_err();
+        let error = interpolation
+            .resolve(&DesignLocation::new(), &[])
+            .unwrap_err();
 
         assert!(matches!(error, crate::CoreError::AxisNotFound(_)));
     }

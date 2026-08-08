@@ -4,15 +4,15 @@ use std::path::Path;
 use shift_font::Font;
 use shift_source::ShiftSourcePackage;
 
-use crate::designspace::{DesignspaceReader, DesignspaceWriter};
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
+use crate::font_source::{FontReadError, OpenedFont};
 use crate::format::FontFormat;
-use crate::glyphs::GlyphsReader;
+use crate::formats::designspace::{DesignspaceFont, DesignspaceReader, DesignspaceWriter};
+use crate::formats::glyphs::{GlyphsFont, GlyphsReader};
+use crate::formats::opentype::{BytesFontAdaptor, OpenTypeFont};
+use crate::formats::ufo::{UfoFont, UfoReader, UfoWriter};
 use crate::import::{FontImport, GlyphStream};
 use crate::traits::{FontReader, FontWriter};
-use crate::ufo::{UfoReader, UfoWriter};
-
-use crate::binary::BytesFontAdaptor;
 
 pub(crate) trait FontAdaptor {
     fn read_font(&self, path: &str) -> FormatBackendResult<Font>;
@@ -50,7 +50,7 @@ impl FontAdaptor for UfoFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
-        let (header, stream) = crate::ufo::stream_font(path)?;
+        let (header, stream) = crate::formats::ufo::stream_font(path)?;
         Ok(Some((header, Box::new(stream))))
     }
 }
@@ -65,7 +65,7 @@ impl FontAdaptor for GlyphsFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
-        let (header, stream) = crate::glyphs::stream_font(path)?;
+        let (header, stream) = crate::formats::glyphs::stream_font(path)?;
         Ok(Some((header, Box::new(stream))))
     }
 }
@@ -80,7 +80,7 @@ impl FontAdaptor for DesignspaceFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
-        let (header, stream) = crate::designspace::stream_font(path)?;
+        let (header, stream) = crate::formats::designspace::stream_font(path)?;
         Ok(Some((header, Box::new(stream))))
     }
 }
@@ -156,6 +156,30 @@ impl FontLoader {
         self.adaptors.keys().collect()
     }
 
+    /// Opens a retained random-access source without constructing an authored Font.
+    pub fn open_source(&self, path: &Path) -> Result<OpenedFont, FontReadError> {
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .ok_or_else(|| FontReadError::UnsupportedFormat {
+                path: path.to_path_buf(),
+            })?;
+        let format =
+            format_from_extension(extension).map_err(|_| FontReadError::UnsupportedFormat {
+                path: path.to_path_buf(),
+            })?;
+
+        match format {
+            FontFormat::Ttf | FontFormat::Otf => OpenTypeFont::open(path).map(OpenedFont::OpenType),
+            FontFormat::Ufo => UfoFont::open(path).map(OpenedFont::Ufo),
+            FontFormat::Designspace => DesignspaceFont::open(path).map(OpenedFont::Designspace),
+            FontFormat::Glyphs => GlyphsFont::open(path).map(OpenedFont::Glyphs),
+            FontFormat::Shift => Err(FontReadError::UnsupportedFormat {
+                path: path.to_path_buf(),
+            }),
+        }
+    }
+
     pub fn stream_font(&self, path: &str) -> BackendResult<FontImport> {
         let resolved = resolve(path)?;
         let adaptor = self
@@ -227,8 +251,57 @@ impl FontLoader {
 
 #[cfg(test)]
 mod tests {
-    use super::format_from_extension;
+    use std::path::PathBuf;
+
+    use super::{format_from_extension, FontLoader};
+    use crate::font_source::OpenedFont;
     use crate::format::FontFormat;
+    use crate::ImportBatchLimit;
+
+    fn fixture(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("fixtures/fonts")
+            .join(name)
+    }
+
+    #[test]
+    fn retained_source_dispatch_preserves_import_capabilities() {
+        let loader = FontLoader::new();
+        let open_type = loader
+            .open_source(&fixture("mutatorsans/MutatorSans.ttf"))
+            .unwrap();
+        let ufo = loader
+            .open_source(&fixture("mutatorsans/MutatorSansLightCondensed.ufo"))
+            .unwrap();
+        let glyphs = loader.open_source(&fixture("Homenaje.glyphs")).unwrap();
+
+        assert!(matches!(&open_type, OpenedFont::OpenType(_)));
+        assert!(open_type.importer().is_none());
+        assert!(matches!(&ufo, OpenedFont::Ufo(_)));
+        let mut ufo_import = ufo.importer().unwrap().begin_import().unwrap();
+        assert!(ufo_import.glyph_count() > 0);
+        assert_eq!(
+            ufo_import
+                .next_batch(ImportBatchLimit::new(1, 1))
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(matches!(&glyphs, OpenedFont::Glyphs(_)));
+        let mut glyphs_import = glyphs.importer().unwrap().begin_import().unwrap();
+        assert!(glyphs_import.glyph_count() > 0);
+        assert_eq!(
+            glyphs_import
+                .next_batch(ImportBatchLimit::new(1, 1))
+                .unwrap()
+                .len(),
+            1
+        );
+    }
 
     #[test]
     fn supports_glyphs_extensions() {

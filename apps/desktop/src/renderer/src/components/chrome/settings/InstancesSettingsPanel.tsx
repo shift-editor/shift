@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, NamedInstance, NamedInstanceId } from "@shift/types";
 import { Input, cn } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
+import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
 import { CreateInstanceMenu } from "@/components/variation/CreateInstanceMenu";
 import { useAxes } from "@/hooks/useAxes";
@@ -12,9 +13,13 @@ import { useSettingsForm } from "./useSettingsForm";
 
 interface InstancesSettingsPanelProps {
   initialInstanceId?: NamedInstanceId;
+  canAuthor: boolean;
 }
 
-export const InstancesSettingsPanel = ({ initialInstanceId }: InstancesSettingsPanelProps) => {
+export const InstancesSettingsPanel = ({
+  initialInstanceId,
+  canAuthor,
+}: InstancesSettingsPanelProps) => {
   const font = useFont();
   const instances = useNamedInstances();
   const axes = useAxes().filter((axis) => axis.role === "external");
@@ -45,7 +50,13 @@ export const InstancesSettingsPanel = ({ initialInstanceId }: InstancesSettingsP
       <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Instances</h2>
-          <CreateInstanceMenu onInstanceCreated={setPendingInstanceId} />
+          {canAuthor ? (
+            <CreateInstanceMenu onInstanceCreated={setPendingInstanceId} />
+          ) : (
+            <SidebarActionButton label="Create instance" disabled>
+              <PlusIcon className="h-3 w-3" />
+            </SidebarActionButton>
+          )}
         </div>
 
         <div className="scrollbar-hidden min-h-0 overflow-y-auto px-2 pb-2">
@@ -64,6 +75,7 @@ export const InstancesSettingsPanel = ({ initialInstanceId }: InstancesSettingsP
                 <SidebarActionButton
                   label={`Delete ${instance.name}`}
                   className="h-8 hover:bg-icon-button-hover"
+                  disabled={!canAuthor}
                   onClick={(event) => {
                     event.stopPropagation();
                     font.deleteNamedInstance(instance.id);
@@ -80,7 +92,12 @@ export const InstancesSettingsPanel = ({ initialInstanceId }: InstancesSettingsP
       </aside>
 
       {selectedInstance ? (
-        <InstanceEditor key={selectedInstance.id} instance={selectedInstance} axes={axes} />
+        <InstanceEditor
+          key={selectedInstance.id}
+          instance={selectedInstance}
+          axes={axes}
+          canAuthor={canAuthor}
+        />
       ) : (
         <InstancesEmptyState hasAxes={axes.length > 0} />
       )}
@@ -91,9 +108,10 @@ export const InstancesSettingsPanel = ({ initialInstanceId }: InstancesSettingsP
 interface InstanceEditorProps {
   instance: NamedInstance;
   axes: readonly Axis[];
+  canAuthor: boolean;
 }
 
-const InstanceEditor = ({ instance, axes }: InstanceEditorProps) => {
+const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
   const font = useFont();
   const form = useSettingsForm<NamedInstance>({
     canonical: instance,
@@ -109,7 +127,7 @@ const InstanceEditor = ({ instance, axes }: InstanceEditorProps) => {
   };
 
   return (
-    <section className="scrollbar-hidden min-h-0 overflow-y-auto p-5 pr-8">
+    <fieldset disabled={!canAuthor} className="scrollbar-hidden min-h-0 overflow-y-auto p-5 pr-8">
       <div className="mb-5 flex h-6 items-center">
         <h2 className="truncate text-sm font-medium text-primary">{draft.name || "Instance"}</h2>
       </div>
@@ -148,7 +166,7 @@ const InstanceEditor = ({ instance, axes }: InstanceEditorProps) => {
           ))}
         </div>
       </SettingsSection>
-    </section>
+    </fieldset>
   );
 };
 

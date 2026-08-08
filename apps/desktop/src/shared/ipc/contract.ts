@@ -1,5 +1,9 @@
 import type { CommandId, RendererCommandId } from "../commands";
-import type { WorkspaceDocumentState, WorkspaceExportResult } from "../workspace/protocol";
+import type {
+  FontSessionMode,
+  WorkspaceDocumentState,
+  WorkspaceExportResult,
+} from "../workspace/protocol";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -32,13 +36,15 @@ export type RendererToMain = {
    * cannot travel through `invoke` responses.
    */
   "document.connect": () => void;
+  /** Returns the backend capability selected for the sender's font session. */
+  "session.mode": () => FontSessionMode;
   /**
-   * Asks main to wire a sync lane to the workspace process. The port itself
-   * arrives separately on the `workspace.port` postMessage channel because
-   * ports cannot travel through `invoke` responses.
+   * Asks main to wire a sync lane to the font session process. The port itself
+   * arrives separately on the `session.port` postMessage channel because ports
+   * cannot travel through `invoke` responses.
    */
-  "workspace.connect": () => void;
-  "workspace.ready": () => void;
+  "session.connect": () => void;
+  "session.ready": () => void;
 };
 
 /**

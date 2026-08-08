@@ -110,7 +110,7 @@ cd apps/desktop && npm test
 - `Camera` -- uses `zoomCell`, pan cells, and affine transform cells
 - `Hover` -- uses `targetCell` for hovered editor state
 - `Selection` -- uses `WritableSignal` fields for selected point/anchor/segment state
-- `NativeBridge` -- uses a glyph identity cell with `equals: () => false` for identity changes
+- `FontStore` -- owns signal-backed renderer snapshots and canonical loaded glyph models
 - `useSignalState` -- React bridge hook (in this module)
 - `useSignalEffect` -- lifecycle-aware effect hook (in `@/hooks/useSignalEffect`)
 - `WorkspaceEditCoordinator` -- uses signals for settled and commit lifecycle state

@@ -26,15 +26,31 @@ test.describe("Resident Glyph Grid", () => {
     await page.evaluate(() => document.fonts.ready);
     await afterNextPaint(page);
 
+    const viewportBox = await scrollViewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    if (!viewportBox) throw new Error("Expected catalog viewport bounds");
+
+    await page.mouse.move(viewportBox.x + 20, viewportBox.y + 20);
+    await afterNextPaint(page);
+    await expect
+      .poll(() =>
+        glyphCanvas.evaluate((canvas) => {
+          const bounds = canvas.getBoundingClientRect();
+          const scale = window.devicePixelRatio;
+          return (
+            canvas.width === Math.floor(bounds.width * scale) &&
+            canvas.height === Math.floor(bounds.height * scale)
+          );
+        }),
+      )
+      .toBe(true);
+
     const initialSize = await glyphCanvas.evaluate((canvas) => ({
       width: canvas.width,
       height: canvas.height,
     }));
     expect(initialSize.width).toBeGreaterThan(1);
     expect(initialSize.height).toBeGreaterThan(1);
-    const viewportBox = await scrollViewport.boundingBox();
-    expect(viewportBox).not.toBeNull();
-    if (!viewportBox) throw new Error("Expected catalog viewport bounds");
 
     for (let index = 0; index < 12; index += 1) {
       await page.mouse.move(
@@ -290,7 +306,7 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setDesignLocation(new Map([[axisId, 900]]));
+      workspace.editor.setExternalLocation(new Map([[axisId, 900]]));
       workspace.font.deleteSource(sourceId);
       await workspace.font.editCoordinator.settled();
     }, variable);
@@ -318,7 +334,7 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setDesignLocation(new Map([[axisId, 750]]));
+      workspace.editor.setExternalLocation(new Map([[axisId, 750]]));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       workspace.font.deleteAxis(axisId);
       await workspace.font.editCoordinator.settled();
@@ -396,7 +412,7 @@ test.describe("Resident Glyph Grid", () => {
 
       const samples: Array<{ previewHeight: number; scrollHeight: number }> = [];
       for (const value of [400, 500, 650, 800, 900, 650, 400]) {
-        workspace.editor.setDesignLocation(new Map([[axisId, value]]));
+        workspace.editor.setExternalLocation(new Map([[axisId, value]]));
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         samples.push({
           previewHeight: Number(canvas.dataset.previewHeight),
@@ -432,8 +448,8 @@ async function createVariableDesignspace(
     if (!font) throw new Error("Expected font");
 
     const axisId = font.createAxis({
-      tag: "wght",
-      name: "Weight",
+      tag: "opsz",
+      name: "Optical Size",
       role: "external",
       axisType: "continuous",
       minimum: 100,
@@ -443,7 +459,7 @@ async function createVariableDesignspace(
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const sourceId = font.createSource("Bold", { values: { [axisId]: 900 } });
+    const sourceId = font.createSource("Bold", new Map([[axisId, 900]]));
     await font.editCoordinator.settled();
     const source = font.sources.find((candidate) => candidate.id === sourceId);
     if (!source || source.metricValues.length === 0) {

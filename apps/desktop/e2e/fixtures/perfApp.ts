@@ -16,118 +16,128 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
+import { copyImportedSource, createAuthoredPackage } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
-const FONT_PATH =
+const EDITABLE_FONT_PATH =
   process.env.SHIFT_E2E_FONT_PATH ??
+  path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+const PREVIEW_FONT_PATH =
+  process.env.SHIFT_E2E_PREVIEW_FONT_PATH ??
   path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
+const VARIABLE_PREVIEW_FONT_PATH =
+  process.env.SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH ??
+  path.resolve(APP_ROOT, "src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf");
+const UFO_PREVIEW_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
+);
+const GLYPHS_PREVIEW_FONT_PATH =
+  process.env.SHIFT_E2E_GLYPHS_PREVIEW_FONT_PATH ??
+  path.resolve(APP_ROOT, "../../fixtures/fonts/MutatorSansVariable.glyphs");
 
-const WINDOW_WIDTH = 1280;
-const WINDOW_HEIGHT = 800;
+/** Fixed CSS content size; canvas backing dimensions continue to follow the host DPR. */
+const CONTENT_WIDTH = 1280;
+const CONTENT_HEIGHT = 800;
 
-type PerfFixtures = {
+export type PerfFixtures = {
   electronApp: ElectronApplication;
   page: Page;
+  sourcePath: string;
 };
 
 /**
  * Perf test fixture — GPU enabled, no software rendering override.
  */
-export const test = base.extend<PerfFixtures>({
-  electronApp: async ({}, use) => {
-    const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
-    const userDataDir = path.join(testRoot, "user-data");
-    const workspaceDirectory = path.join(testRoot, "workspace");
-    let workspacePath: string;
-    let app: ElectronApplication | null = null;
+function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPackage) {
+  return base.extend<PerfFixtures>({
+    electronApp: async ({}, use) => {
+      const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
+      const userDataDir = path.join(testRoot, "user-data");
+      const workspaceDirectory = path.join(testRoot, "workspace");
+      const workspacePath = prepareSource(fontPath, workspaceDirectory);
+      let app: ElectronApplication | null = null;
 
-    if (path.extname(FONT_PATH) === ".designspace") {
-      fs.cpSync(path.dirname(FONT_PATH), workspaceDirectory, { recursive: true });
-      workspacePath = path.join(workspaceDirectory, path.basename(FONT_PATH));
-    } else {
-      fs.mkdirSync(workspaceDirectory, { recursive: true });
-      workspacePath = path.join(workspaceDirectory, path.basename(FONT_PATH));
-      if (fs.statSync(FONT_PATH).isDirectory()) {
-        fs.cpSync(FONT_PATH, workspacePath, { recursive: true });
-      } else {
-        fs.copyFileSync(FONT_PATH, workspacePath, fs.constants.COPYFILE_FICLONE);
-      }
-    }
+      try {
+        app = await electron.launch({
+          args: [MAIN_JS, `--user-data-dir=${userDataDir}`],
+          env: {
+            ...process.env,
+            NODE_ENV: "test",
+            SHIFT_E2E_FONT_PATH: workspacePath,
+            // No LIBGL_ALWAYS_SOFTWARE — use real GPU for perf measurements.
+          },
+        });
 
-    try {
-      app = await electron.launch({
-        args: [MAIN_JS, `--user-data-dir=${userDataDir}`],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          SHIFT_E2E_FONT_PATH: workspacePath,
-          // No LIBGL_ALWAYS_SOFTWARE — use real GPU for perf measurements.
-        },
-      });
+        const page = await app.firstWindow();
+        const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
+          electronApp.getPath("userData"),
+        );
+        if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
+          throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
+        }
 
-      const page = await app.firstWindow();
-      const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
-        electronApp.getPath("userData"),
-      );
-      if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
-        throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
-      }
-
-      const browserWindow = await app.browserWindow(page);
-      const initialContentSize = await browserWindow.evaluate(
-        (win, { w, h }) => {
+        const contentSize = { width: CONTENT_WIDTH, height: CONTENT_HEIGHT };
+        const browserWindow = await app.browserWindow(page);
+        await browserWindow.evaluate((win, { width, height }) => {
           win.unmaximize();
-          win.setSize(w, h);
+          win.setContentSize(width, height);
           win.center();
-          const [width, height] = win.getContentSize();
-          return { width, height };
-        },
-        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-      );
-      await page.waitForFunction(
-        ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
-        initialContentSize,
-      );
-      await page.waitForFunction(() => document.visibilityState === "visible");
-      const visibleContentSize = await browserWindow.evaluate(
-        (win, { w, h }) => {
-          win.setSize(w, h);
+        }, contentSize);
+        await page.waitForFunction(
+          ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
+          contentSize,
+        );
+        await page.waitForFunction(() => document.visibilityState === "visible");
+        await browserWindow.evaluate((win, { width, height }) => {
+          win.setContentSize(width, height);
           win.center();
-          const [width, height] = win.getContentSize();
-          return { width, height };
-        },
-        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-      );
-      await browserWindow.dispose();
-      await page.waitForFunction(
-        ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
-        visibleContentSize,
-      );
+        }, contentSize);
+        await browserWindow.dispose();
+        await page.waitForFunction(
+          ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
+          contentSize,
+        );
 
-      await use(app);
-    } finally {
-      const childProcess = app?.process();
-      if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
-        const exited = once(childProcess, "exit");
-        childProcess.kill("SIGKILL");
-        await exited;
+        await use(app);
+      } finally {
+        const childProcess = app?.process();
+        if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
+          const exited = once(childProcess, "exit");
+          childProcess.kill("SIGKILL");
+          await exited;
+        }
+        fs.rmSync(testRoot, { recursive: true, force: true });
       }
-      fs.rmSync(testRoot, { recursive: true, force: true });
-    }
-  },
+    },
 
-  page: async ({ electronApp }, use) => {
-    const page = await electronApp.firstWindow();
-    await page.waitForLoadState("domcontentloaded");
-    await page.waitForURL(/#\/home/, { timeout: 20_000 });
+    sourcePath: async ({ electronApp }, use) => {
+      const sourcePath = await electronApp.evaluate(() => process.env.SHIFT_E2E_FONT_PATH ?? null);
+      if (!sourcePath) throw new Error("E2E font source path is unavailable");
 
-    // Auto-dismiss native save dialogs that interrupt tests.
-    page.on("dialog", (dialog) => dialog.dismiss());
+      await use(sourcePath);
+    },
 
-    await use(page);
-  },
-});
+    page: async ({ electronApp }, use) => {
+      const page = await electronApp.firstWindow();
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForURL(/#\/home/, { timeout: 20_000 });
+
+      // Auto-dismiss native save dialogs that interrupt tests.
+      page.on("dialog", (dialog) => dialog.dismiss());
+
+      await use(page);
+    },
+  });
+}
+
+export const test = createAppTest(EDITABLE_FONT_PATH, createAuthoredPackage);
+export const previewTest = createAppTest(PREVIEW_FONT_PATH, copyImportedSource);
+export const variablePreviewTest = createAppTest(VARIABLE_PREVIEW_FONT_PATH, copyImportedSource);
+export const designspacePreviewTest = createAppTest(EDITABLE_FONT_PATH, copyImportedSource);
+export const ufoPreviewTest = createAppTest(UFO_PREVIEW_FONT_PATH, copyImportedSource);
+export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImportedSource);
 
 export { expect } from "@playwright/test";
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, type ReactNode } from "react";
 import { isDev } from "@/lib/utils/utils";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { useFontSession } from "@/workspace/WorkspaceContext";
 import { DEFAULT_DEBUG_OVERLAYS, DebugContext } from "./DebugContext";
 
 interface DebugProviderProps {
@@ -11,15 +11,15 @@ export function DebugProvider({ children }: DebugProviderProps) {
   const reactScanEnabled = false;
   const debugPanelOpen = false;
   const overlays = DEFAULT_DEBUG_OVERLAYS;
-  const editor = useEditor();
+  const workspace = useFontSession().workspace;
 
   const dumpSnapshot = useCallback(() => {
     void navigator.clipboard?.writeText("{}");
   }, []);
 
   useEffect(() => {
-    editor.setDebugOverlays(overlays);
-  }, [editor, overlays]);
+    workspace?.editor.setDebugOverlays(overlays);
+  }, [overlays, workspace]);
 
   if (!isDev) {
     return <>{children}</>;

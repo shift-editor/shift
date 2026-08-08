@@ -3,9 +3,9 @@
 use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
     AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform,
-    Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId, KerningPair, KerningSide, LayerId,
-    LibValue, Location, MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point, PointId,
-    PointType, Source, SourceId,
+    DesignLocation, ExternalLocation, Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId,
+    KerningPair, KerningSide, LayerId, LibValue, Location, MetricKind, MetricValue, NamedInstance,
+    NamedInstanceId, Point, PointId, PointType, Source, SourceId,
 };
 use std::collections::BTreeMap;
 
@@ -148,7 +148,7 @@ pub fn sample_font() -> Font {
     font.add_axis(width)
         .expect("sample width axis should be valid");
 
-    let mut regular_location = Location::new();
+    let mut regular_location = ExternalLocation::new();
     regular_location.set(weight_id.clone(), 400.0);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("regular"),
@@ -176,10 +176,10 @@ pub fn sample_font() -> Font {
 
     let regular_id = SourceId::from_raw("regular");
     let bold_id = SourceId::from_raw("bold");
-    let mut regular_location = Location::new();
+    let mut regular_location = DesignLocation::new();
     regular_location.set(weight_id.clone(), 400.0);
     regular_location.set(width_id.clone(), 100.0);
-    let mut bold_location = Location::new();
+    let mut bold_location = DesignLocation::new();
     bold_location.set(weight_id, 800.0);
     bold_location.set(width_id, 112.5);
     font.add_source(Source::with_id(
@@ -367,7 +367,7 @@ pub fn sample_variable_font() -> Font {
     )])
     .expect("sample axis mapping should be valid");
 
-    let mut bold_instance_location = Location::new();
+    let mut bold_instance_location = ExternalLocation::new();
     bold_instance_location.set(weight_id.clone(), 900.0);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("bold"),
@@ -390,16 +390,16 @@ pub fn sample_variable_font() -> Font {
     default_source.set_line_gap(Some(20.0));
     default_source.set_underline_position(Some(-100.0));
     default_source.set_underline_thickness(Some(50.0));
-    let mut default_location = Location::new();
+    let mut default_location = DesignLocation::new();
     default_location.set(weight_id.clone(), 400.0);
     font.source_mut(default_source_id.clone())
         .unwrap()
         .set_location(default_location);
 
-    let mut medium_location = Location::new();
+    let mut medium_location = DesignLocation::new();
     medium_location.set(weight_id.clone(), 600.0);
     font.add_source(Source::new("Medium".to_string(), medium_location));
-    let mut bold_location = Location::new();
+    let mut bold_location = DesignLocation::new();
     bold_location.set(weight_id, 800.0);
     let bold_source_id = font.add_source(Source::new("Bold".to_string(), bold_location));
     set_source_metrics(

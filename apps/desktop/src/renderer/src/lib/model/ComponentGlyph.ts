@@ -8,7 +8,7 @@ import type {
 import { ContourPath } from "@/lib/graphics/ContourPath";
 import { computed, track, type Signal } from "@/lib/signals";
 import type { GlyphRenderContour } from "@/types/glyphRender";
-import type { AxisLocation } from "@/types/variation";
+import type { ExternalAxisLocation } from "@/types/variation";
 import type { GlyphRenderModel } from "./Glyph";
 import type { RenderContour } from "./GlyphRenderModel";
 
@@ -19,12 +19,12 @@ import type { RenderContour } from "./GlyphRenderModel";
  * Rust has already fixed this occurrence's order, ancestry, attachment anchors,
  * and cycle status. `componentPath` is its stable occurrence identity. The
  * cells here only evaluate authored matrices and anchor coordinates at the
- * current design location.
+ * current external location.
  */
 export class ComponentGlyph {
   readonly #definitionCell: Signal<ComponentGlyphDefinition>;
   readonly #glyphIdCell: Signal<GlyphId>;
-  readonly #locationCell: Signal<AxisLocation>;
+  readonly #locationCell: Signal<ExternalAxisLocation>;
   readonly #renderModel: GlyphRenderModel;
   readonly #localTransformCell: Signal<MatModel>;
 
@@ -38,12 +38,12 @@ export class ComponentGlyph {
    * Creates a reactive component occurrence from a Rust projection node.
    *
    * @param definitionCell - Rust-owned occurrence definition selected for the current location.
-   * @param locationCell - Design location shared with the root Glyph render model.
+   * @param locationCell - External location shared with the root Glyph render model.
    * @param renderModel - Complete Glyph render model that owns this occurrence.
    */
   constructor(
     definitionCell: Signal<ComponentGlyphDefinition>,
-    locationCell: Signal<AxisLocation>,
+    locationCell: Signal<ExternalAxisLocation>,
     renderModel: GlyphRenderModel,
   ) {
     this.#definitionCell = definitionCell;

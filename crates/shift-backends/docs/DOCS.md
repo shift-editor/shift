@@ -4,11 +4,13 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 ## Architecture Invariants
 
-**Architecture Invariant:** All backends convert to/from `shift-font` values, never exposing format-specific types (norad, glyphs-reader) to callers. Eager readers return `Font`; bounded foreign imports return a glyph-free `Font` header plus batches of owned `Glyph` values. WHY: The rest of the editor operates on one authored model while large imports avoid constructing the complete model at once.
+**Architecture Invariant:** Backends never expose format-specific types (`norad`, `glyphs-reader`) to callers. Authored conversion returns `shift-font` values; retained source reading returns a source-neutral `FontDirectory` plus location-independent `ProjectedGlyph` values without constructing authored objects. WHY: editing needs one authored model, while read-only inspection must not eagerly convert a complete source.
+
+**Architecture Invariant:** `FontDirectory::from_font` is the sole projection from a format's canonical `shift-font::Font` header into retained metadata. Format adapters supply only ordered glyph names/Unicode values and retained geometry handles. Directory source order must match the source IDs used by retained layers, and sparse mapping coordinates are completed with the same axis-default/base semantics as the authored mapping model. WHY: separate format-specific directory builders silently lose metadata or misaddress source geometry.
 
 **Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
 
-**Architecture Invariant:** Eager reader/writer backends are stateless unit structs. A `FontImport` owns the foreign bytes, GLIF directory records, or one upstream-parsed Glyphs source model plus its current cursor; it never owns a complete geometry-resident Shift `Font`. WHY: ordinary conversion stays pure, while bounded Shift conversion retains only format state needed to produce the next batch.
+**Architecture Invariant:** Eager reader/writer backends are stateless unit structs. `OpenTypeFont` retains compiled bytes, `UfoFont` and `DesignspaceFont` retain their indexed GLIF payloads, and `GlyphsFont` retains one upstream-parsed source. Paths are provenance and error context only after open. A `FontImport` is a separate exhaustive bounded conversion cursor; OpenType sources intentionally expose no `FontImporter` capability. WHY: imported sessions must remain coherent and readable after the original path changes or disappears.
 
 **Architecture Invariant:** `UfoWriter` stages a complete UFO beside the destination and swaps it into place only after the staged tree is durable. WHY: a failed save must preserve the previous source rather than leave a partial directory.
 
@@ -22,47 +24,59 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** TTF/OTF, UFO, Designspace, and Glyphs streaming imports convert glyphs in bounded Rayon batches and preserve input order when publishing each batch. Eager readers drain those same canonical streams rather than maintaining a second conversion path. UFO and Designspace share `GlifGlyphStream`; Glyphs parses its source model once, publishes stable glyph identities, then releases owned Shift batches through `GlyphsGlyphStream`. SQLite remains outside this crate and is written by one workspace-owned sink. WHY: one conversion path prevents eager/streaming semantic drift, while concurrent SQLite authors would add contention and weaken transaction ownership.
 
-**Architecture Invariant:** Compiled-font streaming enumerates `maxp` glyph IDs, not only `cmap` mappings. Unencoded glyphs receive their `post`/CFF name or a synthesized `gidN` name, and all Unicode mappings for a glyph share one authored glyph identity. WHY: `cmap` is character lookup, not the complete glyph directory.
-
-**Architecture Invariant:** Compiled-font contour and point identities are deterministic positions within one glyph's emitted outline: `contour_b{glyph-id-hex}_{contour-index-hex}` and `point_b{glyph-id-hex}_{point-index-hex}`. Counters are monotonic from zero; dropping an explicit closing endpoint does not reuse its consumed point index. WHY: compiled fonts have stable glyph/outline order but no Shift identities, and random IDs make equivalent re-imports differ while injecting incompressible entropy into canonical payloads.
+**Architecture Invariant:** Compiled-font directories enumerate `maxp` glyph IDs, not only `cmap` mappings. Unencoded glyphs receive their `post`/CFF name or a synthesized `gidN` name. `GlyphIndex` is the dense backend-local GID and never crosses the native session boundary; the bridge maps it to an eager stable session `GlyphId`. WHY: `cmap` is character lookup, not the complete glyph directory.
 
 **Architecture Invariant:** TrueType quadratic segments remain one `OffCurve` control plus one `QCurve` endpoint in the authored layer. Closing qcurve endpoints transfer their type to the wrapped start point. CFF cubic segments remain cubic. The bridge may project a qcurve endpoint as on-curve because clients infer the quadratic from its single control; canonical storage and source export retain the distinction. WHY: lifting every TrueType quadratic to cubic adds a point and derived coordinates to every segment, inflating canonical documents without adding information.
 
-**Architecture Invariant:** Designspace source locations are imported as complete design-space locations. An omitted source dimension resolves to that axis's user-space default mapped into design space; default-source selection compares against that same completed mapped location and never silently substitutes the first source. A `layer` attribute only selects where a source's outlines live and does not make it ineligible to be the default. Each source's standard metrics are translated from that UFO's metric identities into the Designspace header definitions. WHY: mixing user defaults with design coordinates corrupts interpolation bases, while looking up one UFO's metrics with another UFO's random IDs silently drops non-default master metrics.
+**Architecture Invariant:** Designspace source locations are complete design-space locations. An omitted source dimension resolves to that axis's mapped default; default-source selection compares against that complete location and never substitutes the first source. A `layer` attribute only selects outline storage. Selected-glyph acquisition compiles source layers into a fallback, compatible normalized deltas, and exact-source exceptions; location evaluation occurs later in TypeScript. WHY: mixing user defaults with design coordinates corrupts interpolation bases.
+
+**Architecture Invariant:** `ProjectedGlyph` contains one requested root projection and a deduplicated complete transitive component closure. Each projection validates one fallback shape, optional normalized variation deltas, and incompatible exact-source shapes. Failed reads publish no partial aggregate and remain retryable. Empty and unmapped glyphs are valid projections with identity, metrics, and empty geometry. WHY: passive inspection and synchronous scrubbing need one coherent source-independent aggregate without hidden I/O.
+
+**Architecture Invariant:** `shift-slug::retained` owns page compilation for every source. Projected sources expose `variable_glyph_inputs`, which the bridge passes to `compile_page`; `build_binary_atlas_page` streams ordered glyf/gvar or static CFF curves directly into the same Slug-owned `PageCompiler` without materializing projection descriptors or authored Shift geometry. Page-local OpenType regions are deduplicated, while each distinct glyph region set receives its own complement weight so unrelated tuple supports cannot alter that glyph's base geometry. Before packing, `into_parts` separates CPU atlas geometry from a small `SourceAtlasDescriptor`; the consumer then drops the geometry after packing while retaining the descriptor for glyph mapping and weight evaluation. Fixed pages are bounded compilation/transfer units, not viewport residency: the Grid consumer must install the complete page set before presentation. WHY: all formats must share one retained layout and validation path, while OpenType preserves its direct geometry path.
+
+**Architecture Invariant:** Retained handles represent immutable source generations. Binary and GLIF sources own bytes; Glyphs owns its parsed source model. Projection and atlas reads never inspect the filesystem after open. WHY: directory metadata, lazy geometry, and component dependencies must always come from one coherent generation.
 
 ## Codemap
 
 ```
 src/
-  lib.rs           -- re-exports FontReader, FontWriter, FontBackend, FontImport, and sub-modules
-  import.rs        -- glyph-free foreign header, bounded cursor, and shared GLIF stream
-  traits.rs        -- FontReader, FontWriter, FontBackend trait definitions
-  ufo/
-    mod.rs         -- UfoBackend convenience struct combining reader+writer; round-trip tests
-    import.rs      -- UFO source discovery configured into the shared GLIF stream
-    reader.rs      -- UfoReader eagerly drains the canonical UFO stream
-    writer.rs      -- UfoWriter: shift_font::Font -> atomically written norad::Font
-  glyphs/
-    mod.rs         -- GlyphsReader and bounded stream exports; fixture-based integration tests
-    conversion.rs  -- Glyphs header, glyph geometry, features, and kerning conversion
-    import.rs      -- parsed Glyphs directory plus bounded parallel `GlyphsGlyphStream`
-    reader.rs      -- eager compatibility reader that drains the canonical Glyphs stream
-  designspace/
-    import.rs      -- Designspace source discovery configured into the shared GLIF stream
-  binary/
-    reader.rs      -- maxp-complete TTF/OTF stream plus eager stream draining
-  shift2fontir/
-    source.rs      -- owned Shift FontView snapshot and fontir Source implementation
-    axes.rs         -- Shift axis/mapping conversion and source normalization
-    metadata.rs    -- static metadata, metrics, features, and empty color work
-    stat.rs         -- axis-label conversion to STAT feature syntax
-    glyph.rs       -- static/variable glyph, component, contour, and anchor work
-    kerning.rs     -- static kerning group and pair work
-  export.rs        -- direct fontc TTF compilation and atomic output write
+  lib.rs             -- public backend and retained-source boundary
+  format.rs          -- source format vocabulary
+  import.rs          -- glyph-free foreign header and bounded conversion cursor
+  font_source/
+    mod.rs            -- FontSource/FontImporter split and OpenedFont dispatch
+    types.rs          -- source-local indexes, directories, shapes, deltas, and projections
+    projection.rs     -- shared master-model compilation and exact-source handling
+    geometry.rs       -- source contour normalization for projections
+    inputs.rs         -- projected glyphs -> shift-slug retained PageInput values
+    atlas.rs          -- Slug retained-page aliases, validation, and source errors
+  formats/
+    opentype/
+      source.rs       -- retained TTF/OTF bytes and GID access
+      variable.rs     -- glyf/gvar variation extraction
+      geometry.rs     -- direct curves, IUP deltas, and flattened components
+      metrics.rs      -- HVAR or phantom-point advance contributions
+      inputs.rs       -- direct streaming into retained::PageCompiler
+      reader.rs       -- maxp-complete authored conversion stream
+    ufo/              -- retained UFO source plus eager reader and atomic writer
+    designspace/      -- retained Designspace source, mappings, reader, and writer
+    glyphs/           -- retained Glyphs source, conversion stream, and reader
+  shift2fontir/       -- owned Shift FontView -> fontir/fontc adapter
+  export.rs           -- direct fontc TTF compilation and atomic output write
 ```
 
 ## Key Types
 
+- `FontSource` -- immutable directory plus lazy `glyph(GlyphIndex) -> ProjectedGlyph` acquisition, implemented by every retained foreign handle
+- `FontImporter` -- optional authored-conversion capability implemented by GLIF and Glyphs handles, but not binary handles
+- `OpenedFont` -- dispatched `OpenType`, `Ufo`, `Designspace`, or `Glyphs` retained handle returned by `FontLoader::open_source`
+- `FontDirectory` / `GlyphIndex` -- source-local immutable directory built by `FontDirectory::from_font`, with private fields, read-only accessors, and backend-local addressing
+- `GlyphProjection` -- one fallback shape, optional normalized deltas, and exact-source topology exceptions
+- `ProjectedGlyph` -- requested root projection plus its deduplicated transitive component projections
+- `SourceAtlasPage` -- immutable source-indexed `VariableAtlas` page plus location-to-weight evaluation; its ordered roots contain no Shift IDs
+- `SourceAtlasDescriptor` -- small mapping and weight evaluator retained after `SourceAtlasPage::into_parts` separates disposable CPU geometry
+- `SourceAtlasError` -- direct atlas read, format-capability, and Slug construction failures
+- `OpenTypeFont` / `UfoFont` / `DesignspaceFont` / `GlyphsFont` -- concrete retained source generations
 - `FontImport` -- top-level authored header, an immediately publishable stable-ID/name directory, and layer-aware `next_batch(limit)`, with no glyphs stored in the header
 - `GlyphDirectoryEntry` -- cheap foreign glyph ID and name used before geometry batches are parsed
 - `ImportBatchLimit` -- simultaneous glyph and authored-layer limits; multi-source projects cannot turn a glyph-count bound into an unbounded layer batch
@@ -79,13 +93,15 @@ src/
 
 ## How it works
 
-**Loading a font:** `FontLoader::read_font` retains the eager API but the TTF/OTF, UFO, Designspace, and Glyphs readers implement it by draining their bounded streams. `FontLoader::stream_font` dispatches those sources to the same importers. It first returns complete top-level metadata and a cheap glyph/source directory, then materializes at most the requested batch of `Glyph` values. UFO and Designspace both feed shared GLIF work records into `GlifGlyphStream`; Designspace only adds stable multi-source discovery. Glyphs syntax is parsed once by `glyphs-reader`; `GlyphsGlyphStream` preassigns every glyph identity so component references resolve before their bases are converted. Rayon converts geometry records in parallel; indexed collection preserves glyph order. The workspace writes and releases each Shift batch before requesting another.
+**Loading a font:** `FontLoader::open_source` dispatches TTF/OTF, UFO/Designspace, and Glyphs/Glyphspackage into immutable retained handles. Opening constructs the complete directory and retains source bytes or a parsed source model, but creates no authored `Font`, layer, point identity, or workspace. `FontSource::glyph` lazily parses/projects only the requested root and every transitive component dependency, with no location argument. `FontLoader::read_font` and `stream_font` remain separate explicit authored-conversion APIs.
 
 **Point type mapping (read):** norad uses separate `Move`, `Line`, `Curve`, `OffCurve`, `QCurve` types. The IR collapses `Move`/`Line`/`Curve` into `OnCurve` and keeps `OffCurve` and `QCurve` distinct. On write, context (position in contour, open/closed, preceding point type) is used to reconstruct the correct norad variant.
 
 **Multi-layer support:** `UfoReader` publishes `public.default` first, then preserves the relative authored order of every other entry in `layercontents.plist`. The default layer maps to the IR's default layer; other layers are represented by layer sources. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
 
-**Binary variation metadata:** The TTF/OTF reader imports `fvar` axis definitions, hidden flags, and named instances into the Shift IR. The bounded path enumerates every `maxp` glyph ID, groups all `cmap` values by glyph, deterministically derives contour/point identities from emitted positions, and preserves TrueType quadratics instead of expanding them to cubic control pairs. Binary glyph geometry is still materialized only at the default variation location; recovering editable `gvar` sources is separate work.
+**Binary variation metadata:** The retained TTF/OTF handle exposes `fvar` axes and `avar` version 1 mappings in external/user coordinates. TrueType selected-glyph acquisition compiles `glyf`, `gvar`, and `HVAR` into fallback values plus normalized region deltas, preserving native point provenance, implied quadratic points, and affine composite transforms. Static CFF outlines compile cubic fallback shapes. Evaluation never reopens the source or calls Skrifa after acquisition.
+
+**Direct OpenType atlas:** `build_binary_atlas_page` reads raw glyf points and tuple regions from retained bytes. It applies IUP independently to each unscaled tuple, preserves a stable quadratic topology, flattens ordinary glyf components exactly, and combines HVAR or gvar phantom-point advance contributions with the same region weights. Curves stream directly into `shift_slug::retained::PageCompiler`; static CFF uses that compiler too. The page stores absolute region-peak curves because the retained atlas consumes weighted source values; a deduplicated complement weight makes every glyph's participating source weights sum to one. The consumer separates the atlas and descriptor with `into_parts`, packs and drops the former, and retains the latter. Axis updates evaluate fvar/avar 1 normalization and OpenType support scalars without touching geometry. Static CFF is supported; CFF2, cubic glyf extensions, avar version 2, and VARC remain explicit unsupported capabilities.
 
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions. The upstream parser currently materializes its complete normalized Glyphs source model before the bounded cursor begins; batching bounds Shift glyph conversion and persistence, not source-syntax parsing.
 
@@ -103,11 +119,11 @@ src/
 
 ### Add a new read-only backend
 
-1. Create `src/<format>/mod.rs` and `src/<format>/reader.rs`
-2. Implement `FontReader` for your struct -- the `load` method must return `Font`
-3. Export from `lib.rs` with `pub mod <format>`
-4. Register the new adaptor in `FontLoader::new()` in `shift-core/src/font_loader.rs`
-5. Add the file extension mapping in `format_from_extension` in the same file
+1. Create `src/formats/<format>/mod.rs` and its reader/source modules.
+2. Implement the appropriate authored `FontReader` and/or retained `FontSource` capability.
+3. Export the format from `src/formats/mod.rs` and the public boundary from `lib.rs`.
+4. Register dispatch in `src/font_loader.rs`.
+5. Add extension mapping in `src/format.rs`.
 
 ### Add write support to an existing backend
 
@@ -129,7 +145,19 @@ src/
 - **Glyphs source parsing is eager:** `glyphs-reader` materializes one normalized source model before `GlyphsGlyphStream` starts. Shift geometry conversion, packing, compression, and SQLite writes remain bounded.
 - **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
 - **Cross-axis mappings:** Direct TTF compilation rejects cross-axis mappings until the compiler stack supports `avar` version 2. It never flattens the mapping or falls back to temporary UFO compilation.
+- **Binary atlas capabilities:** Direct Grid compilation supports quadratic glyf/gvar plus HVAR or phantom advances and static CFF. CFF2, cubic glyf extensions, avar version 2, and VARC fail explicitly rather than falling back to another renderer or authored conversion.
 - **Authored STAT tables:** When Shift axis labels exist, export appends a generated `STAT` feature block. If authored feature text also declares `STAT`, the feature compiler reports the conflict.
+
+## Retained OpenType atlas profile
+
+A controlled same-session release comparison on 2026-08-06 retained every packed Source Han Sans VF page to model complete Grid residency. Both the audited `d218d1ad` path and the Slug-owned streaming `PageCompiler` path produced byte-identical `267,786,324`-byte output with 5,489,581 base curves and 5,483,385 stored delta curves.
+
+| Path                          | Complete build + pack | Page build p95 |
+| ----------------------------- | --------------------: | -------------: |
+| Audited `d218d1ad`            |        2,771–2,890 ms | 16.26–16.92 ms |
+| Slug `PageCompiler` streaming |        2,679–2,687 ms | 15.25–15.36 ms |
+
+The same-session comparison is authoritative; older absolute measurements used different runtime conditions. The streaming path preserves output while avoiding descriptor materialization. These are native compiler measurements; transfer, WebGPU upload, complete page-set installation, and first frame belong to desktop validation.
 
 ## Verification
 
@@ -138,11 +166,19 @@ src/
 cargo test -p shift-backends
 
 # Specific tests
+cargo test -p shift-backends font_source --lib
 cargo test -p shift-backends round_trip_ufo
 cargo test -p shift-backends writer_preserves_fractional_coordinates_and_skips_empty_contours
 cargo test -p shift-backends loads_homenaje_glyphs_file
 cargo test -p shift-backends loads_glyphs_package
 cargo test -p shift-backends --test export
+
+# Manual release profile: open/directory, selected projection,
+# complete sequential/parallel projection, and peak RSS
+cargo run -p shift-backends --release --example profile_font_source -- <font.ttf> [glyph-name]
+
+# Complete location-independent binary atlas pages, packing, and retained bytes
+cargo run -p shift-backends --release --example profile_binary_atlas -- <font.ttf>
 ```
 
 ## Related

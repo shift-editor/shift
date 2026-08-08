@@ -1,23 +1,23 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation } from "react-router";
 import { GlyphCatalogCanvas } from "./GlyphCatalogCanvas";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { getShiftHost } from "@/host/shiftHost";
-import { useSignalState } from "@/lib/signals";
-import type { GlyphCatalogItem } from "@/types/glyphCatalog";
-import { useEditor } from "@/workspace/WorkspaceContext";
 
 /** Coordinates the native scroll viewport and its two canvas-owned catalog layers. */
 export const GlyphGrid = memo(function GlyphGrid() {
-  const navigate = useNavigate();
-  const navigateRef = useRef(navigate);
-  navigateRef.current = navigate;
   const catalogActive = useLocation().pathname === "/home";
-  const editor = useEditor();
-  const font = editor.font;
-  const { filteredGlyphs } = useGlyphCatalog();
-  const location = useSignalState(editor.designLocationCell);
+  const {
+    filteredGlyphs,
+    location,
+    metrics,
+    sourceId,
+    atlasSource,
+    observeAtlasInvalidation,
+    canAuthor,
+    openGlyph,
+  } = useGlyphCatalog();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [[viewportWidth, viewportHeight], setViewportSize] = useState<
     readonly [width: number, height: number]
@@ -27,9 +27,6 @@ export const GlyphGrid = memo(function GlyphGrid() {
     () => new GlyphCatalogLayout(viewportWidth, viewportHeight, filteredGlyphs.length),
     [filteredGlyphs.length, viewportHeight, viewportWidth],
   );
-  const metrics = useMemo(() => font.metricsAtLocation(location), [font, location]);
-  const axes = font.getAxes();
-  const sourceId = font.sourceAt(location)?.id ?? null;
   const initialMeasurementLoggedRef = useRef(false);
 
   useLayoutEffect(() => {
@@ -58,7 +55,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     initialMeasurementLoggedRef.current = true;
 
     try {
-      await getShiftHost().workspace.ready();
+      await getShiftHost().session.ready();
     } catch (error) {
       console.error("failed to show measured workspace", error);
     }
@@ -76,18 +73,6 @@ export const GlyphGrid = memo(function GlyphGrid() {
     void showMeasuredWorkspace();
   }, [showMeasuredWorkspace]);
 
-  const handleCellClick = useCallback(
-    async (glyph: GlyphCatalogItem): Promise<void> => {
-      try {
-        await font.loadGlyph(glyph.id);
-        navigateRef.current(`/editor/${encodeURIComponent(glyph.id)}`);
-      } catch (error) {
-        console.error("failed to load Glyph", error);
-      }
-    },
-    [font],
-  );
-
   return (
     <section className="relative h-full min-h-0 w-full overflow-hidden font-ui text-primary">
       <div
@@ -101,11 +86,13 @@ export const GlyphGrid = memo(function GlyphGrid() {
         containerRef={scrollContainerRef}
         glyphs={filteredGlyphs}
         location={location}
-        axes={axes}
         metrics={metrics}
         sourceId={sourceId}
         active={catalogActive}
-        openGlyph={handleCellClick}
+        atlasSource={atlasSource}
+        observeAtlasInvalidation={observeAtlasInvalidation}
+        canAuthor={canAuthor}
+        openGlyph={openGlyph}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}
       />

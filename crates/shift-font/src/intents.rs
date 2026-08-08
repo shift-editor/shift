@@ -10,8 +10,8 @@ use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, Font, FontMetadata,
-    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, Location, MetricDefinition, MetricId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, DesignLocation,
+    Font, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, MetricDefinition, MetricId,
     MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
@@ -163,13 +163,13 @@ pub enum FontIntent {
     CreateSource {
         source_id: SourceId,
         name: String,
-        location: Location,
+        location: DesignLocation,
     },
     /// Replaces the editable authoring values of an existing master source.
     UpdateSource {
         source_id: SourceId,
         name: String,
-        location: Location,
+        location: DesignLocation,
         metric_values: BTreeMap<MetricId, MetricValue>,
         italic_angle: Option<f64>,
         line_gap: Option<f64>,
@@ -623,7 +623,7 @@ impl Font {
         &mut self,
         source_id: SourceId,
         name: &str,
-        location: &Location,
+        location: &DesignLocation,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
         let name = name.trim();
@@ -672,7 +672,7 @@ impl Font {
         &mut self,
         source_id: &SourceId,
         name: &str,
-        location: &Location,
+        location: &DesignLocation,
         metric_values: &BTreeMap<MetricId, MetricValue>,
         italic_angle: Option<f64>,
         line_gap: Option<f64>,
@@ -1172,7 +1172,7 @@ mod tests {
         let axis_id = axis.id();
         font.add_axis(axis).expect("weight axis should be valid");
         let source_id = SourceId::new();
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         location.set(axis_id, 400.0);
 
         let result = font.apply_intents(FontIntentSet {
@@ -1203,7 +1203,7 @@ mod tests {
         glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
 
-        let source_id = font.add_source(Source::new("Other".to_string(), Location::new()));
+        let source_id = font.add_source(Source::new("Other".to_string(), DesignLocation::new()));
         let layer_id = LayerId::new();
         let mut candidate = font.clone();
         let result = candidate.apply_intents(FontIntentSet {
@@ -1251,7 +1251,7 @@ mod tests {
             .expect("test glyph should be valid");
 
         let source_id = SourceId::new();
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         location.set(axis_id, 700.0);
         font.apply_intents(FontIntentSet {
             intents: vec![FontIntent::CreateSource {

@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { CollapsibleSection } from "@/components/sidebar";
+import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { AxesPanel } from "./AxesPanel";
 import { CreateAxisMenu } from "./CreateAxisMenu";
+import { useFontSession } from "@/workspace/WorkspaceContext";
+import PlusIcon from "@/assets/general/plus.svg";
 
 interface AxesSectionProps {
   defaultOpen?: boolean;
@@ -10,6 +12,7 @@ interface AxesSectionProps {
 export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [axisMenuOpen, setAxisMenuOpen] = useState(false);
+  const canAuthor = useFontSession().canAuthor;
 
   return (
     <CollapsibleSection
@@ -17,7 +20,15 @@ export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
       open={open || axisMenuOpen}
       onOpenChange={setOpen}
       isActive={axisMenuOpen}
-      actions={<CreateAxisMenu onOpenChange={setAxisMenuOpen} />}
+      actions={
+        canAuthor ? (
+          <CreateAxisMenu onOpenChange={setAxisMenuOpen} />
+        ) : (
+          <SidebarActionButton label="Create axis" data-read-only-mutation>
+            <PlusIcon className="h-3 w-3" />
+          </SidebarActionButton>
+        )
+      }
     >
       <AxesPanel />
     </CollapsibleSection>

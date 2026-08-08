@@ -5,15 +5,132 @@ use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
-    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, ComponentAnchorAttachment,
-    ComponentAnchorReference, ComponentData, ComponentGlyph, ContourData, FontMetadata,
-    FontMetrics, GlyphChangedEntities, GlyphComponents, GlyphInterpolation, GlyphLayerRecord,
+    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
+    ComponentAnchorAttachment, ComponentAnchorReference, ComponentData, ComponentGlyph,
+    ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
+    GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
     GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
     GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
-    GlyphStructure, InterpolationBasis, InterpolationSupport, Location, MetricDefinition,
-    MetricKind, NamedInstance, PointData, PointType, Source, SourceMetricField, SourceMetricValue,
-    SourceMetricValues, SourceMetricsInterpolationSnapshot,
+    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, Location,
+    MetricDefinition, MetricKind, NamedInstance, PointData, PointType, Source, SourceMetricField,
+    SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis,
+    VariationDelta,
 };
+
+#[napi(object)]
+pub struct NapiSlugSection {
+    pub offset: u32,
+    pub length: u32,
+}
+
+#[napi(object)]
+pub struct NapiSlugLayout {
+    pub base_curves: NapiSlugSection,
+    pub curve_deltas: NapiSlugSection,
+    pub sparse_deltas: NapiSlugSection,
+    pub glyphs: NapiSlugSection,
+    pub sources: NapiSlugSection,
+    pub source_advances: NapiSlugSection,
+    pub component_glyphs: NapiSlugSection,
+    pub component_parts: NapiSlugSection,
+    pub components: NapiSlugSection,
+    pub component_sources: NapiSlugSection,
+    pub anchor_sources: NapiSlugSection,
+    pub line_bits: NapiSlugSection,
+    pub total_length: u32,
+}
+
+#[napi(object)]
+pub struct NapiSlugExactSource {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub glyph_index: u32,
+}
+
+#[napi(object)]
+pub struct NapiSlugGlyph {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    pub default_glyph: u32,
+    pub exact_sources: Vec<NapiSlugExactSource>,
+}
+
+#[napi(object)]
+pub struct NapiSlugWeightSet {
+    pub basis: NapiInterpolationBasis,
+    pub source_weight_indices: Vec<u32>,
+}
+
+#[napi(object)]
+pub struct NapiSlugPreviewExtents {
+    pub horizontal: f64,
+    pub minimum_y: f64,
+    pub maximum_y: f64,
+}
+
+#[napi(object)]
+pub struct NapiSlugAtlas {
+    pub generation: u32,
+    pub band_count: u32,
+    pub weight_count: u32,
+    pub layout: NapiSlugLayout,
+    pub preview_extents: NapiSlugPreviewExtents,
+    pub glyphs: Vec<NapiSlugGlyph>,
+    pub weight_sets: Vec<NapiSlugWeightSet>,
+    pub atlas_glyph_count: u32,
+    pub curve_count: u32,
+    pub component_count: u32,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAxis {
+    pub index: u32,
+    pub tag: String,
+    pub name: String,
+    pub hidden: bool,
+    pub axis_type: String,
+    pub minimum: Option<f64>,
+    pub default: f64,
+    pub maximum: Option<f64>,
+    pub values: Vec<f64>,
+}
+
+#[napi(object)]
+pub struct NapiCatalogMetrics {
+    pub units_per_em: f64,
+    pub ascender: f64,
+    pub descender: f64,
+    pub line_gap: f64,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAtlasGlyph {
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    pub default_glyph: u32,
+    pub exact_sources: Vec<NapiSlugExactSource>,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAtlasPage {
+    pub generation: u32,
+    pub page_index: u32,
+    pub band_count: u32,
+    pub weight_count: u32,
+    pub layout: NapiSlugLayout,
+    pub preview_extents: NapiSlugPreviewExtents,
+    pub glyphs: Vec<NapiCatalogAtlasGlyph>,
+    pub weights: Vec<f64>,
+    pub atlas_glyph_count: u32,
+    pub curve_count: u32,
+    pub component_count: u32,
+}
+
+#[napi(object)]
+pub struct NapiCatalogAtlasWeights {
+    pub page_index: u32,
+    pub weights: Vec<f64>,
+}
 
 #[napi(string_enum = "camelCase")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,6 +367,36 @@ impl From<AxisMapping> for NapiAxisMapping {
 }
 
 #[napi(object)]
+pub struct NapiAxisMappingBasis {
+    #[napi(ts_type = "AxisMappingId")]
+    pub mapping_id: String,
+    #[napi(ts_type = "Array<AxisId>")]
+    pub input_axis_ids: Vec<String>,
+    #[napi(ts_type = "Array<AxisId>")]
+    pub output_axis_ids: Vec<String>,
+    pub basis: NapiVariationBasis,
+}
+
+impl From<AxisMappingBasis> for NapiAxisMappingBasis {
+    fn from(basis: AxisMappingBasis) -> Self {
+        Self {
+            mapping_id: basis.mapping_id.to_string(),
+            input_axis_ids: basis
+                .input_axis_ids
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
+            output_axis_ids: basis
+                .output_axis_ids
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
+            basis: basis.basis.into(),
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiSource {
     #[napi(ts_type = "SourceId")]
     pub id: String,
@@ -449,9 +596,77 @@ impl From<GlyphSnapshot> for NapiGlyphSnapshot {
 }
 
 #[napi(object)]
+pub struct NapiGlyphEntry {
+    #[napi(ts_type = "GlyphId")]
+    pub id: String,
+    pub name: String,
+    pub unicodes: Vec<u32>,
+}
+
+impl From<GlyphEntry> for NapiGlyphEntry {
+    fn from(entry: GlyphEntry) -> Self {
+        Self {
+            id: entry.id.to_string(),
+            name: entry.name.to_string(),
+            unicodes: entry.unicodes,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiFontSnapshot {
+    pub metadata: NapiFontMetadata,
+    pub metrics: NapiFontMetrics,
+    pub metric_definitions: Vec<NapiMetricDefinition>,
+    pub source_metrics_interpolation: Option<NapiSourceMetricsInterpolationSnapshot>,
+    pub glyphs: Vec<NapiGlyphEntry>,
+    pub sources: Vec<NapiSource>,
+    pub axes: Vec<NapiAxis>,
+    pub axis_mappings: Vec<NapiAxisMapping>,
+    pub axis_mapping_bases: Vec<NapiAxisMappingBasis>,
+    pub named_instances: Vec<NapiNamedInstance>,
+}
+
+impl From<FontSnapshot> for NapiFontSnapshot {
+    fn from(snapshot: FontSnapshot) -> Self {
+        Self {
+            metadata: snapshot.metadata.into(),
+            metrics: snapshot.metrics.into(),
+            metric_definitions: snapshot
+                .metric_definitions
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            source_metrics_interpolation: snapshot.source_metrics_interpolation.map(Into::into),
+            glyphs: snapshot.glyphs.into_iter().map(Into::into).collect(),
+            sources: snapshot.sources.into_iter().map(Into::into).collect(),
+            axes: snapshot.axes.into_iter().map(Into::into).collect(),
+            axis_mappings: snapshot.axis_mappings.into_iter().map(Into::into).collect(),
+            axis_mapping_bases: snapshot
+                .axis_mapping_bases
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            named_instances: snapshot
+                .named_instances
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        }
+    }
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiComponentTransformKind {
+    Decomposed,
+    Affine,
+}
+
+#[napi(object)]
 pub struct NapiGlyphLayerShape {
     pub structure: NapiGlyphStructure,
     pub values: Float64Array,
+    pub component_transform_kind: NapiComponentTransformKind,
 }
 
 impl From<GlyphLayerShape> for NapiGlyphLayerShape {
@@ -459,6 +674,10 @@ impl From<GlyphLayerShape> for NapiGlyphLayerShape {
         Self {
             structure: shape.structure.into(),
             values: shape.values.into(),
+            component_transform_kind: match shape.component_transform_kind {
+                ComponentTransformKind::Decomposed => NapiComponentTransformKind::Decomposed,
+                ComponentTransformKind::Affine => NapiComponentTransformKind::Affine,
+            },
         }
     }
 }
@@ -484,11 +703,38 @@ impl From<InterpolationSupport> for NapiInterpolationSupport {
 }
 
 #[napi(object)]
+pub struct NapiVariationDelta {
+    pub region: Vec<NapiInterpolationSupport>,
+    pub values: Float64Array,
+}
+
+impl From<VariationDelta> for NapiVariationDelta {
+    fn from(delta: VariationDelta) -> Self {
+        Self {
+            region: delta.region.into_iter().map(Into::into).collect(),
+            values: delta.values.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiVariationBasis {
+    pub deltas: Vec<NapiVariationDelta>,
+}
+
+impl From<VariationBasis> for NapiVariationBasis {
+    fn from(basis: VariationBasis) -> Self {
+        Self {
+            deltas: basis.deltas.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiInterpolationBasis {
     #[napi(ts_type = "Array<SourceId>")]
     pub source_ids: Vec<String>,
-    pub regions: Vec<Vec<NapiInterpolationSupport>>,
-    pub coefficients: Vec<Float64Array>,
+    pub basis: NapiVariationBasis,
 }
 
 impl From<InterpolationBasis> for NapiInterpolationBasis {
@@ -499,12 +745,7 @@ impl From<InterpolationBasis> for NapiInterpolationBasis {
                 .into_iter()
                 .map(|source_id| source_id.to_string())
                 .collect(),
-            regions: basis
-                .regions
-                .into_iter()
-                .map(|region| region.into_iter().map(Into::into).collect())
-                .collect(),
-            coefficients: basis.coefficients.into_iter().map(Into::into).collect(),
+            basis: basis.basis.into(),
         }
     }
 }
@@ -536,6 +777,19 @@ impl From<GlyphInterpolation> for NapiGlyphInterpolation {
         Self {
             basis: interpolation.basis.into(),
             sources: interpolation.sources.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphVariation {
+    pub basis: NapiVariationBasis,
+}
+
+impl From<GlyphVariation> for NapiGlyphVariation {
+    fn from(variation: GlyphVariation) -> Self {
+        Self {
+            basis: variation.basis.into(),
         }
     }
 }
@@ -669,6 +923,7 @@ pub struct NapiGlyphProjection {
     pub glyph_id: String,
     pub fallback: NapiGlyphLayerShape,
     pub interpolation: Option<NapiGlyphInterpolation>,
+    pub variation: Option<NapiGlyphVariation>,
     pub exact_source_shapes: Vec<NapiGlyphSourceShape>,
     pub components: NapiGlyphComponents,
     pub exact_source_components: Vec<NapiGlyphSourceComponents>,
@@ -682,6 +937,7 @@ impl From<GlyphProjection> for NapiGlyphProjection {
             glyph_id: projection.glyph_id.to_string(),
             fallback: projection.fallback.into(),
             interpolation: projection.interpolation.map(Into::into),
+            variation: projection.variation.map(Into::into),
             exact_source_shapes: projection
                 .exact_source_shapes
                 .into_iter()
@@ -1207,6 +1463,8 @@ pub struct NapiFontReplacement {
     pub axes: Option<Vec<NapiAxis>>,
     /// Full mapping list when font-level axis mappings changed; absent otherwise.
     pub axis_mappings: Option<Vec<NapiAxisMapping>>,
+    /// Rust-compiled mapping bases when axes or mappings changed; absent otherwise.
+    pub axis_mapping_bases: Option<Vec<NapiAxisMappingBasis>>,
     /// Full font-owned metric definitions when their identity or order changed.
     pub metric_definitions: Option<Vec<NapiMetricDefinition>>,
     /// Refreshed source-metric interpolation model when any of its inputs changed.

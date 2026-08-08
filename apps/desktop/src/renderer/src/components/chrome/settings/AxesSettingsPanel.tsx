@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Axis, AxisId } from "@shift/types";
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab, cn } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
+import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
 import { CreateAxisMenu } from "@/components/variation/CreateAxisMenu";
 import { useAxes } from "@/hooks/useAxes";
@@ -14,9 +15,10 @@ import { useAxisDraft } from "./useAxisDraft";
 
 interface AxesSettingsPanelProps {
   initialAxisId?: AxisId;
+  canAuthor: boolean;
 }
 
-export const AxesSettingsPanel = ({ initialAxisId }: AxesSettingsPanelProps) => {
+export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPanelProps) => {
   const font = useFont();
   const axes = useAxes();
   const [selectedAxisId, setSelectedAxisId] = useState<AxisId | null>(
@@ -42,7 +44,13 @@ export const AxesSettingsPanel = ({ initialAxisId }: AxesSettingsPanelProps) => 
       <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Axes</h2>
-          <CreateAxisMenu onAxisCreated={setCreatedAxisId} />
+          {canAuthor ? (
+            <CreateAxisMenu onAxisCreated={setCreatedAxisId} />
+          ) : (
+            <SidebarActionButton label="Create axis" disabled>
+              <PlusIcon className="h-3 w-3" />
+            </SidebarActionButton>
+          )}
         </div>
 
         <nav className="scrollbar-hidden flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
@@ -60,6 +68,7 @@ export const AxesSettingsPanel = ({ initialAxisId }: AxesSettingsPanelProps) => 
                 <SidebarActionButton
                   label={`Delete ${axis.name}`}
                   className="h-8 hover:bg-icon-button-hover"
+                  disabled={!canAuthor}
                   onClick={(event) => {
                     event.stopPropagation();
                     font.deleteAxis(axis.id);
@@ -79,7 +88,7 @@ export const AxesSettingsPanel = ({ initialAxisId }: AxesSettingsPanelProps) => 
       </aside>
 
       {selectedAxis ? (
-        <AxisEditor key={selectedAxis.id} axis={selectedAxis} />
+        <AxisEditor key={selectedAxis.id} axis={selectedAxis} canAuthor={canAuthor} />
       ) : (
         <div className="flex items-center justify-center text-xs text-secondary">
           Create an axis to edit its definition, mapping, and styles.
@@ -89,7 +98,7 @@ export const AxesSettingsPanel = ({ initialAxisId }: AxesSettingsPanelProps) => 
   );
 };
 
-const AxisEditor = ({ axis }: { axis: Axis }) => {
+const AxisEditor = ({ axis, canAuthor }: { axis: Axis; canAuthor: boolean }) => {
   const [section, setSection] = useState<AxisSettingsSection>("definition");
   const draft = useAxisDraft(axis);
 
@@ -119,13 +128,19 @@ const AxisEditor = ({ axis }: { axis: Axis }) => {
 
       <div className="scrollbar-hidden min-h-0 flex-1 overflow-auto">
         <TabsPanel value="definition">
-          <AxisDefinitionPanel draft={draft} />
+          <fieldset disabled={!canAuthor} className="contents">
+            <AxisDefinitionPanel draft={draft} />
+          </fieldset>
         </TabsPanel>
         <TabsPanel value="mapping">
-          <AxisMappingPanel axis={draft.axis} />
+          <fieldset disabled={!canAuthor} className="contents">
+            <AxisMappingPanel axis={draft.axis} />
+          </fieldset>
         </TabsPanel>
         <TabsPanel value="styles">
-          <AxisStylesPanel draft={draft} />
+          <fieldset disabled={!canAuthor} className="contents">
+            <AxisStylesPanel draft={draft} />
+          </fieldset>
         </TabsPanel>
       </div>
     </Tabs>

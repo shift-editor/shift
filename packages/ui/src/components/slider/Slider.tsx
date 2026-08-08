@@ -25,6 +25,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
       <BaseSlider.Root
         ref={ref}
         className={cn("relative flex items-center w-full select-none touch-none", className)}
+        thumbAlignment="edge"
         onValueChange={onValueChange ? (value) => onValueChange(value as number) : undefined}
         {...props}
       >

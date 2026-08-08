@@ -1,1 +1,1 @@
-export { GlyphCatalog } from "./GlyphCatalog";
+export { GlyphCatalogView } from "./GlyphCatalogView";

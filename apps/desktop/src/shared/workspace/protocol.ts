@@ -2,7 +2,11 @@ import type {
   AppliedChange,
   Axis,
   AxisMapping,
+  AxisMappingBasis,
+  CatalogAtlasPage,
+  CatalogAtlasWeights,
   FontIntent,
+  FontSnapshot,
   FontMetadata,
   FontMetrics,
   GlyphId,
@@ -10,6 +14,7 @@ import type {
   GlyphProjection,
   GlyphRecord,
   GlyphState,
+  GlyphSnapshot,
   Location,
   MetricDefinition,
   SourceMetricsInterpolationSnapshot,
@@ -32,6 +37,7 @@ export type WorkspaceSnapshot = {
   sources: Source[];
   axes: Axis[];
   axisMappings: AxisMapping[];
+  axisMappingBases: AxisMappingBasis[];
   namedInstances: NamedInstance[];
 };
 
@@ -43,12 +49,6 @@ export type WorkspaceGlyphLayerSnapshot = {
 
 export type WorkspaceGlyphSnapshotRequest = {
   glyphId: GlyphId;
-};
-
-export type WorkspaceGlyphSnapshot = {
-  glyphId: GlyphId;
-  projection?: GlyphProjection;
-  layers: WorkspaceGlyphLayerSnapshot[];
 };
 
 /** Process-local origin required to stream or discard one prepared atlas page. */
@@ -69,6 +69,28 @@ export type WorkspaceSlugAtlasPageRequest = {
 };
 
 export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
+
+/** Immutable product mode for one live font session. */
+export type FontSessionMode = "authored" | "imported";
+
+/** Main-visible identity for one retained, read-only foreign source session. */
+export type FontSourceSession = {
+  sessionId: string;
+  canonicalPath: string;
+};
+
+/** Renderer catch-up state for the retained backend of the shared catalog. */
+export type FontSourceSnapshot = FontSourceSession & {
+  font: FontSnapshot;
+};
+
+/** One deterministic page request expressed in source-local glyph indexes. */
+export type FontSourceAtlasPageRequest = {
+  pageIndex: number;
+  glyphIds: GlyphId[];
+  coordinates: number[];
+  alignment: number;
+};
 
 /** Bounded byte delivery over a dedicated transferred port. */
 export type ByteStreamMessage =
@@ -146,6 +168,11 @@ export type ShellCallMap = {
     response: WorkspaceDocumentState;
   };
   "workspace.close": { request: { discard: boolean }; response: null };
+  "source.open": {
+    request: { path: string };
+    response: FontSourceSession;
+  };
+  "source.close": { request: void; response: null };
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
 };
@@ -165,6 +192,27 @@ export type ShellEventMap = {
  */
 export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
+  "source.snapshot": { request: void; response: FontSourceSnapshot | null };
+  "source.glyph": {
+    request: { glyphId: GlyphId };
+    response: GlyphSnapshot[];
+  };
+  "source.atlasPagePrepare": {
+    request: FontSourceAtlasPageRequest;
+    response: CatalogAtlasPage;
+  };
+  "source.atlasPageStream": {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
+  "source.atlasPageDiscard": {
+    request: { pageIndex: number; generation: number };
+    response: null;
+  };
+  "source.atlasWeights": {
+    request: { coordinates: number[] };
+    response: CatalogAtlasWeights[];
+  };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
   /**
    * The one mutation verb. Requests carry intents; the response is pure
@@ -208,7 +256,7 @@ export type SyncCallMap = {
   };
   "workspace.glyphSnapshots": {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };
-    response: WorkspaceGlyphSnapshot[];
+    response: GlyphSnapshot[];
   };
   "workspace.glyphProjections": {
     request: { glyphIds: GlyphId[] };

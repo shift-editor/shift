@@ -3,10 +3,10 @@ import type {
   WorkspacePackageIdentity,
 } from "../../shared/workspace/protocol";
 import type { WorkspaceProcess } from "./WorkspaceProcess";
-import type { WorkspaceId } from "./WorkspaceSession";
+import type { FontSessionId } from "./FontSessionHost";
 
 export type IndexedPackageSession = {
-  readonly workspaceId: WorkspaceId;
+  readonly workspaceId: FontSessionId;
   readonly workspaceProcess: Pick<WorkspaceProcess, "onDocumentChanged">;
 };
 
@@ -15,13 +15,13 @@ export type IndexedPackageSession = {
  *
  * @remarks
  * This is main-process live-session bookkeeping. It enforces that at most one
- * live {@link WorkspaceId} owns a package address, and it follows document
+ * live {@link FontSessionId} owns a package address, and it follows document
  * state changes because Save As can move a session between package addresses.
  */
 export class PackageSessionIndex {
-  readonly #workspaceIdByPackageKey = new Map<string, WorkspaceId>();
-  readonly #packageKeyByWorkspaceId = new Map<WorkspaceId, string>();
-  readonly #unlistenByWorkspaceId = new Map<WorkspaceId, () => void>();
+  readonly #workspaceIdByPackageKey = new Map<string, FontSessionId>();
+  readonly #packageKeyByWorkspaceId = new Map<FontSessionId, string>();
+  readonly #unlistenByWorkspaceId = new Map<FontSessionId, () => void>();
 
   /**
    * Tracks document state changes for one live workspace session.
@@ -47,7 +47,7 @@ export class PackageSessionIndex {
    *
    * @param workspaceId - session identity being unregistered.
    */
-  untrack(workspaceId: WorkspaceId): void {
+  untrack(workspaceId: FontSessionId): void {
     this.#remove(workspaceId);
 
     const unlisten = this.#unlistenByWorkspaceId.get(workspaceId);
@@ -62,7 +62,7 @@ export class PackageSessionIndex {
    * @param state - latest document state; null clears package ownership.
    * @throws {Error} when another live session already owns the package address.
    */
-  update(workspaceId: WorkspaceId, state: WorkspaceDocumentState | null): void {
+  update(workspaceId: FontSessionId, state: WorkspaceDocumentState | null): void {
     const key = state ? packageKeyForState(state) : null;
     if (key) {
       const existing = this.#workspaceIdByPackageKey.get(key);
@@ -84,7 +84,7 @@ export class PackageSessionIndex {
    * @param identity - package id and canonical source path to look up.
    * @returns null when no live session owns the package address.
    */
-  workspaceIdForPackage(identity: WorkspacePackageIdentity): WorkspaceId | null {
+  workspaceIdForPackage(identity: WorkspacePackageIdentity): FontSessionId | null {
     return this.#workspaceIdByPackageKey.get(packageKey(identity)) ?? null;
   }
 
@@ -94,12 +94,12 @@ export class PackageSessionIndex {
    * @param state - document state emitted by the utility process.
    * @returns null when the state is not package-backed or is not indexed.
    */
-  workspaceIdForState(state: WorkspaceDocumentState): WorkspaceId | null {
+  workspaceIdForState(state: WorkspaceDocumentState): FontSessionId | null {
     const key = packageKeyForState(state);
     return key ? (this.#workspaceIdByPackageKey.get(key) ?? null) : null;
   }
 
-  #remove(workspaceId: WorkspaceId): void {
+  #remove(workspaceId: FontSessionId): void {
     const previousKey = this.#packageKeyByWorkspaceId.get(workspaceId);
     if (!previousKey) return;
 

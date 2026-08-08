@@ -14,9 +14,10 @@ const shiftHost: ShiftHost = {
   document: {
     connect: invoke(ipcRenderer, "document.connect"),
   },
-  workspace: {
-    connect: invoke(ipcRenderer, "workspace.connect"),
-    ready: invoke(ipcRenderer, "workspace.ready"),
+  session: {
+    mode: invoke(ipcRenderer, "session.mode"),
+    connect: invoke(ipcRenderer, "session.connect"),
+    ready: invoke(ipcRenderer, "session.ready"),
   },
   ui: {
     onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),
@@ -30,8 +31,8 @@ const shiftHost: ShiftHost = {
 contextBridge.exposeInMainWorld("shiftHost", shiftHost);
 
 // MessagePorts cannot cross the context bridge; relay them into the page.
-ipcRenderer.on("workspace.port", (event: IpcRendererEvent) => {
-  window.postMessage({ type: "workspace.port" }, "*", event.ports);
+ipcRenderer.on("session.port", (event: IpcRendererEvent) => {
+  window.postMessage({ type: "session.port" }, "*", event.ports);
 });
 
 ipcRenderer.on("document.port", (event: IpcRendererEvent) => {

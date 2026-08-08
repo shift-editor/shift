@@ -23,8 +23,9 @@ mod tests {
 
     use serde_json::json;
     use shift_font::{
-        Axis, AxisId, AxisLabel, AxisLabelId, AxisMapping, AxisMappingPoint, Contour, Font, Glyph,
-        GlyphLayer, LayerId, Location, NamedInstance, NamedInstanceId, Point, Source, SourceId,
+        Axis, AxisId, AxisLabel, AxisLabelId, AxisMapping, AxisMappingPoint, Contour,
+        DesignLocation, ExternalLocation, Font, Glyph, GlyphLayer, LayerId, Location,
+        NamedInstance, NamedInstanceId, Point, Source, SourceId,
     };
     use shift_source::ShiftSourcePackage;
 
@@ -193,7 +194,7 @@ mod tests {
         )]);
         font.add_axis(axis).expect("test axis should be valid");
 
-        let mut instance_location = Location::new();
+        let mut instance_location = ExternalLocation::new();
         instance_location.set(axis_id.clone(), 700.0);
         font.add_named_instance(NamedInstance::with_id(
             NamedInstanceId::from_raw("bold"),
@@ -207,12 +208,12 @@ mod tests {
         font.add_source(Source::with_id(
             regular_id,
             "Regular".to_string(),
-            Location::new(),
+            DesignLocation::new(),
             None,
         ));
 
         let bold_id = SourceId::from_raw("bold");
-        let mut bold_location = Location::new();
+        let mut bold_location = DesignLocation::new();
         bold_location.set(axis_id, 700.0);
         font.add_source(Source::with_id(
             bold_id.clone(),

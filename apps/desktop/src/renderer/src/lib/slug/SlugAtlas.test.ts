@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type {
-  GlyphId,
-  SlugAtlas as SlugAtlasDescriptor,
-  SlugSection,
-  SourceId,
-} from "@shift/types";
+import type { GlyphId, SlugSection, SourceId } from "@shift/types";
+import { mintAxisId, mintAxisMappingId, mintSourceId } from "@shift/types";
+import type { GlyphAtlasPage } from "@/types/glyphAtlas";
 import { SlugAtlas } from "./SlugAtlas";
 
 const emptySection = (): SlugSection => ({ offset: 0, length: 0 });
 
-function residentFixture(): { descriptor: SlugAtlasDescriptor; bytes: Uint8Array<ArrayBuffer> } {
+function residentFixture(): {
+  descriptor: GlyphAtlasPage;
+  bytes: Uint8Array<ArrayBuffer>;
+} {
   const glyphs = { offset: 256, length: 64 };
   const componentGlyphs = { offset: 512, length: 24 };
-  const descriptor: SlugAtlasDescriptor = {
+  const descriptor: GlyphAtlasPage = {
     generation: 7,
+    pageIndex: 0,
     bandCount: 8,
     weightCount: 1,
     layout: {
@@ -31,6 +32,7 @@ function residentFixture(): { descriptor: SlugAtlasDescriptor; bytes: Uint8Array
       lineBits: emptySection(),
       totalLength: 536,
     },
+    previewExtents: { horizontal: 0, minimumY: 0, maximumY: 0 },
     glyphs: [
       {
         glyphId: "glyph-a" as GlyphId,
@@ -39,9 +41,9 @@ function residentFixture(): { descriptor: SlugAtlasDescriptor; bytes: Uint8Array
       },
     ],
     weightSets: [],
-    atlasGlyphCount: 2,
-    curveCount: 5,
-    componentCount: 4,
+    weightAxes: [],
+    weightMappingBases: [],
+    resolvedWeights: null,
   };
   const bytes = new Uint8Array(descriptor.layout.totalLength);
   const view = new DataView(bytes.buffer);
@@ -54,6 +56,61 @@ function residentFixture(): { descriptor: SlugAtlasDescriptor; bytes: Uint8Array
 
 function buffer(): GPUBuffer {
   return { destroy() {} } as GPUBuffer;
+}
+
+function mappedWeightFixture(): GlyphAtlasPage {
+  const { descriptor } = residentFixture();
+  const axisId = mintAxisId();
+
+  return {
+    ...descriptor,
+    weightCount: 2,
+    weightAxes: [
+      {
+        id: axisId,
+        tag: "wght",
+        name: "Weight",
+        role: "external",
+        axisType: "continuous",
+        minimum: 100,
+        default: 400,
+        maximum: 900,
+        labels: [],
+        hidden: false,
+      },
+    ],
+    weightMappingBases: [
+      {
+        mappingId: mintAxisMappingId(),
+        inputAxisIds: [axisId],
+        outputAxisIds: [axisId],
+        basis: {
+          deltas: [
+            {
+              region: [{ axisId, lower: 0, peak: 1, upper: 1 }],
+              values: Float64Array.of(-0.2),
+            },
+          ],
+        },
+      },
+    ],
+    weightSets: [
+      {
+        basis: {
+          sourceIds: [mintSourceId()],
+          basis: {
+            deltas: [
+              {
+                region: [{ axisId, lower: 0, peak: 0.8, upper: 0.8 }],
+                values: Float64Array.of(1),
+              },
+            ],
+          },
+        },
+        sourceWeightIndices: [1],
+      },
+    ],
+  };
 }
 
 describe("resident atlas binding layout", () => {
@@ -98,6 +155,26 @@ describe("resident atlas frame planning", () => {
     expect(Array.from(atlas.variableParams(3))).toEqual([
       3, 8, 128, 0, 0, 0, 0, 256, 0, 0, 512, 0, 0, 0, 0, 0,
     ]);
+  });
+
+  it("uses backend-resolved weights without changing resident geometry", () => {
+    const { descriptor } = residentFixture();
+    const atlas = new SlugAtlas(
+      { ...descriptor, resolvedWeights: [0.25] },
+      buffer(),
+      buffer(),
+      128,
+    );
+
+    expect(Array.from(atlas.weights([]))).toEqual([0.25]);
+    atlas.setResolvedWeights([0.75]);
+    expect(Array.from(atlas.weights([]))).toEqual([0.75]);
+  });
+
+  it("maps external coordinates once before evaluating authored weights", () => {
+    const atlas = new SlugAtlas(mappedWeightFixture(), buffer(), buffer(), 128);
+
+    expect(Array.from(atlas.weights([650]))).toEqual([1, 0.5]);
   });
 
   it("captures split descriptors and plans an exact component variant", () => {

@@ -1083,7 +1083,7 @@ fn applies_axis_and_source_created_change_set_and_survives_reopen() {
     let path = temp_store_path("axis-source-reopen");
 
     let font_axis_id = shift_font::AxisId::from_raw("axis_weight");
-    let mut location = shift_font::Location::new();
+    let mut location = shift_font::DesignLocation::new();
     location.set(font_axis_id.clone(), 700.0);
     let source = shift_font::Source::new("Bold".to_string(), location);
     let source_id = SourceId::new(source.id().to_string());
@@ -1150,7 +1150,7 @@ fn replace_font_state_persists_axes_and_source_locations() {
         900.0,
     ))
     .unwrap();
-    let mut location = shift_font::Location::new();
+    let mut location = shift_font::DesignLocation::new();
     location.set(font_axis_id, 700.0);
     let source = shift_font::Source::new("Bold".to_string(), location);
     let source_id = SourceId::new(source.id().to_string());
@@ -1208,7 +1208,7 @@ fn replace_and_load_font_state_preserves_source_roles_and_layer_names() {
     let mut font = shift_font::Font::new();
     let mut medium = shift_font::Source::with_filename(
         "Medium".to_string(),
-        shift_font::Location::new(),
+        shift_font::DesignLocation::new(),
         "Family-Bold.ufo".to_string(),
     );
     medium.set_layer_name(Some("Medium".to_string()));

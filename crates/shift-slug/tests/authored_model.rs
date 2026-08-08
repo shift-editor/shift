@@ -1,8 +1,8 @@
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
     test_support::{sample_font, sample_variable_font},
-    Anchor, Component, Contour, DecomposedTransform, Glyph, GlyphId, GlyphLayer,
-    InterpolationBasis, LayerId, Location, PointType, SourceId,
+    Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
+    InterpolationBasis, LayerId, PointType, SourceId,
 };
 use shift_slug::{
     add_authored_component_projection_glyph, add_authored_glyph,
@@ -60,7 +60,7 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     let atlas = builder.finish();
 
     let axis_id = font.axes()[0].id();
-    let mut location = Location::new();
+    let mut location = DesignLocation::new();
     location.set(axis_id, 600.0);
     let source_weights = interpolation
         .basis()
@@ -241,7 +241,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
         .map(|source| source.location().clone())
         .collect::<Vec<_>>();
     for step in 0..17 {
-        let mut location = Location::new();
+        let mut location = DesignLocation::new();
         for (axis_index, axis) in font.axes().iter().enumerate() {
             let fraction = ((step * 7 + axis_index * 11) % 17) as f64 / 16.0;
             location.set(
@@ -385,7 +385,7 @@ fn component_model_resolves_varying_decomposed_transform() {
             .unwrap();
     let atlas = builder.finish();
     let axis_id = font.axes()[0].id();
-    let mut location = Location::new();
+    let mut location = DesignLocation::new();
     location.set(axis_id, 600.0);
     let source_weights = projection
         .interpolation()
@@ -474,7 +474,7 @@ fn component_model_resolves_variable_anchor_attachment() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = Location::new();
+    let mut location = DesignLocation::new();
     location.set(font.axes()[0].id(), 600.0);
     let source_weights = interpolation
         .basis()
@@ -591,7 +591,7 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = Location::new();
+    let mut location = DesignLocation::new();
     location.set(font.axes()[0].id(), 650.0);
     let mut weights = vec![0.0_f32; next_weight_index as usize];
     weights[0] = 1.0;

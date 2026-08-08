@@ -16,6 +16,10 @@ export class SlugAtlasPage {
     return this.atlas.glyphIds;
   }
 
+  get pageIndex(): number {
+    return this.atlas.pageIndex;
+  }
+
   destroy(): void {
     this.buffers.destroy();
     this.atlas.destroy();

@@ -4,7 +4,7 @@ import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
 import type { GlyphRenderModel } from "@/lib/model/Glyph";
 import type { Signal } from "@/lib/signals/signal";
-import type { AxisLocation } from "@/types/variation";
+import type { ExternalAxisLocation } from "@/types/variation";
 import type { Bounds, Point2D } from "@shift/geo";
 import type { GlyphRecord, Source } from "@shift/types";
 
@@ -17,15 +17,19 @@ import type { GlyphRecord, Source } from "@shift/types";
  *
  */
 export class Positioner {
-  position(run: SegmentedRun, editor: Editor, designLocation: Signal<AxisLocation>): PositionedRun {
+  position(
+    run: SegmentedRun,
+    editor: Editor,
+    externalLocation: Signal<ExternalAxisLocation>,
+  ): PositionedRun {
     let totalAdvance = 0;
     const glyphs: PositionedRun["glyphs"] = [];
-    const source = editor.font.sourceAtOrDefault(designLocation.peek());
+    const source = editor.activeSource ?? editor.font.sourceAtOrDefault(externalLocation.peek());
 
     for (const [idx, g] of run.glyphs.entries()) {
       const record = editor.font.recordForName(g.glyphName);
       const glyph = record ? editor.glyphForId(record.id) : null;
-      const renderModel = glyph?.renderModelAt(designLocation) ?? null;
+      const renderModel = glyph?.renderModelAt(externalLocation, editor.activeSourceIdCell) ?? null;
       let glyphName = g.glyphName;
       let bounds: Bounds | null = null;
 

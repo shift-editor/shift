@@ -3,22 +3,22 @@ import { GlyphCatalogController } from "./GlyphCatalogController";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { useTheme } from "@/context/ThemeContext";
 import type { GlyphCatalogCanvasProps, GlyphCatalogItem } from "@/types/glyphCatalog";
-import { useEditor } from "@/workspace/WorkspaceContext";
 
 /** Thin React shell around the imperative, canvas-owned glyph catalog. */
 export function GlyphCatalogCanvas({
   containerRef,
   glyphs,
   location,
-  axes,
   metrics,
   sourceId,
   active,
+  atlasSource,
+  observeAtlasInvalidation,
+  canAuthor,
   openGlyph,
   onFirstFrame,
   onUnavailable,
 }: GlyphCatalogCanvasProps) {
-  const editor = useEditor();
   const { themeName } = useTheme();
   const glyphCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,8 +38,13 @@ export function GlyphCatalogCanvas({
       container,
       glyphCanvas,
       overlayCanvas,
-      editor.font,
-      setEditingGlyph,
+      atlasSource,
+      observeAtlasInvalidation,
+      canAuthor
+        ? (glyph) => {
+            setEditingGlyph(glyph);
+          }
+        : null,
       () => {
         inputRef.current?.blur();
         setEditingGlyph(null);
@@ -57,14 +62,21 @@ export function GlyphCatalogCanvas({
       controllerRef.current = null;
       controller.destroy();
     };
-  }, [containerRef, editor.font, onFirstFrame, onUnavailable, openGlyph]);
+  }, [
+    atlasSource,
+    canAuthor,
+    containerRef,
+    observeAtlasInvalidation,
+    onFirstFrame,
+    onUnavailable,
+    openGlyph,
+  ]);
 
   useLayoutEffect(() => {
     controllerRef.current?.update(
       {
         glyphs,
         location,
-        axes,
         metrics,
         sourceId,
         themeName,
@@ -73,7 +85,7 @@ export function GlyphCatalogCanvas({
       },
       inputContainerRef.current,
     );
-  }, [active, axes, editingGlyph, glyphs, location, metrics, sourceId, themeName]);
+  }, [active, editingGlyph, glyphs, location, metrics, sourceId, themeName]);
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;

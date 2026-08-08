@@ -26,14 +26,14 @@ import type { Positioner } from "./Positioner";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
 import type { Signal } from "@/lib/signals/signal";
-import type { AxisLocation } from "@/types/variation";
+import type { ExternalAxisLocation } from "@/types/variation";
 
 export interface TextLayoutParams {
   items: readonly TextItem[];
   origin: Point2D;
   editor: Editor;
   positioner: Positioner;
-  designLocation: Signal<AxisLocation>;
+  externalLocation: Signal<ExternalAxisLocation>;
 }
 
 interface AssembledLayout {
@@ -53,15 +53,18 @@ export class TextLayout {
   readonly #items: readonly TextItem[];
 
   constructor(params: TextLayoutParams) {
-    const { items, origin, editor, positioner, designLocation } = params;
+    const { items, origin, editor, positioner, externalLocation } = params;
     this.#items = items;
-    this.metrics = editor.font.metricsAtLocation(designLocation.peek());
+    const activeSourceId = editor.activeSourceId;
+    this.metrics = activeSourceId
+      ? editor.font.metricsForSource(activeSourceId)
+      : editor.font.metricsAtLocation(externalLocation.peek());
     this.origin = origin;
     this.bufferLength = items.length;
 
     // splitParagraphs → segmentRuns → position → assemble
     const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((p) => ({
-      runs: segmentRuns(p).map((run) => positioner.position(run, editor, designLocation)),
+      runs: segmentRuns(p).map((run) => positioner.position(run, editor, externalLocation)),
       clusterStart: p.clusterStart,
       clusterEnd: p.clusterStart + p.glyphs.length + 1,
     }));

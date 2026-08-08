@@ -579,6 +579,7 @@ module.exports = nativeBinding
 module.exports.Bridge = nativeBinding.Bridge
 module.exports.NapiAxisRole = nativeBinding.NapiAxisRole
 module.exports.NapiAxisType = nativeBinding.NapiAxisType
+module.exports.NapiComponentTransformKind = nativeBinding.NapiComponentTransformKind
 module.exports.NapiMetricKind = nativeBinding.NapiMetricKind
 module.exports.NapiPointType = nativeBinding.NapiPointType
 module.exports.NapiSourceMetricField = nativeBinding.NapiSourceMetricField

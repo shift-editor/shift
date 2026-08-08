@@ -1,9 +1,10 @@
 import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
-import type { Axis, GlyphId, GlyphName, SourceId, SourceMetrics } from "@shift/types";
+import type { CatalogAxis, CatalogMetrics, GlyphId, GlyphName, SourceId } from "@shift/types";
 import type { RefObject } from "react";
+import type { RenderGlyph } from "./glyphRender";
 import type { ThemeName } from "./uiState";
-import type { AxisLocation } from "./variation";
+import type { GlyphAtlasSource } from "./glyphAtlas";
 
 export type GlyphCatalogCellArea = "preview" | "name";
 
@@ -14,7 +15,10 @@ export interface GlyphCatalogItem {
   readonly unicode: number | null;
 }
 
-export interface GlyphCatalogState {
+/** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
+export type CatalogLocation = readonly number[];
+
+export interface GlyphCatalogSource {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
@@ -26,6 +30,17 @@ export interface GlyphCatalogState {
   selectAll: () => void;
   selectCategory: (category: GlyphCategory) => void;
   selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
+  atlasSource: GlyphAtlasSource;
+  observeAtlasInvalidation: (
+    listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
+  ) => () => void;
+  location: CatalogLocation;
+  axes: readonly CatalogAxis[];
+  metrics: CatalogMetrics;
+  sourceId: SourceId | null;
+  canAuthor: boolean;
+  openedGlyph: RenderGlyph | null;
+  openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
 }
 
 export interface GlyphCatalogLayoutMetrics {
@@ -65,20 +80,11 @@ export interface GlyphCatalogFrame {
 
 export type GridReadiness = "Initial" | "Stale" | "Complete" | "Unavailable";
 
-/** One fixed root page selected for an atomic Grid replacement. */
-export interface GlyphCatalogAtlasPage {
-  readonly glyphIds: GlyphId[];
-  readonly pageIndex: number;
-  readonly pageCount: number;
-  readonly replacementPageIndices: number[];
-}
-
 /** Mutable catalog inputs requested by React for the latest authored revision. */
 export interface GlyphCatalogControllerFrame {
   readonly glyphs: readonly GlyphCatalogItem[];
-  readonly location: AxisLocation;
-  readonly axes: readonly Axis[];
-  readonly metrics: SourceMetrics;
+  readonly location: CatalogLocation;
+  readonly metrics: CatalogMetrics;
   readonly sourceId: SourceId | null;
   readonly themeName: ThemeName;
   readonly active: boolean;
@@ -93,11 +99,13 @@ export interface GlyphNameInputProps {
 export interface GlyphCatalogCanvasProps {
   readonly containerRef: RefObject<HTMLDivElement | null>;
   readonly glyphs: readonly GlyphCatalogItem[];
-  readonly location: AxisLocation;
-  readonly axes: readonly Axis[];
-  readonly metrics: SourceMetrics;
+  readonly location: CatalogLocation;
+  readonly metrics: CatalogMetrics;
   readonly sourceId: SourceId | null;
   readonly active: boolean;
+  readonly atlasSource: GlyphAtlasSource;
+  readonly observeAtlasInvalidation: GlyphCatalogSource["observeAtlasInvalidation"];
+  readonly canAuthor: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;

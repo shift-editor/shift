@@ -2,13 +2,19 @@ import { describe, expect, it, beforeEach } from "vitest";
 import type { AxisId, GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
 import {
   mintAxisId,
+  mintAxisMappingId,
   mintContourId,
   mintGlyphId,
   mintLayerId,
   mintPointId,
   mintSourceId,
 } from "@shift/types";
-import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
+import {
+  defaultExternalAxisLocation,
+  externalAxisLocationFromLocation,
+  externalAxisLocationFromRecord,
+  withExternalAxisValue,
+} from "@/lib/variation/location";
 import { signal } from "@/lib/signals/signal";
 import { TestEditor } from "@/testing/TestEditor";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
@@ -191,6 +197,71 @@ async function loadGlyphLayer(stack: WorkspaceStack, glyphId: GlyphId, source: S
   return layer;
 }
 
+it("maps external locations once across source creation, instances, and exact layers", async () => {
+  const editor = new TestEditor();
+  await editor.startSession();
+  const glyph = editor.glyphForId(editor.glyphRecord!.id)!;
+  editor.requireGlyphLayer().setXAdvance(300);
+  await editor.settle();
+
+  const axisId = editor.font.createAxis({
+    tag: "wght",
+    name: "Weight",
+    role: "external",
+    axisType: "continuous",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
+  });
+  await editor.settle();
+  await editor.font.setAxisMappings([
+    {
+      id: mintAxisMappingId(),
+      name: "Weight curve",
+      inputs: [axisId],
+      outputs: [axisId],
+      points: [
+        { input: { values: { [axisId]: 100 } }, output: { values: { [axisId]: 100 } } },
+        { input: { values: { [axisId]: 400 } }, output: { values: { [axisId]: 400 } } },
+        { input: { values: { [axisId]: 900 } }, output: { values: { [axisId]: 800 } } },
+      ],
+    },
+  ]);
+
+  const blackExternal = externalAxisLocationFromRecord({ [axisId]: 900 });
+  const blackSourceId = editor.createSource("Black", blackExternal);
+  await editor.settle();
+  glyph.layerForSource(blackSourceId)!.setXAdvance(500);
+  await editor.settle();
+
+  const blackSource = editor.font.source(blackSourceId);
+  if (!blackSource) throw new Error("Expected Black source");
+  expect(blackSource.location.values[axisId]).toBeCloseTo(800);
+  expect(editor.font.sourceAt(blackExternal)?.id).toBe(blackSourceId);
+  expect(glyph.layerAt(blackExternal)?.sourceId).toBe(blackSourceId);
+
+  const instanceId = editor.font.createNamedInstance({
+    name: "Black",
+    location: { values: { [axisId]: 900 } },
+    postscriptName: "UntitledFont-Black",
+  });
+  await editor.settle();
+  const instance = editor.font.namedInstances.find((candidate) => candidate.id === instanceId);
+  if (!instance) throw new Error("Expected Black instance");
+
+  editor.setSourceToDefault();
+  editor.setExternalLocation(externalAxisLocationFromLocation(instance.location));
+  expect(editor.activeSourceId).toBeNull();
+  expect(editor.sceneGlyphRenderModel?.xAdvance).toBe(500);
+
+  editor.setSourceToDefault();
+  editor.selectSource(blackSourceId);
+  expect(editor.activeSourceId).toBe(blackSourceId);
+  expect(editor.sceneGlyphRenderModel?.xAdvance).toBe(500);
+});
+
 describe("variable editing across sources", () => {
   let stack: WorkspaceStack;
   let glyphId: GlyphId;
@@ -228,7 +299,7 @@ describe("variable editing across sources", () => {
     const axis = stack.font.getAxes()[0]!;
 
     // wght 550 is halfway between the masters at 400 and 700.
-    const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    const mid = withExternalAxisValue(defaultExternalAxisLocation(stack.font.getAxes()), axis, 550);
     const renderModel = glyph.renderModelAt(signal(mid));
 
     expect(glyph.layerAt(mid)).toBeNull();
@@ -261,9 +332,7 @@ describe("variable editing across sources", () => {
       hidden: false,
     });
     await editor.settle();
-    const sourceId = editor.createSource("Bold", {
-      values: { [axisId]: 700 } as Record<AxisId, number>,
-    });
+    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
     await editor.settle();
     glyph.layerForSource(sourceId)!.setXAdvance(500);
     await editor.settle();
@@ -273,12 +342,12 @@ describe("variable editing across sources", () => {
     run.setSingleGlyph(glyph.handle);
     expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(300);
 
-    const mid = withAxisValue(
-      defaultAxisLocation(editor.font.getAxes()),
+    const mid = withExternalAxisValue(
+      defaultExternalAxisLocation(editor.font.getAxes()),
       editor.font.getAxes()[0]!,
       550,
     );
-    editor.setDesignLocation(mid);
+    editor.setExternalLocation(mid);
 
     expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(400);
   });
@@ -286,12 +355,22 @@ describe("variable editing across sources", () => {
   it("materializes interpolated geometry and metrics at a new source", async () => {
     const glyph = await loadGlyph(stack, glyphId);
     const axis = stack.font.getAxes()[0]!;
-    const location = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    const location = withExternalAxisValue(
+      defaultExternalAxisLocation(stack.font.getAxes()),
+      axis,
+      550,
+    );
     const sourceId = stack.editCoordinator.transaction("Create source", () => {
-      const id = stack.font.createSource("Medium", {
-        values: { [axis.id]: 550 } as Record<AxisId, number>,
-      });
-      stack.font.materializeGlyphLayer(glyph.id, id, regularLayerId, location);
+      const id = stack.font.createSource(
+        "Medium",
+        externalAxisLocationFromRecord({ [axis.id]: 550 }),
+      );
+      stack.font.materializeGlyphLayer(
+        glyph.id,
+        id,
+        regularLayerId,
+        glyph.geometryAt(location).values,
+      );
       return id;
     });
     await stack.editCoordinator.settled();
@@ -315,7 +394,11 @@ describe("variable editing across sources", () => {
     await loadGlyphLayer(stack, glyphId, bold);
 
     const axis = stack.font.getAxes()[0]!;
-    const atBold = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 700);
+    const atBold = withExternalAxisValue(
+      defaultExternalAxisLocation(stack.font.getAxes()),
+      axis,
+      700,
+    );
     const renderModel = glyph.renderModelAt(signal(atBold));
 
     expect(glyph.layerAt(atBold)?.id).toBe(boldLayerId);
@@ -326,7 +409,7 @@ describe("variable editing across sources", () => {
     const glyph = await loadGlyph(stack, glyphId);
     const boldSource = await loadGlyphLayer(stack, glyphId, bold);
     const axis = stack.font.getAxes()[0]!;
-    const mid = withAxisValue(defaultAxisLocation(stack.font.getAxes()), axis, 550);
+    const mid = withExternalAxisValue(defaultExternalAxisLocation(stack.font.getAxes()), axis, 550);
     const renderModel = glyph.renderModelAt(signal(mid));
 
     boldSource.setXAdvance(700);

@@ -1,4 +1,5 @@
 import type { GlyphId } from "@shift/types";
+import type { GlyphAtlasPageWeights } from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame, GlyphPreviewInstance } from "@/types/glyphPreview";
 import { SlugAtlas } from "./SlugAtlas";
 import { SlugAtlasPage } from "./SlugAtlasPage";
@@ -84,6 +85,15 @@ export class SlugRenderer {
     return glyphIds.every((glyphId) => this.#pageByGlyph.has(glyphId));
   }
 
+  setResolvedWeights(updates: readonly GlyphAtlasPageWeights[]): void {
+    const pagesByIndex = new Map([...this.#pages].map((page) => [page.pageIndex, page]));
+    for (const update of updates) {
+      const page = pagesByIndex.get(update.pageIndex);
+      if (!page) throw new Error(`resident Slug page ${update.pageIndex} is missing`);
+      page.atlas.setResolvedWeights(update.weights);
+    }
+  }
+
   draw(frame: GlyphPreviewFrame): void {
     if (this.#disposed) return;
     if (frame.instances.length === 0) {
@@ -101,7 +111,7 @@ export class SlugRenderer {
     }
 
     const encoder = this.#device.createCommandEncoder({ label: "shift Slug frame" });
-    let rendered = false;
+    const renderCounts = new Map<SlugAtlasPage, number>();
     for (const [page, instances] of instancesByPage) {
       const packed = page.atlas.frame(instances);
       if (packed.instanceCount === 0) continue;
@@ -122,39 +132,28 @@ export class SlugRenderer {
         pass.dispatchWorkgroups(packed.instanceCount * page.atlas.bandCount * 2);
         pass.end();
       }
-      {
-        const pass = encoder.beginRenderPass({
-          label: "shift Slug render",
-          colorAttachments: [
-            {
-              view: this.#context.getCurrentTexture().createView(),
-              loadOp: rendered ? "load" : "clear",
-              clearValue: { r: 0, g: 0, b: 0, a: 0 },
-              storeOp: "store",
-            },
-          ],
-        });
-        pass.setPipeline(this.#pipelines.render);
-        setGroups(pass, page.buffers.renderGroups);
-        pass.draw(6, packed.instanceCount);
-        pass.end();
-      }
-      rendered = true;
+      renderCounts.set(page, packed.instanceCount);
     }
 
-    if (!rendered) {
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: this.#context.getCurrentTexture().createView(),
-            loadOp: "clear",
-            clearValue: { r: 0, g: 0, b: 0, a: 0 },
-            storeOp: "store",
-          },
-        ],
-      });
-      pass.end();
+    const pass = encoder.beginRenderPass({
+      label: "shift Slug render",
+      colorAttachments: [
+        {
+          view: this.#context.getCurrentTexture().createView(),
+          loadOp: "clear",
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          storeOp: "store",
+        },
+      ],
+    });
+    if (renderCounts.size > 0) {
+      pass.setPipeline(this.#pipelines.render);
+      for (const [page, instanceCount] of renderCounts) {
+        setGroups(pass, page.buffers.renderGroups);
+        pass.draw(6, instanceCount);
+      }
     }
+    pass.end();
     this.#device.queue.submit([encoder.finish({ label: "shift Slug frame" })]);
   }
 

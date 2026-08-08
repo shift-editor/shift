@@ -13,23 +13,25 @@ import {
 import { EditableSidebarInput } from "@/components/editor/sidebar-right/EditableSidebarInput";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useAxes } from "@/hooks/useAxes";
-import { useDesignLocation } from "@/hooks/useDesignLocation";
-import { axisValue, withAxisValue } from "@/lib/variation/location";
-import { useFont } from "@/workspace/WorkspaceContext";
+import { useExternalLocation } from "@/hooks/useExternalLocation";
+import { axisVaries } from "@/lib/variation/axis";
+import { axisValue, withExternalAxisValue } from "@/lib/variation/location";
+import { useFont, useFontSession } from "@/workspace/WorkspaceContext";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 export const AxesPanel = () => {
   const font = useFont();
-  const axes = useAxes();
-  const [location, setDesignLocation] = useDesignLocation();
+  const canAuthor = useFontSession().canAuthor;
+  const axes = useAxes().filter(axisVaries);
+  const [location, setExternalLocation] = useExternalLocation();
   const settings = useSettingsNavigation();
 
-  if (axes.length === 0) return <p className="text-ui text-muted pl-2">No axes defined</p>;
+  if (axes.length === 0) return <p className="text-ui text-muted pl-2">No varying axes</p>;
 
   const onAxisChange = (axis: Axis, value: number) => {
-    const nextLocation = withAxisValue(location, axis, value);
-    setDesignLocation(nextLocation);
+    const nextLocation = withExternalAxisValue(location, axis, value);
+    setExternalLocation(nextLocation);
   };
 
   const resetAxis = (axis: Axis) => {
@@ -42,34 +44,37 @@ export const AxesPanel = () => {
 
   return (
     <div className="flex flex-col gap-1">
-      {axes.length > 0 &&
-        axes.map((axis) => (
-          <div key={axis.id} className="flex flex-col gap-1">
-            <div className="flex items-center justify-between px-2">
-              <span className="text-ui text-secondary">{axis.name}</span>
-            </div>
+      {axes.map((axis) => (
+        <div key={axis.id} className="flex flex-col gap-1">
+          <div className="flex items-center justify-between px-2">
+            <span className="text-ui text-secondary">{axis.name}</span>
+          </div>
 
-            <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_1.5rem] items-center gap-4 pl-2">
-              <EditableSidebarInput
-                value={axisValue(location, axis)}
-                className="w-14"
-                onValueChange={(value) => onAxisChange(axis, value)}
-              />
-              <AxisSlider
-                axis={axis}
-                value={axisValue(location, axis)}
-                onChange={(value) => onAxisChange(axis, value)}
-                onReset={() => resetAxis(axis)}
-              />
+          <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_1.5rem] items-center gap-4 pl-2">
+            <EditableSidebarInput
+              value={axisValue(location, axis)}
+              className="w-14"
+              onValueChange={(value) => onAxisChange(axis, value)}
+            />
+            <AxisSlider
+              axis={axis}
+              value={axisValue(location, axis)}
+              onChange={(value) => onAxisChange(axis, value)}
+              onReset={() => resetAxis(axis)}
+            />
+            {canAuthor ? (
               <AxisActionsMenu
                 axis={axis}
                 onEdit={() => settings.open({ category: "axes", axisId: axis.id })}
                 onReset={() => resetAxis(axis)}
                 onDelete={() => deleteAxis(axis)}
               />
-            </div>
+            ) : (
+              <span />
+            )}
           </div>
-        ))}
+        </div>
+      ))}
     </div>
   );
 };

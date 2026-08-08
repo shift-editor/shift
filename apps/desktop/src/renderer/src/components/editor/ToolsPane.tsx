@@ -11,7 +11,7 @@ interface ToolbarIconProps {
   name: ToolName;
   tooltip: string;
   activeTool: ToolName | null;
-  onClick: () => void;
+  onClick?: () => void;
 }
 export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeTool, onClick }) => {
   const isActive = activeTool === name;
@@ -26,6 +26,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeT
           aria-label={tooltip}
           isActive={isActive}
           onClick={onClick}
+          data-read-only-mutation={onClick ? undefined : true}
           size="icon"
         />
       </TooltipTrigger>

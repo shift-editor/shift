@@ -1,8 +1,8 @@
-import type { SourceMetrics } from "@shift/types";
+import type { GlyphGuideMetrics } from "@/types/glyphRender";
 import type { Canvas } from "../Canvas";
 
 export class Guides {
-  draw(canvas: Canvas, metrics: SourceMetrics, advance: number): void {
+  draw(canvas: Canvas, metrics: GlyphGuideMetrics, advance: number): void {
     const { color, widthPx } = canvas.theme.guides;
     const lw = canvas.pxToUpm(widthPx);
 
