@@ -30,7 +30,7 @@ test.describe("variable imported font projection", () => {
     const slider = page.getByRole("slider").first();
     await expect(slider).toBeVisible();
 
-    const variationSidebar = page.locator("aside").first();
+    const variationSidebar = page.locator(".shift-editor-shell aside").first();
     await expect(variationSidebar.getByText("Regular", { exact: true })).toHaveCount(2);
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
     await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveCount(0);

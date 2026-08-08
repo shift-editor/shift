@@ -443,7 +443,7 @@ async function createVariableDesignspace(
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const sourceId = font.createSource("Bold", { values: { [axisId]: 900 } });
+    const sourceId = font.createSource("Bold", new Map([[axisId, 900]]));
     await font.editCoordinator.settled();
     const source = font.sources.find((candidate) => candidate.id === sourceId);
     if (!source || source.metricValues.length === 0) {

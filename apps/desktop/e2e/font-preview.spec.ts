@@ -54,7 +54,10 @@ test.describe("retained font source Grid preview", () => {
     await expect(page.locator("#marker-canvas")).toBeVisible();
     const readOnlyGlyphInputs = page.locator("aside").last().locator("input:disabled");
     await expect(readOnlyGlyphInputs).toHaveCount(3);
-    expect((await readOnlyGlyphInputs.allInputValues()).every((value) => value !== "")).toBe(true);
+    const readOnlyGlyphValues = await readOnlyGlyphInputs.evaluateAll((inputs) =>
+      inputs.map((input) => (input as HTMLInputElement).value),
+    );
+    expect(readOnlyGlyphValues.every((value) => value !== "")).toBe(true);
 
     const selected = await page.evaluate(() => {
       const session = window.shiftSession;
