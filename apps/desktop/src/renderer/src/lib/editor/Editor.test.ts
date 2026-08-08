@@ -183,7 +183,7 @@ describe("Editor scene bootstrap", () => {
 
     expect(editor.glyphForId(node.glyphId)?.layerForSource(sourceId)).toBeNull();
 
-    editor.selectSource(sourceId);
+    editor.selectSourceForEditing(sourceId);
     await editor.settle();
 
     const materializedLayer = editor.glyphForId(node.glyphId)?.layerForSource(sourceId);

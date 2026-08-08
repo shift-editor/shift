@@ -150,7 +150,7 @@ pub(crate) fn font_header(
             .iter()
             .filter(|instance| instance.active)
             .filter_map(|instance| instance.axes_values.get(index))
-            .map(|value| value.into_inner());
+            .map(|value| mapping.unmap(value.into_inner()));
         let external_values = mapping
             .user_values()
             .chain(design_values.iter().map(|value| mapping.unmap(*value)))
@@ -253,12 +253,13 @@ pub(crate) fn font_header(
                     ExternalLocation::from_map(
                         axis_ids_by_index
                             .iter()
+                            .zip(&axis_mappings)
                             .enumerate()
-                            .map(|(index, axis_id)| {
+                            .map(|(index, (axis_id, mapping))| {
                                 let value = instance
                                     .axes_values
                                     .get(index)
-                                    .map(|value| value.into_inner())
+                                    .map(|value| mapping.unmap(value.into_inner()))
                                     .unwrap_or_else(|| font.axes()[index].default());
                                 (axis_id.clone(), value)
                             })

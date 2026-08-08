@@ -25,10 +25,19 @@ export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
 
   if (sources.length === 0) return null;
 
+  const selectSource = (sourceId: SourceId) => {
+    if (canAuthor) {
+      editor.selectSourceForEditing(sourceId);
+      return;
+    }
+
+    editor.selectSource(sourceId);
+  };
+
   const deleteSource = (sourceId: SourceId) => {
     const fallbackSource = sources.find((source) => source.id !== sourceId);
     if (activeSourceId === sourceId && fallbackSource) {
-      editor.selectSource(fallbackSource.id);
+      selectSource(fallbackSource.id);
     }
     editor.font.deleteSource(sourceId);
   };
@@ -39,7 +48,7 @@ export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
         <SidebarActionRow
           key={s.id}
           isActive={s.id === activeSourceId}
-          onClick={() => editor.selectSource(s.id)}
+          onClick={() => selectSource(s.id)}
           contentClassName="h-6 text-ui"
           actions={
             canAuthor ? (

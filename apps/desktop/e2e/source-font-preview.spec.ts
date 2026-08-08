@@ -47,7 +47,30 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
 
   await viewport.click({ position: { x: 50, y: 50 } });
   await page.waitForURL(/#\/editor\//);
+
+  const sceneCanvas = page.locator("#scene-canvas");
+  const beforeSourceFrame = await sceneCanvas.screenshot();
+  const sourceButtons = page
+    .locator(".shift-editor-shell aside")
+    .first()
+    .getByRole("button", { name: "Regular", exact: true });
+  await expect(sourceButtons).toHaveCount(2);
+  const targetSourceId = await page.evaluate(() => window.shiftSession?.font.sources[1]?.id);
+  await sourceButtons.nth(1).click();
+  await expect
+    .poll(() => page.evaluate(() => window.shiftSession?.editor.activeSourceId))
+    .toBe(targetSourceId);
+  await expect
+    .poll(() => page.evaluate(() => window.shiftSession?.catalog.locationCell.value))
+    .toEqual(beforeLocation);
+  await expect
+    .poll(async () => (await sceneCanvas.screenshot()).equals(beforeSourceFrame))
+    .toBe(false);
+
   await page.getByRole("slider").first().press("End");
+  await expect
+    .poll(() => page.evaluate(() => window.shiftSession?.editor.activeSourceId))
+    .toBeNull();
   await expect
     .poll(() => page.evaluate(() => window.shiftSession?.catalog.locationCell.value))
     .not.toEqual(beforeLocation);

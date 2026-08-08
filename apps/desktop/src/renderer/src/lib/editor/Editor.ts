@@ -205,7 +205,7 @@ export class Editor {
       name: "editor.externalLocation",
     });
     this.#activeSourceId = signal<SourceId | null>(
-      this.#sourceIdAtLocation(initialExternalLocation),
+      this.font.sourceAt(initialExternalLocation)?.id ?? null,
       {
         name: "editor.source.active",
       },
@@ -459,11 +459,10 @@ export class Editor {
     return this.#externalLocation.peek();
   }
 
-  /** Sets the external user-space coordinate shared by editor views. */
+  /** Selects an interpolated external user-space location shared by editor views. */
   public setExternalLocation(location: ExternalAxisLocation): void {
-    const next = cloneExternalAxisLocation(location);
-    this.#externalLocation.set(next);
-    this.#activeSourceId.set(this.#sourceIdAtLocation(next));
+    this.#externalLocation.set(cloneExternalAxisLocation(location));
+    this.#activeSourceId.set(null);
   }
 
   /**
@@ -739,18 +738,22 @@ export class Editor {
     this.selection.select(layer.allPoints.map((point) => point.id));
   }
 
+  /** Selects an existing exact source layer without changing the external location. */
+  public selectSource(sourceId: SourceId): void {
+    if (!this.font.source(sourceId)) return;
+
+    this.#activeSourceId.set(sourceId);
+  }
+
   /**
-   * Selects a font source for the current editor glyph.
+   * Selects a source for editing, materializing the current glyph layer when absent.
    *
    * @remarks
-   * Source switching is the lazy glyph-layer materialization boundary. If the
-   * current glyph has no authored layer at `sourceId`, this captures its
-   * resolved interpolated instance before moving the editor to the source
-   * location. Unopened glyphs remain sparse.
-   *
-   * @param sourceId - Existing font source to make active in the editor.
+   * This is the authored-only lazy glyph-layer materialization boundary. The
+   * current interpolated geometry is captured only for the opened glyph;
+   * unopened glyphs remain sparse.
    */
-  public selectSource(sourceId: SourceId): void {
+  public selectSourceForEditing(sourceId: SourceId): void {
     const source = this.font.source(sourceId);
     if (!source) return;
 
@@ -760,7 +763,7 @@ export class Editor {
         (glyph) => glyph.geometryForSource(source.id).values,
       );
     });
-    this.#activeSourceId.set(source.id);
+    this.selectSource(source.id);
   }
 
   /**
@@ -806,15 +809,9 @@ export class Editor {
     this.scene.updateNode({ id: node.id, sourceId });
   }
 
-  /**
-   * Return the shared external location to the font default.
-   */
+  /** Return the shared external location to the font default. */
   public setSourceToDefault(): void {
     this.setExternalLocation(this.font.defaultLocation());
-  }
-
-  #sourceIdAtLocation(location: ExternalAxisLocation): SourceId | null {
-    return this.font.sourceAt(location)?.id ?? null;
   }
 
   public get textRuns(): TextRuns {

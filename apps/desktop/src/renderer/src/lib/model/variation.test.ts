@@ -253,7 +253,7 @@ it("maps external locations once across source creation, instances, and exact la
 
   editor.setSourceToDefault();
   editor.setExternalLocation(externalAxisLocationFromLocation(instance.location));
-  expect(editor.activeSourceId).toBe(blackSourceId);
+  expect(editor.activeSourceId).toBeNull();
   expect(editor.sceneGlyphRenderModel?.xAdvance).toBe(500);
 
   editor.setSourceToDefault();

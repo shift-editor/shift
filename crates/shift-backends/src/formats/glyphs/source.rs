@@ -318,6 +318,42 @@ mod tests {
             .join(name)
     }
 
+    const MAPPED_INSTANCE_GLYPHS: &str = r#"{
+.appVersion = "3414";
+customParameters = (
+{
+name = "Axis Mappings";
+value = {
+wght = {
+100 = 40;
+500 = 62;
+700 = 73;
+};
+};
+},
+{
+name = Axes;
+value = (
+{
+Name = Weight;
+Tag = wght;
+}
+);
+}
+);
+familyName = Mapped;
+fontMaster = (
+{ ascender = 800; capHeight = 700; descender = -200; id = light; weightValue = 40; xHeight = 500; },
+{ ascender = 800; capHeight = 700; descender = -200; id = medium; weightValue = 62; xHeight = 500; },
+{ ascender = 800; capHeight = 700; descender = -200; id = bold; weightValue = 73; xHeight = 500; }
+);
+glyphs = ();
+instances = (
+{ interpolationWeight = 62; name = Medium; }
+);
+unitsPerEm = 1000;
+}"#;
+
     #[test]
     fn directory_sources_keep_retained_master_order() {
         let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
@@ -345,6 +381,26 @@ mod tests {
             assert_eq!(source.index, SourceIndex::new(index as u32));
             assert_eq!(source.location.as_ref(), location);
         }
+    }
+
+    #[test]
+    fn mapped_instances_use_external_coordinates() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("Mapped.glyphs");
+        fs::write(&path, MAPPED_INSTANCE_GLYPHS).unwrap();
+
+        let font = GlyphsFont::open(&path).unwrap();
+        let crate::font_source::VariationAxisKind::Continuous {
+            minimum,
+            default,
+            maximum,
+        } = &font.directory.axes[0].kind
+        else {
+            panic!("expected a continuous weight axis");
+        };
+        assert_eq!((*minimum, *default, *maximum), (100.0, 100.0, 700.0));
+        assert_eq!(font.directory.sources[1].location.as_ref(), [62.0]);
+        assert_eq!(font.directory.instances[0].location.as_ref(), [500.0]);
     }
 
     #[test]
