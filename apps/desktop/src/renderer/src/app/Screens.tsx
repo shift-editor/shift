@@ -70,6 +70,7 @@ const FontSessionScreens = () => {
 };
 
 const ShiftSessionSetup = () => {
+  const session = useFontSession();
   const font = useFont();
   const editor = useEditor();
   const documentLoaded = useSignalState(font.loadedCell);
@@ -78,7 +79,8 @@ const ShiftSessionSetup = () => {
     if (!documentLoaded) return;
 
     editor.setExternalLocation(font.defaultLocation());
-  }, [documentLoaded, editor, font]);
+    if (session.canAuthor) editor.selectSource(font.defaultSource.id);
+  }, [documentLoaded, editor, font, session.canAuthor]);
 
   return null;
 };
