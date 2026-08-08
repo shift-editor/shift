@@ -212,4 +212,42 @@ test.describe("retained font source Grid preview", () => {
     });
     expect(reopenedGlyphId).toBe(selected.glyphId);
   });
+
+  test("shows imported font settings with disabled authoring controls", async ({ page }) => {
+    await expect.poll(() => page.evaluate(() => window.shiftSession?.canAuthor)).toBe(false);
+
+    await page.getByLabel(/Display and edit font information/).click();
+    const settingsDialog = page.getByRole("dialog", { name: "Settings" });
+    await expect(settingsDialog).toBeVisible();
+    await expect(page.getByText("Read-only preview")).toBeHidden();
+
+    const styleNameInput = settingsDialog.getByLabel("Style Name");
+    await expect(styleNameInput).toHaveValue("Regular");
+    await expect(styleNameInput).toBeDisabled();
+
+    const fontControls = settingsDialog.locator("main input, main textarea");
+    await expect.poll(() => fontControls.count()).toBeGreaterThan(0);
+    await expect
+      .poll(() =>
+        fontControls.evaluateAll((controls) =>
+          controls.every((control) => control.matches(":disabled")),
+        ),
+      )
+      .toBe(true);
+
+    await settingsDialog.getByRole("button", { name: "Sources", exact: true }).click();
+    await expect(settingsDialog.getByLabel("Create source")).toBeDisabled();
+    const sourceControls = settingsDialog.locator("main input");
+    await expect.poll(() => sourceControls.count()).toBeGreaterThan(0);
+    await expect
+      .poll(() =>
+        sourceControls.evaluateAll((controls) =>
+          controls.every((control) => control.matches(":disabled")),
+        ),
+      )
+      .toBe(true);
+
+    await settingsDialog.getByLabel("Close settings").click();
+    await expect(settingsDialog).toBeHidden();
+  });
 });

@@ -12,7 +12,7 @@ interface InstancesSectionProps {
 export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
-  const workspace = useFontSession().workspace;
+  const canAuthor = useFontSession().canAuthor;
 
   return (
     <CollapsibleSection
@@ -21,7 +21,7 @@ export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps)
       onOpenChange={setOpen}
       isActive={instanceMenuOpen}
       actions={
-        workspace ? (
+        canAuthor ? (
           <CreateInstanceMenu onOpenChange={setInstanceMenuOpen} />
         ) : (
           <SidebarActionButton label="Create instance" data-read-only-mutation>
@@ -30,7 +30,7 @@ export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps)
         )
       }
     >
-      <Instances editable={workspace !== null} />
+      <Instances canAuthor={canAuthor} />
     </CollapsibleSection>
   );
 };

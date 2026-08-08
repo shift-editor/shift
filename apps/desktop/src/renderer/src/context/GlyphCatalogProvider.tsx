@@ -21,6 +21,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const routeLocation = useLocation();
   const glyphInfo = getGlyphInfo();
   const catalog = session.catalog;
+  const canAuthor = session.canAuthor;
   const workspace = session.workspace;
 
   const availableGlyphs = useSignalState(catalog.glyphsCell);
@@ -192,7 +193,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     axes,
     metrics,
     sourceId,
-    editable: workspace !== null,
+    canAuthor,
     openedGlyph,
     openGlyph,
     createQuickGlyph,

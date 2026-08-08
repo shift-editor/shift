@@ -38,7 +38,7 @@ export interface GlyphCatalogSource {
   axes: readonly CatalogAxis[];
   metrics: CatalogMetrics;
   sourceId: SourceId | null;
-  editable: boolean;
+  canAuthor: boolean;
   openedGlyph: RenderGlyph | null;
   openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
 }
@@ -105,7 +105,7 @@ export interface GlyphCatalogCanvasProps {
   readonly active: boolean;
   readonly atlasSource: GlyphAtlasSource;
   readonly observeAtlasInvalidation: GlyphCatalogSource["observeAtlasInvalidation"];
-  readonly editable: boolean;
+  readonly canAuthor: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;

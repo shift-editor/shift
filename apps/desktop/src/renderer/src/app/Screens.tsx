@@ -63,7 +63,7 @@ const FontSessionScreens = () => {
         <div className={catalogActive ? undefined : "relative z-10"}>
           <Outlet />
         </div>
-        {session.workspace ? null : <ReadOnlyNoticeDialog />}
+        {session.canAuthor ? null : <ReadOnlyNoticeDialog />}
       </SettingsNavigationProvider>
     </GlyphCatalogProvider>
   );

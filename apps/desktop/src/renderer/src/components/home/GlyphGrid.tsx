@@ -15,7 +15,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     sourceId,
     atlasSource,
     observeAtlasInvalidation,
-    editable,
+    canAuthor,
     openGlyph,
   } = useGlyphCatalog();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +91,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
         active={catalogActive}
         atlasSource={atlasSource}
         observeAtlasInvalidation={observeAtlasInvalidation}
-        editable={editable}
+        canAuthor={canAuthor}
         openGlyph={openGlyph}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}

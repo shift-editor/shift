@@ -12,7 +12,7 @@ interface AxesSectionProps {
 export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [axisMenuOpen, setAxisMenuOpen] = useState(false);
-  const workspace = useFontSession().workspace;
+  const canAuthor = useFontSession().canAuthor;
 
   return (
     <CollapsibleSection
@@ -21,7 +21,7 @@ export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
       onOpenChange={setOpen}
       isActive={axisMenuOpen}
       actions={
-        workspace ? (
+        canAuthor ? (
           <CreateAxisMenu onOpenChange={setAxisMenuOpen} />
         ) : (
           <SidebarActionButton label="Create axis" data-read-only-mutation>

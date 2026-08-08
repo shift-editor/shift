@@ -21,7 +21,7 @@ import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 export const AxesPanel = () => {
   const font = useFont();
-  const editable = useFontSession().workspace !== null;
+  const canAuthor = useFontSession().canAuthor;
   const axes = useAxes();
   const [location, setExternalLocation] = useExternalLocation();
   const settings = useSettingsNavigation();
@@ -62,7 +62,7 @@ export const AxesPanel = () => {
                 onChange={(value) => onAxisChange(axis, value)}
                 onReset={() => resetAxis(axis)}
               />
-              {editable ? (
+              {canAuthor ? (
                 <AxisActionsMenu
                   axis={axis}
                   onEdit={() => settings.open({ category: "axes", axisId: axis.id })}

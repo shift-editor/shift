@@ -12,7 +12,7 @@ interface SourcesSectionProps {
 export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
-  const workspace = useFontSession().workspace;
+  const canAuthor = useFontSession().canAuthor;
 
   return (
     <CollapsibleSection
@@ -21,7 +21,7 @@ export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => 
       onOpenChange={setOpen}
       isActive={sourceMenuOpen}
       actions={
-        workspace ? (
+        canAuthor ? (
           <CreateSourceMenu onOpenChange={setSourceMenuOpen} />
         ) : (
           <SidebarActionButton label="Create source" data-read-only-mutation>
@@ -30,7 +30,7 @@ export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => 
         )
       }
     >
-      <Sources editable={workspace !== null} />
+      <Sources canAuthor={canAuthor} />
     </CollapsibleSection>
   );
 };

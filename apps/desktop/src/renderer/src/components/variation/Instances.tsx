@@ -16,7 +16,7 @@ import { useNamedInstances } from "@/hooks/useNamedInstances";
 import { externalAxisLocationFromLocation } from "@/lib/variation/location";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
-export const Instances = ({ editable }: { editable: boolean }) => {
+export const Instances = ({ canAuthor }: { canAuthor: boolean }) => {
   const editor = useEditor();
   const instances = useNamedInstances();
   const settings = useSettingsNavigation();
@@ -37,7 +37,7 @@ export const Instances = ({ editable }: { editable: boolean }) => {
           onClick={() => previewInstance(instance)}
           contentClassName="h-6 text-ui"
           actions={
-            editable ? (
+            canAuthor ? (
               <InstanceActionsMenu
                 instanceName={instance.name}
                 onEdit={() =>

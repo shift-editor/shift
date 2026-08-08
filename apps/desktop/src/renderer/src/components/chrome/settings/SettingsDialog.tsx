@@ -19,11 +19,17 @@ import { SourcesSettingsPanel } from "./SourcesSettingsPanel";
 
 interface SettingsDialogProps {
   target: SettingsTarget | null;
+  canAuthor: boolean;
   onTargetChange: (target: SettingsTarget) => void;
   onOpenChange: (open: boolean) => void;
 }
 
-export const SettingsDialog = ({ target, onTargetChange, onOpenChange }: SettingsDialogProps) => {
+export const SettingsDialog = ({
+  target,
+  canAuthor,
+  onTargetChange,
+  onOpenChange,
+}: SettingsDialogProps) => {
   const font = useFont();
   const activeTarget: SettingsTarget = target ?? { category: "font" };
 
@@ -61,7 +67,7 @@ export const SettingsDialog = ({ target, onTargetChange, onOpenChange }: Setting
               <X className="h-4 w-4" />
             </DialogClose>
 
-            <SettingsCategoryPanel target={activeTarget} />
+            <SettingsCategoryPanel target={activeTarget} canAuthor={canAuthor} />
           </main>
         </DialogPopup>
       </DialogPortal>
@@ -71,14 +77,15 @@ export const SettingsDialog = ({ target, onTargetChange, onOpenChange }: Setting
 
 interface SettingsCategoryPanelProps {
   target: SettingsTarget;
+  canAuthor: boolean;
 }
 
-const SettingsCategoryPanel = ({ target }: SettingsCategoryPanelProps) => {
+const SettingsCategoryPanel = ({ target, canAuthor }: SettingsCategoryPanelProps) => {
   switch (target.category) {
     case "font":
       return (
         <ScrollablePanel>
-          <FontSettingsPanel />
+          <FontSettingsPanel canAuthor={canAuthor} />
         </ScrollablePanel>
       );
     case "sources":
@@ -86,6 +93,7 @@ const SettingsCategoryPanel = ({ target }: SettingsCategoryPanelProps) => {
         <SourcesSettingsPanel
           key={target.sourceId ?? "sources"}
           initialSourceId={target.sourceId}
+          canAuthor={canAuthor}
         />
       );
     case "instances":
@@ -93,10 +101,17 @@ const SettingsCategoryPanel = ({ target }: SettingsCategoryPanelProps) => {
         <InstancesSettingsPanel
           key={target.instanceId ?? "instances"}
           initialInstanceId={target.instanceId}
+          canAuthor={canAuthor}
         />
       );
     case "axes":
-      return <AxesSettingsPanel key={target.axisId ?? "axes"} initialAxisId={target.axisId} />;
+      return (
+        <AxesSettingsPanel
+          key={target.axisId ?? "axes"}
+          initialAxisId={target.axisId}
+          canAuthor={canAuthor}
+        />
+      );
   }
 };
 

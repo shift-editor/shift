@@ -14,7 +14,7 @@ export function GlyphCatalogCanvas({
   active,
   atlasSource,
   observeAtlasInvalidation,
-  editable,
+  canAuthor,
   openGlyph,
   onFirstFrame,
   onUnavailable,
@@ -40,7 +40,7 @@ export function GlyphCatalogCanvas({
       overlayCanvas,
       atlasSource,
       observeAtlasInvalidation,
-      editable
+      canAuthor
         ? (glyph) => {
             setEditingGlyph(glyph);
           }
@@ -64,8 +64,8 @@ export function GlyphCatalogCanvas({
     };
   }, [
     atlasSource,
+    canAuthor,
     containerRef,
-    editable,
     observeAtlasInvalidation,
     onFirstFrame,
     onUnavailable,

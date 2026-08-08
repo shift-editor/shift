@@ -8,6 +8,8 @@ import type { Workspace } from "./Workspace";
 /** Immutable renderer composition for one connected font session. */
 export class FontSession {
   readonly mode: FontSessionMode;
+  /** Whether this immutable session permits durable authoring operations. */
+  readonly canAuthor: boolean;
   readonly catalog: GlyphCatalog;
   readonly workspace: Workspace | null;
   readonly font: Font;
@@ -23,6 +25,7 @@ export class FontSession {
     editor: Editor,
   ) {
     this.mode = mode;
+    this.canAuthor = mode === "authored";
     this.catalog = catalog;
     this.workspace = workspace;
     this.font = font;
