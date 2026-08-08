@@ -32,6 +32,7 @@ impl ShiftStore {
         change_set: &font::FontChangeSet,
         post_font: Option<&font::Font>,
     ) -> Result<(), StoreError> {
+        let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
         let mut touched_layer_ids = HashSet::new();
 
@@ -50,7 +51,9 @@ impl ShiftStore {
                 }
             }
         }
-        mark_workspace_dirty_in_tx(&tx)?;
+        if tracks_workspace {
+            mark_workspace_dirty_in_tx(&tx)?;
+        }
 
         tx.commit()?;
         Ok(())

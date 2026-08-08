@@ -1,27 +1,30 @@
 use std::path::Path;
 
-use crate::{ShiftStore, StoreError, schema};
+use crate::{ShiftStore, StoreError, schema, store::StoreKind};
 
 impl ShiftStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
         let conn = rusqlite::Connection::open(path)?;
-        configure_connection(&conn)?;
+        configure_common(&conn)?;
         schema::ensure_current(&conn)?;
+        configure_working_posture(&conn)?;
         Ok(Self {
             conn,
             path: Some(path.to_path_buf()),
+            kind: StoreKind::Working,
         })
     }
 
     /// Opens a disposable import destination with rollback-capable in-memory
-    /// journaling. The foreign source remains authoritative until
+    /// journaling. The source remains authoritative until
     /// [`Self::finish_import`] makes the completed store durable.
     pub fn open_for_import(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
         let conn = rusqlite::Connection::open(path)?;
-        configure_import_connection(&conn)?;
+        configure_common(&conn)?;
         schema::ensure_current(&conn)?;
+        configure_import_posture(&conn)?;
         let has_workspace: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM workspace_state WHERE id = 1)",
             [],
@@ -33,6 +36,7 @@ impl ShiftStore {
         Ok(Self {
             conn,
             path: Some(path.to_path_buf()),
+            kind: StoreKind::Working,
         })
     }
 
@@ -50,7 +54,7 @@ impl ShiftStore {
         Ok(())
     }
 
-    fn sync_store_file(&self) -> Result<(), StoreError> {
+    pub(crate) fn sync_store_file(&self) -> Result<(), StoreError> {
         if let Some(path) = &self.path {
             std::fs::OpenOptions::new()
                 .read(true)
@@ -63,15 +67,27 @@ impl ShiftStore {
 
     pub fn open_memory_for_test() -> Result<Self, StoreError> {
         let conn = rusqlite::Connection::open_in_memory()?;
-        configure_connection(&conn)?;
+        configure_common(&conn)?;
         schema::ensure_current(&conn)?;
-        Ok(Self { conn, path: None })
+        configure_working_posture(&conn)?;
+        Ok(Self {
+            conn,
+            path: None,
+            kind: StoreKind::Working,
+        })
     }
 }
 
-fn configure_connection(conn: &rusqlite::Connection) -> Result<(), StoreError> {
+pub(crate) fn configure_document_connection(conn: &rusqlite::Connection) -> Result<(), StoreError> {
     configure_common(conn)?;
+    let journal_mode: String =
+        conn.query_row("PRAGMA journal_mode=DELETE", [], |row| row.get(0))?;
+    debug_assert_eq!(journal_mode, "delete");
+    conn.pragma_update(None, "synchronous", "FULL")?;
+    Ok(())
+}
 
+fn configure_working_posture(conn: &rusqlite::Connection) -> Result<(), StoreError> {
     // WAL + NORMAL is the durability/latency posture for a store that
     // commits per user action. In-memory test connections report "memory"
     // for journal_mode; both outcomes are accepted here and the file-mode
@@ -82,8 +98,7 @@ fn configure_connection(conn: &rusqlite::Connection) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn configure_import_connection(conn: &rusqlite::Connection) -> Result<(), StoreError> {
-    configure_common(conn)?;
+fn configure_import_posture(conn: &rusqlite::Connection) -> Result<(), StoreError> {
     let journal_mode: String =
         conn.query_row("PRAGMA journal_mode=MEMORY", [], |row| row.get(0))?;
     debug_assert_eq!(journal_mode, "memory");
@@ -91,9 +106,10 @@ fn configure_import_connection(conn: &rusqlite::Connection) -> Result<(), StoreE
     Ok(())
 }
 
-fn configure_common(conn: &rusqlite::Connection) -> Result<(), StoreError> {
+pub(crate) fn configure_common(conn: &rusqlite::Connection) -> Result<(), StoreError> {
     conn.set_prepared_statement_cache_capacity(64);
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.pragma_update(None, "trusted_schema", "OFF")?;
     conn.busy_timeout(std::time::Duration::from_millis(5_000))?;
     Ok(())
 }

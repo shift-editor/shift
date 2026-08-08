@@ -16,7 +16,7 @@ CREATE INDEX glyph_layers_source_id_idx ON glyph_layers(source_id);
 CREATE INDEX glyph_components_base_glyph_id_idx ON glyph_components(base_glyph_id);
 "#;
 
-pub(crate) const SCHEMA_V1: &str = r#"
+pub(crate) const DOCUMENT_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS font_info (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     family_name TEXT,
@@ -242,6 +242,13 @@ CREATE TABLE IF NOT EXISTS font_binaries (
     PRIMARY KEY (kind, path)
 );
 
+CREATE TABLE IF NOT EXISTS document_metadata (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    document_id TEXT NOT NULL
+);
+"#;
+
+const WORKSPACE_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS workspace_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     document_id TEXT,
@@ -262,6 +269,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 );
 "#;
 
+pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
 pub(crate) const SCHEMA_VERSION: i64 = 1;
 
 pub(crate) fn defer_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreError> {
@@ -280,8 +288,18 @@ pub(crate) fn restore_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreEr
 /// baseline batch in place instead of adding migration steps. A database
 /// from a NEWER app version is refused rather than silently mangled.
 pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreError> {
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let application_id = application_id(conn)?;
+    if application_id == SHIFT_APPLICATION_ID {
+        return Err(StoreError::DocumentRequiresDocumentOpen);
+    }
+    if application_id != 0 {
+        return Err(StoreError::InvalidApplicationId {
+            found: application_id,
+            expected: 0,
+        });
+    }
 
+    let version = schema_version(conn)?;
     if version > SCHEMA_VERSION {
         return Err(StoreError::UnsupportedSchemaVersion {
             found: version,
@@ -290,9 +308,63 @@ pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreErr
     }
 
     if version < 1 {
-        conn.execute_batch(SCHEMA_V1)?;
+        conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
+        conn.execute_batch(WORKSPACE_SCHEMA_V1)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
 
     Ok(())
+}
+
+pub(crate) fn initialize_document(conn: &rusqlite::Connection) -> Result<(), StoreError> {
+    let application_id = application_id(conn)?;
+    if application_id != 0 {
+        return Err(StoreError::InvalidApplicationId {
+            found: application_id,
+            expected: 0,
+        });
+    }
+
+    let version = schema_version(conn)?;
+    if version != 0 {
+        return Err(StoreError::UnsupportedDocumentSchemaVersion {
+            found: version,
+            supported: SCHEMA_VERSION,
+        });
+    }
+
+    conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
+    conn.pragma_update(None, "application_id", SHIFT_APPLICATION_ID)?;
+    conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    Ok(())
+}
+
+pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<(), StoreError> {
+    let application_id = application_id(conn)?;
+    if application_id != SHIFT_APPLICATION_ID {
+        return Err(StoreError::InvalidApplicationId {
+            found: application_id,
+            expected: SHIFT_APPLICATION_ID,
+        });
+    }
+
+    let version = schema_version(conn)?;
+    if version != SCHEMA_VERSION {
+        return Err(StoreError::UnsupportedDocumentSchemaVersion {
+            found: version,
+            supported: SCHEMA_VERSION,
+        });
+    }
+
+    Ok(())
+}
+
+fn application_id(conn: &rusqlite::Connection) -> Result<i64, StoreError> {
+    conn.query_row("PRAGMA application_id", [], |row| row.get(0))
+        .map_err(StoreError::from)
+}
+
+fn schema_version(conn: &rusqlite::Connection) -> Result<i64, StoreError> {
+    conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(StoreError::from)
 }

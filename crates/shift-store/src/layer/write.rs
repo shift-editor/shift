@@ -15,6 +15,7 @@ impl ShiftStore {
     /// rows in one transaction. The workspace revision advances only after
     /// encoding and index derivation have succeeded.
     pub fn replace_glyph_layer(&mut self, layer: &font::GlyphLayer) -> Result<(), StoreError> {
+        let tracks_workspace = self.tracks_workspace();
         let owner =
             layer_owner(&self.conn, &layer.id())?.ok_or_else(|| StoreError::MissingEntity {
                 kind: "glyph layer",
@@ -22,7 +23,9 @@ impl ShiftStore {
             })?;
         let tx = self.conn.transaction()?;
         write_layer_in_tx(&tx, &owner, layer)?;
-        mark_workspace_dirty_in_tx(&tx)?;
+        if tracks_workspace {
+            mark_workspace_dirty_in_tx(&tx)?;
+        }
         tx.commit()?;
         Ok(())
     }
