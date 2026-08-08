@@ -2,11 +2,6 @@ import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 
 export type AxisLocation = ReadonlyMap<AxisId, number>;
 
-export interface AxisMappingSample {
-  readonly location: AxisLocation;
-  readonly values: readonly number[];
-}
-
 /** Identifies the source-creation constraint and control associated with a validation failure. */
 export type SourceCreationIssue =
   | { kind: "name"; message: string }

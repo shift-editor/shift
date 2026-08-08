@@ -5,14 +5,16 @@ use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
-    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingPoint, ComponentAnchorAttachment,
-    ComponentAnchorReference, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData,
-    FontMetadata, FontMetrics, FontSnapshot, GlyphChangedEntities, GlyphComponents, GlyphEntry,
-    GlyphInterpolation, GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection,
-    GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
-    GlyphSourceValues, GlyphState, GlyphStructure, InterpolationBasis, InterpolationSupport,
-    Location, MetricDefinition, MetricKind, NamedInstance, PointData, PointType, Source,
-    SourceMetricField, SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot,
+    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
+    ComponentAnchorAttachment, ComponentAnchorReference, ComponentData, ComponentGlyph,
+    ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
+    GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
+    GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
+    GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
+    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, Location,
+    MetricDefinition, MetricKind, NamedInstance, PointData, PointType, Source, SourceMetricField,
+    SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis,
+    VariationDelta,
 };
 
 #[napi(object)]
@@ -365,6 +367,36 @@ impl From<AxisMapping> for NapiAxisMapping {
 }
 
 #[napi(object)]
+pub struct NapiAxisMappingBasis {
+    #[napi(ts_type = "AxisMappingId")]
+    pub mapping_id: String,
+    #[napi(ts_type = "Array<AxisId>")]
+    pub input_axis_ids: Vec<String>,
+    #[napi(ts_type = "Array<AxisId>")]
+    pub output_axis_ids: Vec<String>,
+    pub basis: NapiVariationBasis,
+}
+
+impl From<AxisMappingBasis> for NapiAxisMappingBasis {
+    fn from(basis: AxisMappingBasis) -> Self {
+        Self {
+            mapping_id: basis.mapping_id.to_string(),
+            input_axis_ids: basis
+                .input_axis_ids
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
+            output_axis_ids: basis
+                .output_axis_ids
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
+            basis: basis.basis.into(),
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiSource {
     #[napi(ts_type = "SourceId")]
     pub id: String,
@@ -591,6 +623,7 @@ pub struct NapiFontSnapshot {
     pub sources: Vec<NapiSource>,
     pub axes: Vec<NapiAxis>,
     pub axis_mappings: Vec<NapiAxisMapping>,
+    pub axis_mapping_bases: Vec<NapiAxisMappingBasis>,
     pub named_instances: Vec<NapiNamedInstance>,
 }
 
@@ -609,6 +642,11 @@ impl From<FontSnapshot> for NapiFontSnapshot {
             sources: snapshot.sources.into_iter().map(Into::into).collect(),
             axes: snapshot.axes.into_iter().map(Into::into).collect(),
             axis_mappings: snapshot.axis_mappings.into_iter().map(Into::into).collect(),
+            axis_mapping_bases: snapshot
+                .axis_mapping_bases
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             named_instances: snapshot
                 .named_instances
                 .into_iter()
@@ -665,11 +703,38 @@ impl From<InterpolationSupport> for NapiInterpolationSupport {
 }
 
 #[napi(object)]
+pub struct NapiVariationDelta {
+    pub region: Vec<NapiInterpolationSupport>,
+    pub values: Float64Array,
+}
+
+impl From<VariationDelta> for NapiVariationDelta {
+    fn from(delta: VariationDelta) -> Self {
+        Self {
+            region: delta.region.into_iter().map(Into::into).collect(),
+            values: delta.values.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiVariationBasis {
+    pub deltas: Vec<NapiVariationDelta>,
+}
+
+impl From<VariationBasis> for NapiVariationBasis {
+    fn from(basis: VariationBasis) -> Self {
+        Self {
+            deltas: basis.deltas.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiInterpolationBasis {
     #[napi(ts_type = "Array<SourceId>")]
     pub source_ids: Vec<String>,
-    pub regions: Vec<Vec<NapiInterpolationSupport>>,
-    pub coefficients: Vec<Float64Array>,
+    pub basis: NapiVariationBasis,
 }
 
 impl From<InterpolationBasis> for NapiInterpolationBasis {
@@ -680,12 +745,7 @@ impl From<InterpolationBasis> for NapiInterpolationBasis {
                 .into_iter()
                 .map(|source_id| source_id.to_string())
                 .collect(),
-            regions: basis
-                .regions
-                .into_iter()
-                .map(|region| region.into_iter().map(Into::into).collect())
-                .collect(),
-            coefficients: basis.coefficients.into_iter().map(Into::into).collect(),
+            basis: basis.basis.into(),
         }
     }
 }
@@ -717,6 +777,19 @@ impl From<GlyphInterpolation> for NapiGlyphInterpolation {
         Self {
             basis: interpolation.basis.into(),
             sources: interpolation.sources.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiGlyphVariation {
+    pub basis: NapiVariationBasis,
+}
+
+impl From<GlyphVariation> for NapiGlyphVariation {
+    fn from(variation: GlyphVariation) -> Self {
+        Self {
+            basis: variation.basis.into(),
         }
     }
 }
@@ -850,6 +923,7 @@ pub struct NapiGlyphProjection {
     pub glyph_id: String,
     pub fallback: NapiGlyphLayerShape,
     pub interpolation: Option<NapiGlyphInterpolation>,
+    pub variation: Option<NapiGlyphVariation>,
     pub exact_source_shapes: Vec<NapiGlyphSourceShape>,
     pub components: NapiGlyphComponents,
     pub exact_source_components: Vec<NapiGlyphSourceComponents>,
@@ -863,6 +937,7 @@ impl From<GlyphProjection> for NapiGlyphProjection {
             glyph_id: projection.glyph_id.to_string(),
             fallback: projection.fallback.into(),
             interpolation: projection.interpolation.map(Into::into),
+            variation: projection.variation.map(Into::into),
             exact_source_shapes: projection
                 .exact_source_shapes
                 .into_iter()
@@ -1388,6 +1463,8 @@ pub struct NapiFontReplacement {
     pub axes: Option<Vec<NapiAxis>>,
     /// Full mapping list when font-level axis mappings changed; absent otherwise.
     pub axis_mappings: Option<Vec<NapiAxisMapping>>,
+    /// Rust-compiled mapping bases when axes or mappings changed; absent otherwise.
+    pub axis_mapping_bases: Option<Vec<NapiAxisMappingBasis>>,
     /// Full font-owned metric definitions when their identity or order changed.
     pub metric_definitions: Option<Vec<NapiMetricDefinition>>,
     /// Refreshed source-metric interpolation model when any of its inputs changed.

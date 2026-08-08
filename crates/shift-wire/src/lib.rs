@@ -12,9 +12,9 @@ use shift_font::composite::{
 };
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
-    AxisMapping as IrAxisMapping, AxisMappingId, AxisRole as IrAxisRole, Component as IrComponent,
-    ComponentId, Contour as IrContour, ContourId, FontMetadata as IrFontMetadata,
-    FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
+    AxisMapping as IrAxisMapping, AxisMappingBasis as IrAxisMappingBasis, AxisMappingId,
+    AxisRole as IrAxisRole, Component as IrComponent, ComponentId, Contour as IrContour, ContourId,
+    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
     GuidelineId, InterpolationBasis as IrInterpolationBasis, LayerId, Location as IrLocation,
@@ -22,7 +22,7 @@ use shift_font::{
     NamedInstance as IrNamedInstance, NamedInstanceId, Point as IrPoint, PointId,
     PointType as IrPointType, Source as IrSource, SourceId,
     SourceMetricField as IrSourceMetricField,
-    SourceMetricInterpolation as IrSourceMetricInterpolation,
+    SourceMetricInterpolation as IrSourceMetricInterpolation, VariationBasis as IrVariationBasis,
 };
 
 pub mod bridges;
@@ -274,6 +274,27 @@ impl From<&IrAxisMapping> for AxisMapping {
     }
 }
 
+/// Fontdrasil-compiled contribution basis for one authored axis mapping.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisMappingBasis {
+    pub mapping_id: AxisMappingId,
+    pub input_axis_ids: Vec<AxisId>,
+    pub output_axis_ids: Vec<AxisId>,
+    pub basis: VariationBasis,
+}
+
+impl From<&IrAxisMappingBasis> for AxisMappingBasis {
+    fn from(basis: &IrAxisMappingBasis) -> Self {
+        Self {
+            mapping_id: basis.mapping_id(),
+            input_axis_ids: basis.input_axis_ids().to_vec(),
+            output_axis_ids: basis.output_axis_ids().to_vec(),
+            basis: basis.basis().into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
@@ -432,6 +453,7 @@ pub struct FontSnapshot {
     pub sources: Vec<Source>,
     pub axes: Vec<Axis>,
     pub axis_mappings: Vec<AxisMapping>,
+    pub axis_mapping_bases: Vec<AxisMappingBasis>,
     pub named_instances: Vec<NamedInstance>,
 }
 
@@ -472,24 +494,30 @@ pub struct InterpolationSupport {
     pub upper: f64,
 }
 
-/// Coordinate-independent interpolation weights for an ordered source set.
+/// One normalized support and numeric contribution vector.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InterpolationBasis {
-    pub source_ids: Vec<SourceId>,
-    pub regions: Vec<Vec<InterpolationSupport>>,
-    pub coefficients: Vec<Vec<f64>>,
+pub struct VariationDelta {
+    pub region: Vec<InterpolationSupport>,
+    pub values: Vec<f64>,
 }
 
-impl From<&IrInterpolationBasis> for InterpolationBasis {
-    fn from(basis: &IrInterpolationBasis) -> Self {
+/// Fontdrasil-compiled supports and numeric contributions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VariationBasis {
+    pub deltas: Vec<VariationDelta>,
+}
+
+impl From<&IrVariationBasis> for VariationBasis {
+    fn from(basis: &IrVariationBasis) -> Self {
         Self {
-            source_ids: basis.source_ids().to_vec(),
-            regions: basis
-                .regions()
+            deltas: basis
+                .deltas()
                 .iter()
-                .map(|region| {
-                    region
+                .map(|delta| VariationDelta {
+                    region: delta
+                        .region()
                         .supports()
                         .iter()
                         .map(|support| InterpolationSupport {
@@ -498,10 +526,27 @@ impl From<&IrInterpolationBasis> for InterpolationBasis {
                             peak: support.peak(),
                             upper: support.maximum(),
                         })
-                        .collect()
+                        .collect(),
+                    values: delta.values().to_vec(),
                 })
                 .collect(),
-            coefficients: basis.coefficients().to_vec(),
+        }
+    }
+}
+
+/// Coordinate-independent interpolation weights for an ordered source set.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterpolationBasis {
+    pub source_ids: Vec<SourceId>,
+    pub basis: VariationBasis,
+}
+
+impl From<&IrInterpolationBasis> for InterpolationBasis {
+    fn from(basis: &IrInterpolationBasis) -> Self {
+        Self {
+            source_ids: basis.source_ids().to_vec(),
+            basis: basis.variation_basis().into(),
         }
     }
 }
@@ -520,6 +565,13 @@ pub struct GlyphSourceValues {
 pub struct GlyphInterpolation {
     pub basis: InterpolationBasis,
     pub sources: Vec<GlyphSourceValues>,
+}
+
+/// Compiled numeric variation for a passive imported glyph shape.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphVariation {
+    pub basis: VariationBasis,
 }
 
 impl From<&IrGlyphInterpolation> for GlyphInterpolation {
@@ -644,6 +696,7 @@ pub struct GlyphProjection {
     pub glyph_id: GlyphId,
     pub fallback: GlyphLayerShape,
     pub interpolation: Option<GlyphInterpolation>,
+    pub variation: Option<GlyphVariation>,
     pub exact_source_shapes: Vec<GlyphSourceShape>,
     pub components: GlyphComponents,
     pub exact_source_components: Vec<GlyphSourceComponents>,
@@ -656,6 +709,7 @@ impl From<&IrGlyphProjection> for GlyphProjection {
             glyph_id: projection.glyph_id(),
             fallback: GlyphLayerShape::from(projection.fallback()),
             interpolation: projection.interpolation().map(Into::into),
+            variation: None,
             exact_source_shapes: projection
                 .exact_source_shapes()
                 .iter()

@@ -10,6 +10,7 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Ordered, identity-addressable authoring collections use `EntityList`. Its iteration, equality, and serialization preserve authored order; its private backing container is not part of the model contract.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
+- **Architecture Invariant:** Fontdrasil exclusively constructs variation sample order, supports, and numeric deltas. `shift-font` exposes compiled `VariationBasis` and `AxisMappingBasis` values; TypeScript and transport layers only evaluate or translate them.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
 - **Architecture Invariant:** UPM is font-global. Metric identities and semantic roles are font-owned; positions, overshoots, and optional technical metrics are authored on master sources.
 
@@ -44,7 +45,9 @@ crates/shift-font/src/
 - `GlyphLayer` is authored editable data for one glyph at one source.
 - `LibData` and recursive `LibValue::Dict` use ordered maps so equal domain values serialize deterministically.
 - `GlyphEntityId` gives `FontIndex` one typed set for contour, point, component, anchor, and guideline identity.
-- `InterpolationBasis` is coordinate-independent variation math for an ordered source set. It contains normalized supports and source coefficient rows, never glyph coordinates or metrics.
+- `VariationBasis` is the source-neutral Fontdrasil output: normalized regions paired with numeric `VariationDelta` vectors.
+- `InterpolationBasis` combines real source identities with a `VariationBasis` whose vectors produce source weights; it never contains glyph coordinates or metrics.
+- `AxisMappingBasis` combines mapping input/output identities with a `VariationBasis` whose vectors produce normalized output adjustments.
 - `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. The glyph's default-source layer owns topology when present; otherwise a deterministic master-backed reference layer allows sparse glyph interpolation.
 - `LayerCompatibility` records every hard structural difference between an interpolation reference layer and another source layer. `LayerDifference` retains ordered path, node, anchor, and component evidence for diagnostics.
 - `GlyphProjection` is a compact location-independent glyph payload: shared fallback layers, optional compatible interpolation, exact-source topology exceptions, `GlyphComponents`, and transitive component identities.
@@ -72,7 +75,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - Own font authoring data structures such as `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Source`, and `Axis`.
 - Keep object-level mutation behavior near the objects it mutates.
 - Provide model-native helpers for layer editing, component resolution, variation behavior, axis mapping evaluation, and geometry-derived behavior. `Font::replace_glyph_layers` retains previous layers through cheap `Arc` references, validates a complete hydration/eviction batch into one `HashSet<GlyphEntityId>`, moves that set into the final index, mutates uniquely owned fonts in place, and preserves shared snapshots through copy-on-write.
-- Own canonical glyph and source-metric interpolation value ordering, variation-model construction, interpolation evaluation, and location-bound glyph resolution.
+- Own canonical glyph, source-metric, and axis-mapping variation-model construction. Fontdrasil constructs every sample order, support region, and delta vector; consumers evaluate the resulting bases without reconstructing them.
 - Stay independent of TypeScript, NAPI, and bridge DTOs.
 
 `Font::glyph_interpolation(glyph_id)` builds compatible source values over an `InterpolationBasis`. The glyph's default-source layer defines structural topology when it exists. Sparse glyphs without that layer choose their most structurally complete master as the reference layer. When two compatible masters bracket the normalized default on one axis, the basis derives a virtual default contribution from them; more complex underdetermined layouts use the documented static fallback. The basis depends only on axes and ordered source locations, so the same mechanism can interpolate other numeric domains without copying glyph concepts into them.
@@ -84,6 +87,8 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 `Font::glyph_projection(glyph_id)` preserves the preferred fallback, compatible interpolation, incompatible authored source topology, and Rust-owned component relationships without resolving a location. `Font::glyph_projection_set(glyph_ids)` applies the same semantics to a batch while preparing each requested or transitively referenced glyph once and sharing equal source-location bases. Authored fallback and exact-source layers remain `Arc`-shared; only derived interpolation values are owned by the projections. Each glyph in the component closure resolves independently at the shared root location: exact master, then interpolation, then static master fallback. Layer-only/background sources never supply projection geometry. A renderer can retain this compact payload and combine its basis with current authored source signals. No arbitrary location result is persisted, and projection sets must not survive authored edits.
 
 `Font::source_metric_interpolation()` combines the same coordinate-independent basis with complete master-source metric vectors. Optional technical fields participate only when every master authors them, so interpolation does not invent sparse values.
+
+`Font::axis_mapping_bases()` compiles authored independent and cross-axis mappings through Fontdrasil. External locations evaluate independent bases first, then cross-axis bases against the independently mapped location. Raw mapping points remain authoring data and never become renderer evaluation input. Output parity does not authorize another language or bridge layer to reconstruct the same model.
 
 `Font::projection(location)` expects an internal authoring location. Apply external axis mappings before constructing it. Resolution prefers an exact authored layer, then compatible interpolation, then the default or preferred fallback. A globally authored source with no glyph layer is not blank by definition: it uses interpolation/fallback while remaining non-editable at that source. Component branches resolve independently at the same location and are flattened through the same `GlyphComponents` semantics exposed to renderers.
 

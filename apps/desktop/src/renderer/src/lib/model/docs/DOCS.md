@@ -17,7 +17,8 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** Numeric authored edits flow through the existing `GlyphLayerState` signal graph. Do not add a revision signal, invalidate projections to `null`, or refetch native variation data for point, component-transform, advance, or metric value changes.
 - **Architecture Invariant:** `Font.committedFontCell` is an invalidation-only dependency for resources derived from the complete native font, including unloaded glyphs. It carries the stable Font value and notifies after committed echoes or workspace replacement; consumers use `track(...)`, never a revision counter.
 - **Architecture Invariant:** Structural glyph, source, or axis changes rebuild retained native projections behind the workspace FIFO and publish replacements atomically. The previous projection remains usable until its replacement arrives.
-- **Architecture Invariant:** Imported selected-glyph geometry is acquired lazily by stable glyph identity, then retained with its complete component closure until session disposal. External slider coordinates are mapped synchronously before exact-source matching and projection evaluation. Scrubbing is local signal evaluation, never a bridge, filesystem, or projection-acquisition request.
+- **Architecture Invariant:** Imported selected-glyph geometry is acquired lazily by stable glyph identity, then retained with its complete component closure until session disposal. External slider coordinates evaluate Rust-compiled `AxisMappingBasis` values synchronously before exact-source matching and projection evaluation. Raw mapping points never enter runtime evaluation; scrubbing is local basis evaluation, never a bridge, filesystem, or projection-acquisition request.
+- **Architecture Invariant:** TypeScript evaluates `VariationBasis` values but never constructs variation sample order, support regions, master influence, or deltas. Authored interpolation, imported glyph variation, source metrics, Slug weights, and axis mappings share this evaluator.
 - **Architecture Invariant:** Authored object IDs resolve through `FontStore` ownership indexes before imported-geometry fallback. Point, anchor, segment, and contour objects retain their authored `GlyphLayer` and read its live structure and coordinate signals, so object bounds and overlays remain reactive without rescanning complete geometry.
 - **Architecture Invariant:** Selected-glyph sidebearing and advance controls read the editor's single glyph scene node. Values stay live through the glyph model; mutations are available only when that glyph has an exact authored layer at the current location.
 
@@ -34,7 +35,8 @@ lib/model/
 lib/graphics/
   ContourPath.ts             -- canonical transformed commands and lazy path outputs
 lib/interpolation/
-  InterpolationBasis.ts      -- local support evaluation and source-value combination
+  VariationBasis.ts          -- local evaluation of Rust/Fontdrasil-compiled numeric bases
+  InterpolationBasis.ts      -- source-weight evaluation and source-value combination
 types/
   glyph.ts                   -- GlyphReader and model construction contracts
   glyphRender.ts             -- renderer contour/anchor contracts plus passive RenderGlyph
@@ -55,7 +57,10 @@ hooks/
 - `Glyph` -- stable, completely loaded renderer domain object containing zero or more authored layers, direct references to its loaded component dependencies, and synchronous location-specific geometry backing.
 - `GlyphLayer` -- editable geometry for one glyph/source pair.
 - `GlyphProjection` -- generated bridge DTO retained as compact backing: fallback, compatible interpolation, incompatible exact-source shapes, and component identities.
-- `InterpolationBasis` -- source contribution math shared by glyphs with the same ordered compatible sources.
+- `VariationBasis` -- normalized supports and numeric vectors compiled in Rust and evaluated locally without bridge traffic.
+- `InterpolationBasis` -- real source identities plus a `VariationBasis` producing source contribution weights.
+- `AxisMappingBasis` -- mapping input/output identities plus a `VariationBasis` producing normalized output adjustments.
+- `GlyphVariation` -- imported fallback-relative numeric variation with no fabricated authored source identities.
 - `GlyphRenderModel` -- internal reactive render cache bound to a location signal. Its contours, bounds, paths, advance, and sidebearings describe the complete displayed Glyph; root point/segment lookup remains root-owned.
 - `ComponentGlyph` -- one ordered component occurrence with a full `ComponentId[]` ancestry, current local/resolved transforms, direct contours, children, and bounds.
 - `GlyphContour` -- one displayed contour occurrence over a source contour, a current transform, and optional owning `ComponentGlyph`; it replaces a `ContourPath` when reactive geometry changes.
@@ -94,8 +99,9 @@ Only observed render output is evaluated. Virtualized offscreen models do not su
 
 - `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode.
 - `GlyphCatalog` is the only font-wide surface consumed by Home/Grid. Imported `GlyphEntry` directory values populate `FontStore`, while imported authored-record and layer collections remain empty.
-- Rust owns source compatibility and constructs bases/projections.
-- `shift-wire` and the workspace bridge transport those values without resolving a UI location.
+- Rust/Fontdrasil owns source compatibility and constructs every variation and axis-mapping basis.
+- `shift-wire` and the workspace bridge translate those values without inventing samples, source identities, support regions, or a UI location.
+- Raw `AxisMapping` values are available only to the `Font` authoring surface and mapping settings UI. Glyph/runtime contracts receive `AxisMappingBasis` values. A TypeScript helper that consumes mapping points to answer a renderer query is an architecture violation even when its output matches Rust fixtures.
 - `FontStore` owns renderer-local backing, reactive authored state, and canonical completely loaded Glyph objects; do not wrap it in another manager/store/cache.
 - `GlyphRenderModel` owns no editable source identity and cannot commit edits.
 - `GlyphNodeDefinition` owns handle policy. It filters `GlyphRenderModel.contours` to root-owned occurrences and uses `GlyphRenderModel.anchors`; inherited component points never become editable root points.

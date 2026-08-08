@@ -21,6 +21,7 @@ export function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSna
     sources: workspace.sources,
     axes: workspace.axes,
     axisMappings: workspace.axisMappings,
+    axisMappingBases: workspace.axisMappingBases,
     namedInstances: workspace.namedInstances,
   };
 }

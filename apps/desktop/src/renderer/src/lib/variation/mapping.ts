@@ -1,11 +1,11 @@
-import type { Axis, AxisId, AxisMapping } from "@shift/types";
-import { mappingAdjustments } from "./mappingModel";
-import type { AxisLocation, AxisMappingSample } from "@/types/variation";
+import type { Axis, AxisId, AxisMappingBasis } from "@shift/types";
+import { evaluateVariationBasis } from "@/lib/interpolation/VariationBasis";
+import type { AxisLocation } from "@/types/variation";
 
 export function mapAxisMappings(
   location: AxisLocation,
   axes: readonly Axis[],
-  mappings: readonly AxisMapping[],
+  bases: readonly AxisMappingBasis[],
 ): AxisLocation {
   const mapped = new Map(
     axes.map((axis) => [
@@ -14,67 +14,32 @@ export function mapAxisMappings(
     ]),
   );
 
-  for (const mapping of mappings.filter(isIndependent)) {
-    applyMapping(mapped, evaluateMapping(mapping, location, axes));
+  for (const basis of bases.filter(isIndependent)) {
+    applyMapping(mapped, evaluateAxisMappingBasis(basis, location, axes));
   }
 
   const independentlyMapped = new Map(mapped);
-  for (const mapping of mappings.filter((mapping) => !isIndependent(mapping))) {
-    applyMapping(mapped, evaluateMapping(mapping, independentlyMapped, axes));
+  for (const basis of bases.filter((basis) => !isIndependent(basis))) {
+    applyMapping(mapped, evaluateAxisMappingBasis(basis, independentlyMapped, axes));
   }
 
   return mapped;
 }
 
-function applyMapping(target: Map<AxisId, number>, output: AxisLocation): void {
-  for (const [axisId, value] of output) target.set(axisId, value);
-}
-
-function isIndependent(mapping: AxisMapping): boolean {
-  return (
-    mapping.inputs.length === 1 &&
-    mapping.outputs.length === 1 &&
-    mapping.inputs[0] === mapping.outputs[0]
-  );
-}
-
-function evaluateMapping(
-  mapping: AxisMapping,
+/** Evaluates one Rust/Fontdrasil-compiled axis mapping basis. */
+export function evaluateAxisMappingBasis(
+  mapping: AxisMappingBasis,
   location: AxisLocation,
   axes: readonly Axis[],
 ): AxisLocation {
   const axesById = new Map(axes.map((axis) => [axis.id, axis]));
-  const inputAxes = mapping.inputs.map((axisId) => requiredAxis(axisId, axesById, mapping));
-  const outputAxes = mapping.outputs.map((axisId) => requiredAxis(axisId, axesById, mapping));
-  const samples = new Map<string, AxisMappingSample>();
+  const adjustments = evaluateVariationBasis(mapping.basis, location, axes);
 
-  for (const point of mapping.points) {
-    const normalized = normalizedLocation(point.input.values, inputAxes);
-    const values = outputAxes.map((axis) => {
-      const input = point.input.values[axis.id] ?? axis.default;
-      const output = point.output.values[axis.id] ?? input;
-      return normalizeAxis(output, axis) - normalizeAxis(input, axis);
-    });
-    const key = locationKey(normalized, inputAxes);
-    if (samples.has(key)) {
-      throw new Error(`axis mapping ${mapping.name} has duplicate point inputs`);
-    }
-    samples.set(key, { location: normalized, values });
-  }
-
-  const defaultLocation = new Map(inputAxes.map((axis) => [axis.id, 0]));
-  const defaultKey = locationKey(defaultLocation, inputAxes);
-  if (!samples.has(defaultKey)) {
-    samples.set(defaultKey, {
-      location: defaultLocation,
-      values: outputAxes.map(() => 0),
-    });
-  }
-
-  const target = normalizedLocation(location, inputAxes);
-  const adjustments = mappingAdjustments([...samples.values()], target, inputAxes);
   return new Map(
-    outputAxes.map((axis, index) => {
+    mapping.outputAxisIds.map((axisId, index) => {
+      const axis = axesById.get(axisId);
+      if (!axis)
+        throw new Error(`axis mapping ${mapping.mappingId} references unknown axis ${axisId}`);
       const base = axisLocationValue(location, axis);
       return [
         axis.id,
@@ -84,30 +49,16 @@ function evaluateMapping(
   );
 }
 
-function requiredAxis(
-  axisId: AxisId,
-  axesById: ReadonlyMap<AxisId, Axis>,
-  mapping: AxisMapping,
-): Axis {
-  const axis = axesById.get(axisId);
-  if (!axis) throw new Error(`axis mapping ${mapping.name} references unknown axis ${axisId}`);
-  return axis;
+function applyMapping(target: Map<AxisId, number>, output: AxisLocation): void {
+  for (const [axisId, value] of output) target.set(axisId, value);
 }
 
-function normalizedLocation(
-  location: AxisLocation | Readonly<Record<string, number>>,
-  axes: readonly Axis[],
-): AxisLocation {
-  return new Map(
-    axes.map((axis) => {
-      const value = location instanceof Map ? location.get(axis.id) : location[axis.id];
-      return [axis.id, normalizeAxis(value ?? axis.default, axis)];
-    }),
+function isIndependent(basis: AxisMappingBasis): boolean {
+  return (
+    basis.inputAxisIds.length === 1 &&
+    basis.outputAxisIds.length === 1 &&
+    basis.inputAxisIds[0] === basis.outputAxisIds[0]
   );
-}
-
-function locationKey(location: AxisLocation, axes: readonly Axis[]): string {
-  return axes.map((axis) => location.get(axis.id) ?? 0).join(",");
 }
 
 function axisLocationValue(location: AxisLocation, axis: Axis): number {
@@ -117,6 +68,7 @@ function axisLocationValue(location: AxisLocation, axis: Axis): number {
 function normalizeAxis(value: number, axis: Axis): number {
   const minimum = axis.minimum ?? Math.min(...(axis.values ?? [axis.default]));
   const maximum = axis.maximum ?? Math.max(...(axis.values ?? [axis.default]));
+
   if (value < axis.default) {
     const range = axis.default - minimum;
     return Math.abs(range) < Number.EPSILON ? 0 : (value - axis.default) / range;
@@ -131,6 +83,7 @@ function normalizeAxis(value: number, axis: Axis): number {
 function denormalizeAxis(value: number, axis: Axis): number {
   const minimum = axis.minimum ?? Math.min(...(axis.values ?? [axis.default]));
   const maximum = axis.maximum ?? Math.max(...(axis.values ?? [axis.default]));
+
   if (value < 0) return axis.default + value * (axis.default - minimum);
   if (value > 0) return axis.default + value * (maximum - axis.default);
   return axis.default;

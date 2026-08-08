@@ -376,6 +376,7 @@ export class FontSessionClient {
       glyphs: next.glyphs ?? current.glyphs,
       axes: next.axes ?? current.axes,
       axisMappings: next.axisMappings ?? current.axisMappings,
+      axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
       namedInstances: next.namedInstances ?? current.namedInstances,
       sources: next.sources ?? current.sources,
     });

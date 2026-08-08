@@ -29,7 +29,7 @@ import type {
 
 export const DEFAULT_ATLAS_CACHE_BYTE_BUDGET = 1024 * 1024 * 1024;
 
-const FORMAT = "shift.slug-atlas-cache.v1" as const;
+const FORMAT = "shift.slug-atlas-cache.v2" as const;
 const MAGIC = Buffer.from("SHATLAS1");
 const INDEX_CHECKSUM_BYTES = 32;
 const INDEX_CHECKSUM_OFFSET = MAGIC.byteLength + 4;
@@ -55,11 +55,21 @@ const interpolationSupportSchema = z
     upper: finiteNumber,
   })
   .strict();
+const variationDeltaSchema = z
+  .object({
+    region: z.array(interpolationSupportSchema),
+    values: z.array(finiteNumber),
+  })
+  .strict();
+const variationBasisSchema = z
+  .object({
+    deltas: z.array(variationDeltaSchema),
+  })
+  .strict();
 const interpolationBasisSchema = z
   .object({
     sourceIds: z.array(z.string()),
-    regions: z.array(z.array(interpolationSupportSchema)),
-    coefficients: z.array(z.array(finiteNumber)),
+    basis: variationBasisSchema,
   })
   .strict();
 const slugAtlasSchema = z
@@ -481,7 +491,7 @@ function withoutGeneration(descriptor: SlugAtlas): CachedSlugAtlas {
   return atlas;
 }
 
-function withTypedCoefficients(atlas: CachedSlugAtlas): CachedSlugAtlas {
+function withTypedVariationValues(atlas: CachedSlugAtlas): CachedSlugAtlas {
   return {
     ...atlas,
     glyphs: atlas.glyphs as SlugGlyph[],
@@ -490,9 +500,13 @@ function withTypedCoefficients(atlas: CachedSlugAtlas): CachedSlugAtlas {
         ...set,
         basis: {
           ...set.basis,
-          coefficients: set.basis.coefficients.map(
-            (coefficients) => new Float64Array(coefficients),
-          ),
+          basis: {
+            ...set.basis.basis,
+            deltas: set.basis.basis.deltas.map((delta) => ({
+              ...delta,
+              values: new Float64Array(delta.values),
+            })),
+          },
         } as InterpolationBasis,
       }),
     ),
@@ -545,7 +559,7 @@ async function readCachedAtlasFile(file: FileHandle): Promise<CachedAtlas> {
     pages: parsed.pages.map((page) => ({
       ...page,
       glyphIds: page.glyphIds as GlyphId[],
-      atlas: withTypedCoefficients(page.atlas as unknown as CachedSlugAtlas),
+      atlas: withTypedVariationValues(page.atlas as unknown as CachedSlugAtlas),
     })),
   } satisfies CachedAtlas;
   await validateCachedAtlas(file, cached, HEADER_BYTES + indexLength);

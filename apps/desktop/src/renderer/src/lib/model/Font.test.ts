@@ -42,6 +42,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
   ],
   axes: [],
   axisMappings: [],
+  axisMappingBases: [],
   namedInstances: [],
 };
 
@@ -276,6 +277,9 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
     expect(stack.font.getAxisMappings().map((mapping) => mapping.id)).toEqual([mappingId]);
+    expect(
+      stack.client.workspaceCell.peek()?.axisMappingBases.map((basis) => basis.mappingId),
+    ).toEqual([mappingId]);
     const mapped = await stack.font.mapLocation({
       values: { [axisId]: 900 } as Record<AxisId, number>,
     });

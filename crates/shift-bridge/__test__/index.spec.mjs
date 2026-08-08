@@ -167,6 +167,22 @@ describe("Bridge", () => {
     bridge.resumeWorkspaceForSource(storePath, packagePath);
   }
 
+  it("transports imported variation without fabricating authored sources", () => {
+    bridge.closeWorkspace();
+    const sourcePath = join(
+      repositoryRoot,
+      "fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
+    );
+    const font = bridge.openFontSource(sourcePath);
+    const glyph = font.glyphs.find((entry) => entry.name === "A");
+    if (!glyph) throw new Error("MutatorSans fixture has no A glyph");
+
+    const projection = bridge.readFontSourceGlyph(glyph.id)[0]?.projection;
+
+    expect(projection?.interpolation).toBeUndefined();
+    expect(projection?.variation?.basis.deltas.length).toBeGreaterThan(0);
+  });
+
   it("acquires every lazy glyph payload before preparing the complete Slug atlas", () => {
     resumeMutatorPackage();
 

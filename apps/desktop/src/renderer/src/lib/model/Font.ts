@@ -6,6 +6,7 @@ import type {
   Axis,
   AxisDefinition,
   AxisMapping,
+  AxisMappingBasis,
   Source,
   GlyphEntry,
   GlyphId,
@@ -329,6 +330,7 @@ export class Font {
 
   readonly #axesCell: Signal<Axis[]>;
   readonly #axisMappingsCell: Signal<AxisMapping[]>;
+  readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
 
   readonly #namedInstancesCell: Signal<NamedInstance[]>;
 
@@ -396,6 +398,7 @@ export class Font {
       return this.#metricsForSource(source);
     });
     this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
+    this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#directoryCell = computed(() =>
       GlyphDirectory.fromEntries(fontCell.value?.glyphs ?? [], this.#store.records()),
@@ -887,7 +890,7 @@ export class Font {
       layers,
       componentGlyphs: new Map(),
       axesCell: this.#axesCell,
-      axisMappingsCell: this.#axisMappingsCell,
+      axisMappingBasesCell: this.#axisMappingBasesCell,
       sourcesCell: this.#sourcesCell,
       projectionCell: this.#store.projectionCell(entry.id),
       defaultSourceId: this.defaultSource.id,
@@ -1157,7 +1160,7 @@ export class Font {
    */
   sourceAt(location: AxisLocation): Source | null {
     const axes = this.getAxes();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     return sourceAtLocation(this.sources, axes, mappedLocation);
   }
 
@@ -1171,7 +1174,11 @@ export class Font {
     return computed(
       () => {
         const axes = this.#axesCell.value;
-        const mappedLocation = mapAxisLocation(location.value, axes, this.#axisMappingsCell.value);
+        const mappedLocation = mapAxisLocation(
+          location.value,
+          axes,
+          this.#axisMappingBasesCell.value,
+        );
         return sourceAtLocation(this.#sourcesCell.value, axes, mappedLocation);
       },
       { name: "font.sourceAt" },
@@ -1193,7 +1200,7 @@ export class Font {
 
   nearestSource(location: AxisLocation): Source | null {
     const axes = this.getAxes();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     let nearest: { source: Source; distance: number } | null = null;
 
     for (const source of this.sources) {
@@ -1476,7 +1483,7 @@ export class Font {
    */
   metricsAtLocation(location: AxisLocation): SourceMetrics {
     const axes = this.#axesCell.peek();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     const exactSource = sourceAtLocation(this.#sourcesCell.peek(), axes, mappedLocation);
     if (exactSource) return this.#metricsForSource(exactSource);
 

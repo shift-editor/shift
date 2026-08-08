@@ -16,7 +16,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Glyph snapshots, projections, imported `source.glyph`, and Slug preparation are explicit acquisition boundaries. Authored reads may load requested BLOBs in the serialized utility process; imported renderer Glyphs and synchronous getters never initiate I/O. `readFontSourceGlyph()` requests a stable session `GlyphId`, resolves the backend-private `GlyphIndex`, and returns canonical `GlyphSnapshot[]` for the root and complete component closure. Imported results contain projections but no authored layers. Product Grid startup requests the complete directory as bounded fixed root pages and presents only after the entire page set is resident.
 
-**Architecture Invariant:** `shift-font` constructs typed glyph and source-metric interpolation; renderer code only evaluates their flattened transport snapshots. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
+**Architecture Invariant:** Rust/Fontdrasil constructs typed glyph, source-metric, and axis-mapping variation bases. The bridge translates compiled regions and vectors without inventing source identities, coefficients, sample order, or support regions; renderer code only evaluates those transport values. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
 **Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
 
@@ -49,8 +49,10 @@ crates/shift-bridge/
 - `NapiUpdateFontMetadataIntent` -- complete authored metadata replacement payload that leaves metrics unchanged.
 - `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
+- `NapiVariationBasis` / `NapiVariationDelta` -- compiled normalized supports and numeric contributions translated without model reconstruction.
+- `NapiAxisMappingBasis` -- Fontdrasil-compiled mapping inputs, outputs, and normalized adjustment basis used for synchronous renderer evaluation.
 - `NapiNamedInstance` -- explicit product-preset DTO carrying stable identity and a complete external location.
-- `NapiGlyphProjection` -- compact location-independent glyph backing with reusable interpolation, exact-source exceptions, and Rust-owned `GlyphComponents` relationships.
+- `NapiGlyphProjection` -- compact location-independent glyph backing with authored interpolation or imported `NapiGlyphVariation`, exact-source exceptions, and Rust-owned `GlyphComponents` relationships. Imported deltas remain numeric variation rather than fabricated authored sources.
 - `NapiSourceMetricsInterpolationSnapshot` -- metric schema, reusable interpolation basis, and ordered source values projected from native source-metric interpolation; derived state, never `.shift` authoring data.
 - `NapiSlugAtlas` -- small generation/page metadata, explicit authored root identities, exact-source selectors, deduplicated weight bases, cache-serialized preview extents, and aligned resident-section layout.
 - `SlugAtlasGeneration` -- one aligned native atlas or page consumed by its stream API or released by its discard API.
@@ -92,7 +94,7 @@ crates/shift-bridge/
 2. Return native NAPI DTOs rather than serialized JSON.
 3. Keep editor/rendering concerns out of Rust; TypeScript owns canvas-specific interpretation.
 
-All selected-glyph reads must stay location-independent. Do not add resolved SVG/path caches or location parameters: `readFontSourceGlyph()` returns retained fallback values, variation deltas, exact-source shapes, and component dependencies. The renderer maps external coordinates and evaluates those projections synchronously.
+All selected-glyph reads must stay location-independent. Do not add resolved SVG/path caches or location parameters: `readFontSourceGlyph()` returns retained fallback values, `GlyphVariation` deltas, exact-source shapes, and component dependencies. The renderer evaluates transported `AxisMappingBasis` and variation values synchronously. Never adapt imported deltas into `GlyphInterpolation` by fabricating `SourceId` values.
 
 ## Verification
 

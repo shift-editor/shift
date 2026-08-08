@@ -115,8 +115,15 @@ function continuousAxis(
 function twoSourceBasis(axisId: AxisId, regularId: SourceId, boldId: SourceId): InterpolationBasis {
   return {
     sourceIds: [regularId, boldId],
-    regions: [[], [{ axisId, lower: 0, peak: 1, upper: 1 }]],
-    coefficients: [new Float64Array([1, 0]), new Float64Array([-1, 1])],
+    basis: {
+      deltas: [
+        { region: [], values: new Float64Array([1, 0]) },
+        {
+          region: [{ axisId, lower: 0, peak: 1, upper: 1 }],
+          values: new Float64Array([-1, 1]),
+        },
+      ],
+    },
   };
 }
 
@@ -131,12 +138,16 @@ function twoAxisBasis(
   const weightSupport = { axisId: weightAxisId, lower: 0, peak: 1, upper: 1 };
   return {
     sourceIds: [...sourceIds],
-    regions: [[], [widthSupport], [weightSupport], [widthSupport, weightSupport]],
-    coefficients: [
-      new Float64Array([1, 0, 0, 0]),
-      new Float64Array([-1, 0, 1, 0]),
-      new Float64Array([-1, 1, 0, 0]),
-      new Float64Array([1, -1, -1, 1]),
-    ],
+    basis: {
+      deltas: [
+        { region: [], values: new Float64Array([1, 0, 0, 0]) },
+        { region: [widthSupport], values: new Float64Array([-1, 0, 1, 0]) },
+        { region: [weightSupport], values: new Float64Array([-1, 1, 0, 0]) },
+        {
+          region: [widthSupport, weightSupport],
+          values: new Float64Array([1, -1, -1, 1]),
+        },
+      ],
+    },
   };
 }

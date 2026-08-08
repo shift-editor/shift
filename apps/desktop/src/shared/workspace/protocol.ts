@@ -2,6 +2,7 @@ import type {
   AppliedChange,
   Axis,
   AxisMapping,
+  AxisMappingBasis,
   CatalogAtlasPage,
   CatalogAtlasWeights,
   FontIntent,
@@ -36,6 +37,7 @@ export type WorkspaceSnapshot = {
   sources: Source[];
   axes: Axis[];
   axisMappings: AxisMapping[];
+  axisMappingBases: AxisMappingBasis[];
   namedInstances: NamedInstance[];
 };
 

@@ -7,7 +7,7 @@ Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge 
 - **Architecture Invariant: CRITICAL:** `src/bridge/generated.ts` is generated from `crates/shift-bridge/index.d.ts` by `scripts/generate-bridge-types.mjs`. Never edit it manually.
 - **Architecture Invariant: CRITICAL:** `@shift/types` is the canonical TypeScript DTO facade for the native bridge. It strips `Napi*` prefixes and exports type-only DTOs.
 - **Architecture Invariant:** Editor/domain snapshot types do not live here.
-- **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, `AxisLabelId`, `AxisMappingId`, `NamedInstanceId`, and point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types.
+- **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, `AxisLabelId`, `AxisMappingId`, `NamedInstanceId`, and point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types. Compiled variation contributions never fabricate entity IDs.
 - **Architecture Invariant:** This package ships raw `.ts` source. `package.json` points `main` and `types` directly at `src/index.ts`.
 
 ## Codemap
@@ -30,8 +30,11 @@ Import from `@shift/types`.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
-- `InterpolationBasis` -- ordered source identities, normalized support regions, and source coefficient rows; contains no glyph-specific values.
-- `GlyphProjection` -- location-independent renderer backing with fallback shape, compatible source values, exact-source shapes, and component identities.
+- `VariationBasis` / `VariationDelta` -- Rust/Fontdrasil-compiled normalized supports and numeric contribution vectors.
+- `InterpolationBasis` -- ordered real source identities plus a `VariationBasis` that produces source weights; contains no glyph-specific values.
+- `AxisMappingBasis` -- mapping identity and ordered input/output axes plus a compiled normalized-adjustment basis.
+- `GlyphVariation` -- imported fallback-relative numeric variation without fabricated authored source identities.
+- `GlyphProjection` -- location-independent renderer backing with fallback shape, optional authored interpolation or imported variation, exact-source shapes, and component identities.
 - `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo; its optional `next.metadata` is a complete replacement.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `SourceMetricsInterpolationSnapshot` -- derived metric schema, reusable interpolation basis, and ordered source values; it is workspace transport state, not an authored source or named instance.

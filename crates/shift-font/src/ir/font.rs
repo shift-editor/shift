@@ -638,6 +638,13 @@ impl Font {
         Ok(())
     }
 
+    pub fn axis_mapping_bases(&self) -> CoreResult<Vec<crate::AxisMappingBasis>> {
+        self.axis_mappings()
+            .iter()
+            .map(|mapping| crate::AxisMappingBasis::try_from((mapping, self.axes())))
+            .collect()
+    }
+
     pub fn mapped_location(&self, external: &Location) -> CoreResult<Location> {
         crate::variation::map_location(external, self.axes(), self.axis_mappings())
     }

@@ -262,6 +262,7 @@ export class FontStore {
             glyphs: next.glyphs ?? current.glyphs,
             axes: next.axes ?? current.axes,
             axisMappings: next.axisMappings ?? current.axisMappings,
+            axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
             metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
             sourceMetricsInterpolation: next.sourceMetricsInterpolation
               ? (next.sourceMetricsInterpolation.snapshot ?? null)

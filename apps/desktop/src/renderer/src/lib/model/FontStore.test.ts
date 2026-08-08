@@ -258,6 +258,7 @@ function snapshot(documentId: string, layerId: LayerId): WorkspaceSnapshot {
     ],
     axes: [],
     axisMappings: [],
+    axisMappingBases: [],
     namedInstances: [],
   };
 }

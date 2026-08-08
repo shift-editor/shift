@@ -114,6 +114,7 @@ export declare class Bridge {
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getAxisMappings(): Array<NapiAxisMapping>
+  getAxisMappingBases(): Array<NapiAxisMappingBasis>
   getMetricDefinitions(): Array<NapiMetricDefinition>
   getNamedInstances(): Array<NapiNamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
@@ -233,6 +234,13 @@ export interface NapiAxisMapping {
   inputs: Array<AxisId>
   outputs: Array<AxisId>
   points: Array<NapiAxisMappingPoint>
+}
+
+export interface NapiAxisMappingBasis {
+  mappingId: AxisMappingId
+  inputAxisIds: Array<AxisId>
+  outputAxisIds: Array<AxisId>
+  basis: NapiVariationBasis
 }
 
 export interface NapiAxisMappingPoint {
@@ -490,6 +498,8 @@ export interface NapiFontReplacement {
   axes?: Array<NapiAxis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
   axisMappings?: Array<NapiAxisMapping>
+  /** Rust-compiled mapping bases when axes or mappings changed; absent otherwise. */
+  axisMappingBases?: Array<NapiAxisMappingBasis>
   /** Full font-owned metric definitions when their identity or order changed. */
   metricDefinitions?: Array<NapiMetricDefinition>
   /** Refreshed source-metric interpolation model when any of its inputs changed. */
@@ -512,6 +522,7 @@ export interface NapiFontSnapshot {
   sources: Array<NapiSource>
   axes: Array<NapiAxis>
   axisMappings: Array<NapiAxisMapping>
+  axisMappingBases: Array<NapiAxisMappingBasis>
   namedInstances: Array<NapiNamedInstance>
 }
 
@@ -570,6 +581,7 @@ export interface NapiGlyphProjection {
   glyphId: GlyphId
   fallback: NapiGlyphLayerShape
   interpolation?: NapiGlyphInterpolation
+  variation?: NapiGlyphVariation
   exactSourceShapes: Array<NapiGlyphSourceShape>
   components: NapiGlyphComponents
   exactSourceComponents: Array<NapiGlyphSourceComponents>
@@ -622,10 +634,13 @@ export interface NapiGlyphStructure {
   components: Array<NapiComponentData>
 }
 
+export interface NapiGlyphVariation {
+  basis: NapiVariationBasis
+}
+
 export interface NapiInterpolationBasis {
   sourceIds: Array<SourceId>
-  regions: Array<Array<NapiInterpolationSupport>>
-  coefficients: Array<Float64Array>
+  basis: NapiVariationBasis
 }
 
 export interface NapiInterpolationSupport {
@@ -904,4 +919,13 @@ export interface NapiUpdateSourceIntent {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface NapiVariationBasis {
+  deltas: Array<NapiVariationDelta>
+}
+
+export interface NapiVariationDelta {
+  region: Array<NapiInterpolationSupport>
+  values: Float64Array
 }

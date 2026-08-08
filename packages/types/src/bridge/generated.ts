@@ -129,6 +129,7 @@ export interface BridgeApi {
   isVariable(): boolean
   getAxes(): Array<Axis>
   getAxisMappings(): Array<AxisMapping>
+  getAxisMappingBases(): Array<AxisMappingBasis>
   getMetricDefinitions(): Array<MetricDefinition>
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
@@ -248,6 +249,13 @@ export interface AxisMapping {
   inputs: Array<AxisId>
   outputs: Array<AxisId>
   points: Array<AxisMappingPoint>
+}
+
+export interface AxisMappingBasis {
+  mappingId: AxisMappingId
+  inputAxisIds: Array<AxisId>
+  outputAxisIds: Array<AxisId>
+  basis: VariationBasis
 }
 
 export interface AxisMappingPoint {
@@ -496,6 +504,8 @@ export interface FontReplacement {
   axes?: Array<Axis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
   axisMappings?: Array<AxisMapping>
+  /** Rust-compiled mapping bases when axes or mappings changed; absent otherwise. */
+  axisMappingBases?: Array<AxisMappingBasis>
   /** Full font-owned metric definitions when their identity or order changed. */
   metricDefinitions?: Array<MetricDefinition>
   /** Refreshed source-metric interpolation model when any of its inputs changed. */
@@ -518,6 +528,7 @@ export interface FontSnapshot {
   sources: Array<Source>
   axes: Array<Axis>
   axisMappings: Array<AxisMapping>
+  axisMappingBases: Array<AxisMappingBasis>
   namedInstances: Array<NamedInstance>
 }
 
@@ -576,6 +587,7 @@ export interface GlyphProjection {
   glyphId: GlyphId
   fallback: GlyphLayerShape
   interpolation?: GlyphInterpolation
+  variation?: GlyphVariation
   exactSourceShapes: Array<GlyphSourceShape>
   components: GlyphComponents
   exactSourceComponents: Array<GlyphSourceComponents>
@@ -628,10 +640,13 @@ export interface GlyphStructure {
   components: Array<ComponentData>
 }
 
+export interface GlyphVariation {
+  basis: VariationBasis
+}
+
 export interface InterpolationBasis {
   sourceIds: Array<SourceId>
-  regions: Array<Array<InterpolationSupport>>
-  coefficients: Array<Float64Array>
+  basis: VariationBasis
 }
 
 export interface InterpolationSupport {
@@ -895,4 +910,13 @@ export interface UpdateSourceIntent {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface VariationBasis {
+  deltas: Array<VariationDelta>
+}
+
+export interface VariationDelta {
+  region: Array<InterpolationSupport>
+  values: Float64Array
 }

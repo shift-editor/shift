@@ -152,6 +152,9 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 ## Architectural Constraints
 
+- **NEVER construct variation models in TypeScript.** Rust/Fontdrasil exclusively owns sample ordering, support construction, master influence, and delta decomposition. TypeScript may only evaluate transported compiled bases.
+- **Raw axis-mapping points stop at authoring boundaries.** `AxisMapping.points` may be read by Rust compilation and TypeScript mapping-authoring UI/model code only. Glyph, interpolation, source matching, metrics, editability, and atlas-weight evaluation must consume `AxisMappingBasis`, never `AxisMapping` or `AxisMappingPoint`.
+- **Compiled variation math carries no synthetic domain identity.** Transport `VariationBasis`, `VariationDelta`, and `GlyphVariation` as regions and numeric vectors. Never adapt imported deltas into `GlyphInterpolation`, invent `SourceId` values for them, or add an identity coefficient matrix.
 - **NEVER create Manager, Store, or Cache wrapper classes.** NativeBridge is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
 - **NEVER create CONTEXT.md files.** These are agent-generated dumps that go stale. Use `docs/architecture/` for architecture docs.
 

@@ -44,3 +44,4 @@ pub use named_instance::NamedInstance;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};
 pub use source::{Source, SourceRole};
+pub use variation::AxisMappingBasis;

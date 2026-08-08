@@ -95,6 +95,7 @@ export type {
   Axis,
   AxisLabel,
   AxisMapping,
+  AxisMappingBasis,
   AxisMappingPoint,
   AxisRole,
   AxisType,
@@ -144,6 +145,7 @@ export type {
   GlyphSnapshotRequest,
   GlyphState,
   GlyphStructure,
+  GlyphVariation,
   InterpolationBasis,
   InterpolationSupport,
   LayerReplaced,
@@ -163,4 +165,6 @@ export type {
   UpdateFontMetadataIntent,
   UpdateNamedInstanceIntent,
   UpdateSourceIntent,
+  VariationBasis,
+  VariationDelta,
 } from "./bridge";

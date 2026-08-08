@@ -27,23 +27,24 @@ use shift_slug::{
 };
 use shift_wire::{
   bridges::napi::{
-    NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisRole, NapiAxisType,
-    NapiCatalogAtlasGlyph, NapiCatalogAtlasPage, NapiCatalogAtlasWeights, NapiFontIntent,
-    NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot, NapiGlyphPreview,
-    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiInterpolationBasis, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
-    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
-    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
-    NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
+    NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
+    NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
+    NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
+    NapiFontReplacement, NapiFontSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
+    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiLayerReplaced,
+    NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance, NapiPointSeed,
+    NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents,
+    NapiSlugSection, NapiSlugWeightSet, NapiSource, NapiSourceMetricsInterpolationReplacement,
+    NapiSourceMetricsInterpolationSnapshot,
   },
-  AnchorData, Axis, AxisMapping, AxisMappingPoint, ComponentData, ComponentGlyph,
+  AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
   ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
-  GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerShape,
-  GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
-  GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure,
+  GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
+  GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents,
+  GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
   InterpolationBasis as WireInterpolationBasis, InterpolationSupport, Location as WireLocation,
   MetricDefinition, MetricKind as WireMetricKind, NamedInstance, PointData, PointType, Source,
-  SourceMetricValue, SourceMetricsInterpolationSnapshot,
+  SourceMetricValue, SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 use shift_workspace::{
   AcquireScope, FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError,
@@ -283,43 +284,37 @@ fn wire_font_snapshot(
       name: (*name).into(),
     })
     .collect::<Vec<_>>();
-  let axes = directory
+  let font_axes = directory
     .axes
     .iter()
     .zip(identity.axis_ids.iter())
-    .map(|(axis, id)| match &axis.kind {
-      VariationAxisKind::Continuous {
-        minimum,
-        default,
-        maximum,
-      } => Axis {
-        id: id.clone(),
-        tag: axis.tag.clone(),
-        name: axis.name.clone(),
-        role: "external".into(),
-        axis_type: "continuous".into(),
-        minimum: Some(*minimum),
-        default: *default,
-        maximum: Some(*maximum),
-        values: None,
-        labels: Vec::new(),
-        hidden: axis.hidden,
-      },
-      VariationAxisKind::Discrete { values, default } => Axis {
-        id: id.clone(),
-        tag: axis.tag.clone(),
-        name: axis.name.clone(),
-        role: "external".into(),
-        axis_type: "discrete".into(),
-        minimum: None,
-        default: *default,
-        maximum: None,
-        values: Some(values.to_vec()),
-        labels: Vec::new(),
-        hidden: axis.hidden,
-      },
+    .map(|(axis, id)| {
+      let mut mapped = match &axis.kind {
+        VariationAxisKind::Continuous {
+          minimum,
+          default,
+          maximum,
+        } => FontAxis::continuous_with_id(
+          id.clone(),
+          axis.tag.clone(),
+          axis.name.clone(),
+          *minimum,
+          *default,
+          *maximum,
+        ),
+        VariationAxisKind::Discrete { values, default } => FontAxis::discrete_with_id(
+          id.clone(),
+          axis.tag.clone(),
+          axis.name.clone(),
+          values.to_vec(),
+          *default,
+        ),
+      };
+      mapped.set_hidden(axis.hidden);
+      mapped
     })
     .collect::<Vec<_>>();
+  let axes = font_axes.iter().map(Axis::from).collect::<Vec<_>>();
   let sources = directory
     .sources
     .iter()
@@ -352,7 +347,7 @@ fn wire_font_snapshot(
       }
     })
     .collect::<Vec<_>>();
-  let axis_mappings = directory
+  let font_axis_mappings = directory
     .axis_mappings
     .iter()
     .map(|mapping| {
@@ -364,28 +359,34 @@ fn wire_font_snapshot(
           kind: "source axis mapping",
           value: mapping.axis.to_u32().to_string(),
         })?;
-      Ok(AxisMapping {
-        id: AxisMappingId::new(),
-        name: format!("{} mapping", directory.axes[mapping.axis.to_usize()].name),
-        description: None,
-        inputs: vec![axis_id.clone()],
-        outputs: vec![axis_id.clone()],
-        points: mapping
+      Ok(FontAxisMapping::with_id(
+        AxisMappingId::new(),
+        format!("{} mapping", directory.axes[mapping.axis.to_usize()].name),
+        vec![axis_id.clone()],
+        vec![axis_id.clone()],
+        mapping
           .points
           .iter()
-          .map(|(input, output)| AxisMappingPoint {
+          .map(|(input, output)| FontAxisMappingPoint {
             description: None,
-            input: WireLocation {
-              values: HashMap::from([(axis_id.clone(), *input)]),
-            },
-            output: WireLocation {
-              values: HashMap::from([(axis_id.clone(), *output)]),
-            },
+            input: FontLocation::from_map(HashMap::from([(axis_id.clone(), *input)])),
+            output: FontLocation::from_map(HashMap::from([(axis_id.clone(), *output)])),
           })
           .collect(),
-      })
+      ))
     })
     .collect::<BridgeResult<Vec<_>>>()?;
+  let axis_mappings = font_axis_mappings
+    .iter()
+    .map(AxisMapping::from)
+    .collect::<Vec<_>>();
+  let axis_mapping_bases = font_axis_mappings
+    .iter()
+    .map(|mapping| shift_font::AxisMappingBasis::try_from((mapping, font_axes.as_slice())))
+    .collect::<std::result::Result<Vec<_>, _>>()?
+    .iter()
+    .map(AxisMappingBasis::from)
+    .collect();
   let named_instances = directory
     .instances
     .iter()
@@ -424,6 +425,7 @@ fn wire_font_snapshot(
     sources,
     axes,
     axis_mappings,
+    axis_mapping_bases,
     named_instances,
   })
 }
@@ -483,67 +485,43 @@ fn wire_source_glyph(
         directory,
         identity,
       )?;
-      let interpolation = projection
+      let variation = projection
         .variation
         .as_ref()
         .map(|variation| {
-          let source_ids = (0..=variation.deltas.len())
-            .map(|index| SourceId::from_raw(format!("{glyph_id}-variation-{index}")))
-            .collect::<Vec<_>>();
-          let mut regions = vec![Vec::new()];
-          regions.extend(
-            variation
-              .deltas
-              .iter()
-              .map(|delta| {
-                delta
-                  .region
-                  .supports
-                  .iter()
-                  .map(|support| {
-                    let axis_id = identity
-                      .axis_ids
-                      .get(support.axis.to_usize())
-                      .cloned()
-                      .ok_or_else(|| BridgeError::InvalidInput {
-                        kind: "source projection axis",
-                        value: support.axis.to_u32().to_string(),
-                      })?;
-                    Ok(InterpolationSupport {
-                      axis_id,
-                      lower: support.lower,
-                      peak: support.peak,
-                      upper: support.upper,
-                    })
+          let deltas = variation
+            .deltas
+            .iter()
+            .map(|delta| {
+              let region = delta
+                .region
+                .supports
+                .iter()
+                .map(|support| {
+                  let axis_id = identity
+                    .axis_ids
+                    .get(support.axis.to_usize())
+                    .cloned()
+                    .ok_or_else(|| BridgeError::InvalidInput {
+                      kind: "source projection axis",
+                      value: support.axis.to_u32().to_string(),
+                    })?;
+                  Ok(InterpolationSupport {
+                    axis_id,
+                    lower: support.lower,
+                    peak: support.peak,
+                    upper: support.upper,
                   })
-                  .collect::<BridgeResult<Vec<_>>>()
+                })
+                .collect::<BridgeResult<Vec<_>>>()?;
+              Ok(VariationDelta {
+                region,
+                values: delta.values.to_vec(),
               })
-              .collect::<BridgeResult<Vec<_>>>()?,
-          );
-          let coefficients = (0..source_ids.len())
-            .map(|row| {
-              (0..source_ids.len())
-                .map(|column| if row == column { 1.0 } else { 0.0 })
-                .collect::<Vec<_>>()
             })
-            .collect();
-          let mut sources = vec![GlyphSourceValues {
-            source_id: source_ids[0].clone(),
-            values: projection.fallback.values.to_vec(),
-          }];
-          sources.extend(variation.deltas.iter().zip(source_ids.iter().skip(1)).map(
-            |(delta, source_id)| GlyphSourceValues {
-              source_id: source_id.clone(),
-              values: delta.values.to_vec(),
-            },
-          ));
-          Ok::<_, BridgeError>(GlyphInterpolation {
-            basis: WireInterpolationBasis {
-              source_ids,
-              regions,
-              coefficients,
-            },
-            sources,
+            .collect::<BridgeResult<Vec<_>>>()?;
+          Ok::<_, BridgeError>(GlyphVariation {
+            basis: VariationBasis { deltas },
           })
         })
         .transpose()?;
@@ -599,7 +577,8 @@ fn wire_source_glyph(
         projection: Some(GlyphProjection {
           glyph_id,
           fallback,
-          interpolation,
+          interpolation: None,
+          variation,
           exact_source_shapes,
           components,
           exact_source_components,
@@ -1378,6 +1357,9 @@ impl Bridge {
           axis_mappings: axis_mappings_changed
             .then(|| self.get_axis_mappings())
             .transpose()?,
+          axis_mapping_bases: (axes_changed || axis_mappings_changed)
+            .then(|| self.get_axis_mapping_bases())
+            .transpose()?,
           metric_definitions: metric_definitions_changed
             .then(|| self.get_metric_definitions())
             .transpose()?,
@@ -1861,6 +1843,19 @@ impl Bridge {
         .axis_mappings()
         .iter()
         .map(AxisMapping::from)
+        .map(Into::into)
+        .collect(),
+    )
+  }
+
+  #[napi]
+  pub fn get_axis_mapping_bases(&self) -> errors::Result<Vec<NapiAxisMappingBasis>> {
+    Ok(
+      self
+        .font()?
+        .axis_mapping_bases()?
+        .iter()
+        .map(AxisMappingBasis::from)
         .map(Into::into)
         .collect(),
     )

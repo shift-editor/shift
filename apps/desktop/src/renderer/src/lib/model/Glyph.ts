@@ -1,7 +1,7 @@
 import type {
   AnchorId,
   Axis,
-  AxisMapping,
+  AxisMappingBasis,
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
   ContourData,
@@ -45,6 +45,7 @@ import {
   interpolateSourceValues,
   interpolationWeights,
 } from "@/lib/interpolation/InterpolationBasis";
+import { evaluateVariationBasis } from "@/lib/interpolation/VariationBasis";
 import { Transform } from "@/lib/transform/Transform";
 import { Alignment } from "@/lib/transform/Alignment";
 import type { AlignmentType, DistributeType, ReflectAxis } from "@/types/transform";
@@ -1624,7 +1625,7 @@ export class Glyph {
   readonly #entryCell: WritableSignal<GlyphEntry>;
   readonly #layersCell: WritableSignal<readonly GlyphLayer[]>;
   readonly #axesCell: Signal<Axis[]>;
-  readonly #axisMappingsCell: Signal<AxisMapping[]>;
+  readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
   readonly #sourcesCell: Signal<Source[]>;
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
@@ -1637,7 +1638,7 @@ export class Glyph {
     this.#entryCell = signal(options.entry, { name: "glyph.entry" });
     this.#layersCell = signal(options.layers, { name: "glyph.layers" });
     this.#axesCell = options.axesCell;
-    this.#axisMappingsCell = options.axisMappingsCell;
+    this.#axisMappingBasesCell = options.axisMappingBasesCell;
     this.#sourcesCell = options.sourcesCell;
     this.#projectionCell = options.projectionCell;
     this.#defaultSourceId = options.defaultSourceId;
@@ -1682,10 +1683,10 @@ export class Glyph {
   layerAt(location: AxisLocation): GlyphLayer | null {
     track(this.#layersCell);
     track(this.#axesCell);
-    track(this.#axisMappingsCell);
+    track(this.#axisMappingBasesCell);
 
     const axes = this.#axesCell.peek();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     for (const layer of this.#layersCell.peek()) {
       if (
         axisLocationsEqual(axisLocationFromLocation(layer.source.location), mappedLocation, axes)
@@ -1700,7 +1701,7 @@ export class Glyph {
   geometryAt(location: AxisLocation): GlyphGeometry {
     track(this.#layersCell);
     track(this.#axesCell);
-    track(this.#axisMappingsCell);
+    track(this.#axisMappingBasesCell);
     track(this.#sourcesCell);
     track(this.#projectionCell);
 
@@ -1719,7 +1720,7 @@ export class Glyph {
     }
 
     const axes = this.#axesCell.peek();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
     const exactSource = this.#sourcesCell
       .peek()
       .find((source) =>
@@ -1735,19 +1736,34 @@ export class Glyph {
     if (exactShape) return projectionGeometry(exactShape.shape);
 
     const interpolation = projection.interpolation;
-    if (!interpolation) return projectionGeometry(projection.fallback);
+    if (interpolation) {
+      const weights = interpolationWeights(interpolation.basis, mappedLocation, axes);
+      const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
+        const sourceLayer = this.#layersBySourceId.get(sourceId);
+        if (sourceLayer) {
+          track(sourceLayer.geometryCell);
+          return sourceLayer.state.values;
+        }
 
-    const weights = interpolationWeights(interpolation.basis, mappedLocation, axes);
-    const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
-      const sourceLayer = this.#layersBySourceId.get(sourceId);
-      if (sourceLayer) {
-        track(sourceLayer.geometryCell);
-        return sourceLayer.state.values;
-      }
+        return interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
+      });
+      if (!values) return projectionGeometry(projection.fallback);
 
-      return interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
-    });
-    if (!values) return projectionGeometry(projection.fallback);
+      return new GlyphGeometry(
+        projection.fallback.structure,
+        values,
+        projection.fallback.componentTransformKind,
+      );
+    }
+
+    const variation = projection.variation;
+    if (!variation) return projectionGeometry(projection.fallback);
+
+    const adjustments = evaluateVariationBasis(variation.basis, mappedLocation, axes);
+    const values = new Float64Array(projection.fallback.values);
+    for (let index = 0; index < values.length; index++) {
+      values[index] += adjustments[index] ?? 0;
+    }
 
     return new GlyphGeometry(
       projection.fallback.structure,
@@ -1784,9 +1800,9 @@ export class Glyph {
       (location) => {
         track(this.#sourcesCell);
         track(this.#axesCell);
-        track(this.#axisMappingsCell);
+        track(this.#axisMappingBasesCell);
         const axes = this.#axesCell.peek();
-        const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingsCell.peek());
+        const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
         const source = this.#sourcesCell
           .peek()
           .find((candidate) =>

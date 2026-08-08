@@ -36,22 +36,16 @@ mod tests {
     use super::piecewise_map;
 
     #[test]
-    fn matches_typescript_axis_mapping_fixture() {
-        let fixture =
-            include_str!("../../../../packages/types/__fixtures__/axis_mapping_parity.txt");
-        let mut points = Vec::new();
-        let mut cases = Vec::new();
-        for line in fixture.lines() {
-            let mut fields = line.split(',');
-            let kind = fields.next().unwrap();
-            let input = fields.next().unwrap().parse::<f64>().unwrap();
-            let output = fields.next().unwrap().parse::<f64>().unwrap();
-            match kind {
-                "point" => points.push((input, output)),
-                "case" => cases.push((input, output)),
-                _ => panic!("unknown axis mapping parity row {kind:?}"),
-            }
-        }
+    fn uses_designspace_offset_extrapolation() {
+        let points = [(100.0, 80.0), (400.0, 400.0), (900.0, 850.0)];
+        let cases = [
+            (0.0, -20.0),
+            (100.0, 80.0),
+            (250.0, 240.0),
+            (400.0, 400.0),
+            (900.0, 850.0),
+            (1000.0, 950.0),
+        ];
 
         for (input, expected) in cases {
             assert!((piecewise_map(input, &points) - expected).abs() < 1e-9);

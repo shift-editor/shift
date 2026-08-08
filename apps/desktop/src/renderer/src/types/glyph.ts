@@ -1,7 +1,7 @@
 import type {
   AnchorId,
   Axis,
-  AxisMapping,
+  AxisMappingBasis,
   ContourId,
   GlyphEntry,
   GlyphId,
@@ -32,7 +32,7 @@ export interface GlyphOptions {
   readonly layers: readonly GlyphLayer[];
   readonly componentGlyphs: ReadonlyMap<GlyphId, Glyph>;
   readonly axesCell: Signal<Axis[]>;
-  readonly axisMappingsCell: Signal<AxisMapping[]>;
+  readonly axisMappingBasesCell: Signal<AxisMappingBasis[]>;
   readonly sourcesCell: Signal<Source[]>;
   readonly projectionCell: Signal<GlyphProjection | null>;
   readonly defaultSourceId: SourceId;
