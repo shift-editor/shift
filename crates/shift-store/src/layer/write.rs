@@ -15,12 +15,19 @@ impl ShiftStore {
     /// rows in one transaction. The workspace revision advances only after
     /// encoding and index derivation have succeeded.
     pub fn replace_glyph_layer(&mut self, layer: &font::GlyphLayer) -> Result<(), StoreError> {
-        let tracks_workspace = self.tracks_workspace();
         let owner =
             layer_owner(&self.conn, &layer.id())?.ok_or_else(|| StoreError::MissingEntity {
                 kind: "glyph layer",
                 id: layer.id().to_string(),
             })?;
+        if let Some(recovery) = self.recovery.as_mut() {
+            return recovery.replace_layer(&owner, layer);
+        }
+        if self.kind == crate::store::StoreKind::Document {
+            return Err(StoreError::DocumentRequiresRecoveryOverlay);
+        }
+
+        let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
         write_layer_in_tx(&tx, &owner, layer)?;
         if tracks_workspace {
