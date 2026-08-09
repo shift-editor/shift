@@ -1020,6 +1020,8 @@ fn canonical_document_round_trip_preserves_kitchen_sink_font_for_export() {
     let metadata = store.document_metadata().expect("document metadata");
     assert!(metadata.document_id.as_str().starts_with("document_"));
     assert_eq!(metadata.document_id.as_str().len(), 41);
+    assert!(metadata.saved_commit_id.as_str().starts_with("commit_"));
+    assert_eq!(metadata.saved_commit_id.as_str().len(), 39);
     assert_eq!(store.load_font_state().expect("load document"), original);
     drop(store);
 

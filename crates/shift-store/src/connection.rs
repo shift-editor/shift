@@ -13,6 +13,7 @@ impl ShiftStore {
             conn,
             path: Some(path.to_path_buf()),
             kind: StoreKind::Working,
+            recovery: None,
         })
     }
 
@@ -37,6 +38,7 @@ impl ShiftStore {
             conn,
             path: Some(path.to_path_buf()),
             kind: StoreKind::Working,
+            recovery: None,
         })
     }
 
@@ -74,6 +76,7 @@ impl ShiftStore {
             conn,
             path: None,
             kind: StoreKind::Working,
+            recovery: None,
         })
     }
 }

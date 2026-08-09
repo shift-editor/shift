@@ -8,7 +8,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, backup::Backup, params}
 use shift_font::Font;
 
 use crate::{
-    DocumentId, ShiftStore, StoreError,
+    CommitId, DocumentId, RecoveryState, ShiftStore, StoreError,
     connection::{configure_common, configure_document_connection},
     schema,
     store::StoreKind,
@@ -17,6 +17,7 @@ use crate::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentMetadata {
     pub document_id: DocumentId,
+    pub saved_commit_id: CommitId,
 }
 
 impl ShiftStore {
@@ -45,10 +46,12 @@ impl ShiftStore {
                 conn,
                 path: Some(staged.to_path_buf()),
                 kind: StoreKind::Document,
+                recovery: None,
             };
             store.replace_font_state(font)?;
             store.insert_document_metadata(&DocumentMetadata {
                 document_id: DocumentId::new(),
+                saved_commit_id: CommitId::new(),
             })?;
             store.sync_store_file()?;
         }
@@ -91,15 +94,40 @@ impl ShiftStore {
         }
 
         configure_document_connection(&conn)?;
-        conn.pragma_update(None, "secure_delete", "ON")?;
         let metadata = DocumentMetadata {
             document_id: DocumentId::new(),
+            saved_commit_id: CommitId::new(),
         };
+        if let Some(recovery) = self.recovery.as_ref() {
+            let state = recovery.state()?;
+            match state {
+                RecoveryState::Clean => {}
+                RecoveryState::Dirty | RecoveryState::Conflict => {
+                    crate::recovery::apply_overlay_to_snapshot(
+                        &mut conn,
+                        recovery,
+                        &metadata.saved_commit_id,
+                    )?;
+                }
+                RecoveryState::SavePending => {
+                    return Err(StoreError::InvalidRecoveryTransition {
+                        expected: "clean, dirty, or conflict",
+                        found: state.as_str(),
+                    });
+                }
+            }
+        }
+        conn.pragma_update(None, "secure_delete", "ON")?;
         let tx = conn.transaction()?;
-        tx.execute_batch("DROP TABLE IF EXISTS workspace_state; DELETE FROM document_metadata;")?;
+        tx.execute_batch(
+            "DROP TABLE IF EXISTS main.workspace_state; DELETE FROM main.document_metadata;",
+        )?;
         tx.execute(
-            "INSERT INTO document_metadata (id, document_id) VALUES (1, ?1)",
-            params![metadata.document_id.as_str()],
+            "INSERT INTO main.document_metadata (id, document_id, saved_commit_id) VALUES (1, ?1, ?2)",
+            params![
+                metadata.document_id.as_str(),
+                metadata.saved_commit_id.as_str()
+            ],
         )?;
         tx.pragma_update(None, "application_id", schema::SHIFT_APPLICATION_ID)?;
         tx.pragma_update(None, "user_version", schema::SCHEMA_VERSION)?;
@@ -110,6 +138,7 @@ impl ShiftStore {
             conn,
             path: Some(staged.to_path_buf()),
             kind: StoreKind::Document,
+            recovery: None,
         };
         staged_store.sync_store_file()?;
         drop(staged_store);
@@ -153,6 +182,7 @@ impl ShiftStore {
             conn,
             path: Some(path.to_path_buf()),
             kind: StoreKind::Document,
+            recovery: None,
         })
     }
 
@@ -186,8 +216,11 @@ impl ShiftStore {
 
     fn insert_document_metadata(&mut self, metadata: &DocumentMetadata) -> Result<(), StoreError> {
         self.conn.execute(
-            "INSERT INTO document_metadata (id, document_id) VALUES (1, ?1)",
-            params![metadata.document_id.as_str()],
+            "INSERT INTO document_metadata (id, document_id, saved_commit_id) VALUES (1, ?1, ?2)",
+            params![
+                metadata.document_id.as_str(),
+                metadata.saved_commit_id.as_str()
+            ],
         )?;
         Ok(())
     }
@@ -227,18 +260,23 @@ fn load_document_metadata(conn: &Connection) -> Result<DocumentMetadata, StoreEr
 
     let stored = conn
         .query_row(
-            "SELECT document_id FROM document_metadata WHERE id = 1",
+            "SELECT document_id, saved_commit_id FROM document_metadata WHERE id = 1",
             [],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .optional()?
         .ok_or_else(|| {
             StoreError::InvalidDocument("missing document_metadata row 1".to_string())
         })?;
     let document_id =
-        DocumentId::from_stored(stored.clone()).ok_or(StoreError::InvalidDocumentId(stored))?;
+        DocumentId::from_stored(stored.0.clone()).ok_or(StoreError::InvalidDocumentId(stored.0))?;
+    let saved_commit_id =
+        CommitId::from_stored(stored.1.clone()).ok_or(StoreError::InvalidCommitId(stored.1))?;
 
-    Ok(DocumentMetadata { document_id })
+    Ok(DocumentMetadata {
+        document_id,
+        saved_commit_id,
+    })
 }
 
 fn parent_directory(path: &Path) -> &Path {
