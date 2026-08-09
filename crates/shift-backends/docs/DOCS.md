@@ -18,6 +18,8 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** `UfoWriter` preserves fractional coordinates and widths. Empty contours are skipped because they have no serializable UFO geometry.
 
+**Architecture Invariant:** Exporting a `Font` materialized from canonical SQLite must produce byte-identical UFO and Designspace artifacts to exporting the same supported in-memory `Font` directly. WHY: native persistence must preserve authored export inputs rather than narrowing them to a storage-specific projection.
+
 **Architecture Invariant:** `GlyphsReader` converts Glyphs-format kerning group prefixes (`@MMK_L_`, `@MMK_R_`) to UFO-convention prefixes (`public.kern1.`, `public.kern2.`) at load time. WHY: The IR stores kerning in UFO conventions; all backends must normalize to this format.
 
 **Architecture Invariant:** `GlyphsReader` only loads kerning from the default master and reports omitted non-default-master or RTL pairs through `ImportReport`. WHY: The IR currently stores a single static kerning table, not per-master or direction-specific kerning.
@@ -176,6 +178,7 @@ cargo test -p shift-backends writer_preserves_fractional_coordinates_and_skips_e
 cargo test -p shift-backends loads_homenaje_glyphs_file
 cargo test -p shift-backends loads_glyphs_package
 cargo test -p shift-backends --test export
+cargo test -p shift-backends --test native_document_export
 
 # Manual release profile: open/directory, selected projection,
 # complete sequential/parallel projection, and peak RSS

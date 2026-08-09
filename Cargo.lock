@@ -2269,6 +2269,7 @@ dependencies = [
  "shift-font",
  "shift-slug",
  "shift-source",
+ "shift-store",
  "skrifa",
  "tempfile",
  "thiserror",
