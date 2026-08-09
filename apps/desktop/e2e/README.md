@@ -1,6 +1,6 @@
 # Desktop E2E tests
 
-Playwright launches the built Electron application against an isolated user-data directory and a copied workspace. The suites cover different execution environments and should not share rendering assumptions.
+Playwright launches the built Electron application against an isolated user-data directory and a native SQLite `.shift` fixture. The suites cover different execution environments and should not share rendering assumptions.
 
 ## Commands
 
@@ -18,6 +18,7 @@ Append a Playwright file filter for a focused run:
 
 ```sh
 pnpm test:e2e:visual e2e/home.spec.ts
+pnpm test:e2e:visual e2e/document-recovery.spec.ts
 pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
 ```
 
@@ -39,7 +40,7 @@ SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview
 SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
-Fixtures copy source files into a temporary workspace. Tests must not depend on a developer's existing Shift workspace or user-data directory.
+Authored fixtures import their source into a canonical native document under a temporary test root. Tests must not depend on a developer's existing Shift workspace or user-data directory. The recovery fixture restarts Electron with the same isolated user-data directory and document, allowing forced-termination recovery to be tested without touching developer state.
 
 ## Visual snapshots
 

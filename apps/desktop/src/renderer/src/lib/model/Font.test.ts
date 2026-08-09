@@ -21,7 +21,7 @@ import { signal } from "@/lib/signals/signal";
 import { externalAxisLocationFromRecord } from "@/lib/variation/location";
 
 const SNAPSHOT: WorkspaceSnapshot = {
-  documentId: "11111111-2222-3333-4444-555555555555",
+  workspaceId: "11111111-2222-3333-4444-555555555555",
   metadata: { familyName: "Untitled Font" },
   metrics: { unitsPerEm: 2048, ascender: 1638, descender: -410 },
   glyphs: [

@@ -73,7 +73,7 @@ export class FontSessionHost {
     }
   }
 
-  /** Identity used by authored package indexing. */
+  /** App-local identity used by authored document indexing. */
   get workspaceId(): FontSessionId {
     return this.sessionId;
   }

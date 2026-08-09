@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { createBridge } from "@shift/bridge";
 import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker_threads";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -100,6 +101,17 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync: SyncChannel = new Channel(nodePortTransport(lane.port2));
     channels.push(sync);
     return sync;
+  }
+
+  async function startAdditionalHost(): Promise<{
+    shell: ShellChannel;
+    sync: SyncChannel;
+  }> {
+    const lane = new MessageChannel();
+    const additionalShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
+    channels.push(additionalShell);
+    startHost(nodePortTransport(lane.port2));
+    return { shell: additionalShell, sync: await connectSyncLane(additionalShell) };
   }
 
   async function applyWorkspace(
@@ -211,7 +223,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const state = await targetShell.call("workspace.create", undefined);
     const snapshot = await sync.call("workspace.snapshot", undefined);
     if (!snapshot) throw new Error("workspace.create did not create a snapshot");
-    expect(snapshot.documentId).toBe(state.documentId);
+    expect(snapshot.workspaceId).toBe(state.workspaceId);
     return snapshot;
   }
 
@@ -223,19 +235,45 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const state = await targetShell.call("workspace.open", { path: sourcePath });
     const snapshot = await sync.call("workspace.snapshot", undefined);
     if (!snapshot) throw new Error("workspace.open did not create a snapshot");
-    expect(snapshot.documentId).toBe(state.documentId);
+    expect(snapshot.workspaceId).toBe(state.workspaceId);
     return snapshot;
   }
 
-  function externallyAddGlyph(sourcePath: string, name: GlyphName, unicode: Unicode): void {
-    const bridge = createBridge();
-    const storePath = path.join(tmpRoot, "external", `${String(name)}.sqlite`);
+  async function saveDocumentWithGlyphA(
+    sync: SyncChannel,
+    fileName: string,
+  ): Promise<{ path: string; workspaceId: string }> {
+    const { workspaceId } = await createWorkspace(sync);
+    await sync.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
+    const documentPath = path.join(tmpRoot, fileName);
+    await sync.call("workspace.saveAs", { path: documentPath });
+    return { path: documentPath, workspaceId };
+  }
 
-    fs.mkdirSync(path.dirname(storePath), { recursive: true });
-    bridge.openWorkspace(sourcePath, storePath);
-    bridge.apply([createGlyph(name, unicode)], "External Edit");
-    bridge.saveWorkspace();
-    bridge.closeWorkspace();
+  async function addGlyphB(sync: SyncChannel): Promise<void> {
+    await sync.call("workspace.apply", {
+      intents: [createGlyph("B" as GlyphName, 66 as Unicode)],
+      label: "Add Glyph",
+    });
+  }
+
+  async function reopenedGlyphNames(documentPath: string): Promise<string[]> {
+    const reopened = await startAdditionalHost();
+    const snapshot = await openWorkspace(reopened.sync, reopened.shell, documentPath);
+    return snapshot.glyphs.map((glyph) => glyph.name);
+  }
+
+  function canonicalGlyphNames(documentPath: string): string[] {
+    const bridge = createBridge();
+    const recoveryPath = path.join(tmpRoot, "inspection", `${crypto.randomUUID()}.sqlite`);
+
+    fs.mkdirSync(path.dirname(recoveryPath), { recursive: true });
+    try {
+      bridge.openDocument(documentPath, recoveryPath);
+      return bridge.getGlyphs().map((glyph) => glyph.name);
+    } finally {
+      bridge.closeWorkspace();
+    }
   }
 
   beforeEach(() => {
@@ -262,7 +300,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(snapshot?.font.glyphs.length).toBeGreaterThan(0);
     expect(await sync.call("workspace.snapshot", undefined)).toBeNull();
     expect(await sync.call("document.state", undefined)).toBeNull();
-    expect(fs.existsSync(path.join(tmpRoot, "documents"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpRoot, "workspaces"))).toBe(false);
     expect(fs.existsSync(path.join(tmpRoot, "atlas-cache"))).toBe(false);
   });
 
@@ -312,7 +350,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(weights.map((page) => page.pageIndex)).toEqual(pages.map((page) => page.pageIndex));
     expect(weights.map((page) => page.weights)).toEqual(pages.map((page) => page.weights));
     expect(maximumWeights).not.toEqual(weights);
-    expect(fs.existsSync(path.join(tmpRoot, "documents"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpRoot, "workspaces"))).toBe(false);
     expect(fs.existsSync(path.join(tmpRoot, "atlas-cache"))).toBe(false);
   });
 
@@ -500,8 +538,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     // An authored draft must never die with the process: the data-loss
     // class the durability ADRs were written against.
     const sync = await connectSyncLane();
-    const { documentId } = await createWorkspace(sync);
-    const storePath = path.join(tmpRoot, "documents", documentId, "document.sqlite");
+    const { workspaceId } = await createWorkspace(sync);
+    const storePath = path.join(tmpRoot, "workspaces", workspaceId, "document.sqlite");
     expect(fs.existsSync(storePath)).toBe(true);
 
     const lane = new MessageChannel();
@@ -538,7 +576,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     const sync = await connectSyncLane();
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toMatchObject({
-      documentId: state.documentId,
+      workspaceId: state.workspaceId,
       glyphs: [],
     });
   });
@@ -548,19 +586,19 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     const snapshot = await createWorkspace(sync);
 
-    expect(snapshot.documentId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
+    expect(snapshot.workspaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
     expect(snapshot.glyphs).toEqual([]);
     expect(snapshot.metrics.unitsPerEm).toBe(1000);
     expect(snapshot.sources.length).toBeGreaterThan(0);
     expect(snapshot.axes).toEqual([]);
   });
 
-  it("writes the sqlite store under the documents root", async () => {
+  it("writes the SQLite store under the workspace root", async () => {
     const sync = await connectSyncLane();
 
-    const { documentId } = await createWorkspace(sync);
+    const { workspaceId } = await createWorkspace(sync);
 
-    const storePath = path.join(tmpRoot, "documents", documentId, "document.sqlite");
+    const storePath = path.join(tmpRoot, "workspaces", workspaceId, "document.sqlite");
     expect(fs.existsSync(storePath)).toBe(true);
   });
 
@@ -571,214 +609,74 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toEqual(created);
   });
 
-  it("opens a package before any workspace exists", async () => {
+  it("opens a canonical document through a sparse recovery workspace", async () => {
     const source = await connectSyncLane();
-    await createWorkspace(source);
-    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const savePath = path.join(tmpRoot, "OpenMe.shift");
-    await source.call("workspace.saveAs", { path: savePath });
+    const saved = await saveDocumentWithGlyphA(source, "OpenMe.shift");
+    const restarted = await startAdditionalHost();
 
-    const lane = new MessageChannel();
-    const unopenedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
-    channels.push(unopenedShell);
-    startHost(nodePortTransport(lane.port2));
-    const unopened = await connectSyncLane(unopenedShell);
-
-    const opened = await openWorkspace(unopened, unopenedShell, savePath);
-
-    expect(opened.documentId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
-    expect(opened.sources.length).toBeGreaterThan(0);
-    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
-    await expect(unopenedShell.call("document.state", undefined)).resolves.toMatchObject({
-      sourceKind: "package",
-      saveTarget: fs.realpathSync(savePath),
-      dirty: false,
-      needsSaveAs: false,
-    });
-  });
-
-  it("opens a package from the shell lane", async () => {
-    const source = await connectSyncLane();
-    await createWorkspace(source);
-    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const savePath = path.join(tmpRoot, "ShellOpenMe.shift");
-    await source.call("workspace.saveAs", { path: savePath });
-
-    const lane = new MessageChannel();
-    const unopenedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
-    channels.push(unopenedShell);
-    startHost(nodePortTransport(lane.port2));
-
-    const state = await unopenedShell.call("workspace.open", { path: savePath });
+    const state = await restarted.shell.call("workspace.open", { path: saved.path });
+    const snapshot = await restarted.sync.call("workspace.snapshot", undefined);
 
     expect(state).toMatchObject({
-      sourceKind: "package",
-      saveTarget: fs.realpathSync(savePath),
+      sourceKind: "document",
+      documentId: expect.stringMatching(/^document_/),
+      canonicalPath: fs.realpathSync(saved.path),
       dirty: false,
       needsSaveAs: false,
     });
-
-    const unopened = await connectSyncLane(unopenedShell);
-    await expect(unopened.call("workspace.snapshot", undefined)).resolves.toMatchObject({
-      documentId: state.documentId,
-      glyphs: [expect.objectContaining({ name: "A" })],
-    });
+    expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
   });
 
-  it("opening a package resumes a retained dirty working store", async () => {
+  it("recovers unsaved edits on the next document open", async () => {
     const source = await connectSyncLane();
-    const created = await createWorkspace(source);
-    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const savePath = path.join(tmpRoot, "RecoverMe.shift");
-    await source.call("workspace.saveAs", { path: savePath });
-    await source.call("workspace.apply", {
-      intents: [
-        {
-          kind: "createGlyph",
-          createGlyph: {
-            glyphId: mintGlyphId(),
-            name: "B" as GlyphName,
-            unicodes: [66 as Unicode],
-          },
-        },
-      ],
-      label: "Add Glyph",
-    });
+    const saved = await saveDocumentWithGlyphA(source, "RecoverMe.shift");
+    await addGlyphB(source);
+    expect(canonicalGlyphNames(saved.path)).toEqual(["A"]);
 
-    const lane = new MessageChannel();
-    const restartedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
-    channels.push(restartedShell);
-    startHost(nodePortTransport(lane.port2));
-    const restarted = await connectSyncLane(restartedShell);
+    const restarted = await startAdditionalHost();
+    const opened = await openWorkspace(restarted.sync, restarted.shell, saved.path);
 
-    const opened = await openWorkspace(restarted, restartedShell, savePath);
-
-    expect(opened.documentId).toBe(created.documentId);
+    expect(opened.workspaceId).toBe(saved.workspaceId);
     expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A", "B"]);
-    await expect(restartedShell.call("document.state", undefined)).resolves.toMatchObject({
-      documentId: created.documentId,
-      sourceKind: "package",
-      saveTarget: fs.realpathSync(savePath),
-      dirty: true,
-      needsSaveAs: false,
-    });
-  });
-
-  it("opening a clean package binding hydrates a fresh document", async () => {
-    const source = await connectSyncLane();
-    const created = await createWorkspace(source);
-    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const savePath = path.join(tmpRoot, "CleanBinding.shift");
-    await source.call("workspace.saveAs", { path: savePath });
-    const oldStorePath = path.join(tmpRoot, "documents", created.documentId, "document.sqlite");
-
-    const lane = new MessageChannel();
-    const restartedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
-    channels.push(restartedShell);
-    startHost(nodePortTransport(lane.port2));
-    const restarted = await connectSyncLane(restartedShell);
-
-    const opened = await openWorkspace(restarted, restartedShell, savePath);
-
-    expect(opened.documentId).not.toBe(created.documentId);
-    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(fs.existsSync(oldStorePath)).toBe(false);
-    await expect(restartedShell.call("document.state", undefined)).resolves.toMatchObject({
-      packageId: expect.stringMatching(/^package_/),
-      canonicalPath: fs.realpathSync(savePath),
-      dirty: false,
-    });
-  });
-
-  it("opening a dirty binding after the source changes hydrates fresh and orphans the old document", async () => {
-    const source = await connectSyncLane();
-    const created = await createWorkspace(source);
-    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const savePath = path.join(tmpRoot, "Diverged.shift");
-    await source.call("workspace.saveAs", { path: savePath });
-    await source.call("workspace.apply", {
-      intents: [createGlyph("B" as GlyphName, 66 as Unicode)],
-      label: "Add Glyph",
-    });
-    externallyAddGlyph(savePath, "C" as GlyphName, 67 as Unicode);
-
-    const lane = new MessageChannel();
-    const restartedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
-    channels.push(restartedShell);
-    startHost(nodePortTransport(lane.port2));
-    const restarted = await connectSyncLane(restartedShell);
-
-    const opened = await openWorkspace(restarted, restartedShell, savePath);
-
-    expect(opened.documentId).not.toBe(created.documentId);
-    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A", "C"]);
-    expect(fs.existsSync(path.join(tmpRoot, "documents", created.documentId))).toBe(true);
-    expect(fs.existsSync(path.join(tmpRoot, "orphaned", `${created.documentId}.json`))).toBe(true);
-    await expect(restartedShell.call("document.state", undefined)).resolves.toMatchObject({
-      dirty: false,
-      canonicalPath: fs.realpathSync(savePath),
-    });
-  });
-
-  it("opening a moved package resumes the dirty document and relinks the binding", async () => {
-    const source = await connectSyncLane();
-    const created = await createWorkspace(source);
-    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const savePath = path.join(tmpRoot, "Original.shift");
-    const movedPath = path.join(tmpRoot, "Moved.shift");
-    await source.call("workspace.saveAs", { path: savePath });
-    await source.call("workspace.apply", {
-      intents: [createGlyph("B" as GlyphName, 66 as Unicode)],
-      label: "Add Glyph",
-    });
-    fs.renameSync(savePath, movedPath);
-
-    const lane = new MessageChannel();
-    const restartedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
-    channels.push(restartedShell);
-    startHost(nodePortTransport(lane.port2));
-    const restarted = await connectSyncLane(restartedShell);
-
-    const opened = await openWorkspace(restarted, restartedShell, movedPath);
-
-    expect(opened.documentId).toBe(created.documentId);
-    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A", "B"]);
-    await expect(restartedShell.call("document.state", undefined)).resolves.toMatchObject({
-      documentId: created.documentId,
-      saveTarget: fs.realpathSync(movedPath),
-      canonicalPath: fs.realpathSync(movedPath),
+    await expect(restarted.shell.call("document.state", undefined)).resolves.toMatchObject({
+      sourceKind: "document",
       dirty: true,
     });
+    await restarted.sync.call("workspace.save", undefined);
+    expect(canonicalGlyphNames(saved.path)).toEqual(["A", "B"]);
   });
 
-  it("opening a copied package while the original exists hydrates a separate clean document", async () => {
+  it("discard removes recovered edits without changing the canonical document", async () => {
     const source = await connectSyncLane();
-    const created = await createWorkspace(source);
-    await source.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const savePath = path.join(tmpRoot, "OriginalForCopy.shift");
-    const copyPath = path.join(tmpRoot, "Copy.shift");
-    await source.call("workspace.saveAs", { path: savePath });
-    await source.call("workspace.apply", {
-      intents: [createGlyph("B" as GlyphName, 66 as Unicode)],
-      label: "Add Glyph",
-    });
-    fs.copyFileSync(savePath, copyPath);
+    const saved = await saveDocumentWithGlyphA(source, "DiscardMe.shift");
+    await addGlyphB(source);
+    const restarted = await startAdditionalHost();
+    await openWorkspace(restarted.sync, restarted.shell, saved.path);
 
-    const lane = new MessageChannel();
-    const restartedShell: ShellChannel = new Channel(nodePortTransport(lane.port1));
-    channels.push(restartedShell);
-    startHost(nodePortTransport(lane.port2));
-    const restarted = await connectSyncLane(restartedShell);
+    await restarted.shell.call("workspace.close", { discard: true });
+    const reopened = await startAdditionalHost();
+    const snapshot = await openWorkspace(reopened.sync, reopened.shell, saved.path);
 
-    const opened = await openWorkspace(restarted, restartedShell, copyPath);
-
-    expect(opened.documentId).not.toBe(created.documentId);
-    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
-    await expect(restartedShell.call("document.state", undefined)).resolves.toMatchObject({
-      saveTarget: fs.realpathSync(copyPath),
-      canonicalPath: fs.realpathSync(copyPath),
+    expect(snapshot.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+    await expect(reopened.shell.call("document.state", undefined)).resolves.toMatchObject({
       dirty: false,
     });
+  });
+
+  it("Save As rebinds a recovered document without mutating its source", async () => {
+    const source = await connectSyncLane();
+    const saved = await saveDocumentWithGlyphA(source, "Source.shift");
+    const sourceState = await shell.call("document.state", undefined);
+    await addGlyphB(source);
+    const destinationPath = path.join(tmpRoot, "Destination.shift");
+
+    const rebound = await source.call("workspace.saveAs", { path: destinationPath });
+
+    expect(rebound.documentId).not.toBe(sourceState?.documentId);
+    expect(rebound.canonicalPath).toBe(fs.realpathSync(destinationPath));
+    expect(canonicalGlyphNames(saved.path)).toEqual(["A"]);
+    expect(canonicalGlyphNames(destinationPath)).toEqual(["A", "B"]);
+    await expect(reopenedGlyphNames(saved.path)).resolves.toEqual(["A"]);
   });
 
   it("emits utility-owned document state after create and apply", async () => {
@@ -791,7 +689,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const created = await createWorkspace(sync);
     await shell.call("document.state", undefined);
     expect(latestState).toMatchObject({
-      documentId: created.documentId,
+      workspaceId: created.workspaceId,
       sourceKind: "untitled",
       saveTarget: null,
       dirty: false,
@@ -822,7 +720,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
     const sync = await connectSyncLane();
     const created = await createWorkspace(sync);
-    const storePath = path.join(tmpRoot, "documents", created.documentId, "document.sqlite");
+    const storePath = path.join(tmpRoot, "workspaces", created.workspaceId, "document.sqlite");
 
     await expect(shell.call("workspace.close", { discard: false })).resolves.toBeNull();
 
@@ -837,13 +735,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync = await connectSyncLane();
     const created = await createWorkspace(sync);
     await sync.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
-    const storePath = path.join(tmpRoot, "documents", created.documentId, "document.sqlite");
+    const storePath = path.join(tmpRoot, "workspaces", created.workspaceId, "document.sqlite");
 
     await expect(shell.call("workspace.close", { discard: false })).rejects.toThrow(
       "cannot close a dirty workspace without discard",
     );
     await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
-      documentId: created.documentId,
+      workspaceId: created.workspaceId,
       dirty: true,
     });
 
@@ -914,7 +812,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
   });
 
-  it("workspace.saveAs writes the package and clears dirty for later saves", async () => {
+  it("workspace.saveAs writes a native document and clears dirty for later saves", async () => {
     const sync = await connectSyncLane();
     await createWorkspace(sync);
     await applyWorkspace(sync, {
@@ -926,7 +824,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const saved = await sync.call("workspace.saveAs", { path: savePath });
 
     expect(saved).toMatchObject({
-      sourceKind: "package",
+      sourceKind: "document",
+      documentId: expect.stringMatching(/^document_/),
       saveTarget: savePath,
       dirty: false,
       needsSaveAs: false,

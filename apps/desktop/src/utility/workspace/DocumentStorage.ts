@@ -2,27 +2,20 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { DocumentAllocation, OrphanedDocument, PackageAddress, PackageBinding } from "./types";
+import { DocumentAddress, type DocumentBinding, type WorkspaceAllocation } from "./types";
 
-const packageBindingSchema = z
+const documentBindingSchema = z
   .object({
-    packageId: z.string(),
-    canonicalPath: z.string(),
     documentId: z.string(),
+    canonicalPath: z.string(),
+    workspaceId: z.string(),
     storePath: z.string(),
+    recoveryPath: z.string(),
     updatedAt: z.string(),
   })
   .strict();
 
-/**
- * Owns utility-process document allocations and package bindings.
- *
- * @remarks
- * SQLite databases live under `documents/<documentId>`. Package source files
- * are bound to those databases through JSON files under
- * `packages/<packageId>/<pathHash>.json`, so changing a binding is an atomic
- * file replace rather than a database move.
- */
+/** Owns app-local workspace allocations and canonical-document recovery bindings. */
 export class DocumentStorage {
   readonly #rootPath: string;
   readonly #createId: () => string;
@@ -32,79 +25,86 @@ export class DocumentStorage {
     this.#createId = createId;
   }
 
-  /**
-   * Mints a document id and creates its SQLite directory.
-   *
-   * @returns a fresh allocation owned by the caller.
-   */
-  createDocument(): DocumentAllocation {
-    const documentId = this.#createId();
-    const allocation = this.document(documentId);
+  /** Mints one app-local workspace and creates its private directory. */
+  createWorkspace(): WorkspaceAllocation {
+    const workspaceId = this.#createId();
+    const allocation = this.workspace(workspaceId);
 
     fs.mkdirSync(path.dirname(allocation.storePath), { recursive: true });
     return allocation;
   }
 
-  /**
-   * Resolves the SQLite location for an existing document id.
-   *
-   * @param documentId - utility-minted document identity.
-   * @returns the allocation path; the directory is not created.
-   */
-  document(documentId: string): DocumentAllocation {
-    assertSafeSegment("document id", documentId);
+  /** Resolves app-local persistence paths without creating them. */
+  workspace(workspaceId: string): WorkspaceAllocation {
+    assertSafeSegment("workspace id", workspaceId);
+    const workspacePath = path.join(this.#rootPath, "workspaces", workspaceId);
     return {
-      documentId,
-      storePath: path.join(this.#rootPath, "documents", documentId, "document.sqlite"),
+      workspaceId,
+      storePath: path.join(workspacePath, "document.sqlite"),
+      recoveryPath: path.join(workspacePath, "recovery.sqlite"),
     };
   }
 
-  /**
-   * Reads the package binding for an exact package address.
-   *
-   * @param address - package id plus canonical source path.
-   * @returns the binding, or null when the package instance has no document.
-   */
-  packageBinding(address: PackageAddress): PackageBinding | null {
+  /** Allocates a fresh recovery filename inside an existing workspace. */
+  createRecoveryPath(workspaceId: string): string {
+    const workspace = this.workspace(workspaceId);
+    fs.mkdirSync(path.dirname(workspace.recoveryPath), { recursive: true });
+    return path.join(path.dirname(workspace.recoveryPath), `recovery-${this.#createId()}.sqlite`);
+  }
+
+  /** Removes a complete working store after native Save As adopts its snapshot. */
+  deleteWorkingStore(workspaceId: string): void {
+    const { storePath } = this.workspace(workspaceId);
+    for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+      fs.rmSync(`${storePath}${suffix}`, { force: true });
+    }
+  }
+
+  /** Removes an obsolete recovery file and its SQLite sidecars. */
+  deleteRecovery(recoveryPath: string): void {
+    for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+      fs.rmSync(`${recoveryPath}${suffix}`, { force: true });
+    }
+  }
+
+  /** Reads the recovery binding for one exact document identity and path. */
+  documentBinding(address: DocumentAddress): DocumentBinding | null {
     const bindingPath = this.#bindingPath(address);
     if (!fs.existsSync(bindingPath)) return null;
 
-    return readPackageBinding(bindingPath);
+    const binding = readDocumentBinding(bindingPath);
+    this.#validateBinding(address, binding, bindingPath);
+    return binding;
   }
 
-  /**
-   * Lists bindings for all known paths of one package id.
-   *
-   * @param packageId - stable identity stored in a `.shift` manifest.
-   * @returns bindings sorted by canonical path for deterministic callers.
-   */
-  listPackageBindings(packageId: string): PackageBinding[] {
-    assertSafeSegment("package id", packageId);
-    const directoryPath = path.join(this.#rootPath, "packages", packageId);
+  /** Lists every path binding for one canonical document identity. */
+  listDocumentBindings(documentId: string): DocumentBinding[] {
+    assertSafeSegment("document id", documentId);
+    const directoryPath = path.join(this.#rootPath, "bindings", documentId);
     if (!fs.existsSync(directoryPath)) return [];
 
-    const bindings: PackageBinding[] = [];
+    const bindings: DocumentBinding[] = [];
     for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
 
-      bindings.push(readPackageBinding(path.join(directoryPath, entry.name)));
+      const bindingPath = path.join(directoryPath, entry.name);
+      const binding = readDocumentBinding(bindingPath);
+      const address = new DocumentAddress(documentId, binding.canonicalPath);
+      this.#validateBinding(address, binding, bindingPath);
+      bindings.push(binding);
     }
 
     return bindings.sort((left, right) => left.canonicalPath.localeCompare(right.canonicalPath));
   }
 
-  /**
-   * Atomically binds a package address to a document id.
-   *
-   * @param address - package instance being opened.
-   * @param documentId - existing utility-owned document allocation.
-   * @returns the durable binding that now owns the package address.
-   */
-  writePackageBinding(address: PackageAddress, documentId: string): PackageBinding {
-    const binding: PackageBinding = {
-      ...address,
-      documentId,
-      storePath: this.document(documentId).storePath,
+  /** Atomically binds one canonical document address to an app-local workspace. */
+  writeDocumentBinding(address: DocumentAddress, workspace: WorkspaceAllocation): DocumentBinding {
+    const binding: DocumentBinding = {
+      documentId: address.documentId,
+      canonicalPath: address.canonicalPath,
+      workspaceId: workspace.workspaceId,
+      storePath: workspace.storePath,
+      recoveryPath: workspace.recoveryPath,
       updatedAt: new Date().toISOString(),
     };
 
@@ -112,71 +112,57 @@ export class DocumentStorage {
     return binding;
   }
 
-  /**
-   * Removes the binding for an exact package address.
-   *
-   * @param address - package instance whose binding should be removed.
-   */
-  removePackageBinding(address: PackageAddress): void {
+  /** Removes one exact canonical-document recovery binding. */
+  removeDocumentBinding(address: DocumentAddress): void {
     fs.rmSync(this.#bindingPath(address), { force: true });
   }
 
-  /**
-   * Records a detached dirty document for future explicit recovery UI.
-   *
-   * @param binding - package binding that used to own the document.
-   * @param reason - stable reason string for diagnostics.
-   * @returns the orphan record written to disk.
-   */
-  orphanDocument(binding: PackageBinding, reason: string): OrphanedDocument {
-    const orphan: OrphanedDocument = {
-      documentId: binding.documentId,
-      storePath: binding.storePath,
-      packageId: binding.packageId,
-      canonicalPath: binding.canonicalPath,
-      reason,
-      orphanedAt: new Date().toISOString(),
-    };
-
-    writeJsonAtomic(path.join(this.#rootPath, "orphaned", `${binding.documentId}.json`), orphan);
-    return orphan;
-  }
-
-  /**
-   * Deletes a document allocation and its SQLite database.
-   *
-   * @param documentId - utility-owned document id to remove.
-   */
-  deleteDocument(documentId: string): void {
-    const allocation = this.document(documentId);
+  /** Deletes one app-local workspace and all of its SQLite sidecars. */
+  deleteWorkspace(workspaceId: string): void {
+    const allocation = this.workspace(workspaceId);
     fs.rmSync(path.dirname(allocation.storePath), { recursive: true, force: true });
   }
 
-  #bindingPath(address: PackageAddress): string {
-    assertSafeSegment("package id", address.packageId);
+  #bindingPath(address: DocumentAddress): string {
+    assertSafeSegment("document id", address.documentId);
     const hash = crypto.createHash("sha256").update(address.canonicalPath).digest("hex");
-    return path.join(this.#rootPath, "packages", address.packageId, `${hash}.json`);
+    return path.join(this.#rootPath, "bindings", address.documentId, `${hash}.json`);
+  }
+
+  #validateBinding(address: DocumentAddress, binding: DocumentBinding, bindingPath: string): void {
+    const expectedBindingPath = path.resolve(this.#bindingPath(address));
+    if (
+      !DocumentAddress.equals(address, binding) ||
+      path.resolve(bindingPath) !== expectedBindingPath
+    ) {
+      throw new Error(`invalid document binding: ${bindingPath}: document address mismatch`);
+    }
+
+    const expected = this.workspace(binding.workspaceId);
+    const expectedDirectory = path.resolve(path.dirname(expected.recoveryPath));
+    const recoveryDirectory = path.resolve(path.dirname(binding.recoveryPath));
+    const recoveryFileName = path.basename(binding.recoveryPath);
+    if (
+      path.resolve(binding.storePath) !== path.resolve(expected.storePath) ||
+      recoveryDirectory !== expectedDirectory ||
+      !/^recovery(?:-[A-Za-z0-9._-]+)?\.sqlite$/.test(recoveryFileName)
+    ) {
+      throw new Error(`invalid document binding: ${bindingPath}: workspace path mismatch`);
+    }
   }
 }
 
-function readPackageBinding(bindingPath: string): PackageBinding {
-  return parsePackageBinding(JSON.parse(fs.readFileSync(bindingPath, "utf8")), bindingPath);
-}
+function readDocumentBinding(bindingPath: string): DocumentBinding {
+  const result = documentBindingSchema.safeParse(JSON.parse(fs.readFileSync(bindingPath, "utf8")));
+  if (result.success) return result.data;
 
-function parsePackageBinding(value: unknown, bindingPath: string): PackageBinding {
-  const result = packageBindingSchema.safeParse(value);
-  if (!result.success) {
-    const details = result.error.issues
-      .map((issue) => {
-        const path = issue.path.join(".");
-        return path ? `${path}: ${issue.message}` : issue.message;
-      })
-      .join("; ");
-
-    throw new Error(`invalid package binding: ${bindingPath}: ${details}`);
-  }
-
-  return result.data;
+  const details = result.error.issues
+    .map((issue) => {
+      const issuePath = issue.path.join(".");
+      return issuePath ? `${issuePath}: ${issue.message}` : issue.message;
+    })
+    .join("; ");
+  throw new Error(`invalid document binding: ${bindingPath}: ${details}`);
 }
 
 function writeJsonAtomic(targetPath: string, value: unknown): void {

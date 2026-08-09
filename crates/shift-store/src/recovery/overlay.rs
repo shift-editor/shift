@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS recovery_metadata (
     document_id TEXT NOT NULL,
     base_commit_id TEXT NOT NULL,
     pending_commit_id TEXT,
-    state TEXT NOT NULL CHECK (state IN ('clean', 'dirty', 'save_pending', 'conflict'))
+    state TEXT NOT NULL CHECK (state IN ('clean', 'dirty', 'save_pending', 'conflict')),
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS recovery_replacements (
@@ -110,8 +111,8 @@ impl RecoveryOverlay {
         conn.pragma_update(None, "user_version", RECOVERY_SCHEMA_VERSION)?;
         conn.execute(
             "INSERT INTO recovery_metadata (
-                id, document_id, base_commit_id, pending_commit_id, state
-             ) VALUES (1, ?1, ?2, NULL, 'clean')",
+                id, document_id, base_commit_id, pending_commit_id, state, revision
+             ) VALUES (1, ?1, ?2, NULL, 'clean', 0)",
             params![document_id.as_str(), base_commit_id.as_str()],
         )?;
         sync_path(path)?;
@@ -149,6 +150,16 @@ impl RecoveryOverlay {
 
     pub fn pending_commit_id(&self) -> Result<Option<CommitId>, StoreError> {
         Ok(self.metadata()?.pending_commit_id)
+    }
+
+    pub fn revision(&self) -> Result<i64, StoreError> {
+        self.conn
+            .query_row(
+                "SELECT revision FROM recovery_metadata WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(StoreError::from)
     }
 
     pub fn reconcile(&mut self, saved_commit_id: &CommitId) -> Result<RecoveryState, StoreError> {
@@ -237,7 +248,7 @@ impl RecoveryOverlay {
         super::catalog::clear_recovery(&tx)?;
         tx.execute(
             "UPDATE recovery_metadata
-             SET base_commit_id = ?1, pending_commit_id = NULL, state = 'clean'
+             SET base_commit_id = ?1, pending_commit_id = NULL, state = 'clean', revision = 0
              WHERE id = 1",
             [base_commit_id.as_str()],
         )?;

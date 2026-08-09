@@ -16,7 +16,7 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
-import { copyImportedSource, createAuthoredPackage } from "./fontSource";
+import { copyImportedSource, createAuthoredDocument } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -50,7 +50,7 @@ export type PerfFixtures = {
 /**
  * Perf test fixture — GPU enabled, no software rendering override.
  */
-function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPackage) {
+function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDocument) {
   return base.extend<PerfFixtures>({
     electronApp: async ({}, use) => {
       const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
@@ -132,7 +132,7 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPac
   });
 }
 
-export const test = createAppTest(EDITABLE_FONT_PATH, createAuthoredPackage);
+export const test = createAppTest(EDITABLE_FONT_PATH, createAuthoredDocument);
 export const previewTest = createAppTest(PREVIEW_FONT_PATH, copyImportedSource);
 export const variablePreviewTest = createAppTest(VARIABLE_PREVIEW_FONT_PATH, copyImportedSource);
 export const designspacePreviewTest = createAppTest(EDITABLE_FONT_PATH, copyImportedSource);

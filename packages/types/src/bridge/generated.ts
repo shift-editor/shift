@@ -35,16 +35,18 @@ export interface BridgeApi {
   createUntitledWorkspace(storePath: string, options?: NewWorkspace | undefined | null): void
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
   documentState(): DocumentState
-  inspectPackage(path: string): PackageIdentity
-  inspectPackageDraft(storePath: string): PackageDraft
+  inspectDocument(path: string): DocumentIdentity
   closeWorkspace(): void
+  openDocument(path: string, recoveryPath: string): void
   openWorkspace(path: string, storePath: string): void
   resumeWorkspaceForSource(storePath: string, sourcePath: string): void
   openFontSource(path: string): FontSnapshot
   closeFontSource(): void
-  setDocumentId(documentId: string): DocumentState
+  setWorkspaceId(workspaceId: string): DocumentState
   saveWorkspace(): DocumentState
   saveWorkspaceAs(path: string): DocumentState
+  saveWorkspaceAsDocument(path: string, recoveryPath: string): DocumentState
+  discardWorkspaceChanges(): DocumentState
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
   getGlyphs(): Array<GlyphRecord>
@@ -138,8 +140,14 @@ export interface BridgeApi {
   getSources(): Array<Source>
 }
 
+export interface DocumentIdentity {
+  documentId: string
+  canonicalPath: string
+}
+
 export interface DocumentState {
   sourceKind: string
+  documentId?: string
   saveTarget?: string
   dirty: boolean
   needsSaveAs: boolean
@@ -158,20 +166,6 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
-}
-
-export interface PackageDraft {
-  documentId?: string
-  packageId: string
-  sourcePath: string
-  baseFingerprint: string
-  dirty: boolean
-}
-
-export interface PackageIdentity {
-  packageId: string
-  canonicalPath: string
-  fingerprint: string
 }
 export interface AddAnchorsIntent {
   layerId: LayerId
