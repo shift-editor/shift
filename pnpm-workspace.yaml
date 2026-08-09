@@ -5,6 +5,8 @@ packages:
 
 allowBuilds:
   '@tailwindcss/oxide@4.1.11': true
+  # Optional cbor-x accelerator; the portable JS codec is intentional.
+  cbor-extract: false
   electron-winstaller@5.4.0: true
   electron@40.10.6: true
   esbuild@0.25.12: true

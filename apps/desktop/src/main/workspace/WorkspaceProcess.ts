@@ -1,6 +1,7 @@
 import { utilityProcess, type MessagePortMain, type UtilityProcess } from "electron";
 import path from "node:path";
-import { Channel, utilityProcessTransport } from "../../shared/workspace/channel";
+import { Channel } from "../../shared/workspace/channel";
+import { utilityProcessTransport } from "../../shared/workspace/localTransports";
 import type {
   FontSourceSession,
   ShellCallMap,

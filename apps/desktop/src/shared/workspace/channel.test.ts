@@ -1,12 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { MessageChannel } from "node:worker_threads";
-import {
-  Channel,
-  domPortTransport,
-  nodePortTransport,
-  serveChannel,
-  type ChannelServer,
-} from "./channel";
+import { Channel, serveChannel, type ChannelServer } from "./channel";
+import { domPortTransport, nodePortTransport } from "./localTransports";
 
 type TestCalls = {
   "math.add": { request: { a: number; b: number }; response: number };

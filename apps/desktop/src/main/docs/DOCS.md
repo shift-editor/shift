@@ -14,6 +14,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; each process validates an artifact index once and then verifies and decompresses its fixed pages independently. Staging paths use readable `run-{pid}-{id}/page-{index}-{id}.zst` names, and every retry owns a distinct file until publication. The LRU scans after an artifact is opened or published, never after every page stream. Stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
+- **Architecture Invariant:** `shared/workspace/channel.ts` owns only correlated calls/events over the required `Transport` shape. Electron, DOM and Node-port adapters live in `localTransports.ts`; WebSocket lanes use bounded standard-map CBOR from `channelCodec.ts`, preserving `Float64Array`/`Uint8Array` without structured-clone extensions. One ordinary frame is limited to 32 MiB, malformed or unsupported values close the socket, and WebSocket lanes reject transferred ports. Atlas byte streams remain on local transferred ports until a separately bounded network stream protocol lands.
 
 ## Codemap
 
@@ -116,5 +117,9 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 ## Related
 
 - `shared/workspace/protocol.ts` -- utility shell/sync channel types.
+- `shared/workspace/channel.ts` -- platform-neutral request/response/event channel.
+- `shared/workspace/localTransports.ts` -- Electron, DOM and Node message-port adapters.
+- `shared/workspace/channelCodec.ts` -- bounded CBOR envelope codec with typed-array preservation.
+- `shared/workspace/webSocketTransport.ts` -- established-WebSocket adapter; no port transfer or large-stream multiplexing.
 - `utility/workspace/WorkspaceHost.ts` -- utility-process owner of the Rust bridge and working documents.
 - `@shift/bridge` -- runtime native bridge package.
