@@ -1,7 +1,7 @@
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
-    AxisId, Evidence, FileIdentity, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, ShiftStore,
-    SourceId, SourceIdentitySnapshot, SourceKind, WorkspaceState,
+    AxisId, Evidence, FileIdentity, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource,
+    SHIFT_APPLICATION_ID, ShiftStore, SourceId, SourceIdentitySnapshot, SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -985,6 +985,12 @@ fn temp_store_path(label: &str) -> std::path::PathBuf {
     dir.join("store.sqlite")
 }
 
+fn sqlite_sidecar_path(path: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+    let mut sidecar = std::ffi::OsString::from(path.as_os_str());
+    sidecar.push(suffix);
+    std::path::PathBuf::from(sidecar)
+}
+
 #[test]
 fn file_stores_run_wal_with_verified_pragmas() {
     let path = temp_store_path("pragmas");
@@ -1002,6 +1008,159 @@ fn file_stores_run_wal_with_verified_pragmas() {
     assert_eq!(version, 1);
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn canonical_document_round_trip_preserves_kitchen_sink_font_for_export() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let path = temp.path().join("Dogfood.shift");
+    let original = sample_font();
+
+    let store = ShiftStore::create_document(&path, &original).expect("create document");
+    let metadata = store.document_metadata().expect("document metadata");
+    assert!(metadata.document_id.as_str().starts_with("document_"));
+    assert_eq!(metadata.document_id.as_str().len(), 41);
+    assert_eq!(store.load_font_state().expect("load document"), original);
+    drop(store);
+
+    let magic = std::fs::read(&path).expect("read document");
+    assert_eq!(&magic[..16], b"SQLite format 3\0");
+    assert!(!sqlite_sidecar_path(&path, "-journal").exists());
+    assert!(!sqlite_sidecar_path(&path, "-wal").exists());
+    assert!(!sqlite_sidecar_path(&path, "-shm").exists());
+
+    let conn = rusqlite::Connection::open(&path).expect("raw reopen");
+    let application_id: i64 = conn
+        .query_row("PRAGMA application_id", [], |row| row.get(0))
+        .expect("application_id");
+    assert_eq!(application_id, SHIFT_APPLICATION_ID);
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("user_version");
+    assert_eq!(version, 1);
+    let journal: String = conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .expect("journal_mode");
+    assert_eq!(journal, "delete");
+    let has_workspace_state: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'workspace_state')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("workspace schema check");
+    assert!(!has_workspace_state);
+    drop(conn);
+
+    let reopened = ShiftStore::open_document(&path).expect("reopen document");
+    assert_eq!(
+        reopened.document_metadata().expect("reopened metadata"),
+        metadata
+    );
+    assert_eq!(reopened.load_font_state().expect("reloaded font"), original);
+}
+
+#[test]
+fn raw_document_copy_preserves_document_identity() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let original_path = temp.path().join("Original.shift");
+    let copy_path = temp.path().join("Copy.shift");
+    let font = sample_font();
+    let original = ShiftStore::create_document(&original_path, &font).expect("create document");
+    let metadata = original.document_metadata().expect("document metadata");
+    drop(original);
+
+    std::fs::copy(&original_path, &copy_path).expect("copy document");
+
+    assert_eq!(
+        ShiftStore::verify_document(&copy_path).expect("verify copy"),
+        metadata
+    );
+}
+
+#[test]
+fn create_document_never_clobbers_an_existing_destination() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let path = temp.path().join("Existing.shift");
+    std::fs::write(&path, b"retain me").expect("write destination");
+
+    let error = match ShiftStore::create_document(&path, &sample_font()) {
+        Ok(_) => panic!("existing destination must not be replaced"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        error,
+        shift_store::StoreError::DocumentAlreadyExists(existing) if existing == path
+    ));
+    assert_eq!(
+        std::fs::read(&path).expect("read destination"),
+        b"retain me"
+    );
+}
+
+#[test]
+fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let plain_path = temp.path().join("Plain.shift");
+    let corrupt_path = temp.path().join("Corrupt.shift");
+    let future_path = temp.path().join("Future.shift");
+
+    rusqlite::Connection::open(&plain_path).expect("create plain sqlite");
+    let plain_error = match ShiftStore::open_document(&plain_path) {
+        Ok(_) => panic!("plain SQLite must not open as Shift"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        plain_error,
+        shift_store::StoreError::InvalidApplicationId { found: 0, expected }
+            if expected == SHIFT_APPLICATION_ID
+    ));
+
+    std::fs::write(&corrupt_path, b"not sqlite").expect("write corrupt file");
+    assert!(ShiftStore::open_document(&corrupt_path).is_err());
+
+    drop(ShiftStore::create_document(&future_path, &sample_font()).expect("create future base"));
+    let conn = rusqlite::Connection::open(&future_path).expect("open future raw");
+    conn.pragma_update(None, "user_version", 999)
+        .expect("stamp future schema");
+    drop(conn);
+    let future_error = match ShiftStore::open_document(&future_path) {
+        Ok(_) => panic!("future document must be refused"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        future_error,
+        shift_store::StoreError::UnsupportedDocumentSchemaVersion {
+            found: 999,
+            supported: 1
+        }
+    ));
+}
+
+#[test]
+fn canonical_document_requires_document_open_posture() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let path = temp.path().join("Canonical.shift");
+    drop(ShiftStore::create_document(&path, &sample_font()).expect("create document"));
+
+    let error = match ShiftStore::open(&path) {
+        Ok(_) => panic!("canonical document must not use working-store WAL posture"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        shift_store::StoreError::DocumentRequiresDocumentOpen
+    ));
+
+    let conn = rusqlite::Connection::open(&path).expect("raw reopen");
+    let journal: String = conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .expect("journal mode");
+    assert_eq!(journal, "delete");
+    drop(conn);
+    assert!(!sqlite_sidecar_path(&path, "-wal").exists());
+    assert!(!sqlite_sidecar_path(&path, "-shm").exists());
 }
 
 #[test]

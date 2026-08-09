@@ -63,9 +63,29 @@ pub enum StoreError {
     #[error("import destination already contains published workspace state: {0}")]
     ImportDestinationNotEmpty(std::path::PathBuf),
 
+    #[error("document already exists: {0}")]
+    DocumentAlreadyExists(std::path::PathBuf),
+
+    #[error("invalid SQLite application ID {found:#010x}; expected {expected:#010x}")]
+    InvalidApplicationId { found: i64, expected: i64 },
+
+    #[error("canonical Shift documents must be opened with ShiftStore::open_document")]
+    DocumentRequiresDocumentOpen,
+
+    #[error("invalid Shift document: {0}")]
+    InvalidDocument(String),
+
+    #[error("invalid document ID: {0}")]
+    InvalidDocumentId(String),
+
     #[error("missing {kind}: {id}")]
     MissingEntity { kind: &'static str, id: String },
 
     #[error("store schema version {found} is newer than supported version {supported}")]
     UnsupportedSchemaVersion { found: i64, supported: i64 },
+
+    #[error(
+        "Shift document schema version {found} is unsupported; this build supports {supported}"
+    )]
+    UnsupportedDocumentSchemaVersion { found: i64, supported: i64 },
 }

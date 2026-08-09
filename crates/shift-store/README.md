@@ -1,8 +1,16 @@
 # shift-store
 
-`shift-store` owns Shift's durable SQLite working database.
+`shift-store` owns Shift's SQLite persistence boundary: the canonical `.shift` application database and the separate app-local working database used during editing and import.
 
-Callers use typed APIs from this crate rather than preparing SQL or opening a second application-level persistence path.
+Callers use typed APIs from this crate rather than preparing SQL or opening a second application-level persistence path. The desktop app has not yet cut over from the legacy ZIP package, so the canonical document APIs are currently a tested foundation rather than the active Save/Open route.
+
+## Canonical document boundary
+
+- A `.shift` document is the SQLite database itself. It uses application ID `SHFT` (`0x53484654`) and an exact `user_version` contract.
+- `ShiftStore::create_document` writes a complete `shift-font::Font` at a sibling staging path, syncs it, and publishes without clobbering an existing destination.
+- `ShiftStore::open_document` validates the file read-only before opening it with rollback journaling and `synchronous=FULL`. `ShiftStore::verify_document` also runs SQLite integrity and foreign-key checks.
+- `DocumentMetadata` contains the stable `DocumentId`. A raw copy preserves it; Save As will mint a new identity at the workspace boundary.
+- Canonical documents never contain app-local `workspace_state`. Working databases retain WAL + NORMAL and their revision/source-binding row.
 
 ## Storage boundary
 
@@ -30,16 +38,20 @@ only then invoke strict MessagePack decoding. A layer replacement may move betwe
 
 `FontImportWriter` accepts bounded replacement glyph batches without requiring a complete in-memory `Font`. `encode_glyph_batch` MessagePack-encodes, BLAKE3-hashes, and independently compresses an owned batch with Rayon without borrowing the SQLite transaction, allowing the workspace to overlap parsing, encoding/compression, and one stable-order SQLite writer. Streaming inserts, full-state replacement, and change-set replacement share one write implementation parameterized only by insert/upsert mode. Change sets supplied with a committed post-edit font skip incremental decode/re-encode for touched existing layers and write each final layer once. Secondary query indexes are dropped inside the stream transaction and rebuilt in bulk by `finish`; dropping an unfinished writer restores them with the rest of the rollback. Prefix-redundant Unicode-glyph and component-layer indexes are omitted. `finish` is the only stream commit point.
 
-`ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the foreign source remains authoritative and the path is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL. Normal edits never use import pragmas. `FontWorkspace` opens imports at a sibling staging path, writes workspace state there, makes the staged database durable, closes it, removes the closed staging WAL/SHM sidecars, atomically installs the main database at the requested destination, and syncs the parent directory. A failure before installation leaves the previous destination untouched.
+`ShiftStore::open_for_import` uses rollback-capable in-memory journaling and disabled synchronous writes only while the authoring source remains authoritative and the path is disposable. `finish_import` syncs the completed database and restores WAL + NORMAL. Normal edits never use import pragmas. `FontWorkspace` opens imports at a sibling staging path, writes workspace state there, makes the staged database durable, closes it, removes the closed staging WAL/SHM sidecars, atomically installs the main database at the requested destination, and syncs the parent directory. A failure before installation leaves the previous destination untouched.
+
+## Preservation and export gate
+
+Canonical SQLite publication must preserve the complete `shift-font::Font`, not a projection chosen for one exporter. The kitchen-sink canonical-document test covers metadata, metrics, axes and mappings, named instances, sources, kerning, features, libs, binary data, guidelines, glyph layers, components, anchors, and stable authored identities through SQLite equality. UFO and Designspace exports must materialize that complete canonical state and use their dedicated writers. Any concept the target format cannot represent requires an explicit export diagnostic; no exporter may silently narrow the canonical document or route through another authoring format.
 
 ## Schema policy
 
-Shift has not shipped this working-store schema. Schema changes therefore update the version-1 baseline directly; there is intentionally no compatibility migration for earlier development databases.
+Shift has not shipped either SQLite schema. Schema changes therefore update the version-1 baselines directly; there is intentionally no compatibility migration for earlier development databases. Canonical document schema stabilization is gated on preservation/export goldens and hostile-input budgets.
 
 ## Responsibilities
 
-- configure SQLite for WAL-backed transactional work and a separately finalized disposable-import mode;
-- own the baseline schema and raw SQL;
+- configure SQLite for canonical rollback/FULL durability, WAL-backed transactional work, and a separately finalized disposable-import mode;
+- own the canonical and working version-1 schemas and raw SQL;
 - preserve stable authored IDs and exact values;
 - provide directory-first and bounded canonical payload APIs rather than row-level outline/component compatibility models;
 - keep canonical payloads and relational query indexes atomic;
@@ -49,8 +61,9 @@ Shift has not shipped this working-store schema. Schema changes therefore update
 
 ```text
 src/
-  connection.rs     # normal WAL opening plus disposable import/finalization posture
-  schema.rs         # pre-release version-1 baseline
+  connection.rs     # canonical, working-WAL, and disposable-import connection postures
+  document.rs       # staged create, validated open/verify, metadata, and durable publication
+  schema.rs         # canonical and working pre-release version-1 baselines
   font_state.rs     # eager metadata/directory and explicit full materialization
   import_writer.rs  # pipelined Rayon encode/compress plus one SQLite transaction owner
   layer/
