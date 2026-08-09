@@ -12,7 +12,7 @@ use crate::font_source::{
 use crate::formats::ufo::glif::{
     glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer,
 };
-use crate::{BackendError, BackendResult, FontFormat, FontImport};
+use crate::{BackendError, BackendResult, FontFormat, FontImport, ImportReport};
 
 use super::{derive_axis_range, find_default_source_index, map_axis_value, stream_retained};
 
@@ -156,6 +156,7 @@ impl FontImporter for DesignspaceFont {
         Ok(FontImport::new(
             header,
             Box::new(stream),
+            ImportReport::default(),
             FontFormat::Designspace,
             self.path.clone(),
         ))

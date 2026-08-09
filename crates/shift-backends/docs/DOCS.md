@@ -12,13 +12,15 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Eager reader/writer backends are stateless unit structs. `OpenTypeFont` retains compiled bytes, `UfoFont` and `DesignspaceFont` retain their indexed GLIF payloads, and `GlyphsFont` retains one upstream-parsed source. Paths are provenance and error context only after open. A `FontImport` is a separate exhaustive bounded conversion cursor; OpenType sources intentionally expose no `FontImporter` capability. WHY: imported sessions must remain coherent and readable after the original path changes or disappears.
 
+**Architecture Invariant:** `FontImport::report` describes valid source concepts whose semantics Shift converts, approximates, or omits. Malformed values and parser failures remain errors and never become import losses. WHY: authoring-fidelity limits such as Glyphs bracket layers must be visible without confusing unsupported source semantics with bad data.
+
 **Architecture Invariant:** `UfoWriter` stages a complete UFO beside the destination and swaps it into place only after the staged tree is durable. WHY: a failed save must preserve the previous source rather than leave a partial directory.
 
 **Architecture Invariant:** `UfoWriter` preserves fractional coordinates and widths. Empty contours are skipped because they have no serializable UFO geometry.
 
 **Architecture Invariant:** `GlyphsReader` converts Glyphs-format kerning group prefixes (`@MMK_L_`, `@MMK_R_`) to UFO-convention prefixes (`public.kern1.`, `public.kern2.`) at load time. WHY: The IR stores kerning in UFO conventions; all backends must normalize to this format.
 
-**Architecture Invariant:** `GlyphsReader` only loads kerning from the default master. WHY: The IR currently stores a single static kerning table, not per-master kerning.
+**Architecture Invariant:** `GlyphsReader` only loads kerning from the default master and reports omitted non-default-master or RTL pairs through `ImportReport`. WHY: The IR currently stores a single static kerning table, not per-master or direction-specific kerning.
 
 **Architecture Invariant:** TrueType export compiles an owned snapshot of the Shift `Font` IR directly through fontir/fontc. It must not serialize a temporary UFO or fall back to another authoring format. WHY: `.shift` is the canonical authoring source, and an intermediate format would discard or reinterpret Shift concepts before compilation.
 
@@ -42,7 +44,8 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 src/
   lib.rs             -- public backend and retained-source boundary
   format.rs          -- source format vocabulary
-  import.rs          -- glyph-free foreign header and bounded conversion cursor
+  import.rs          -- glyph-free source header and bounded conversion cursor
+  import_report.rs   -- source-to-Shift fidelity losses
   font_source/
     mod.rs            -- FontSource/FontImporter split and OpenedFont dispatch
     types.rs          -- source-local indexes, directories, shapes, deltas, and projections
@@ -60,14 +63,14 @@ src/
       reader.rs       -- maxp-complete authored conversion stream
     ufo/              -- retained UFO source plus eager reader and atomic writer
     designspace/      -- retained Designspace source, mappings, reader, and writer
-    glyphs/           -- retained Glyphs source, conversion stream, and reader
+    glyphs/           -- retained Glyphs source, conversion stream, fidelity report, and reader
   shift2fontir/       -- owned Shift FontView -> fontir/fontc adapter
   export.rs           -- direct fontc TTF compilation and atomic output write
 ```
 
 ## Key Types
 
-- `FontSource` -- immutable directory plus lazy `glyph(GlyphIndex) -> ProjectedGlyph` acquisition, implemented by every retained foreign handle
+- `FontSource` -- immutable directory plus lazy `glyph(GlyphIndex) -> ProjectedGlyph` acquisition, implemented by every retained source handle
 - `FontImporter` -- optional authored-conversion capability implemented by GLIF and Glyphs handles, but not binary handles
 - `OpenedFont` -- dispatched `OpenType`, `Ufo`, `Designspace`, or `Glyphs` retained handle returned by `FontLoader::open_source`
 - `FontDirectory` / `GlyphIndex` -- source-local immutable directory built by `FontDirectory::from_font`, with private fields, read-only accessors, and backend-local addressing
@@ -77,8 +80,9 @@ src/
 - `SourceAtlasDescriptor` -- small mapping and weight evaluator retained after `SourceAtlasPage::into_parts` separates disposable CPU geometry
 - `SourceAtlasError` -- direct atlas read, format-capability, and Slug construction failures
 - `OpenTypeFont` / `UfoFont` / `DesignspaceFont` / `GlyphsFont` -- concrete retained source generations
-- `FontImport` -- top-level authored header, an immediately publishable stable-ID/name directory, and layer-aware `next_batch(limit)`, with no glyphs stored in the header
-- `GlyphDirectoryEntry` -- cheap foreign glyph ID and name used before geometry batches are parsed
+- `FontImport` -- top-level authored header, an immediately publishable stable-ID/name directory, `ImportReport`, and layer-aware `next_batch(limit)`, with no glyphs stored in the header
+- `ImportReport` / `ImportLoss` -- source concepts converted, approximated, or omitted because Shift cannot represent identical semantics; never malformed-data diagnostics
+- `GlyphDirectoryEntry` -- cheap source glyph ID and name used before geometry batches are parsed
 - `ImportBatchLimit` -- simultaneous glyph and authored-layer limits; multi-source projects cannot turn a glyph-count bound into an unbounded layer batch
 - `FontReader` -- trait with `load(&self, path) -> Result<Font, String>` plus default methods for extracting glyphs, kerning, features from a loaded `Font`
 - `FontWriter` -- trait with `save(&self, font, path) -> Result<(), String>`
@@ -103,7 +107,7 @@ src/
 
 **Direct OpenType atlas:** `build_binary_atlas_page` reads raw glyf points and tuple regions from retained bytes. It applies IUP independently to each unscaled tuple, preserves a stable quadratic topology, flattens ordinary glyf components exactly, and combines HVAR or gvar phantom-point advance contributions with the same region weights. Curves stream directly into `shift_slug::retained::PageCompiler`; static CFF uses that compiler too. The page stores absolute region-peak curves because the retained atlas consumes weighted source values; a deduplicated complement weight makes every glyph's participating source weights sum to one. The consumer separates the atlas and descriptor with `into_parts`, packs and drops the former, and retains the latter. Axis updates evaluate fvar/avar 1 normalization and OpenType support scalars without touching geometry. Static CFF is supported; CFF2, cubic glyf extensions, avar version 2, and VARC remain explicit unsupported capabilities.
 
-**Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions. The upstream parser currently materializes its complete normalized Glyphs source model before the bounded cursor begins; batching bounds Shift glyph conversion and persistence, not source-syntax parsing.
+**Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions. Before conversion begins, `ImportReport` records bracket layers omitted because Shift has no conditional-layer model, intermediate and smart-component semantics approximated as ordinary layers/components, and non-default-master or RTL kerning omitted because Shift has one static table. The upstream parser currently materializes its complete normalized Glyphs source model before the bounded cursor begins; batching bounds Shift glyph conversion and persistence, not source-syntax parsing.
 
 **Designspace mapping:** Per-axis `<map>` entries become independent `AxisMapping` values. Designspace 5.1+ `<mappings>` entries become the font's single cross-axis mapping group. Axis value labels use the standard Designspace 5.0 `<labels>` representation; imported labels receive newly minted Shift identity because Designspace has no equivalent stable label ID.
 
@@ -143,7 +147,7 @@ src/
 - **Cross-platform UFO replacement:** macOS and Linux use an atomic directory exchange when supported. The fallback moves the old tree aside first and restores it if installing the staged tree fails.
 - **OnCurve ambiguity on write:** The IR's `OnCurve` type is context-dependent when writing. The first point of an open contour becomes `Move`, a point after `OffCurve` becomes `Curve`, everything else becomes `Line`. If contour structure is malformed, this heuristic may produce wrong results.
 - **Glyphs source parsing is eager:** `glyphs-reader` materializes one normalized source model before `GlyphsGlyphStream` starts. Shift geometry conversion, packing, compression, and SQLite writes remain bounded.
-- **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
+- **Glyphs kerning is default-master only:** Multi-master and RTL kerning are reduced to the default LTR table; omitted pairs are listed in `ImportReport`.
 - **Cross-axis mappings:** Direct TTF compilation rejects cross-axis mappings until the compiler stack supports `avar` version 2. It never flattens the mapping or falls back to temporary UFO compilation.
 - **Binary atlas capabilities:** Direct Grid compilation supports quadratic glyf/gvar plus HVAR or phantom advances and static CFF. CFF2, cubic glyf extensions, avar version 2, and VARC fail explicitly rather than falling back to another renderer or authored conversion.
 - **Authored STAT tables:** When Shift axis labels exist, export appends a generated `STAT` feature block. If authored feature text also declares `STAT`, the feature compiler reports the conflict.

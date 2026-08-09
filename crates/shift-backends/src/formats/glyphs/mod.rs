@@ -1,6 +1,7 @@
 mod conversion;
 mod import;
 mod reader;
+mod report;
 mod source;
 
 pub(crate) use conversion::{

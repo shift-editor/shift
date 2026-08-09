@@ -6,6 +6,7 @@ pub mod font_source;
 pub mod format;
 pub mod formats;
 pub mod import;
+mod import_report;
 mod metrics;
 mod shift2fontir;
 mod traits;
@@ -25,4 +26,5 @@ pub use font_source::{
 };
 pub use format::FontFormat;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
+pub use import_report::{ImportLoss, ImportLossKind, ImportReport};
 pub use traits::{FontBackend, FontReader, FontView, FontWriter};
