@@ -115,6 +115,7 @@ impl ComponentAnchorAttachment {
 pub struct ComponentGlyph {
     parent_glyph_id: GlyphId,
     component_id: ComponentId,
+    component_index: usize,
     base_glyph_id: GlyphId,
     parent_path: ComponentPath,
     component_path: ComponentPath,
@@ -130,6 +131,11 @@ impl ComponentGlyph {
     /// Returns the stable component identity within its parent layer.
     pub fn component_id(&self) -> ComponentId {
         self.component_id.clone()
+    }
+
+    /// Returns this occurrence's ordered slot within its immediate parent layer.
+    pub fn component_index(&self) -> usize {
+        self.component_index
     }
 
     /// Returns the glyph instantiated by this component occurrence.
@@ -314,7 +320,7 @@ fn append_components(
 ) -> CoreResult<()> {
     let mut placed_anchors: Vec<PlacedComponentAnchor> = Vec::new();
 
-    for component in parent_layer.components_iter() {
+    for (component_index, component) in parent_layer.components_iter().enumerate() {
         let base_glyph_id = component.base_glyph_id();
         if visiting.contains(&base_glyph_id) {
             continue;
@@ -338,6 +344,7 @@ fn append_components(
         out.push(ComponentGlyph {
             parent_glyph_id: parent_glyph_id.clone(),
             component_id: component.id(),
+            component_index,
             base_glyph_id: base_glyph_id.clone(),
             parent_path: parent_path.clone(),
             component_path: component_path.clone(),
@@ -765,6 +772,14 @@ mod tests {
                 vec![second_id.clone()],
                 vec![second_id, nested_id],
             ]
+        );
+        assert_eq!(
+            components
+                .components()
+                .iter()
+                .map(ComponentGlyph::component_index)
+                .collect::<Vec<_>>(),
+            vec![0, 0, 1, 0],
         );
     }
 

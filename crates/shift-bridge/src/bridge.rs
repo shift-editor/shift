@@ -759,6 +759,7 @@ fn wire_source_components(
       output.push(ComponentGlyph {
         parent_glyph_id: parent_glyph_id.clone(),
         component_id,
+        component_index: index,
         base_glyph_id: identity.glyph_id(component.glyph)?,
         parent_path: parent_path.clone(),
         component_path: component_path.clone(),

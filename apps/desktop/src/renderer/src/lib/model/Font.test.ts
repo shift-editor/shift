@@ -642,6 +642,32 @@ describe("font-level intents make the font variable", () => {
     expect(await stack.font.loadGlyph(record.id)).not.toBe(glyph);
   });
 
+  it("uses exact-source component transforms when source component IDs differ", async () => {
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(
+      resolve(process.cwd(), "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace"),
+    );
+    const record = stack.font.recordForName("Aacute" as GlyphName);
+    if (!record) throw new Error("Expected Aacute fixture glyph");
+    const source = stack.font.sources.find((candidate) => candidate.name === "BoldWide");
+    if (!source) throw new Error("Expected BoldWide fixture source");
+    const glyph = await stack.font.loadGlyph(record.id);
+    const locationCell = signal(stack.font.defaultLocation());
+    const activeSourceIdCell = signal<SourceId | null>(source.id);
+    const renderModel = glyph.renderModelAt(locationCell, activeSourceIdCell);
+    const exactGeometry = glyph.geometryForSource(source.id);
+    const directComponents = renderModel.components.filter(
+      (component) => component.parentPath.length === 0,
+    );
+
+    expect(directComponents.map((component) => component.componentId)).not.toEqual(
+      exactGeometry.components.map((component) => component.id),
+    );
+    expect(directComponents.map((component) => component.transform)).toEqual(
+      exactGeometry.components.map((component) => component.matrix),
+    );
+  });
+
   it("measures a pure component glyph while keeping root controls empty", async () => {
     const stack = createWorkspaceStack();
     await stack.openWorkspace(resolve(process.cwd(), "../../fixtures/fonts/Homenaje.glyphs"));

@@ -56,10 +56,11 @@ export class ComponentGlyph {
         definition.parentGlyphId,
         this.#locationCell.value,
       );
-      return (
-        geometry.components.find((component) => component.id === definition.componentId)?.matrix ??
-        Mat.Identity()
-      );
+
+      const component = geometry.components[definition.componentIndex];
+      if (component?.baseGlyphId !== definition.baseGlyphId) return Mat.Identity();
+
+      return component.matrix;
     });
     this.#localTransformCell = computed(() => {
       const definition = this.#definitionCell.value;

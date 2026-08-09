@@ -846,6 +846,7 @@ pub struct NapiComponentGlyph {
     pub parent_glyph_id: String,
     #[napi(ts_type = "ComponentId")]
     pub component_id: String,
+    pub component_index: u32,
     #[napi(ts_type = "GlyphId")]
     pub base_glyph_id: String,
     #[napi(ts_type = "Array<ComponentId>")]
@@ -860,6 +861,8 @@ impl From<ComponentGlyph> for NapiComponentGlyph {
         Self {
             parent_glyph_id: component.parent_glyph_id.to_string(),
             component_id: component.component_id.to_string(),
+            component_index: u32::try_from(component.component_index)
+                .expect("component index exceeds u32"),
             base_glyph_id: component.base_glyph_id.to_string(),
             parent_path: component
                 .parent_path
