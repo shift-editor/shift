@@ -4,10 +4,13 @@ use glyphs_reader::Font as GlyphsFont;
 use rayon::prelude::*;
 use shift_font::{Font, Glyph, GlyphId, SourceId};
 
-use super::conversion::{convert_glyph, font_header, imported_layer_count};
+use super::{
+    conversion::{convert_glyph, font_header, imported_layer_count},
+    report::import_report,
+};
 use crate::{
     import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
-    FormatBackendError, FormatBackendResult,
+    FormatBackendError, FormatBackendResult, ImportReport,
 };
 
 /// Bounded Shift conversion over one parsed Glyphs source.
@@ -67,7 +70,9 @@ impl GlyphStream for GlyphsGlyphStream {
     }
 }
 
-pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlyphsGlyphStream)> {
+pub(crate) fn stream_font(
+    path: &str,
+) -> FormatBackendResult<(Font, GlyphsGlyphStream, ImportReport)> {
     let source = Arc::new(
         GlyphsFont::load(Path::new(path))
             .map_err(|error| FormatBackendError::Glyphs(error.to_string()))?,
@@ -77,7 +82,8 @@ pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlyphsGlyphS
 
 pub(crate) fn stream_retained(
     source: Arc<GlyphsFont>,
-) -> FormatBackendResult<(Font, GlyphsGlyphStream)> {
+) -> FormatBackendResult<(Font, GlyphsGlyphStream, ImportReport)> {
+    let report = import_report(&source);
     let (header, source_ids_by_master_id) = font_header(&source)?;
     let glyph_names = source
         .glyphs
@@ -98,5 +104,6 @@ pub(crate) fn stream_retained(
             source_ids_by_master_id,
             next_glyph: 0,
         },
+        report,
     ))
 }
