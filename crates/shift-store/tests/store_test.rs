@@ -1079,6 +1079,100 @@ fn raw_document_copy_preserves_document_identity() {
 }
 
 #[test]
+fn save_as_document_snapshots_working_store_without_workspace_state() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let working_path = temp.path().join("Working.sqlite");
+    let document_path = temp.path().join("Saved.shift");
+    let font = sample_font();
+    let mut working = ShiftStore::open(&working_path).expect("open working store");
+    working
+        .replace_font_state(&font)
+        .expect("write complete font state");
+    let private_marker = "PRIVATE_WORKSPACE_ORIGIN_MARKER_9f4902c5";
+    let mut state = WorkspaceState::imported(private_marker, Some("workspace-1".to_string()));
+    state.dirty = true;
+    state.revision = 7;
+    working
+        .set_workspace_state(state.clone())
+        .expect("write workspace state");
+
+    let metadata = working
+        .save_as_document(&document_path)
+        .expect("save document snapshot");
+
+    assert_eq!(
+        working.workspace_state().expect("read source state"),
+        Some(state)
+    );
+    let document = ShiftStore::open_document(&document_path).expect("open saved document");
+    assert_eq!(
+        document.document_metadata().expect("document metadata"),
+        metadata
+    );
+    assert_eq!(document.load_font_state().expect("load saved font"), font);
+    drop(document);
+    assert!(!sqlite_sidecar_path(&document_path, "-journal").exists());
+    assert!(!sqlite_sidecar_path(&document_path, "-wal").exists());
+    assert!(!sqlite_sidecar_path(&document_path, "-shm").exists());
+    let document_bytes = std::fs::read(&document_path).expect("read document bytes");
+    assert!(
+        !document_bytes
+            .windows(private_marker.len())
+            .any(|bytes| bytes == private_marker.as_bytes())
+    );
+}
+
+#[test]
+fn save_as_document_from_document_mints_a_new_identity() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let original_path = temp.path().join("Original.shift");
+    let saved_as_path = temp.path().join("SavedAs.shift");
+    let font = sample_font();
+    let original =
+        ShiftStore::create_document(&original_path, &font).expect("create original document");
+    let original_metadata = original.document_metadata().expect("original metadata");
+
+    let saved_as_metadata = original
+        .save_as_document(&saved_as_path)
+        .expect("save document as new document");
+
+    assert_ne!(saved_as_metadata, original_metadata);
+    assert_eq!(
+        original
+            .document_metadata()
+            .expect("unchanged source metadata"),
+        original_metadata
+    );
+    let saved_as = ShiftStore::open_document(&saved_as_path).expect("open saved-as document");
+    assert_eq!(
+        saved_as.load_font_state().expect("load saved-as font"),
+        font
+    );
+}
+
+#[test]
+fn save_as_document_never_clobbers_an_existing_destination() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let working_path = temp.path().join("Working.sqlite");
+    let document_path = temp.path().join("Existing.shift");
+    let working = ShiftStore::open(&working_path).expect("open working store");
+    std::fs::write(&document_path, b"retain me").expect("write destination");
+
+    let error = working
+        .save_as_document(&document_path)
+        .expect_err("existing destination must not be replaced");
+
+    assert!(matches!(
+        error,
+        shift_store::StoreError::DocumentAlreadyExists(existing) if existing == document_path
+    ));
+    assert_eq!(
+        std::fs::read(&document_path).expect("read destination"),
+        b"retain me"
+    );
+}
+
+#[test]
 fn create_document_never_clobbers_an_existing_destination() {
     let temp = tempfile::tempdir().expect("temp dir");
     let path = temp.path().join("Existing.shift");
