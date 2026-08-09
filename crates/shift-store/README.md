@@ -32,6 +32,7 @@ Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
 
 - Font metadata and the glyph/layer directory remain relational and load eagerly. `glyph_axes`, `glyph_variants`, `glyph_sources`, and `glyph_source_locations` preserve ordered glyph-local designspaces independently from geometry; nullable `glyph_sources.variant_id` distinguishes Default membership from one variant.
 - `glyph_layers` contains only glyph ownership and metrics. A source row references a same-glyph layer, several sources may share one layer, and unreferenced backup/background layers remain canonical.
+- Glyph-axis, glyph-source, and glyph-variant create/update/delete changes apply transactionally to those relational tables and their sparse location rows. Recovery marks the affected glyph's complete authoring rows for replacement; component operations continue through the layer payload's `LayerGeometryReplaced` path.
 - Each editable glyph layer is one independently addressable, store-private MessagePack payload identified as `shift.glyph-layer.v2`; the store independently wraps it as `none` or `zstd.v1` without changing authored semantics.
 - Component dependency rows contain only the earned query index: component ID, owner layer ID, base glyph ID, and ordinal.
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.

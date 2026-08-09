@@ -1,10 +1,11 @@
 use std::{fs, path::PathBuf};
 
 use shift_font::{
-    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, ExternalLocation,
-    Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName,
-    GlyphSource, LayerId, Location, NamedInstance, NamedInstanceId, PointId, PointSeed, PointType,
-    SourceId, error::CoreError,
+    AnchorId, AnchorSeed, Axis, AxisId, AxisInheritance, BooleanOp, Component, Condition,
+    ContourId, DecomposedTransform, DesignLocation, ExternalLocation, Font, FontChange, FontIntent,
+    FontIntentSet, Glyph, GlyphAxis, GlyphId, GlyphLayer, GlyphName, GlyphSource, GlyphSourceId,
+    GlyphVariant, GlyphVariantId, LayerId, Location, NamedInstance, NamedInstanceId, PointId,
+    PointSeed, PointType, SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
@@ -1247,6 +1248,274 @@ fn delete_source_rejects_an_existing_glyph_source_base_atomically() {
             .any(|source| source.id() == source_id)
     );
     assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
+}
+
+#[test]
+fn glyph_local_entity_operations_persist_and_undo_without_changing_ownership() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let weight_id = create_weight_axis(&mut workspace);
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let global_source_id = workspace.font().default_source_id().unwrap();
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), global_source_id.clone());
+    let local_axis_id = AxisId::from_raw("A-width");
+    let local_axis = GlyphAxis::with_id(
+        local_axis_id.clone(),
+        "A Width".to_string(),
+        0.0,
+        0.0,
+        100.0,
+    );
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateGlyphAxis {
+                    glyph_id: glyph_id.clone(),
+                    axis: local_axis.clone(),
+                }],
+            },
+            Some("Create Glyph Axis".to_string()),
+        )
+        .unwrap();
+
+    let glyph_source_id = GlyphSourceId::from_raw("A-wide");
+    let mut wide_location = Location::new();
+    wide_location.set(local_axis_id.clone(), 100.0);
+    let glyph_source = GlyphSource::with_id(
+        glyph_source_id.clone(),
+        "Wide".to_string(),
+        layer_id.clone(),
+        Some(global_source_id.clone()),
+        wide_location.clone(),
+    );
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateGlyphSource {
+                    glyph_id: glyph_id.clone(),
+                    variant_id: None,
+                    source: glyph_source,
+                }],
+            },
+            Some("Create Glyph Source".to_string()),
+        )
+        .unwrap();
+
+    let replacement = GlyphSource::with_id(
+        glyph_source_id.clone(),
+        "Wide Renamed".to_string(),
+        layer_id.clone(),
+        Some(global_source_id.clone()),
+        wide_location,
+    );
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::UpdateGlyphSource {
+                    glyph_id: glyph_id.clone(),
+                    variant_id: None,
+                    source: replacement,
+                }],
+            },
+            Some("Update Glyph Source".to_string()),
+        )
+        .unwrap();
+    assert_eq!(
+        workspace
+            .font()
+            .glyph(glyph_id.clone())
+            .unwrap()
+            .source(glyph_source_id.clone())
+            .unwrap()
+            .name(),
+        "Wide Renamed"
+    );
+
+    let mut variant = GlyphVariant::with_id(
+        GlyphVariantId::from_raw("A-heavy"),
+        "Heavy".to_string(),
+        Condition::AxisRange {
+            axis_id: weight_id,
+            minimum: Some(700.0),
+            maximum: None,
+        },
+    );
+    variant.insert_source(GlyphSource::with_id(
+        GlyphSourceId::from_raw("A-heavy-source"),
+        "Heavy Source".to_string(),
+        layer_id,
+        Some(global_source_id),
+        Location::new(),
+    ));
+    let variant_id = variant.id();
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateGlyphVariant {
+                    glyph_id: glyph_id.clone(),
+                    variant,
+                }],
+            },
+            Some("Create Glyph Variant".to_string()),
+        )
+        .unwrap();
+
+    workspace
+        .undo()
+        .unwrap()
+        .expect("variant create should undo");
+    assert!(
+        workspace
+            .font()
+            .glyph(glyph_id.clone())
+            .unwrap()
+            .variant(variant_id.clone())
+            .is_none()
+    );
+    workspace
+        .redo()
+        .unwrap()
+        .expect("variant create should redo");
+    assert!(
+        workspace
+            .font()
+            .glyph(glyph_id.clone())
+            .unwrap()
+            .variant(variant_id)
+            .is_some()
+    );
+
+    drop(workspace);
+    let resumed = FontWorkspace::resume(&store_path).unwrap();
+    let glyph = resumed.font().glyph(glyph_id).unwrap();
+    assert_eq!(glyph.axes().len(), 1);
+    assert_eq!(glyph.default_sources().len(), 2);
+    assert_eq!(glyph.variants().len(), 1);
+}
+
+#[test]
+fn component_operations_commit_as_one_layer_replacement_and_undo() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let weight_id = create_weight_axis(&mut workspace);
+    let parent_id = create_glyph(&mut workspace, "A", vec![65]);
+    let base_id = create_glyph(&mut workspace, "part", vec![]);
+    let source_id = workspace.font().default_source_id().unwrap();
+    let layer_id = create_glyph_layer(&mut workspace, parent_id, source_id);
+    let local_axis_id = AxisId::from_raw("part-width");
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::CreateGlyphAxis {
+                    glyph_id: base_id.clone(),
+                    axis: GlyphAxis::with_id(
+                        local_axis_id.clone(),
+                        "Part Width".to_string(),
+                        0.0,
+                        0.0,
+                        100.0,
+                    ),
+                }],
+            },
+            None,
+        )
+        .unwrap();
+
+    let component_id = shift_font::ComponentId::from_raw("A-part");
+    let component = Component::with_id(
+        component_id.clone(),
+        base_id,
+        "part",
+        DecomposedTransform::identity(),
+    );
+    let mut location = Location::new();
+    location.set(local_axis_id, 75.0);
+    let transform = DecomposedTransform {
+        translate_x: 40.0,
+        ..DecomposedTransform::identity()
+    };
+    let outcome = workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![
+                    FontIntent::AddComponent {
+                        layer_id: layer_id.clone(),
+                        component,
+                    },
+                    FontIntent::SetComponentLocation {
+                        layer_id: layer_id.clone(),
+                        component_id: component_id.clone(),
+                        location: location.clone(),
+                    },
+                    FontIntent::SetComponentAxisInheritance {
+                        layer_id: layer_id.clone(),
+                        component_id: component_id.clone(),
+                        axis_inheritance: AxisInheritance::Font,
+                    },
+                    FontIntent::SetComponentCondition {
+                        layer_id: layer_id.clone(),
+                        component_id: component_id.clone(),
+                        condition: Some(Condition::AxisRange {
+                            axis_id: weight_id,
+                            minimum: Some(500.0),
+                            maximum: None,
+                        }),
+                    },
+                    FontIntent::SetComponentTransform {
+                        layer_id: layer_id.clone(),
+                        component_id: component_id.clone(),
+                        transform,
+                    },
+                ],
+            },
+            Some("Configure Component".to_string()),
+        )
+        .unwrap();
+    assert!(
+        outcome
+            .changes
+            .changes
+            .iter()
+            .all(|change| matches!(change, FontChange::LayerGeometryReplaced(_)))
+    );
+    let component = workspace
+        .font()
+        .layer(layer_id.clone())
+        .unwrap()
+        .component(component_id.clone())
+        .unwrap();
+    assert_eq!(component.location(), &location);
+    assert_eq!(component.axis_inheritance(), AxisInheritance::Font);
+    assert_eq!(component.transform(), &transform);
+    assert!(component.condition().is_some());
+
+    workspace
+        .undo()
+        .unwrap()
+        .expect("component batch should undo");
+    assert!(
+        workspace
+            .font()
+            .layer(layer_id.clone())
+            .unwrap()
+            .component(component_id.clone())
+            .is_none()
+    );
+    workspace
+        .redo()
+        .unwrap()
+        .expect("component batch should redo");
+    assert!(
+        workspace
+            .font()
+            .layer(layer_id)
+            .unwrap()
+            .component(component_id)
+            .is_some()
+    );
 }
 
 #[test]

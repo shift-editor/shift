@@ -10,8 +10,9 @@ use shift_backends::{
 };
 use shift_font::{
     AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
-    FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphSource, LayerId, Location, MetricDefinition,
-    NamedInstance, Source, SourceId, TouchedLayer, error::CoreError,
+    FontMetadata, Glyph, GlyphAxis, GlyphId, GlyphLayer, GlyphSource, GlyphVariant, GlyphVariantId,
+    LayerId, Location, MetricDefinition, NamedInstance, Source, SourceId, TouchedLayer,
+    error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::{
@@ -441,6 +442,101 @@ impl FontWorkspace {
                         post: change.mappings.clone(),
                     });
                 }
+                FontChange::GlyphAxisCreated(change) => steps.push(LedgerStep::GlyphAxis {
+                    glyph_id: change.glyph_id.clone(),
+                    pre: None,
+                    post: Some(change.axis.clone()),
+                }),
+                FontChange::GlyphAxisUpdated(change) => steps.push(LedgerStep::GlyphAxis {
+                    glyph_id: change.glyph_id.clone(),
+                    pre: pre
+                        .glyph_axes
+                        .iter()
+                        .find(|(glyph_id, axis)| {
+                            *glyph_id == change.glyph_id && axis.id() == change.axis.id()
+                        })
+                        .map(|(_, axis)| axis.clone()),
+                    post: Some(change.axis.clone()),
+                }),
+                FontChange::GlyphAxisDeleted(change) => steps.push(LedgerStep::GlyphAxis {
+                    glyph_id: change.glyph_id.clone(),
+                    pre: pre
+                        .glyph_axes
+                        .iter()
+                        .find(|(glyph_id, axis)| {
+                            *glyph_id == change.glyph_id && axis.id() == change.axis_id
+                        })
+                        .map(|(_, axis)| axis.clone()),
+                    post: None,
+                }),
+                FontChange::GlyphSourceCreated(change) => steps.push(LedgerStep::GlyphSource {
+                    glyph_id: change.glyph_id.clone(),
+                    variant_id: change.variant_id.clone(),
+                    pre: None,
+                    post: Some(change.source.clone()),
+                }),
+                FontChange::GlyphSourceUpdated(change) => steps.push(LedgerStep::GlyphSource {
+                    glyph_id: change.glyph_id.clone(),
+                    variant_id: change.variant_id.clone(),
+                    pre: pre
+                        .glyph_sources
+                        .iter()
+                        .find(|(glyph_id, variant_id, source)| {
+                            *glyph_id == change.glyph_id
+                                && *variant_id == change.variant_id
+                                && source.id() == change.source.id()
+                        })
+                        .map(|(_, _, source)| source.clone()),
+                    post: Some(change.source.clone()),
+                }),
+                FontChange::GlyphSourceDeleted(change) => steps.push(LedgerStep::GlyphSource {
+                    glyph_id: change.glyph_id.clone(),
+                    variant_id: change.variant_id.clone(),
+                    pre: pre
+                        .glyph_sources
+                        .iter()
+                        .find(|(glyph_id, variant_id, source)| {
+                            *glyph_id == change.glyph_id
+                                && *variant_id == change.variant_id
+                                && source.id() == change.glyph_source_id
+                        })
+                        .map(|(_, _, source)| source.clone()),
+                    post: None,
+                }),
+                FontChange::GlyphVariantCreated(change) => {
+                    steps.push(LedgerStep::GlyphVariant {
+                        glyph_id: change.glyph_id.clone(),
+                        pre: None,
+                        post: Some(change.variant.clone()),
+                    });
+                }
+                FontChange::GlyphVariantUpdated(change) => {
+                    steps.push(LedgerStep::GlyphVariant {
+                        glyph_id: change.glyph_id.clone(),
+                        pre: pre
+                            .glyph_variants
+                            .iter()
+                            .find(|(glyph_id, variant)| {
+                                *glyph_id == change.glyph_id && variant.id() == change.variant.id()
+                            })
+                            .map(|(_, variant)| variant.clone()),
+                        post: Some(change.variant.clone()),
+                    });
+                }
+                FontChange::GlyphVariantDeleted(change) => {
+                    steps.push(LedgerStep::GlyphVariant {
+                        glyph_id: change.glyph_id.clone(),
+                        pre: pre
+                            .glyph_variants
+                            .iter()
+                            .find(|(glyph_id, variant)| {
+                                *glyph_id == change.glyph_id
+                                    && variant.id() == change.glyph_variant_id
+                            })
+                            .map(|(_, variant)| variant.clone()),
+                        post: None,
+                    });
+                }
                 FontChange::MetricDefinitionsUpdated(change) => {
                     steps.push(LedgerStep::MetricDefinitions {
                         pre: pre
@@ -664,6 +760,31 @@ impl FontWorkspace {
                     LedgerStep::Source { pre, post } => {
                         let (from, to) = side.orient(pre, post);
                         replay_source(font, from, to, &mut changes)?;
+                    }
+                    LedgerStep::GlyphAxis {
+                        glyph_id,
+                        pre,
+                        post,
+                    } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_glyph_axis(font, glyph_id, from, to, &mut changes)?;
+                    }
+                    LedgerStep::GlyphSource {
+                        glyph_id,
+                        variant_id,
+                        pre,
+                        post,
+                    } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_glyph_source(font, glyph_id, variant_id, from, to, &mut changes)?;
+                    }
+                    LedgerStep::GlyphVariant {
+                        glyph_id,
+                        pre,
+                        post,
+                    } => {
+                        let (from, to) = side.orient(pre, post);
+                        replay_glyph_variant(font, glyph_id, from, to, &mut changes)?;
                     }
                     LedgerStep::GlyphLayer {
                         glyph_id,
@@ -1080,6 +1201,9 @@ struct FontLevelPreState {
     metric_definitions: Option<Vec<MetricDefinition>>,
     named_instances: Option<Vec<NamedInstance>>,
     axis_locations: Vec<(AxisId, SourceId, f64)>,
+    glyph_axes: Vec<(GlyphId, GlyphAxis)>,
+    glyph_sources: Vec<(GlyphId, Option<GlyphVariantId>, GlyphSource)>,
+    glyph_variants: Vec<(GlyphId, GlyphVariant)>,
 }
 
 fn capture_font_level_pre_state(
@@ -1166,6 +1290,67 @@ fn capture_font_level_pre_state(
                     pre.axis_locations
                         .push((axis_id.clone(), source.id(), value));
                 }
+            }
+        }
+        FontIntent::UpdateGlyphAxis { glyph_id, axis } => {
+            if let Some(axis) = font
+                .glyph(glyph_id.clone())
+                .and_then(|glyph| glyph.axis(axis.id()))
+            {
+                pre.glyph_axes.push((glyph_id.clone(), axis.clone()));
+            }
+        }
+        FontIntent::DeleteGlyphAxis { glyph_id, axis_id } => {
+            if let Some(axis) = font
+                .glyph(glyph_id.clone())
+                .and_then(|glyph| glyph.axis(axis_id.clone()))
+            {
+                pre.glyph_axes.push((glyph_id.clone(), axis.clone()));
+            }
+        }
+        FontIntent::UpdateGlyphSource {
+            glyph_id,
+            variant_id,
+            source,
+        } => {
+            if let Some(source) = font
+                .glyph(glyph_id.clone())
+                .and_then(|glyph| glyph.source(source.id()))
+            {
+                pre.glyph_sources
+                    .push((glyph_id.clone(), variant_id.clone(), source.clone()));
+            }
+        }
+        FontIntent::DeleteGlyphSource {
+            glyph_id,
+            variant_id,
+            glyph_source_id,
+        } => {
+            if let Some(source) = font
+                .glyph(glyph_id.clone())
+                .and_then(|glyph| glyph.source(glyph_source_id.clone()))
+            {
+                pre.glyph_sources
+                    .push((glyph_id.clone(), variant_id.clone(), source.clone()));
+            }
+        }
+        FontIntent::UpdateGlyphVariant { glyph_id, variant } => {
+            if let Some(variant) = font
+                .glyph(glyph_id.clone())
+                .and_then(|glyph| glyph.variant(variant.id()))
+            {
+                pre.glyph_variants.push((glyph_id.clone(), variant.clone()));
+            }
+        }
+        FontIntent::DeleteGlyphVariant {
+            glyph_id,
+            glyph_variant_id,
+        } => {
+            if let Some(variant) = font
+                .glyph(glyph_id.clone())
+                .and_then(|glyph| glyph.variant(glyph_variant_id.clone()))
+            {
+                pre.glyph_variants.push((glyph_id.clone(), variant.clone()));
             }
         }
         FontIntent::SetAxisMappings { .. } => {
@@ -1420,6 +1605,91 @@ fn replay_source(
         font.add_source(source);
     }
 
+    Ok(())
+}
+
+fn replay_glyph_axis(
+    font: &mut shift_font::Font,
+    glyph_id: GlyphId,
+    from: Option<GlyphAxis>,
+    to: Option<GlyphAxis>,
+    changes: &mut FontChangeSet,
+) -> Result<(), WorkspaceError> {
+    if let (Some(from), Some(to)) = (from.as_ref(), to.as_ref())
+        && from.id() == to.id()
+    {
+        font.replace_glyph_axis(to.clone())?;
+        changes.push(FontChange::glyph_axis_updated(glyph_id, to));
+        return Ok(());
+    }
+    if let Some(axis) = from {
+        font.remove_glyph_axis(axis.id())?;
+        changes.push(FontChange::glyph_axis_deleted(glyph_id.clone(), axis.id()));
+    }
+    if let Some(axis) = to {
+        font.add_glyph_axis(glyph_id.clone(), axis.clone())?;
+        changes.push(FontChange::glyph_axis_created(glyph_id, &axis));
+    }
+    Ok(())
+}
+
+fn replay_glyph_source(
+    font: &mut shift_font::Font,
+    glyph_id: GlyphId,
+    variant_id: Option<GlyphVariantId>,
+    from: Option<GlyphSource>,
+    to: Option<GlyphSource>,
+    changes: &mut FontChangeSet,
+) -> Result<(), WorkspaceError> {
+    if let (Some(from), Some(to)) = (from.as_ref(), to.as_ref())
+        && from.id() == to.id()
+    {
+        font.replace_glyph_source(to.clone())?;
+        changes.push(FontChange::glyph_source_updated(glyph_id, variant_id, to));
+        return Ok(());
+    }
+    if let Some(source) = from {
+        font.remove_glyph_source(source.id())?;
+        changes.push(FontChange::glyph_source_deleted(
+            glyph_id.clone(),
+            variant_id.clone(),
+            source.id(),
+        ));
+    }
+    if let Some(source) = to {
+        font.add_glyph_source(glyph_id.clone(), variant_id.clone(), source.clone())?;
+        changes.push(FontChange::glyph_source_created(
+            glyph_id, variant_id, &source,
+        ));
+    }
+    Ok(())
+}
+
+fn replay_glyph_variant(
+    font: &mut shift_font::Font,
+    glyph_id: GlyphId,
+    from: Option<GlyphVariant>,
+    to: Option<GlyphVariant>,
+    changes: &mut FontChangeSet,
+) -> Result<(), WorkspaceError> {
+    if let (Some(from), Some(to)) = (from.as_ref(), to.as_ref())
+        && from.id() == to.id()
+    {
+        font.replace_glyph_variant(to.clone())?;
+        changes.push(FontChange::glyph_variant_updated(glyph_id, to));
+        return Ok(());
+    }
+    if let Some(variant) = from {
+        font.remove_glyph_variant(variant.id())?;
+        changes.push(FontChange::glyph_variant_deleted(
+            glyph_id.clone(),
+            variant.id(),
+        ));
+    }
+    if let Some(variant) = to {
+        font.add_glyph_variant(glyph_id.clone(), variant.clone())?;
+        changes.push(FontChange::glyph_variant_created(glyph_id, &variant));
+    }
     Ok(())
 }
 

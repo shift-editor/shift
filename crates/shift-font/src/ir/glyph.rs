@@ -187,6 +187,11 @@ impl GlyphVariant {
         &mut self.sources
     }
 
+    pub(crate) fn replace_name_condition(&mut self, replacement: &GlyphVariant) {
+        self.name = replacement.name.clone();
+        self.condition = replacement.condition.clone();
+    }
+
     pub fn source(&self, id: GlyphSourceId) -> Option<&GlyphSource> {
         self.sources.get(&id)
     }
@@ -386,6 +391,10 @@ impl GlyphLayer {
         self.components.get(&id)
     }
 
+    pub(crate) fn component_mut(&mut self, id: ComponentId) -> Option<&mut Component> {
+        self.components.get_mut(&id)
+    }
+
     pub fn add_component(&mut self, component: Component) -> ComponentId {
         let id = component.id();
         self.components.insert(component);
@@ -552,6 +561,10 @@ impl Glyph {
 
     pub fn axes(&self) -> &EntityList<GlyphAxis> {
         &self.axes
+    }
+
+    pub(crate) fn axes_mut(&mut self) -> &mut EntityList<GlyphAxis> {
+        &mut self.axes
     }
 
     pub fn axis(&self, id: AxisId) -> Option<&GlyphAxis> {

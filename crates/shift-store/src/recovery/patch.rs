@@ -91,6 +91,33 @@ impl RecoveryOverlay {
                     authoring_glyph_ids.insert(change.glyph_id.clone());
                     layer_ids.insert(change.layer_id.clone());
                 }
+                font::FontChange::GlyphAxisCreated(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphAxisUpdated(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphAxisDeleted(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphSourceCreated(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphSourceUpdated(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphSourceDeleted(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphVariantCreated(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphVariantUpdated(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphVariantDeleted(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                }
                 _ => {
                     if let Some(layer_id) = change.layer_id() {
                         layer_ids.insert(layer_id.clone());

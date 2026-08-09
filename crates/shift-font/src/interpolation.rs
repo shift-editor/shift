@@ -426,7 +426,24 @@ fn interpolation_basis(
     sources: &[(SourceId, NormalizedLocation)],
     axes: &[Axis],
 ) -> Option<InterpolationBasis> {
-    if sources.is_empty() {
+    let locations = sources
+        .iter()
+        .map(|(_, location)| location.clone())
+        .collect::<Vec<_>>();
+    Some(InterpolationBasis {
+        source_ids: sources
+            .iter()
+            .map(|(source_id, _)| source_id.clone())
+            .collect(),
+        basis: variation_basis_for_locations(&locations, axes)?,
+    })
+}
+
+fn variation_basis_for_locations(
+    locations: &[NormalizedLocation],
+    axes: &[Axis],
+) -> Option<VariationBasis> {
+    if locations.is_empty() {
         return None;
     }
 
@@ -437,8 +454,8 @@ fn interpolation_basis(
     let ordered_axes = tagged_axes.iter().map(|(tag, _)| *tag).collect();
     let axis_ids_by_tag = tagged_axes.into_iter().collect::<HashMap<_, _>>();
     let mut points = HashMap::new();
-    for (index, (_, location)) in sources.iter().enumerate() {
-        let mut unit = vec![0.0; sources.len()];
+    for (index, location) in locations.iter().enumerate() {
+        let mut unit = vec![0.0; locations.len()];
         unit[index] = 1.0;
         if points.insert(location.clone(), unit).is_some() {
             return None;
@@ -446,7 +463,7 @@ fn interpolation_basis(
     }
     let default_location = normalized_location(&DesignLocation::new(), axes);
     if let Entry::Vacant(entry) = points.entry(default_location) {
-        entry.insert(virtual_default_coefficients(sources)?);
+        entry.insert(virtual_default_coefficients(locations)?);
     }
     let model = VariationModel::new(
         points
@@ -458,13 +475,10 @@ fn interpolation_basis(
     let model_coefficients = model
         .deltas_with_rounding::<f64, f64>(&points, RoundingBehaviour::None)
         .ok()?;
-    Some(InterpolationBasis {
-        source_ids: sources
-            .iter()
-            .map(|(source_id, _)| source_id.clone())
-            .collect(),
-        basis: VariationBasis::from_fontdrasil(model_coefficients, &axis_ids_by_tag),
-    })
+    Some(VariationBasis::from_fontdrasil(
+        model_coefficients,
+        &axis_ids_by_tag,
+    ))
 }
 
 /// Derives a virtual default only when two masters bracket it on one axis.
@@ -473,11 +487,11 @@ fn interpolation_basis(
 /// sparse glyph may omit the font's default master while still providing a
 /// well-defined one-axis interpolation on opposite sides of it. More complex
 /// sparse layouts remain nonviable and use the caller's static master fallback.
-fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> Option<Vec<f64>> {
+fn virtual_default_coefficients(locations: &[NormalizedLocation]) -> Option<Vec<f64>> {
     let mut negative: Option<(usize, Tag, f64)> = None;
     let mut positive: Option<(usize, Tag, f64)> = None;
 
-    for (index, (_, location)) in sources.iter().enumerate() {
+    for (index, location) in locations.iter().enumerate() {
         let nonzero = location
             .iter()
             .filter_map(|(tag, coordinate)| {
@@ -512,10 +526,25 @@ fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> O
     }
 
     let span = positive_value - negative_value;
-    let mut coefficients = vec![0.0; sources.len()];
+    let mut coefficients = vec![0.0; locations.len()];
     coefficients[negative_index] = positive_value / span;
     coefficients[positive_index] = -negative_value / span;
     Some(coefficients)
+}
+
+pub(crate) fn interpolation_weights(
+    source_locations: &[DesignLocation],
+    location: &DesignLocation,
+    axes: &[Axis],
+) -> CoreResult<Option<Vec<f64>>> {
+    let source_locations = source_locations
+        .iter()
+        .map(|location| normalized_location(location, axes))
+        .collect::<Vec<_>>();
+    let Some(basis) = variation_basis_for_locations(&source_locations, axes) else {
+        return Ok(None);
+    };
+    basis.evaluate(location.as_untyped(), axes).map(Some)
 }
 
 fn normalized_location(location: &DesignLocation, axes: &[Axis]) -> NormalizedLocation {

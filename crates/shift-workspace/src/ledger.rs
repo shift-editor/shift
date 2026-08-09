@@ -10,8 +10,8 @@
 use std::sync::Arc;
 
 use shift_font::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, GlyphSource, LayerId,
-    MetricDefinition, NamedInstance, Source, SourceId,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphAxis, GlyphId, GlyphLayer, GlyphName, GlyphSource,
+    GlyphVariant, GlyphVariantId, LayerId, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 /// Maximum entries retained independently by each stack. The oldest entry on
@@ -62,6 +62,22 @@ pub enum LedgerStep {
     Source {
         pre: Option<Source>,
         post: Option<Source>,
+    },
+    GlyphAxis {
+        glyph_id: GlyphId,
+        pre: Option<GlyphAxis>,
+        post: Option<GlyphAxis>,
+    },
+    GlyphSource {
+        glyph_id: GlyphId,
+        variant_id: Option<GlyphVariantId>,
+        pre: Option<GlyphSource>,
+        post: Option<GlyphSource>,
+    },
+    GlyphVariant {
+        glyph_id: GlyphId,
+        pre: Option<GlyphVariant>,
+        post: Option<GlyphVariant>,
     },
     /// Independent glyph-source and layer existence for sparse source authoring.
     GlyphLayer {
@@ -128,6 +144,9 @@ impl LedgerEntry {
                 | LedgerStep::MetricDefinitions { .. }
                 | LedgerStep::NamedInstances { .. }
                 | LedgerStep::Source { .. }
+                | LedgerStep::GlyphAxis { .. }
+                | LedgerStep::GlyphSource { .. }
+                | LedgerStep::GlyphVariant { .. }
                 | LedgerStep::GlyphIdentity { .. } => Vec::new(),
             })
             .collect()

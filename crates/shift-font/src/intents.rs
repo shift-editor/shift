@@ -3,16 +3,18 @@
 //! Intents are what a caller ASKS for; [`FontChange`] records are what the
 //! workspace persists. The vocabularies are deliberately distinct: intents
 //! carry caller-minted ids and insertion anchors, records carry
-//! post-mutation snapshots for the store. CS1 covers the pen scope; later
-//! milestones add variants alongside the tools that emit them.
+//! post-mutation snapshots for the store. Glyph-local entities use explicit
+//! create/update/delete intents; component intents echo whole-layer replacements.
 
 use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, DesignLocation,
-    Font, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, MetricDefinition, MetricId,
-    MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisInheritance, AxisMapping, BooleanOp, Component,
+    ComponentId, Condition, Contour, ContourId, DecomposedTransform, DesignLocation, Font,
+    FontMetadata, Glyph, GlyphAxis, GlyphId, GlyphLayer, GlyphName, GlyphSource, GlyphSourceId,
+    GlyphVariant, GlyphVariantId, LayerId, Location, MetricDefinition, MetricId, MetricValue,
+    NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
@@ -112,6 +114,34 @@ pub enum FontIntent {
         contour_id_b: ContourId,
         operation: BooleanOp,
     },
+    AddComponent {
+        layer_id: LayerId,
+        component: Component,
+    },
+    RemoveComponent {
+        layer_id: LayerId,
+        component_id: ComponentId,
+    },
+    SetComponentLocation {
+        layer_id: LayerId,
+        component_id: ComponentId,
+        location: Location,
+    },
+    SetComponentAxisInheritance {
+        layer_id: LayerId,
+        component_id: ComponentId,
+        axis_inheritance: AxisInheritance,
+    },
+    SetComponentCondition {
+        layer_id: LayerId,
+        component_id: ComponentId,
+        condition: Option<Condition>,
+    },
+    SetComponentTransform {
+        layer_id: LayerId,
+        component_id: ComponentId,
+        transform: DecomposedTransform,
+    },
     /// Creates glyph identity and metadata only. Authored editable data is
     /// created by explicit `CreateGlyphLayer` intents.
     CreateGlyph {
@@ -145,6 +175,45 @@ pub enum FontIntent {
     },
     SetMetricDefinitions {
         definitions: Vec<MetricDefinition>,
+    },
+    CreateGlyphAxis {
+        glyph_id: GlyphId,
+        axis: GlyphAxis,
+    },
+    UpdateGlyphAxis {
+        glyph_id: GlyphId,
+        axis: GlyphAxis,
+    },
+    DeleteGlyphAxis {
+        glyph_id: GlyphId,
+        axis_id: AxisId,
+    },
+    CreateGlyphSource {
+        glyph_id: GlyphId,
+        variant_id: Option<GlyphVariantId>,
+        source: GlyphSource,
+    },
+    UpdateGlyphSource {
+        glyph_id: GlyphId,
+        variant_id: Option<GlyphVariantId>,
+        source: GlyphSource,
+    },
+    DeleteGlyphSource {
+        glyph_id: GlyphId,
+        variant_id: Option<GlyphVariantId>,
+        glyph_source_id: GlyphSourceId,
+    },
+    CreateGlyphVariant {
+        glyph_id: GlyphId,
+        variant: GlyphVariant,
+    },
+    UpdateGlyphVariant {
+        glyph_id: GlyphId,
+        variant: GlyphVariant,
+    },
+    DeleteGlyphVariant {
+        glyph_id: GlyphId,
+        glyph_variant_id: GlyphVariantId,
     },
     CreateNamedInstance {
         instance: NamedInstance,
@@ -192,8 +261,8 @@ pub enum FontIntent {
     /// Creates one editable layer from compatible resolved numeric values.
     ///
     /// The source layer supplies authored structure and non-varying data. The
-    /// resolved values replace its advance, coordinates, and component
-    /// transforms after fresh internal identities are minted.
+    /// resolved values replace its advance, coordinates, component transforms,
+    /// and corresponding component-location values after fresh identities are minted.
     MaterializeGlyphLayer {
         layer_id: LayerId,
         glyph_id: GlyphId,
@@ -220,7 +289,13 @@ impl FontIntent {
             | Self::ReverseContour { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
-            | Self::ApplyBooleanOp { layer_id, .. } => Some(layer_id),
+            | Self::ApplyBooleanOp { layer_id, .. }
+            | Self::AddComponent { layer_id, .. }
+            | Self::RemoveComponent { layer_id, .. }
+            | Self::SetComponentLocation { layer_id, .. }
+            | Self::SetComponentAxisInheritance { layer_id, .. }
+            | Self::SetComponentCondition { layer_id, .. }
+            | Self::SetComponentTransform { layer_id, .. } => Some(layer_id),
 
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
@@ -230,6 +305,15 @@ impl FontIntent {
             | Self::DeleteAxis { .. }
             | Self::SetAxisMappings { .. }
             | Self::SetMetricDefinitions { .. }
+            | Self::CreateGlyphAxis { .. }
+            | Self::UpdateGlyphAxis { .. }
+            | Self::DeleteGlyphAxis { .. }
+            | Self::CreateGlyphSource { .. }
+            | Self::UpdateGlyphSource { .. }
+            | Self::DeleteGlyphSource { .. }
+            | Self::CreateGlyphVariant { .. }
+            | Self::UpdateGlyphVariant { .. }
+            | Self::DeleteGlyphVariant { .. }
             | Self::CreateNamedInstance { .. }
             | Self::UpdateNamedInstance { .. }
             | Self::DeleteNamedInstance { .. }
@@ -262,11 +346,24 @@ impl FontIntent {
             | Self::ReverseContour { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
-            | Self::ApplyBooleanOp { layer_id, .. } => vec![layer_id.clone()],
+            | Self::ApplyBooleanOp { layer_id, .. }
+            | Self::AddComponent { layer_id, .. }
+            | Self::RemoveComponent { layer_id, .. }
+            | Self::SetComponentLocation { layer_id, .. }
+            | Self::SetComponentAxisInheritance { layer_id, .. }
+            | Self::SetComponentCondition { layer_id, .. }
+            | Self::SetComponentTransform { layer_id, .. } => vec![layer_id.clone()],
             Self::CloneGlyphLayer { from_layer_id, .. }
             | Self::MaterializeGlyphLayer { from_layer_id, .. } => {
                 vec![from_layer_id.clone()]
             }
+            Self::UpdateAxis { .. }
+            | Self::DeleteAxis { .. }
+            | Self::UpdateGlyphAxis { .. }
+            | Self::DeleteGlyphAxis { .. } => font
+                .glyphs()
+                .flat_map(|glyph| glyph.layers().keys().cloned())
+                .collect(),
             Self::DeleteSource { source_id } => font
                 .glyphs()
                 .filter_map(|glyph| {
@@ -279,10 +376,15 @@ impl FontIntent {
             | Self::UpdateGlyph { .. }
             | Self::UpdateFontMetadata { .. }
             | Self::CreateAxis { .. }
-            | Self::UpdateAxis { .. }
-            | Self::DeleteAxis { .. }
             | Self::SetAxisMappings { .. }
             | Self::SetMetricDefinitions { .. }
+            | Self::CreateGlyphAxis { .. }
+            | Self::CreateGlyphSource { .. }
+            | Self::UpdateGlyphSource { .. }
+            | Self::DeleteGlyphSource { .. }
+            | Self::CreateGlyphVariant { .. }
+            | Self::UpdateGlyphVariant { .. }
+            | Self::DeleteGlyphVariant { .. }
             | Self::CreateNamedInstance { .. }
             | Self::UpdateNamedInstance { .. }
             | Self::DeleteNamedInstance { .. }
@@ -301,6 +403,7 @@ impl FontIntent {
                 | Self::MoveAnchors { .. }
                 | Self::TranslatePoints { .. }
                 | Self::SetXAdvance { .. }
+                | Self::SetComponentTransform { .. }
         )
     }
 }
@@ -323,6 +426,47 @@ pub struct AppliedIntents {
     /// Unique touched layers in first-touch order; `structural` is OR-ed
     /// across the set.
     pub layers: Vec<TouchedLayer>,
+}
+
+fn require_component_layer(
+    font: &Font,
+    layer_id: &LayerId,
+    component_id: &ComponentId,
+) -> CoreResult<()> {
+    if font
+        .layer(layer_id.clone())
+        .is_some_and(|layer| layer.component(component_id.clone()).is_some())
+    {
+        Ok(())
+    } else {
+        Err(CoreError::ComponentNotFound(component_id.clone()))
+    }
+}
+
+fn require_glyph_source_owner(
+    font: &Font,
+    glyph_id: &GlyphId,
+    variant_id: Option<&GlyphVariantId>,
+    glyph_source_id: &GlyphSourceId,
+) -> CoreResult<()> {
+    let glyph = font
+        .glyph(glyph_id.clone())
+        .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+    let belongs = match variant_id {
+        Some(variant_id) => glyph
+            .variant(variant_id.clone())
+            .is_some_and(|variant| variant.source(glyph_source_id.clone()).is_some()),
+        None => glyph.default_sources().contains(glyph_source_id),
+    };
+    if belongs {
+        Ok(())
+    } else {
+        Err(CoreError::InvalidAuthoringEntity {
+            kind: "glyph source",
+            entity_id: glyph_source_id.to_string(),
+            message: "does not belong to the requested source set".to_string(),
+        })
+    }
 }
 
 impl Font {
@@ -432,6 +576,118 @@ impl Font {
                 for source in self.sources() {
                     changes.push(FontChange::source_updated(source));
                 }
+                Ok(Vec::new())
+            }
+            FontIntent::CreateGlyphAxis { glyph_id, axis } => {
+                self.add_glyph_axis(glyph_id.clone(), axis.clone())?;
+                changes.push(FontChange::glyph_axis_created(glyph_id.clone(), axis));
+                Ok(Vec::new())
+            }
+            FontIntent::UpdateGlyphAxis { glyph_id, axis } => {
+                let owns_axis = self
+                    .glyph(glyph_id.clone())
+                    .is_some_and(|glyph| glyph.axis(axis.id()).is_some());
+                if !owns_axis {
+                    return Err(CoreError::AxisNotFound(axis.id()));
+                }
+                self.replace_glyph_axis(axis.clone())?;
+                changes.push(FontChange::glyph_axis_updated(glyph_id.clone(), axis));
+                Ok(Vec::new())
+            }
+            FontIntent::DeleteGlyphAxis { glyph_id, axis_id } => {
+                let owns_axis = self
+                    .glyph(glyph_id.clone())
+                    .is_some_and(|glyph| glyph.axis(axis_id.clone()).is_some());
+                if !owns_axis {
+                    return Err(CoreError::AxisNotFound(axis_id.clone()));
+                }
+                self.remove_glyph_axis(axis_id.clone())?;
+                changes.push(FontChange::glyph_axis_deleted(
+                    glyph_id.clone(),
+                    axis_id.clone(),
+                ));
+                Ok(Vec::new())
+            }
+            FontIntent::CreateGlyphSource {
+                glyph_id,
+                variant_id,
+                source,
+            } => {
+                self.add_glyph_source(glyph_id.clone(), variant_id.clone(), source.clone())?;
+                changes.push(FontChange::glyph_source_created(
+                    glyph_id.clone(),
+                    variant_id.clone(),
+                    source,
+                ));
+                Ok(Vec::new())
+            }
+            FontIntent::UpdateGlyphSource {
+                glyph_id,
+                variant_id,
+                source,
+            } => {
+                require_glyph_source_owner(self, glyph_id, variant_id.as_ref(), &source.id())?;
+                self.replace_glyph_source(source.clone())?;
+                changes.push(FontChange::glyph_source_updated(
+                    glyph_id.clone(),
+                    variant_id.clone(),
+                    source,
+                ));
+                Ok(Vec::new())
+            }
+            FontIntent::DeleteGlyphSource {
+                glyph_id,
+                variant_id,
+                glyph_source_id,
+            } => {
+                require_glyph_source_owner(self, glyph_id, variant_id.as_ref(), glyph_source_id)?;
+                self.remove_glyph_source(glyph_source_id.clone())?;
+                changes.push(FontChange::glyph_source_deleted(
+                    glyph_id.clone(),
+                    variant_id.clone(),
+                    glyph_source_id.clone(),
+                ));
+                Ok(Vec::new())
+            }
+            FontIntent::CreateGlyphVariant { glyph_id, variant } => {
+                self.add_glyph_variant(glyph_id.clone(), variant.clone())?;
+                changes.push(FontChange::glyph_variant_created(glyph_id.clone(), variant));
+                Ok(Vec::new())
+            }
+            FontIntent::UpdateGlyphVariant { glyph_id, variant } => {
+                let owns_variant = self
+                    .glyph(glyph_id.clone())
+                    .is_some_and(|glyph| glyph.variant(variant.id()).is_some());
+                if !owns_variant {
+                    return Err(CoreError::InvalidAuthoringEntity {
+                        kind: "glyph variant",
+                        entity_id: variant.id().to_string(),
+                        message: "does not belong to the glyph".to_string(),
+                    });
+                }
+                self.replace_glyph_variant(variant.clone())?;
+                changes.push(FontChange::glyph_variant_updated(glyph_id.clone(), variant));
+                Ok(Vec::new())
+            }
+            FontIntent::DeleteGlyphVariant {
+                glyph_id,
+                glyph_variant_id,
+            } => {
+                let owns_variant = self
+                    .glyph(glyph_id.clone())
+                    .is_some_and(|glyph| glyph.variant(glyph_variant_id.clone()).is_some());
+                if !owns_variant {
+                    return Err(CoreError::InvalidAuthoringEntity {
+                        kind: "glyph variant",
+                        entity_id: glyph_variant_id.to_string(),
+                        message: "does not belong to the glyph".to_string(),
+                    });
+                }
+                self.remove_glyph_variant(glyph_variant_id.clone())?;
+                changes.push(FontChange::glyph_variant_deleted(
+                    glyph_id.clone(),
+                    glyph_variant_id.clone(),
+                ));
                 Ok(Vec::new())
             }
             FontIntent::CreateNamedInstance { instance } => {
@@ -1159,6 +1415,75 @@ impl Font {
                 self.rebuild_structure_index()?;
                 Ok(change)
             }
+            FontIntent::AddComponent {
+                layer_id,
+                component,
+            } => {
+                self.add_component(layer_id.clone(), component.clone())?;
+                Ok(FontChange::layer_geometry_replaced(
+                    self.layer(layer_id.clone())
+                        .expect("component target layer exists after mutation"),
+                ))
+            }
+            FontIntent::RemoveComponent {
+                layer_id,
+                component_id,
+            } => {
+                require_component_layer(self, layer_id, component_id)?;
+                self.remove_component(component_id.clone())?;
+                Ok(FontChange::layer_geometry_replaced(
+                    self.layer(layer_id.clone())
+                        .expect("component target layer remains after mutation"),
+                ))
+            }
+            FontIntent::SetComponentLocation {
+                layer_id,
+                component_id,
+                location,
+            } => {
+                require_component_layer(self, layer_id, component_id)?;
+                self.set_component_location(component_id.clone(), location.clone())?;
+                Ok(FontChange::layer_geometry_replaced(
+                    self.layer(layer_id.clone())
+                        .expect("component target layer remains after mutation"),
+                ))
+            }
+            FontIntent::SetComponentAxisInheritance {
+                layer_id,
+                component_id,
+                axis_inheritance,
+            } => {
+                require_component_layer(self, layer_id, component_id)?;
+                self.set_component_axis_inheritance(component_id.clone(), *axis_inheritance)?;
+                Ok(FontChange::layer_geometry_replaced(
+                    self.layer(layer_id.clone())
+                        .expect("component target layer remains after mutation"),
+                ))
+            }
+            FontIntent::SetComponentCondition {
+                layer_id,
+                component_id,
+                condition,
+            } => {
+                require_component_layer(self, layer_id, component_id)?;
+                self.set_component_condition(component_id.clone(), condition.clone())?;
+                Ok(FontChange::layer_geometry_replaced(
+                    self.layer(layer_id.clone())
+                        .expect("component target layer remains after mutation"),
+                ))
+            }
+            FontIntent::SetComponentTransform {
+                layer_id,
+                component_id,
+                transform,
+            } => {
+                require_component_layer(self, layer_id, component_id)?;
+                self.set_component_transform(component_id.clone(), *transform)?;
+                Ok(FontChange::layer_geometry_replaced(
+                    self.layer(layer_id.clone())
+                        .expect("component target layer remains after mutation"),
+                ))
+            }
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }
             | FontIntent::UpdateFontMetadata { .. }
@@ -1167,6 +1492,15 @@ impl Font {
             | FontIntent::DeleteAxis { .. }
             | FontIntent::SetAxisMappings { .. }
             | FontIntent::SetMetricDefinitions { .. }
+            | FontIntent::CreateGlyphAxis { .. }
+            | FontIntent::UpdateGlyphAxis { .. }
+            | FontIntent::DeleteGlyphAxis { .. }
+            | FontIntent::CreateGlyphSource { .. }
+            | FontIntent::UpdateGlyphSource { .. }
+            | FontIntent::DeleteGlyphSource { .. }
+            | FontIntent::CreateGlyphVariant { .. }
+            | FontIntent::UpdateGlyphVariant { .. }
+            | FontIntent::DeleteGlyphVariant { .. }
             | FontIntent::CreateNamedInstance { .. }
             | FontIntent::UpdateNamedInstance { .. }
             | FontIntent::DeleteNamedInstance { .. }

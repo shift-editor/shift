@@ -1,7 +1,8 @@
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph, GlyphId,
-    GlyphLayer, GlyphName, GlyphSource, LayerId, MetricDefinition, MetricId, MetricValue,
-    NamedInstance, Point, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph,
+    GlyphAxis, GlyphId, GlyphLayer, GlyphName, GlyphSource, GlyphSourceId, GlyphVariant,
+    GlyphVariantId, LayerId, MetricDefinition, MetricId, MetricValue, NamedInstance, Point,
+    PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -37,6 +38,15 @@ pub enum FontChange {
     AxisUpdated(AxisUpdated),
     AxisDeleted(AxisDeleted),
     AxisMappingsUpdated(AxisMappingsUpdated),
+    GlyphAxisCreated(GlyphAxisCreated),
+    GlyphAxisUpdated(GlyphAxisUpdated),
+    GlyphAxisDeleted(GlyphAxisDeleted),
+    GlyphSourceCreated(GlyphSourceCreated),
+    GlyphSourceUpdated(GlyphSourceUpdated),
+    GlyphSourceDeleted(GlyphSourceDeleted),
+    GlyphVariantCreated(GlyphVariantCreated),
+    GlyphVariantUpdated(GlyphVariantUpdated),
+    GlyphVariantDeleted(GlyphVariantDeleted),
     MetricDefinitionsUpdated(MetricDefinitionsUpdated),
     NamedInstancesUpdated(NamedInstancesUpdated),
     SourceCreated(SourceCreated),
@@ -81,6 +91,81 @@ impl FontChange {
     pub fn axis_mappings_updated(mappings: &[AxisMapping]) -> Self {
         Self::AxisMappingsUpdated(AxisMappingsUpdated {
             mappings: mappings.to_vec(),
+        })
+    }
+
+    pub fn glyph_axis_created(glyph_id: GlyphId, axis: &GlyphAxis) -> Self {
+        Self::GlyphAxisCreated(GlyphAxisCreated {
+            glyph_id,
+            axis: axis.clone(),
+        })
+    }
+
+    pub fn glyph_axis_updated(glyph_id: GlyphId, axis: &GlyphAxis) -> Self {
+        Self::GlyphAxisUpdated(GlyphAxisUpdated {
+            glyph_id,
+            axis: axis.clone(),
+        })
+    }
+
+    pub fn glyph_axis_deleted(glyph_id: GlyphId, axis_id: AxisId) -> Self {
+        Self::GlyphAxisDeleted(GlyphAxisDeleted { glyph_id, axis_id })
+    }
+
+    pub fn glyph_source_created(
+        glyph_id: GlyphId,
+        variant_id: Option<GlyphVariantId>,
+        source: &GlyphSource,
+    ) -> Self {
+        Self::GlyphSourceCreated(GlyphSourceCreated {
+            glyph_id,
+            variant_id,
+            source: source.clone(),
+        })
+    }
+
+    pub fn glyph_source_updated(
+        glyph_id: GlyphId,
+        variant_id: Option<GlyphVariantId>,
+        source: &GlyphSource,
+    ) -> Self {
+        Self::GlyphSourceUpdated(GlyphSourceUpdated {
+            glyph_id,
+            variant_id,
+            source: source.clone(),
+        })
+    }
+
+    pub fn glyph_source_deleted(
+        glyph_id: GlyphId,
+        variant_id: Option<GlyphVariantId>,
+        glyph_source_id: GlyphSourceId,
+    ) -> Self {
+        Self::GlyphSourceDeleted(GlyphSourceDeleted {
+            glyph_id,
+            variant_id,
+            glyph_source_id,
+        })
+    }
+
+    pub fn glyph_variant_created(glyph_id: GlyphId, variant: &GlyphVariant) -> Self {
+        Self::GlyphVariantCreated(GlyphVariantCreated {
+            glyph_id,
+            variant: variant.clone(),
+        })
+    }
+
+    pub fn glyph_variant_updated(glyph_id: GlyphId, variant: &GlyphVariant) -> Self {
+        Self::GlyphVariantUpdated(GlyphVariantUpdated {
+            glyph_id,
+            variant: variant.clone(),
+        })
+    }
+
+    pub fn glyph_variant_deleted(glyph_id: GlyphId, glyph_variant_id: GlyphVariantId) -> Self {
+        Self::GlyphVariantDeleted(GlyphVariantDeleted {
+            glyph_id,
+            glyph_variant_id,
         })
     }
 
@@ -226,6 +311,15 @@ impl FontChange {
             | Self::AxisUpdated(_)
             | Self::AxisDeleted(_)
             | Self::AxisMappingsUpdated(_)
+            | Self::GlyphAxisCreated(_)
+            | Self::GlyphAxisUpdated(_)
+            | Self::GlyphAxisDeleted(_)
+            | Self::GlyphSourceCreated(_)
+            | Self::GlyphSourceUpdated(_)
+            | Self::GlyphSourceDeleted(_)
+            | Self::GlyphVariantCreated(_)
+            | Self::GlyphVariantUpdated(_)
+            | Self::GlyphVariantDeleted(_)
             | Self::MetricDefinitionsUpdated(_)
             | Self::NamedInstancesUpdated(_)
             | Self::SourceCreated(_)
@@ -264,6 +358,63 @@ pub struct AxisUpdated {
 #[derive(Clone, Debug)]
 pub struct AxisMappingsUpdated {
     pub mappings: Vec<AxisMapping>,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphAxisCreated {
+    pub glyph_id: GlyphId,
+    pub axis: GlyphAxis,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphAxisUpdated {
+    pub glyph_id: GlyphId,
+    pub axis: GlyphAxis,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphAxisDeleted {
+    pub glyph_id: GlyphId,
+    pub axis_id: AxisId,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphSourceCreated {
+    pub glyph_id: GlyphId,
+    pub variant_id: Option<GlyphVariantId>,
+    pub source: GlyphSource,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphSourceUpdated {
+    pub glyph_id: GlyphId,
+    pub variant_id: Option<GlyphVariantId>,
+    pub source: GlyphSource,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphSourceDeleted {
+    pub glyph_id: GlyphId,
+    pub variant_id: Option<GlyphVariantId>,
+    pub glyph_source_id: GlyphSourceId,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphVariantCreated {
+    pub glyph_id: GlyphId,
+    pub variant: GlyphVariant,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphVariantUpdated {
+    pub glyph_id: GlyphId,
+    pub variant: GlyphVariant,
+}
+
+#[derive(Clone, Debug)]
+pub struct GlyphVariantDeleted {
+    pub glyph_id: GlyphId,
+    pub glyph_variant_id: GlyphVariantId,
 }
 
 #[derive(Clone, Debug)]

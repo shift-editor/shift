@@ -6,7 +6,7 @@ use crate::entity::{
 };
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
-use crate::glyph::{Glyph, GlyphAxis, GlyphLayer, GlyphSource};
+use crate::glyph::{Glyph, GlyphAxis, GlyphLayer, GlyphSource, GlyphVariant};
 use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::KerningData;
@@ -16,7 +16,8 @@ use crate::named_instance::{validate_named_instances, NamedInstance};
 use crate::source::source_locations_equal;
 use crate::source::Source;
 use crate::{
-    AxisLabelId, Component, Condition, GlyphName, GlyphSourceId, GlyphVariantId, NamedInstanceId,
+    AxisInheritance, AxisLabelId, Component, ComponentId, Condition, DecomposedTransform,
+    GlyphName, GlyphSourceId, GlyphVariantId, Location, NamedInstanceId,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -1197,6 +1198,112 @@ impl Font {
         Ok(())
     }
 
+    pub fn add_glyph_axis(&mut self, glyph_id: GlyphId, axis: GlyphAxis) -> CoreResult<()> {
+        if self
+            .axes()
+            .iter()
+            .any(|existing| existing.id() == axis.id())
+            || self.index().glyph_axis_owner.contains_key(&axis.id())
+        {
+            return Err(CoreError::DuplicateAxisId(axis.id()));
+        }
+        let mut state = (*self.state).clone();
+        let glyph = state
+            .data
+            .glyphs
+            .get_mut(&glyph_id)
+            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        Arc::make_mut(glyph).insert_axis(axis);
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(())
+    }
+
+    pub fn replace_glyph_axis(&mut self, axis: GlyphAxis) -> CoreResult<GlyphAxis> {
+        let axis_id = axis.id();
+        let glyph_id = self
+            .index()
+            .glyph_axis_owner
+            .get(&axis_id)
+            .cloned()
+            .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("indexed glyph axis owner exists"),
+        );
+        let previous = glyph
+            .insert_axis(axis)
+            .expect("indexed glyph axis exists in its owner");
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(previous)
+    }
+
+    pub fn remove_glyph_axis(&mut self, axis_id: AxisId) -> CoreResult<GlyphAxis> {
+        let glyph_id = self
+            .index()
+            .glyph_axis_owner
+            .get(&axis_id)
+            .cloned()
+            .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+        if let Some(source) = self
+            .glyph(glyph_id.clone())
+            .into_iter()
+            .flat_map(glyph_sources)
+            .find(|source| source.location().get(&axis_id).is_some())
+        {
+            return Err(CoreError::AxisReferenced {
+                axis_id,
+                kind: "glyph source",
+                entity_id: source.id().to_string(),
+            });
+        }
+        if let Some(component) = self
+            .glyphs()
+            .flat_map(|glyph| glyph.layers().values())
+            .flat_map(|layer| layer.components_iter())
+            .find(|component| component.location().get(&axis_id).is_some())
+        {
+            return Err(CoreError::AxisReferenced {
+                axis_id,
+                kind: "component",
+                entity_id: component.id().to_string(),
+            });
+        }
+
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("indexed glyph axis owner exists"),
+        );
+        let removed = glyph
+            .axes_mut()
+            .shift_remove(&axis_id)
+            .expect("indexed glyph axis exists in its owner");
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(removed)
+    }
+
     pub fn add_glyph_source(
         &mut self,
         glyph_id: GlyphId,
@@ -1236,6 +1343,53 @@ impl Font {
         Ok(())
     }
 
+    pub fn replace_glyph_source(&mut self, source: GlyphSource) -> CoreResult<GlyphSource> {
+        let glyph_source_id = source.id();
+        let glyph_id = self
+            .index()
+            .glyph_source_owner
+            .get(&glyph_source_id)
+            .cloned()
+            .ok_or_else(|| CoreError::InvalidAuthoringEntity {
+                kind: "glyph source",
+                entity_id: glyph_source_id.to_string(),
+                message: "does not exist".to_string(),
+            })?;
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("indexed glyph source owner exists"),
+        );
+        let previous = if glyph.default_sources().contains(&glyph_source_id) {
+            glyph
+                .default_sources_mut()
+                .insert(source)
+                .expect("indexed Default glyph source exists")
+        } else {
+            glyph
+                .variants_mut()
+                .values_mut()
+                .find_map(|variant| {
+                    variant
+                        .sources()
+                        .contains(&glyph_source_id)
+                        .then(|| variant.sources_mut().insert(source.clone()))
+                        .flatten()
+                })
+                .expect("indexed variant glyph source exists")
+        };
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(previous)
+    }
+
     pub fn remove_glyph_source(
         &mut self,
         glyph_source_id: GlyphSourceId,
@@ -1270,6 +1424,104 @@ impl Font {
                     .expect("indexed glyph source exists in its owner")
             };
 
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(removed)
+    }
+
+    pub fn add_glyph_variant(
+        &mut self,
+        glyph_id: GlyphId,
+        variant: GlyphVariant,
+    ) -> CoreResult<()> {
+        if self.index().glyph_variant_owner.contains_key(&variant.id()) {
+            return Err(CoreError::DuplicateGlyphVariantId(variant.id()));
+        }
+        let mut state = (*self.state).clone();
+        let glyph = state
+            .data
+            .glyphs
+            .get_mut(&glyph_id)
+            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        Arc::make_mut(glyph).insert_variant(variant);
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(())
+    }
+
+    pub fn replace_glyph_variant(&mut self, variant: GlyphVariant) -> CoreResult<GlyphVariant> {
+        let variant_id = variant.id();
+        let glyph_id = self
+            .index()
+            .glyph_variant_owner
+            .get(&variant_id)
+            .cloned()
+            .ok_or_else(|| CoreError::InvalidAuthoringEntity {
+                kind: "glyph variant",
+                entity_id: variant_id.to_string(),
+                message: "does not exist".to_string(),
+            })?;
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("indexed glyph variant owner exists"),
+        );
+        let current = glyph
+            .variants_mut()
+            .get_mut(&variant_id)
+            .expect("indexed glyph variant exists in its owner");
+        if current.sources() != variant.sources() {
+            return Err(CoreError::InvalidAuthoringEntity {
+                kind: "glyph variant",
+                entity_id: variant_id.to_string(),
+                message: "source membership changes require glyph-source operations".to_string(),
+            });
+        }
+        let previous = current.clone();
+        current.replace_name_condition(&variant);
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(previous)
+    }
+
+    pub fn remove_glyph_variant(&mut self, variant_id: GlyphVariantId) -> CoreResult<GlyphVariant> {
+        let glyph_id = self
+            .index()
+            .glyph_variant_owner
+            .get(&variant_id)
+            .cloned()
+            .ok_or_else(|| CoreError::InvalidAuthoringEntity {
+                kind: "glyph variant",
+                entity_id: variant_id.to_string(),
+                message: "does not exist".to_string(),
+            })?;
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("indexed glyph variant owner exists"),
+        );
+        let removed = glyph
+            .variants_mut()
+            .shift_remove(&variant_id)
+            .expect("indexed glyph variant exists in its owner");
         state.rebuild_index()?;
         let candidate = Self {
             state: Arc::new(state),
@@ -1331,6 +1583,134 @@ impl Font {
         state.rebuild_index()?;
         self.state = Arc::new(state);
         Ok(glyph_source)
+    }
+
+    pub fn add_component(&mut self, layer_id: LayerId, component: Component) -> CoreResult<()> {
+        if self.component_owner(&component.id()).is_some() {
+            return Err(CoreError::DuplicateComponentId(component.id()));
+        }
+        let glyph_id = self
+            .glyph_id_by_layer(layer_id.clone())
+            .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+        let mut state = (*self.state).clone();
+        let layer = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("indexed layer owner exists"),
+        )
+        .layer_mut(layer_id)
+        .expect("indexed layer exists in its owner");
+        layer.add_component(component);
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(())
+    }
+
+    pub fn remove_component(&mut self, component_id: ComponentId) -> CoreResult<Component> {
+        let (glyph_id, layer_id) = self
+            .component_owner(&component_id)
+            .ok_or_else(|| CoreError::ComponentNotFound(component_id.clone()))?;
+        let mut state = (*self.state).clone();
+        let layer = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("component layer owner exists"),
+        )
+        .layer_mut(layer_id)
+        .expect("component layer exists in its owner");
+        let removed = layer
+            .remove_component(component_id.clone())
+            .ok_or(CoreError::ComponentNotFound(component_id))?;
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(removed)
+    }
+
+    pub fn set_component_location(
+        &mut self,
+        component_id: ComponentId,
+        location: Location,
+    ) -> CoreResult<()> {
+        self.update_component(component_id, |component| component.set_location(location))
+    }
+
+    pub fn set_component_axis_inheritance(
+        &mut self,
+        component_id: ComponentId,
+        axis_inheritance: AxisInheritance,
+    ) -> CoreResult<()> {
+        self.update_component(component_id, |component| {
+            component.set_axis_inheritance(axis_inheritance)
+        })
+    }
+
+    pub fn set_component_condition(
+        &mut self,
+        component_id: ComponentId,
+        condition: Option<Condition>,
+    ) -> CoreResult<()> {
+        self.update_component(component_id, |component| component.set_condition(condition))
+    }
+
+    pub fn set_component_transform(
+        &mut self,
+        component_id: ComponentId,
+        transform: DecomposedTransform,
+    ) -> CoreResult<()> {
+        self.update_component(component_id, |component| component.set_transform(transform))
+    }
+
+    fn update_component(
+        &mut self,
+        component_id: ComponentId,
+        update: impl FnOnce(&mut Component),
+    ) -> CoreResult<()> {
+        let (glyph_id, layer_id) = self
+            .component_owner(&component_id)
+            .ok_or_else(|| CoreError::ComponentNotFound(component_id.clone()))?;
+        let mut state = (*self.state).clone();
+        let layer = Arc::make_mut(
+            state
+                .data
+                .glyphs
+                .get_mut(&glyph_id)
+                .expect("component layer owner exists"),
+        )
+        .layer_mut(layer_id)
+        .expect("component layer exists in its owner");
+        let component = layer
+            .component_mut(component_id.clone())
+            .ok_or(CoreError::ComponentNotFound(component_id))?;
+        update(component);
+        state.rebuild_index()?;
+        let candidate = Self {
+            state: Arc::new(state),
+        };
+        candidate.validate()?;
+        self.state = candidate.state;
+        Ok(())
+    }
+
+    fn component_owner(&self, component_id: &ComponentId) -> Option<(GlyphId, LayerId)> {
+        self.glyphs().find_map(|glyph| {
+            glyph.layers().values().find_map(|layer| {
+                layer
+                    .component(component_id.clone())
+                    .map(|_| (glyph.id(), layer.id()))
+            })
+        })
     }
 
     pub fn insert_glyph_layer(&mut self, glyph_id: GlyphId, layer: GlyphLayer) -> CoreResult<()> {
@@ -1554,7 +1934,7 @@ fn validate_font_data(data: &FontData) -> CoreResult<()> {
         .map(|glyph| (glyph.id(), glyph))
         .collect::<HashMap<_, _>>();
     for glyph in glyphs.values() {
-        validate_glyph_authoring(glyph, &data.axes, &source_ids, &glyphs)?;
+        validate_glyph_authoring(glyph, &data.axes, &data.sources, &source_ids, &glyphs)?;
     }
     validate_component_cycles(&glyphs)?;
 
@@ -1564,6 +1944,7 @@ fn validate_font_data(data: &FontData) -> CoreResult<()> {
 fn validate_glyph_authoring(
     glyph: &Glyph,
     font_axes: &[Axis],
+    global_sources: &[Source],
     source_ids: &HashSet<SourceId>,
     glyphs: &HashMap<GlyphId, &Glyph>,
 ) -> CoreResult<()> {
@@ -1576,6 +1957,12 @@ fn validate_glyph_authoring(
     for source in glyph.default_sources().values() {
         validate_glyph_source(glyph, source, font_axes, &local_axes, source_ids)?;
     }
+    validate_unique_glyph_source_locations(
+        glyph.default_sources().values(),
+        font_axes,
+        &local_axes,
+        global_sources,
+    )?;
     for variant in glyph.variants().values() {
         if variant.name().trim().is_empty() {
             return Err(invalid_authoring(
@@ -1595,6 +1982,12 @@ fn validate_glyph_authoring(
         for source in variant.sources().values() {
             validate_glyph_source(glyph, source, font_axes, &local_axes, source_ids)?;
         }
+        validate_unique_glyph_source_locations(
+            variant.sources().values(),
+            font_axes,
+            &local_axes,
+            global_sources,
+        )?;
     }
 
     for layer in glyph.layers().values() {
@@ -1691,6 +2084,58 @@ fn validate_glyph_source(
     }
 
     let _ = glyph;
+    Ok(())
+}
+
+fn validate_unique_glyph_source_locations<'a>(
+    sources: impl Iterator<Item = &'a GlyphSource>,
+    font_axes: &[Axis],
+    glyph_axes: &HashMap<AxisId, &GlyphAxis>,
+    global_sources: &[Source],
+) -> CoreResult<()> {
+    let sources = sources
+        .filter(|source| {
+            source.base_source_id().is_none_or(|source_id| {
+                global_sources
+                    .iter()
+                    .find(|global| global.id() == source_id)
+                    .is_none_or(Source::is_master)
+            })
+        })
+        .collect::<Vec<_>>();
+    let axis_defaults = font_axes
+        .iter()
+        .map(|axis| (axis.id(), axis.default()))
+        .chain(glyph_axes.values().map(|axis| (axis.id(), axis.default())))
+        .collect::<Vec<_>>();
+    for (index, first) in sources.iter().enumerate() {
+        for second in &sources[index + 1..] {
+            let equal = axis_defaults.iter().all(|(axis_id, default)| {
+                let value = |source: &GlyphSource| {
+                    source
+                        .location()
+                        .get(axis_id)
+                        .or_else(|| {
+                            source.base_source_id().and_then(|source_id| {
+                                global_sources
+                                    .iter()
+                                    .find(|global| global.id() == source_id)
+                                    .and_then(|global| global.location().get(axis_id))
+                            })
+                        })
+                        .unwrap_or(*default)
+                };
+                (value(first) - value(second)).abs() <= 1e-9
+            });
+            if equal {
+                return Err(invalid_authoring(
+                    "glyph source",
+                    second.id().to_string(),
+                    format!("has the same effective location as {}", first.id()),
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -2782,6 +3227,35 @@ mod tests {
                 glyph_id: id,
                 source_id: source
             } if id == glyph_id && source == source_id
+        ));
+    }
+
+    #[test]
+    fn validation_rejects_duplicate_effective_glyph_source_locations() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let local_axis = GlyphAxis::new("Local".to_string(), 0.0, 0.0, 100.0);
+        let mut glyph = Glyph::new("A");
+        glyph.insert_axis(local_axis);
+        for name in ["First", "Second"] {
+            let layer = GlyphLayer::new(LayerId::new());
+            let layer_id = layer.id();
+            glyph.set_layer(layer);
+            glyph.insert_default_source(GlyphSource::new(
+                name.to_string(),
+                layer_id,
+                Some(source_id.clone()),
+                Location::new(),
+            ));
+        }
+        font.insert_glyph(glyph).unwrap();
+
+        let error = font.validate().unwrap_err();
+
+        assert!(matches!(
+            error,
+            CoreError::InvalidAuthoringEntity { kind, message, .. }
+                if kind == "glyph source" && message.contains("same effective location")
         ));
     }
 
