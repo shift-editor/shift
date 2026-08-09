@@ -13,6 +13,9 @@ cargo run -p shift-cli -- inspect --view mappings path/to/Family.shift
 cargo run -p shift-cli -- inspect --view sources path/to/Family.shift
 cargo run -p shift-cli -- inspect --view layers path/to/Family.shift
 cargo run -p shift-cli -- inspect --json path/to/Family.shift
+cargo run -p shift-cli -- glyph inspect path/to/Family.glyphs Aacute
+cargo run -p shift-cli -- glyph inspect path/to/Family.designspace Aacute \
+  --location wght=700 --view variation --json
 cargo run -p shift-cli -- compile path/to/Family.shift --output path/to/Family.ttf
 
 cargo run -p shift-cli -- font create path/to/Lab.shift
@@ -30,7 +33,7 @@ cargo run -p shift-cli -- layer copy path/to/Lab.shift \
 
 Human-readable output is quiet by default and uses plain text when stdout is redirected. Use `--json` when another tool needs the complete report.
 
-Available views:
+Package inspection views:
 
 - `summary`: package metadata, counts, and sources
 - `axes`: variable font axes
@@ -38,6 +41,18 @@ Available views:
 - `sources`: design sources and locations
 - `glyphs`: glyph names, Unicode values, and layer counts
 - `layers`: glyph layer source bindings and geometry counts
+
+`glyph inspect` reads one glyph through Shift's semantic font model from `.shift`, UFO,
+Designspace, Glyphs, TTF, or OTF input. Locations use external/user-space `TAG=VALUE`
+coordinates and are mapped once into design space. Its views are:
+
+- `summary`: identity, location, selection mode, bounds, and geometry counts
+- `structure`: resolved root contours, anchors, and ordered component occurrences
+- `sources`: layer presence and structural compatibility by source
+- `variation`: selected interpolation model, source weights, and support regions
+- `resolved`: location-evaluated points with components flattened
+
+`--json` emits the complete `GlyphInspection` regardless of the selected human-readable view.
 
 ## Authoring
 
@@ -102,6 +117,7 @@ cargo run -p shift-cli -- compile --help
 cargo run -p shift-cli -- axis add --help
 cargo run -p shift-cli -- source add --help
 cargo run -p shift-cli -- glyph add --help
+cargo run -p shift-cli -- glyph inspect --help
 cargo run -p shift-cli -- layer add --help
 cargo run -p shift-cli -- layer copy --help
 ```

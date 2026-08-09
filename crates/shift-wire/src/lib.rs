@@ -631,6 +631,7 @@ pub struct ComponentAnchorAttachment {
 pub struct ComponentGlyph {
     pub parent_glyph_id: GlyphId,
     pub component_id: ComponentId,
+    pub component_index: usize,
     pub base_glyph_id: GlyphId,
     pub parent_path: Vec<ComponentId>,
     pub component_path: Vec<ComponentId>,
@@ -642,6 +643,7 @@ impl From<&IrComponentGlyph> for ComponentGlyph {
         Self {
             parent_glyph_id: component.parent_glyph_id(),
             component_id: component.component_id(),
+            component_index: component.component_index(),
             base_glyph_id: component.base_glyph_id(),
             parent_path: component.parent_path().as_slice().to_vec(),
             component_path: component.component_path().as_slice().to_vec(),

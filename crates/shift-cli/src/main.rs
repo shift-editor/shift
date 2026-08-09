@@ -1,5 +1,6 @@
 mod authoring;
 mod cli;
+mod glyph_inspect;
 mod inspect;
 
 use std::io::{self, IsTerminal, Write};
@@ -11,6 +12,7 @@ use clap::Parser;
 use cli::{
     AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, LayerCommand, SourceCommand,
 };
+use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
 use miette::IntoDiagnostic;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
@@ -46,6 +48,7 @@ fn main() -> miette::Result<()> {
                 let json = args.mutation.json;
                 write_authoring_result(add_glyph(args), json)
             }
+            GlyphCommand::Inspect(args) => inspect_glyph(args),
         },
         Command::Layer { command } => match command {
             LayerCommand::Add(args) => {
@@ -113,6 +116,17 @@ fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
 
 fn inspect(args: cli::InspectArgs) -> miette::Result<()> {
     let report = InspectReport::load(&args.path)?;
+    let output = if args.json {
+        serde_json::to_string_pretty(&report).into_diagnostic()?
+    } else {
+        report.render(args.view, render_mode())
+    };
+
+    write_stdout(&output)
+}
+
+fn inspect_glyph(args: cli::InspectGlyphArgs) -> miette::Result<()> {
+    let report = GlyphInspection::load(&args.path, &args.glyph, &args.location)?;
     let output = if args.json {
         serde_json::to_string_pretty(&report).into_diagnostic()?
     } else {

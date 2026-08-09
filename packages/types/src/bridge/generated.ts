@@ -348,6 +348,7 @@ export interface ComponentData {
 export interface ComponentGlyph {
   parentGlyphId: GlyphId
   componentId: ComponentId
+  componentIndex: number
   baseGlyphId: GlyphId
   parentPath: Array<ComponentId>
   componentPath: Array<ComponentId>

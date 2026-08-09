@@ -4,6 +4,7 @@ use anstyle::{AnsiColor, Effects};
 use clap::builder::styling::Styles;
 use clap::{Args, ColorChoice, Parser, Subcommand, ValueHint};
 
+use crate::glyph_inspect::GlyphInspectView;
 use crate::inspect::InspectView;
 
 const CLAP_STYLES: Styles = Styles::styled()
@@ -89,6 +90,9 @@ pub enum SourceCommand {
 pub enum GlyphCommand {
     /// Add glyph identity and Unicode assignments without creating layers.
     Add(AddGlyphArgs),
+
+    /// Inspect one glyph from any supported font source.
+    Inspect(InspectGlyphArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -161,6 +165,28 @@ pub struct AddSourceArgs {
 
     #[command(flatten)]
     pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct InspectGlyphArgs {
+    /// Path to a .shift, UFO, Designspace, Glyphs, TTF, or OTF font source.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Glyph name or full stable glyph id.
+    pub glyph: String,
+
+    /// External user-space coordinate as TAG=VALUE; repeat or comma-separate values.
+    #[arg(long, value_name = "TAG=VALUE", value_delimiter = ',')]
+    pub location: Vec<String>,
+
+    /// Select the human-readable section to print.
+    #[arg(long, value_enum, default_value_t = GlyphInspectView::Summary)]
+    pub view: GlyphInspectView,
+
+    /// Emit the complete stable inspection as JSON.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]

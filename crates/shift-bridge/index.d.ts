@@ -339,6 +339,7 @@ export interface NapiComponentData {
 export interface NapiComponentGlyph {
   parentGlyphId: GlyphId
   componentId: ComponentId
+  componentIndex: number
   baseGlyphId: GlyphId
   parentPath: Array<ComponentId>
   componentPath: Array<ComponentId>
