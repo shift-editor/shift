@@ -63,6 +63,13 @@ impl ShiftStore {
             .transpose()
     }
 
+    pub fn recovery_revision(&self) -> Result<Option<i64>, StoreError> {
+        self.recovery
+            .as_ref()
+            .map(RecoveryOverlay::revision)
+            .transpose()
+    }
+
     /// Clears unsaved overlay changes and exposes the canonical saved rows immediately.
     pub fn discard_recovery(&mut self) -> Result<(), StoreError> {
         let saved_commit_id = self.document_metadata()?.saved_commit_id;
@@ -75,11 +82,14 @@ impl ShiftStore {
 
     /// Applies sparse unsaved changes to the canonical document and acknowledges the commit.
     pub fn save_document(&mut self) -> Result<crate::DocumentMetadata, StoreError> {
+        let document = self.document_metadata()?;
         let state = self
-            .recovery_state()?
-            .ok_or(StoreError::DocumentRequiresRecoveryOverlay)?;
+            .recovery
+            .as_mut()
+            .ok_or(StoreError::DocumentRequiresRecoveryOverlay)?
+            .reconcile(&document.saved_commit_id)?;
         if state == RecoveryState::Clean {
-            return self.document_metadata();
+            return Ok(document);
         }
         if state != RecoveryState::Dirty {
             return Err(StoreError::InvalidRecoveryTransition {

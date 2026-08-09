@@ -18,7 +18,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Rust/Fontdrasil constructs typed glyph, source-metric, and axis-mapping variation bases. The bridge translates compiled regions and vectors without inventing source identities, coefficients, sample order, or support regions; renderer code only evaluates those transport values. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
-**Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
+**Architecture Invariant:** `inspectDocument(path)` is read-only and may run without an open workspace. `openDocument(path, recoveryPath)` opens the canonical SQLite file directly against an app-owned sparse overlay; the bridge does not allocate or bind recovery paths. **WHY:** Electron must deduplicate by canonical document identity before selecting the one durable recovery allocation.
 
 **Architecture Invariant:** A prepared Slug page remains native until it is consumed once through napi-rs `ReadableStream<Buffer>` chunks. Every font edit invalidates unconsumed output. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. `slugAtlasCacheRevision()` exposes only the durable authored revision string needed by the utility's disposable cache key; cache bytes and policy remain outside Rust. **WHY:** Fixed pages yield between native calls, support narrow cached replacement after edits, and retain one bounded temporary chunk rather than an atlas-sized JavaScript copy or an unbounded IPC queue. The renderer installs the complete requested page set before presentation. The complete endpoint remains an external profiling boundary, not product startup scheduling.
 
@@ -41,7 +41,7 @@ crates/shift-bridge/
 - `Bridge` -- the exported `#[napi]` class holding the current `FontWorkspace` and document versions.
 - `LayerId` -- mutation-side identity for the glyph layer being edited.
 - `FontSaveSnapshot` -- clone/COW export view of the current workspace font.
-- `NapiPackageIdentity` / `NapiPackageDraft` -- package source and working-store inspection DTOs for utility-process lifecycle decisions.
+- `NapiDocumentIdentity` -- canonical `DocumentId` and canonical path used by utility/main document lifecycle decisions.
 - `ExportFontTask` -- NAPI `Task` implementation for async font export.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
 - `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
@@ -65,9 +65,9 @@ crates/shift-bridge/
 3. `Bridge` parses boundary strings and asks `FontWorkspace` to run the edit against that layer.
 4. The bridge returns a `shift-wire` change DTO and bumps the live version.
 5. Full glyph snapshots first acquire requested layer payloads, then include authored state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` and previews expand transitive component identities through SQLite indexes, acquire those layers, and only then project without further I/O. Source reads expose master sources only; layer-only/background sources remain native authoring details and never enter renderer interpolation.
-6. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
-7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
-8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
+6. `saveWorkspace()` applies a document's sparse recovery overlay to its canonical SQLite file. `saveWorkspaceAsDocument(path, recoveryPath)` publishes a new native document identity and adopts its fresh overlay; `discardWorkspaceChanges()` clears recovery and reloads canonical directory state.
+7. `inspectDocument(path)` exposes canonical identity without opening a live workspace. `openDocument(path, recoveryPath)` opens merged lazy views selected by the utility process.
+8. `closeWorkspace()` drops the live Rust workspace handle before the utility process removes clean or discarded recovery files and bindings.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
 10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` for every deterministic fixed directory page and installs the complete set before first presentation. Every native miss independently acquires its indexed component closure. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. The utility may bypass native preparation with a validated external `CachedAtlas` page keyed by `slugAtlasCacheRevision()`, but cached and native pages share the same bounded renderer stream contract. Authored invalidation rebuilds every affected page while the previous complete set remains presented; scrolling performs no bridge work. The complete preparation endpoint remains available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for native phase timings.
 

@@ -254,7 +254,7 @@ export class DocumentSession {
     const options: SaveDialogOptions = {
       title: "Save Shift Document",
       defaultPath: state.saveTarget ?? undefined,
-      filters: [{ name: "Shift Source Package", extensions: ["shift"] }],
+      filters: [{ name: "Shift Document", extensions: ["shift"] }],
       properties: ["createDirectory", "showOverwriteConfirmation"],
     };
 
