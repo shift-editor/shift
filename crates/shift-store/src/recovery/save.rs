@@ -1,5 +1,11 @@
-use rusqlite::Connection;
+use std::collections::HashSet;
 
+use rusqlite::{Connection, Transaction};
+
+use super::catalog::{
+    RecoveryMode, RecoveryTableShape, identifier, load_recovery_table_shapes, matching_columns,
+    string_literal,
+};
 use crate::{CommitId, StoreError};
 
 pub(super) fn apply_recovery_to_document(
@@ -7,7 +13,7 @@ pub(super) fn apply_recovery_to_document(
     commit_id: &CommitId,
 ) -> Result<(), StoreError> {
     let tx = conn.transaction()?;
-    tx.execute_batch(APPLY_RECOVERY_SQL)?;
+    apply_recovery(&tx)?;
     tx.execute(
         "UPDATE main.document_metadata SET saved_commit_id = ?1 WHERE id = 1",
         [commit_id.as_str()],
@@ -16,141 +22,167 @@ pub(super) fn apply_recovery_to_document(
     Ok(())
 }
 
-const APPLY_RECOVERY_SQL: &str = r#"
-DELETE FROM main.glyph_layers
-WHERE id IN (SELECT entity_id FROM recovery.recovery_tombstones WHERE entity_kind = 'layer');
-DELETE FROM main.glyphs
-WHERE id IN (SELECT entity_id FROM recovery.recovery_tombstones WHERE entity_kind = 'glyph');
-DELETE FROM main.sources
-WHERE id IN (SELECT entity_id FROM recovery.recovery_tombstones WHERE entity_kind = 'source');
-DELETE FROM main.axes
-WHERE id IN (SELECT entity_id FROM recovery.recovery_tombstones WHERE entity_kind = 'axis');
+fn apply_recovery(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    let tables = load_recovery_table_shapes(tx)?;
 
-UPDATE main.font_info
-SET family_name = r.family_name,
-    style_name = r.style_name,
-    copyright = r.copyright,
-    trademark = r.trademark,
-    description = r.description,
-    note = r.note,
-    sample_text = r.sample_text,
-    designer = r.designer,
-    designer_url = r.designer_url,
-    manufacturer = r.manufacturer,
-    manufacturer_url = r.manufacturer_url,
-    license_description = r.license_description,
-    license_info_url = r.license_info_url,
-    vendor_id = r.vendor_id,
-    version_major = r.version_major,
-    version_minor = r.version_minor,
-    units_per_em = r.units_per_em,
-    default_source_id = r.default_source_id
-FROM recovery.font_info r
-WHERE main.font_info.id = r.id;
-INSERT INTO main.font_info SELECT * FROM recovery.font_info r
-WHERE NOT EXISTS (SELECT 1 FROM main.font_info m WHERE m.id = r.id);
+    for table in tables.iter().rev() {
+        delete_replaced_rows(tx, table, table.table.preserve_matching_rows())?;
+    }
 
-UPDATE main.axes
-SET tag = r.tag, name = r.name, min_value = r.min_value,
-    default_value = r.default_value, max_value = r.max_value, role = r.role,
-    discrete_values_json = r.discrete_values_json, labels_json = r.labels_json,
-    hidden = r.hidden, order_index = r.order_index
-FROM recovery.axes r WHERE main.axes.id = r.id;
-INSERT INTO main.axes SELECT * FROM recovery.axes r
-WHERE NOT EXISTS (SELECT 1 FROM main.axes m WHERE m.id = r.id);
+    for table in &tables {
+        upsert_recovery_rows(tx, table, table.table.preserve_matching_rows())?;
+    }
 
-DELETE FROM main.axis_mappings
-WHERE EXISTS (SELECT 1 FROM recovery.recovery_replacements WHERE collection = 'axis_mappings' AND owner_id = '');
-INSERT INTO main.axis_mappings SELECT * FROM recovery.axis_mappings
-WHERE EXISTS (SELECT 1 FROM recovery.recovery_replacements WHERE collection = 'axis_mappings' AND owner_id = '');
+    Ok(())
+}
 
-UPDATE main.metric_definitions
-SET kind = r.kind, name = r.name, order_index = r.order_index
-FROM recovery.metric_definitions r WHERE main.metric_definitions.id = r.id;
-INSERT INTO main.metric_definitions SELECT * FROM recovery.metric_definitions r
-WHERE NOT EXISTS (SELECT 1 FROM main.metric_definitions m WHERE m.id = r.id);
-DELETE FROM main.source_metric_values
-WHERE metric_id NOT IN (SELECT id FROM recovery.metric_definitions)
-  AND EXISTS (SELECT 1 FROM recovery.recovery_replacements WHERE collection = 'metric_definitions' AND owner_id = '');
-DELETE FROM main.metric_definitions
-WHERE id NOT IN (SELECT id FROM recovery.metric_definitions)
-  AND EXISTS (SELECT 1 FROM recovery.recovery_replacements WHERE collection = 'metric_definitions' AND owner_id = '');
+fn delete_replaced_rows(
+    tx: &Transaction<'_>,
+    table: &RecoveryTableShape,
+    preserve_matching_rows: bool,
+) -> Result<(), StoreError> {
+    let name = identifier(table.table.name());
+    let absent_from_final = if preserve_matching_rows {
+        format!(
+            " AND NOT EXISTS (
+                 SELECT 1 FROM temp.{name} AS v WHERE {}
+             )",
+            matching_columns("v", "m", &table.primary_key)
+        )
+    } else {
+        String::new()
+    };
+    let sql = match table.table.mode() {
+        RecoveryMode::OverlayRows {
+            tombstone_kind: Some(kind),
+            ..
+        } => format!(
+            "DELETE FROM main.{name} AS m
+             WHERE EXISTS (
+                 SELECT 1 FROM recovery.recovery_tombstones AS t
+                 WHERE t.entity_kind = {}
+                   AND t.entity_id = m.{}
+             )",
+            string_literal(kind),
+            identifier(&table.primary_key[0])
+        ),
+        RecoveryMode::ReplaceCollection {
+            owner_column: None, ..
+        } => format!(
+            "DELETE FROM main.{name} AS m
+             WHERE EXISTS (
+                 SELECT 1 FROM recovery.recovery_replacements AS x
+                 WHERE x.collection = {} AND x.owner_id = ''
+             ){absent_from_final}",
+            string_literal(table.table.name())
+        ),
+        RecoveryMode::ReplaceCollection {
+            owner_column: Some(owner_column),
+            ..
+        } => format!(
+            "DELETE FROM main.{name} AS m
+             WHERE EXISTS (
+                 SELECT 1 FROM recovery.recovery_replacements AS x
+                 WHERE x.collection = {}
+                   AND x.owner_id = m.{}
+             ){absent_from_final}",
+            string_literal(table.table.name()),
+            identifier(owner_column)
+        ),
+        RecoveryMode::OverlayRows {
+            tombstone_kind: None,
+            ..
+        }
+        | RecoveryMode::CanonicalOnly => return Ok(()),
+    };
+    tx.execute(&sql, [])?;
+    Ok(())
+}
 
-DELETE FROM main.named_instances
-WHERE EXISTS (SELECT 1 FROM recovery.recovery_replacements WHERE collection = 'named_instances' AND owner_id = '');
-INSERT INTO main.named_instances SELECT * FROM recovery.named_instances
-WHERE EXISTS (SELECT 1 FROM recovery.recovery_replacements WHERE collection = 'named_instances' AND owner_id = '');
+fn upsert_recovery_rows(
+    tx: &Transaction<'_>,
+    table: &RecoveryTableShape,
+    preserve_matching_rows: bool,
+) -> Result<(), StoreError> {
+    let scope = match table.table.mode() {
+        RecoveryMode::OverlayRows { .. } => format!(
+            "EXISTS (
+                SELECT 1 FROM recovery.{} AS r WHERE {}
+            )",
+            identifier(table.table.name()),
+            matching_columns("r", "v", &table.primary_key)
+        ),
+        RecoveryMode::ReplaceCollection {
+            owner_column: None, ..
+        } => format!(
+            "EXISTS (
+                SELECT 1 FROM recovery.recovery_replacements AS x
+                WHERE x.collection = {} AND x.owner_id = ''
+            )",
+            string_literal(table.table.name())
+        ),
+        RecoveryMode::ReplaceCollection {
+            owner_column: Some(owner_column),
+            ..
+        } => format!(
+            "EXISTS (
+                SELECT 1 FROM recovery.recovery_replacements AS x
+                WHERE x.collection = {}
+                  AND x.owner_id = v.{}
+            )",
+            string_literal(table.table.name()),
+            identifier(owner_column)
+        ),
+        RecoveryMode::CanonicalOnly => return Ok(()),
+    };
 
-UPDATE main.sources
-SET name = r.name,
-    family_name = COALESCE(r.family_name, main.sources.family_name),
-    style_name = COALESCE(r.style_name, main.sources.style_name),
-    filename = r.filename, color = r.color, layer_name = r.layer_name,
-    italic_angle = r.italic_angle, line_gap = r.line_gap,
-    underline_position = r.underline_position,
-    underline_thickness = r.underline_thickness, kind = r.kind,
-    order_index = r.order_index
-FROM recovery.sources r WHERE main.sources.id = r.id;
-INSERT INTO main.sources SELECT * FROM recovery.sources r
-WHERE NOT EXISTS (SELECT 1 FROM main.sources m WHERE m.id = r.id);
-
-DELETE FROM main.source_locations
-WHERE source_id IN (SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'source_locations');
-INSERT INTO main.source_locations
-SELECT v.* FROM temp.source_locations v
-WHERE v.source_id IN (
-    SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'source_locations'
-);
-DELETE FROM main.source_metric_values
-WHERE source_id IN (SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'source_metric_values');
-INSERT INTO main.source_metric_values
-SELECT v.* FROM temp.source_metric_values v
-WHERE v.source_id IN (
-    SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'source_metric_values'
-);
-DELETE FROM main.source_lib
-WHERE source_id IN (SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'source_lib');
-INSERT INTO main.source_lib
-SELECT v.* FROM temp.source_lib v
-WHERE v.source_id IN (
-    SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'source_lib'
-);
-
-UPDATE main.glyphs
-SET name = r.name, order_index = r.order_index
-FROM recovery.glyphs r WHERE main.glyphs.id = r.id;
-INSERT INTO main.glyphs SELECT * FROM recovery.glyphs r
-WHERE NOT EXISTS (SELECT 1 FROM main.glyphs m WHERE m.id = r.id);
-DELETE FROM main.glyph_unicodes
-WHERE glyph_id IN (SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'glyph_unicodes');
-INSERT INTO main.glyph_unicodes
-SELECT v.* FROM temp.glyph_unicodes v
-WHERE v.glyph_id IN (
-    SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'glyph_unicodes'
-);
-DELETE FROM main.glyph_lib
-WHERE glyph_id IN (SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'glyph_lib');
-INSERT INTO main.glyph_lib
-SELECT v.* FROM temp.glyph_lib v
-WHERE v.glyph_id IN (
-    SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'glyph_lib'
-);
-
-UPDATE main.glyph_layers
-SET glyph_id = r.glyph_id, source_id = r.source_id, width = r.width, height = r.height
-FROM recovery.glyph_layers r WHERE main.glyph_layers.id = r.id;
-INSERT INTO main.glyph_layers
-SELECT v.* FROM temp.glyph_layers v
-WHERE EXISTS (SELECT 1 FROM recovery.glyph_layers r WHERE r.id = v.id)
-  AND NOT EXISTS (SELECT 1 FROM main.glyph_layers m WHERE m.id = v.id);
-INSERT OR REPLACE INTO main.glyph_layer_payloads
-SELECT v.* FROM temp.glyph_layer_payloads v
-WHERE EXISTS (SELECT 1 FROM recovery.glyph_layer_payloads r WHERE r.layer_id = v.layer_id);
-DELETE FROM main.glyph_components
-WHERE layer_id IN (SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'glyph_components');
-INSERT INTO main.glyph_components
-SELECT v.* FROM temp.glyph_components v
-WHERE v.layer_id IN (
-    SELECT owner_id FROM recovery.recovery_replacements WHERE collection = 'glyph_components'
-);
-"#;
+    let name = identifier(table.table.name());
+    let columns = table
+        .columns
+        .iter()
+        .map(|column| identifier(column))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let selected_columns = table
+        .columns
+        .iter()
+        .map(|column| format!("v.{}", identifier(column)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let conflict_columns = table
+        .primary_key
+        .iter()
+        .map(|column| identifier(column))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let primary_key = table.primary_key.iter().collect::<HashSet<_>>();
+    let updates = table
+        .columns
+        .iter()
+        .filter(|column| !primary_key.contains(column))
+        .map(|column| {
+            let column = identifier(column);
+            format!("{column} = excluded.{column}")
+        })
+        .collect::<Vec<_>>();
+    let conflict = if matches!(table.table.mode(), RecoveryMode::ReplaceCollection { .. })
+        && !preserve_matching_rows
+    {
+        String::new()
+    } else if updates.is_empty() {
+        format!("ON CONFLICT ({conflict_columns}) DO NOTHING")
+    } else {
+        format!(
+            "ON CONFLICT ({conflict_columns}) DO UPDATE SET {}",
+            updates.join(", ")
+        )
+    };
+    let sql = format!(
+        "INSERT INTO main.{name} ({columns})
+         SELECT {selected_columns} FROM temp.{name} AS v
+         WHERE {scope}
+         {conflict}"
+    );
+    tx.execute(&sql, [])?;
+    Ok(())
+}
