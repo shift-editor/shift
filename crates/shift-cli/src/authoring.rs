@@ -299,7 +299,7 @@ fn report_changes(font: &Font, changes: Vec<FontChange>) -> Vec<AuthoringChange>
                 Some(AuthoringChange::GlyphLayerCreated {
                     layer_id: change.layer_id.to_string(),
                     glyph_id: change.glyph_id.to_string(),
-                    source_id: change.source_id.to_string(),
+                    source_id: change.glyph_source.base_source_id()?.to_string(),
                     advance: layer.width(),
                     contour_count: layer.contours().len(),
                     point_count: layer

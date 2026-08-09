@@ -6,7 +6,9 @@ use shift_font as font;
 
 use crate::{
     GlyphWriteBatch, LayerBatchTiming, ShiftStore, StoreError,
-    change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
+    change_set::{
+        replace_font_header_in_tx, replace_glyph_authoring_in_tx, write_glyph_directory_in_tx,
+    },
     layer::{StoredLayerPayload, compress_layer, encode_layer, store_stored_layer_in_tx},
     schema::{defer_import_indexes, restore_import_indexes},
     types::{EncodedGlyphLayers, PackedGlyph},
@@ -120,6 +122,7 @@ impl FontImportWriter<'_> {
                 })?;
             store_stored_layer_in_tx(&self.tx, &glyph.id(), layer, stored, WriteMode::Insert)?;
         }
+        replace_glyph_authoring_in_tx(&self.tx, glyph)?;
         self.next_glyph_order += 1;
         Ok(())
     }
@@ -165,10 +168,14 @@ fn compress_glyph_layers(
 mod tests {
     use super::*;
 
-    const DEFERRED_INDEXES: [&str; 4] = [
+    const DEFERRED_INDEXES: [&str; 8] = [
         "glyphs_name_idx",
+        "glyph_axes_glyph_id_idx",
+        "glyph_variants_glyph_id_idx",
         "glyph_layers_glyph_id_idx",
-        "glyph_layers_source_id_idx",
+        "glyph_sources_glyph_id_idx",
+        "glyph_sources_layer_id_idx",
+        "glyph_sources_base_source_id_idx",
         "glyph_components_base_glyph_id_idx",
     ];
 

@@ -42,7 +42,7 @@ pub(crate) fn load_glyph_layer_from_conn(
 ) -> Result<Option<font::GlyphLayer>, StoreError> {
     let mut directory_stmt = conn.prepare_cached(
         "
-        SELECT l.id, l.source_id, l.width, l.height,
+        SELECT l.id, l.width, l.height,
                p.inner_format, p.compression,
                p.stored_byte_length, p.decoded_byte_length, p.decoded_blake3,
                length(p.payload)
@@ -87,13 +87,7 @@ pub(crate) fn load_glyph_layer_from_conn(
         })?;
     let decoded = decompress_layer(facts.layer_id.as_str(), facts.stored_layer(payload)?)?;
     let layer = decode_layer(&decoded)?;
-    validate_directory_facts(
-        layer_id,
-        &facts.source_id,
-        facts.width,
-        facts.height,
-        &layer,
-    )?;
+    validate_directory_facts(layer_id, facts.width, facts.height, &layer)?;
     validate_component_index(conn, &layer)?;
     Ok(Some(layer))
 }
@@ -195,7 +189,7 @@ pub(super) fn load_glyph_layer_batch_from_conn(
     let placeholders = (0..keys.len()).map(|_| "?").collect::<Vec<_>>().join(",");
     let directory_sql = format!(
         "
-        SELECT l.id, l.source_id, l.width, l.height,
+        SELECT l.id, l.width, l.height,
                p.inner_format, p.compression,
                p.stored_byte_length, p.decoded_byte_length, p.decoded_blake3,
                length(p.payload)
@@ -292,13 +286,7 @@ pub(super) fn load_glyph_layer_batch_from_conn(
             let decoded = decompress_layer(layer_id.as_str(), facts.stored_layer(payload)?)?;
             let layer = decode_layer(&decoded)?;
             let expected_id = font::LayerId::from_raw(layer_id.clone());
-            validate_directory_facts(
-                &expected_id,
-                &facts.source_id,
-                facts.width,
-                facts.height,
-                &layer,
-            )?;
+            validate_directory_facts(&expected_id, facts.width, facts.height, &layer)?;
             Ok((layer_id, layer))
         })
         .collect::<Result<Vec<_>, StoreError>>()?;

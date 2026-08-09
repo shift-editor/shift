@@ -24,7 +24,7 @@ mod tests {
     use serde_json::json;
     use shift_font::{
         Axis, AxisId, AxisLabel, AxisLabelId, AxisMapping, AxisMappingPoint, Contour,
-        DesignLocation, ExternalLocation, Font, Glyph, GlyphLayer, LayerId, Location,
+        DesignLocation, ExternalLocation, Font, Glyph, GlyphLayer, GlyphSource, LayerId, Location,
         NamedInstance, NamedInstanceId, Point, Source, SourceId,
     };
     use shift_source::ShiftSourcePackage;
@@ -224,12 +224,19 @@ mod tests {
         font.set_default_source_id(bold_id.clone());
 
         let mut glyph = Glyph::with_unicode("A", 0x41);
-        let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_bold"), bold_id, 600.0);
+        let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_bold"), 600.0);
         layer.add_contour(Contour::from_points(
             vec![Point::on_curve(0.0, 0.0), Point::on_curve(100.0, 0.0)],
             false,
         ));
+        let glyph_source = GlyphSource::new(
+            "Bold".to_string(),
+            layer.id(),
+            Some(bold_id),
+            Location::new(),
+        );
         glyph.set_layer(layer);
+        glyph.insert_default_source(glyph_source);
         font.insert_glyph(glyph).unwrap();
 
         font

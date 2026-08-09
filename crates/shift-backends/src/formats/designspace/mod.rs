@@ -18,7 +18,8 @@ mod tests {
     use crate::traits::{FontReader, FontWriter};
     use shift_font::{
         Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, Contour,
-        ExternalLocation, Font, Glyph, GlyphLayer, LayerId, Location, NamedInstance, PointType,
+        ExternalLocation, Font, Glyph, GlyphLayer, GlyphSource, LayerId, Location, NamedInstance,
+        PointType,
     };
     use std::fs;
 
@@ -29,8 +30,7 @@ mod tests {
         font.metrics_mut().units_per_em = 1000.0;
 
         let mut glyph = Glyph::with_unicode("o".to_string(), 'o' as u32);
-        let mut layer =
-            GlyphLayer::with_width(LayerId::new(), font.default_source_id().unwrap(), 520.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 520.0);
         let mut contour = Contour::new();
         contour.add_point(100.0, 0.0, PointType::OnCurve, false);
         contour.add_point(420.0, 0.0, PointType::OnCurve, false);
@@ -38,7 +38,15 @@ mod tests {
         contour.add_point(100.0, 500.0, PointType::OnCurve, false);
         contour.close();
         layer.add_contour(contour);
+        let source_id = font.default_source_id().unwrap();
+        let glyph_source = GlyphSource::new(
+            "Regular".to_string(),
+            layer.id(),
+            Some(source_id),
+            Location::new(),
+        );
         glyph.set_layer(layer);
+        glyph.insert_default_source(glyph_source);
         font.insert_glyph(glyph).unwrap();
 
         font

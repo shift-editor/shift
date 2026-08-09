@@ -6,7 +6,8 @@ use shift_font as font;
 use super::{
     RecoveryOverlay, RecoveryState,
     catalog::{
-        AXES, AXIS_MAPPINGS, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES, GLYPHS,
+        AXES, AXIS_MAPPINGS, GLYPH_AXES, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB,
+        GLYPH_SOURCE_LOCATIONS, GLYPH_SOURCES, GLYPH_UNICODES, GLYPH_VARIANTS, GLYPHS,
         METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS,
         SOURCE_METRIC_VALUES, SOURCES,
     },
@@ -14,9 +15,9 @@ use super::{
 use crate::{
     FontInfo, StoreError,
     change_set::{
-        replace_axis_mappings, replace_metric_definitions, replace_named_instances,
-        upsert_axis_with_order, upsert_font_info, write_glyph_directory_in_tx,
-        write_source_snapshot_in_tx,
+        replace_axis_mappings, replace_glyph_authoring_in_tx, replace_metric_definitions,
+        replace_named_instances, upsert_axis_with_order, upsert_font_info,
+        write_glyph_directory_in_tx, write_source_snapshot_in_tx,
     },
     layer::write_layer_in_tx,
     write_mode::WriteMode,
@@ -51,6 +52,7 @@ impl RecoveryOverlay {
         let mut source_ids = HashSet::new();
         let mut glyph_ids = HashSet::new();
         let mut layer_ids = HashSet::new();
+        let mut authoring_glyph_ids = HashSet::new();
 
         for change in &change_set.changes {
             match change {
@@ -84,6 +86,10 @@ impl RecoveryOverlay {
                 }
                 font::FontChange::GlyphIdentityChanged(change) => {
                     glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphLayerCreated(change) => {
+                    authoring_glyph_ids.insert(change.glyph_id.clone());
+                    layer_ids.insert(change.layer_id.clone());
                 }
                 _ => {
                     if let Some(layer_id) = change.layer_id() {
@@ -176,6 +182,24 @@ impl RecoveryOverlay {
             } else {
                 delete_layer_override(&tx, &layer_id)?;
                 mark_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
+            }
+        }
+
+        for glyph_id in authoring_glyph_ids {
+            let Some(glyph) = post_font.glyph(glyph_id.clone()) else {
+                continue;
+            };
+            replace_glyph_authoring_in_tx(&tx, glyph)?;
+            mark_replaced(&tx, GLYPH_AXES, glyph_id.as_str())?;
+            mark_replaced(&tx, GLYPH_VARIANTS, glyph_id.as_str())?;
+            mark_replaced(&tx, GLYPH_SOURCES, glyph_id.as_str())?;
+            for source in glyph.default_sources().values().chain(
+                glyph
+                    .variants()
+                    .values()
+                    .flat_map(|variant| variant.sources().values()),
+            ) {
+                mark_replaced(&tx, GLYPH_SOURCE_LOCATIONS, source.id().as_str())?;
             }
         }
 

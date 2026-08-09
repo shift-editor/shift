@@ -3,9 +3,9 @@
 use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
     AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform,
-    DesignLocation, ExternalLocation, Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId,
-    KerningPair, KerningSide, LayerId, LibValue, Location, MetricKind, MetricValue, NamedInstance,
-    NamedInstanceId, Point, PointId, PointType, Source, SourceId,
+    DesignLocation, ExternalLocation, Font, Glyph, GlyphId, GlyphLayer, GlyphSource, GlyphSourceId,
+    Guideline, GuidelineId, KerningPair, KerningSide, LayerId, LibValue, Location, MetricKind,
+    MetricValue, NamedInstance, NamedInstanceId, Point, PointId, PointType, Source, SourceId,
 };
 use std::collections::BTreeMap;
 
@@ -217,19 +217,19 @@ pub fn sample_font() -> Font {
 
     let acute_id = GlyphId::from_raw("acute");
     let mut acute = Glyph::with_id(acute_id.clone(), "acute");
-    acute.set_layer(GlyphLayer::with_width(
-        LayerId::from_raw("acute_regular"),
+    set_layer_for_source(
+        &mut acute,
         regular_id.clone(),
-        200.0,
-    ));
+        "Regular",
+        GlyphLayer::with_width(LayerId::from_raw("acute_regular"), 200.0),
+    );
     font.insert_glyph(acute).unwrap();
 
     let glyph_id = GlyphId::from_raw("A");
     let mut glyph = Glyph::with_id(glyph_id, "A");
     glyph.set_unicodes(vec![0x0041, 0x00C1]);
 
-    let mut regular_layer =
-        GlyphLayer::with_width(LayerId::from_raw("A_regular"), regular_id, 600.0);
+    let mut regular_layer = GlyphLayer::with_width(LayerId::from_raw("A_regular"), 600.0);
     regular_layer.set_height(Some(700.0));
     let mut contour = Contour::with_id(ContourId::from_raw("A_outer"));
     contour.push_point(Point::new(
@@ -298,9 +298,9 @@ pub fn sample_font() -> Font {
     regular_layer
         .lib_mut()
         .set("com.shift.layer".to_string(), LibValue::Integer(42));
-    glyph.set_layer(regular_layer);
+    set_layer_for_source(&mut glyph, regular_id, "Regular", regular_layer);
 
-    let mut bold_layer = GlyphLayer::with_width(LayerId::from_raw("A_bold"), bold_id, 650.0);
+    let mut bold_layer = GlyphLayer::with_width(LayerId::from_raw("A_bold"), 650.0);
     bold_layer.set_height(Some(720.0));
     let mut bold_contour = Contour::with_id(ContourId::from_raw("A_bold_outer"));
     bold_contour.push_point(Point::new(
@@ -318,7 +318,7 @@ pub fn sample_font() -> Font {
         false,
     ));
     bold_layer.add_contour(bold_contour);
-    glyph.set_layer(bold_layer);
+    set_layer_for_source(&mut glyph, bold_id, "Bold", bold_layer);
     glyph
         .lib_mut()
         .set("com.shift.glyph".to_string(), LibValue::Boolean(true));
@@ -422,8 +422,18 @@ pub fn sample_variable_font() -> Font {
     ));
 
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-    glyph.set_layer(triangle_layer(default_source_id, 600.0, 300.0));
-    glyph.set_layer(triangle_layer(bold_source_id, 800.0, 380.0));
+    set_layer_for_source(
+        &mut glyph,
+        default_source_id,
+        "Regular",
+        triangle_layer(600.0, 300.0),
+    );
+    set_layer_for_source(
+        &mut glyph,
+        bold_source_id,
+        "Bold",
+        triangle_layer(800.0, 380.0),
+    );
     font.insert_glyph(glyph).unwrap();
     font
 }
@@ -473,8 +483,25 @@ fn mapping_point(axis: &Axis, user: f64, design: f64) -> AxisMappingPoint {
     }
 }
 
-fn triangle_layer(source_id: SourceId, width: f64, apex_x: f64) -> GlyphLayer {
-    let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, width);
+fn set_layer_for_source(
+    glyph: &mut Glyph,
+    source_id: SourceId,
+    source_name: &str,
+    layer: GlyphLayer,
+) {
+    let layer_id = layer.id();
+    glyph.set_layer(layer);
+    glyph.insert_default_source(GlyphSource::with_id(
+        GlyphSourceId::from_raw(layer_id.as_str()),
+        source_name.to_string(),
+        layer_id,
+        Some(source_id),
+        Location::new(),
+    ));
+}
+
+fn triangle_layer(width: f64, apex_x: f64) -> GlyphLayer {
+    let mut layer = GlyphLayer::with_width(LayerId::new(), width);
     let mut contour = Contour::new();
     contour.add_point(100.0, 0.0, PointType::OnCurve, false);
     contour.add_point(apex_x, 700.0, PointType::OnCurve, false);

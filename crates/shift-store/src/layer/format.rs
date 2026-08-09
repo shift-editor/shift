@@ -6,7 +6,7 @@ use shift_font::{self as font, GlyphEntityId, LibValue};
 use super::check_layer_length;
 use crate::StoreError;
 
-pub const GLYPH_LAYER_FORMAT: &str = "shift.glyph-layer.v1";
+pub const GLYPH_LAYER_FORMAT: &str = "shift.glyph-layer.v2";
 const MAX_NESTING_DEPTH: usize = 64;
 const MAX_LIB_VALUES: usize = 1_000_000;
 
@@ -266,7 +266,6 @@ mod tests {
     fn invalid_ids_and_non_finite_values_are_rejected() {
         let invalid_id = rmp_serde::to_vec(&(
             "wrong",
-            "source_test",
             0.0_f64,
             None::<f64>,
             Vec::<font::Contour>::new(),
@@ -280,7 +279,6 @@ mod tests {
 
         let non_finite = rmp_serde::to_vec(&(
             "layer_test",
-            "source_test",
             f64::NAN,
             None::<f64>,
             Vec::<font::Contour>::new(),
@@ -314,10 +312,7 @@ mod tests {
             font::PointType::OnCurve,
             false,
         ));
-        let mut layer = font::GlyphLayer::new(
-            font::LayerId::from_raw("test"),
-            font::SourceId::from_raw("test"),
-        );
+        let mut layer = font::GlyphLayer::new(font::LayerId::from_raw("test"));
         layer.add_contour(contour);
 
         assert!(matches!(

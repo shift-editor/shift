@@ -1490,13 +1490,16 @@ impl Bridge {
       let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
 
       let layers = glyph
-        .layers()
+        .default_sources()
         .values()
-        .map(|layer| layer.as_ref())
-        .map(|layer| GlyphLayerSnapshot {
-          glyph_id: glyph_id.clone(),
-          source_id: layer.source_id(),
-          state: GlyphState::from_layer(layer),
+        .filter_map(|source| {
+          let source_id = source.base_source_id()?;
+          let layer = glyph.layer(source.layer_id())?;
+          Some(GlyphLayerSnapshot {
+            glyph_id: glyph_id.clone(),
+            source_id,
+            state: GlyphState::from_layer(layer),
+          })
         })
         .collect();
 

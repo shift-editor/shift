@@ -137,6 +137,8 @@ typed_id!(AnchorId, "anchor");
 typed_id!(GuidelineId, "guideline");
 typed_id!(LayerId, "layer");
 typed_id!(GlyphId, "glyph");
+typed_id!(GlyphSourceId, "glyphSource");
+typed_id!(GlyphVariantId, "glyphVariant");
 typed_id!(SourceId, "source");
 typed_id!(AxisId, "axis");
 typed_id!(AxisLabelId, "axisLabel");

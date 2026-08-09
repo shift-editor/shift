@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use rayon::prelude::*;
-use shift_font::{Font, Glyph, GlyphId, GlyphName, LayerId, SourceId};
+use shift_font::{Font, Glyph, GlyphId, GlyphName, GlyphSource, LayerId, Location, SourceId};
 
 use crate::{BackendError, BackendResult, FontFormat, FormatBackendResult, ImportReport};
 
@@ -132,10 +132,16 @@ fn load_glif_glyph(
         let layer = crate::formats::ufo::UfoReader::convert_stream_layer(
             &norad_glyph,
             layer_record.layer_id.clone(),
-            layer_record.source_id.clone(),
             glyph_ids,
         )?;
+        let glyph_source = GlyphSource::new(
+            layer_record.source_id.to_string(),
+            layer.id(),
+            Some(layer_record.source_id.clone()),
+            Location::new(),
+        );
         glyph.set_layer(layer);
+        glyph.insert_default_source(glyph_source);
     }
     Ok(glyph)
 }

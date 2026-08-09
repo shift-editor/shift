@@ -4,7 +4,8 @@ use std::sync::mpsc;
 
 use shift_font::{
     test_support::sample_variable_font, Anchor, Component, Contour, DecomposedTransform,
-    DesignLocation, Glyph, GlyphId, GlyphLayer, LayerId, PointType,
+    DesignLocation, Glyph, GlyphId, GlyphLayer, GlyphSource, LayerId, Location, PointType,
+    SourceId,
 };
 use shift_slug::{
     add_authored_glyph_with_weight_sets, pack_render_instances, pack_variable_params,
@@ -278,9 +279,9 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     let layers = font
         .glyph(root_id.clone())
         .unwrap()
-        .layers()
+        .default_sources()
         .values()
-        .map(|layer| (layer.id(), layer.source_id()))
+        .filter_map(|source| Some((source.layer_id(), source.base_source_id()?)))
         .collect::<Vec<_>>();
 
     let base_id = GlyphId::from_raw("gpu-component-base");
@@ -294,7 +295,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
             100.0 + source_index as f64 * 60.0,
             180.0 + source_index as f64 * 30.0,
         ));
-        base.set_layer(base_layer);
+        set_source_layer(&mut base, source_id.clone(), base_layer);
 
         let mut mark_layer = triangle_layer(source_id.clone(), source_index as f64 * 5.0);
         mark_layer.add_anchor(Anchor::new(
@@ -302,7 +303,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
             10.0 + source_index as f64 * 5.0,
             5.0 + source_index as f64 * 2.0,
         ));
-        mark.set_layer(mark_layer);
+        set_source_layer(&mut mark, source_id.clone(), mark_layer);
     }
     font.insert_glyph(base).unwrap();
     font.insert_glyph(mark).unwrap();
@@ -329,8 +330,19 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     (font, root_id)
 }
 
-fn triangle_layer(source_id: shift_font::SourceId, shift: f64) -> GlyphLayer {
-    let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+fn set_source_layer(glyph: &mut Glyph, source_id: SourceId, layer: GlyphLayer) {
+    let glyph_source = GlyphSource::new(
+        source_id.to_string(),
+        layer.id(),
+        Some(source_id),
+        Location::new(),
+    );
+    glyph.set_layer(layer);
+    glyph.insert_default_source(glyph_source);
+}
+
+fn triangle_layer(_source_id: SourceId, shift: f64) -> GlyphLayer {
+    let mut layer = GlyphLayer::with_width(LayerId::new(), 500.0);
     let mut contour = Contour::new();
     contour.add_point(shift, 0.0, PointType::OnCurve, false);
     contour.add_point(50.0 + shift, 100.0, PointType::OnCurve, false);

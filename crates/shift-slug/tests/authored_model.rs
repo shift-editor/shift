@@ -2,7 +2,7 @@ use shift_backends::font_loader::FontLoader;
 use shift_font::{
     test_support::{sample_font, sample_variable_font},
     Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
-    InterpolationBasis, LayerId, PointType, SourceId,
+    GlyphSource, InterpolationBasis, LayerId, Location, PointType, SourceId,
 };
 use shift_slug::{
     add_authored_component_projection_glyph, add_authored_glyph,
@@ -321,14 +321,18 @@ fn component_model_resolves_varying_decomposed_transform() {
     let layers = font
         .glyph(glyph_id.clone())
         .unwrap()
-        .layers()
+        .default_sources()
         .values()
-        .map(|layer| (layer.id(), layer.source_id()))
+        .filter_map(|source| Some((source.layer_id(), source.base_source_id()?)))
         .collect::<Vec<_>>();
     let grandchild_id = GlyphId::from_raw("component-grandchild");
     let mut grandchild = Glyph::with_id(grandchild_id.clone(), "component-grandchild");
     for (_, source_id) in &layers {
-        grandchild.set_layer(triangle_layer_for_source_shifted(source_id.clone(), 25.0));
+        set_source_layer(
+            &mut grandchild,
+            source_id.clone(),
+            triangle_layer_for_source_shifted(source_id.clone(), 25.0),
+        );
     }
     font.insert_glyph(grandchild).unwrap();
 
@@ -348,7 +352,7 @@ fn component_model_resolves_varying_decomposed_transform() {
                 ..DecomposedTransform::identity()
             },
         ));
-        child.set_layer(layer);
+        set_source_layer(&mut child, source_id.clone(), layer);
     }
     font.insert_glyph(child).unwrap();
 
@@ -421,9 +425,9 @@ fn component_model_resolves_variable_anchor_attachment() {
         .glyphs_by_unicode(0x41)
         .next()
         .unwrap()
-        .layers()
+        .default_sources()
         .values()
-        .map(|layer| layer.source_id())
+        .filter_map(|source| source.base_source_id())
         .collect::<Vec<_>>();
 
     let base_id = GlyphId::from_raw("attachment-base");
@@ -435,7 +439,7 @@ fn component_model_resolves_variable_anchor_attachment() {
             100.0 + 80.0 * source_index as f64,
             200.0 + 40.0 * source_index as f64,
         ));
-        base.set_layer(layer);
+        set_source_layer(&mut base, source_id.clone(), layer);
     }
     font.insert_glyph(base).unwrap();
 
@@ -448,17 +452,17 @@ fn component_model_resolves_variable_anchor_attachment() {
             5.0 + 10.0 * source_index as f64,
             10.0 + 5.0 * source_index as f64,
         ));
-        mark.set_layer(layer);
+        set_source_layer(&mut mark, source_id.clone(), layer);
     }
     font.insert_glyph(mark).unwrap();
 
     let root_id = GlyphId::from_raw("attachment-root");
     let mut root = Glyph::with_id(root_id.clone(), "attachment-root");
     for source_id in &source_ids {
-        let mut layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 500.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         layer.add_component(Component::new(base_id.clone(), "attachment-base"));
         layer.add_component(Component::new(mark_id.clone(), "attachment-mark"));
-        root.set_layer(layer);
+        set_source_layer(&mut root, source_id.clone(), layer);
     }
     font.insert_glyph(root).unwrap();
 
@@ -503,9 +507,9 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
     let root_source_ids = font
         .glyph(root_id.clone())
         .unwrap()
-        .layers()
+        .default_sources()
         .values()
-        .map(|layer| layer.source_id())
+        .filter_map(|source| source.base_source_id())
         .collect::<Vec<_>>();
     let medium_source_id = font
         .sources()
@@ -524,10 +528,9 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
     .into_iter()
     .enumerate()
     {
-        child.set_layer(triangle_layer_for_source_shifted(
-            source_id,
-            source_index as f64 * 30.0,
-        ));
+        let layer =
+            triangle_layer_for_source_shifted(source_id.clone(), source_index as f64 * 30.0);
+        set_source_layer(&mut child, source_id, layer);
     }
     font.insert_glyph(child).unwrap();
 
@@ -705,7 +708,7 @@ fn authored_projection_reports_unimplemented_product_semantics() {
 }
 
 fn cubic_layer() -> GlyphLayer {
-    let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
+    let mut layer = GlyphLayer::new(LayerId::new());
     let mut contour = Contour::new();
     contour.add_point(0.0, 0.0, PointType::OnCurve, false);
     contour.add_point(33.0, 0.0, PointType::OffCurve, false);
@@ -713,6 +716,17 @@ fn cubic_layer() -> GlyphLayer {
     contour.add_point(100.0, 0.0, PointType::OnCurve, false);
     layer.add_contour(contour);
     layer
+}
+
+fn set_source_layer(glyph: &mut Glyph, source_id: SourceId, layer: GlyphLayer) {
+    let glyph_source = GlyphSource::new(
+        source_id.to_string(),
+        layer.id(),
+        Some(source_id),
+        Location::new(),
+    );
+    glyph.set_layer(layer);
+    glyph.insert_default_source(glyph_source);
 }
 
 fn triangle_layer() -> GlyphLayer {
@@ -723,8 +737,8 @@ fn triangle_layer_for_source(source_id: SourceId) -> GlyphLayer {
     triangle_layer_for_source_shifted(source_id, 0.0)
 }
 
-fn triangle_layer_for_source_shifted(source_id: SourceId, shift: f64) -> GlyphLayer {
-    let mut layer = GlyphLayer::new(LayerId::new(), source_id);
+fn triangle_layer_for_source_shifted(_source_id: SourceId, shift: f64) -> GlyphLayer {
+    let mut layer = GlyphLayer::new(LayerId::new());
     let mut contour = Contour::new();
     contour.add_point(shift, 0.0, PointType::OnCurve, false);
     contour.add_point(50.0 + shift, 100.0, PointType::OnCurve, false);

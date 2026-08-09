@@ -354,9 +354,9 @@ impl From<&IrGlyph> for GlyphRecord {
         component_base_glyph_ids.sort();
         component_base_glyph_ids.dedup();
         let mut layers: Vec<_> = glyph
-            .layers()
+            .default_sources()
             .values()
-            .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
+            .filter_map(GlyphLayerRecord::from_glyph_source)
             .collect();
         layers.sort_by(|a, b| {
             a.source_id
@@ -382,12 +382,12 @@ pub struct GlyphLayerRecord {
     pub source_id: SourceId,
 }
 
-impl From<&GlyphLayer> for GlyphLayerRecord {
-    fn from(layer: &GlyphLayer) -> Self {
-        Self {
-            id: layer.id(),
-            source_id: layer.source_id(),
-        }
+impl GlyphLayerRecord {
+    fn from_glyph_source(source: &shift_font::GlyphSource) -> Option<Self> {
+        Some(Self {
+            id: source.layer_id(),
+            source_id: source.base_source_id()?,
+        })
     }
 }
 

@@ -33,8 +33,21 @@ impl FontWriter for UfoBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Contour, Glyph, GlyphLayer, LayerId, PointType};
+    use shift_font::{
+        Contour, Glyph, GlyphLayer, GlyphSource, LayerId, Location, PointType, SourceId,
+    };
     use std::fs;
+
+    fn set_source_layer(glyph: &mut Glyph, source_id: SourceId, layer: GlyphLayer) {
+        let glyph_source = GlyphSource::new(
+            source_id.to_string(),
+            layer.id(),
+            Some(source_id),
+            Location::new(),
+        );
+        glyph.set_layer(layer);
+        glyph.insert_default_source(glyph_source);
+    }
 
     fn create_test_font() -> Font {
         let mut font = Font::new();
@@ -45,7 +58,7 @@ mod tests {
         let default_source_id = font.default_source_id().unwrap();
 
         let mut glyph = Glyph::with_unicode("A".to_string(), 65);
-        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 600.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 600.0);
 
         let mut contour = Contour::new();
         contour.add_point(0.0, 0.0, PointType::OnCurve, false);
@@ -61,7 +74,7 @@ mod tests {
         inner.close();
         layer.add_contour(inner);
 
-        glyph.set_layer(layer);
+        set_source_layer(&mut glyph, default_source_id, layer);
         font.insert_glyph(glyph).unwrap();
 
         font
@@ -124,7 +137,7 @@ mod tests {
         let default_source_id = font.default_source_id().unwrap();
 
         let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 500.4);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 500.4);
 
         let mut contour = Contour::new();
         contour.add_point(
@@ -149,7 +162,7 @@ mod tests {
         layer.add_contour(contour);
         layer.add_contour(Contour::new());
 
-        glyph.set_layer(layer);
+        set_source_layer(&mut glyph, default_source_id, layer);
         font.insert_glyph(glyph).unwrap();
 
         let temp_dir = tempfile::tempdir().unwrap();
@@ -220,16 +233,16 @@ mod tests {
 
         for (name, unicode) in [("B", 0x0042_u32), ("C", 0x0043)] {
             let mut glyph = Glyph::with_unicode(name.to_string(), unicode);
-            glyph.set_layer(GlyphLayer::with_width(
-                LayerId::new(),
+            set_source_layer(
+                &mut glyph,
                 default_source_id.clone(),
-                500.0,
-            ));
-            glyph.set_layer(GlyphLayer::with_width(
-                LayerId::new(),
+                GlyphLayer::with_width(LayerId::new(), 500.0),
+            );
+            set_source_layer(
+                &mut glyph,
                 bold_source_id.clone(),
-                550.0,
-            ));
+                GlyphLayer::with_width(LayerId::new(), 550.0),
+            );
             font.insert_glyph(glyph).unwrap();
         }
 
@@ -296,11 +309,11 @@ mod tests {
 
         let bad_name = "A\u{0001}B".to_string();
         let mut glyph = Glyph::with_unicode(bad_name.clone(), 0x0041);
-        glyph.set_layer(GlyphLayer::with_width(
-            LayerId::new(),
+        set_source_layer(
+            &mut glyph,
             default_source_id,
-            600.0,
-        ));
+            GlyphLayer::with_width(LayerId::new(), 600.0),
+        );
         font.insert_glyph(glyph).unwrap();
 
         let temp_dir = tempfile::tempdir().unwrap();
@@ -347,7 +360,7 @@ mod tests {
         let default_source_id = font.default_source_id().unwrap();
 
         let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-        let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 512.5);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 512.5);
 
         let mut contour = Contour::new();
         contour.add_point(100.5, 33.25, PointType::OnCurve, false);
@@ -357,7 +370,7 @@ mod tests {
         layer.add_contour(contour);
         layer.add_anchor(shift_font::Anchor::new("top".to_string(), 10.75, 720.5));
 
-        glyph.set_layer(layer);
+        set_source_layer(&mut glyph, default_source_id, layer);
         font.insert_glyph(glyph).unwrap();
 
         let temp_dir = tempfile::tempdir().unwrap();

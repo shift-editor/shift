@@ -212,14 +212,10 @@ fn component_sequence(layer: &GlyphLayer) -> Vec<GlyphId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Anchor, Component, Contour, LayerId, Point, SourceId};
+    use crate::{Anchor, Component, Contour, LayerId, Point};
 
     fn layer() -> GlyphLayer {
-        let mut layer = GlyphLayer::with_width(
-            LayerId::from_raw("layer"),
-            SourceId::from_raw("source"),
-            600.0,
-        );
+        let mut layer = GlyphLayer::with_width(LayerId::from_raw("layer"), 600.0);
         let mut contour = Contour::from_points(
             vec![
                 Point::on_curve(0.0, 0.0),
@@ -239,10 +235,7 @@ mod tests {
     #[test]
     fn compatible_layers_may_change_interpolated_values_and_metadata() {
         let reference = layer();
-        let mut source = reference.clone_with_fresh_ids(
-            LayerId::from_raw("source-layer"),
-            SourceId::from_raw("other-source"),
-        );
+        let mut source = reference.clone_with_fresh_ids(LayerId::from_raw("source-layer"));
         source.set_width(900.0);
         source.contours_iter_mut().next().unwrap().points_mut()[0].set_position(200.0, 300.0);
         source.contours_iter_mut().next().unwrap().points_mut()[1].set_smooth(false);
@@ -352,10 +345,7 @@ mod tests {
             }]
         );
 
-        let mut component_sequence = GlyphLayer::new(
-            LayerId::from_raw("components"),
-            SourceId::from_raw("other-source"),
-        );
+        let mut component_sequence = GlyphLayer::new(LayerId::from_raw("components"));
         component_sequence.add_contour(reference.contours_iter().next().unwrap().clone());
         component_sequence.add_anchor(reference.anchors()[0].clone());
         component_sequence
@@ -395,10 +385,7 @@ mod tests {
     #[test]
     fn reports_independent_differences_together_in_domain_order() {
         let reference = layer();
-        let source = GlyphLayer::new(
-            LayerId::from_raw("empty-layer"),
-            SourceId::from_raw("other-source"),
-        );
+        let source = GlyphLayer::new(LayerId::from_raw("empty-layer"));
 
         assert_eq!(
             reference

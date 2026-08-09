@@ -59,6 +59,7 @@ impl ShiftStore {
         }
 
         *font.kerning_mut() = load_kerning(&self.conn)?;
+        font.validate()?;
 
         Ok(font)
     }
@@ -362,21 +363,137 @@ fn load_glyphs(
         }
     }
 
+    let mut glyph_axes: HashMap<font::GlyphId, Vec<font::GlyphAxis>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT id, glyph_id, name, min_value, default_value, max_value
+             FROM glyph_axes
+             ORDER BY glyph_id, order_index, id",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                font::GlyphId::from_raw(row.get::<_, String>(1)?),
+                font::GlyphAxis::with_id(
+                    font::AxisId::from_raw(row.get::<_, String>(0)?),
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ),
+            ))
+        })?;
+        for row in rows {
+            let (glyph_id, axis) = row?;
+            glyph_axes.entry(glyph_id).or_default().push(axis);
+        }
+    }
+
+    let mut variants: HashMap<font::GlyphId, Vec<font::GlyphVariant>> = HashMap::new();
+    let mut variant_owners: HashMap<font::GlyphVariantId, font::GlyphId> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT id, glyph_id, name, condition_json
+             FROM glyph_variants
+             ORDER BY glyph_id, order_index, id",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let condition_json = row.get::<_, String>(3)?;
+            let condition = serde_json::from_str(&condition_json).map_err(json_column_error)?;
+            Ok((
+                font::GlyphId::from_raw(row.get::<_, String>(1)?),
+                font::GlyphVariant::with_id(
+                    font::GlyphVariantId::from_raw(row.get::<_, String>(0)?),
+                    row.get(2)?,
+                    condition,
+                ),
+            ))
+        })?;
+        for row in rows {
+            let (glyph_id, variant) = row?;
+            variant_owners.insert(variant.id(), glyph_id.clone());
+            variants.entry(glyph_id).or_default().push(variant);
+        }
+    }
+
+    let mut glyph_source_locations: HashMap<font::GlyphSourceId, font::Location> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT glyph_source_id, axis_id, value
+             FROM glyph_source_locations
+             ORDER BY glyph_source_id, axis_id",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                font::GlyphSourceId::from_raw(row.get::<_, String>(0)?),
+                font::AxisId::from_raw(row.get::<_, String>(1)?),
+                row.get::<_, f64>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (glyph_source_id, axis_id, value) = row?;
+            glyph_source_locations
+                .entry(glyph_source_id)
+                .or_default()
+                .set(axis_id, value);
+        }
+    }
+
+    let mut default_sources: HashMap<font::GlyphId, Vec<font::GlyphSource>> = HashMap::new();
+    let mut variant_sources: HashMap<font::GlyphVariantId, Vec<font::GlyphSource>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT id, glyph_id, variant_id, name, layer_id, base_source_id
+             FROM glyph_sources
+             ORDER BY glyph_id, variant_id, order_index, id",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let glyph_source_id = font::GlyphSourceId::from_raw(row.get::<_, String>(0)?);
+            let location = glyph_source_locations
+                .remove(&glyph_source_id)
+                .unwrap_or_default();
+            Ok((
+                font::GlyphId::from_raw(row.get::<_, String>(1)?),
+                row.get::<_, Option<String>>(2)?
+                    .map(font::GlyphVariantId::from_raw),
+                font::GlyphSource::with_id(
+                    glyph_source_id,
+                    row.get(3)?,
+                    font::LayerId::from_raw(row.get::<_, String>(4)?),
+                    row.get::<_, Option<String>>(5)?
+                        .map(font::SourceId::from_raw),
+                    location,
+                ),
+            ))
+        })?;
+        for row in rows {
+            let (glyph_id, variant_id, source) = row?;
+            if let Some(variant_id) = variant_id {
+                if variant_owners.get(&variant_id) != Some(&glyph_id) {
+                    return Err(StoreError::InvalidDocument(format!(
+                        "glyph source {} and variant {} have different glyph owners",
+                        source.id(),
+                        variant_id
+                    )));
+                }
+                variant_sources.entry(variant_id).or_default().push(source);
+            } else {
+                default_sources.entry(glyph_id).or_default().push(source);
+            }
+        }
+    }
+
     let layer_rows = {
         let mut stmt = conn.prepare(
-            "
-            SELECT id, glyph_id, source_id, width, height
-            FROM glyph_layers
-            ORDER BY glyph_id, source_id, id
-            ",
+            "SELECT id, glyph_id, width, height
+             FROM glyph_layers
+             ORDER BY glyph_id, id",
         )?;
         stmt.query_map([], |row| {
             Ok((
                 font::LayerId::from_raw(row.get::<_, String>(0)?),
                 font::GlyphId::from_raw(row.get::<_, String>(1)?),
-                font::SourceId::from_raw(row.get::<_, String>(2)?),
-                row.get::<_, f64>(3)?,
-                row.get::<_, Option<f64>>(4)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, Option<f64>>(3)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?
@@ -385,7 +502,7 @@ fn load_glyphs(
     if include_layer_payloads {
         let layer_ids = layer_rows
             .iter()
-            .map(|(layer_id, _, _, _, _)| layer_id.clone())
+            .map(|(layer_id, _, _, _)| layer_id.clone())
             .collect::<Vec<_>>();
         for layer in crate::layer::load_glyph_layers_from_conn(conn, &layer_ids)? {
             loaded_layers.insert(layer.id(), layer);
@@ -393,7 +510,7 @@ fn load_glyphs(
     }
 
     let mut layers: HashMap<font::GlyphId, Vec<font::GlyphLayer>> = HashMap::new();
-    for (layer_id, glyph_id, source_id, width, height) in layer_rows {
+    for (layer_id, glyph_id, width, height) in layer_rows {
         let layer = if include_layer_payloads {
             loaded_layers
                 .remove(&layer_id)
@@ -402,7 +519,7 @@ fn load_glyphs(
                     id: layer_id.to_string(),
                 })?
         } else {
-            let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
+            let mut layer = font::GlyphLayer::with_width(layer_id, width);
             layer.set_height(height);
             layer
         };
@@ -421,8 +538,20 @@ fn load_glyphs(
                 .collect(),
         );
         *glyph.lib_mut() = font::LibData::from_map(libs.remove(&glyph_id).unwrap_or_default());
+        for axis in glyph_axes.remove(&glyph_id).unwrap_or_default() {
+            glyph.insert_axis(axis);
+        }
         for layer in layers.remove(&glyph_id).unwrap_or_default() {
             glyph.set_layer(layer);
+        }
+        for source in default_sources.remove(&glyph_id).unwrap_or_default() {
+            glyph.insert_default_source(source);
+        }
+        for mut variant in variants.remove(&glyph_id).unwrap_or_default() {
+            for source in variant_sources.remove(&variant.id()).unwrap_or_default() {
+                variant.insert_source(source);
+            }
+            glyph.insert_variant(variant);
         }
         glyphs.push(glyph);
     }

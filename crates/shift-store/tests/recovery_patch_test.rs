@@ -83,7 +83,7 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
 
     let mut post = original.clone();
     post.metadata_mut().family_name = Some("Recovered Sans".to_string());
-    let deleted_glyph_id = shift_font::GlyphId::from_raw("acute");
+    let deleted_glyph_id = shift_font::GlyphId::from_raw("A");
     post.remove_glyph(deleted_glyph_id.clone())
         .expect("sample glyph");
     let weight_id = shift_font::AxisId::from_raw("weight");
@@ -252,17 +252,44 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     let layer_id = shift_font::LayerId::from_raw("B_regular");
     let mut glyph = shift_font::Glyph::with_id(glyph_id.clone(), "B");
     glyph.set_unicodes(vec![0x42]);
-    let layer = shift_font::GlyphLayer::with_width(
+    glyph.insert_axis(shift_font::GlyphAxis::with_id(
+        shift_font::AxisId::from_raw("B-width"),
+        "B Width".to_string(),
+        0.0,
+        50.0,
+        100.0,
+    ));
+    let layer = shift_font::GlyphLayer::with_width(layer_id.clone(), 620.0);
+    let glyph_source = shift_font::GlyphSource::new(
+        "Regular".to_string(),
         layer_id.clone(),
-        shift_font::SourceId::from_raw("regular"),
-        620.0,
+        Some(shift_font::SourceId::from_raw("regular")),
+        shift_font::Location::new(),
     );
     glyph.set_layer(layer.clone());
+    glyph.insert_default_source(glyph_source.clone());
+    let mut variant = shift_font::GlyphVariant::with_id(
+        shift_font::GlyphVariantId::from_raw("B-heavy"),
+        "Heavy".to_string(),
+        shift_font::Condition::AxisRange {
+            axis_id: shift_font::AxisId::from_raw("weight"),
+            minimum: Some(700.0),
+            maximum: None,
+        },
+    );
+    variant.insert_source(shift_font::GlyphSource::with_id(
+        shift_font::GlyphSourceId::from_raw("B-heavy"),
+        "Heavy Regular".to_string(),
+        layer_id.clone(),
+        Some(shift_font::SourceId::from_raw("regular")),
+        shift_font::Location::new(),
+    ));
+    glyph.insert_variant(variant);
     let mut post = original;
     post.insert_glyph(glyph.clone()).expect("insert glyph");
     let changes = shift_font::FontChangeSet::new(vec![
         shift_font::FontChange::glyph_created(&glyph),
-        shift_font::FontChange::glyph_layer_created(glyph_id.clone(), &layer),
+        shift_font::FontChange::glyph_layer_created(glyph_id.clone(), &glyph_source, &layer),
     ]);
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
@@ -272,6 +299,11 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
         .unwrap();
     let directory = document.load_font_directory().unwrap();
     assert_eq!(directory.glyph_count(), post.glyph_count());
+    assert_eq!(directory.glyph(glyph_id.clone()).unwrap().axes().len(), 1);
+    assert_eq!(
+        directory.glyph(glyph_id.clone()).unwrap().variants().len(),
+        1
+    );
     assert_eq!(
         directory
             .glyph(glyph_id)

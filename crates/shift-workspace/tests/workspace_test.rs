@@ -2,8 +2,9 @@ use std::{fs, path::PathBuf};
 
 use shift_font::{
     AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, ExternalLocation,
-    Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
-    NamedInstance, NamedInstanceId, PointId, PointSeed, PointType, SourceId, error::CoreError,
+    Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName,
+    GlyphSource, LayerId, Location, NamedInstance, NamedInstanceId, PointId, PointSeed, PointType,
+    SourceId, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::ShiftStore;
@@ -566,11 +567,18 @@ fn failed_streaming_import_removes_staging_and_preserves_the_destination() {
     let store_path = temp.path().join("existing.sqlite");
     let mut font = Font::new();
     let mut glyph = Glyph::new("A");
-    let mut layer = GlyphLayer::new(LayerId::new(), font.default_source_id().unwrap());
+    let mut layer = GlyphLayer::new(LayerId::new());
     let mut contour = shift_font::Contour::new();
     contour.add_point(0.0, 0.0, PointType::OnCurve, false);
     layer.add_contour(contour);
+    let glyph_source = GlyphSource::new(
+        "Regular".to_string(),
+        layer.id(),
+        font.default_source_id(),
+        Location::new(),
+    );
     glyph.set_layer(layer);
+    glyph.insert_default_source(glyph_source);
     font.insert_glyph(glyph).unwrap();
     shift_backends::font_loader::FontLoader::new()
         .write_font(&font, source_path.to_str().unwrap())
@@ -1142,7 +1150,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone()),
+            .layer_id_for_source(glyph_id.clone(), source_id.clone()),
         Some(layer_id.clone())
     );
 
@@ -1156,7 +1164,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone()),
+            .layer_id_for_source(glyph_id.clone(), source_id.clone()),
         None
     );
 
@@ -1166,9 +1174,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
         .expect("createGlyphLayer should redo");
     assert_eq!(redone.layers.len(), 1);
     assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_id, source_id),
+        workspace.font().layer_id_for_source(glyph_id, source_id),
         Some(layer_id)
     );
 }
@@ -1189,12 +1195,11 @@ fn create_glyph_layer_initializes_width_from_font_upm() {
 }
 
 #[test]
-fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
+fn delete_source_rejects_an_existing_glyph_source_base_atomically() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    let glyph_a = create_glyph(&mut workspace, "A", vec![65]);
-    let glyph_b = create_glyph(&mut workspace, "B", vec![66]);
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
     let source_id = SourceId::from_raw("source_alt");
     let axis_id = create_weight_axis(&mut workspace);
 
@@ -1210,18 +1215,12 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             Some("Create Source".to_string()),
         )
         .unwrap();
-    let layer_id = create_glyph_layer(&mut workspace, glyph_a.clone(), source_id.clone());
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id.clone());
     workspace
         .apply(set_x_advance_intents(layer_id.clone(), 640.0), None)
         .unwrap();
-    assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_b.clone(), source_id.clone()),
-        None
-    );
 
-    workspace
+    let error = workspace
         .apply(
             FontIntentSet {
                 intents: vec![FontIntent::DeleteSource {
@@ -1230,23 +1229,16 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             },
             Some("Delete Source".to_string()),
         )
-        .unwrap();
+        .err()
+        .expect("a glyph-source base must block global source deletion");
 
-    assert!(
-        workspace
-            .font()
-            .sources()
-            .iter()
-            .all(|source| source.id() != source_id)
-    );
-    assert!(workspace.font().layer(layer_id.clone()).is_none());
-
-    let undone = workspace.undo().unwrap().expect("deleteSource should undo");
-    assert!(undone
-        .changes
-        .changes
-        .iter()
-        .any(|change| matches!(change, FontChange::SourceCreated(change) if change.source_id == source_id)));
+    assert!(matches!(
+        error,
+        WorkspaceError::Font(CoreError::SourceReferencedByGlyphSource {
+            source_id: actual,
+            ..
+        }) if actual == source_id
+    ));
     assert!(
         workspace
             .font()
@@ -1254,31 +1246,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .iter()
             .any(|source| source.id() == source_id)
     );
-    assert_eq!(
-        workspace.font().layer(layer_id.clone()).unwrap().width(),
-        640.0
-    );
-    assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_b, source_id.clone()),
-        None
-    );
-
-    let redone = workspace.redo().unwrap().expect("deleteSource should redo");
-    assert!(redone
-        .changes
-        .changes
-        .iter()
-        .any(|change| matches!(change, FontChange::GlyphLayerDeleted(change) if change.layer_id == layer_id)));
-    assert!(
-        workspace
-            .font()
-            .sources()
-            .iter()
-            .all(|source| source.id() != source_id)
-    );
-    assert!(workspace.font().layer(layer_id).is_none());
+    assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
 }
 
 #[test]

@@ -4,6 +4,7 @@ pub mod binary_data;
 pub mod boolean;
 pub mod collection;
 pub mod component;
+pub mod condition;
 pub mod contour;
 pub mod entity;
 pub mod features;
@@ -27,15 +28,17 @@ pub use axis::{
 };
 pub use binary_data::BinaryData;
 pub use boolean::{boolean, BooleanOp};
-pub use component::{Component, DecomposedTransform, Transform};
+pub use component::{AxisInheritance, Component, DecomposedTransform, Transform};
+pub use condition::Condition;
 pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,
-    GlyphId, GuidelineId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
+    GlyphId, GlyphSourceId, GlyphVariantId, GuidelineId, LayerId, MetricId, NamedInstanceId,
+    PointId, SourceId,
 };
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata};
-pub use glyph::{Glyph, GlyphLayer};
+pub use glyph::{Glyph, GlyphAxis, GlyphLayer, GlyphSource, GlyphVariant};
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{KerningData, KerningPair, KerningSide};

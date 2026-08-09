@@ -7,8 +7,8 @@ use crate::{
 };
 use rayon::prelude::*;
 use shift_font::{
-    Contour, ContourId, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, LayerId,
-    PointId, PointType, SourceId,
+    Contour, ContourId, Font, Glyph, GlyphId as ShiftGlyphId, GlyphLayer, GlyphName, GlyphSource,
+    LayerId, Location, PointId, PointType, SourceId,
 };
 use skrifa::{
     outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
@@ -271,7 +271,6 @@ fn glyph_from_skrifa(
     })?;
     let mut layer = GlyphLayer::with_width(
         LayerId::from_raw(format!("binary{}", record.raw_id.to_u32())),
-        source_id.clone(),
         advance_width as f64,
     );
 
@@ -291,9 +290,16 @@ fn glyph_from_skrifa(
         }
     }
 
+    let glyph_source = GlyphSource::new(
+        source_id.to_string(),
+        layer.id(),
+        Some(source_id.clone()),
+        Location::new(),
+    );
     let mut glyph = Glyph::with_id(record.shift_id.clone(), record.name.clone());
     glyph.set_unicodes(record.unicodes.clone());
     glyph.set_layer(layer);
+    glyph.insert_default_source(glyph_source);
     Ok(glyph)
 }
 

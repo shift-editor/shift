@@ -1,7 +1,15 @@
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
-use crate::GlyphName;
+use crate::{Condition, GlyphName, Location};
 use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AxisInheritance {
+    #[default]
+    Parent,
+    Font,
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Component {
@@ -9,6 +17,9 @@ pub struct Component {
     base_glyph_id: GlyphId,
     base_glyph_name: GlyphName,
     transform: DecomposedTransform,
+    location: Location,
+    axis_inheritance: AxisInheritance,
+    condition: Option<Condition>,
 }
 
 impl Identified for Component {
@@ -216,6 +227,9 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::identity(),
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::Parent,
+            condition: None,
         }
     }
 
@@ -229,6 +243,9 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform,
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::Parent,
+            condition: None,
         }
     }
 
@@ -243,6 +260,9 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform,
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::Parent,
+            condition: None,
         }
     }
 
@@ -256,6 +276,9 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::from_matrix(matrix),
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::Parent,
+            condition: None,
         }
     }
 
@@ -281,6 +304,30 @@ impl Component {
 
     pub fn set_transform(&mut self, transform: DecomposedTransform) {
         self.transform = transform;
+    }
+
+    pub fn location(&self) -> &Location {
+        &self.location
+    }
+
+    pub fn set_location(&mut self, location: Location) {
+        self.location = location;
+    }
+
+    pub fn axis_inheritance(&self) -> AxisInheritance {
+        self.axis_inheritance
+    }
+
+    pub fn set_axis_inheritance(&mut self, axis_inheritance: AxisInheritance) {
+        self.axis_inheritance = axis_inheritance;
+    }
+
+    pub fn condition(&self) -> Option<&Condition> {
+        self.condition.as_ref()
+    }
+
+    pub fn set_condition(&mut self, condition: Option<Condition>) {
+        self.condition = condition;
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {

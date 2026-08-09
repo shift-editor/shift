@@ -391,26 +391,24 @@ fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Ar
             .find(|source| source.id() == default_source_id)
             .is_some_and(crate::Source::is_master);
         if default_is_master {
-            if let Some(layer) = glyph
-                .layers()
-                .values()
-                .find(|layer| layer.source_id() == default_source_id)
-            {
-                return Some(layer.clone());
+            if let Some(layer) = glyph.layer_for_source(default_source_id) {
+                return glyph.layers().get(&layer.id()).cloned();
             }
         }
     }
 
     glyph
-        .layers()
+        .default_sources()
         .values()
-        .filter(|layer| {
-            font.sources()
-                .iter()
-                .find(|source| source.id() == layer.source_id())
-                .is_some_and(crate::Source::is_master)
+        .filter(|glyph_source| {
+            glyph_source.base_source_id().is_some_and(|source_id| {
+                font.sources()
+                    .iter()
+                    .find(|source| source.id() == source_id)
+                    .is_some_and(crate::Source::is_master)
+            })
         })
-        .cloned()
+        .filter_map(|glyph_source| glyph.layers().get(&glyph_source.layer_id()).cloned())
         .reduce(|preferred, candidate| {
             if layer_complexity(&candidate) > layer_complexity(&preferred) {
                 candidate
