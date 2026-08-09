@@ -29,26 +29,6 @@ CREATE TABLE IF NOT EXISTS recovery_tombstones (
 );
 "#;
 
-const CLEAR_PATCH_SQL: &str = r#"
-DELETE FROM glyph_components;
-DELETE FROM glyph_layer_payloads;
-DELETE FROM glyph_layers;
-DELETE FROM glyph_unicodes;
-DELETE FROM glyph_lib;
-DELETE FROM glyphs;
-DELETE FROM source_locations;
-DELETE FROM source_metric_values;
-DELETE FROM source_lib;
-DELETE FROM sources;
-DELETE FROM metric_definitions;
-DELETE FROM axis_mappings;
-DELETE FROM named_instances;
-DELETE FROM axes;
-DELETE FROM font_info;
-DELETE FROM recovery_replacements;
-DELETE FROM recovery_tombstones;
-"#;
-
 /// Persisted lifecycle state of one sparse recovery overlay.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RecoveryState {
@@ -254,7 +234,7 @@ impl RecoveryOverlay {
 
     fn set_clean(&mut self, base_commit_id: &CommitId) -> Result<(), StoreError> {
         let tx = self.conn.transaction()?;
-        tx.execute_batch(CLEAR_PATCH_SQL)?;
+        super::catalog::clear_recovery(&tx)?;
         tx.execute(
             "UPDATE recovery_metadata
              SET base_commit_id = ?1, pending_commit_id = NULL, state = 'clean'

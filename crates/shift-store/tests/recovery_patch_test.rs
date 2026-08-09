@@ -145,6 +145,68 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
 }
 
 #[test]
+fn metric_definition_replacement_preserves_untouched_source_values() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    let original = sample_font();
+    drop(ShiftStore::create_document(&document_path, &original).expect("create document"));
+
+    let mut post = original;
+    let mut definitions = post.metric_definitions().to_vec();
+    definitions[0].set_name("Recovered Ascender".to_string());
+    post.set_metric_definitions(definitions.clone())
+        .expect("replace metric definitions");
+    let changes = shift_font::FontChangeSet::from(
+        shift_font::FontChange::metric_definitions_updated(&definitions),
+    );
+
+    let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("open with recovery");
+    document
+        .apply_change_set_with_font(&changes, &post)
+        .expect("write metric recovery change");
+    document.save_document().expect("save recovered document");
+    drop(document);
+
+    let saved = ShiftStore::open_document(&document_path).expect("open saved document");
+    assert_eq!(saved.load_font_state().unwrap(), post);
+}
+
+#[test]
+fn recovery_save_replaces_reordered_component_collections() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    let layer_id = shift_font::LayerId::from_raw("A_regular");
+    drop(ShiftStore::create_document(&document_path, &sample_font()).expect("create document"));
+
+    let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("open with recovery");
+    let mut layer = document.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let first_id = layer.components_iter().next().unwrap().id();
+    let first = layer.remove_component(first_id).unwrap();
+    layer.add_component(first);
+    let reordered = layer
+        .components_iter()
+        .map(|component| component.id())
+        .collect::<Vec<_>>();
+    document.replace_glyph_layer(&layer).unwrap();
+    document.save_document().unwrap();
+    drop(document);
+
+    let saved = ShiftStore::open_document(&document_path).expect("open saved document");
+    let saved_layer = saved.load_glyph_layer(&layer_id).unwrap().unwrap();
+    assert_eq!(
+        saved_layer
+            .components_iter()
+            .map(|component| component.id())
+            .collect::<Vec<_>>(),
+        reordered
+    );
+}
+
+#[test]
 fn recovered_directory_open_remains_payload_lazy() {
     let temp = tempfile::tempdir().expect("temp dir");
     let document_path = temp.path().join("Dogfood.shift");

@@ -62,7 +62,7 @@ Canonical SQLite publication must preserve the complete `shift-font::Font`, not 
 
 ## Schema policy
 
-Shift has not shipped either SQLite schema. Schema changes therefore update the version-1 baselines directly; there is intentionally no compatibility migration for earlier development databases. Canonical document schema stabilization is gated on preservation/export goldens and hostile-input budgets.
+Shift has not shipped either SQLite schema. Schema changes therefore update the version-1 baselines directly; there is intentionally no compatibility migration for earlier development databases. Every canonical table must be classified in the recovery catalog; open validates the overlay's columns, primary keys, foreign keys, and dependency order before installing generated merged views. Canonical document schema stabilization is gated on preservation/export goldens and hostile-input budgets.
 
 ## Responsibilities
 
@@ -79,7 +79,7 @@ Shift has not shipped either SQLite schema. Schema changes therefore update the 
 src/
   connection.rs     # canonical, working-WAL, and disposable-import connection postures
   document.rs       # staged create/Save As, validated open/verify, metadata, and durable publication
-  recovery/         # sparse overlay state, patch writes, merged reads, and commit-ID Save
+  recovery/         # schema-catalogued sparse overlays, merged reads, and commit-ID Save
   schema.rs         # canonical and working pre-release version-1 baselines
   font_state.rs     # eager metadata/directory and explicit full materialization
   import_writer.rs  # pipelined Rayon encode/compress plus one SQLite transaction owner

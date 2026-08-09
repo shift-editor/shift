@@ -3,7 +3,14 @@ use std::collections::HashSet;
 use rusqlite::{Transaction, params};
 use shift_font as font;
 
-use super::{RecoveryOverlay, RecoveryState};
+use super::{
+    RecoveryOverlay, RecoveryState,
+    catalog::{
+        AXES, AXIS_MAPPINGS, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES, GLYPHS,
+        METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS,
+        SOURCE_METRIC_VALUES, SOURCES,
+    },
+};
 use crate::{
     FontInfo, StoreError,
     change_set::{
@@ -16,19 +23,6 @@ use crate::{
 };
 
 const GLOBAL_OWNER: &str = "";
-const AXIS: &str = "axis";
-const SOURCE: &str = "source";
-const GLYPH: &str = "glyph";
-const LAYER: &str = "layer";
-const AXIS_MAPPINGS: &str = "axis_mappings";
-const METRIC_DEFINITIONS: &str = "metric_definitions";
-const NAMED_INSTANCES: &str = "named_instances";
-const SOURCE_LOCATIONS: &str = "source_locations";
-const SOURCE_METRIC_VALUES: &str = "source_metric_values";
-const SOURCE_LIB: &str = "source_lib";
-const GLYPH_UNICODES: &str = "glyph_unicodes";
-const GLYPH_LIB: &str = "glyph_lib";
-const GLYPH_COMPONENTS: &str = "glyph_components";
 
 impl RecoveryOverlay {
     pub(crate) fn apply_change_set(
@@ -132,11 +126,11 @@ impl RecoveryOverlay {
                 .enumerate()
                 .find(|(_, axis)| axis.id() == axis_id)
             {
-                clear_tombstone(&tx, AXIS, axis_id.as_str())?;
+                clear_tombstone(&tx, AXES, axis_id.as_str())?;
                 upsert_axis_with_order(&tx, axis, order_index as i64)?;
             } else {
                 delete_axis_override(&tx, &axis_id)?;
-                mark_tombstone(&tx, AXIS, axis_id.as_str())?;
+                mark_tombstone(&tx, AXES, axis_id.as_str())?;
             }
         }
 
@@ -147,14 +141,14 @@ impl RecoveryOverlay {
                 .enumerate()
                 .find(|(_, source)| source.id() == source_id)
             {
-                clear_tombstone(&tx, SOURCE, source_id.as_str())?;
+                clear_tombstone(&tx, SOURCES, source_id.as_str())?;
                 write_source_snapshot_in_tx(&tx, source, order_index as i64)?;
                 mark_replaced(&tx, SOURCE_LOCATIONS, source_id.as_str())?;
                 mark_replaced(&tx, SOURCE_METRIC_VALUES, source_id.as_str())?;
                 mark_replaced(&tx, SOURCE_LIB, source_id.as_str())?;
             } else {
                 delete_source_override(&tx, &source_id)?;
-                mark_tombstone(&tx, SOURCE, source_id.as_str())?;
+                mark_tombstone(&tx, SOURCES, source_id.as_str())?;
             }
         }
 
@@ -164,24 +158,24 @@ impl RecoveryOverlay {
                 .enumerate()
                 .find(|(_, glyph)| glyph.id() == glyph_id)
             {
-                clear_tombstone(&tx, GLYPH, glyph_id.as_str())?;
+                clear_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
                 write_glyph_directory_in_tx(&tx, glyph, order_index as i64, WriteMode::Upsert)?;
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_LIB, glyph_id.as_str())?;
             } else {
                 delete_glyph_override(&tx, &glyph_id)?;
-                mark_tombstone(&tx, GLYPH, glyph_id.as_str())?;
+                mark_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
             }
         }
 
         for layer_id in layer_ids {
             if let Some((glyph_id, layer)) = find_layer(post_font, &layer_id) {
-                clear_tombstone(&tx, LAYER, layer_id.as_str())?;
+                clear_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
                 write_layer_in_tx(&tx, &glyph_id, layer)?;
                 mark_replaced(&tx, GLYPH_COMPONENTS, layer_id.as_str())?;
             } else {
                 delete_layer_override(&tx, &layer_id)?;
-                mark_tombstone(&tx, LAYER, layer_id.as_str())?;
+                mark_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
             }
         }
 
@@ -207,7 +201,7 @@ impl RecoveryOverlay {
         }
 
         let tx = self.conn.transaction()?;
-        clear_tombstone(&tx, LAYER, layer.id().as_str())?;
+        clear_tombstone(&tx, GLYPH_LAYERS, layer.id().as_str())?;
         write_layer_in_tx(&tx, glyph_id, layer)?;
         mark_replaced(&tx, GLYPH_COMPONENTS, layer.id().as_str())?;
         tx.execute(
@@ -219,34 +213,44 @@ impl RecoveryOverlay {
     }
 }
 
-fn mark_replaced(tx: &Transaction<'_>, collection: &str, owner_id: &str) -> Result<(), StoreError> {
+fn mark_replaced(
+    tx: &Transaction<'_>,
+    table: RecoveryTable,
+    owner_id: &str,
+) -> Result<(), StoreError> {
     tx.execute(
         "INSERT OR IGNORE INTO recovery_replacements (collection, owner_id) VALUES (?1, ?2)",
-        params![collection, owner_id],
+        params![table.name(), owner_id],
     )?;
     Ok(())
 }
 
 fn mark_tombstone(
     tx: &Transaction<'_>,
-    entity_kind: &str,
+    table: RecoveryTable,
     entity_id: &str,
 ) -> Result<(), StoreError> {
     tx.execute(
         "INSERT OR IGNORE INTO recovery_tombstones (entity_kind, entity_id) VALUES (?1, ?2)",
-        params![entity_kind, entity_id],
+        params![
+            table.tombstone_kind().expect("table supports tombstones"),
+            entity_id
+        ],
     )?;
     Ok(())
 }
 
 fn clear_tombstone(
     tx: &Transaction<'_>,
-    entity_kind: &str,
+    table: RecoveryTable,
     entity_id: &str,
 ) -> Result<(), StoreError> {
     tx.execute(
         "DELETE FROM recovery_tombstones WHERE entity_kind = ?1 AND entity_id = ?2",
-        params![entity_kind, entity_id],
+        params![
+            table.tombstone_kind().expect("table supports tombstones"),
+            entity_id
+        ],
     )?;
     Ok(())
 }
