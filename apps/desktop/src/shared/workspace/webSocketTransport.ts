@@ -8,7 +8,7 @@ import {
 /** Browser-compatible WebSocket surface required by the channel transport. */
 export type WebSocketPeer = Pick<WebSocket, "binaryType" | "send" | "close" | "addEventListener">;
 
-/** Carries bounded CBOR channel envelopes over one established WebSocket. */
+/** Carries bounded MessagePack channel envelopes over one established WebSocket. */
 export function webSocketTransport(peer: WebSocketPeer): Transport {
   const closeListeners = new Set<() => void>();
   let closed = false;

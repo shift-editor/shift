@@ -30,14 +30,29 @@ describe("channel messages preserve bounded binary state", () => {
     expect(() => decodeChannelMessage(encoded)).toThrow(`limit is ${MAX_CHANNEL_MESSAGE_BYTES}`);
   });
 
-  it("rejects a declared container beyond the decode allocation limit", () => {
-    const millionAndOneItems = Uint8Array.of(0x9a, 0x00, 0x0f, 0x42, 0x41);
+  it("preserves undefined channel values", () => {
+    const encoded = encodeChannelMessage({
+      kind: "request",
+      id: "8",
+      type: "workspace.create",
+      payload: undefined,
+    });
 
-    expect(() => decodeChannelMessage(millionAndOneItems)).toThrow("Array length exceeds 1000000");
+    const decoded = decodeChannelMessage(encoded) as { payload: unknown };
+    expect(Object.hasOwn(decoded, "payload")).toBe(true);
+    expect(decoded.payload).toBeUndefined();
   });
 
-  it("rejects malformed CBOR and unsupported channel values", () => {
-    expect(() => decodeChannelMessage(Uint8Array.of(0x5a))).toThrow("invalid CBOR channel message");
+  it("rejects a declared container beyond the decode allocation limit", () => {
+    const millionAndOneItems = Uint8Array.of(0xdd, 0x00, 0x0f, 0x42, 0x41);
+
+    expect(() => decodeChannelMessage(millionAndOneItems)).toThrow("maxArrayLength");
+  });
+
+  it("rejects malformed MessagePack and unsupported channel values", () => {
+    expect(() => decodeChannelMessage(Uint8Array.of(0xc1))).toThrow(
+      "invalid MessagePack channel message",
+    );
     expect(() =>
       encodeChannelMessage({ kind: "event", type: "bad", payload: new Map([["x", 1]]) }),
     ).toThrow("unsupported value");

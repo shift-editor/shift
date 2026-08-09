@@ -1,4 +1,4 @@
-import { Decoder, Encoder, setSizeLimits } from "cbor-x";
+import { Decoder, Encoder, ExtensionCodec } from "@msgpack/msgpack";
 
 /** Maximum encoded size of one ordinary channel request, response, event, or close frame. */
 export const MAX_CHANNEL_MESSAGE_BYTES = 32 * 1024 * 1024;
@@ -7,41 +7,55 @@ const MAX_CHANNEL_ARRAY_LENGTH = 1_000_000;
 const MAX_CHANNEL_OBJECT_PROPERTIES = 100_000;
 const MAX_CHANNEL_VALUE_DEPTH = 64;
 const MAX_CHANNEL_VALUE_COUNT = 2_000_000;
+const FLOAT64_ARRAY_EXTENSION_TYPE = 1;
+const UNDEFINED_EXTENSION_TYPE = 2;
+const UNDEFINED_EXTENSION_VALUE = Object.freeze({});
+const EMPTY_EXTENSION_BYTES = new Uint8Array();
 
-setSizeLimits({
-  maxArraySize: MAX_CHANNEL_ARRAY_LENGTH,
-  maxMapSize: MAX_CHANNEL_OBJECT_PROPERTIES,
-  maxObjectSize: MAX_CHANNEL_OBJECT_PROPERTIES,
+// MessagePack binary values preserve Uint8Array directly. These two explicit
+// extension codes preserve the remaining structured-clone values in Shift's
+// channel contract and can be implemented by a future rmp-serde peer.
+const extensionCodec = new ExtensionCodec();
+extensionCodec.register({
+  type: FLOAT64_ARRAY_EXTENSION_TYPE,
+  encode: encodeFloat64Array,
+  decode: decodeFloat64Array,
+});
+extensionCodec.register({
+  type: UNDEFINED_EXTENSION_TYPE,
+  encode: (value) => (value === UNDEFINED_EXTENSION_VALUE ? EMPTY_EXTENSION_BYTES : null),
+  decode: (bytes) => {
+    if (bytes.byteLength !== 0) throw new Error("invalid undefined extension");
+
+    return undefined;
+  },
 });
 
-// Standard CBOR maps and RFC 8746 typed-array tags keep this wire format
-// consumable by a future Rust peer. Shift messages do not need cyclic/shared
-// object identity, so structured-clone extensions stay disabled.
 const encoder = new Encoder({
-  structuredClone: false,
-  useRecords: false,
-  tagUint8Array: true,
-  useToJSON: false,
+  extensionCodec,
+  maxDepth: MAX_CHANNEL_VALUE_DEPTH,
 });
 const decoder = new Decoder({
-  structuredClone: false,
-  useRecords: false,
-  mapsAsObjects: true,
+  extensionCodec,
+  maxStrLength: MAX_CHANNEL_MESSAGE_BYTES,
+  maxBinLength: MAX_CHANNEL_MESSAGE_BYTES,
+  maxArrayLength: MAX_CHANNEL_ARRAY_LENGTH,
+  maxMapLength: MAX_CHANNEL_OBJECT_PROPERTIES,
+  maxExtLength: MAX_CHANNEL_MESSAGE_BYTES,
+  mapKeyConverter: decodeMapKey,
 });
 
 /** Encodes one bounded channel envelope while preserving supported typed arrays. */
 export function encodeChannelMessage(message: unknown): Uint8Array<ArrayBuffer> {
   validateChannelMessage(message);
-  const encoded = encoder.encode(message);
+  const encoded = encoder.encode(replaceUndefined(message));
   if (encoded.byteLength > MAX_CHANNEL_MESSAGE_BYTES) {
     throw new Error(
       `channel message has ${encoded.byteLength} bytes; limit is ${MAX_CHANNEL_MESSAGE_BYTES}`,
     );
   }
 
-  const result = new Uint8Array(encoded.byteLength);
-  result.set(encoded);
-  return result;
+  return encoded;
 }
 
 /** Decodes and validates one complete bounded channel envelope. */
@@ -58,7 +72,7 @@ export function decodeChannelMessage(message: ArrayBuffer | ArrayBufferView): un
     decoded = decoder.decode(encoded);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`invalid CBOR channel message: ${detail}`);
+    throw new Error(`invalid MessagePack channel message: ${detail}`);
   }
 
   validateChannelMessage(decoded);
@@ -71,6 +85,51 @@ function encodedBytes(message: ArrayBuffer | ArrayBufferView): Uint8Array {
   }
 
   return new Uint8Array(message);
+}
+
+function encodeFloat64Array(value: unknown): Uint8Array | null {
+  if (!(value instanceof Float64Array)) return null;
+
+  const bytes = new Uint8Array(value.byteLength);
+  const view = new DataView(bytes.buffer);
+  for (let index = 0; index < value.length; index += 1) {
+    view.setFloat64(index * Float64Array.BYTES_PER_ELEMENT, value[index]!, true);
+  }
+  return bytes;
+}
+
+function decodeFloat64Array(bytes: Uint8Array): Float64Array {
+  if (bytes.byteLength % Float64Array.BYTES_PER_ELEMENT !== 0) {
+    throw new Error("invalid Float64Array extension length");
+  }
+
+  const result = new Float64Array(bytes.byteLength / Float64Array.BYTES_PER_ELEMENT);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let index = 0; index < result.length; index += 1) {
+    result[index] = view.getFloat64(index * Float64Array.BYTES_PER_ELEMENT, true);
+  }
+  return result;
+}
+
+function decodeMapKey(key: unknown): string {
+  if (typeof key !== "string") throw new Error("channel map keys must be strings");
+  if (key === "__proto__" || key === "constructor" || key === "prototype") {
+    throw new Error(`channel message contains unsafe property ${JSON.stringify(key)}`);
+  }
+
+  return key;
+}
+
+function replaceUndefined(value: unknown): unknown {
+  if (value === undefined) return UNDEFINED_EXTENSION_VALUE;
+  if (Array.isArray(value)) return value.map(replaceUndefined);
+  if (!isPlainObject(value)) return value;
+
+  const result: Record<string, unknown> = {};
+  for (const [key, propertyValue] of Object.entries(value)) {
+    result[key] = replaceUndefined(propertyValue);
+  }
+  return result;
 }
 
 function validateChannelMessage(message: unknown): void {
