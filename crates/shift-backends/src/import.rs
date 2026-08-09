@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use rayon::prelude::*;
 use shift_font::{Font, Glyph, GlyphId, GlyphName, LayerId, SourceId};
 
-use crate::{BackendError, BackendResult, FontFormat, FormatBackendResult};
+use crate::{BackendError, BackendResult, FontFormat, FormatBackendResult, ImportReport};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GlyphDirectoryEntry {
@@ -140,6 +140,8 @@ fn load_glif_glyph(
     Ok(glyph)
 }
 
+pub(crate) type PreparedImport = (Font, Box<dyn GlyphStream>, ImportReport);
+
 pub(crate) trait GlyphStream: Send {
     fn directory(&self) -> Vec<GlyphDirectoryEntry>;
     fn glyph_count(&self) -> usize;
@@ -164,13 +166,14 @@ pub(crate) fn collect_streamed_font(
     Ok(header)
 }
 
-/// A bounded foreign-font import.
+/// A bounded source-to-Shift import.
 ///
 /// The header contains top-level authored state but no glyphs. Glyph geometry
 /// is materialized only in batches requested by [`Self::next_batch`].
 pub struct FontImport {
     header: Font,
     stream: Box<dyn GlyphStream>,
+    report: ImportReport,
     format: FontFormat,
     path: PathBuf,
 }
@@ -179,12 +182,14 @@ impl FontImport {
     pub(crate) fn new(
         header: Font,
         stream: Box<dyn GlyphStream>,
+        report: ImportReport,
         format: FontFormat,
         path: PathBuf,
     ) -> Self {
         Self {
             header,
             stream,
+            report,
             format,
             path,
         }
@@ -196,6 +201,10 @@ impl FontImport {
 
     pub fn directory(&self) -> Vec<GlyphDirectoryEntry> {
         self.stream.directory()
+    }
+
+    pub fn report(&self) -> &ImportReport {
+        &self.report
     }
 
     pub fn glyph_count(&self) -> usize {
@@ -215,6 +224,7 @@ impl FontImport {
         let Self {
             header,
             mut stream,
+            report: _,
             format,
             path,
         } = self;

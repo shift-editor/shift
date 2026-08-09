@@ -1,0 +1,77 @@
+{
+.appVersion = "3343";
+.formatVersion = 3;
+axes = (
+{
+name = Weight;
+tag = wght;
+}
+);
+familyName = "Glyphs Import Losses";
+fontMaster = (
+{
+axesValues = (
+40
+);
+id = master01;
+name = Regular;
+},
+{
+axesValues = (
+200
+);
+id = master02;
+name = Bold;
+}
+);
+glyphs = (
+{
+glyphname = space;
+layers = (
+{
+layerId = master01;
+width = 600;
+},
+{
+layerId = master02;
+width = 700;
+},
+{
+associatedMasterId = master01;
+attr = {
+axisRules = (
+{
+min = 150;
+}
+);
+};
+layerId = bracket01;
+name = "Regular [150]";
+width = 650;
+},
+{
+associatedMasterId = master02;
+attr = {
+axisRules = (
+{
+min = 150;
+}
+);
+};
+layerId = bracket02;
+name = "Bold [150]";
+width = 750;
+}
+);
+unicode = 32;
+}
+);
+kerning = {
+master02 = {
+space = {
+space = -10;
+};
+};
+};
+unitsPerEm = 1000;
+}

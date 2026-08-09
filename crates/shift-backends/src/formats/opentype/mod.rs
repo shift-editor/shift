@@ -11,7 +11,8 @@ pub use source::OpenTypeFont;
 
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::font_loader::FontAdaptor;
-use crate::import::GlyphStream;
+use crate::import::PreparedImport;
+use crate::ImportReport;
 use shift_font::Font;
 use skrifa::string::StringId;
 use skrifa::{FontRef, MetadataProvider};
@@ -34,8 +35,8 @@ impl FontAdaptor for BytesFontAdaptor {
         Err(FormatBackendError::WriteUnsupported)
     }
 
-    fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
+    fn stream(&self, path: &str) -> FormatBackendResult<Option<PreparedImport>> {
         let (header, stream) = reader::stream_font_file(path)?;
-        Ok(Some((header, Box::new(stream))))
+        Ok(Some((header, Box::new(stream), ImportReport::default())))
     }
 }

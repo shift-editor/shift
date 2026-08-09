@@ -11,14 +11,15 @@ use crate::formats::designspace::{DesignspaceFont, DesignspaceReader, Designspac
 use crate::formats::glyphs::{GlyphsFont, GlyphsReader};
 use crate::formats::opentype::{BytesFontAdaptor, OpenTypeFont};
 use crate::formats::ufo::{UfoFont, UfoReader, UfoWriter};
-use crate::import::{FontImport, GlyphStream};
+use crate::import::{FontImport, PreparedImport};
 use crate::traits::{FontReader, FontWriter};
+use crate::ImportReport;
 
 pub(crate) trait FontAdaptor {
     fn read_font(&self, path: &str) -> FormatBackendResult<Font>;
     fn write_font(&self, font: &Font, path: &str) -> FormatBackendResult<()>;
 
-    fn stream(&self, _path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
+    fn stream(&self, _path: &str) -> FormatBackendResult<Option<PreparedImport>> {
         Ok(None)
     }
 }
@@ -49,9 +50,9 @@ impl FontAdaptor for UfoFontAdaptor {
         UfoWriter::new().save(font, path)
     }
 
-    fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
+    fn stream(&self, path: &str) -> FormatBackendResult<Option<PreparedImport>> {
         let (header, stream) = crate::formats::ufo::stream_font(path)?;
-        Ok(Some((header, Box::new(stream))))
+        Ok(Some((header, Box::new(stream), ImportReport::default())))
     }
 }
 
@@ -64,9 +65,9 @@ impl FontAdaptor for GlyphsFontAdaptor {
         Err(FormatBackendError::WriteUnsupported)
     }
 
-    fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
-        let (header, stream) = crate::formats::glyphs::stream_font(path)?;
-        Ok(Some((header, Box::new(stream))))
+    fn stream(&self, path: &str) -> FormatBackendResult<Option<PreparedImport>> {
+        let (header, stream, report) = crate::formats::glyphs::stream_font(path)?;
+        Ok(Some((header, Box::new(stream), report)))
     }
 }
 
@@ -79,9 +80,9 @@ impl FontAdaptor for DesignspaceFontAdaptor {
         DesignspaceWriter::new().save(font, path)
     }
 
-    fn stream(&self, path: &str) -> FormatBackendResult<Option<(Font, Box<dyn GlyphStream>)>> {
+    fn stream(&self, path: &str) -> FormatBackendResult<Option<PreparedImport>> {
         let (header, stream) = crate::formats::designspace::stream_font(path)?;
-        Ok(Some((header, Box::new(stream))))
+        Ok(Some((header, Box::new(stream), ImportReport::default())))
     }
 }
 
@@ -196,9 +197,11 @@ impl FontLoader {
             .ok_or(BackendError::StreamingUnsupported {
                 format: resolved.format,
             })?;
+        let (header, stream, report) = streamed;
         Ok(FontImport::new(
-            streamed.0,
-            streamed.1,
+            header,
+            stream,
+            report,
             resolved.format,
             resolved.path_buf,
         ))
@@ -215,8 +218,8 @@ impl FontLoader {
         let streamed = adaptor.stream(resolved.path).map_err(|source| {
             BackendError::load(resolved.format, resolved.path_buf.clone(), source)
         })?;
-        if let Some((header, stream)) = streamed {
-            return FontImport::new(header, stream, resolved.format, resolved.path_buf)
+        if let Some((header, stream, report)) = streamed {
+            return FontImport::new(header, stream, report, resolved.format, resolved.path_buf)
                 .collect_font();
         }
 

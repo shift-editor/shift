@@ -6,7 +6,7 @@ use crate::font_source::projection::resolve_projection_closure;
 use crate::font_source::{
     malformed, FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
 };
-use crate::{BackendError, BackendResult, FontFormat, FontImport};
+use crate::{BackendError, BackendResult, FontFormat, FontImport, ImportReport};
 
 use super::glif::{glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer};
 use super::{load_header, read_ufo_layer_directories, stream_retained, UfoLayerDirectory};
@@ -91,6 +91,7 @@ impl FontImporter for UfoFont {
         Ok(FontImport::new(
             header,
             Box::new(stream),
+            ImportReport::default(),
             FontFormat::Ufo,
             self.path.clone(),
         ))
