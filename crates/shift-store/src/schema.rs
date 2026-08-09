@@ -244,7 +244,8 @@ CREATE TABLE IF NOT EXISTS font_binaries (
 
 CREATE TABLE IF NOT EXISTS document_metadata (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    document_id TEXT NOT NULL
+    document_id TEXT NOT NULL,
+    saved_commit_id TEXT NOT NULL
 );
 "#;
 

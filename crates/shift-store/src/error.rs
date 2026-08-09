@@ -66,6 +66,9 @@ pub enum StoreError {
     #[error("document already exists: {0}")]
     DocumentAlreadyExists(std::path::PathBuf),
 
+    #[error("recovery overlay already exists: {0}")]
+    RecoveryAlreadyExists(std::path::PathBuf),
+
     #[error("invalid SQLite application ID {found:#010x}; expected {expected:#010x}")]
     InvalidApplicationId { found: i64, expected: i64 },
 
@@ -77,6 +80,24 @@ pub enum StoreError {
 
     #[error("invalid document ID: {0}")]
     InvalidDocumentId(String),
+
+    #[error("invalid commit ID: {0}")]
+    InvalidCommitId(String),
+
+    #[error("recovery overlay belongs to document {found}, not {expected}")]
+    RecoveryDocumentMismatch { found: String, expected: String },
+
+    #[error("recovery operation requires state {expected}, found {found}")]
+    InvalidRecoveryTransition {
+        expected: &'static str,
+        found: &'static str,
+    },
+
+    #[error("canonical document edits require a recovery overlay")]
+    DocumentRequiresRecoveryOverlay,
+
+    #[error("recovery edits require the committed post-edit font")]
+    RecoveryRequiresPostFont,
 
     #[error("missing {kind}: {id}")]
     MissingEntity { kind: &'static str, id: String },
