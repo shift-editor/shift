@@ -118,7 +118,7 @@ pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
     let from_source_id = resolve_source_id(&font, &args.from_source)?;
     let source_id = resolve_source_id(&font, &args.source)?;
     let from_layer_id = font
-        .layer_id_for_glyph_source(glyph_id.clone(), from_source_id.clone())
+        .layer_id_for_source(glyph_id.clone(), from_source_id.clone())
         .ok_or_else(|| {
             miette!(
                 "glyph {:?} has no authored layer at source {:?}",

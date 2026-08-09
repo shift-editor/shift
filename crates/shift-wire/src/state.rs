@@ -11,11 +11,11 @@ use shift_font::{
 
 pub fn layer_from_state(
     layer_id: LayerId,
-    source_id: SourceId,
+    _source_id: SourceId,
     structure: &GlyphStructure,
     values: &[GlyphValue],
 ) -> CoreResult<GlyphLayer> {
-    let mut layer = GlyphLayer::new(layer_id, source_id);
+    let mut layer = GlyphLayer::new(layer_id);
     apply_state_to_layer(&mut layer, structure, values)?;
     Ok(layer)
 }
@@ -103,7 +103,7 @@ mod tests {
     use shift_font::{Anchor, Component, DecomposedTransform, GlyphId, LayerId, SourceId};
 
     fn sample_layer() -> GlyphLayer {
-        let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 500.0);
 
         let mut contour = IrContour::with_id(ContourId::from_raw(10));
         contour.add_point_with_id(PointId::from_raw(20), 1.0, 2.0, IrPointType::OnCurve, false);
@@ -157,13 +157,12 @@ mod tests {
         let structure = GlyphStructure::from(&layer);
         let restored = layer_from_state(
             layer.id(),
-            layer.source_id(),
+            SourceId::from_raw("test"),
             &structure,
             &values_from_layer(&layer),
         )?;
 
         assert_eq!(restored.id(), layer.id());
-        assert_eq!(restored.source_id(), layer.source_id());
         assert_eq!(restored.width(), 500.0);
 
         let contour = restored.contour(ContourId::from_raw(10)).unwrap();
@@ -195,7 +194,7 @@ mod tests {
 
     #[test]
     fn glyph_structure_preserves_component_order() {
-        let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
+        let mut layer = GlyphLayer::new(LayerId::new());
         layer.add_component(Component::with_id(
             ComponentId::from_raw(200),
             GlyphId::from_raw("later"),

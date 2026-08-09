@@ -1,8 +1,8 @@
 use std::fs::{self, File};
 
 use shift_font::{
-    Axis, AxisId, DesignLocation, Font, KerningPair, LibValue, Source, SourceId, SourceRole,
-    test_support::sample_font,
+    Axis, AxisId, DesignLocation, Font, Glyph, GlyphAxis, KerningPair, LibValue, Source, SourceId,
+    SourceRole, test_support::sample_font,
 };
 use shift_source::{
     AXES_FILE, AXIS_MAPPINGS_FILE, DATA_DIR, FEATURES_FILE, FONT_FILE, FONTINFO_MODULE_FILE,
@@ -356,6 +356,24 @@ fn rejects_non_finite_metric_values_before_json_serialization() {
         error,
         SourcePackageError::NonFiniteNumber { field } if field.contains("metricValues")
     ));
+}
+
+#[test]
+fn source_package_v1_rejects_glyph_local_authoring_explicitly() {
+    let mut font = Font::new();
+    let mut glyph = Glyph::new("A");
+    glyph.insert_axis(GlyphAxis::with_id(
+        AxisId::from_raw("local"),
+        "Local".to_string(),
+        0.0,
+        0.0,
+        1.0,
+    ));
+    font.insert_glyph(glyph).unwrap();
+
+    let error = font_to_tree(&test_package_id(), &font).unwrap_err();
+
+    assert!(matches!(error, SourcePackageError::UnsupportedFormat(_)));
 }
 
 #[test]

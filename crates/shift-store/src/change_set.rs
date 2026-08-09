@@ -51,6 +51,7 @@ impl ShiftStore {
         let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
         let mut touched_layer_ids = HashSet::new();
+        let mut touched_glyph_ids = HashSet::new();
 
         for change in &change_set.changes {
             if post_font.is_none() || !post_font_supersedes_incremental_layer_write(change) {
@@ -59,11 +60,28 @@ impl ShiftStore {
             if let Some(layer_id) = change.layer_id() {
                 touched_layer_ids.insert(layer_id.clone());
             }
+            match change {
+                font::FontChange::GlyphCreated(change) => {
+                    touched_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphLayerCreated(change) => {
+                    touched_glyph_ids.insert(change.glyph_id.clone());
+                }
+                font::FontChange::GlyphLayerDeleted(change) => {
+                    touched_glyph_ids.insert(change.glyph_id.clone());
+                }
+                _ => {}
+            }
         }
         if let Some(post_font) = post_font {
             for layer_id in touched_layer_ids {
                 if let Some(layer) = post_font.layer(layer_id) {
                     rewrite_layer_in_tx(&tx, layer)?;
+                }
+            }
+            for glyph_id in touched_glyph_ids {
+                if let Some(glyph) = post_font.glyph(glyph_id) {
+                    replace_glyph_authoring_in_tx(&tx, glyph)?;
                 }
             }
         }
@@ -76,6 +94,7 @@ impl ShiftStore {
     }
 
     pub fn replace_font_state(&mut self, font: &font::Font) -> Result<(), StoreError> {
+        font.validate()?;
         let tx = self.conn.transaction()?;
         replace_font_header_in_tx(&tx, font)?;
 
@@ -102,6 +121,10 @@ pub(crate) fn replace_font_header_in_tx(
     tx.execute("DELETE FROM feature_text", [])?;
     tx.execute("DELETE FROM font_guidelines", [])?;
     tx.execute("DELETE FROM glyph_components", [])?;
+    tx.execute("DELETE FROM glyph_source_locations", [])?;
+    tx.execute("DELETE FROM glyph_sources", [])?;
+    tx.execute("DELETE FROM glyph_variants", [])?;
+    tx.execute("DELETE FROM glyph_axes", [])?;
     tx.execute("DELETE FROM glyph_layer_payloads", [])?;
     tx.execute("DELETE FROM glyph_layers", [])?;
     tx.execute("DELETE FROM glyph_unicodes", [])?;
@@ -183,6 +206,105 @@ pub(crate) fn write_glyph_in_tx(
 
     for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
         write_layer_in_tx(tx, &glyph.id(), layer)?;
+    }
+    replace_glyph_authoring_in_tx(tx, glyph)
+}
+
+pub(crate) fn replace_glyph_authoring_in_tx(
+    tx: &Transaction<'_>,
+    glyph: &font::Glyph,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "DELETE FROM glyph_source_locations
+         WHERE glyph_source_id IN (SELECT id FROM glyph_sources WHERE glyph_id = ?1)",
+        [glyph.id().to_string()],
+    )?;
+    tx.execute(
+        "DELETE FROM glyph_sources WHERE glyph_id = ?1",
+        [glyph.id().to_string()],
+    )?;
+    tx.execute(
+        "DELETE FROM glyph_variants WHERE glyph_id = ?1",
+        [glyph.id().to_string()],
+    )?;
+    tx.execute(
+        "DELETE FROM glyph_axes WHERE glyph_id = ?1",
+        [glyph.id().to_string()],
+    )?;
+
+    for (order_index, axis) in glyph.axes().values().enumerate() {
+        tx.execute(
+            "INSERT INTO glyph_axes
+             (id, glyph_id, name, min_value, default_value, max_value, order_index)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                axis.id().to_string(),
+                glyph.id().to_string(),
+                axis.name(),
+                axis.minimum(),
+                axis.default(),
+                axis.maximum(),
+                order_index as i64,
+            ],
+        )?;
+    }
+
+    for (order_index, source) in glyph.default_sources().values().enumerate() {
+        insert_glyph_source(tx, &glyph.id(), None, source, order_index as i64)?;
+    }
+    for (variant_order, variant) in glyph.variants().values().enumerate() {
+        tx.execute(
+            "INSERT INTO glyph_variants
+             (id, glyph_id, name, condition_json, order_index)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                variant.id().to_string(),
+                glyph.id().to_string(),
+                variant.name(),
+                serde_json::to_string(variant.condition())?,
+                variant_order as i64,
+            ],
+        )?;
+        for (source_order, source) in variant.sources().values().enumerate() {
+            insert_glyph_source(
+                tx,
+                &glyph.id(),
+                Some(&variant.id()),
+                source,
+                source_order as i64,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn insert_glyph_source(
+    tx: &Transaction<'_>,
+    glyph_id: &font::GlyphId,
+    variant_id: Option<&font::GlyphVariantId>,
+    source: &font::GlyphSource,
+    order_index: i64,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "INSERT INTO glyph_sources
+         (id, glyph_id, variant_id, name, layer_id, base_source_id, order_index)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            source.id().to_string(),
+            glyph_id.to_string(),
+            variant_id.map(ToString::to_string),
+            source.name(),
+            source.layer_id().to_string(),
+            source.base_source_id().map(|id| id.to_string()),
+            order_index,
+        ],
+    )?;
+    for (axis_id, value) in source.location().iter() {
+        tx.execute(
+            "INSERT INTO glyph_source_locations (glyph_source_id, axis_id, value)
+             VALUES (?1, ?2, ?3)",
+            params![source.id().to_string(), axis_id.to_string(), value],
+        )?;
     }
     Ok(())
 }
@@ -364,12 +486,16 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         font::FontChange::GlyphLayerCreated(change) => create_empty_layer_in_tx(
             tx,
             &change.glyph_id,
+            &change.glyph_source,
             change.layer_id.clone(),
-            change.source_id.clone(),
             change.width,
             change.height,
         ),
         font::FontChange::GlyphLayerDeleted(change) => {
+            tx.execute(
+                "DELETE FROM glyph_sources WHERE layer_id = ?1",
+                [layer_row_id(&change.layer_id)],
+            )?;
             let rows_changed = tx.execute(
                 "DELETE FROM glyph_layers WHERE id = ?1",
                 [layer_row_id(&change.layer_id)],

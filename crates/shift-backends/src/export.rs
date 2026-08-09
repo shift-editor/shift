@@ -68,6 +68,12 @@ pub enum ExportError {
         source: std::io::Error,
     },
 
+    #[error("TTF export does not support {capability} in glyph {glyph_id}")]
+    UnsupportedAuthoringCapability {
+        glyph_id: shift_font::GlyphId,
+        capability: &'static str,
+    },
+
     #[error("cross-axis mappings are not supported by TTF export yet ({mapping_count} mappings)")]
     UnsupportedCrossAxisMappings { mapping_count: usize },
 
@@ -122,6 +128,7 @@ impl FontExporter {
 
     fn export_ttf(&self, font: &impl FontView, output_path: &Path) -> Result<(), ExportError> {
         ensure_ttf_output_path(output_path)?;
+        ensure_supported_ttf_authoring(font)?;
 
         let temp_dir = tempfile::Builder::new()
             .prefix("shift-export-")
@@ -142,6 +149,53 @@ impl Default for FontExporter {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn ensure_supported_ttf_authoring(font: &impl FontView) -> Result<(), ExportError> {
+    for glyph in font.glyphs() {
+        let unsupported = if !glyph.axes().is_empty() {
+            Some("glyph-local axes")
+        } else if !glyph.variants().is_empty() {
+            Some("conditional glyph variants")
+        } else if glyph
+            .default_sources()
+            .values()
+            .any(|source| source.base_source_id().is_none() || !source.location().is_empty())
+        {
+            Some("glyph-local source locations")
+        } else {
+            let mut base_source_ids = std::collections::HashSet::new();
+            if glyph
+                .default_sources()
+                .values()
+                .filter_map(|source| source.base_source_id())
+                .any(|source_id| !base_source_ids.insert(source_id))
+            {
+                Some("several glyph sources with one global source base")
+            } else if glyph
+                .layers()
+                .values()
+                .flat_map(|layer| layer.components_iter())
+                .any(|component| {
+                    !component.location().is_empty()
+                        || component.axis_inheritance() != shift_font::AxisInheritance::Parent
+                        || component.condition().is_some()
+                })
+            {
+                Some("variable-component authoring")
+            } else {
+                None
+            }
+        };
+
+        if let Some(capability) = unsupported {
+            return Err(ExportError::UnsupportedAuthoringCapability {
+                glyph_id: glyph.id(),
+                capability,
+            });
+        }
+    }
+    Ok(())
 }
 
 fn compile_ttf(source: ShiftIrSource, build_dir: &Path) -> Result<Vec<u8>, ExportError> {
@@ -181,7 +235,10 @@ fn ensure_ttf_output_path(path: &Path) -> Result<(), ExportError> {
 mod tests {
     use super::*;
     use shift_font::test_support::sample_variable_font;
-    use shift_font::{Axis, AxisMapping, AxisMappingPoint, AxisRole, Font, Location};
+    use shift_font::{
+        Axis, AxisMapping, AxisMappingPoint, AxisRole, Condition, Font, Glyph, GlyphSource,
+        GlyphVariant, Location,
+    };
     use skrifa::{FontRef, MetadataProvider};
 
     #[test]
@@ -238,6 +295,54 @@ mod tests {
             error,
             ExportError::OutputExtensionMismatch { path } if path == output_path
         ));
+    }
+
+    #[test]
+    fn rejects_conditional_variants_before_writing_output() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_path = temp_dir.path().join("Dogfood.ttf");
+        let mut font = Font::new();
+        let weight = Axis::weight();
+        let weight_id = weight.id();
+        font.add_axis(weight).unwrap();
+        let source_id = font.default_source_id().unwrap();
+        let mut glyph = Glyph::new("A");
+        let layer_id = glyph.ensure_layer_for_source(source_id.clone()).id();
+        let mut variant = GlyphVariant::new(
+            "Heavy".to_string(),
+            Condition::AxisRange {
+                axis_id: weight_id,
+                minimum: Some(700.0),
+                maximum: None,
+            },
+        );
+        variant.insert_source(GlyphSource::new(
+            "Heavy Regular".to_string(),
+            layer_id,
+            Some(source_id),
+            Location::new(),
+        ));
+        glyph.insert_variant(variant);
+        font.insert_glyph(glyph).unwrap();
+
+        let error = FontExporter::new()
+            .export(
+                &font,
+                FontExportRequest {
+                    path: output_path.clone(),
+                    format: ExportFormat::Ttf,
+                },
+            )
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ExportError::UnsupportedAuthoringCapability {
+                capability: "conditional glyph variants",
+                ..
+            }
+        ));
+        assert!(!output_path.exists());
     }
 
     #[test]

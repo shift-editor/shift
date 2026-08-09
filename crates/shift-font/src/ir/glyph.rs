@@ -3,21 +3,210 @@ use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
 use crate::entity::{
-    AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
+    AnchorId, AxisId, ComponentId, ContourId, GlyphId, GlyphSourceId, GlyphVariantId, GuidelineId,
+    LayerId, PointId, SourceId,
 };
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::point::Point;
-use crate::GlyphName;
+use crate::{Condition, GlyphName, Location};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GlyphAxis {
+    id: AxisId,
+    name: String,
+    minimum: f64,
+    default: f64,
+    maximum: f64,
+}
+
+impl Identified for GlyphAxis {
+    type Id = AxisId;
+
+    fn id(&self) -> Self::Id {
+        GlyphAxis::id(self)
+    }
+}
+
+impl GlyphAxis {
+    pub fn new(name: String, minimum: f64, default: f64, maximum: f64) -> Self {
+        Self::with_id(AxisId::new(), name, minimum, default, maximum)
+    }
+
+    pub fn with_id(id: AxisId, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
+        Self {
+            id,
+            name,
+            minimum,
+            default,
+            maximum,
+        }
+    }
+
+    pub fn id(&self) -> AxisId {
+        self.id.clone()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn minimum(&self) -> f64 {
+        self.minimum
+    }
+
+    pub fn default(&self) -> f64 {
+        self.default
+    }
+
+    pub fn maximum(&self) -> f64 {
+        self.maximum
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GlyphSource {
+    id: GlyphSourceId,
+    name: String,
+    layer_id: LayerId,
+    base_source_id: Option<SourceId>,
+    location: Location,
+}
+
+impl Identified for GlyphSource {
+    type Id = GlyphSourceId;
+
+    fn id(&self) -> Self::Id {
+        GlyphSource::id(self)
+    }
+}
+
+impl GlyphSource {
+    pub fn new(
+        name: String,
+        layer_id: LayerId,
+        base_source_id: Option<SourceId>,
+        location: Location,
+    ) -> Self {
+        Self::with_id(
+            GlyphSourceId::new(),
+            name,
+            layer_id,
+            base_source_id,
+            location,
+        )
+    }
+
+    pub fn with_id(
+        id: GlyphSourceId,
+        name: String,
+        layer_id: LayerId,
+        base_source_id: Option<SourceId>,
+        location: Location,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            layer_id,
+            base_source_id,
+            location,
+        }
+    }
+
+    pub fn id(&self) -> GlyphSourceId {
+        self.id.clone()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn layer_id(&self) -> LayerId {
+        self.layer_id.clone()
+    }
+
+    pub fn base_source_id(&self) -> Option<SourceId> {
+        self.base_source_id.clone()
+    }
+
+    pub fn location(&self) -> &Location {
+        &self.location
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GlyphVariant {
+    id: GlyphVariantId,
+    name: String,
+    condition: Condition,
+    sources: EntityList<GlyphSource>,
+}
+
+impl Identified for GlyphVariant {
+    type Id = GlyphVariantId;
+
+    fn id(&self) -> Self::Id {
+        GlyphVariant::id(self)
+    }
+}
+
+impl GlyphVariant {
+    pub fn new(name: String, condition: Condition) -> Self {
+        Self::with_id(GlyphVariantId::new(), name, condition)
+    }
+
+    pub fn with_id(id: GlyphVariantId, name: String, condition: Condition) -> Self {
+        Self {
+            id,
+            name,
+            condition,
+            sources: EntityList::new(),
+        }
+    }
+
+    pub fn id(&self) -> GlyphVariantId {
+        self.id.clone()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn condition(&self) -> &Condition {
+        &self.condition
+    }
+
+    pub fn sources(&self) -> &EntityList<GlyphSource> {
+        &self.sources
+    }
+
+    pub(crate) fn sources_mut(&mut self) -> &mut EntityList<GlyphSource> {
+        &mut self.sources
+    }
+
+    pub fn source(&self, id: GlyphSourceId) -> Option<&GlyphSource> {
+        self.sources.get(&id)
+    }
+
+    pub fn insert_source(&mut self, source: GlyphSource) -> Option<GlyphSource> {
+        self.sources.insert(source)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Glyph {
     id: GlyphId,
     name: GlyphName,
     unicodes: Vec<u32>,
+    #[serde(default)]
+    axes: EntityList<GlyphAxis>,
+    #[serde(default)]
+    default_sources: EntityList<GlyphSource>,
+    #[serde(default)]
+    variants: EntityList<GlyphVariant>,
     layers: HashMap<LayerId, Arc<GlyphLayer>>,
     lib: LibData,
 }
@@ -33,7 +222,6 @@ impl Identified for Glyph {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GlyphLayer {
     id: LayerId,
-    source_id: SourceId,
     width: f64,
     height: Option<f64>,
     contours: EntityList<Contour>,
@@ -44,10 +232,9 @@ pub struct GlyphLayer {
 }
 
 impl GlyphLayer {
-    pub fn new(id: LayerId, source_id: SourceId) -> Self {
+    pub fn new(id: LayerId) -> Self {
         Self {
             id,
-            source_id,
             width: 0.0,
             height: None,
             contours: EntityList::new(),
@@ -58,10 +245,10 @@ impl GlyphLayer {
         }
     }
 
-    pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
+    pub fn with_width(id: LayerId, width: f64) -> Self {
         Self {
             width,
-            ..Self::new(id, source_id)
+            ..Self::new(id)
         }
     }
 
@@ -69,19 +256,14 @@ impl GlyphLayer {
         self.id.clone()
     }
 
-    pub fn source_id(&self) -> SourceId {
-        self.source_id.clone()
-    }
-
-    pub fn clone_with_identity(&self, id: LayerId, source_id: SourceId) -> Self {
+    pub fn clone_with_identity(&self, id: LayerId) -> Self {
         let mut layer = self.clone();
         layer.id = id;
-        layer.source_id = source_id;
         layer
     }
 
-    pub fn clone_with_fresh_ids(&self, id: LayerId, source_id: SourceId) -> Self {
-        let mut layer = Self::with_width(id, source_id, self.width);
+    pub fn clone_with_fresh_ids(&self, id: LayerId) -> Self {
+        let mut layer = Self::with_width(id, self.width);
         layer.height = self.height;
         layer.lib = self.lib.clone();
 
@@ -105,11 +287,15 @@ impl GlyphLayer {
         }
 
         for component in self.components_iter() {
-            layer.add_component(Component::with_transform(
+            let mut cloned = Component::with_transform(
                 component.base_glyph_id(),
                 component.base_glyph_name().clone(),
                 *component.transform(),
-            ));
+            );
+            cloned.set_location(component.location().clone());
+            cloned.set_axis_inheritance(component.axis_inheritance());
+            cloned.set_condition(component.condition().cloned());
+            layer.add_component(cloned);
         }
 
         for anchor in self.anchors_iter() {
@@ -305,6 +491,9 @@ impl Glyph {
             id,
             name: name.into(),
             unicodes: Vec::new(),
+            axes: EntityList::new(),
+            default_sources: EntityList::new(),
+            variants: EntityList::new(),
             layers: HashMap::new(),
             lib: LibData::new(),
         }
@@ -315,6 +504,9 @@ impl Glyph {
             id: GlyphId::new(),
             name: name.into(),
             unicodes: vec![unicode],
+            axes: EntityList::new(),
+            default_sources: EntityList::new(),
+            variants: EntityList::new(),
             layers: HashMap::new(),
             lib: LibData::new(),
         }
@@ -358,6 +550,59 @@ impl Glyph {
         self.unicodes = unicodes;
     }
 
+    pub fn axes(&self) -> &EntityList<GlyphAxis> {
+        &self.axes
+    }
+
+    pub fn axis(&self, id: AxisId) -> Option<&GlyphAxis> {
+        self.axes.get(&id)
+    }
+
+    pub fn default_sources(&self) -> &EntityList<GlyphSource> {
+        &self.default_sources
+    }
+
+    pub(crate) fn default_sources_mut(&mut self) -> &mut EntityList<GlyphSource> {
+        &mut self.default_sources
+    }
+
+    pub fn source(&self, id: GlyphSourceId) -> Option<&GlyphSource> {
+        self.default_sources.get(&id).or_else(|| {
+            self.variants
+                .values()
+                .find_map(|variant| variant.source(id.clone()))
+        })
+    }
+
+    pub fn variants(&self) -> &EntityList<GlyphVariant> {
+        &self.variants
+    }
+
+    pub(crate) fn variants_mut(&mut self) -> &mut EntityList<GlyphVariant> {
+        &mut self.variants
+    }
+
+    pub fn variant(&self, id: GlyphVariantId) -> Option<&GlyphVariant> {
+        self.variants.get(&id)
+    }
+
+    pub fn insert_axis(&mut self, axis: GlyphAxis) -> Option<GlyphAxis> {
+        self.axes.insert(axis)
+    }
+
+    pub fn insert_default_source(&mut self, source: GlyphSource) -> Option<GlyphSource> {
+        self.default_sources.insert(source)
+    }
+
+    pub fn insert_variant(&mut self, variant: GlyphVariant) -> Option<GlyphVariant> {
+        self.variants.insert(variant)
+    }
+
+    pub fn layer_for_glyph_source(&self, glyph_source_id: GlyphSourceId) -> Option<&GlyphLayer> {
+        let layer_id = self.source(glyph_source_id)?.layer_id();
+        self.layer(layer_id)
+    }
+
     pub fn layers(&self) -> &HashMap<LayerId, Arc<GlyphLayer>> {
         &self.layers
     }
@@ -372,17 +617,27 @@ impl Glyph {
 
     pub fn ensure_layer_for_source(&mut self, source_id: SourceId) -> &mut GlyphLayer {
         if let Some(layer_id) = self
-            .layers
+            .default_sources
             .values()
-            .find(|layer| layer.source_id() == source_id)
-            .map(|layer| layer.id())
+            .find(|source| source.base_source_id().as_ref() == Some(&source_id))
+            .map(GlyphSource::layer_id)
         {
-            return self.layer_mut(layer_id).expect("layer id came from glyph");
+            return self
+                .layer_mut(layer_id)
+                .expect("glyph source layer belongs to glyph");
         }
 
-        let layer = GlyphLayer::new(LayerId::new(), source_id);
-        let layer_id = layer.id();
-        self.layers.insert(layer_id.clone(), Arc::new(layer));
+        let layer_id = LayerId::new();
+        self.layers.insert(
+            layer_id.clone(),
+            Arc::new(GlyphLayer::new(layer_id.clone())),
+        );
+        self.default_sources.insert(GlyphSource::new(
+            source_id.to_string(),
+            layer_id.clone(),
+            Some(source_id),
+            Location::new(),
+        ));
         self.layer_mut(layer_id).expect("layer was just inserted")
     }
 
@@ -394,18 +649,26 @@ impl Glyph {
         self.layers.insert(layer.id(), layer);
     }
 
+    /// Returns the first Default glyph-source layer based on a global source.
+    ///
+    /// Several glyph sources may intentionally share one global base. Stable
+    /// glyph-source lookup should be used when that distinction matters.
     pub fn layer_for_source(&self, source_id: SourceId) -> Option<&GlyphLayer> {
-        self.layers
+        let layer_id = self
+            .default_sources
             .values()
-            .find(|layer| layer.source_id() == source_id)
-            .map(Arc::as_ref)
+            .find(|source| source.base_source_id().as_ref() == Some(&source_id))?
+            .layer_id();
+        self.layer(layer_id)
     }
 
     pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
-        self.layers
-            .values_mut()
-            .find(|layer| layer.source_id() == source_id)
-            .map(Arc::make_mut)
+        let layer_id = self
+            .default_sources
+            .values()
+            .find(|source| source.base_source_id().as_ref() == Some(&source_id))?
+            .layer_id();
+        self.layer_mut(layer_id)
     }
 
     pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {
@@ -453,20 +716,10 @@ mod tests {
     #[test]
     fn cloned_glyph_shares_layers_until_one_layer_is_mutated() {
         let mut glyph = Glyph::new("A".to_string());
-        let first_source_id = SourceId::new();
-        let second_source_id = SourceId::new();
         let first_layer_id = LayerId::new();
         let second_layer_id = LayerId::new();
-        glyph.set_layer(GlyphLayer::with_width(
-            first_layer_id.clone(),
-            first_source_id.clone(),
-            500.0,
-        ));
-        glyph.set_layer(GlyphLayer::with_width(
-            second_layer_id.clone(),
-            second_source_id.clone(),
-            600.0,
-        ));
+        glyph.set_layer(GlyphLayer::with_width(first_layer_id.clone(), 500.0));
+        glyph.set_layer(GlyphLayer::with_width(second_layer_id.clone(), 600.0));
         let snapshot = glyph.clone();
 
         glyph
@@ -491,7 +744,7 @@ mod tests {
 
     #[test]
     fn glyph_layer_contours() {
-        let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         assert!(layer.is_empty());
 
         let contour = Contour::new();
@@ -503,7 +756,7 @@ mod tests {
 
     #[test]
     fn glyph_layer_anchors_are_ordered() {
-        let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
+        let mut layer = GlyphLayer::new(LayerId::new());
         let a1 = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 20.0));
         let a2 = layer.add_anchor(Anchor::new(Some("bottom".to_string()), 30.0, 40.0));
 

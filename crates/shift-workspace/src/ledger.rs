@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use shift_font::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, GlyphSource, LayerId,
     MetricDefinition, NamedInstance, Source, SourceId,
 };
 
@@ -63,11 +63,11 @@ pub enum LedgerStep {
         pre: Option<Source>,
         post: Option<Source>,
     },
-    /// Independent glyph-layer existence for sparse source authoring.
+    /// Independent glyph-source and layer existence for sparse source authoring.
     GlyphLayer {
         glyph_id: GlyphId,
-        pre: Option<Box<GlyphLayer>>,
-        post: Option<Box<GlyphLayer>>,
+        pre: Option<(GlyphSource, Box<GlyphLayer>)>,
+        post: Option<(GlyphSource, Box<GlyphLayer>)>,
     },
     /// Glyph rename / unicode reassignment. Both sides always exist; the
     /// glyph and its layers are untouched.
@@ -120,7 +120,7 @@ impl LedgerEntry {
                 LedgerStep::GlyphLayer { pre, post, .. } => pre
                     .iter()
                     .chain(post.iter())
-                    .map(|layer| layer.id())
+                    .map(|(_, layer)| layer.id())
                     .collect(),
                 LedgerStep::FontMetadata { .. }
                 | LedgerStep::Axis { .. }

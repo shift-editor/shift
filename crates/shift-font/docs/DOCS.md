@@ -8,7 +8,7 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Stable IDs are identity. Names, tags, Unicode assignments, and coordinates remain editable authoring values.
 - **Architecture Invariant:** Glyph-structure IDs are font-wide within their entity type. Contours, points, components, anchors, and glyph-layer guidelines are never addressed by a layer-qualified identity.
 - **Architecture Invariant:** Ordered, identity-addressable authoring collections use `EntityList`. Its iteration, equality, and serialization preserve authored order; its private backing container is not part of the model contract.
-- **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
+- **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Global `Source` values own font design-space locations; ordered `GlyphSource` values bind glyph-local samples to independent geometry layers and optional global-source bases.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
 - **Architecture Invariant:** Fontdrasil exclusively constructs variation sample order, supports, and numeric deltas. `shift-font` exposes compiled `VariationBasis` and `AxisMappingBasis` values; TypeScript and transport layers only evaluate or translate them.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
@@ -40,10 +40,14 @@ crates/shift-font/src/
 - `ExternalLocation` and `DesignLocation` are serde-transparent nominal wrappers around `Location`. Mapping accepts only the former and interpolation/projection accepts only the latter.
 - `NamedInstance` is an explicit named product preset at a complete external location. It owns no source, layer, or compiler representation.
 - `MetricDefinition` gives one metric row stable identity and a standard or custom semantic role.
-- `Source` is an editable designspace position with a name, location, complete metric values, and optional technical metrics.
+- `Source` is an editable font-global designspace position with a name, location, complete metric values, and optional technical metrics.
 - `SourceMetricInterpolation` owns metric identity, optional technical-field participation, variation regions, and delta ordering for source-owned metrics.
-- `Glyph` is a glyph concept identified by `GlyphId`.
-- `GlyphLayer` is authored editable data for one glyph at one source.
+- `Glyph` is a glyph concept identified by `GlyphId`. It owns ordered glyph-local axes, Default glyph sources, conditional variants, and an independent layer map.
+- `GlyphAxis` is a glyph-owned continuous axis. Its `AxisId` shares the font-wide axis identity namespace.
+- `GlyphSource` is a stable sample binding with an optional global-source base, sparse global/local coordinates, and a same-glyph `LayerId`. Several sources may intentionally share a layer; layers may remain unreferenced.
+- `GlyphVariant` is an ordered conditional alternate source set. `Condition` is a validated boolean tree over font axes only.
+- `GlyphLayer` owns geometry only and has no source identity.
+- `Component` may additionally own a sparse child location, `AxisInheritance::{Parent, Font}`, and an optional root-font condition.
 - `LibData` and recursive `LibValue::Dict` use ordered maps so equal domain values serialize deterministically.
 - `GlyphEntityId` gives `FontIndex` one typed set for contour, point, component, anchor, and guideline identity.
 - `VariationBasis` is the source-neutral Fontdrasil output: normalized regions paired with numeric `VariationDelta` vectors.
@@ -63,8 +67,8 @@ crates/shift-font/src/
 Stable IDs are identity. Names and Unicode values are editable metadata.
 
 - `GlyphId` identifies a glyph.
-- `SourceId` identifies a source.
-- `LayerId` identifies a glyph layer: the authored data for one glyph at one source.
+- `SourceId` identifies a font-global source; `GlyphSourceId` identifies one glyph-owned sample binding; `GlyphVariantId` identifies one conditional source set.
+- `LayerId` identifies source-neutral glyph geometry. Source-to-layer membership is represented only by `GlyphSource`.
 - `ContourId`, `PointId`, `ComponentId`, `AnchorId`, and glyph-layer `GuidelineId` identify one authored node anywhere in the font; authoring operations mint them rather than accepting user-chosen values.
 - `AxisMappingId` identifies a font-owned mapping independently of its editable name.
 - `AxisLabelId` identifies an axis value label independently of its editable name or position.
@@ -73,7 +77,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 ## How it works
 
-- Own font authoring data structures such as `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Source`, and `Axis`.
+- Own font authoring data structures such as `Font`, `Glyph`, `GlyphAxis`, `GlyphSource`, `GlyphVariant`, `Condition`, `GlyphLayer`, `Contour`, `Point`, `Component`, `Source`, and `Axis`.
 - Keep object-level mutation behavior near the objects it mutates.
 - Provide model-native helpers for layer editing, component resolution, variation behavior, axis mapping evaluation, and geometry-derived behavior. `Font::replace_glyph_layers` retains previous layers through cheap `Arc` references, validates a complete hydration/eviction batch into one `HashSet<GlyphEntityId>`, moves that set into the final index, mutates uniquely owned fonts in place, and preserves shared snapshots through copy-on-write.
 - Own canonical glyph, source-metric, and axis-mapping variation-model construction. Fontdrasil constructs every sample order, support region, and delta vector; consumers evaluate the resulting bases without reconstructing them.
@@ -99,7 +103,7 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 
 `shift-wire` may translate native bases, source values, and projections into transport DTOs, but it must not rebuild source samples, define value ordering or topology compatibility, or evaluate variation models.
 
-`shift-font` should not perform SQLite persistence or define a durable binary encoding. Durable working-store reads, writes, MessagePack encoding, compression, and compatibility policy belong in `shift-store`.
+`shift-font` should not perform SQLite persistence or define a durable binary encoding. Durable working-store reads, writes, MessagePack encoding, compression, and compatibility policy belong in `shift-store`. Publication boundaries call `Font::validate` to reject invalid source/layer ownership, local-axis collisions, font-axis-only condition violations, missing component bases, and component cycles.
 
 `shift-font` should not own Electron, NAPI, or editor state. The TypeScript editor owns UI interaction, selection, hover, camera, tools, and command history.
 

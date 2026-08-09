@@ -482,12 +482,22 @@ fn fallback_bounds(
     projection: &GlyphProjection,
     resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
 ) -> Result<Bounds, AuthoredSlugError> {
+    let fallback_source_id = font
+        .glyph(projection.glyph_id())
+        .and_then(|glyph| {
+            glyph
+                .default_sources()
+                .values()
+                .find(|source| source.layer_id() == projection.fallback().id())
+        })
+        .and_then(|source| source.base_source_id())
+        .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
     let resolved = resolved_source_glyph(
         resolved_sources,
         font,
         projection_set,
         projection,
-        &projection.fallback().source_id(),
+        &fallback_source_id,
     )?;
     let curves = curves_from_resolved_contours(resolved.contours())?;
     let mut curves = curves.into_iter();

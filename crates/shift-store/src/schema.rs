@@ -4,15 +4,23 @@ use crate::StoreError;
 
 const DEFER_IMPORT_INDEXES: &str = r#"
 DROP INDEX IF EXISTS glyphs_name_idx;
+DROP INDEX IF EXISTS glyph_axes_glyph_id_idx;
+DROP INDEX IF EXISTS glyph_variants_glyph_id_idx;
 DROP INDEX IF EXISTS glyph_layers_glyph_id_idx;
-DROP INDEX IF EXISTS glyph_layers_source_id_idx;
+DROP INDEX IF EXISTS glyph_sources_glyph_id_idx;
+DROP INDEX IF EXISTS glyph_sources_layer_id_idx;
+DROP INDEX IF EXISTS glyph_sources_base_source_id_idx;
 DROP INDEX IF EXISTS glyph_components_base_glyph_id_idx;
 "#;
 
 const RESTORE_IMPORT_INDEXES: &str = r#"
 CREATE INDEX glyphs_name_idx ON glyphs(name);
+CREATE INDEX glyph_axes_glyph_id_idx ON glyph_axes(glyph_id);
+CREATE INDEX glyph_variants_glyph_id_idx ON glyph_variants(glyph_id);
 CREATE INDEX glyph_layers_glyph_id_idx ON glyph_layers(glyph_id);
-CREATE INDEX glyph_layers_source_id_idx ON glyph_layers(source_id);
+CREATE INDEX glyph_sources_glyph_id_idx ON glyph_sources(glyph_id);
+CREATE INDEX glyph_sources_layer_id_idx ON glyph_sources(layer_id);
+CREATE INDEX glyph_sources_base_source_id_idx ON glyph_sources(base_source_id);
 CREATE INDEX glyph_components_base_glyph_id_idx ON glyph_components(base_glyph_id);
 "#;
 
@@ -108,21 +116,87 @@ CREATE TABLE IF NOT EXISTS glyph_unicodes (
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS glyph_axes (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    min_value REAL NOT NULL,
+    default_value REAL NOT NULL,
+    max_value REAL NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_axes_glyph_order_unique
+ON glyph_axes(glyph_id, order_index);
+
+CREATE INDEX IF NOT EXISTS glyph_axes_glyph_id_idx
+ON glyph_axes(glyph_id);
+
+CREATE TABLE IF NOT EXISTS glyph_variants (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    condition_json TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_variants_glyph_order_unique
+ON glyph_variants(glyph_id, order_index);
+
+CREATE INDEX IF NOT EXISTS glyph_variants_glyph_id_idx
+ON glyph_variants(glyph_id);
+
 CREATE TABLE IF NOT EXISTS glyph_layers (
     id TEXT PRIMARY KEY,
     glyph_id TEXT NOT NULL,
-    source_id TEXT NOT NULL,
     width REAL NOT NULL DEFAULT 0,
     height REAL,
-    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,
-    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS glyph_layers_glyph_id_idx
 ON glyph_layers(glyph_id);
 
-CREATE INDEX IF NOT EXISTS glyph_layers_source_id_idx
-ON glyph_layers(source_id);
+CREATE TABLE IF NOT EXISTS glyph_sources (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    variant_id TEXT,
+    name TEXT NOT NULL,
+    layer_id TEXT NOT NULL,
+    base_source_id TEXT,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,
+    FOREIGN KEY (variant_id) REFERENCES glyph_variants(id) ON DELETE CASCADE,
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id),
+    FOREIGN KEY (base_source_id) REFERENCES sources(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_sources_default_order_unique
+ON glyph_sources(glyph_id, order_index)
+WHERE variant_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS glyph_sources_variant_order_unique
+ON glyph_sources(variant_id, order_index)
+WHERE variant_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS glyph_sources_glyph_id_idx
+ON glyph_sources(glyph_id);
+
+CREATE INDEX IF NOT EXISTS glyph_sources_layer_id_idx
+ON glyph_sources(layer_id);
+
+CREATE INDEX IF NOT EXISTS glyph_sources_base_source_id_idx
+ON glyph_sources(base_source_id);
+
+CREATE TABLE IF NOT EXISTS glyph_source_locations (
+    glyph_source_id TEXT NOT NULL,
+    axis_id TEXT NOT NULL,
+    value REAL NOT NULL,
+    PRIMARY KEY (glyph_source_id, axis_id),
+    FOREIGN KEY (glyph_source_id) REFERENCES glyph_sources(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS glyph_layer_payloads (
     layer_id TEXT PRIMARY KEY,

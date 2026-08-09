@@ -6,8 +6,9 @@ use glyphs_reader::{
 };
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
-    ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, KerningData, KerningPair,
-    KerningSide, LayerId, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
+    ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, GlyphSource, KerningData,
+    KerningPair, KerningSide, LayerId, Location, MetricKind, NamedInstance, Source, SourceId,
+    Transform,
 };
 
 use crate::{
@@ -303,8 +304,7 @@ pub(super) fn convert_glyph(
             continue;
         };
 
-        let mut result_layer =
-            GlyphLayer::with_width(LayerId::new(), source_id, layer.width.into_inner());
+        let mut result_layer = GlyphLayer::with_width(LayerId::new(), layer.width.into_inner());
         for shape in &layer.shapes {
             match shape {
                 Shape::Path(path) => {
@@ -347,7 +347,14 @@ pub(super) fn convert_glyph(
             result_layer.add_anchor(Anchor::new(name, x, y));
         }
 
+        let glyph_source = GlyphSource::new(
+            source_id.to_string(),
+            result_layer.id(),
+            Some(source_id),
+            Location::new(),
+        );
         result.set_layer(result_layer);
+        result.insert_default_source(glyph_source);
     }
 
     Ok(result)

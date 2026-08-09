@@ -424,9 +424,17 @@ fn location_values(
 impl GlyphSummary {
     fn from_glyph(glyph: &Glyph, source_names_by_id: &HashMap<SourceId, String>) -> Self {
         let mut layers = glyph
-            .layers()
+            .default_sources()
             .values()
-            .map(|layer| GlyphLayerSummary::from_layer(layer.as_ref(), source_names_by_id))
+            .filter_map(|source| {
+                let source_id = source.base_source_id()?;
+                let layer = glyph.layer(source.layer_id())?;
+                Some(GlyphLayerSummary::from_layer(
+                    layer,
+                    source_id,
+                    source_names_by_id,
+                ))
+            })
             .collect::<Vec<_>>();
         layers.sort_by(|left, right| {
             left.source_id
@@ -449,8 +457,11 @@ impl GlyphSummary {
 }
 
 impl GlyphLayerSummary {
-    fn from_layer(layer: &GlyphLayer, source_names_by_id: &HashMap<SourceId, String>) -> Self {
-        let source_id = layer.source_id();
+    fn from_layer(
+        layer: &GlyphLayer,
+        source_id: SourceId,
+        source_names_by_id: &HashMap<SourceId, String>,
+    ) -> Self {
         let point_count = layer.contours_iter().map(|contour| contour.len()).sum();
 
         Self {

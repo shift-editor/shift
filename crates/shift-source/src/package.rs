@@ -9,12 +9,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use shift_font::{
-    Anchor, Axis, AxisId, AxisKind, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
-    AxisMappingId, AxisMappingPoint, AxisRole, Component, Contour, DecomposedTransform,
-    DesignLocation, ExternalLocation, FeatureData, Font, FontMetadata, FontMetrics, Glyph,
-    GlyphLayer, GlyphName, Guideline, KerningData, KerningPair, KerningSide, LibData, LibValue,
-    Location, MetricDefinition, MetricId, MetricKind, MetricValue, NamedInstance, NamedInstanceId,
-    Point, PointType, Source, SourceId, SourceRole,
+    Anchor, Axis, AxisId, AxisInheritance, AxisKind, AxisLabel, AxisLabelId, AxisLabelRange,
+    AxisMapping, AxisMappingId, AxisMappingPoint, AxisRole, Component, Contour,
+    DecomposedTransform, DesignLocation, ExternalLocation, FeatureData, Font, FontMetadata,
+    FontMetrics, Glyph, GlyphLayer, GlyphName, GlyphSource, GlyphSourceId, Guideline, KerningData,
+    KerningPair, KerningSide, LibData, LibValue, Location, MetricDefinition, MetricId, MetricKind,
+    MetricValue, NamedInstance, NamedInstanceId, Point, PointType, Source, SourceId, SourceRole,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, result::ZipError, write::SimpleFileOptions};
 
@@ -657,10 +657,83 @@ enum LibValueDoc {
     Uid(u64),
 }
 
+fn legacy_source_id_for_layer(
+    glyph: &Glyph,
+    layer_id: &shift_font::LayerId,
+) -> Result<SourceId, SourcePackageError> {
+    glyph
+        .default_sources()
+        .values()
+        .find(|source| source.layer_id() == *layer_id)
+        .and_then(|source| source.base_source_id())
+        .ok_or_else(|| {
+            SourcePackageError::UnsupportedFormat(format!(
+                "layer {layer_id} has no representable global source binding"
+            ))
+        })
+}
+
+fn ensure_legacy_source_shape(font: &Font) -> Result<(), SourcePackageError> {
+    for glyph in font.glyphs() {
+        if !glyph.axes().is_empty() || !glyph.variants().is_empty() {
+            return Err(SourcePackageError::UnsupportedFormat(format!(
+                "glyph {} uses glyph-local axes or variants",
+                glyph.id()
+            )));
+        }
+
+        let mut referenced_layers = HashSet::new();
+        for source in glyph.default_sources().values() {
+            if source.base_source_id().is_none() || !source.location().is_empty() {
+                return Err(SourcePackageError::UnsupportedFormat(format!(
+                    "glyph source {} cannot be represented by source package v1",
+                    source.id()
+                )));
+            }
+            if !referenced_layers.insert(source.layer_id()) {
+                return Err(SourcePackageError::UnsupportedFormat(format!(
+                    "layer {} is shared by several glyph sources",
+                    source.layer_id()
+                )));
+            }
+        }
+        if referenced_layers.len() != glyph.layers().len()
+            || referenced_layers
+                .iter()
+                .any(|layer_id| glyph.layer(layer_id.clone()).is_none())
+        {
+            return Err(SourcePackageError::UnsupportedFormat(format!(
+                "glyph {} has {} layers but {} distinct representable glyph-source bindings",
+                glyph.id(),
+                glyph.layers().len(),
+                referenced_layers.len(),
+            )));
+        }
+
+        for component in glyph
+            .layers()
+            .values()
+            .flat_map(|layer| layer.components_iter())
+        {
+            if !component.location().is_empty()
+                || component.axis_inheritance() != AxisInheritance::Parent
+                || component.condition().is_some()
+            {
+                return Err(SourcePackageError::UnsupportedFormat(format!(
+                    "component {} uses variable-component authoring",
+                    component.id()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn font_to_tree(
     package_id: &PackageId,
     font: &Font,
 ) -> Result<PackageTree, SourcePackageError> {
+    ensure_legacy_source_shape(font)?;
     let manifest = ManifestDoc {
         format: FORMAT_ID.to_string(),
         schema_version: SCHEMA_VERSION,
@@ -728,7 +801,7 @@ pub fn font_to_tree(
         tree.push(json_entry(KERNING_FILE, &KerningDoc::from_font(font)?)?);
     }
 
-    if let Some(lib_module_doc) = LibModuleDoc::from_font(font) {
+    if let Some(lib_module_doc) = LibModuleDoc::from_font(font)? {
         tree.push(json_entry(LIB_MODULE_FILE, &lib_module_doc)?);
     }
 
@@ -901,7 +974,7 @@ pub fn tree_to_font(tree: PackageTree) -> Result<Font, SourcePackageError> {
 
     for (_, glyph_doc) in ordered_glyph_docs {
         validate_glyph_component_references(&glyph_doc, &glyph_names_by_id)?;
-        let mut glyph = Glyph::try_from(glyph_doc)?;
+        let mut glyph = glyph_doc.into_glyph(font.sources())?;
         if let Some(module_doc) = &mut lib_module_doc {
             apply_lib_module_to_glyph(&mut glyph, module_doc)?;
         }
@@ -1435,24 +1508,23 @@ fn apply_lib_module_to_glyph(
             });
         }
 
+        let expected_source_id = legacy_source_id_for_layer(glyph, &layer_id)?;
+        if layer_doc.source_id != expected_source_id.to_string() {
+            return Err(SourcePackageError::InvalidModule {
+                path: LIB_MODULE_FILE.to_string(),
+                message: format!(
+                    "layer lib source {:?} does not match glyph source base {:?}",
+                    layer_doc.source_id, expected_source_id
+                ),
+            });
+        }
+
         let layer = glyph.layer_mut(layer_id.clone()).ok_or_else(|| {
             SourcePackageError::DanglingReference {
                 field: "lib layer",
                 id: layer_id.to_string(),
             }
         })?;
-
-        if layer_doc.source_id != layer.source_id().to_string() {
-            return Err(SourcePackageError::InvalidModule {
-                path: LIB_MODULE_FILE.to_string(),
-                message: format!(
-                    "layer lib source {:?} does not match layer source {:?}",
-                    layer_doc.source_id,
-                    layer.source_id()
-                ),
-            });
-        }
-
         *layer.lib_mut() = lib_from_doc(layer_doc.lib)?;
     }
 
@@ -1499,7 +1571,7 @@ fn lib_from_doc(doc: BTreeMap<String, LibValueDoc>) -> Result<LibData, SourcePac
 }
 
 impl LibModuleDoc {
-    fn from_font(font: &Font) -> Option<Self> {
+    fn from_font(font: &Font) -> Result<Option<Self>, SourcePackageError> {
         let font_lib = lib_to_doc(font.lib());
         let mut sources = BTreeMap::new();
         let mut glyphs = BTreeMap::new();
@@ -1540,7 +1612,7 @@ impl LibModuleDoc {
                     LayerLibDoc {
                         glyph_id: glyph.id().to_string(),
                         glyph_name: glyph.name().to_string(),
-                        source_id: layer.source_id().to_string(),
+                        source_id: legacy_source_id_for_layer(glyph, &layer.id())?.to_string(),
                         lib: lib_to_doc(layer.lib()),
                     },
                 );
@@ -1548,10 +1620,10 @@ impl LibModuleDoc {
         }
 
         if font_lib.is_empty() && sources.is_empty() && glyphs.is_empty() && layers.is_empty() {
-            return None;
+            return Ok(None);
         }
 
-        Some(Self {
+        Ok(Some(Self {
             owner: LIB_MODULE_OWNER.to_string(),
             module: LIB_MODULE_NAME.to_string(),
             schema_version: LIB_MODULE_SCHEMA_VERSION,
@@ -1559,7 +1631,7 @@ impl LibModuleDoc {
             sources,
             glyphs,
             layers,
-        })
+        }))
     }
 }
 
@@ -2339,11 +2411,20 @@ impl TryFrom<SourceDoc> for Source {
 impl GlyphDoc {
     fn from_glyph(font: &Font, glyph: &Glyph) -> Result<Self, SourcePackageError> {
         let mut layers = BTreeMap::new();
-        for layer in glyph.layers().values() {
-            layers.insert(
-                layer.source_id().to_string(),
-                LayerDoc::from_layer(font, layer.as_ref())?,
-            );
+        for source in glyph.default_sources().values() {
+            let source_id = source.base_source_id().ok_or_else(|| {
+                SourcePackageError::UnsupportedFormat(format!(
+                    "glyph source {} has no global source base",
+                    source.id()
+                ))
+            })?;
+            let layer = glyph.layer(source.layer_id()).ok_or_else(|| {
+                SourcePackageError::DanglingReference {
+                    field: "glyph source layer",
+                    id: source.layer_id().to_string(),
+                }
+            })?;
+            layers.insert(source_id.to_string(), LayerDoc::from_layer(font, layer)?);
         }
 
         Ok(Self {
@@ -2359,22 +2440,52 @@ impl GlyphDoc {
     }
 }
 
-impl TryFrom<GlyphDoc> for Glyph {
-    type Error = SourcePackageError;
-
-    fn try_from(doc: GlyphDoc) -> Result<Self, Self::Error> {
-        let glyph_name = GlyphName::new(doc.name.clone())
-            .map_err(|_| SourcePackageError::InvalidGlyphName(doc.name.clone()))?;
-        let mut glyph = Glyph::with_id(parse_id("glyph", &doc.id)?, glyph_name);
+impl GlyphDoc {
+    fn into_glyph(self, sources: &[Source]) -> Result<Glyph, SourcePackageError> {
+        let glyph_name = GlyphName::new(self.name.clone())
+            .map_err(|_| SourcePackageError::InvalidGlyphName(self.name.clone()))?;
+        let mut glyph = Glyph::with_id(parse_id("glyph", &self.id)?, glyph_name);
         glyph.set_unicodes(
-            doc.unicodes
+            self.unicodes
                 .iter()
                 .map(|value| unicode_from_hex(value))
                 .collect::<Result<Vec<_>, _>>()?,
         );
 
-        for (source_id, layer_doc) in doc.layers {
-            glyph.set_layer(layer_doc.into_layer(parse_id("source", &source_id)?)?);
+        let mut layers = self
+            .layers
+            .into_iter()
+            .map(|(source_id, layer_doc)| {
+                let base_source_id = parse_id("source", &source_id)?;
+                let source_order = sources
+                    .iter()
+                    .position(|source| source.id() == base_source_id)
+                    .ok_or_else(|| SourcePackageError::DanglingReference {
+                        field: "glyph layer source",
+                        id: base_source_id.to_string(),
+                    })?;
+                Ok((source_order, base_source_id, layer_doc))
+            })
+            .collect::<Result<Vec<_>, SourcePackageError>>()?;
+        layers.sort_by_key(|(source_order, _, _)| *source_order);
+
+        for (_, base_source_id, layer_doc) in layers {
+            let source_name = sources
+                .iter()
+                .find(|source| source.id() == base_source_id)
+                .expect("source order established the source")
+                .name()
+                .to_string();
+            let layer = layer_doc.into_layer()?;
+            let glyph_source = GlyphSource::with_id(
+                GlyphSourceId::from_raw(layer.id().as_str()),
+                source_name,
+                layer.id(),
+                Some(base_source_id),
+                Location::new(),
+            );
+            glyph.set_layer(layer);
+            glyph.insert_default_source(glyph_source);
         }
 
         Ok(glyph)
@@ -2407,10 +2518,9 @@ impl LayerDoc {
         })
     }
 
-    fn into_layer(self, source_id: SourceId) -> Result<GlyphLayer, SourcePackageError> {
+    fn into_layer(self) -> Result<GlyphLayer, SourcePackageError> {
         let mut layer = GlyphLayer::with_width(
             parse_id("layer", &self.id)?,
-            source_id,
             ensure_finite("glyph.layers[].advance", self.advance)?,
         );
         layer.set_height(ensure_optional_finite(

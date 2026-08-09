@@ -33,13 +33,6 @@ fn sqlite_payload_preserves_canonical_bytes() {
     store
         .conn
         .execute(
-            "INSERT INTO sources (id, name, kind, order_index) VALUES (?1, 'Golden', 'master', 0)",
-            [layer.source_id().to_string()],
-        )
-        .unwrap();
-    store
-        .conn
-        .execute(
             "INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, 0)",
             params![glyph_id.to_string(), glyph_name.as_str()],
         )
@@ -100,12 +93,10 @@ fn bounded_batch_load_matches_complete_font_layers() {
 #[test]
 fn requested_layers_load_across_multiple_count_bounded_batches() {
     let mut font = font::Font::new();
-    let source_id = font.default_source_id().unwrap();
     let mut layer_ids = Vec::new();
     for index in 0..=MAX_LAYER_READ_BATCH_COUNT {
         let layer = font::GlyphLayer::with_width(
             font::LayerId::from_raw(format!("layer_{index:04}")),
-            source_id.clone(),
             index as f64,
         );
         layer_ids.push(layer.id());
@@ -609,22 +600,14 @@ fn abandoned_font_stream_rolls_back_header_and_glyphs() {
 fn cjk_scale_directory_open_is_payload_independent() {
     const GLYPH_COUNT: usize = 65_536;
     let mut store = ShiftStore::open_memory_for_test().unwrap();
-    let source_id = font::SourceId::from_raw("cjk").to_string();
-    store
-        .conn
-        .execute(
-            "INSERT INTO sources (id, name, kind, order_index) VALUES (?1, 'CJK', 'master', 0)",
-            [&source_id],
-        )
-        .unwrap();
     let tx = store.conn.transaction().unwrap();
     {
         let mut glyph_stmt = tx
             .prepare("INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, ?3)")
             .unwrap();
         let mut layer_stmt = tx
-                .prepare("INSERT INTO glyph_layers (id, glyph_id, source_id, width, height) VALUES (?1, ?2, ?3, 1000, NULL)")
-                .unwrap();
+            .prepare("INSERT INTO glyph_layers (id, glyph_id, width, height) VALUES (?1, ?2, 1000, NULL)")
+            .unwrap();
         let mut payload_stmt = tx
             .prepare(
                 "INSERT INTO glyph_layer_payloads (
@@ -640,9 +623,7 @@ fn cjk_scale_directory_open_is_payload_independent() {
             glyph_stmt
                 .execute(params![glyph_id, name, index as i64])
                 .unwrap();
-            layer_stmt
-                .execute(params![layer_id, glyph_id, source_id])
-                .unwrap();
+            layer_stmt.execute(params![layer_id, glyph_id]).unwrap();
             payload_stmt
                 .execute(params![layer_id, GLYPH_LAYER_FORMAT])
                 .unwrap();

@@ -546,10 +546,10 @@ impl GlyphLayer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Anchor, Component, GlyphId, LayerId, SourceId};
+    use crate::{Anchor, Component, GlyphId, LayerId};
 
     fn create_session() -> GlyphLayer {
-        GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0)
+        GlyphLayer::with_width(LayerId::new(), 500.0)
     }
 
     fn session_with_contour() -> (GlyphLayer, ContourId) {

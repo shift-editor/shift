@@ -599,22 +599,25 @@ impl Font {
             return Err(CoreError::CannotDeleteLastSource);
         }
 
-        let layers: Vec<(GlyphId, GlyphLayer)> = self
+        if let Some(glyph_source) = self
             .glyphs()
-            .filter_map(|glyph| {
-                glyph
-                    .layer_for_source(source_id.clone())
-                    .map(|layer| (glyph.id(), layer.clone()))
+            .flat_map(|glyph| {
+                glyph.default_sources().values().chain(
+                    glyph
+                        .variants()
+                        .values()
+                        .flat_map(|variant| variant.sources().values()),
+                )
             })
-            .collect();
-
-        for (glyph_id, layer) in layers {
-            changes.push(FontChange::glyph_layer_deleted(glyph_id, &layer));
-            self.remove_glyph_layer(layer.id())?;
+            .find(|glyph_source| glyph_source.base_source_id().as_ref() == Some(source_id))
+        {
+            return Err(CoreError::SourceReferencedByGlyphSource {
+                source_id: source_id.clone(),
+                glyph_source_id: glyph_source.id(),
+            });
         }
 
-        self.remove_source(source_id.clone())
-            .ok_or_else(|| CoreError::SourceNotFound(source_id.clone()))?;
+        self.remove_source(source_id.clone())?;
         changes.push(FontChange::source_deleted(source_id.clone()));
         Ok(())
     }
@@ -709,7 +712,7 @@ impl Font {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
+            .layer_id_for_source(glyph_id.clone(), source_id.clone())
             .is_some()
         {
             return Err(CoreError::DuplicateGlyphLayer {
@@ -717,10 +720,15 @@ impl Font {
                 source_id,
             });
         }
-        let layer = GlyphLayer::with_width(layer_id.clone(), source_id, self.default_layer_width());
+        let layer = GlyphLayer::with_width(layer_id.clone(), self.default_layer_width());
 
-        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
+        let glyph_source =
+            self.insert_layer_for_source(glyph_id.clone(), source_id, layer.clone())?;
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id,
+            &glyph_source,
+            &layer,
+        ));
 
         Ok(vec![layer_id])
     }
@@ -733,11 +741,20 @@ impl Font {
         from_layer_id: LayerId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let layer =
-            self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
+        let layer = self.cloned_glyph_layer(
+            layer_id.clone(),
+            glyph_id.clone(),
+            source_id.clone(),
+            from_layer_id,
+        )?;
 
-        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
+        let glyph_source =
+            self.insert_layer_for_source(glyph_id.clone(), source_id, layer.clone())?;
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id,
+            &glyph_source,
+            &layer,
+        ));
 
         Ok(vec![layer_id])
     }
@@ -751,12 +768,21 @@ impl Font {
         values: &GlyphInterpolationValues,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        let mut layer =
-            self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
+        let mut layer = self.cloned_glyph_layer(
+            layer_id.clone(),
+            glyph_id.clone(),
+            source_id.clone(),
+            from_layer_id,
+        )?;
         layer.apply_interpolation_values(values)?;
 
-        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
+        let glyph_source =
+            self.insert_layer_for_source(glyph_id.clone(), source_id, layer.clone())?;
+        changes.push(FontChange::glyph_layer_created(
+            glyph_id,
+            &glyph_source,
+            &layer,
+        ));
 
         Ok(vec![layer_id])
     }
@@ -772,7 +798,7 @@ impl Font {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
+            .layer_id_for_source(glyph_id.clone(), source_id.clone())
             .is_some()
         {
             return Err(CoreError::DuplicateGlyphLayer {
@@ -795,7 +821,7 @@ impl Font {
         let source_layer = self
             .layer(from_layer_id.clone())
             .ok_or(CoreError::LayerNotFound(from_layer_id))?;
-        let layer = source_layer.clone_with_fresh_ids(layer_id, source_id);
+        let layer = source_layer.clone_with_fresh_ids(layer_id);
 
         Ok(layer)
     }
@@ -1192,12 +1218,11 @@ mod tests {
     #[test]
     fn intent_set_rejects_contour_identity_used_by_another_layer() {
         let mut font = Font::new();
-        let default_source_id = font.default_source_id().unwrap();
         let contour_id = ContourId::from_raw("shared");
         let glyph_id = GlyphId::new();
         let mut contour = Contour::with_id(contour_id.clone());
         contour.add_point(0.0, 0.0, PointType::OnCurve, false);
-        let mut layer = GlyphLayer::new(LayerId::new(), default_source_id);
+        let mut layer = GlyphLayer::new(LayerId::new());
         layer.add_contour(contour);
         let mut glyph = Glyph::with_id(glyph_id.clone(), "A");
         glyph.set_layer(layer);
@@ -1231,17 +1256,13 @@ mod tests {
     #[test]
     fn materialize_glyph_layer_applies_values_with_fresh_structure_ids() {
         let mut font = Font::new();
-        let default_source_id = font
-            .default_source_id()
-            .expect("new font should have a default source");
         let axis = Axis::weight();
         let axis_id = axis.id();
         font.add_axis(axis).expect("weight axis should be valid");
 
         let glyph_id = GlyphId::new();
         let from_layer_id = LayerId::new();
-        let mut source_layer =
-            GlyphLayer::with_width(from_layer_id.clone(), default_source_id, 500.0);
+        let mut source_layer = GlyphLayer::with_width(from_layer_id.clone(), 500.0);
         let mut contour = Contour::new();
         let source_point_id = contour.add_point(10.0, 20.0, PointType::OnCurve, false);
         source_layer.add_contour(contour);

@@ -291,7 +291,10 @@ fn creates_and_reads_glyph_layer() {
         .expect("glyph layer should exist");
 
     assert_eq!(layer.glyph_id.as_str(), glyph_id.as_str());
-    assert_eq!(layer.source_id.as_str(), source_id.as_str());
+    assert_eq!(
+        layer.source_id.as_ref().unwrap().as_str(),
+        source_id.as_str()
+    );
     assert_eq!(layer.name.as_ref().map(|name| name.as_str()), Some("A"));
 }
 
@@ -299,17 +302,13 @@ fn creates_and_reads_glyph_layer() {
 fn glyph_layer_requires_existing_glyph_and_source() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
-    let layer = shift_font::GlyphLayer::with_width(
-        shift_font::LayerId::from_raw("layer-A-regular"),
-        shift_font::SourceId::from_raw("source-missing"),
-        0.0,
-    );
-    let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::glyph_layer_created(
+    let layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::from_raw("layer-A-regular"), 0.0);
+    let result =
+        store.apply_change_set(&shift_font::FontChangeSet::new(vec![glyph_layer_created(
             shift_font::GlyphId::from_raw("glyph-missing"),
             &layer,
-        ),
-    ]));
+        )]));
 
     assert!(result.is_err());
 }
@@ -330,7 +329,10 @@ fn lists_glyph_layers_for_glyph() {
 
     assert_eq!(layers.len(), 1);
     assert_eq!(layers[0].layer_id, layer_id);
-    assert_eq!(layers[0].source_id.as_str(), source_id.as_str());
+    assert_eq!(
+        layers[0].source_id.as_ref().unwrap().as_str(),
+        source_id.as_str()
+    );
 }
 
 #[test]
@@ -358,11 +360,8 @@ fn creates_and_reads_glyph_component() {
 #[test]
 fn glyph_component_replacement_requires_existing_layer() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
-    let mut layer = shift_font::GlyphLayer::with_width(
-        shift_font::LayerId::from_raw("layer-missing"),
-        shift_font::SourceId::from_raw("source-missing"),
-        0.0,
-    );
+    let mut layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::from_raw("layer-missing"), 0.0);
     layer.add_component(shift_font::Component::with_id(
         shift_font::ComponentId::from_raw("component-A-missing"),
         shift_font::GlyphId::from_raw("glyph-missing"),
@@ -402,14 +401,13 @@ fn applies_glyph_identity_change_set() {
     let glyph = shift_font::Glyph::with_unicode("A", 65);
     let glyph_id = glyph.id();
     let source_id = shift_font::SourceId::new();
-    let layer =
-        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
+    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), 500.0);
     create_regular_source_with_id(&mut store, source_id);
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::GlyphCreated(shift_font::GlyphCreated::from(&glyph)),
-            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
+            glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::GlyphIdentityChanged(shift_font::GlyphIdentityChanged {
                 glyph_id: glyph_id.clone(),
                 from_name: shift_font::GlyphName::from("A"),
@@ -476,14 +474,13 @@ fn applies_glyph_delete_change_set_and_cascades_layers() {
     let glyph = shift_font::Glyph::with_unicode("A", 65);
     let glyph_id = glyph.id();
     let source_id = shift_font::SourceId::new();
-    let layer =
-        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
+    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), 500.0);
     create_regular_source_with_id(&mut store, source_id);
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::glyph_created(&glyph),
-            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
+            glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::glyph_deleted(glyph.id()),
         ]))
         .expect("change set should apply");
@@ -510,12 +507,11 @@ fn applies_glyph_delete_change_set_and_cascades_layers() {
 fn applies_layer_metrics_and_contour_point_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, contour, point_id) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, layer.source_id());
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::glyph_created(&glyph),
-            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
+            glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::LayerMetricsChanged(shift_font::LayerMetricsChanged {
                 layer_id: layer.id(),
                 width: 720.0,
@@ -557,14 +553,13 @@ fn applies_layer_metrics_and_contour_point_changes() {
 fn applies_layer_geometry_replacement() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, first_contour, _) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, layer.source_id());
-    let mut replacement = shift_font::GlyphLayer::with_width(layer.id(), layer.source_id(), 500.0);
+    let mut replacement = shift_font::GlyphLayer::with_width(layer.id(), 500.0);
     replacement.add_contour(contour_with_point(10.0, 20.0));
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::glyph_created(&glyph),
-            shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
+            glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::ContourAdded(shift_font::ContourAdded {
                 layer_id: layer.id(),
                 contour: first_contour,
@@ -593,7 +588,6 @@ fn applies_layer_geometry_replacement() {
 fn layer_geometry_replacement_round_trips_anchors() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, layer.source_id());
 
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
@@ -615,7 +609,6 @@ fn layer_geometry_replacement_round_trips_anchors() {
 fn applies_anchor_position_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, layer.source_id());
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
@@ -645,7 +638,6 @@ fn applies_anchor_position_changes() {
 fn rejects_anchor_position_change_for_missing_anchor_row() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, _) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, layer.source_id());
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
@@ -677,7 +669,6 @@ fn reopen_preserves_layer_anchors() {
 
     {
         let mut store = ShiftStore::open(&path).expect("open");
-        create_regular_source_with_id(&mut store, layer.source_id());
         store
             .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
             .expect("change set should apply");
@@ -702,12 +693,11 @@ fn reopen_preserves_layer_anchors() {
 fn rejects_incremental_change_for_missing_point_row() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, _, _) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, layer.source_id());
     let missing_point_id = shift_font::PointId::new();
 
     let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
         shift_font::FontChange::glyph_created(&glyph),
-        shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
+        glyph_layer_created(glyph.id(), &layer),
         shift_font::FontChange::PointPositionsChanged(shift_font::PointPositionsChanged {
             layer_id: layer.id(),
             points: vec![shift_font::PointPosition {
@@ -834,16 +824,19 @@ fn create_default_glyph_layer(
     glyph_id: &GlyphId,
     source_id: &SourceId,
 ) -> shift_font::LayerId {
-    let layer = shift_font::GlyphLayer::with_width(
-        shift_font::LayerId::from_raw("A-regular"),
-        shift_font::SourceId::from_raw(source_id.as_str()),
-        0.0,
+    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::from_raw("A-regular"), 0.0);
+    let glyph_source = shift_font::GlyphSource::new(
+        "Regular".to_string(),
+        layer.id(),
+        Some(shift_font::SourceId::from_raw(source_id.as_str())),
+        shift_font::Location::new(),
     );
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::glyph_layer_created(
                 shift_font::GlyphId::from_raw(glyph_id.as_str()),
+                &glyph_source,
                 &layer,
             ),
         ]))
@@ -931,8 +924,7 @@ fn store_layer_with_contour() -> (
     shift_font::PointId,
 ) {
     let glyph = shift_font::Glyph::with_unicode("A", 65);
-    let source_id = shift_font::SourceId::new();
-    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id, 500.0);
+    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), 500.0);
     let contour = contour_with_point(10.0, 20.0);
     let point_id = contour.points()[0].id();
 
@@ -950,9 +942,7 @@ fn store_layer_with_anchor() -> (
     shift_font::AnchorId,
 ) {
     let glyph = shift_font::Glyph::with_unicode("A", 65);
-    let source_id = shift_font::SourceId::new();
-    let mut layer =
-        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id, 500.0);
+    let mut layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), 500.0);
     let anchor_id = layer.add_anchor(shift_font::Anchor::new(
         Some("top".to_string()),
         250.0,
@@ -962,13 +952,26 @@ fn store_layer_with_anchor() -> (
     (glyph, layer, anchor_id)
 }
 
+fn glyph_layer_created(
+    glyph_id: shift_font::GlyphId,
+    layer: &shift_font::GlyphLayer,
+) -> shift_font::FontChange {
+    let source = shift_font::GlyphSource::new(
+        "Default".to_string(),
+        layer.id(),
+        None,
+        shift_font::Location::new(),
+    );
+    shift_font::FontChange::glyph_layer_created(glyph_id, &source, layer)
+}
+
 fn anchored_layer_change_set(
     glyph: &shift_font::Glyph,
     layer: &shift_font::GlyphLayer,
 ) -> shift_font::FontChangeSet {
     shift_font::FontChangeSet::new(vec![
         shift_font::FontChange::glyph_created(glyph),
-        shift_font::FontChange::glyph_layer_created(glyph.id(), layer),
+        glyph_layer_created(glyph.id(), layer),
         shift_font::FontChange::layer_geometry_replaced(layer),
     ])
 }
@@ -1441,6 +1444,145 @@ fn replace_and_load_font_state_preserves_whole_font() {
 }
 
 #[test]
+fn canonical_round_trip_preserves_glyph_local_authoring_and_variable_components() {
+    let mut font = shift_font::Font::new();
+    let weight = shift_font::Axis::weight();
+    let weight_id = weight.id();
+    font.add_axis(weight).unwrap();
+    let regular_id = font.default_source_id().unwrap();
+    let mut bold_location = shift_font::DesignLocation::new();
+    bold_location.set(weight_id.clone(), 800.0);
+    let bold_id = font.add_source(shift_font::Source::new("Bold".to_string(), bold_location));
+
+    let part_id = shift_font::GlyphId::from_raw("part");
+    let part_axis_id = shift_font::AxisId::from_raw("part-width");
+    let part_regular_layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::from_raw("part-regular"), 200.0);
+    let part_bold_layer =
+        shift_font::GlyphLayer::with_width(shift_font::LayerId::from_raw("part-bold"), 240.0);
+    let mut part = shift_font::Glyph::with_id(part_id.clone(), "part");
+    part.insert_axis(shift_font::GlyphAxis::with_id(
+        part_axis_id.clone(),
+        "Part Width".to_string(),
+        0.0,
+        50.0,
+        100.0,
+    ));
+    part.set_layer(part_regular_layer.clone());
+    part.set_layer(part_bold_layer.clone());
+    let mut part_regular_location = shift_font::Location::new();
+    part_regular_location.set(part_axis_id.clone(), 0.0);
+    part.insert_default_source(shift_font::GlyphSource::with_id(
+        shift_font::GlyphSourceId::from_raw("part-regular"),
+        "Regular Narrow".to_string(),
+        part_regular_layer.id(),
+        Some(regular_id.clone()),
+        part_regular_location,
+    ));
+    let mut part_bold_location = shift_font::Location::new();
+    part_bold_location.set(part_axis_id.clone(), 100.0);
+    part.insert_default_source(shift_font::GlyphSource::with_id(
+        shift_font::GlyphSourceId::from_raw("part-bold"),
+        "Bold Wide".to_string(),
+        part_bold_layer.id(),
+        Some(bold_id.clone()),
+        part_bold_location,
+    ));
+    font.insert_glyph(part).unwrap();
+
+    let glyph_id = shift_font::GlyphId::from_raw("A-local");
+    let shared_layer_id = shift_font::LayerId::from_raw("A-shared");
+    let heavy_layer_id = shift_font::LayerId::from_raw("A-heavy");
+    let backup_layer_id = shift_font::LayerId::from_raw("A-backup");
+    let mut shared_layer = shift_font::GlyphLayer::with_width(shared_layer_id.clone(), 600.0);
+    let mut component = shift_font::Component::with_id(
+        shift_font::ComponentId::from_raw("A-part"),
+        part_id,
+        "part",
+        shift_font::DecomposedTransform::identity(),
+    );
+    let mut component_location = shift_font::Location::new();
+    component_location.set(part_axis_id, 75.0);
+    component.set_location(component_location);
+    component.set_axis_inheritance(shift_font::AxisInheritance::Font);
+    component.set_condition(Some(shift_font::Condition::AxisRange {
+        axis_id: weight_id.clone(),
+        minimum: None,
+        maximum: Some(600.0),
+    }));
+    shared_layer.add_component(component);
+
+    let mut glyph = shift_font::Glyph::with_id(glyph_id, "A.local");
+    glyph.set_layer(shared_layer);
+    glyph.set_layer(shift_font::GlyphLayer::with_width(
+        heavy_layer_id.clone(),
+        640.0,
+    ));
+    glyph.set_layer(shift_font::GlyphLayer::with_width(backup_layer_id, 610.0));
+    glyph.insert_default_source(shift_font::GlyphSource::with_id(
+        shift_font::GlyphSourceId::from_raw("A-default"),
+        "Default Regular".to_string(),
+        shared_layer_id.clone(),
+        Some(regular_id.clone()),
+        shift_font::Location::new(),
+    ));
+    let mut variant = shift_font::GlyphVariant::with_id(
+        shift_font::GlyphVariantId::from_raw("A-heavy"),
+        "Heavy".to_string(),
+        shift_font::Condition::AxisRange {
+            axis_id: weight_id,
+            minimum: Some(700.0),
+            maximum: None,
+        },
+    );
+    variant.insert_source(shift_font::GlyphSource::with_id(
+        shift_font::GlyphSourceId::from_raw("A-heavy-regular"),
+        "Heavy Regular".to_string(),
+        shared_layer_id.clone(),
+        Some(regular_id),
+        shift_font::Location::new(),
+    ));
+    variant.insert_source(shift_font::GlyphSource::with_id(
+        shift_font::GlyphSourceId::from_raw("A-heavy-bold"),
+        "Heavy Bold".to_string(),
+        heavy_layer_id,
+        Some(bold_id),
+        shift_font::Location::new(),
+    ));
+    glyph.insert_variant(variant);
+    font.insert_glyph(glyph).unwrap();
+    font.validate().unwrap();
+
+    let mut store = ShiftStore::open_memory_for_test().unwrap();
+    store.replace_font_state(&font).unwrap();
+
+    let directory = store.load_font_directory().unwrap();
+    let directory_glyph = directory.glyph_by_name("A.local").unwrap();
+    assert_eq!(directory_glyph.variants().len(), 1);
+    assert_eq!(directory_glyph.default_sources().len(), 1);
+    assert_eq!(directory_glyph.layers().len(), 3);
+    assert!(
+        directory_glyph
+            .layers()
+            .values()
+            .all(|layer| layer.components().is_empty())
+    );
+
+    let loaded = store.load_font_state().unwrap();
+    assert_eq!(loaded, font);
+    assert_eq!(
+        loaded
+            .glyph_by_name("A.local")
+            .unwrap()
+            .layer(shared_layer_id)
+            .unwrap()
+            .components()
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn refuses_stores_from_newer_schema_versions() {
     let path = temp_store_path("future");
 
@@ -1460,14 +1602,16 @@ fn refuses_stores_from_newer_schema_versions() {
 fn replace_and_load_font_state_preserves_source_roles_and_layer_names() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
-    let mut font = shift_font::Font::new();
+    let mut font = shift_font::Font::empty();
     let mut medium = shift_font::Source::with_filename(
         "Medium".to_string(),
         shift_font::DesignLocation::new(),
         "Family-Bold.ufo".to_string(),
     );
     medium.set_layer_name(Some("Medium".to_string()));
+    let medium_id = medium.id();
     font.add_source(medium);
+    font.set_default_source_id(medium_id);
     font.add_source(shift_font::Source::layer("background".to_string()));
 
     store.replace_font_state(&font).expect("replace font state");

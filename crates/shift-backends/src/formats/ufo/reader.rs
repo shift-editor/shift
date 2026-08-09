@@ -5,8 +5,7 @@ use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, GlyphId, GlyphLayer, Guideline, KerningData,
-    KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType, SourceId,
-    Transform,
+    KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType, Transform,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -187,9 +186,8 @@ impl UfoReader {
     fn convert_layer_geometry(
         norad_glyph: &norad::Glyph,
         layer_id: LayerId,
-        source_id: SourceId,
     ) -> (GlyphLayer, Vec<PendingComponent>) {
-        let mut glyph_layer = GlyphLayer::with_width(layer_id, source_id, norad_glyph.width);
+        let mut glyph_layer = GlyphLayer::with_width(layer_id, norad_glyph.width);
         let mut pending_components = Vec::new();
         if norad_glyph.height != 0.0 {
             glyph_layer.set_height(Some(norad_glyph.height));
@@ -221,11 +219,9 @@ impl UfoReader {
     pub(crate) fn convert_stream_layer(
         norad_glyph: &norad::Glyph,
         layer_id: LayerId,
-        source_id: SourceId,
         glyph_ids: &HashMap<String, GlyphId>,
     ) -> FormatBackendResult<GlyphLayer> {
-        let (mut layer, pending_components) =
-            Self::convert_layer_geometry(norad_glyph, layer_id, source_id);
+        let (mut layer, pending_components) = Self::convert_layer_geometry(norad_glyph, layer_id);
         for pending in pending_components {
             let base_glyph_id = glyph_ids.get(&pending.base_glyph_name).ok_or_else(|| {
                 FormatBackendError::Ufo(format!(

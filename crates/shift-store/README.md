@@ -30,8 +30,9 @@ Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
 
 ## Storage boundary
 
-- Font metadata and the glyph/layer directory remain relational and load eagerly. Layer rows reference their glyph rather than duplicating its editable name.
-- Each editable glyph layer is one independently addressable, store-private MessagePack payload identified as `shift.glyph-layer.v1`; the store independently wraps it as `none` or `zstd.v1` without changing authored semantics.
+- Font metadata and the glyph/layer directory remain relational and load eagerly. `glyph_axes`, `glyph_variants`, `glyph_sources`, and `glyph_source_locations` preserve ordered glyph-local designspaces independently from geometry; nullable `glyph_sources.variant_id` distinguishes Default membership from one variant.
+- `glyph_layers` contains only glyph ownership and metrics. A source row references a same-glyph layer, several sources may share one layer, and unreferenced backup/background layers remain canonical.
+- Each editable glyph layer is one independently addressable, store-private MessagePack payload identified as `shift.glyph-layer.v2`; the store independently wraps it as `none` or `zstd.v1` without changing authored semantics.
 - Component dependency rows contain only the earned query index: component ID, owner layer ID, base glyph ID, and ordinal.
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.
 - Payload replacement, directory facts, component rows, and workspace revision state commit in one transaction.
@@ -42,7 +43,7 @@ Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
 
 `glyph_layer_payloads` stores `inner_format`, `compression`, `stored_byte_length`,
 `decoded_byte_length`, `decoded_blake3`, and `payload`. `inner_format` remains
-`shift.glyph-layer.v1`. Its bytes are `rmp-serde`'s compact serialization of `GlyphLayer`; struct field order and enum Serde attributes are format-bearing and require a new identifier if changed. Compression is either `none` or `zstd.v1`; `zstd.v1` means one complete independent Zstandard frame with no dictionary. Level 1 is the current write policy, not a decoding
+`shift.glyph-layer.v2`. Its bytes are `rmp-serde`'s compact serialization of source-neutral `GlyphLayer`; component location, axis inheritance, and condition fields are part of that payload. Struct field order and enum Serde attributes are format-bearing and require a new identifier if changed. Compression is either `none` or `zstd.v1`; `zstd.v1` means one complete independent Zstandard frame with no dictionary. Level 1 is the current write policy, not a decoding
 requirement. Writers retain compressed bytes only when they are smaller than the canonical input.
 
 `decoded_blake3` is the 32-byte BLAKE3 of the exact canonical bytes. Reads bound both lengths before
@@ -58,7 +59,7 @@ only then invoke strict MessagePack decoding. A layer replacement may move betwe
 
 ## Preservation and export gate
 
-Canonical SQLite publication must preserve the complete `shift-font::Font`, not a projection chosen for one exporter. The kitchen-sink canonical-document test covers metadata, metrics, axes and mappings, named instances, sources, kerning, features, libs, binary data, guidelines, glyph layers, components, anchors, and stable authored identities through SQLite equality. UFO and Designspace exports must materialize that complete canonical state and use their dedicated writers. Any concept the target format cannot represent requires an explicit export diagnostic; no exporter may silently narrow the canonical document or route through another authoring format.
+Canonical SQLite publication must preserve the complete `shift-font::Font`, not a projection chosen for one exporter. The kitchen-sink and glyph-local canonical-document tests cover metadata, metrics, axes and mappings, named instances, global and glyph-local sources, conditional variants, shared and unreferenced layers, variable-component fields, kerning, features, libs, binary data, guidelines, anchors, and stable authored identities through SQLite equality. UFO and Designspace exports must materialize that complete canonical state and use their dedicated writers. Any concept the target format cannot represent requires an explicit export diagnostic; no exporter may silently narrow the canonical document or route through another authoring format.
 
 ## Schema policy
 

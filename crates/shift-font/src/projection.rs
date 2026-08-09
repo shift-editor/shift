@@ -60,6 +60,7 @@ pub struct GlyphProjectionSet {
 
 #[derive(Clone, Debug, PartialEq)]
 struct GlyphLayerProjection {
+    fallback_source_id: SourceId,
     fallback: Arc<GlyphLayer>,
     interpolation: Option<GlyphInterpolation>,
     exact_source_shapes: Vec<GlyphSourceShape>,
@@ -74,7 +75,7 @@ impl GlyphLayerProjection {
     ) -> CoreResult<GlyphLayer> {
         let exact_source_id = exact_source_id(location, axes, sources);
         if let Some(source_id) = exact_source_id {
-            if source_id == self.fallback.source_id() {
+            if source_id == self.fallback_source_id {
                 return Ok(self.fallback.as_ref().clone());
             }
 
@@ -223,10 +224,13 @@ impl Font {
         let interpolation = self.glyph_interpolation_with_bases(glyph_id, interpolation_bases)?;
         let fallback = interpolation
             .as_ref()
-            .and_then(|interpolation| glyph.layers().get(&interpolation.reference_layer().id()))
-            .cloned()
+            .and_then(|interpolation| {
+                let layer = glyph.layers().get(&interpolation.reference_layer().id())?;
+                let source_id = source_id_for_layer(self, glyph, layer.id())?;
+                Some((source_id, layer.clone()))
+            })
             .or_else(|| fallback_layer(self, glyph));
-        let Some(fallback) = fallback else {
+        let Some((fallback_source_id, fallback)) = fallback else {
             return Ok(None);
         };
         let exact_source_shapes = self
@@ -235,9 +239,8 @@ impl Font {
             .filter(|source| source.is_master())
             .filter_map(|source| {
                 let layer = glyph
-                    .layers()
-                    .values()
-                    .find(|layer| layer.source_id() == source.id())?
+                    .layer_for_source(source.id())
+                    .and_then(|layer| glyph.layers().get(&layer.id()))?
                     .clone();
                 if layer.id() == fallback.id() {
                     return None;
@@ -259,6 +262,7 @@ impl Font {
             .collect();
 
         Ok(Some(Arc::new(GlyphLayerProjection {
+            fallback_source_id,
             fallback,
             interpolation,
             exact_source_shapes,
@@ -363,7 +367,7 @@ impl Font {
         layers: Arc<GlyphLayerProjection>,
         projections: &HashMap<GlyphId, Option<Arc<GlyphLayerProjection>>>,
     ) -> CoreResult<GlyphProjection> {
-        let fallback_source_id = layers.fallback.source_id();
+        let fallback_source_id = layers.fallback_source_id.clone();
         let components =
             self.structural_components(glyph_id, &layers, projections, &fallback_source_id)?;
 
@@ -675,26 +679,45 @@ fn component_base_glyph_ids(
         })
 }
 
-fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
+fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<(SourceId, Arc<GlyphLayer>)> {
     if let Some(default_source_id) = font.default_source_id() {
         let is_master = source_for_id(font, &default_source_id).is_some_and(Source::is_master);
         if is_master {
-            if let Some(layer) = glyph
-                .layers()
-                .values()
-                .find(|layer| layer.source_id() == default_source_id)
-            {
-                return Some(layer.clone());
+            if let Some(layer) = glyph.layer_for_source(default_source_id.clone()) {
+                return glyph
+                    .layers()
+                    .get(&layer.id())
+                    .cloned()
+                    .map(|layer| (default_source_id, layer));
             }
         }
     }
 
     glyph
-        .layers()
+        .default_sources()
         .values()
-        .filter(|layer| source_for_id(font, &layer.source_id()).is_some_and(Source::is_master))
-        .max_by_key(|layer| layer.contours().len() + layer.components().len())
-        .cloned()
+        .filter_map(|glyph_source| {
+            let source_id = glyph_source.base_source_id()?;
+            if !source_for_id(font, &source_id).is_some_and(Source::is_master) {
+                return None;
+            }
+            let layer = glyph.layers().get(&glyph_source.layer_id())?.clone();
+            Some((source_id, layer))
+        })
+        .max_by_key(|(_, layer)| layer.contours().len() + layer.components().len())
+}
+
+fn source_id_for_layer(font: &Font, glyph: &Glyph, layer_id: crate::LayerId) -> Option<SourceId> {
+    glyph
+        .default_sources()
+        .values()
+        .find(|glyph_source| {
+            glyph_source.layer_id() == layer_id
+                && glyph_source.base_source_id().is_some_and(|source_id| {
+                    source_for_id(font, &source_id).is_some_and(Source::is_master)
+                })
+        })
+        .and_then(|glyph_source| glyph_source.base_source_id())
 }
 
 fn source_for_id<'a>(font: &'a Font, source_id: &SourceId) -> Option<&'a Source> {
@@ -720,7 +743,7 @@ mod tests {
     use crate::test_support::sample_variable_font;
     use crate::{
         Anchor, Axis, AxisId, Component, Contour, CoreError, DesignLocation, Font, Glyph, GlyphId,
-        GlyphLayer, LayerId, PointType, Source, SourceId, Transform,
+        GlyphLayer, GlyphSource, LayerId, Location, PointType, Source, SourceId, Transform,
     };
 
     fn variable_font() -> (Font, AxisId, SourceId, SourceId, SourceId) {
@@ -753,13 +776,24 @@ mod tests {
         location
     }
 
-    fn line_layer(source_id: SourceId, x: f64) -> GlyphLayer {
-        let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 200.0);
+    fn line_layer(_source_id: SourceId, x: f64) -> GlyphLayer {
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 200.0);
         let mut contour = Contour::new();
         contour.add_point(x, 0.0, PointType::OnCurve, false);
         contour.add_point(x + 10.0, 0.0, PointType::OnCurve, false);
         layer.add_contour(contour);
         layer
+    }
+
+    fn set_test_layer(glyph: &mut Glyph, source_id: SourceId, layer: GlyphLayer) {
+        let layer_id = layer.id();
+        glyph.set_layer(layer);
+        glyph.insert_default_source(GlyphSource::new(
+            source_id.to_string(),
+            layer_id,
+            Some(source_id),
+            Location::new(),
+        ));
     }
 
     #[test]
@@ -774,9 +808,9 @@ mod tests {
 
         for root_id in &root_ids {
             let mut root = Glyph::with_id(root_id.clone(), root_id.to_string());
-            let mut layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 700.0);
+            let mut layer = GlyphLayer::with_width(LayerId::new(), 700.0);
             layer.add_component(Component::new(child_id.clone(), "A"));
-            root.set_layer(layer);
+            set_test_layer(&mut root, source_id.clone(), layer);
             font.insert_glyph(root).unwrap();
         }
 
@@ -851,15 +885,16 @@ mod tests {
         let (mut font, axis_id, _light_id, regular_id, bold_id) = variable_font();
         let child_id = GlyphId::from_raw("diaeresis");
         let mut child = Glyph::with_id(child_id.clone(), "diaeresis");
-        child.set_layer(line_layer(regular_id.clone(), 20.0));
+        let child_layer = line_layer(regular_id.clone(), 20.0);
+        set_test_layer(&mut child, regular_id.clone(), child_layer);
         font.insert_glyph(child).unwrap();
 
         let root_id = GlyphId::from_raw("Adieresis");
         let mut root = Glyph::with_id(root_id.clone(), "Adieresis");
         for source_id in [regular_id, bold_id] {
-            let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+            let mut layer = GlyphLayer::with_width(LayerId::new(), 500.0);
             layer.add_component(Component::new(child_id.clone(), "diaeresis"));
-            root.set_layer(layer);
+            set_test_layer(&mut root, source_id, layer);
         }
         font.insert_glyph(root).unwrap();
 
@@ -878,8 +913,10 @@ mod tests {
         let (mut font, axis_id, light_id, regular_id, bold_id) = variable_font();
         let child_id = GlyphId::from_raw("diaeresis");
         let mut child = Glyph::with_id(child_id.clone(), "diaeresis");
-        child.set_layer(line_layer(light_id, 0.0));
-        child.set_layer(line_layer(bold_id, 80.0));
+        let light_layer = line_layer(light_id.clone(), 0.0);
+        set_test_layer(&mut child, light_id, light_layer);
+        let bold_layer = line_layer(bold_id.clone(), 80.0);
+        set_test_layer(&mut child, bold_id, bold_layer);
         font.insert_glyph(child).unwrap();
 
         let weights = font
@@ -893,9 +930,9 @@ mod tests {
 
         let root_id = GlyphId::from_raw("Adieresis");
         let mut root = Glyph::with_id(root_id.clone(), "Adieresis");
-        let mut root_layer = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
+        let mut root_layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         root_layer.add_component(Component::new(child_id, "diaeresis"));
-        root.set_layer(root_layer);
+        set_test_layer(&mut root, regular_id, root_layer);
         font.insert_glyph(root).unwrap();
 
         let glyph = font
@@ -915,9 +952,9 @@ mod tests {
         let missing_id = GlyphId::from_raw("missing");
         let root_id = GlyphId::from_raw("root");
         let mut root = Glyph::with_id(root_id.clone(), "root");
-        let mut root_layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+        let mut root_layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         root_layer.add_component(Component::new(missing_id.clone(), "missing"));
-        root.set_layer(root_layer);
+        set_test_layer(&mut root, source_id, root_layer);
         font.insert_glyph(root).unwrap();
 
         let error = font.glyph_projection(&root_id).unwrap_err();
@@ -936,14 +973,15 @@ mod tests {
         let layer_source_id = font.add_source(Source::layer("background".to_string()));
         let child_id = GlyphId::from_raw("child");
         let mut child = Glyph::with_id(child_id.clone(), "child");
-        child.set_layer(line_layer(layer_source_id, 20.0));
+        let child_layer = line_layer(layer_source_id.clone(), 20.0);
+        set_test_layer(&mut child, layer_source_id, child_layer);
         font.insert_glyph(child).unwrap();
 
         let root_id = GlyphId::from_raw("root");
         let mut root = Glyph::with_id(root_id.clone(), "root");
-        let mut root_layer = GlyphLayer::with_width(LayerId::new(), master_id, 500.0);
+        let mut root_layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         root_layer.add_component(Component::new(child_id.clone(), "child"));
-        root.set_layer(root_layer);
+        set_test_layer(&mut root, master_id, root_layer);
         font.insert_glyph(root).unwrap();
 
         let error = font.glyph_projection(&root_id).unwrap_err();
@@ -967,20 +1005,18 @@ mod tests {
             .unwrap()
             .clone();
         let reference_layer_id = font
-            .layer_id_for_glyph_source(glyph_id.clone(), reference_source_id.clone())
+            .layer_id_for_source(glyph_id.clone(), reference_source_id.clone())
             .unwrap();
         let bold_layer_id = font
-            .layer_id_for_glyph_source(glyph_id.clone(), bold_source.id())
+            .layer_id_for_source(glyph_id.clone(), bold_source.id())
             .unwrap();
         let c_id = GlyphId::from_raw("C");
         let caron_id = GlyphId::from_raw("caron.cap");
         for (component_glyph_id, name) in [(c_id.clone(), "C"), (caron_id.clone(), "caron.cap")] {
             let mut component_glyph = Glyph::with_id(component_glyph_id, name);
-            component_glyph.set_layer(GlyphLayer::with_width(
-                LayerId::new(),
-                reference_source_id.clone(),
-                500.0,
-            ));
+            component_glyph
+                .ensure_layer_for_source(reference_source_id.clone())
+                .set_width(500.0);
             font.insert_glyph(component_glyph).unwrap();
         }
         let reference_layer = font.layer_mut(reference_layer_id).unwrap();
@@ -1027,16 +1063,17 @@ mod tests {
             (regular_id.clone(), 40.0),
             (bold_id.clone(), 80.0),
         ] {
-            base.set_layer(line_layer(source_id, x));
+            let layer = line_layer(source_id.clone(), x);
+            set_test_layer(&mut base, source_id, layer);
         }
         font.insert_glyph(base).unwrap();
 
         let root_id = GlyphId::from_raw("Aacute");
         let mut root = Glyph::with_id(root_id.clone(), "Aacute");
         for (source_id, x) in [(light_id, 0.0), (regular_id, 40.0), (bold_id, 80.0)] {
-            let mut layer = line_layer(source_id, x);
+            let mut layer = line_layer(source_id.clone(), x);
             layer.add_component(Component::new(base_id.clone(), "A"));
-            root.set_layer(layer);
+            set_test_layer(&mut root, source_id, layer);
         }
         font.insert_glyph(root).unwrap();
 
@@ -1060,16 +1097,19 @@ mod tests {
         let (mut font, _axis_id, _light_id, regular_id, bold_id) = variable_font();
         let base_id = GlyphId::from_raw("A");
         let mut base = Glyph::with_id(base_id.clone(), "A");
-        base.set_layer(line_layer(regular_id.clone(), 0.0));
-        base.set_layer(line_layer(bold_id.clone(), 80.0));
+        let regular_layer = line_layer(regular_id.clone(), 0.0);
+        set_test_layer(&mut base, regular_id.clone(), regular_layer);
+        let bold_layer = line_layer(bold_id.clone(), 80.0);
+        set_test_layer(&mut base, bold_id.clone(), bold_layer);
         font.insert_glyph(base).unwrap();
 
         let root_id = GlyphId::from_raw("Aacute");
         let mut root = Glyph::with_id(root_id.clone(), "Aacute");
-        let mut composed = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
+        let mut composed = GlyphLayer::with_width(LayerId::new(), 500.0);
         composed.add_component(Component::new(base_id.clone(), "A"));
-        root.set_layer(composed);
-        root.set_layer(line_layer(bold_id.clone(), 80.0));
+        set_test_layer(&mut root, regular_id, composed);
+        let bold_layer = line_layer(bold_id.clone(), 80.0);
+        set_test_layer(&mut root, bold_id.clone(), bold_layer);
         font.insert_glyph(root).unwrap();
 
         let projection = font.glyph_projection(&root_id).unwrap().unwrap();
@@ -1094,15 +1134,17 @@ mod tests {
         let (mut font, _axis_id, light_id, regular_id, bold_id) = variable_font();
         let base_id = GlyphId::from_raw("diaeresis");
         let mut base = Glyph::with_id(base_id.clone(), "diaeresis");
-        base.set_layer(line_layer(light_id, 0.0));
-        base.set_layer(line_layer(bold_id, 80.0));
+        let light_layer = line_layer(light_id.clone(), 0.0);
+        set_test_layer(&mut base, light_id, light_layer);
+        let bold_layer = line_layer(bold_id.clone(), 80.0);
+        set_test_layer(&mut base, bold_id, bold_layer);
         font.insert_glyph(base).unwrap();
 
         let root_id = GlyphId::from_raw("Adieresis");
         let mut root = Glyph::with_id(root_id.clone(), "Adieresis");
-        let mut layer = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         layer.add_component(Component::new(base_id.clone(), "diaeresis"));
-        root.set_layer(layer);
+        set_test_layer(&mut root, regular_id, layer);
         font.insert_glyph(root).unwrap();
 
         let projection = font.glyph_projection(&root_id).unwrap().unwrap();
@@ -1116,21 +1158,22 @@ mod tests {
         let (mut font, _axis_id, _light_id, regular_id, _bold_id) = variable_font();
         let acute_id = GlyphId::from_raw("acute");
         let mut acute = Glyph::with_id(acute_id.clone(), "acute");
-        acute.set_layer(line_layer(regular_id.clone(), 0.0));
+        let acute_layer = line_layer(regular_id.clone(), 0.0);
+        set_test_layer(&mut acute, regular_id.clone(), acute_layer);
         font.insert_glyph(acute).unwrap();
 
         let acutecomb_id = GlyphId::from_raw("acutecomb");
         let mut acutecomb = Glyph::with_id(acutecomb_id.clone(), "acutecomb");
-        let mut acutecomb_layer = GlyphLayer::with_width(LayerId::new(), regular_id.clone(), 0.0);
+        let mut acutecomb_layer = GlyphLayer::with_width(LayerId::new(), 0.0);
         acutecomb_layer.add_component(Component::new(acute_id.clone(), "acute"));
-        acutecomb.set_layer(acutecomb_layer);
+        set_test_layer(&mut acutecomb, regular_id.clone(), acutecomb_layer);
         font.insert_glyph(acutecomb).unwrap();
 
         let root_id = GlyphId::from_raw("Aacute");
         let mut root = Glyph::with_id(root_id.clone(), "Aacute");
-        let mut root_layer = line_layer(regular_id, 40.0);
+        let mut root_layer = line_layer(regular_id.clone(), 40.0);
         root_layer.add_component(Component::new(acutecomb_id.clone(), "acutecomb"));
-        root.set_layer(root_layer);
+        set_test_layer(&mut root, regular_id, root_layer);
         font.insert_glyph(root).unwrap();
 
         let projection = font.glyph_projection(&root_id).unwrap().unwrap();
@@ -1156,22 +1199,22 @@ mod tests {
         let mut base = Glyph::with_id(base_id.clone(), "A");
         let mut base_layer = line_layer(regular_id.clone(), 0.0);
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
-        base.set_layer(base_layer);
+        set_test_layer(&mut base, regular_id.clone(), base_layer);
         font.insert_glyph(base).unwrap();
 
         let mark_id = GlyphId::from_raw("acutecomb");
         let mut mark = Glyph::with_id(mark_id.clone(), "acutecomb");
         let mut mark_layer = line_layer(regular_id.clone(), 0.0);
         mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
-        mark.set_layer(mark_layer);
+        set_test_layer(&mut mark, regular_id.clone(), mark_layer);
         font.insert_glyph(mark).unwrap();
 
         let root_id = GlyphId::from_raw("Aacute");
         let mut root = Glyph::with_id(root_id.clone(), "Aacute");
-        let mut root_layer = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
+        let mut root_layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         root_layer.add_component(Component::new(base_id, "A"));
         root_layer.add_component(Component::new(mark_id, "acutecomb"));
-        root.set_layer(root_layer);
+        set_test_layer(&mut root, regular_id, root_layer);
         font.insert_glyph(root).unwrap();
 
         let projection = font.glyph_projection(&root_id).unwrap().unwrap();
@@ -1195,7 +1238,8 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
         let blank_id = GlyphId::from_raw("blank");
         let mut blank = Glyph::with_id(blank_id.clone(), "blank");
-        blank.set_layer(GlyphLayer::with_width(LayerId::new(), source_id, 420.0));
+        let blank_layer = GlyphLayer::with_width(LayerId::new(), 420.0);
+        set_test_layer(&mut blank, source_id, blank_layer);
         font.insert_glyph(blank).unwrap();
 
         let glyphs = font
@@ -1219,23 +1263,23 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
         let base_id = GlyphId::from_raw("base");
         let mut base = Glyph::with_id(base_id.clone(), "base");
-        let mut base_layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 200.0);
+        let mut base_layer = GlyphLayer::with_width(LayerId::new(), 200.0);
         let mut contour = Contour::new();
         contour.add_point(0.0, 0.0, PointType::OnCurve, false);
         contour.add_point(10.0, 10.0, PointType::OnCurve, false);
         base_layer.add_contour(contour);
-        base.set_layer(base_layer);
+        set_test_layer(&mut base, source_id.clone(), base_layer);
         font.insert_glyph(base).unwrap();
 
         let root_id = GlyphId::from_raw("root");
         let mut root = Glyph::with_id(root_id.clone(), "root");
-        let mut root_layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+        let mut root_layer = GlyphLayer::with_width(LayerId::new(), 500.0);
         root_layer.add_component(Component::with_matrix(
             base_id,
             "base",
             &Transform::translate(50.0, 20.0),
         ));
-        root.set_layer(root_layer);
+        set_test_layer(&mut root, source_id, root_layer);
         font.insert_glyph(root).unwrap();
 
         let glyph = font

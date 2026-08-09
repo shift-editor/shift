@@ -13,7 +13,7 @@ const MAX_LAYER_PAYLOAD_BYTES_SQL: i64 = MAX_LAYER_PAYLOAD_BYTES as i64;
 pub struct GlyphLayerDirectoryEntry {
     pub layer_id: font::LayerId,
     pub glyph_id: font::GlyphId,
-    pub source_id: font::SourceId,
+    pub source_id: Option<font::SourceId>,
     pub name: Option<font::GlyphName>,
     pub width: f64,
     pub height: Option<f64>,
@@ -25,12 +25,20 @@ impl ShiftStore {
     pub fn list_glyph_layer_directory(&self) -> Result<Vec<GlyphLayerDirectoryEntry>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
-            SELECT l.id, l.glyph_id, l.source_id, g.name, l.width, l.height,
+            SELECT l.id, l.glyph_id,
+                   (SELECT gs.base_source_id
+                    FROM glyph_sources AS gs
+                    WHERE gs.layer_id = l.id
+                      AND gs.variant_id IS NULL
+                      AND gs.base_source_id IS NOT NULL
+                    ORDER BY gs.order_index, gs.id
+                    LIMIT 1) AS source_id,
+                   g.name, l.width, l.height,
                    p.stored_byte_length, p.decoded_byte_length
             FROM glyph_layers AS l
             JOIN glyphs AS g ON g.id = l.glyph_id
             JOIN glyph_layer_payloads AS p ON p.layer_id = l.id
-            ORDER BY l.glyph_id, l.source_id, l.id
+            ORDER BY l.glyph_id, l.id
             ",
         )?;
         let rows = stmt.query_map([], map_directory_row)?;
@@ -40,7 +48,6 @@ impl ShiftStore {
 
 pub(super) struct DirectoryFacts {
     pub(super) layer_id: String,
-    pub(super) source_id: String,
     pub(super) width: f64,
     pub(super) height: Option<f64>,
     inner_format: String,
@@ -117,29 +124,25 @@ impl DirectoryFacts {
 pub(super) fn map_directory_facts_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<DirectoryFacts> {
     Ok(DirectoryFacts {
         layer_id: row.get(0)?,
-        source_id: row.get(1)?,
-        width: row.get(2)?,
-        height: row.get(3)?,
-        inner_format: row.get(4)?,
-        compression: row.get(5)?,
-        stored_byte_length: row.get(6)?,
-        decoded_byte_length: row.get(7)?,
-        decoded_blake3: row.get(8)?,
-        actual_stored_byte_length: row.get(9)?,
+        width: row.get(1)?,
+        height: row.get(2)?,
+        inner_format: row.get(3)?,
+        compression: row.get(4)?,
+        stored_byte_length: row.get(5)?,
+        decoded_byte_length: row.get(6)?,
+        decoded_blake3: row.get(7)?,
+        actual_stored_byte_length: row.get(8)?,
     })
 }
 
 pub(super) fn validate_directory_facts(
     expected_id: &font::LayerId,
-    expected_source_id: &str,
     expected_width: f64,
     expected_height: Option<f64>,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
     let detail = if layer.id() != *expected_id {
         Some(format!("payload id is {}", layer.id()))
-    } else if layer.source_id().as_str() != expected_source_id {
-        Some(format!("payload source id is {}", layer.source_id()))
     } else if layer.width().to_bits() != expected_width.to_bits() {
         Some("payload width differs from directory width".to_string())
     } else if !same_optional_f64(layer.height(), expected_height) {
@@ -162,7 +165,9 @@ fn map_directory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GlyphLayerDire
     Ok(GlyphLayerDirectoryEntry {
         layer_id: font::LayerId::from_raw(row.get::<_, String>(0)?),
         glyph_id: font::GlyphId::from_raw(row.get::<_, String>(1)?),
-        source_id: font::SourceId::from_raw(row.get::<_, String>(2)?),
+        source_id: row
+            .get::<_, Option<String>>(2)?
+            .map(font::SourceId::from_raw),
         name: row.get::<_, Option<String>>(3)?.map(font::GlyphName::from),
         width: row.get(4)?,
         height: row.get(5)?,

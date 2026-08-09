@@ -59,15 +59,14 @@ pub(crate) fn store_stored_layer_in_tx(
     let decoded_byte_length = encoded_len(stored.decoded_byte_length)?;
     let layer_sql = match mode {
         WriteMode::Insert => {
-            "INSERT INTO glyph_layers (id, glyph_id, source_id, width, height) VALUES (?1, ?2, ?3, ?4, ?5)"
+            "INSERT INTO glyph_layers (id, glyph_id, width, height) VALUES (?1, ?2, ?3, ?4)"
         }
         WriteMode::Upsert => {
             "
-            INSERT INTO glyph_layers (id, glyph_id, source_id, width, height)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO glyph_layers (id, glyph_id, width, height)
+            VALUES (?1, ?2, ?3, ?4)
             ON CONFLICT(id) DO UPDATE SET
                 glyph_id = excluded.glyph_id,
-                source_id = excluded.source_id,
                 width = excluded.width,
                 height = excluded.height
             "
@@ -76,7 +75,6 @@ pub(crate) fn store_stored_layer_in_tx(
     tx.prepare_cached(layer_sql)?.execute(params![
         layer.id().to_string(),
         glyph_id.to_string(),
-        layer.source_id().to_string(),
         layer.width(),
         layer.height(),
     ])?;
@@ -137,14 +135,43 @@ pub(crate) fn rewrite_layer_in_tx(
 pub(crate) fn create_empty_layer_in_tx(
     tx: &Transaction<'_>,
     glyph_id: &font::GlyphId,
+    glyph_source: &font::GlyphSource,
     layer_id: font::LayerId,
-    source_id: font::SourceId,
     width: f64,
     height: Option<f64>,
 ) -> Result<(), StoreError> {
-    let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
+    let mut layer = font::GlyphLayer::with_width(layer_id, width);
     layer.set_height(height);
-    write_layer_in_tx(tx, glyph_id, &layer)
+    write_layer_in_tx(tx, glyph_id, &layer)?;
+
+    let order_index: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(order_index) + 1, 0)
+         FROM glyph_sources
+         WHERE glyph_id = ?1 AND variant_id IS NULL",
+        [glyph_id.to_string()],
+        |row| row.get(0),
+    )?;
+    tx.execute(
+        "INSERT INTO glyph_sources (
+            id, glyph_id, variant_id, name, layer_id, base_source_id, order_index
+         ) VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)",
+        params![
+            glyph_source.id().to_string(),
+            glyph_id.to_string(),
+            glyph_source.name(),
+            glyph_source.layer_id().to_string(),
+            glyph_source.base_source_id().map(|id| id.to_string()),
+            order_index,
+        ],
+    )?;
+    for (axis_id, value) in glyph_source.location().iter() {
+        tx.execute(
+            "INSERT INTO glyph_source_locations (glyph_source_id, axis_id, value)
+             VALUES (?1, ?2, ?3)",
+            params![glyph_source.id().to_string(), axis_id.to_string(), value],
+        )?;
+    }
+    Ok(())
 }
 
 fn write_component_index(

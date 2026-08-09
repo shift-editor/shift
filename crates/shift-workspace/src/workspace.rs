@@ -10,8 +10,8 @@ use shift_backends::{
 };
 use shift_font::{
     AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
-    FontMetadata, Glyph, GlyphId, GlyphLayer, LayerId, MetricDefinition, NamedInstance, Source,
-    SourceId, TouchedLayer, error::CoreError,
+    FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphSource, LayerId, Location, MetricDefinition,
+    NamedInstance, Source, SourceId, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
 use shift_store::{
@@ -353,7 +353,7 @@ impl FontWorkspace {
                     .and_then(|glyph| glyph.layers().get(layer_id))
                     .cloned()
             {
-                pre.layers.push(PreLayer { glyph_id, layer });
+                pre.layers.push(PreLayer { layer });
             }
         }
 
@@ -501,7 +501,7 @@ impl FontWorkspace {
                     steps.push(LedgerStep::GlyphLayer {
                         glyph_id: change.glyph_id.clone(),
                         pre: None,
-                        post: Some(Box::new(layer.clone())),
+                        post: Some((change.glyph_source.clone(), Box::new(layer.clone()))),
                     });
                 }
                 FontChange::GlyphLayerDeleted(change) => {
@@ -510,13 +510,7 @@ impl FontWorkspace {
                     }
                     steps.push(LedgerStep::GlyphLayer {
                         glyph_id: change.glyph_id.clone(),
-                        pre: pre
-                            .layers
-                            .iter()
-                            .find(|pre| {
-                                pre.glyph_id == change.glyph_id && pre.layer.id() == change.layer_id
-                            })
-                            .map(|pre| Box::new(pre.layer.as_ref().clone())),
+                        pre: None,
                         post: None,
                     });
                 }
@@ -680,8 +674,8 @@ impl FontWorkspace {
                         replay_glyph_layer(
                             font,
                             glyph_id,
-                            from.map(|layer| *layer),
-                            to.map(|layer| *layer),
+                            from.map(|(source, layer)| (source, *layer)),
+                            to.map(|(source, layer)| (source, *layer)),
                             &mut changes,
                             &mut touched,
                         )?;
@@ -954,8 +948,7 @@ impl FontWorkspace {
                 if self.residency.is_unloaded(&layer.id()) || !seen_layer_ids.insert(layer.id()) {
                     continue;
                 }
-                let mut placeholder =
-                    GlyphLayer::with_width(layer.id(), layer.source_id(), layer.width());
+                let mut placeholder = GlyphLayer::with_width(layer.id(), layer.width());
                 placeholder.set_height(layer.height());
                 placeholders.push(placeholder);
                 evicted.push(layer.id());
@@ -1074,7 +1067,6 @@ impl FontWorkspace {
 
 #[derive(Clone)]
 struct PreLayer {
-    glyph_id: GlyphId,
     layer: Arc<GlyphLayer>,
 }
 
@@ -1145,24 +1137,6 @@ fn capture_font_level_pre_state(
                     .find(|source| source.id() == *source_id)
             {
                 pre.sources.push(source.clone());
-            }
-
-            for glyph in font.glyphs() {
-                let Some(layer) = glyph
-                    .layers()
-                    .values()
-                    .find(|layer| layer.source_id() == *source_id)
-                    .cloned()
-                else {
-                    continue;
-                };
-                if pre.layers.iter().any(|pre| pre.layer.id() == layer.id()) {
-                    continue;
-                }
-                pre.layers.push(PreLayer {
-                    glyph_id: glyph.id(),
-                    layer,
-                });
             }
         }
         FontIntent::UpdateAxis { axis } => {
@@ -1263,8 +1237,7 @@ fn replay_glyph(
     touched: &mut Vec<TouchedLayer>,
 ) -> Result<(), WorkspaceError> {
     if let Some(glyph) = from {
-        font.remove_glyph(glyph.id())
-            .ok_or(CoreError::GlyphNotFound(glyph.id()))?;
+        font.remove_glyph(glyph.id())?;
         changes.push(FontChange::glyph_deleted(glyph.id()));
     }
 
@@ -1273,7 +1246,30 @@ fn replay_glyph(
         changes.push(FontChange::glyph_created(&glyph));
 
         for layer in glyph.layers().values() {
-            changes.push(FontChange::glyph_layer_created(glyph.id(), layer.as_ref()));
+            let glyph_source = glyph
+                .default_sources()
+                .values()
+                .chain(
+                    glyph
+                        .variants()
+                        .values()
+                        .flat_map(|variant| variant.sources().values()),
+                )
+                .find(|source| source.layer_id() == layer.id())
+                .cloned()
+                .unwrap_or_else(|| {
+                    GlyphSource::new(
+                        "Unreferenced layer".to_string(),
+                        layer.id(),
+                        None,
+                        Location::new(),
+                    )
+                });
+            changes.push(FontChange::glyph_layer_created(
+                glyph.id(),
+                &glyph_source,
+                layer.as_ref(),
+            ));
             touched.push(TouchedLayer {
                 layer: layer.clone(),
                 structural: true,
@@ -1415,8 +1411,7 @@ fn replay_source(
     }
 
     if let Some(source) = from {
-        font.remove_source(source.id())
-            .ok_or(CoreError::SourceNotFound(source.id()))?;
+        font.remove_source(source.id())?;
         changes.push(FontChange::source_deleted(source.id()));
     }
 
@@ -1431,19 +1426,21 @@ fn replay_source(
 fn replay_glyph_layer(
     font: &mut shift_font::Font,
     glyph_id: GlyphId,
-    from: Option<GlyphLayer>,
-    to: Option<GlyphLayer>,
+    from: Option<(GlyphSource, GlyphLayer)>,
+    to: Option<(GlyphSource, GlyphLayer)>,
     changes: &mut FontChangeSet,
     touched: &mut Vec<TouchedLayer>,
 ) -> Result<(), WorkspaceError> {
-    if let Some(layer) = from {
+    if let Some((source, layer)) = from {
+        font.remove_glyph_source(source.id())?;
         font.remove_glyph_layer(layer.id())?;
         changes.push(FontChange::glyph_layer_deleted(glyph_id.clone(), &layer));
     }
 
-    if let Some(layer) = to {
-        changes.push(FontChange::glyph_layer_created(glyph_id.clone(), &layer));
-        font.insert_glyph_layer(glyph_id, layer.clone())?;
+    if let Some((source, layer)) = to {
+        font.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
+        font.add_glyph_source(glyph_id.clone(), None, source.clone())?;
+        changes.push(FontChange::glyph_layer_created(glyph_id, &source, &layer));
         touched.push(TouchedLayer {
             layer: Arc::new(layer),
             structural: true,

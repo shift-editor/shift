@@ -1,6 +1,7 @@
 use crate::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, GlyphId, GlyphName,
-    GuidelineId, LayerId, MetricId, MetricKind, NamedInstanceId, PointId, SourceId,
+    GlyphSourceId, GlyphVariantId, GuidelineId, LayerId, MetricId, MetricKind, NamedInstanceId,
+    PointId, SourceId,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -76,6 +77,24 @@ pub enum CoreError {
     #[error("source id {0} already exists")]
     DuplicateSourceId(SourceId),
 
+    #[error("glyph source id {0} already exists")]
+    DuplicateGlyphSourceId(GlyphSourceId),
+
+    #[error("glyph variant id {0} already exists")]
+    DuplicateGlyphVariantId(GlyphVariantId),
+
+    #[error("glyph source {glyph_source_id} references missing layer {layer_id}")]
+    GlyphSourceLayerNotFound {
+        glyph_source_id: GlyphSourceId,
+        layer_id: LayerId,
+    },
+
+    #[error("layer {layer_id} is referenced by glyph source {glyph_source_id}")]
+    GlyphLayerReferenced {
+        layer_id: LayerId,
+        glyph_source_id: GlyphSourceId,
+    },
+
     #[error("layer {0} not found")]
     LayerNotFound(LayerId),
 
@@ -119,6 +138,9 @@ pub enum CoreError {
 
     #[error("axis tag {0} already exists")]
     DuplicateAxisTag(String),
+
+    #[error("axis id {0} already exists")]
+    DuplicateAxisId(AxisId),
 
     #[error("axis {0} not found")]
     AxisNotFound(AxisId),
@@ -201,6 +223,26 @@ pub enum CoreError {
 
     #[error("cannot delete the last source")]
     CannotDeleteLastSource,
+
+    #[error("{kind} {entity_id} is invalid: {message}")]
+    InvalidAuthoringEntity {
+        kind: &'static str,
+        entity_id: String,
+        message: String,
+    },
+
+    #[error("source {source_id} is used as the base of glyph source {glyph_source_id}")]
+    SourceReferencedByGlyphSource {
+        source_id: SourceId,
+        glyph_source_id: GlyphSourceId,
+    },
+
+    #[error("axis {axis_id} is referenced by {kind} {entity_id}")]
+    AxisReferenced {
+        axis_id: AxisId,
+        kind: &'static str,
+        entity_id: String,
+    },
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

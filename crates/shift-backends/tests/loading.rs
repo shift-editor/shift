@@ -4,7 +4,9 @@ use std::{
 };
 
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
+use shift_font::{
+    Contour, Font, Glyph, GlyphLayer, GlyphSource, LayerId, Location, MetricKind, PointType,
+};
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -99,14 +101,21 @@ fn simple_geometry_font() -> Font {
     let mut font = Font::new();
     let source_id = font.default_source_id().unwrap();
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-    let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_regular"), source_id, 640.0);
+    let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_regular"), 640.0);
     let mut contour = Contour::new();
     contour.add_point(100.0, 0.0, PointType::OnCurve, false);
     contour.add_point(320.0, 700.0, PointType::OnCurve, false);
     contour.add_point(540.0, 0.0, PointType::OnCurve, false);
     contour.close();
     layer.add_contour(contour);
+    let glyph_source = GlyphSource::new(
+        "Regular".to_string(),
+        layer.id(),
+        Some(source_id),
+        Location::new(),
+    );
     glyph.set_layer(layer);
+    glyph.insert_default_source(glyph_source);
     font.insert_glyph(glyph).unwrap();
     font
 }
@@ -185,13 +194,14 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
     let source_names: Vec<_> = font.sources().iter().map(|source| source.name()).collect();
     assert!(source_names.contains(&"Regular"));
     assert!(font.sources().len() >= 2);
-    assert!(font
-        .glyphs()
-        .flat_map(|glyph| glyph.layers().values())
-        .all(|layer| font
-            .sources()
-            .iter()
-            .any(|source| source.id() == layer.source_id())));
+    assert!(font.glyphs().all(|glyph| {
+        glyph.default_sources().values().all(|glyph_source| {
+            glyph.layer(glyph_source.layer_id()).is_some()
+                && glyph_source.base_source_id().is_some_and(|source_id| {
+                    font.sources().iter().any(|source| source.id() == source_id)
+                })
+        })
+    }));
 
     assert_eq!(font.kerning().get_kerning("T", "A"), Some(-75.0));
     assert_eq!(font.kerning().get_kerning("V", "A"), Some(-100.0));

@@ -1,7 +1,7 @@
 use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph, GlyphId,
-    GlyphLayer, GlyphName, LayerId, MetricDefinition, MetricId, MetricValue, NamedInstance, Point,
-    PointId, PointType, Source, SourceId,
+    GlyphLayer, GlyphName, GlyphSource, LayerId, MetricDefinition, MetricId, MetricValue,
+    NamedInstance, Point, PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -134,14 +134,17 @@ impl FontChange {
         })
     }
 
-    pub fn glyph_layer_created(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
-        Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, layer))
+    pub fn glyph_layer_created(
+        glyph_id: GlyphId,
+        glyph_source: &GlyphSource,
+        layer: &GlyphLayer,
+    ) -> Self {
+        Self::GlyphLayerCreated(GlyphLayerCreated::from_layer(glyph_id, glyph_source, layer))
     }
 
     pub fn glyph_layer_deleted(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
         Self::GlyphLayerDeleted(GlyphLayerDeleted {
             glyph_id,
-            source_id: layer.source_id(),
             layer_id: layer.id(),
         })
     }
@@ -375,17 +378,17 @@ pub struct GlyphIdentityChanged {
 #[derive(Clone, Debug)]
 pub struct GlyphLayerCreated {
     pub glyph_id: GlyphId,
-    pub source_id: SourceId,
+    pub glyph_source: GlyphSource,
     pub layer_id: LayerId,
     pub width: f64,
     pub height: Option<f64>,
 }
 
 impl GlyphLayerCreated {
-    pub fn from_layer(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
+    pub fn from_layer(glyph_id: GlyphId, glyph_source: &GlyphSource, layer: &GlyphLayer) -> Self {
         Self {
             glyph_id,
-            source_id: layer.source_id(),
+            glyph_source: glyph_source.clone(),
             layer_id: layer.id(),
             width: layer.width(),
             height: layer.height(),
@@ -396,7 +399,6 @@ impl GlyphLayerCreated {
 #[derive(Clone, Debug)]
 pub struct GlyphLayerDeleted {
     pub glyph_id: GlyphId,
-    pub source_id: SourceId,
     pub layer_id: LayerId,
 }
 
