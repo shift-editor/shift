@@ -8,8 +8,9 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 
 - A `.shift` document is the SQLite database itself. It uses application ID `SHFT` (`0x53484654`) and an exact `user_version` contract.
 - `ShiftStore::create_document` writes a complete `shift-font::Font` at a sibling staging path, syncs it, and publishes without clobbering an existing destination.
+- `ShiftStore::save_as_document` takes a consistent SQLite snapshot of a working or canonical store without materializing a complete `Font`, removes app-local workspace state, mints a new document identity, validates and syncs the staged canonical database, and publishes without clobbering.
 - `ShiftStore::open_document` validates the file read-only before opening it with rollback journaling and `synchronous=FULL`. `ShiftStore::verify_document` also runs SQLite integrity and foreign-key checks.
-- `DocumentMetadata` contains the stable `DocumentId`. A raw copy preserves it; Save As will mint a new identity at the workspace boundary.
+- `DocumentMetadata` contains the stable `DocumentId`. A raw copy preserves it; Save As mints a new identity.
 - Canonical documents never contain app-local `workspace_state`. Working databases retain WAL + NORMAL and their revision/source-binding row.
 
 ## Storage boundary
@@ -62,7 +63,7 @@ Shift has not shipped either SQLite schema. Schema changes therefore update the 
 ```text
 src/
   connection.rs     # canonical, working-WAL, and disposable-import connection postures
-  document.rs       # staged create, validated open/verify, metadata, and durable publication
+  document.rs       # staged create/Save As, validated open/verify, metadata, and durable publication
   schema.rs         # canonical and working pre-release version-1 baselines
   font_state.rs     # eager metadata/directory and explicit full materialization
   import_writer.rs  # pipelined Rayon encode/compress plus one SQLite transaction owner

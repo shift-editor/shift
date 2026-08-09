@@ -1,9 +1,10 @@
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, backup::Backup, params};
 use shift_font::Font;
 
 use crate::{
@@ -63,6 +64,72 @@ impl ShiftStore {
         sync_parent_directory(path)?;
 
         Self::open_document(path)
+    }
+
+    /// Saves a consistent snapshot of this store as a new canonical document.
+    ///
+    /// The source remains open and unchanged. The destination receives a new
+    /// document identity, excludes app-local workspace state, and is validated
+    /// and synced at a sibling staging path before no-clobber publication.
+    pub fn save_as_document(&self, path: impl AsRef<Path>) -> Result<DocumentMetadata, StoreError> {
+        let path = path.as_ref();
+        if path.exists() {
+            return Err(StoreError::DocumentAlreadyExists(path.to_path_buf()));
+        }
+
+        let parent = parent_directory(path);
+        let staged = tempfile::Builder::new()
+            .prefix(".shift-document-")
+            .suffix(".shift")
+            .tempfile_in(parent)?
+            .into_temp_path();
+        let mut conn = Connection::open(&staged)?;
+
+        {
+            let backup = Backup::new(&self.conn, &mut conn)?;
+            backup.run_to_completion(256, Duration::from_millis(1), None)?;
+        }
+
+        configure_document_connection(&conn)?;
+        let metadata = DocumentMetadata {
+            document_id: DocumentId::new(),
+        };
+        let tx = conn.transaction()?;
+        tx.execute_batch("DROP TABLE IF EXISTS workspace_state; DELETE FROM document_metadata;")?;
+        tx.execute(
+            "INSERT INTO document_metadata (id, document_id) VALUES (1, ?1)",
+            params![metadata.document_id.as_str()],
+        )?;
+        tx.pragma_update(None, "application_id", schema::SHIFT_APPLICATION_ID)?;
+        tx.pragma_update(None, "user_version", schema::SCHEMA_VERSION)?;
+        tx.commit()?;
+
+        let staged_store = Self {
+            conn,
+            path: Some(staged.to_path_buf()),
+            kind: StoreKind::Document,
+        };
+        staged_store.sync_store_file()?;
+        drop(staged_store);
+        remove_staging_sidecars(&staged)?;
+
+        let verified = Self::verify_document(&staged)?;
+        if verified != metadata {
+            return Err(StoreError::InvalidDocument(
+                "staged document identity changed during validation".to_string(),
+            ));
+        }
+
+        match staged.persist_noclobber(path) {
+            Ok(()) => {}
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                return Err(StoreError::DocumentAlreadyExists(path.to_path_buf()));
+            }
+            Err(error) => return Err(StoreError::Io(error.error)),
+        }
+        sync_parent_directory(path)?;
+
+        Ok(metadata)
     }
 
     /// Opens a canonical Shift document after validating it read-only first.
