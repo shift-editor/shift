@@ -119,7 +119,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
 
   it("a current-target save serializes behind a later edit", async () => {
     const { store, editCoordinator } = stack;
-    await editCoordinator.save(savePath()); // adopt a package target
+    await editCoordinator.save(savePath()); // adopt a canonical document target
 
     editCoordinator.push(createGlyph("B", 66));
     const saved = await editCoordinator.save(null); // null = save to current target

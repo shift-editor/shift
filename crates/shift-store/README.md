@@ -2,7 +2,7 @@
 
 `shift-store` owns Shift's SQLite persistence boundary: the canonical `.shift` application database, sparse app-local recovery overlays for saved documents, and complete app-local working databases for unsaved imports and new documents.
 
-Callers use typed APIs from this crate rather than preparing SQL or opening a second application-level persistence path. The desktop app has not yet cut over from the legacy ZIP package, so the native document and recovery APIs are currently a tested foundation rather than the active Save/Open route.
+Callers use typed APIs from this crate rather than preparing SQL or opening a second application-level persistence path. The desktop opens existing `.shift` files through the native document/recovery route; legacy ZIP compatibility remains only for source-import and transitional APIs.
 
 ## Canonical document boundary
 
@@ -16,14 +16,14 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 
 ## Recovery boundary
 
-`RecoveryOverlay` is an app-data SQLite database bound to one `DocumentId` and `base_commit_id`. A completed semantic edit transaction writes only replacement rows, complete replacement layer BLOBs, earned component rows, collection-replacement markers, and deletion tombstones. The canonical `.shift` remains the last explicitly saved document.
+`RecoveryOverlay` is an app-data SQLite database bound to one `DocumentId` and `base_commit_id`. A completed semantic edit transaction writes only replacement rows, complete replacement layer BLOBs, earned component rows, collection-replacement markers, and deletion tombstones, and advances the durable recovery revision used to invalidate derived caches. The canonical `.shift` remains the last explicitly saved document.
 
 Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
 
 - an edit moves `Clean` to `Dirty`;
 - `save_document` first persists a new `pending_commit_id`, applies only overlay changes to the canonical document in one short transaction, writes the same ID as `saved_commit_id`, then acknowledges and clears the overlay;
 - reopening after a crash compares commit IDs: a matching pending/saved ID proves Save committed and clears the overlay, while an unchanged base returns to `Dirty`;
-- a changed canonical base moves a dirty overlay to `Conflict` rather than applying stale rows silently;
+- Open and every explicit Save reconcile the current canonical commit; a changed base moves a dirty overlay to `Conflict` rather than applying stale rows silently;
 - `discard_recovery` clears the overlay and immediately exposes canonical rows through the same merged views.
 
 `save_as_document` snapshots the canonical main database and applies the current merged overlay only to the staged destination. It mints a new identity while leaving the source document and its unsaved recovery state unchanged. Recovery databases use WAL with `synchronous=FULL`; canonical documents retain rollback/FULL and no required idle sidecars.

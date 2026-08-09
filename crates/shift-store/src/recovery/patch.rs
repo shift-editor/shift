@@ -185,10 +185,7 @@ impl RecoveryOverlay {
             }
         }
 
-        tx.execute(
-            "UPDATE recovery_metadata SET state = 'dirty', pending_commit_id = NULL WHERE id = 1",
-            [],
-        )?;
+        mark_dirty(&tx)?;
         tx.commit()?;
         Ok(())
     }
@@ -210,13 +207,20 @@ impl RecoveryOverlay {
         clear_tombstone(&tx, LAYER, layer.id().as_str())?;
         write_layer_in_tx(&tx, glyph_id, layer)?;
         mark_replaced(&tx, GLYPH_COMPONENTS, layer.id().as_str())?;
-        tx.execute(
-            "UPDATE recovery_metadata SET state = 'dirty', pending_commit_id = NULL WHERE id = 1",
-            [],
-        )?;
+        mark_dirty(&tx)?;
         tx.commit()?;
         Ok(())
     }
+}
+
+fn mark_dirty(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    tx.execute(
+        "UPDATE recovery_metadata
+         SET state = 'dirty', pending_commit_id = NULL, revision = revision + 1
+         WHERE id = 1",
+        [],
+    )?;
+    Ok(())
 }
 
 fn mark_replaced(tx: &Transaction<'_>, collection: &str, owner_id: &str) -> Result<(), StoreError> {

@@ -9,8 +9,8 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Every non-`.shift` font path opens as an immutable imported session. It uses the shared renderer sync lane and `/home` route, but never allocates a SQLite working document or authored Shift model.
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
-- **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
-- **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean documents and explicitly discarded dirty documents are closed through the utility process so package bindings and SQLite documents are pruned.
+- **Architecture Invariant:** Within one app instance, at most one live or in-flight session owns a `DocumentId`. Different documents open concurrently; a raw filesystem copy retains its identity and therefore reuses the existing session until Save As mints an independent `DocumentId`.
+- **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean documents and explicitly discarded dirty documents are closed through the utility process so app-owned recovery bindings and SQLite overlays are pruned. Unexpected process termination leaves completed recovery transactions intact.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; each process validates an artifact index once and then verifies and decompresses its fixed pages independently. Staging paths use readable `run-{pid}-{id}/page-{index}-{id}.zst` names, and every retry owns a distinct file until publication. The LRU scans after an artifact is opened or published, never after every page stream. Stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
@@ -37,7 +37,8 @@ src/main/
     Window.ts                     -- BrowserWindow wrapper
     WindowManager.ts              -- live window registry
   workspace/
-    WorkspaceManager.ts           -- live workspace session registry and package-session dedupe
+    WorkspaceManager.ts           -- live workspace registry and document-open coalescing
+    DocumentSessionIndex.ts        -- one live workspace owner per canonical DocumentId
     WorkspaceProcess.ts           -- utility-process shell-lane controller
     FontSessionHost.ts            -- process/mode/optional-document/window grouping for one font session
 ```
@@ -46,7 +47,8 @@ src/main/
 
 - `WorkspaceManager` -- registry for live Shift and imported font sessions and window attachments.
 - `FontSessionHost` -- owns the immutable mode, utility process, optional authored document services, and attached windows for one open font.
-- `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect package, open, close, and document state.
+- `DocumentSessionIndex` -- maps each live `DocumentId` to one app-local workspace session and follows Save As identity changes.
+- `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect document, open, close, and document state.
 - `DocumentClient` -- request client for renderer-served document state/save calls.
 - `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
 - `AppLifecycle` -- coordinates Electron window close and app quit around document vetoes.
@@ -56,7 +58,7 @@ src/main/
 
 ### Startup
 
-`main.ts` constructs `App` and calls `start()`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development normally uses `Shift Dev` below Electron's app-data directory, but an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
+`main.ts` constructs `App` and calls `start()`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. That app-owned root contains workspace allocations, sparse recovery overlays, and document-address bindings; canonical `.shift` files remain at their user-selected paths. Development normally uses `Shift Dev` below Electron's app-data directory, but an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and recovery state.
 
 On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. Windows and Linux keep the conventional quit-on-last-window behavior.
 
@@ -64,7 +66,7 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 File -> New asks `WorkspaceManager.createUntitled()` for a session. File -> Open shows `showOpenFontDialog()` and then asks `WorkspaceManager.openPath(path)`.
 
-For every non-`.shift` font path, `WorkspaceManager` opens one immutable retained source in the utility process and registers an `"imported"` session without a document lane. For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the process opens the package and the resulting state is registered. Main does not start monolithic Slug preparation: the renderer requests the complete fixed-page set before its first Grid presentation. The utility opens and validates a matching cache artifact once, serves independently verified Zstd pages through the bounded stream contract, or compiles native misses and stages them for atomic publication. Page boundaries keep compilation, streaming, cache replacement, and local edit invalidation bounded without putting page acquisition on the scroll path.
+For every non-`.shift` font path, `WorkspaceManager` opens one immutable retained source in the utility process and registers an `"imported"` session without a document lane. For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectDocument` before opening. If a live session already owns the same `DocumentId`, the provisional process is stopped and the existing session is returned. Concurrent requests for that identity share one in-flight open, so only one utility process may publish its recovery binding. Otherwise the utility opens the canonical SQLite file directly against the bound app-owned sparse overlay and registers the resulting workspace state. Path-specific bindings distinguish a closed document move from a raw copy: one missing old path can rebind its recovery, while an extant original path prevents its recovery from being attached to the copy. Main does not start monolithic Slug preparation: the renderer requests the complete fixed-page set before its first Grid presentation. The utility opens and validates a matching cache artifact once, serves independently verified Zstd pages through the bounded stream contract, or compiles native misses and stages them for atomic publication. Page boundaries keep compilation, streaming, cache replacement, and local edit invalidation bounded without putting page acquisition on the scroll path.
 
 ### Window Attachment
 
@@ -74,9 +76,11 @@ For every non-`.shift` font path, `WorkspaceManager` opens one immutable retaine
 
 Save and Save As start in `DocumentSession`, but the actual save request goes through `DocumentClient` to the renderer document lane. The renderer flushes queued edits through the workspace sync lane before calling `workspace.save` or `workspace.saveAs`.
 
-Export TrueType follows the same document and sync lanes. The utility process captures an immutable native snapshot after prior edits, then awaits direct Shift IR-to-fontc compilation outside the workspace queue. Edits submitted after snapshot capture can proceed and are not included in that export. Export does not change the package binding or dirty state.
+Export TrueType follows the same document and sync lanes. The utility process captures an immutable native snapshot after prior edits, then awaits direct Shift IR-to-fontc compilation outside the workspace queue. Edits submitted after snapshot capture can proceed and are not included in that export. Export does not change the document binding or dirty state.
 
-Close and quit call `DocumentSession.confirmClose`. If the document is clean, or the user saves successfully, or the user chooses discard, `DocumentSession` calls `workspace.close` in the utility process. The utility drops the Rust workspace handle, removes package bindings, and deletes the clean/discarded SQLite document. Dirty divergent documents created by package-source conflicts are orphaned by the utility process, not by main.
+For a document-backed workspace, Save first reconciles the current canonical commit and then commits only its sparse recovery rows. A changed commit becomes `Conflict` rather than accepting a stale Save. Save As snapshots the merged view to a new canonical `DocumentId`, installs a fresh recovery overlay, and rebinds the existing app-local workspace session. The source canonical document remains unchanged.
+
+Close and quit call `DocumentSession.confirmClose`. If the document is clean, or the user saves successfully, or the user chooses Don't Save, `DocumentSession` calls `workspace.close` in the utility process. Don't Save first clears native recovery state. The utility then drops the Rust workspace handle, removes the document binding, and deletes the clean/discarded app-owned workspace directory. A crash or forced termination bypasses this cleanup, allowing the next open of the same document address to resume the completed recovery transactions.
 
 Message lanes reject in-flight calls when their remote port closes. An unexpected utility-process exit also disconnects the renderer document lane: Save remains blocked because pending edits cannot be settled, while an explicit Discard treats the unavailable workspace as already closed so window and quit guards can finish.
 
@@ -104,9 +108,10 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm --filter @shift/desktop test src/utility/workspace/WorkspaceHost.test.ts`
 - `pnpm --filter @shift/desktop test src/renderer/src/lib/workspace/WorkspaceEditCoordinator.test.ts`
 - `pnpm typecheck`
-- Electron E2E fixtures copy their startup workspace under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
-- Manual: open the same `.shift` package twice and verify the existing workspace session is reused.
-- Manual: edit a package, close the last window, and verify the save/discard prompt appears.
+- Electron E2E fixtures materialize a native startup document under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
+- `document-recovery.spec.ts` force-terminates Electron, reopens the same document and user-data directory, verifies recovery, then verifies explicit Save changes the canonical document.
+- Manual: open the same `.shift` document twice and verify the existing workspace session is reused.
+- Manual: edit a document, close the last window, and verify the Save / Don't Save / Cancel prompt appears.
 
 ## Related
 

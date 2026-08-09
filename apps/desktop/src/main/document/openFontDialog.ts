@@ -22,7 +22,7 @@ export async function showOpenFontDialog(window: Window | null): Promise<string 
     title: "Open Font",
     filters: [
       { name: "Supported Fonts", extensions: OPEN_FONT_EXTENSIONS },
-      { name: "Shift Source Package", extensions: ["shift"] },
+      { name: "Shift Document", extensions: ["shift"] },
       { name: "TrueType/OpenType", extensions: ["ttf", "otf"] },
       { name: "Glyphs", extensions: ["glyphs", "glyphspackage"] },
       { name: "UFO/Designspace", extensions: ["ufo", "designspace"] },

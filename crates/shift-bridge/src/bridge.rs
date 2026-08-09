@@ -46,8 +46,7 @@ use shift_wire::{
   SourceMetricValue, SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 use shift_workspace::{
-  AcquireScope, FontWorkspace, NewWorkspace, PackageDraft, PackageIdentity, WorkspaceError,
-  WorkspaceSource,
+  AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource,
 };
 use std::{
   collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -79,25 +78,16 @@ pub struct NapiNewWorkspace {
 #[derive(Debug)]
 pub struct NapiDocumentState {
   pub source_kind: String,
+  pub document_id: Option<String>,
   pub save_target: Option<String>,
   pub dirty: bool,
   pub needs_save_as: bool,
 }
 
 #[napi(object)]
-pub struct NapiPackageIdentity {
-  pub package_id: String,
+pub struct NapiDocumentIdentity {
+  pub document_id: String,
   pub canonical_path: String,
-  pub fingerprint: String,
-}
-
-#[napi(object)]
-pub struct NapiPackageDraft {
-  pub document_id: Option<String>,
-  pub package_id: String,
-  pub source_path: String,
-  pub base_fingerprint: String,
-  pub dirty: bool,
 }
 
 struct SlugAtlasGeneration {
@@ -145,28 +135,13 @@ impl From<FontExportResult> for NapiFontExportResult {
   }
 }
 
-impl TryFrom<PackageIdentity> for NapiPackageIdentity {
+impl TryFrom<DocumentIdentity> for NapiDocumentIdentity {
   type Error = BridgeError;
 
-  fn try_from(identity: PackageIdentity) -> BridgeResult<Self> {
+  fn try_from(identity: DocumentIdentity) -> BridgeResult<Self> {
     Ok(Self {
-      package_id: identity.package_id,
+      document_id: identity.document_id.to_string(),
       canonical_path: path_to_string(&identity.canonical_path)?,
-      fingerprint: identity.fingerprint,
-    })
-  }
-}
-
-impl TryFrom<PackageDraft> for NapiPackageDraft {
-  type Error = BridgeError;
-
-  fn try_from(draft: PackageDraft) -> BridgeResult<Self> {
-    Ok(Self {
-      document_id: draft.document_id,
-      package_id: draft.package_id,
-      source_path: path_to_string(&draft.source_path)?,
-      base_fingerprint: draft.base_fingerprint,
-      dirty: draft.dirty,
     })
   }
 }
@@ -1199,19 +1174,23 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn inspect_package(&self, path: String) -> errors::Result<NapiPackageIdentity> {
-    FontWorkspace::inspect_package(path)?.try_into()
-  }
-
-  #[napi]
-  pub fn inspect_package_draft(&self, store_path: String) -> errors::Result<NapiPackageDraft> {
-    FontWorkspace::inspect_package_draft(store_path)?.try_into()
+  pub fn inspect_document(&self, path: String) -> errors::Result<NapiDocumentIdentity> {
+    FontWorkspace::inspect_document(path)?.try_into()
   }
 
   #[napi]
   pub fn close_workspace(&mut self) {
     self.workspace = None;
     self.reset_versions();
+  }
+
+  #[napi]
+  pub fn open_document(&mut self, path: String, recovery_path: String) -> errors::Result<()> {
+    self.workspace = Some(FontWorkspace::open_document(path, recovery_path)?);
+    self.font_source = None;
+    self.source_identity = None;
+    self.reset_versions();
+    Ok(())
   }
 
   #[napi]
@@ -1258,8 +1237,8 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn set_document_id(&mut self, document_id: String) -> errors::Result<NapiDocumentState> {
-    self.workspace_mut()?.set_document_id(document_id)?;
+  pub fn set_workspace_id(&mut self, workspace_id: String) -> errors::Result<NapiDocumentState> {
+    self.workspace_mut()?.set_workspace_id(workspace_id)?;
     self.document_state_snapshot()
   }
 
@@ -1274,6 +1253,26 @@ impl Bridge {
   pub fn save_workspace_as(&mut self, path: String) -> errors::Result<NapiDocumentState> {
     self.workspace_mut()?.save_as(path)?;
     self.mark_saved();
+    self.document_state_snapshot()
+  }
+
+  #[napi]
+  pub fn save_workspace_as_document(
+    &mut self,
+    path: String,
+    recovery_path: String,
+  ) -> errors::Result<NapiDocumentState> {
+    self
+      .workspace_mut()?
+      .save_as_document(path, recovery_path)?;
+    self.mark_saved();
+    self.document_state_snapshot()
+  }
+
+  #[napi]
+  pub fn discard_workspace_changes(&mut self) -> errors::Result<NapiDocumentState> {
+    self.workspace_mut()?.discard_recovery()?;
+    self.reset_versions();
     self.document_state_snapshot()
   }
 
@@ -2040,14 +2039,22 @@ impl Bridge {
     let workspace = self.workspace()?;
     let source_kind = match workspace.source() {
       WorkspaceSource::Untitled => "untitled",
+      WorkspaceSource::Document { .. } => "document",
       WorkspaceSource::Package { .. } => "package",
       WorkspaceSource::Imported { .. } => "imported",
     };
+    let document_id = workspace
+      .document_metadata()?
+      .map(|metadata| metadata.document_id.to_string());
     let save_target = workspace.save_target().map(path_to_string).transpose()?;
-    let needs_save_as = !matches!(workspace.source(), WorkspaceSource::Package { .. });
+    let needs_save_as = !matches!(
+      workspace.source(),
+      WorkspaceSource::Document { .. } | WorkspaceSource::Package { .. }
+    );
 
     Ok(NapiDocumentState {
       source_kind: source_kind.to_string(),
+      document_id,
       save_target,
       dirty: workspace.is_dirty()?,
       needs_save_as,

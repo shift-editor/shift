@@ -12,10 +12,10 @@ import type {
   SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
+  WorkspaceDocumentIdentity,
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
   WorkspaceExportResult,
-  WorkspacePackageIdentity,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
   WorkspaceSnapshot,
@@ -31,13 +31,12 @@ import {
   stageCachedAtlasPage,
 } from "./CachedAtlas";
 import { DocumentStorage } from "./DocumentStorage";
-import { PackageOpener } from "./PackageOpener";
+import { DocumentOpener } from "./DocumentOpener";
 import {
-  PackageAddress,
+  DocumentAddress,
   type CachedAtlasBuild,
   type CachedAtlasPageRequest,
   type CachedAtlasPageSink,
-  type DocumentAllocation,
   type OpenedCachedAtlas,
   type OpenedCachedAtlasPage,
   type PreparedAtlasPage,
@@ -73,16 +72,17 @@ export type WorkspaceHostOptions = {
 export class WorkspaceHost {
   readonly #bridge: ShiftBridge;
   readonly #documents: DocumentStorage;
-  readonly #packageOpener: PackageOpener;
+  readonly #documentOpener: DocumentOpener;
   readonly #atlasCacheRoot: string;
   readonly #atlasCacheByteBudget: number;
   readonly #shellTransport: Transport;
   readonly #portTransport: (port: unknown) => Transport;
   #shell: ChannelServer<ShellEventMap> | null = null;
   #sync: ChannelServer<SyncEventMap> | null = null;
-  #documentId: string | null = null;
+  #workspaceId: string | null = null;
   #fontSource: FontSourceSnapshot | null = null;
-  #packageAddress: PackageAddress | null = null;
+  #documentAddress: DocumentAddress | null = null;
+  #recoveryPath: string | null = null;
   #atlasCacheRevision: string | null = null;
   #cachedGeneration = 0;
   #cachedPages = new Map<number, OpenedCachedAtlasPage>();
@@ -96,7 +96,7 @@ export class WorkspaceHost {
   constructor(options: WorkspaceHostOptions) {
     this.#bridge = createBridge();
     this.#documents = new DocumentStorage(options.documentsRoot);
-    this.#packageOpener = new PackageOpener(this.#bridge, this.#documents);
+    this.#documentOpener = new DocumentOpener(this.#bridge, this.#documents);
     this.#atlasCacheRoot = options.atlasCacheRoot;
     this.#atlasCacheByteBudget = options.atlasCacheByteBudget ?? DEFAULT_ATLAS_CACHE_BYTE_BUDGET;
     this.#shellTransport = options.shell;
@@ -107,7 +107,7 @@ export class WorkspaceHost {
   start(): void {
     this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
       "workspace.create": () => this.#serialize(() => this.#create()),
-      "workspace.inspectPackage": ({ path }) => this.#serialize(() => this.#inspectPackage(path)),
+      "workspace.inspectDocument": ({ path }) => this.#serialize(() => this.#inspectDocument(path)),
       "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
       "source.open": ({ path }) => this.#serialize(() => this.#openFontSource(path)),
@@ -131,7 +131,7 @@ export class WorkspaceHost {
     this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#portTransport(port), {
       "workspace.snapshot": () =>
         this.#serialize(() =>
-          this.#documentId === null ? null : this.#snapshot(this.#documentId),
+          this.#workspaceId === null ? null : this.#snapshot(this.#workspaceId),
         ),
       "source.snapshot": () => this.#serialize(() => this.#fontSource),
       "source.glyph": ({ glyphId }) =>
@@ -205,7 +205,7 @@ export class WorkspaceHost {
     const cacheRequest: CachedAtlasPageRequest = {
       ...request,
       key: {
-        documentKey: this.#requireDocumentId(),
+        documentKey: this.#requireWorkspaceId(),
         revisionKey: this.#currentAtlasCacheRevision(),
       },
     };
@@ -528,7 +528,7 @@ export class WorkspaceHost {
   }
 
   #openFontSource(sourcePath: string): FontSourceSession {
-    if (this.#documentId !== null) throw new Error("a workspace is already open");
+    if (this.#workspaceId !== null) throw new Error("a workspace is already open");
     const canonicalPath = fs.realpathSync(sourcePath);
     const font = this.#bridge.openFontSource(canonicalPath);
     const state = {
@@ -548,29 +548,29 @@ export class WorkspaceHost {
   }
 
   #create(): WorkspaceDocumentState {
-    const document = this.#documents.createDocument();
+    const workspace = this.#documents.createWorkspace();
 
-    this.#bridge.createUntitledWorkspace(document.storePath);
-    this.#bridge.setDocumentId(document.documentId);
-    this.#documentId = document.documentId;
+    this.#bridge.createUntitledWorkspace(workspace.storePath);
+    this.#bridge.setWorkspaceId(workspace.workspaceId);
+    this.#workspaceId = workspace.workspaceId;
     this.#atlasCacheRevision = null;
-    this.#packageAddress = null;
+    this.#documentAddress = null;
+    this.#recoveryPath = null;
 
     return this.#emitDocumentChanged();
   }
 
-  #inspectPackage(path: string): WorkspacePackageIdentity {
-    const identity = this.#bridge.inspectPackage(path);
+  #inspectDocument(documentPath: string): WorkspaceDocumentIdentity {
+    const identity = this.#bridge.inspectDocument(documentPath);
     return {
-      packageId: identity.packageId,
+      documentId: identity.documentId,
       canonicalPath: identity.canonicalPath,
-      fingerprint: identity.fingerprint,
     };
   }
 
-  #snapshot(documentId: string): WorkspaceSnapshot {
+  #snapshot(workspaceId: string): WorkspaceSnapshot {
     return {
-      documentId,
+      workspaceId,
       metadata: this.#bridge.getMetadata(),
       metrics: this.#bridge.getMetrics(),
       metricDefinitions: this.#bridge.getMetricDefinitions(),
@@ -585,32 +585,27 @@ export class WorkspaceHost {
   }
 
   #open(sourcePath: string): WorkspaceDocumentState {
-    if (isShiftPackagePath(sourcePath)) {
-      return this.#openPackage(sourcePath);
-    }
+    if (isShiftDocumentPath(sourcePath)) return this.#openDocument(sourcePath);
 
-    const document = this.#documents.createDocument();
-    this.#bridge.openWorkspace(sourcePath, document.storePath);
-    this.#bridge.setDocumentId(document.documentId);
-    this.#documentId = document.documentId;
+    const workspace = this.#documents.createWorkspace();
+    this.#bridge.openWorkspace(sourcePath, workspace.storePath);
+    this.#bridge.setWorkspaceId(workspace.workspaceId);
+    this.#workspaceId = workspace.workspaceId;
     this.#atlasCacheRevision = null;
-    this.#packageAddress = null;
+    this.#documentAddress = null;
+    this.#recoveryPath = null;
 
     return this.#emitDocumentChanged();
   }
 
-  #openPackage(sourcePath: string): WorkspaceDocumentState {
-    const identity = this.#inspectPackage(sourcePath);
-    const opened = this.#packageOpener.open(identity);
+  #openDocument(documentPath: string): WorkspaceDocumentState {
+    const opened = this.#documentOpener.open(this.#inspectDocument(documentPath));
 
-    this.#adoptDocument(opened.document, opened.address);
-    return this.#emitDocumentChanged();
-  }
-
-  #adoptDocument(document: DocumentAllocation, address: PackageAddress | null): void {
-    this.#documentId = document.documentId;
+    this.#workspaceId = opened.workspace.workspaceId;
     this.#atlasCacheRevision = null;
-    this.#packageAddress = address;
+    this.#documentAddress = opened.address;
+    this.#recoveryPath = opened.workspace.recoveryPath;
+    return this.#emitDocumentChanged();
   }
 
   #save(): WorkspaceDocumentState {
@@ -619,18 +614,33 @@ export class WorkspaceHost {
   }
 
   #saveAs(savePath: string): WorkspaceDocumentState {
-    const oldAddress = this.#packageAddress;
+    const workspaceId = this.#requireWorkspaceId();
+    const oldAddress = this.#documentAddress;
+    const oldRecoveryPath = this.#recoveryPath;
+    const recoveryPath = this.#documents.createRecoveryPath(workspaceId);
+    let adopted = false;
 
-    this.#bridge.saveWorkspaceAs(savePath);
-    const identity = this.#inspectPackage(savePath);
-    const newAddress = PackageAddress.fromIdentity(identity);
-    const documentId = this.#requireDocumentId();
-
-    this.#documents.writePackageBinding(newAddress, documentId);
-    if (oldAddress && !PackageAddress.equals(oldAddress, newAddress)) {
-      this.#documents.removePackageBinding(oldAddress);
+    try {
+      this.#bridge.saveWorkspaceAsDocument(savePath, recoveryPath);
+      adopted = true;
+      const newAddress = DocumentAddress.fromIdentity(this.#inspectDocument(savePath));
+      this.#documentAddress = newAddress;
+      this.#recoveryPath = recoveryPath;
+      this.#documents.writeDocumentBinding(newAddress, {
+        ...this.#documents.workspace(workspaceId),
+        recoveryPath,
+      });
+      if (oldAddress && !DocumentAddress.equals(oldAddress, newAddress)) {
+        this.#documents.removeDocumentBinding(oldAddress);
+      }
+      if (oldRecoveryPath && oldRecoveryPath !== recoveryPath) {
+        this.#documents.deleteRecovery(oldRecoveryPath);
+      }
+      this.#documents.deleteWorkingStore(workspaceId);
+    } catch (error) {
+      if (!adopted) this.#documents.deleteRecovery(recoveryPath);
+      throw error;
     }
-    this.#packageAddress = newAddress;
 
     return this.#emitDocumentChanged();
   }
@@ -655,8 +665,12 @@ export class WorkspaceHost {
       throw new Error("cannot close a dirty workspace without discard");
     }
 
-    const documentId = state.documentId;
-    const address = this.#packageAddress;
+    const workspaceId = state.workspaceId;
+    const address = this.#documentAddress;
+
+    if (state.dirty && discard && state.sourceKind === "document") {
+      this.#bridge.discardWorkspaceChanges();
+    }
 
     for (const page of this.#cachedPages.values()) {
       try {
@@ -671,12 +685,13 @@ export class WorkspaceHost {
     this.#preparedPages.clear();
     this.#discardAtlasBuildsExcept(null);
     this.#bridge.closeWorkspace();
-    this.#documentId = null;
+    this.#workspaceId = null;
     this.#atlasCacheRevision = null;
-    this.#packageAddress = null;
+    this.#documentAddress = null;
+    this.#recoveryPath = null;
 
-    if (address) this.#documents.removePackageBinding(address);
-    this.#documents.deleteDocument(documentId);
+    if (address) this.#documents.removeDocumentBinding(address);
+    this.#documents.deleteWorkspace(workspaceId);
     this.#shell?.emit("document.changed", null);
     this.#sync?.emit("document.changed", null);
 
@@ -684,15 +699,15 @@ export class WorkspaceHost {
   }
 
   #documentState(): WorkspaceDocumentState | null {
-    if (this.#documentId === null) return null;
+    if (this.#workspaceId === null) return null;
     const state = this.#bridge.documentState();
-    const address = this.#packageAddress;
+    const address = this.#documentAddress;
 
     return {
-      documentId: this.#documentId,
+      workspaceId: this.#workspaceId,
       sourceKind: parseDocumentSourceKind(state.sourceKind),
+      documentId: state.documentId ?? null,
       saveTarget: state.saveTarget ?? null,
-      packageId: address?.packageId ?? null,
       canonicalPath: address?.canonicalPath ?? null,
       dirty: state.dirty,
       needsSaveAs: state.needsSaveAs,
@@ -724,12 +739,12 @@ export class WorkspaceHost {
     return this.#atlasCacheRevision;
   }
 
-  #requireDocumentId(): string {
-    if (this.#documentId === null) {
+  #requireWorkspaceId(): string {
+    if (this.#workspaceId === null) {
       throw new Error("no workspace is open");
     }
 
-    return this.#documentId;
+    return this.#workspaceId;
   }
 
   #requireFontSource(): FontSourceSnapshot {
@@ -778,13 +793,13 @@ function logSlugAtlasProfile(fields: Record<string, string | number | boolean | 
 }
 
 function parseDocumentSourceKind(sourceKind: string): WorkspaceDocumentSourceKind {
-  if (sourceKind === "untitled" || sourceKind === "package" || sourceKind === "imported") {
+  if (sourceKind === "untitled" || sourceKind === "document" || sourceKind === "imported") {
     return sourceKind;
   }
 
   throw new Error(`unknown document source kind: ${sourceKind}`);
 }
 
-function isShiftPackagePath(sourcePath: string): boolean {
+function isShiftDocumentPath(sourcePath: string): boolean {
   return path.extname(sourcePath).toLowerCase() === ".shift";
 }

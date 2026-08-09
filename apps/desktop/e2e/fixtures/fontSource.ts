@@ -2,26 +2,27 @@ import { createBridge } from "@shift/bridge";
 import fs from "node:fs";
 import * as path from "node:path";
 
-export function createAuthoredPackage(sourcePath: string, workspaceDirectory: string): string {
+export function createAuthoredDocument(sourcePath: string, workspaceDirectory: string): string {
   fs.mkdirSync(workspaceDirectory, { recursive: true });
 
-  const packagePath = path.join(workspaceDirectory, "font.shift");
+  const documentPath = path.join(workspaceDirectory, "font.shift");
   if (path.extname(sourcePath) === ".shift") {
-    fs.copyFileSync(sourcePath, packagePath, fs.constants.COPYFILE_FICLONE);
-    return packagePath;
+    fs.copyFileSync(sourcePath, documentPath, fs.constants.COPYFILE_FICLONE);
+    return documentPath;
   }
 
   const bridge = createBridge();
   const storePath = path.join(workspaceDirectory, "conversion.sqlite");
+  const recoveryPath = path.join(workspaceDirectory, "conversion-recovery.sqlite");
 
   try {
     bridge.openWorkspace(sourcePath, storePath);
-    bridge.saveWorkspaceAs(packagePath);
+    bridge.saveWorkspaceAsDocument(documentPath, recoveryPath);
   } finally {
     bridge.closeWorkspace();
   }
 
-  return packagePath;
+  return documentPath;
 }
 
 export function copyImportedSource(sourcePath: string, workspaceDirectory: string): string {

@@ -14,8 +14,12 @@ use shift_font::{
     SourceId, TouchedLayer, error::CoreError,
 };
 use shift_source::ShiftSourcePackage;
-use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
+use shift_store::{
+    DocumentMetadata, RecoveryState, ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind,
+    WorkspaceState,
+};
 
+use crate::document_identity::{DocumentIdentity, document_identity};
 use crate::import_staging::{create_import_staging_path, install_import_store};
 use crate::layer_residency::LayerResidency;
 use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
@@ -70,6 +74,7 @@ pub enum WorkspaceError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WorkspaceSource {
     Untitled,
+    Document { path: PathBuf },
     Package { path: PathBuf },
     Imported { original_path: PathBuf },
 }
@@ -145,7 +150,40 @@ impl FontWorkspace {
         }
     }
 
+    pub fn open_document(
+        document_path: impl AsRef<Path>,
+        recovery_path: impl AsRef<Path>,
+    ) -> Result<Self, WorkspaceError> {
+        let document_path = document_path.as_ref();
+        let store = ShiftStore::open_document_with_recovery(document_path, recovery_path)?;
+        let font = store.load_font_directory()?;
+        let residency = LayerResidency::with_unloaded(
+            font.glyphs()
+                .flat_map(|glyph| glyph.layers().keys().cloned()),
+        );
+
+        Ok(Self::from_store(
+            font,
+            WorkspaceSource::Document {
+                path: document_path.to_path_buf(),
+            },
+            store,
+            residency,
+        ))
+    }
+
+    pub fn inspect_document(
+        document_path: impl AsRef<Path>,
+    ) -> Result<DocumentIdentity, WorkspaceError> {
+        document_identity(document_path)
+    }
+
     pub fn save(&mut self) -> Result<(), WorkspaceError> {
+        if matches!(&self.source, WorkspaceSource::Document { .. }) {
+            self.store.save_document()?;
+            return Ok(());
+        }
+
         self.acquire_all_layers()?;
         match self.source.clone() {
             WorkspaceSource::Package { path } => {
@@ -158,6 +196,43 @@ impl FontWorkspace {
             WorkspaceSource::Untitled | WorkspaceSource::Imported { .. } => {
                 Err(WorkspaceError::NeedsSaveAs)
             }
+            WorkspaceSource::Document { .. } => unreachable!("native document saved above"),
+        }
+    }
+
+    pub fn save_as_document(
+        &mut self,
+        document_path: impl AsRef<Path>,
+        recovery_path: impl AsRef<Path>,
+    ) -> Result<DocumentMetadata, WorkspaceError> {
+        let document_path = document_path.as_ref();
+        let metadata = self.store.save_as_document(document_path)?;
+        let store = ShiftStore::open_document_with_recovery(document_path, recovery_path)?;
+        self.store = store;
+        self.source = WorkspaceSource::Document {
+            path: document_path.to_path_buf(),
+        };
+        self.ledger = Ledger::default();
+
+        Ok(metadata)
+    }
+
+    pub fn discard_recovery(&mut self) -> Result<(), WorkspaceError> {
+        self.store.discard_recovery()?;
+        let font = self.store.load_font_directory()?;
+        self.residency = LayerResidency::with_unloaded(
+            font.glyphs()
+                .flat_map(|glyph| glyph.layers().keys().cloned()),
+        );
+        self.font = font;
+        self.ledger = Ledger::default();
+        Ok(())
+    }
+
+    pub fn document_metadata(&self) -> Result<Option<DocumentMetadata>, WorkspaceError> {
+        match &self.source {
+            WorkspaceSource::Document { .. } => Ok(Some(self.store.document_metadata()?)),
+            _ => Ok(None),
         }
     }
 
@@ -935,7 +1010,7 @@ impl FontWorkspace {
     pub fn save_target(&self) -> Option<&Path> {
         match &self.source {
             WorkspaceSource::Untitled => None,
-            WorkspaceSource::Package { path } => Some(path),
+            WorkspaceSource::Document { path } | WorkspaceSource::Package { path } => Some(path),
             WorkspaceSource::Imported { .. } => None,
         }
     }
@@ -953,6 +1028,13 @@ impl FontWorkspace {
     }
 
     pub fn is_dirty(&self) -> Result<bool, WorkspaceError> {
+        if matches!(&self.source, WorkspaceSource::Document { .. }) {
+            return Ok(!matches!(
+                self.store.recovery_state()?,
+                Some(RecoveryState::Clean)
+            ));
+        }
+
         Ok(self
             .store
             .workspace_state()?
@@ -961,6 +1043,12 @@ impl FontWorkspace {
 
     /// Returns the durable authored revision used to address disposable derived artifacts.
     pub fn slug_atlas_cache_revision(&self) -> Result<String, WorkspaceError> {
+        if matches!(&self.source, WorkspaceSource::Document { .. }) {
+            let metadata = self.store.document_metadata()?;
+            let revision = self.store.recovery_revision()?.unwrap_or_default();
+            return Ok(format!("{}:{revision}", metadata.saved_commit_id));
+        }
+
         let state = self
             .store
             .workspace_state()?
@@ -974,8 +1062,12 @@ impl FontWorkspace {
         Ok(state.revision.to_string())
     }
 
-    pub fn set_document_id(&mut self, document_id: String) -> Result<(), WorkspaceError> {
-        self.store.set_workspace_document_id(document_id)?;
+    pub fn set_workspace_id(&mut self, workspace_id: String) -> Result<(), WorkspaceError> {
+        if matches!(&self.source, WorkspaceSource::Document { .. }) {
+            return Ok(());
+        }
+
+        self.store.set_workspace_document_id(workspace_id)?;
         Ok(())
     }
 }

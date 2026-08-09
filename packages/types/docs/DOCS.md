@@ -28,7 +28,7 @@ Import from `@shift/types`.
 - `BridgeApi` -- type-only native bridge API surface.
 - `FontMetadata` / `FontMetrics` -- independent font-level DTOs; metadata mutation replaces the complete `FontMetadata` snapshot without changing metrics.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
-- `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
+- `DocumentIdentity` -- canonical `DocumentId` and canonical path used by the desktop to deduplicate native document sessions before Open.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
 - `VariationBasis` / `VariationDelta` -- Rust/Fontdrasil-compiled normalized supports and numeric contribution vectors.
 - `InterpolationBasis` -- ordered real source identities plus a `VariationBasis` that produces source weights; contains no glyph-specific values.
