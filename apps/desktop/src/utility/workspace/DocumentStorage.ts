@@ -4,6 +4,8 @@ import path from "node:path";
 import { z } from "zod";
 import { DocumentAddress, type DocumentBinding, type WorkspaceAllocation } from "./types";
 
+const SQLITE_SIDECAR_SUFFIXES = ["", "-wal", "-shm", "-journal"] as const;
+
 const documentBindingSchema = z
   .object({
     documentId: z.string(),
@@ -55,14 +57,14 @@ export class DocumentStorage {
   /** Removes a complete working store after native Save As adopts its snapshot. */
   deleteWorkingStore(workspaceId: string): void {
     const { storePath } = this.workspace(workspaceId);
-    for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+    for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
       fs.rmSync(`${storePath}${suffix}`, { force: true });
     }
   }
 
   /** Removes an obsolete recovery file and its SQLite sidecars. */
   deleteRecovery(recoveryPath: string): void {
-    for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+    for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
       fs.rmSync(`${recoveryPath}${suffix}`, { force: true });
     }
   }

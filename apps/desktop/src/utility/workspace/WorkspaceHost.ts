@@ -6,7 +6,6 @@ import { serveChannel, type ChannelServer, type Transport } from "../../shared/w
 import type {
   FontSourceAtlasPageRequest,
   FontSourceSession,
-  FontSourceSnapshot,
   ShellCallMap,
   ShellEventMap,
   SlugAtlasOrigin,
@@ -41,6 +40,7 @@ import {
   type OpenedCachedAtlasPage,
   type PreparedAtlasPage,
   type StagedCachedAtlasPage,
+  type WorkspaceHostState,
 } from "./types";
 
 /**
@@ -79,10 +79,7 @@ export class WorkspaceHost {
   readonly #portTransport: (port: unknown) => Transport;
   #shell: ChannelServer<ShellEventMap> | null = null;
   #sync: ChannelServer<SyncEventMap> | null = null;
-  #workspaceId: string | null = null;
-  #fontSource: FontSourceSnapshot | null = null;
-  #documentAddress: DocumentAddress | null = null;
-  #recoveryPath: string | null = null;
+  #state: WorkspaceHostState = { kind: "closed" };
   #atlasCacheRevision: string | null = null;
   #cachedGeneration = 0;
   #cachedPages = new Map<number, OpenedCachedAtlasPage>();
@@ -131,9 +128,12 @@ export class WorkspaceHost {
     this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#portTransport(port), {
       "workspace.snapshot": () =>
         this.#serialize(() =>
-          this.#workspaceId === null ? null : this.#snapshot(this.#workspaceId),
+          this.#state.kind === "workspace"
+            ? this.#snapshot(this.#state.allocation.workspaceId)
+            : null,
         ),
-      "source.snapshot": () => this.#serialize(() => this.#fontSource),
+      "source.snapshot": () =>
+        this.#serialize(() => (this.#state.kind === "source" ? this.#state.source : null)),
       "source.glyph": ({ glyphId }) =>
         this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphId)),
       "source.atlasPagePrepare": (request) =>
@@ -205,7 +205,7 @@ export class WorkspaceHost {
     const cacheRequest: CachedAtlasPageRequest = {
       ...request,
       key: {
-        documentKey: this.#requireWorkspaceId(),
+        documentKey: this.#requireWorkspace().allocation.workspaceId,
         revisionKey: this.#currentAtlasCacheRevision(),
       },
     };
@@ -528,34 +528,43 @@ export class WorkspaceHost {
   }
 
   #openFontSource(sourcePath: string): FontSourceSession {
-    if (this.#workspaceId !== null) throw new Error("a workspace is already open");
+    if (this.#state.kind !== "closed") {
+      throw new Error("a source or workspace is already open");
+    }
+
     const canonicalPath = fs.realpathSync(sourcePath);
     const font = this.#bridge.openFontSource(canonicalPath);
-    const state = {
+    const session = {
       sessionId: `source:${canonicalPath}`,
       canonicalPath,
     };
-    this.#fontSource = { ...state, font };
+    this.#state = { kind: "source", source: { ...session, font } };
     this.#preparedSourcePages.clear();
-    return state;
+    return session;
   }
 
   #closeFontSource(): null {
+    this.#requireFontSource();
     this.#bridge.closeFontSource();
-    this.#fontSource = null;
+    this.#state = { kind: "closed" };
     this.#preparedSourcePages.clear();
     return null;
   }
 
   #create(): WorkspaceDocumentState {
-    const workspace = this.#documents.createWorkspace();
+    if (this.#state.kind !== "closed") {
+      throw new Error("a source or workspace is already open");
+    }
 
-    this.#bridge.createUntitledWorkspace(workspace.storePath);
-    this.#bridge.setWorkspaceId(workspace.workspaceId);
-    this.#workspaceId = workspace.workspaceId;
+    const allocation = this.#documents.createWorkspace();
+    this.#bridge.createUntitledWorkspace(allocation.storePath);
+    this.#bridge.setWorkspaceId(allocation.workspaceId);
+    this.#state = {
+      kind: "workspace",
+      allocation,
+      binding: { kind: "unbound" },
+    };
     this.#atlasCacheRevision = null;
-    this.#documentAddress = null;
-    this.#recoveryPath = null;
 
     return this.#emitDocumentChanged();
   }
@@ -585,15 +594,20 @@ export class WorkspaceHost {
   }
 
   #open(sourcePath: string): WorkspaceDocumentState {
+    if (this.#state.kind !== "closed") {
+      throw new Error("a source or workspace is already open");
+    }
     if (isShiftDocumentPath(sourcePath)) return this.#openDocument(sourcePath);
 
-    const workspace = this.#documents.createWorkspace();
-    this.#bridge.openWorkspace(sourcePath, workspace.storePath);
-    this.#bridge.setWorkspaceId(workspace.workspaceId);
-    this.#workspaceId = workspace.workspaceId;
+    const allocation = this.#documents.createWorkspace();
+    this.#bridge.openWorkspace(sourcePath, allocation.storePath);
+    this.#bridge.setWorkspaceId(allocation.workspaceId);
+    this.#state = {
+      kind: "workspace",
+      allocation,
+      binding: { kind: "unbound" },
+    };
     this.#atlasCacheRevision = null;
-    this.#documentAddress = null;
-    this.#recoveryPath = null;
 
     return this.#emitDocumentChanged();
   }
@@ -601,10 +615,12 @@ export class WorkspaceHost {
   #openDocument(documentPath: string): WorkspaceDocumentState {
     const opened = this.#documentOpener.open(this.#inspectDocument(documentPath));
 
-    this.#workspaceId = opened.workspace.workspaceId;
+    this.#state = {
+      kind: "workspace",
+      allocation: opened.workspace,
+      binding: { kind: "bound", address: opened.address },
+    };
     this.#atlasCacheRevision = null;
-    this.#documentAddress = opened.address;
-    this.#recoveryPath = opened.workspace.recoveryPath;
     return this.#emitDocumentChanged();
   }
 
@@ -614,33 +630,38 @@ export class WorkspaceHost {
   }
 
   #saveAs(savePath: string): WorkspaceDocumentState {
-    const workspaceId = this.#requireWorkspaceId();
-    const oldAddress = this.#documentAddress;
-    const oldRecoveryPath = this.#recoveryPath;
+    const previous = this.#requireWorkspace();
+    const workspaceId = previous.allocation.workspaceId;
     const recoveryPath = this.#documents.createRecoveryPath(workspaceId);
-    let adopted = false;
 
     try {
       this.#bridge.saveWorkspaceAsDocument(savePath, recoveryPath);
-      adopted = true;
-      const newAddress = DocumentAddress.fromIdentity(this.#inspectDocument(savePath));
-      this.#documentAddress = newAddress;
-      this.#recoveryPath = recoveryPath;
-      this.#documents.writeDocumentBinding(newAddress, {
-        ...this.#documents.workspace(workspaceId),
-        recoveryPath,
-      });
-      if (oldAddress && !DocumentAddress.equals(oldAddress, newAddress)) {
-        this.#documents.removeDocumentBinding(oldAddress);
-      }
-      if (oldRecoveryPath && oldRecoveryPath !== recoveryPath) {
-        this.#documents.deleteRecovery(oldRecoveryPath);
-      }
-      this.#documents.deleteWorkingStore(workspaceId);
     } catch (error) {
-      if (!adopted) this.#documents.deleteRecovery(recoveryPath);
+      this.#documents.deleteRecovery(recoveryPath);
       throw error;
     }
+
+    const address = DocumentAddress.fromIdentity(this.#inspectDocument(savePath));
+    const allocation = {
+      ...this.#documents.workspace(workspaceId),
+      recoveryPath,
+    };
+    this.#state = {
+      kind: "workspace",
+      allocation,
+      binding: { kind: "bound", address },
+    };
+    this.#documents.writeDocumentBinding(address, allocation);
+
+    if (previous.binding.kind === "bound") {
+      if (!DocumentAddress.equals(previous.binding.address, address)) {
+        this.#documents.removeDocumentBinding(previous.binding.address);
+      }
+      if (previous.allocation.recoveryPath !== recoveryPath) {
+        this.#documents.deleteRecovery(previous.allocation.recoveryPath);
+      }
+    }
+    this.#documents.deleteWorkingStore(workspaceId);
 
     return this.#emitDocumentChanged();
   }
@@ -665,8 +686,8 @@ export class WorkspaceHost {
       throw new Error("cannot close a dirty workspace without discard");
     }
 
-    const workspaceId = state.workspaceId;
-    const address = this.#documentAddress;
+    const workspace = this.#requireWorkspace();
+    const workspaceId = workspace.allocation.workspaceId;
 
     if (state.dirty && discard && state.sourceKind === "document") {
       this.#bridge.discardWorkspaceChanges();
@@ -685,12 +706,12 @@ export class WorkspaceHost {
     this.#preparedPages.clear();
     this.#discardAtlasBuildsExcept(null);
     this.#bridge.closeWorkspace();
-    this.#workspaceId = null;
+    this.#state = { kind: "closed" };
     this.#atlasCacheRevision = null;
-    this.#documentAddress = null;
-    this.#recoveryPath = null;
 
-    if (address) this.#documents.removeDocumentBinding(address);
+    if (workspace.binding.kind === "bound") {
+      this.#documents.removeDocumentBinding(workspace.binding.address);
+    }
     this.#documents.deleteWorkspace(workspaceId);
     this.#shell?.emit("document.changed", null);
     this.#sync?.emit("document.changed", null);
@@ -699,16 +720,19 @@ export class WorkspaceHost {
   }
 
   #documentState(): WorkspaceDocumentState | null {
-    if (this.#workspaceId === null) return null;
+    if (this.#state.kind !== "workspace") return null;
+
+    const workspace = this.#state;
     const state = this.#bridge.documentState();
-    const address = this.#documentAddress;
+    const canonicalPath =
+      workspace.binding.kind === "bound" ? workspace.binding.address.canonicalPath : null;
 
     return {
-      workspaceId: this.#workspaceId,
+      workspaceId: workspace.allocation.workspaceId,
       sourceKind: parseDocumentSourceKind(state.sourceKind),
       documentId: state.documentId ?? null,
       saveTarget: state.saveTarget ?? null,
-      canonicalPath: address?.canonicalPath ?? null,
+      canonicalPath,
       dirty: state.dirty,
       needsSaveAs: state.needsSaveAs,
     };
@@ -739,17 +763,20 @@ export class WorkspaceHost {
     return this.#atlasCacheRevision;
   }
 
-  #requireWorkspaceId(): string {
-    if (this.#workspaceId === null) {
+  #requireWorkspace() {
+    if (this.#state.kind !== "workspace") {
       throw new Error("no workspace is open");
     }
 
-    return this.#workspaceId;
+    return this.#state;
   }
 
-  #requireFontSource(): FontSourceSnapshot {
-    if (!this.#fontSource) throw new Error("no retained font source is open");
-    return this.#fontSource;
+  #requireFontSource() {
+    if (this.#state.kind !== "source") {
+      throw new Error("no retained font source is open");
+    }
+
+    return this.#state.source;
   }
 }
 

@@ -679,6 +679,28 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await expect(reopenedGlyphNames(saved.path)).resolves.toEqual(["A"]);
   });
 
+  it("keeps the current binding when Save As cannot publish its destination", async () => {
+    const sync = await connectSyncLane();
+    const saved = await saveDocumentWithGlyphA(sync, "Bound.shift");
+    await addGlyphB(sync);
+    const before = await shell.call("document.state", undefined);
+    const occupiedPath = path.join(tmpRoot, "Occupied.shift");
+    fs.writeFileSync(occupiedPath, "occupied");
+
+    await expect(sync.call("workspace.saveAs", { path: occupiedPath })).rejects.toThrow(
+      "document already exists",
+    );
+    await expect(shell.call("document.state", undefined)).resolves.toEqual(before);
+    const retryPath = path.join(tmpRoot, "Retried.shift");
+    const retried = await sync.call("workspace.saveAs", { path: retryPath });
+    expect(retried).toMatchObject({
+      workspaceId: saved.workspaceId,
+      canonicalPath: fs.realpathSync(retryPath),
+    });
+    expect(canonicalGlyphNames(saved.path)).toEqual(["A"]);
+    expect(canonicalGlyphNames(retryPath)).toEqual(["A", "B"]);
+  });
+
   it("emits utility-owned document state after create and apply", async () => {
     let latestState: WorkspaceDocumentState | null = null;
     const unlisten = shell.listen("document.changed", (state) => {

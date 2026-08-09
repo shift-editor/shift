@@ -53,6 +53,20 @@ describe("native document recovery allocations", () => {
     reopened.bridge.closeWorkspace();
   });
 
+  it("replaces an exact binding whose recovery file is missing", () => {
+    const first = openDocument(documentPath, storage);
+    const firstWorkspacePath = path.dirname(first.workspace.recoveryPath);
+    first.bridge.closeWorkspace();
+    storage.deleteRecovery(first.workspace.recoveryPath);
+
+    const reopened = openDocument(documentPath, storage);
+
+    expect(reopened.workspaceId).not.toBe(first.workspaceId);
+    expect(reopened.bridge.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(fs.existsSync(firstWorkspacePath)).toBe(false);
+    reopened.bridge.closeWorkspace();
+  });
+
   it("rebinds recovery when the same document moves to a new path", () => {
     const identity = createBridge().inspectDocument(documentPath);
     const first = openDocument(documentPath, storage);

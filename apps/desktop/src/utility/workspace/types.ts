@@ -2,6 +2,7 @@ import type { GlyphId, SlugAtlas } from "@shift/types";
 import type { FileHandle } from "node:fs/promises";
 import type {
   ByteReadableStream,
+  FontSourceSnapshot,
   WorkspaceDocumentIdentity,
 } from "../../shared/workspace/protocol";
 
@@ -135,6 +136,26 @@ export type DocumentBinding = DocumentAddress &
   WorkspaceAllocation & {
     updatedAt: string;
   };
+
+/** Whether an editable workspace has a canonical document binding. */
+export type WorkspaceBinding = { kind: "unbound" } | { kind: "bound"; address: DocumentAddress };
+
+/** Legal native ownership states for the utility workspace host. */
+export type WorkspaceHostState =
+  | { kind: "closed" }
+  | { kind: "source"; source: FontSourceSnapshot }
+  | {
+      kind: "workspace";
+      allocation: WorkspaceAllocation;
+      binding: WorkspaceBinding;
+    };
+
+/** Storage action selected before native document Open performs side effects. */
+export type DocumentOpenAction =
+  | { kind: "create" }
+  | { kind: "resume"; binding: DocumentBinding }
+  | { kind: "move"; binding: DocumentBinding }
+  | { kind: "replace"; binding: DocumentBinding };
 
 /** Workspace allocation and canonical address settled by native document Open. */
 export type DocumentOpenResult = {
