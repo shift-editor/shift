@@ -1088,7 +1088,8 @@ fn save_as_document_snapshots_working_store_without_workspace_state() {
     working
         .replace_font_state(&font)
         .expect("write complete font state");
-    let mut state = WorkspaceState::untitled(Some("workspace-1".to_string()));
+    let private_marker = "PRIVATE_WORKSPACE_ORIGIN_MARKER_9f4902c5";
+    let mut state = WorkspaceState::imported(private_marker, Some("workspace-1".to_string()));
     state.dirty = true;
     state.revision = 7;
     working
@@ -1113,6 +1114,12 @@ fn save_as_document_snapshots_working_store_without_workspace_state() {
     assert!(!sqlite_sidecar_path(&document_path, "-journal").exists());
     assert!(!sqlite_sidecar_path(&document_path, "-wal").exists());
     assert!(!sqlite_sidecar_path(&document_path, "-shm").exists());
+    let document_bytes = std::fs::read(&document_path).expect("read document bytes");
+    assert!(
+        !document_bytes
+            .windows(private_marker.len())
+            .any(|bytes| bytes == private_marker.as_bytes())
+    );
 }
 
 #[test]

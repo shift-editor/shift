@@ -91,6 +91,7 @@ impl ShiftStore {
         }
 
         configure_document_connection(&conn)?;
+        conn.pragma_update(None, "secure_delete", "ON")?;
         let metadata = DocumentMetadata {
             document_id: DocumentId::new(),
         };
@@ -103,6 +104,7 @@ impl ShiftStore {
         tx.pragma_update(None, "application_id", schema::SHIFT_APPLICATION_ID)?;
         tx.pragma_update(None, "user_version", schema::SCHEMA_VERSION)?;
         tx.commit()?;
+        conn.pragma_update(None, "secure_delete", "OFF")?;
 
         let staged_store = Self {
             conn,
