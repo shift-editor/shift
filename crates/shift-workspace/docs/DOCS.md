@@ -17,6 +17,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** Ledger replay restores complete named-instance collections after axis topology so undo/redo never observes an instance against the wrong external-axis shape.
 - **Architecture Invariant:** Metadata ledger entries store complete pre/post snapshots and replay them independently of font metrics.
 - **Architecture Invariant:** Metric-definition ledger state replays before complete source snapshots so source metric IDs are always valid during undo and redo.
+- **Architecture Invariant:** Glyph-axis, glyph-source, and glyph-variant changes carry owner-qualified pre/post snapshots through the ledger and incremental store path. Component intents remain layer edits and replay through complete `LayerGeometryReplaced` snapshots.
 - **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply clears redo.
 
 ## Codemap

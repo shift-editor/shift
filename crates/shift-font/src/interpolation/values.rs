@@ -3,7 +3,7 @@ use crate::{CoreError, CoreResult, DecomposedTransform, GlyphLayer};
 /// Numeric glyph-layer values that participate in interpolation.
 ///
 /// Values are ordered as advance width, contour point positions, anchor
-/// positions, and component transforms. The ordering is owned alongside
+/// positions, component transforms, and component locations sorted by axis identity. The ordering is owned alongside
 /// [`GlyphLayer`] so persistence and transport adapters do not define domain
 /// interpolation semantics.
 #[derive(Clone, Debug, PartialEq)]
@@ -45,6 +45,9 @@ impl GlyphInterpolationValues {
             values.push(transform.skew_y);
             values.push(transform.t_center_x);
             values.push(transform.t_center_y);
+            let mut location_values = component.location().iter().collect::<Vec<_>>();
+            location_values.sort_by(|(left, _), (right, _)| left.cmp(right));
+            values.extend(location_values.into_iter().map(|(_, value)| *value));
         }
 
         Self { values }
@@ -83,7 +86,10 @@ impl GlyphLayer {
                 .map(|contour| contour.points().len() * 2)
                 .sum::<usize>()
             + self.anchors().len() * 2
-            + self.components().len() * 9;
+            + self
+                .components_iter()
+                .map(|component| 9 + component.location().iter().count())
+                .sum::<usize>();
         let actual = values.as_slice().len();
         if actual < expected {
             return Err(CoreError::MissingGlyphValue { index: actual });
@@ -123,6 +129,17 @@ impl GlyphLayer {
                 t_center_x: cursor.next()?,
                 t_center_y: cursor.next()?,
             });
+            let mut axis_ids = component
+                .location()
+                .iter()
+                .map(|(axis_id, _)| axis_id.clone())
+                .collect::<Vec<_>>();
+            axis_ids.sort();
+            let mut location = component.location().clone();
+            for axis_id in axis_ids {
+                location.set(axis_id, cursor.next()?);
+            }
+            component.set_location(location);
         }
 
         cursor.finish()

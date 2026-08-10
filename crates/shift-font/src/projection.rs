@@ -1,12 +1,13 @@
 //! Location-independent glyph backing and location-bound read-only resolution.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::composite::{resolved_contours_from_layers, GlyphComponents, ResolvedContour};
 use crate::{
-    Axis, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation,
-    GlyphLayer, InterpolationBasis, Source, SourceId,
+    Axis, AxisInheritance, Component, Condition, CoreError, CoreResult, DesignLocation, Font,
+    Glyph, GlyphId, GlyphInterpolation, GlyphInterpolationValues, GlyphLayer, GlyphSource,
+    InterpolationBasis, Source, SourceId,
 };
 
 /// One exact-source shape that cannot be represented by compatible variation.
@@ -560,6 +561,332 @@ impl GlyphProjectionSet {
     }
 }
 
+fn glyph_requires_advanced_resolution(
+    font: &Font,
+    glyph_id: &GlyphId,
+    visited: &mut HashSet<GlyphId>,
+) -> bool {
+    if !visited.insert(glyph_id.clone()) {
+        return false;
+    }
+    let Some(glyph) = font.glyph(glyph_id.clone()) else {
+        return false;
+    };
+    if !glyph.axes().is_empty()
+        || !glyph.variants().is_empty()
+        || glyph
+            .default_sources()
+            .values()
+            .any(|source| source.base_source_id().is_none() || !source.location().is_empty())
+        || glyph.layers().values().any(|layer| {
+            layer.components_iter().any(|component| {
+                !component.location().is_empty()
+                    || component.axis_inheritance() != AxisInheritance::Parent
+                    || component.condition().is_some()
+            })
+        })
+    {
+        return true;
+    }
+    glyph
+        .layers()
+        .values()
+        .flat_map(|layer| layer.components_iter())
+        .any(|component| {
+            glyph_requires_advanced_resolution(font, &component.base_glyph_id(), visited)
+        })
+}
+
+fn resolved_occurrence_layers(
+    font: &Font,
+    glyph_id: &GlyphId,
+    location: &DesignLocation,
+) -> CoreResult<Option<(GlyphLayer, HashMap<GlyphId, GlyphLayer>)>> {
+    let root_font_location = complete_root_font_location(font, location);
+    let mut layers = HashMap::new();
+    let Some(layer) = append_resolved_occurrence(
+        font,
+        glyph_id,
+        glyph_id.clone(),
+        location,
+        &root_font_location,
+        &mut layers,
+        &mut HashSet::new(),
+    )?
+    else {
+        return Ok(None);
+    };
+    Ok(Some((layer, layers)))
+}
+
+fn append_resolved_occurrence(
+    font: &Font,
+    authored_glyph_id: &GlyphId,
+    output_glyph_id: GlyphId,
+    location: &DesignLocation,
+    root_font_location: &DesignLocation,
+    layers: &mut HashMap<GlyphId, GlyphLayer>,
+    visiting: &mut HashSet<GlyphId>,
+) -> CoreResult<Option<GlyphLayer>> {
+    if !visiting.insert(authored_glyph_id.clone()) {
+        return Ok(None);
+    }
+    let Some(mut layer) =
+        resolved_glyph_source_layer(font, authored_glyph_id, location, root_font_location)?
+    else {
+        visiting.remove(authored_glyph_id);
+        return Ok(None);
+    };
+    let components = layer.components_iter().cloned().collect::<Vec<_>>();
+    for component in components {
+        if component
+            .condition()
+            .is_some_and(|condition| !condition_matches(condition, font, root_font_location))
+        {
+            layer.remove_component(component.id());
+            continue;
+        }
+
+        let mut child_location = match component.axis_inheritance() {
+            AxisInheritance::Parent => location.clone(),
+            AxisInheritance::Font => root_font_location.clone(),
+        };
+        for (axis_id, value) in component.location().iter() {
+            child_location.set(axis_id.clone(), *value);
+        }
+        let child_output_id = (0_u32..)
+            .map(|suffix| {
+                GlyphId::from_raw(format!(
+                    "resolved-component-{}-{suffix}",
+                    component.id().as_str()
+                ))
+            })
+            .find(|candidate| {
+                font.glyph(candidate.clone()).is_none() && !layers.contains_key(candidate)
+            })
+            .expect("component occurrence identity space is not exhausted");
+        let base_glyph_id = component.base_glyph_id();
+        if append_resolved_occurrence(
+            font,
+            &base_glyph_id,
+            child_output_id.clone(),
+            &child_location,
+            root_font_location,
+            layers,
+            visiting,
+        )?
+        .is_none()
+        {
+            visiting.remove(authored_glyph_id);
+            return Err(CoreError::UnresolvableComponentGlyph {
+                component_id: component.id(),
+                base_glyph_id,
+            });
+        }
+
+        let mut replacement = Component::with_id(
+            component.id(),
+            child_output_id,
+            component.base_glyph_name().clone(),
+            *component.transform(),
+        );
+        replacement.set_location(component.location().clone());
+        replacement.set_axis_inheritance(component.axis_inheritance());
+        replacement.set_condition(component.condition().cloned());
+        layer.add_component(replacement);
+    }
+    visiting.remove(authored_glyph_id);
+    layers.insert(output_glyph_id, layer.clone());
+    Ok(Some(layer))
+}
+
+fn resolved_glyph_source_layer(
+    font: &Font,
+    glyph_id: &GlyphId,
+    location: &DesignLocation,
+    root_font_location: &DesignLocation,
+) -> CoreResult<Option<GlyphLayer>> {
+    let Some(glyph) = font.glyph(glyph_id.clone()) else {
+        return Ok(None);
+    };
+    let selected_variant = glyph
+        .variants()
+        .values()
+        .find(|variant| condition_matches(variant.condition(), font, root_font_location));
+    let sources = selected_variant
+        .map(|variant| variant.sources().values().collect::<Vec<_>>())
+        .unwrap_or_else(|| glyph.default_sources().values().collect());
+    if sources.is_empty() {
+        if selected_variant.is_some() {
+            return Ok(None);
+        }
+        return Ok(glyph
+            .layers()
+            .values()
+            .max_by_key(|layer| layer.contours().len() + layer.components().len())
+            .map(|layer| layer.as_ref().clone()));
+    }
+
+    let is_interpolating_source = |source: &GlyphSource| {
+        source.base_source_id().is_none_or(|source_id| {
+            font.sources()
+                .iter()
+                .find(|global| global.id() == source_id)
+                .is_none_or(Source::is_master)
+        })
+    };
+    let axes = glyph_interpolation_axes(font, glyph);
+    let located_sources = sources
+        .iter()
+        .filter(|source| is_interpolating_source(source))
+        .filter_map(|source| {
+            let layer = glyph.layer(source.layer_id())?;
+            Some((
+                *source,
+                effective_glyph_source_location(font, source),
+                layer,
+            ))
+        })
+        .collect::<Vec<_>>();
+    if let Some((_, _, layer)) = located_sources
+        .iter()
+        .find(|(_, source_location, _)| locations_match(source_location, location, &axes))
+    {
+        return Ok(Some((*layer).clone()));
+    }
+
+    let mut candidates = located_sources;
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    let reference = candidates[0].2;
+    candidates.retain(|(_, _, layer)| {
+        reference
+            .interpolation_compatibility_with(layer)
+            .is_compatible()
+    });
+    if candidates.len() == 1 {
+        return Ok(Some(candidates[0].2.clone()));
+    }
+
+    let source_locations = candidates
+        .iter()
+        .map(|(_, source_location, _)| source_location.clone())
+        .collect::<Vec<_>>();
+    let Some(weights) =
+        crate::interpolation::interpolation_weights(&source_locations, location, &axes)?
+    else {
+        return Ok(Some(reference.clone()));
+    };
+    let source_values = candidates
+        .iter()
+        .map(|(_, _, layer)| layer.interpolation_values())
+        .collect::<Vec<_>>();
+    let value_count = source_values[0].as_slice().len();
+    let mut values = vec![0.0; value_count];
+    for (weight, source) in weights.into_iter().zip(&source_values) {
+        if source.as_slice().len() != value_count {
+            return Ok(Some(reference.clone()));
+        }
+        for (value, source_value) in values.iter_mut().zip(source.as_slice()) {
+            *value += weight * source_value;
+        }
+    }
+    let mut resolved = reference.clone();
+    resolved.apply_interpolation_values(&GlyphInterpolationValues::new(values))?;
+    Ok(Some(resolved))
+}
+
+fn effective_glyph_source_location(font: &Font, source: &GlyphSource) -> DesignLocation {
+    let mut location = source
+        .base_source_id()
+        .and_then(|source_id| {
+            font.sources()
+                .iter()
+                .find(|global| global.id() == source_id)
+                .map(|global| global.location().clone())
+        })
+        .unwrap_or_default();
+    for (axis_id, value) in source.location().iter() {
+        location.set(axis_id.clone(), *value);
+    }
+    location
+}
+
+fn glyph_interpolation_axes(font: &Font, glyph: &Glyph) -> Vec<Axis> {
+    let mut axes = font.axes().to_vec();
+    let mut used_tags = axes
+        .iter()
+        .map(|axis| axis.tag().to_string())
+        .collect::<HashSet<_>>();
+    let mut tag_index = 0_u32;
+    for local in glyph.axes().values() {
+        let tag = loop {
+            let candidate = format!("L{tag_index:03X}");
+            tag_index += 1;
+            if used_tags.insert(candidate.clone()) {
+                break candidate;
+            }
+        };
+        axes.push(Axis::continuous_with_id(
+            local.id(),
+            tag,
+            local.name().to_string(),
+            local.minimum(),
+            local.default(),
+            local.maximum(),
+        ));
+    }
+    axes
+}
+
+fn locations_match(left: &DesignLocation, right: &DesignLocation, axes: &[Axis]) -> bool {
+    axes.iter().all(|axis| {
+        let left = left.get(&axis.id()).unwrap_or(axis.default());
+        let right = right.get(&axis.id()).unwrap_or(axis.default());
+        (left - right).abs() <= 1e-9
+    })
+}
+
+fn complete_root_font_location(font: &Font, location: &DesignLocation) -> DesignLocation {
+    let mut complete = DesignLocation::new();
+    for axis in font.axes() {
+        complete.set(
+            axis.id(),
+            location.get(&axis.id()).unwrap_or(axis.default()),
+        );
+    }
+    complete
+}
+
+fn condition_matches(condition: &Condition, font: &Font, location: &DesignLocation) -> bool {
+    match condition {
+        Condition::AxisRange {
+            axis_id,
+            minimum,
+            maximum,
+        } => {
+            let value = location.get(axis_id).or_else(|| {
+                font.axes()
+                    .iter()
+                    .find(|axis| axis.id() == *axis_id)
+                    .map(Axis::default)
+            });
+            value.is_some_and(|value| {
+                minimum.is_none_or(|minimum| value >= minimum)
+                    && maximum.is_none_or(|maximum| value <= maximum)
+            })
+        }
+        Condition::And { conditions } => conditions
+            .iter()
+            .all(|condition| condition_matches(condition, font, location)),
+        Condition::Or { conditions } => conditions
+            .iter()
+            .any(|condition| condition_matches(condition, font, location)),
+        Condition::Not { condition } => !condition_matches(condition, font, location),
+    }
+}
+
 impl FontProjection<'_> {
     /// Returns the internal authoring location fixed for this projection.
     pub fn location(&self) -> &DesignLocation {
@@ -578,6 +905,18 @@ impl FontProjection<'_> {
     /// reference has no master-backed projection, or an interpolation error
     /// when derived values do not match their compatible structural reference layer.
     pub fn glyph(&mut self, glyph_id: &GlyphId) -> CoreResult<Option<ResolvedGlyph>> {
+        if glyph_requires_advanced_resolution(self.font, glyph_id, &mut HashSet::new()) {
+            let Some((layer, layers)) =
+                resolved_occurrence_layers(self.font, glyph_id, &self.location)?
+            else {
+                return Ok(None);
+            };
+            return Ok(Some(ResolvedGlyph {
+                glyph_id: glyph_id.clone(),
+                contours: resolved_contours_from_layers(glyph_id, &layers)?,
+                x_advance: layer.width(),
+            }));
+        }
         if !self.prepare_layer_tree(glyph_id)? {
             return Ok(None);
         }
@@ -742,8 +1081,9 @@ fn exact_source_id(
 mod tests {
     use crate::test_support::sample_variable_font;
     use crate::{
-        Anchor, Axis, AxisId, Component, Contour, CoreError, DesignLocation, Font, Glyph, GlyphId,
-        GlyphLayer, GlyphSource, LayerId, Location, PointType, Source, SourceId, Transform,
+        Anchor, Axis, AxisId, AxisInheritance, Component, Condition, Contour, CoreError,
+        DesignLocation, Font, Glyph, GlyphAxis, GlyphId, GlyphLayer, GlyphSource, GlyphVariant,
+        LayerId, Location, PointType, Source, SourceId, Transform,
     };
 
     fn variable_font() -> (Font, AxisId, SourceId, SourceId, SourceId) {
@@ -1230,6 +1570,313 @@ mod tests {
             attachment.target().component_path(),
             components[0].component_path()
         );
+    }
+
+    #[test]
+    fn glyph_local_sources_interpolate_on_local_axes() {
+        let (mut font, _weight_id, _, regular_id, _) = variable_font();
+        let local_axis_id = AxisId::from_raw("local-width");
+        let mut glyph = Glyph::new("local");
+        glyph.insert_axis(GlyphAxis::with_id(
+            local_axis_id.clone(),
+            "Local Width".to_string(),
+            0.0,
+            0.0,
+            100.0,
+        ));
+        let narrow = GlyphLayer::with_width(LayerId::from_raw("narrow"), 200.0);
+        let wide = GlyphLayer::with_width(LayerId::from_raw("wide"), 400.0);
+        glyph.set_layer(narrow.clone());
+        glyph.set_layer(wide.clone());
+        let mut narrow_location = Location::new();
+        narrow_location.set(local_axis_id.clone(), 0.0);
+        glyph.insert_default_source(GlyphSource::new(
+            "Narrow".to_string(),
+            narrow.id(),
+            Some(regular_id.clone()),
+            narrow_location,
+        ));
+        let mut wide_location = Location::new();
+        wide_location.set(local_axis_id.clone(), 100.0);
+        glyph.insert_default_source(GlyphSource::new(
+            "Wide".to_string(),
+            wide.id(),
+            Some(regular_id),
+            wide_location,
+        ));
+        let glyph_id = font.insert_glyph(glyph).unwrap();
+        font.validate().unwrap();
+        let mut location = DesignLocation::new();
+        location.set(local_axis_id, 50.0);
+
+        let resolved = font
+            .projection(&location)
+            .glyph(&glyph_id)
+            .unwrap()
+            .unwrap();
+
+        assert!((resolved.x_advance() - 300.0).abs() <= 1e-9);
+    }
+
+    #[test]
+    fn conditional_variants_use_first_match_without_default_fallback() {
+        let (mut font, weight_id, _, regular_id, _) = variable_font();
+        let mut glyph = Glyph::new("variant");
+        let default_layer = GlyphLayer::with_width(LayerId::from_raw("default"), 100.0);
+        let first_layer = GlyphLayer::with_width(LayerId::from_raw("first"), 200.0);
+        let second_layer = GlyphLayer::with_width(LayerId::from_raw("second"), 300.0);
+        glyph.set_layer(default_layer.clone());
+        glyph.set_layer(first_layer.clone());
+        glyph.set_layer(second_layer.clone());
+        glyph.insert_default_source(GlyphSource::new(
+            "Default".to_string(),
+            default_layer.id(),
+            Some(regular_id.clone()),
+            Location::new(),
+        ));
+        let mut first = GlyphVariant::new(
+            "First".to_string(),
+            Condition::AxisRange {
+                axis_id: weight_id.clone(),
+                minimum: Some(500.0),
+                maximum: None,
+            },
+        );
+        first.insert_source(GlyphSource::new(
+            "First explicit".to_string(),
+            first_layer.id(),
+            Some(regular_id.clone()),
+            Location::new(),
+        ));
+        glyph.insert_variant(first);
+        let mut second = GlyphVariant::new(
+            "Second".to_string(),
+            Condition::AxisRange {
+                axis_id: weight_id.clone(),
+                minimum: Some(400.0),
+                maximum: None,
+            },
+        );
+        second.insert_source(GlyphSource::new(
+            "Second explicit".to_string(),
+            second_layer.id(),
+            Some(regular_id),
+            Location::new(),
+        ));
+        glyph.insert_variant(second);
+        let glyph_id = font.insert_glyph(glyph).unwrap();
+        font.validate().unwrap();
+
+        let resolved = font
+            .projection(&location(&weight_id, 600.0))
+            .glyph(&glyph_id)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(resolved.x_advance(), 200.0);
+    }
+
+    #[test]
+    fn component_locations_interpolate_with_parent_glyph_sources() {
+        let (mut font, weight_id, _, regular_id, bold_id) = variable_font();
+        let local_axis_id = AxisId::from_raw("component-width");
+        let base_id = GlyphId::from_raw("variable-component-base");
+        let mut base = Glyph::with_id(base_id.clone(), "variable-component-base");
+        base.insert_axis(GlyphAxis::with_id(
+            local_axis_id.clone(),
+            "Component Width".to_string(),
+            0.0,
+            0.0,
+            100.0,
+        ));
+        let narrow = line_layer(regular_id.clone(), 0.0);
+        let wide = line_layer(regular_id.clone(), 100.0);
+        base.set_layer(narrow.clone());
+        base.set_layer(wide.clone());
+        let mut narrow_location = Location::new();
+        narrow_location.set(local_axis_id.clone(), 0.0);
+        base.insert_default_source(GlyphSource::new(
+            "Narrow".to_string(),
+            narrow.id(),
+            Some(regular_id.clone()),
+            narrow_location,
+        ));
+        let mut wide_location = Location::new();
+        wide_location.set(local_axis_id.clone(), 100.0);
+        base.insert_default_source(GlyphSource::new(
+            "Wide".to_string(),
+            wide.id(),
+            Some(regular_id.clone()),
+            wide_location,
+        ));
+        font.insert_glyph(base).unwrap();
+
+        let mut root = Glyph::new("variable-component-root");
+        let mut regular_layer = GlyphLayer::new(LayerId::from_raw("component-regular"));
+        let mut regular_component = Component::new(base_id.clone(), "variable-component-base");
+        let mut regular_component_location = Location::new();
+        regular_component_location.set(local_axis_id.clone(), 0.0);
+        regular_component.set_location(regular_component_location);
+        regular_layer.add_component(regular_component);
+        let mut bold_layer = GlyphLayer::new(LayerId::from_raw("component-bold"));
+        let mut bold_component = Component::new(base_id, "variable-component-base");
+        let mut bold_component_location = Location::new();
+        bold_component_location.set(local_axis_id, 100.0);
+        bold_component.set_location(bold_component_location);
+        bold_layer.add_component(bold_component);
+        root.set_layer(regular_layer.clone());
+        root.set_layer(bold_layer.clone());
+        root.insert_default_source(GlyphSource::new(
+            "Regular".to_string(),
+            regular_layer.id(),
+            Some(regular_id),
+            Location::new(),
+        ));
+        root.insert_default_source(GlyphSource::new(
+            "Bold".to_string(),
+            bold_layer.id(),
+            Some(bold_id),
+            Location::new(),
+        ));
+        let root_id = font.insert_glyph(root).unwrap();
+        font.validate().unwrap();
+
+        let resolved = font
+            .projection(&location(&weight_id, 650.0))
+            .glyph(&root_id)
+            .unwrap()
+            .unwrap();
+
+        assert!((resolved.contours()[0].points[0].x() - 50.0).abs() <= 1e-6);
+    }
+
+    #[test]
+    fn component_condition_uses_root_font_location() {
+        let (mut font, weight_id, _, regular_id, _) = variable_font();
+        let base_id = GlyphId::from_raw("conditional-base");
+        let mut base = Glyph::with_id(base_id.clone(), "conditional-base");
+        let base_layer = line_layer(regular_id.clone(), 20.0);
+        base.set_layer(base_layer.clone());
+        base.insert_default_source(GlyphSource::new(
+            "Base".to_string(),
+            base_layer.id(),
+            Some(regular_id.clone()),
+            Location::new(),
+        ));
+        font.insert_glyph(base).unwrap();
+
+        let mut root = Glyph::new("conditional-root");
+        let mut root_layer = GlyphLayer::new(LayerId::from_raw("conditional-root"));
+        let mut component = Component::new(base_id, "conditional-base");
+        component.set_condition(Some(Condition::AxisRange {
+            axis_id: weight_id.clone(),
+            minimum: Some(600.0),
+            maximum: None,
+        }));
+        root_layer.add_component(component);
+        root.set_layer(root_layer.clone());
+        root.insert_default_source(GlyphSource::new(
+            "Root".to_string(),
+            root_layer.id(),
+            Some(regular_id),
+            Location::new(),
+        ));
+        let root_id = font.insert_glyph(root).unwrap();
+        font.validate().unwrap();
+
+        let hidden = font
+            .projection(&location(&weight_id, 500.0))
+            .glyph(&root_id)
+            .unwrap()
+            .unwrap();
+        assert!(hidden.contours().is_empty());
+        let visible = font
+            .projection(&location(&weight_id, 700.0))
+            .glyph(&root_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(visible.contours().len(), 1);
+    }
+
+    #[test]
+    fn nested_component_axis_inheritance_uses_parent_or_root_font_location() {
+        let (mut font, weight_id, _, regular_id, _) = variable_font();
+        let shoulder_id = GlyphId::from_raw("shoulder");
+        let mut shoulder = Glyph::with_id(shoulder_id.clone(), "shoulder");
+        let light = line_layer(regular_id.clone(), 0.0);
+        let heavy = line_layer(regular_id.clone(), 300.0);
+        shoulder.set_layer(light.clone());
+        shoulder.set_layer(heavy.clone());
+        let mut light_location = Location::new();
+        light_location.set(weight_id.clone(), 400.0);
+        shoulder.insert_default_source(GlyphSource::new(
+            "Light".to_string(),
+            light.id(),
+            Some(regular_id.clone()),
+            light_location,
+        ));
+        let mut heavy_location = Location::new();
+        heavy_location.set(weight_id.clone(), 700.0);
+        shoulder.insert_default_source(GlyphSource::new(
+            "Heavy".to_string(),
+            heavy.id(),
+            Some(regular_id.clone()),
+            heavy_location,
+        ));
+        font.insert_glyph(shoulder).unwrap();
+
+        let middle_id = GlyphId::from_raw("middle");
+        let mut middle = Glyph::with_id(middle_id.clone(), "middle");
+        let mut middle_layer = GlyphLayer::new(LayerId::from_raw("middle"));
+        let nested_component_id = crate::ComponentId::from_raw("nested-shoulder");
+        middle_layer.add_component(Component::with_id(
+            nested_component_id.clone(),
+            shoulder_id,
+            "shoulder",
+            crate::DecomposedTransform::identity(),
+        ));
+        middle.set_layer(middle_layer.clone());
+        middle.insert_default_source(GlyphSource::new(
+            "Middle".to_string(),
+            middle_layer.id(),
+            Some(regular_id.clone()),
+            Location::new(),
+        ));
+        font.insert_glyph(middle).unwrap();
+
+        let mut root = Glyph::new("root");
+        let mut root_layer = GlyphLayer::new(LayerId::from_raw("root"));
+        let mut middle_component = Component::new(middle_id, "middle");
+        let mut middle_location = Location::new();
+        middle_location.set(weight_id.clone(), 500.0);
+        middle_component.set_location(middle_location);
+        root_layer.add_component(middle_component);
+        root.set_layer(root_layer.clone());
+        root.insert_default_source(GlyphSource::new(
+            "Root".to_string(),
+            root_layer.id(),
+            Some(regular_id),
+            Location::new(),
+        ));
+        let root_id = font.insert_glyph(root).unwrap();
+        font.validate().unwrap();
+
+        let root_location = location(&weight_id, 700.0);
+        let parent = font
+            .projection(&root_location)
+            .glyph(&root_id)
+            .unwrap()
+            .unwrap();
+        assert!((parent.contours()[0].points[0].x() - 100.0).abs() <= 1e-6);
+
+        font.set_component_axis_inheritance(nested_component_id, AxisInheritance::Font)
+            .unwrap();
+        let reset = font
+            .projection(&root_location)
+            .glyph(&root_id)
+            .unwrap()
+            .unwrap();
+        assert!((reset.contours()[0].points[0].x() - 300.0).abs() <= 1e-6);
     }
 
     #[test]

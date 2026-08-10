@@ -193,13 +193,28 @@ fn compare_components(
         || reference
             .components_iter()
             .zip(source.components_iter())
-            .any(|(reference, source)| reference.base_glyph_id() != source.base_glyph_id());
+            .any(|(reference, source)| {
+                reference.base_glyph_id() != source.base_glyph_id()
+                    || reference.axis_inheritance() != source.axis_inheritance()
+                    || reference.condition() != source.condition()
+                    || component_location_axes(reference) != component_location_axes(source)
+            });
     if sequence_differs {
         differences.push(LayerDifference::ComponentSequence {
             reference: component_sequence(reference),
             source: component_sequence(source),
         });
     }
+}
+
+fn component_location_axes(component: &crate::Component) -> Vec<crate::AxisId> {
+    let mut axis_ids = component
+        .location()
+        .iter()
+        .map(|(axis_id, _)| axis_id.clone())
+        .collect::<Vec<_>>();
+    axis_ids.sort();
+    axis_ids
 }
 
 fn component_sequence(layer: &GlyphLayer) -> Vec<GlyphId> {

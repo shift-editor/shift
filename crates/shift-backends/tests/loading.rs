@@ -3,7 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use shift_backends::font_loader::FontLoader;
+use shift_backends::{
+    build_binary_atlas_page,
+    font_loader::FontLoader,
+    font_source::{FontReadError, FontSource},
+    BackendError, FormatBackendError, OpenedFont, SourceAtlasError,
+};
 use shift_font::{
     Contour, Font, Glyph, GlyphLayer, GlyphSource, LayerId, Location, MetricKind, PointType,
 };
@@ -40,6 +45,10 @@ fn mutatorsans_ttf_path() -> PathBuf {
 
 fn mutatorsans_otf_path() -> PathBuf {
     fixtures_path().join("fonts/mutatorsans/MutatorSans.otf")
+}
+
+fn varc_fixture_path(name: &str) -> PathBuf {
+    fixtures_path().join("fonts/varc").join(name)
 }
 
 fn host_grotesk_variable_ttf_path() -> PathBuf {
@@ -118,6 +127,71 @@ fn simple_geometry_font() -> Font {
     glyph.insert_default_source(glyph_source);
     font.insert_glyph(glyph).unwrap();
     font
+}
+
+#[test]
+fn authored_import_rejects_upstream_varc_fixtures_explicitly() {
+    for fixture in [
+        "varc-ac00-ac01.ttf",
+        "varc-ac01-conditional.ttf",
+        "varc-6868.ttf",
+    ] {
+        let path = varc_fixture_path(fixture);
+
+        let error = match FontLoader::new().stream_font(path.to_str().unwrap()) {
+            Ok(_) => panic!("{fixture} authored import should reject VARC"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error,
+            BackendError::Load {
+                source: FormatBackendError::Binary(message),
+                ..
+            } if message == "VARC authored import is not supported"
+        ));
+    }
+}
+
+#[test]
+fn retained_projection_rejects_upstream_varc_fixtures_explicitly() {
+    for fixture in [
+        "varc-ac00-ac01.ttf",
+        "varc-ac01-conditional.ttf",
+        "varc-6868.ttf",
+    ] {
+        let path = varc_fixture_path(fixture);
+        let source = FontLoader::new().open_source(&path).unwrap();
+        let glyph = source
+            .directory()
+            .glyphs()
+            .iter()
+            .find(|glyph| glyph.unicodes.iter().any(|unicode| *unicode != 0))
+            .expect("VARC fixture should contain an encoded glyph")
+            .index;
+
+        let projection_error = source.glyph(glyph).unwrap_err();
+        assert!(matches!(
+            projection_error,
+            FontReadError::UnsupportedProjection {
+                details: "VARC projection is not supported"
+            }
+        ));
+
+        let OpenedFont::OpenType(font) = source else {
+            panic!("{fixture} should open as an OpenType source");
+        };
+        let atlas_error = match build_binary_atlas_page(&font, &[glyph], 8) {
+            Ok(_) => panic!("{fixture} retained atlas should reject VARC"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            atlas_error,
+            SourceAtlasError::Read(FontReadError::UnsupportedProjection {
+                details: "VARC projection is not supported"
+            })
+        ));
+    }
 }
 
 #[test]

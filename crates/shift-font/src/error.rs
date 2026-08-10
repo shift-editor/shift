@@ -48,6 +48,9 @@ pub enum CoreError {
     #[error("anchor {0} not found")]
     AnchorNotFound(AnchorId),
 
+    #[error("component {0} not found")]
+    ComponentNotFound(ComponentId),
+
     #[error("boolean operation failed: {0}")]
     BooleanOperationFailed(String),
 

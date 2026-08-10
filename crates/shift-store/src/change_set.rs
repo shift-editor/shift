@@ -278,6 +278,21 @@ pub(crate) fn replace_glyph_authoring_in_tx(
     Ok(())
 }
 
+fn next_glyph_source_order(
+    tx: &Transaction<'_>,
+    glyph_id: &font::GlyphId,
+    variant_id: Option<&font::GlyphVariantId>,
+) -> Result<i64, StoreError> {
+    tx.query_row(
+        "SELECT COALESCE(MAX(order_index) + 1, 0)
+         FROM glyph_sources
+         WHERE glyph_id = ?1 AND variant_id IS ?2",
+        params![glyph_id.to_string(), variant_id.map(ToString::to_string),],
+        |row| row.get(0),
+    )
+    .map_err(StoreError::from)
+}
+
 fn insert_glyph_source(
     tx: &Transaction<'_>,
     glyph_id: &font::GlyphId,
@@ -375,6 +390,170 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         }
         font::FontChange::AxisMappingsUpdated(change) => {
             replace_axis_mappings(tx, &change.mappings)
+        }
+        font::FontChange::GlyphAxisCreated(change) => {
+            let order_index: i64 = tx.query_row(
+                "SELECT COALESCE(MAX(order_index) + 1, 0) FROM glyph_axes WHERE glyph_id = ?1",
+                [change.glyph_id.to_string()],
+                |row| row.get(0),
+            )?;
+            tx.execute(
+                "INSERT INTO glyph_axes
+                 (id, glyph_id, name, min_value, default_value, max_value, order_index)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    change.axis.id().to_string(),
+                    change.glyph_id.to_string(),
+                    change.axis.name(),
+                    change.axis.minimum(),
+                    change.axis.default(),
+                    change.axis.maximum(),
+                    order_index,
+                ],
+            )?;
+            Ok(())
+        }
+        font::FontChange::GlyphAxisUpdated(change) => {
+            let rows_changed = tx.execute(
+                "UPDATE glyph_axes
+                 SET name = ?1, min_value = ?2, default_value = ?3, max_value = ?4
+                 WHERE id = ?5 AND glyph_id = ?6",
+                params![
+                    change.axis.name(),
+                    change.axis.minimum(),
+                    change.axis.default(),
+                    change.axis.maximum(),
+                    change.axis.id().to_string(),
+                    change.glyph_id.to_string(),
+                ],
+            )?;
+            require_changed(rows_changed, "glyph axis", change.axis.id().to_string())?;
+            Ok(())
+        }
+        font::FontChange::GlyphAxisDeleted(change) => {
+            let rows_changed = tx.execute(
+                "DELETE FROM glyph_axes WHERE id = ?1 AND glyph_id = ?2",
+                params![change.axis_id.to_string(), change.glyph_id.to_string()],
+            )?;
+            require_changed(rows_changed, "glyph axis", change.axis_id.to_string())?;
+            Ok(())
+        }
+        font::FontChange::GlyphSourceCreated(change) => {
+            let order_index =
+                next_glyph_source_order(tx, &change.glyph_id, change.variant_id.as_ref())?;
+            insert_glyph_source(
+                tx,
+                &change.glyph_id,
+                change.variant_id.as_ref(),
+                &change.source,
+                order_index,
+            )
+        }
+        font::FontChange::GlyphSourceUpdated(change) => {
+            let rows_changed = tx.execute(
+                "UPDATE glyph_sources
+                 SET name = ?1, layer_id = ?2, base_source_id = ?3
+                 WHERE id = ?4 AND glyph_id = ?5 AND variant_id IS ?6",
+                params![
+                    change.source.name(),
+                    change.source.layer_id().to_string(),
+                    change.source.base_source_id().map(|id| id.to_string()),
+                    change.source.id().to_string(),
+                    change.glyph_id.to_string(),
+                    change.variant_id.as_ref().map(ToString::to_string),
+                ],
+            )?;
+            require_changed(rows_changed, "glyph source", change.source.id().to_string())?;
+            tx.execute(
+                "DELETE FROM glyph_source_locations WHERE glyph_source_id = ?1",
+                [change.source.id().to_string()],
+            )?;
+            for (axis_id, value) in change.source.location().iter() {
+                tx.execute(
+                    "INSERT INTO glyph_source_locations (glyph_source_id, axis_id, value)
+                     VALUES (?1, ?2, ?3)",
+                    params![change.source.id().to_string(), axis_id.to_string(), value],
+                )?;
+            }
+            Ok(())
+        }
+        font::FontChange::GlyphSourceDeleted(change) => {
+            let rows_changed = tx.execute(
+                "DELETE FROM glyph_sources
+                 WHERE id = ?1 AND glyph_id = ?2 AND variant_id IS ?3",
+                params![
+                    change.glyph_source_id.to_string(),
+                    change.glyph_id.to_string(),
+                    change.variant_id.as_ref().map(ToString::to_string),
+                ],
+            )?;
+            require_changed(
+                rows_changed,
+                "glyph source",
+                change.glyph_source_id.to_string(),
+            )?;
+            Ok(())
+        }
+        font::FontChange::GlyphVariantCreated(change) => {
+            let order_index: i64 = tx.query_row(
+                "SELECT COALESCE(MAX(order_index) + 1, 0) FROM glyph_variants WHERE glyph_id = ?1",
+                [change.glyph_id.to_string()],
+                |row| row.get(0),
+            )?;
+            tx.execute(
+                "INSERT INTO glyph_variants (id, glyph_id, name, condition_json, order_index)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    change.variant.id().to_string(),
+                    change.glyph_id.to_string(),
+                    change.variant.name(),
+                    serde_json::to_string(change.variant.condition())?,
+                    order_index,
+                ],
+            )?;
+            for (source_order, source) in change.variant.sources().values().enumerate() {
+                insert_glyph_source(
+                    tx,
+                    &change.glyph_id,
+                    Some(&change.variant.id()),
+                    source,
+                    source_order as i64,
+                )?;
+            }
+            Ok(())
+        }
+        font::FontChange::GlyphVariantUpdated(change) => {
+            let rows_changed = tx.execute(
+                "UPDATE glyph_variants SET name = ?1, condition_json = ?2
+                 WHERE id = ?3 AND glyph_id = ?4",
+                params![
+                    change.variant.name(),
+                    serde_json::to_string(change.variant.condition())?,
+                    change.variant.id().to_string(),
+                    change.glyph_id.to_string(),
+                ],
+            )?;
+            require_changed(
+                rows_changed,
+                "glyph variant",
+                change.variant.id().to_string(),
+            )?;
+            Ok(())
+        }
+        font::FontChange::GlyphVariantDeleted(change) => {
+            let rows_changed = tx.execute(
+                "DELETE FROM glyph_variants WHERE id = ?1 AND glyph_id = ?2",
+                params![
+                    change.glyph_variant_id.to_string(),
+                    change.glyph_id.to_string(),
+                ],
+            )?;
+            require_changed(
+                rows_changed,
+                "glyph variant",
+                change.glyph_variant_id.to_string(),
+            )?;
+            Ok(())
         }
         font::FontChange::MetricDefinitionsUpdated(change) => {
             replace_metric_definitions(tx, &change.definitions)
