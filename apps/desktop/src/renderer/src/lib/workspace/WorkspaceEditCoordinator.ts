@@ -11,6 +11,7 @@ import type {
 import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
+  WorkspacePreviewFont,
   SlugAtlasOrigin,
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSlugAtlas,
@@ -278,6 +279,12 @@ export class WorkspaceEditCoordinator {
    */
   async export(path: string): Promise<WorkspaceExportResult> {
     const { completion } = await this.#withFlush(() => this.#session.startExport(path));
+    return completion;
+  }
+
+  /** Captures a spike-only working font after every pending authored edit. */
+  async compilePreview(): Promise<WorkspacePreviewFont> {
+    const { completion } = await this.#withFlush(() => this.#session.startPreviewCompile());
     return completion;
   }
 

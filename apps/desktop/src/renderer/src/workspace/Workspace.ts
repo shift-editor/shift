@@ -1,5 +1,5 @@
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { WorkspaceDocumentState, WorkspacePreviewFont } from "@shared/workspace/protocol";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { Editor } from "@/lib/editor/Editor";
 import { Font } from "@/lib/model/Font";
@@ -59,6 +59,11 @@ export class Workspace {
     }
 
     return this.#connection;
+  }
+
+  /** Compiles the committed workspace for the spike DOM proof projection. */
+  compilePreview(): Promise<WorkspacePreviewFont> {
+    return this.#edits.compilePreview();
   }
 
   dispose(): void {

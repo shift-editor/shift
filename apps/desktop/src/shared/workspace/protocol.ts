@@ -146,6 +146,12 @@ export type WorkspaceExportResult = {
   format: "ttf";
 };
 
+/** Spike payload for installing the current committed workspace as a FontFace. */
+export type WorkspacePreviewFont = {
+  bytes: Uint8Array;
+  compileMs: number;
+};
+
 /**
  * Shell lane: main ↔ utility. Plumbing only; never font data.
  *
@@ -253,6 +259,11 @@ export type SyncCallMap = {
   "workspace.export": {
     request: { path: string };
     response: WorkspaceExportResult;
+  };
+  /** Spike path: compiles the committed workspace for in-editor DOM proofing. */
+  "workspace.compilePreview": {
+    request: void;
+    response: WorkspacePreviewFont;
   };
   "workspace.glyphSnapshots": {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };

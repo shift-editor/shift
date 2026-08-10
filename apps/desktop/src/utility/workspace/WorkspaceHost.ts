@@ -1,6 +1,7 @@
 import { createBridge, type ShiftBridge } from "@shift/bridge";
 import type { GlyphSnapshot } from "@shift/types";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
 import type {
@@ -16,6 +17,7 @@ import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
   WorkspacePackageIdentity,
+  WorkspacePreviewFont,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
   WorkspaceSnapshot,
@@ -172,6 +174,7 @@ export class WorkspaceHost {
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.export": ({ path }) => this.#export(path),
+      "workspace.compilePreview": () => this.#compilePreview(),
       "workspace.glyphSnapshots": ({ requests }) =>
         this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]),
       "workspace.glyphProjections": ({ glyphIds }) =>
@@ -646,6 +649,23 @@ export class WorkspaceHost {
     }));
     const result = await completion;
     return { path: result.path, format: "ttf" };
+  }
+
+  async #compilePreview(): Promise<WorkspacePreviewFont> {
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "shift-preview-"));
+    const outputPath = path.join(directory, "working.ttf");
+
+    try {
+      const started = performance.now();
+      await this.#export(outputPath);
+      const bytes = await fs.promises.readFile(outputPath);
+      return {
+        bytes: Uint8Array.from(bytes),
+        compileMs: performance.now() - started,
+      };
+    } finally {
+      await fs.promises.rm(directory, { recursive: true, force: true });
+    }
   }
 
   async #close(discard: boolean): Promise<null> {

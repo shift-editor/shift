@@ -1,6 +1,3 @@
-import { createBridge } from "@shift/bridge";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { performance as nodePerformance } from "node:perf_hooks";
 
@@ -15,49 +12,12 @@ const VARIABLE_SOURCE_PATH = path.resolve(
 test.use({ startupFontPath: VARIABLE_SOURCE_PATH });
 
 test.describe("compiled proof board spike", () => {
-  let compiledFont: number[];
-  let compileMs: number;
-  let compiledBytes: number;
-  let compileRoot: string;
-
-  test.beforeAll(async () => {
-    compileRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-proof-compile-"));
-    const bridge = createBridge();
-    const outputPath = path.join(compileRoot, "MutatorSans-proof.ttf");
-
-    try {
-      bridge.openWorkspace(VARIABLE_SOURCE_PATH, path.join(compileRoot, "workspace.sqlite"));
-      const started = nodePerformance.now();
-      await bridge.exportWorkspace({ path: outputPath, format: "ttf" });
-      compileMs = nodePerformance.now() - started;
-      const bytes = fs.readFileSync(outputPath);
-      compiledBytes = bytes.byteLength;
-      compiledFont = Array.from(bytes);
-    } finally {
-      bridge.closeWorkspace();
-    }
-  });
-
-  test.afterAll(() => {
-    fs.rmSync(compileRoot, { recursive: true, force: true });
-  });
-
-  test("shares scene data, camera motion, and a compiled variable FontFace", async ({
-    page,
-  }, testInfo) => {
+  test("recompiles shared DOM proofs after authored edits", async ({ page }, testInfo) => {
     await navigateToEditor(page, "41");
 
-    const setup = await page.evaluate(async (fontBytes) => {
+    const setup = await page.evaluate(() => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
-
-      const family = `ShiftCompiledProof-${Date.now()}`;
-      const started = window.performance.now();
-      const face = new FontFace(family, new Uint8Array(fontBytes).buffer);
-      document.fonts.add(face);
-      await face.load();
-      const loadMs = window.performance.now() - started;
-      document.documentElement.style.setProperty("--shift-working-font-family", `"${family}"`);
 
       const axes = workspace.font.getAxes();
       if (axes.length === 0) throw new Error("Expected variable authored fixture");
@@ -68,7 +28,7 @@ test.describe("compiled proof board spike", () => {
       const highValues = Object.fromEntries(
         axes.map((axis) => [axis.id, axis.maximum ?? axis.default]),
       );
-      const run = workspace.editor.text.createRun("FISH");
+      const run = workspace.editor.text.createRun("FISH A");
       const low = workspace.editor.scene.createNode({
         kind: "textRun",
         runId: run.id,
@@ -85,34 +45,42 @@ test.describe("compiled proof board spike", () => {
       });
 
       return {
-        family,
-        loadMs,
         runId: run.id,
         lowNodeId: low.id,
         highNodeId: high.id,
         axisTags: axes.map((axis) => axis.tag),
       };
-    }, compiledFont);
+    });
 
     const proofLayer = page.locator("[data-compiled-proof-layer]");
     const frames = proofLayer.locator("[data-proof-node-id]");
     await expect(frames).toHaveCount(2);
+    await expect(proofLayer).toHaveAttribute("data-working-font-status", "ready", {
+      timeout: 30_000,
+    });
     await expect(frames.nth(0)).toHaveAttribute("data-proof-run-id", setup.runId);
     await expect(frames.nth(1)).toHaveAttribute("data-proof-run-id", setup.runId);
-    await expect(frames.nth(0)).toHaveText("FISH");
-    await expect(frames.nth(1)).toHaveText("FISH");
+    await expect(frames.nth(0)).toHaveText("FISH A");
+    await expect(frames.nth(1)).toHaveText("FISH A");
 
+    const firstFamily = await proofLayer.getAttribute("data-working-font-family");
+    expect(firstFamily).toBeTruthy();
+    const firstMetrics = await workingFontMetrics(proofLayer);
     const styles = await frames.evaluateAll((elements) =>
       elements.map((element) => {
         const style = getComputedStyle(element);
         return {
           family: style.fontFamily,
+          inlineFamily: (element as HTMLElement).style.fontFamily,
           variations: style.fontVariationSettings,
           fontSize: style.fontSize,
         };
       }),
     );
-    expect(styles.every((style) => style.family.includes(setup.family))).toBe(true);
+    for (const style of styles) {
+      expect(style.inlineFamily).toContain(firstFamily!);
+      expect(style.family).toContain(firstFamily!);
+    }
     expect(styles[0]?.variations).not.toBe(styles[1]?.variations);
     expect(setup.axisTags).toEqual(expect.arrayContaining(["wdth", "wght"]));
 
@@ -178,19 +146,50 @@ test.describe("compiled proof board spike", () => {
       )
       .toBeGreaterThan(Number.parseFloat(before[0]!.fontSize));
 
+    const proofBeforeEdit = await frames.nth(0).screenshot();
+    const recompileStarted = nodePerformance.now();
+    await page.evaluate(() => {
+      const workspace = window.shift;
+      const node = workspace?.editor.scene.nodesOfKind("glyph")[0] ?? null;
+      const glyph = node ? workspace?.editor.glyphForId(node.glyphId) : null;
+      const layer = node ? glyph?.layerForSource(node.sourceId) : null;
+      if (!layer) throw new Error("Expected active authored glyph layer");
+      layer.setXAdvance(layer.xAdvance + 120);
+    });
+
+    await expect
+      .poll(() => proofLayer.getAttribute("data-working-font-family"), { timeout: 30_000 })
+      .not.toBe(firstFamily);
+    await expect(proofLayer).toHaveAttribute("data-working-font-status", "ready");
+    const editToInstalledFaceMs = nodePerformance.now() - recompileStarted;
+    const proofAfterEdit = await frames.nth(0).screenshot();
+    expect(proofAfterEdit.equals(proofBeforeEdit)).toBe(false);
+
+    const updatedMetrics = await workingFontMetrics(proofLayer);
+    const metrics = {
+      initial: firstMetrics,
+      updated: updatedMetrics,
+      editToInstalledFaceMs,
+    };
+    for (const generation of [metrics.initial, metrics.updated]) {
+      expect(generation.compiledBytes).toBeGreaterThan(0);
+      expect(generation.compileMs).toBeGreaterThan(0);
+      expect(generation.fontFaceLoadMs).toBeGreaterThanOrEqual(0);
+      expect(generation.updateMs).toBeGreaterThan(0);
+    }
+
     await testInfo.attach("compiled-proof-timings.json", {
-      body: Buffer.from(
-        JSON.stringify(
-          {
-            compileMs,
-            fontFaceLoadMs: setup.loadMs,
-            compiledBytes,
-          },
-          null,
-          2,
-        ),
-      ),
+      body: Buffer.from(JSON.stringify(metrics, null, 2)),
       contentType: "application/json",
     });
   });
 });
+
+async function workingFontMetrics(proofLayer: import("@playwright/test").Locator) {
+  return proofLayer.evaluate((element) => ({
+    compiledBytes: Number(element.getAttribute("data-working-font-bytes")),
+    compileMs: Number(element.getAttribute("data-working-font-compile-ms")),
+    fontFaceLoadMs: Number(element.getAttribute("data-working-font-load-ms")),
+    updateMs: Number(element.getAttribute("data-working-font-update-ms")),
+  }));
+}

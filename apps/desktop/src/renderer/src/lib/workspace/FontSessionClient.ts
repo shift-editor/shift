@@ -10,6 +10,7 @@ import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
   WorkspaceGlyphSnapshotRequest,
+  WorkspacePreviewFont,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
   WorkspaceSnapshot,
@@ -228,6 +229,15 @@ export class FontSessionClient {
 
     return {
       completion: this.#require().call("workspace.export", { path }),
+    };
+  }
+
+  /** Starts a spike-only working-font compile after entering the workspace FIFO. */
+  async startPreviewCompile(): Promise<{ completion: Promise<WorkspacePreviewFont> }> {
+    await this.connect();
+
+    return {
+      completion: this.#require().call("workspace.compilePreview", undefined),
     };
   }
 
