@@ -13,7 +13,7 @@ use shift_font::{
 use skrifa::{
     outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
     prelude::{LocationRef, Size},
-    raw::{tables::hmtx::Hmtx, types::GlyphId, TableProvider},
+    raw::{tables::hmtx::Hmtx, types::GlyphId, ReadError, TableProvider},
     FontRef, MetadataProvider,
 };
 
@@ -188,6 +188,22 @@ pub(crate) fn stream_font_file(path: &str) -> FormatBackendResult<(Font, BinaryG
         OpenTypeFont::open(Path::new(path))
             .map_err(|error| FormatBackendError::Binary(error.to_string()))?,
     );
+    let font = FontRef::new(retained.bytes()).map_err(|error| {
+        FormatBackendError::Binary(format!("failed to reopen retained font: {error}"))
+    })?;
+    match font.varc() {
+        Ok(_) => {
+            return Err(FormatBackendError::Binary(
+                "VARC authored import is not supported".to_string(),
+            ));
+        }
+        Err(ReadError::TableIsMissing(_)) => {}
+        Err(error) => {
+            return Err(FormatBackendError::Binary(format!(
+                "failed to read VARC table: {error}"
+            )));
+        }
+    }
     let header = retained.header.clone();
     let source_id = header.default_source_id().ok_or_else(|| {
         FormatBackendError::Binary("binary font header is missing its default source".into())

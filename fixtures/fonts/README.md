@@ -27,6 +27,21 @@ in font tooling projects for testing font loading, editing, and round-trip opera
 
 MutatorSans is licensed under the SIL Open Font License. See `LICENSE` in the mutatorsans directory.
 
+## FontTools VARC fixtures
+
+Source: [FontTools `Tests/ttLib/data`](https://github.com/fonttools/fonttools/tree/6b407ba72a81af6f41830c096b777646d635364d/Tests/ttLib/data)
+
+The three small fonts in `varc/` cover basic variable components, conditional
+component participation, and component axis variation. They verify that editable
+binary import rejects compiled VARC semantics explicitly until native conversion
+exists, while the retained source boundary reports its separate unsupported
+projection capability. See `varc/README.md` for pinned hashes and provenance.
+
+### License
+
+The VARC fixtures are distributed under the FontTools MIT license. See
+`varc/LICENSE`.
+
 ## Adding Binary Fonts
 
 To add TTF/OTF test files, you can build them from the UFO sources using fontmake:
