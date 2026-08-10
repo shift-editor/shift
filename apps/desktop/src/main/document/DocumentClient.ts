@@ -4,7 +4,8 @@ import type {
   WorkspaceExportResult,
 } from "../../shared/workspace/protocol";
 import type { DocumentCallMap, DocumentEventMap } from "../../shared/ipc/contract";
-import { Channel, electronPortTransport } from "../../shared/workspace/channel";
+import { Channel } from "../../shared/workspace/channel";
+import { electronPortTransport } from "../../shared/workspace/localTransports";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
 export interface Document {

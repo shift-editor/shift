@@ -1,4 +1,5 @@
-import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
+import { Channel, type Transport } from "@shared/workspace/channel";
+import { domPortTransport } from "@shared/workspace/localTransports";
 import { PortByteStream } from "@shared/workspace/PortByteStream";
 import type {
   FontSessionMode,

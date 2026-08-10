@@ -6,7 +6,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Channel, nodePortTransport, type Transport } from "../../shared/workspace/channel";
+import { Channel, type Transport } from "../../shared/workspace/channel";
+import { nodePortTransport } from "../../shared/workspace/localTransports";
 import {
   mintContourId,
   mintGlyphId,

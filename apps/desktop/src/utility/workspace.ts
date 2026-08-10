@@ -1,5 +1,5 @@
 import type { MessagePortMain } from "electron";
-import { electronPortTransport, parentPortTransport } from "../shared/workspace/channel";
+import { electronPortTransport, parentPortTransport } from "../shared/workspace/localTransports";
 import { WorkspaceHost } from "./workspace/WorkspaceHost";
 
 const documentsRoot = process.argv[2];

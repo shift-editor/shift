@@ -1,6 +1,7 @@
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { DocumentCallMap, DocumentEventMap } from "@shared/ipc/contract";
-import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
+import { serveChannel, type ChannelServer } from "@shared/workspace/channel";
+import { domPortTransport } from "@shared/workspace/localTransports";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 interface WorkspaceDocumentBridgeOptions {

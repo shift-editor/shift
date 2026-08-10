@@ -1,6 +1,6 @@
 import { MessageChannel } from "node:worker_threads";
 import { describe, expect, it } from "vitest";
-import { nodePortTransport } from "./channel";
+import { nodePortTransport } from "./localTransports";
 import { PortByteStream } from "./PortByteStream";
 
 function stream(...chunks: number[][]): ReadableStream<Uint8Array> {
