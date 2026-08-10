@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Camera } from "./Camera";
 import type { Rect2D } from "@shift/geo";
+import { effect } from "@/lib/signals";
 
 describe("Camera", () => {
   let camera: Camera;
@@ -33,6 +34,29 @@ describe("Camera", () => {
     it("should have valid upmScale", () => {
       const scale = camera.upmScale;
       expect(scale).toBeGreaterThan(0);
+    });
+
+    it("notifies viewport-transform consumers when the canvas rect changes", () => {
+      let centreX = Number.NaN;
+      const subscription = effect(() => {
+        camera.trackViewportTransform();
+        centreX = camera.centre.x;
+      });
+
+      expect(centreX).toBe(500);
+      camera.setRect({
+        x: 0,
+        y: 0,
+        width: 800,
+        height: 800,
+        left: 0,
+        top: 0,
+        right: 800,
+        bottom: 800,
+      } as Rect2D);
+
+      expect(centreX).toBe(400);
+      subscription.dispose();
     });
   });
 

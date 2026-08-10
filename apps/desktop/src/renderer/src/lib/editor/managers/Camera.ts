@@ -74,6 +74,7 @@ export class Camera {
   readonly #panY: WritableSignal<number>;
   readonly #upm: WritableSignal<number>;
   readonly #descender: WritableSignal<number>;
+  readonly #viewportRevision: WritableSignal<number>;
 
   #canvasRect: Rect2D;
   #layoutHeight: number;
@@ -95,6 +96,7 @@ export class Camera {
     this.#panY = signal(0, { name: "camera.panY" });
     this.#upm = signal(1000, { name: "camera.upm" });
     this.#descender = signal(-200, { name: "camera.descender" });
+    this.#viewportRevision = signal(0, { name: "camera.viewportRevision" });
     this.#layoutHeight = 0;
 
     this.#mouseX = 0;
@@ -122,6 +124,7 @@ export class Camera {
     this.#upmToScreenMatrix = computed(
       () => {
         this.#upm.value;
+        this.#viewportRevision.value;
         const scale = this.upmScale;
         const padding = this.padding;
         const baselineY = this.layoutHeight - padding - this.#descender.value * scale;
@@ -154,8 +157,7 @@ export class Camera {
     if (this.#layoutHeight <= 0 && rect.height > 0) {
       this.#layoutHeight = rect.height;
     }
-    this.#upmToScreenMatrix.invalidate();
-    this.#screenToUpmMatrix.invalidate();
+    this.#viewportRevision.update((revision) => revision + 1);
 
     if (!before) return;
 
@@ -248,6 +250,10 @@ export class Camera {
     this.#panY.value;
     this.#upm.value;
     this.#descender.value;
+    // Viewport and layout dimensions are not signals, but setRect invalidates
+    // this matrix. Tracking it keeps non-Canvas scene projections in lockstep
+    // with the imperative Canvas surface lifecycle.
+    this.#upmToScreenMatrix.value;
   }
 
   /** Hit-test radius in UPM units. Grows as you zoom out so handles remain clickable. */

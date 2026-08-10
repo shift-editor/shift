@@ -6,6 +6,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
+import { CompiledProofLayer } from "./CompiledProofLayer";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
@@ -61,6 +62,7 @@ export const Canvas: FC = () => {
     >
       <CanvasContextProvider>
         <StaticScene />
+        <CompiledProofLayer />
         <InteractiveScene />
       </CanvasContextProvider>
       <TextInput />
