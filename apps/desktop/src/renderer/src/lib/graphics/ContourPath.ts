@@ -9,6 +9,7 @@ import {
 import type { SegmentedContour } from "@shift/glyph-state";
 import type { PathCommand } from "@/types/graphics";
 import { formatDecimal } from "@/lib/utils/number";
+import { Point } from "electron";
 
 /**
  * Represents one transformed contour as reusable vector-path output.
@@ -68,6 +69,7 @@ export class ContourPath {
           const controlStart = Mat.applyToPoint(transform, points.controlStart);
           const controlEnd = Mat.applyToPoint(transform, points.controlEnd);
           const end = Mat.applyToPoint(transform, points.end);
+
           commands.push({
             type: "cubicTo",
             cp1x: controlStart.x,
@@ -131,6 +133,14 @@ export class ContourPath {
 
     this.#bounds = Bounds.unionAll(bounds);
     return this.#bounds;
+  }
+
+  windingAt(point: Point2D): number {
+    return 0
+  }
+
+  distanceTo(point: Point2D): number {
+    return 0
   }
 
   /** Returns a cached Canvas path for this contour. */

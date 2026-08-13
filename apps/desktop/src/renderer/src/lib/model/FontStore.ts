@@ -1,6 +1,7 @@
 import type {
   AppliedChange,
   AnchorId,
+  ComponentId,
   ContourData,
   ContourId,
   FontSnapshot,
@@ -113,6 +114,10 @@ export class FontStore {
   /** Glyph roots whose resident atlas entries no longer match the committed font. */
   get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
     return this.#invalidGlyphIds;
+  }
+
+  layerIdForComponent(componentId: ComponentId): LayerId | null {
+    return this.#glyphObjectIndexCell.peek().layerIdByComponentId.get(componentId) ?? null;
   }
 
   layerIdForPoint(pointId: PointId): LayerId | null {
@@ -480,6 +485,7 @@ export class FontStore {
     // Layer state cells materialize lazily, so the cell-set version is what
     // lets cells created after the last rebuild enter the tracked set.
     track(this.#layerCellSetVersion);
+    const layerIdByComponentId = new Map<ComponentId, LayerId>();
     const layerIdByPointId = new Map<PointId, LayerId>();
     const contourIdByPointId = new Map<PointId, ContourId>();
     const layerIdByContourId = new Map<ContourId, LayerId>();
@@ -495,6 +501,10 @@ export class FontStore {
 
       const layerId = state.layerId;
       const structure = state.structure;
+
+      for (const component of structure.components) {
+        layerIdByComponentId.set(component.id, layerId);
+      }
 
       for (const contour of structure.contours) {
         layerIdByContourId.set(contour.id, layerId);
@@ -517,6 +527,7 @@ export class FontStore {
     }
 
     return {
+      layerIdByComponentId,
       layerIdByPointId,
       contourIdByPointId,
       layerIdByContourId,

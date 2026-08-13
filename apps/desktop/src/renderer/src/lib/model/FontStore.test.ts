@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   asAnchorId,
+  asComponentId,
   asContourId,
   asPointId,
   type AppliedChange,
   type AnchorId,
+  type ComponentId,
   type ContourId,
   type GlyphId,
   type GlyphName,
@@ -23,6 +25,7 @@ import { Font } from "./Font";
 import { FontStore } from "./FontStore";
 
 const GLYPH_ID = "glyph_shared" as GlyphId;
+const BASE_GLYPH_ID = "glyph_base" as GlyphId;
 const SOURCE_ID = "source_regular" as SourceId;
 const LAYER_A_ID = "layer_a" as LayerId;
 const LAYER_B_ID = "layer_b" as LayerId;
@@ -35,6 +38,8 @@ const POINT_4_ID = asPointId("point_4");
 const NEXT_POINT_ID = asPointId("point_next");
 const ANCHOR_ID = asAnchorId("anchor_a");
 const NEXT_ANCHOR_ID = asAnchorId("anchor_b");
+const COMPONENT_ID = asComponentId("component_a");
+const NEXT_COMPONENT_ID = asComponentId("component_b");
 const SEGMENT_ID = segmentIdFor(POINT_1_ID, POINT_4_ID);
 const NEXT_SEGMENT_ID = segmentIdFor(NEXT_POINT_ID, POINT_4_ID);
 
@@ -74,6 +79,7 @@ describe("FontStore glyph object ownership", () => {
 
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
+    expect(store.layerIdForComponent(COMPONENT_ID)).toBe(LAYER_A_ID);
     expect(store.layerIdForPoint(POINT_1_ID)).toBe(LAYER_A_ID);
     expect(store.contourIdForPoint(POINT_1_ID)).toBe(CONTOUR_ID);
     expect(store.layerIdForContour(CONTOUR_ID)).toBe(LAYER_A_ID);
@@ -96,6 +102,7 @@ describe("FontStore glyph object ownership", () => {
       contourId: NEXT_CONTOUR_ID,
       pointIds: [NEXT_POINT_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
       anchorId: NEXT_ANCHOR_ID,
+      componentId: NEXT_COMPONENT_ID,
     });
     store.applyWorkspaceChange({
       layers: [
@@ -108,17 +115,19 @@ describe("FontStore glyph object ownership", () => {
             contourIds: [NEXT_CONTOUR_ID],
             anchorIds: [NEXT_ANCHOR_ID],
             guidelineIds: [],
-            componentIds: [],
+            componentIds: [NEXT_COMPONENT_ID],
           },
         },
       ],
       dependents: [],
     });
 
+    expect(store.layerIdForComponent(COMPONENT_ID)).toBeNull();
     expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
     expect(store.layerIdForContour(CONTOUR_ID)).toBeNull();
     expect(store.layerIdForAnchor(ANCHOR_ID)).toBeNull();
     expect(store.layerIdForSegment(SEGMENT_ID)).toBeNull();
+    expect(store.layerIdForComponent(NEXT_COMPONENT_ID)).toBe(LAYER_A_ID);
     expect(store.layerIdForPoint(NEXT_POINT_ID)).toBe(LAYER_A_ID);
     expect(store.contourIdForPoint(NEXT_POINT_ID)).toBe(NEXT_CONTOUR_ID);
     expect(store.layerIdForContour(NEXT_CONTOUR_ID)).toBe(LAYER_A_ID);
@@ -132,6 +141,7 @@ describe("FontStore glyph object ownership", () => {
       contourId: NEXT_CONTOUR_ID,
       pointIds: [NEXT_POINT_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
       anchorId: NEXT_ANCHOR_ID,
+      componentId: NEXT_COMPONENT_ID,
     });
 
     store.applyWorkspaceChange({
@@ -154,6 +164,7 @@ describe("FontStore glyph object ownership", () => {
     });
 
     expect(store.layerState(LAYER_B_ID)).not.toBeNull();
+    expect(store.layerIdForComponent(NEXT_COMPONENT_ID)).toBe(LAYER_B_ID);
     expect(store.layerIdForPoint(NEXT_POINT_ID)).toBe(LAYER_B_ID);
     expect(store.contourIdForPoint(NEXT_POINT_ID)).toBe(NEXT_CONTOUR_ID);
     expect(store.layerIdForAnchor(NEXT_ANCHOR_ID)).toBe(LAYER_B_ID);
@@ -202,6 +213,7 @@ describe("FontStore glyph object ownership", () => {
     const font = new Font({ store });
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
+    expect(font.layerIdForComponent(COMPONENT_ID)).toBe(LAYER_A_ID);
     expect(font.layerIdForPoint(POINT_1_ID)).toBe(LAYER_A_ID);
     expect(font.contourIdForPoint(POINT_1_ID)).toBe(CONTOUR_ID);
     expect(font.layerIdForAnchor(ANCHOR_ID)).toBe(LAYER_A_ID);
@@ -295,10 +307,12 @@ function structure({
   contourId = CONTOUR_ID,
   pointIds = [POINT_1_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
   anchorId = ANCHOR_ID,
+  componentId = COMPONENT_ID,
 }: {
   readonly contourId?: ContourId;
   readonly pointIds?: readonly PointId[];
   readonly anchorId?: AnchorId;
+  readonly componentId?: ComponentId;
 } = {}): GlyphStructure {
   return {
     contours: [
@@ -314,7 +328,13 @@ function structure({
       },
     ],
     anchors: [{ id: anchorId, x: 50, y: 100 }],
-    components: [],
+    components: [
+      {
+        id: componentId,
+        baseGlyphId: BASE_GLYPH_ID,
+        baseGlyphName: "base" as GlyphName,
+      },
+    ],
   };
 }
 

@@ -18,6 +18,7 @@ import type {
   Unicode,
   AxisId,
   AnchorId,
+  ComponentId,
   ContourId,
   LayerId,
   Location,
@@ -517,6 +518,11 @@ export class Font {
   /** Glyph roots whose resident atlas entries no longer match the committed font. */
   get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
     return this.#store.invalidGlyphIdsCell;
+  }
+
+  /** Returns the layer owning a component id, or null when unknown. */
+  layerIdForComponent(componentId: ComponentId): LayerId | null {
+    return this.#store.layerIdForComponent(componentId);
   }
 
   /** Returns the layer owning a point id, or null when unknown. */

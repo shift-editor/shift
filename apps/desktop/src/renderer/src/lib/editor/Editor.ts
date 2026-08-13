@@ -5,6 +5,7 @@ import {
   isNodeId,
   isPointId,
   type AnchorId,
+  type ComponentId,
   type PointId,
   type ContourId,
   type Source,
@@ -13,6 +14,7 @@ import {
   type GlyphName,
   type GlyphRecord,
   type LayerId,
+  isComponentId,
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "@/types/variation";
@@ -68,7 +70,14 @@ import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "@/types/target";
 import type { SelectableId, ShiftEditorRecord, ShiftId, ShiftObject } from "@/types";
 import type { GlyphNode, NodeKind } from "@/types/node";
-import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
+import {
+  AnchorObject,
+  ComponentObject,
+  ContourObject,
+  NodeObject,
+  PointObject,
+  SegmentObject,
+} from "@/lib/objects";
 import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
@@ -555,6 +564,18 @@ export class Editor {
       return null;
     }
 
+    if (isComponentId(id)) {
+      const layer = this.#layerForComponent(id);
+      const node = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+      const glyph = node ? this.glyphForId(node.glyphId) : null;
+      const component = glyph
+        ?.renderModelAt(this.externalLocationCell, this.activeSourceIdCell)
+        .componentAt([id]);
+      if (!layer || !node || !component) return null;
+
+      return new ComponentObject(id, component, node, layer);
+    }
+
     return null;
   }
 
@@ -588,6 +609,14 @@ export class Editor {
     }
 
     return owner === null ? null : this.#layerForId(owner);
+  }
+
+  #layerForComponent(componentId: ComponentId): GlyphLayer | null {
+    const layerId = this.font.layerIdForComponent(componentId);
+    if (!layerId) return null;
+
+    const layer = this.#layerForId(layerId);
+    return layer?.components.some((component) => component.id === componentId) ? layer : null;
   }
 
   #layerForPoint(pointId: PointId): GlyphLayer | null {

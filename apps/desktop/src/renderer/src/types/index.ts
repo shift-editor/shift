@@ -1,4 +1,4 @@
-import type { AnchorId, ContourId, LayerId, PointId } from "@shift/types";
+import type { AnchorId, ComponentId, ContourId, LayerId, PointId } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
 
 export { currentEditingId } from "./editing";
@@ -56,6 +56,7 @@ export interface GlyphObjectSegment {
 }
 
 export interface GlyphObjectIndex {
+  readonly layerIdByComponentId: ReadonlyMap<ComponentId, LayerId>;
   readonly layerIdByPointId: ReadonlyMap<PointId, LayerId>;
   readonly contourIdByPointId: ReadonlyMap<PointId, ContourId>;
   readonly layerIdByContourId: ReadonlyMap<ContourId, LayerId>;

@@ -1,6 +1,7 @@
 import type { Rect2D } from "@shift/geo";
 import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
-import type { AnchorId, ContourId, NodeId, PointId } from "@shift/types";
+import type { AnchorId, ComponentId, ContourId, NodeId, PointId } from "@shift/types";
+import type { ComponentGlyph } from "@/lib/model/ComponentGlyph";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { GlyphNode, ShiftNode } from "./node";
 
@@ -11,7 +12,7 @@ export type SelectionId = string & { readonly [SelectionIdBrand]: typeof Selecti
 export const currentSelectionId = "selection:current" as SelectionId;
 
 /** Identifies an editor-addressable scene node or glyph object. */
-export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId;
+export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
 
 /** Identifies objects that can be selected by the editor. */
 export type SelectableId = ShiftId;
@@ -123,6 +124,23 @@ export interface ShiftObjectKindMap {
     readonly geometry: GlyphGeometry;
     readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
+  };
+
+  /**
+   * Represents one direct component occurrence in a placed glyph.
+   *
+   * @remarks
+   * `component` provides the live resolved contours, transform, descendants,
+   * and bounds for the occurrence. The paired glyph node supplies scene
+   * placement. A non-null `layer` identifies the exact authored parent layer
+   * that owns the component transform; imported and interpolated occurrences
+   * remain selectable but immutable.
+   */
+  readonly component: ShiftObjectBase<"component", ComponentId> & {
+    readonly node: GlyphNode;
+    readonly component: ComponentGlyph;
+    readonly layer: GlyphLayer | null;
+    readonly componentId: ComponentId;
   };
 }
 
