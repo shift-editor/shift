@@ -82,6 +82,13 @@ User pointer/key
   -> tool.drawOverlay / drawScene / drawBackground
 ```
 
+### Drag lifecycle invariant
+
+- Crossing the screen-space threshold emits `dragStart` at the pointer-down origin, immediately followed by the first `drag` sample.
+- Every `drag.delta` is cumulative from pointer-down; the threshold classifies the gesture but does not become a new origin.
+- Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`.
+- Behaviors initialize on `dragStart`, preview from `drag`, commit on `dragEnd`, and revert on `dragCancel`.
+
 ### Behavior loop (`#runBehaviors`)
 
 1. If `state.type === "idle"`, return immediately (no handling).
