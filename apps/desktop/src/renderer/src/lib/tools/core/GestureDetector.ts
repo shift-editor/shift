@@ -204,7 +204,8 @@ export class GestureDetector {
 
   /**
    * Process a pointer move. Returns `pointerMove` if not pressed, `dragStart`
-   * on threshold crossing, or `drag` while dragging.
+   * at the pointer-down origin followed by the first `drag` sample on threshold
+   * crossing, or a `drag` sample while dragging.
    */
   pointerMove(coords: Coordinates, modifiers: Modifiers): GestureEvent[] {
     const modifierKeys = normalizeModifiers(modifiers);
@@ -213,19 +214,27 @@ export class GestureDetector {
       return [{ type: "pointerMove", coords, ...modifierKeys }];
     }
 
+    const origin = this.downCoords;
     const distance = Math.hypot(
-      coords.screen.x - this.downCoords.screen.x,
-      coords.screen.y - this.downCoords.screen.y,
+      coords.screen.x - origin.screen.x,
+      coords.screen.y - origin.screen.y,
     );
-    const delta = pointerDelta(coords, this.downCoords);
+    const delta = pointerDelta(coords, origin);
 
     if (!this.dragging && distance > this.dragThreshold) {
       this.dragging = true;
       return [
         {
           type: "dragStart",
+          coords: origin,
+          origin,
+          delta: pointerDelta(origin, origin),
+          ...this.downModifiers,
+        },
+        {
+          type: "drag",
           coords,
-          origin: this.downCoords,
+          origin,
           delta,
           ...modifierKeys,
         },
@@ -237,7 +246,7 @@ export class GestureDetector {
         {
           type: "drag",
           coords,
-          origin: this.downCoords,
+          origin,
           delta,
           ...modifierKeys,
         },
@@ -248,8 +257,8 @@ export class GestureDetector {
   }
 
   /**
-   * Process a pointer release. Returns `dragEnd` if dragging, `doubleClick`
-   * if within timing/distance thresholds, or `click` otherwise.
+   * Process a pointer release. Returns the final `drag` sample before `dragEnd`
+   * if dragging, `doubleClick` within timing/distance thresholds, or `click`.
    */
   pointerUp(coords: Coordinates, modifiers: Modifiers): GestureEvent[] {
     if (!this.downCoords || !this.downModifiers) return [];
@@ -259,13 +268,22 @@ export class GestureDetector {
     const delta = pointerDelta(coords, this.downCoords);
 
     if (this.dragging) {
-      events.push({
-        type: "dragEnd",
-        coords,
-        origin: this.downCoords,
-        delta,
-        ...modifierKeys,
-      });
+      events.push(
+        {
+          type: "drag",
+          coords,
+          origin: this.downCoords,
+          delta,
+          ...modifierKeys,
+        },
+        {
+          type: "dragEnd",
+          coords,
+          origin: this.downCoords,
+          delta,
+          ...modifierKeys,
+        },
+      );
     } else {
       const now = Date.now();
       const timeSinceLastClick = now - this.lastClickTime;
