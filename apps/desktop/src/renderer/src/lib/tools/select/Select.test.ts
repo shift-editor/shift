@@ -129,7 +129,7 @@ describe("Select tool", () => {
 
       const drag = await editor.dragScene({
         down: before,
-        start: { x: before.x + 4, y: before.y },
+        threshold: { x: before.x + 4, y: before.y },
         end: { x: before.x + 40, y: before.y + 30 },
       });
 
@@ -137,6 +137,57 @@ describe("Select tool", () => {
 
       expect(after.x).toBeCloseTo(before.x + drag.delta.x);
       expect(after.y).toBeCloseTo(before.y + drag.delta.y);
+    });
+
+    it("commits the latest queued move when releasing a selected point before the next frame", async () => {
+      editor.selectTool("pen");
+      editor.clickGlyphLocal(100, 200);
+      await editor.settle();
+      editor.selectTool("select");
+      editor.clickGlyphLocal(100, 200);
+
+      const pointId = editor.selection.ids.find(isPointId);
+      if (!pointId) throw new Error("Expected selected point");
+      const before = editor.pointPosition(pointId);
+      const down = editor.projectSceneToScreen(before);
+      const start = editor.projectSceneToScreen({ x: before.x + 10, y: before.y });
+      const end = editor.projectSceneToScreen({ x: before.x + 50, y: before.y + 30 });
+      const modifiers = { shiftKey: false, altKey: false, metaKey: false };
+
+      editor.pointerDown(down.x, down.y);
+      editor.toolManager.handlePointerMove(start, modifiers);
+      editor.toolManager.flushPointerMoves();
+      editor.toolManager.handlePointerMove(end, modifiers);
+      editor.pointerUp(end.x, end.y);
+      editor.toolManager.flushPointerMoves();
+      await editor.settle();
+
+      expect(editor.pointPosition(pointId)).toEqual({ x: before.x + 50, y: before.y + 30 });
+    });
+
+    it("commits a selected-point drag whose only queued move crosses the threshold", async () => {
+      editor.selectTool("pen");
+      editor.clickGlyphLocal(100, 200);
+      await editor.settle();
+      editor.selectTool("select");
+      editor.clickGlyphLocal(100, 200);
+
+      const pointId = editor.selection.ids.find(isPointId);
+      if (!pointId) throw new Error("Expected selected point");
+      const before = editor.pointPosition(pointId);
+      const down = editor.projectSceneToScreen(before);
+      const end = editor.projectSceneToScreen({ x: before.x + 50, y: before.y + 30 });
+
+      editor.pointerDown(down.x, down.y);
+      editor.toolManager.handlePointerMove(end, {
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+      });
+      editor.pointerUp(end.x, end.y);
+      await editor.settle();
+
+      expect(editor.pointPosition(pointId)).toEqual({ x: before.x + 50, y: before.y + 30 });
     });
 
     it("drags an unselected point from the pointer-down handle", async () => {
@@ -151,7 +202,7 @@ describe("Select tool", () => {
       const before = editor.pointPosition(point.id);
       const drag = await editor.dragScene({
         down: before,
-        start: { x: before.x + 80, y: before.y },
+        threshold: { x: before.x + 80, y: before.y },
         end: { x: before.x + 110, y: before.y + 30 },
       });
 
@@ -178,7 +229,7 @@ describe("Select tool", () => {
       const beforeSecond = editor.pointPosition(second.id);
       const drag = await editor.dragScene({
         down: { x: 120, y: 180 },
-        start: { x: 124, y: 180 },
+        threshold: { x: 124, y: 180 },
         end: { x: 150, y: 220 },
       });
 
@@ -208,7 +259,7 @@ describe("Select tool", () => {
 
       await editor.dragScene({
         down: { x: bounds.right, y: bounds.bottom },
-        start: { x: bounds.right + 60, y: bounds.bottom },
+        threshold: { x: bounds.right + 60, y: bounds.bottom },
         end: { x: bounds.right + 50, y: bounds.bottom + 50 },
       });
 
@@ -239,7 +290,7 @@ describe("Select tool", () => {
       const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
       await editor.dragScene({
         down: { x: bounds.right + offset, y: bounds.bottom + offset },
-        start: { x: bounds.right + offset + 40, y: bounds.bottom + offset + 40 },
+        threshold: { x: bounds.right + offset + 40, y: bounds.bottom + offset + 40 },
         end: { x: bounds.left - offset, y: bounds.bottom + offset },
       });
 
@@ -271,7 +322,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
       const drag = await editor.dragScene({
         down: midpoint,
-        start: { x: midpoint.x + 4, y: midpoint.y },
+        threshold: { x: midpoint.x + 4, y: midpoint.y },
         end: { x: midpoint.x + 30, y: midpoint.y + 20 },
       });
 
@@ -363,7 +414,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
       await editor.dragScene({
         down: bendPoint,
-        start: { x: bendPoint.x + 4, y: bendPoint.y },
+        threshold: { x: bendPoint.x + 4, y: bendPoint.y },
         end: { x: bendPoint.x + 4, y: bendPoint.y + 40 },
         options: { metaKey: true },
       });
@@ -390,6 +441,32 @@ describe("Select tool", () => {
       expect(layer.point(point.id)?.smooth).toBe(true);
     });
 
+    it("finishes a marquee whose threshold-crossing move is still queued", async () => {
+      editor.selectTool("pen");
+      editor.clickGlyphLocal(100, 200);
+      await editor.settle();
+      editor.clickGlyphLocal(180, 200);
+      await editor.settle();
+
+      const [inside, outside] = editor.requireGlyphLayer().contours[0]?.points ?? [];
+      if (!inside || !outside) throw new Error("Expected line segment points");
+      const down = editor.projectSceneToScreen({ x: 80, y: 180 });
+      const end = editor.projectSceneToScreen({ x: 130, y: 230 });
+
+      editor.selectTool("select");
+      editor.pointerDown(down.x, down.y);
+      editor.toolManager.handlePointerMove(end, {
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+      });
+      editor.pointerUp(end.x, end.y);
+      editor.toolManager.flushPointerMoves();
+
+      expect(editor.selection.has(inside.id)).toBe(true);
+      expect(editor.selection.has(outside.id)).toBe(false);
+    });
+
     it("marquee-selects points inside the brushed rectangle", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 200);
@@ -402,7 +479,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
       await editor.dragScene({
         down: { x: 80, y: 180 },
-        start: { x: 84, y: 180 },
+        threshold: { x: 84, y: 180 },
         end: { x: 130, y: 230 },
       });
 

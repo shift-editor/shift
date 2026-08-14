@@ -270,41 +270,41 @@ export class TestEditor extends Editor {
   }
 
   /**
-   * Drags through scene coordinates while preserving drag-start semantics.
+   * Drags through scene coordinates with a distinct threshold-crossing sample.
    *
-   * @param input - Scene-space pointer-down point, threshold-crossing first
+   * @param input - Scene-space pointer-down origin, threshold-crossing first
    * move, and final pointer position.
    * @returns The scene-space drag points observed through the camera and the
-   * delta from `start` to `end`.
+   * canonical delta from `down` to `end`.
    */
   async dragScene(input: {
     down: Point2D;
-    start: Point2D;
+    threshold: Point2D;
     end: Point2D;
     options?: Partial<typeof DEFAULT_MODIFIERS>;
-  }): Promise<{ down: Point2D; start: Point2D; end: Point2D; delta: Point2D }> {
+  }): Promise<{ down: Point2D; threshold: Point2D; end: Point2D; delta: Point2D }> {
     const downScreen = this.projectSceneToScreen(input.down);
-    const startScreen = this.projectSceneToScreen(input.start);
+    const thresholdScreen = this.projectSceneToScreen(input.threshold);
     const endScreen = this.projectSceneToScreen(input.end);
 
     this.pointerDown(downScreen.x, downScreen.y, input.options);
-    this.pointerMove(startScreen.x, startScreen.y, input.options);
+    this.pointerMove(thresholdScreen.x, thresholdScreen.y, input.options);
     this.pointerMove(endScreen.x, endScreen.y, input.options);
     this.pointerUp(endScreen.x, endScreen.y, input.options);
 
     await this.settle();
 
     const down = this.projectScreenToScene(downScreen);
-    const start = this.projectScreenToScene(startScreen);
+    const threshold = this.projectScreenToScene(thresholdScreen);
     const end = this.projectScreenToScene(endScreen);
 
     return {
       down,
-      start,
+      threshold,
       end,
       delta: {
-        x: end.x - start.x,
-        y: end.y - start.y,
+        x: end.x - down.x,
+        y: end.y - down.y,
       },
     };
   }

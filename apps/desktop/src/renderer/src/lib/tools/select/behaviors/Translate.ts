@@ -29,7 +29,7 @@ export class Translate implements SelectBehavior {
     if (!operation) return false;
 
     operation.applySelection(ctx.editor);
-    this.#drag = new TranslateDrag(operation, event.coords.scene);
+    this.#drag = new TranslateDrag(operation, event.origin.scene);
     ctx.setState(translatingState(this.#drag.startPos));
     return true;
   }
