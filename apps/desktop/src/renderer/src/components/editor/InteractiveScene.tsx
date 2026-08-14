@@ -47,13 +47,14 @@ export const InteractiveScene = () => {
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (activePointerIdRef.current !== e.pointerId) return;
 
+      // Clear first because releasing capture may synchronously emit
+      // lostpointercapture and must not finish the gesture twice.
+      activePointerIdRef.current = null;
       toolManager.handlePointerUp(getScreenPoint(e), getModifiers(e));
 
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
-
-      activePointerIdRef.current = null;
     },
     [toolManager, getScreenPoint],
   );
@@ -62,10 +63,24 @@ export const InteractiveScene = () => {
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (activePointerIdRef.current !== e.pointerId) return;
 
-      toolManager.cancelPointerGesture();
       activePointerIdRef.current = null;
+      toolManager.cancelPointerGesture();
     },
     [toolManager],
+  );
+
+  const handleLostPointerCapture = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (activePointerIdRef.current !== e.pointerId) return;
+
+      if (e.buttons === 0) {
+        handlePointerUp(e);
+        return;
+      }
+
+      handlePointerCancel(e);
+    },
+    [handlePointerUp, handlePointerCancel],
   );
 
   return (
@@ -83,7 +98,7 @@ export const InteractiveScene = () => {
       onPointerUp={handlePointerUp}
       onPointerMove={handlePointerMove}
       onPointerCancel={handlePointerCancel}
-      onLostPointerCapture={handlePointerCancel}
+      onLostPointerCapture={handleLostPointerCapture}
     />
   );
 };
