@@ -508,6 +508,7 @@ export class FontStore {
       if (!state) continue;
 
       const layerId = state.layerId;
+      track(state.structureCell);
       const structure = state.structure;
 
       for (const contour of structure.contours) {
