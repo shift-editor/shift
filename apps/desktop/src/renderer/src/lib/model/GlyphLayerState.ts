@@ -1,11 +1,16 @@
 import type {
+  AnchorData,
   AnchorId,
+  AnchorSeed,
+  ContourData,
   ContourId,
   GlyphState,
   GlyphStructure,
   LayerId,
   LayerReplaced,
+  PointData,
   PointId,
+  PointSeed,
 } from "@shift/types";
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
 import {
@@ -15,7 +20,7 @@ import {
   type GlyphPositions,
   type GlyphSidebearings,
 } from "@shift/glyph-state";
-import type { WorkspaceEditId } from "@/types";
+import type { PendingEditId } from "@/types";
 import {
   batch,
   computed,
@@ -40,39 +45,39 @@ interface PointBufferLocation {
 export class GlyphLayerState {
   readonly #layerId: LayerId;
   readonly #structure: WritableSignal<GlyphStructure>;
-  readonly #coordinates: WritableSignal<LayerCoordinateBuffers>;
+  readonly #buffers: WritableSignal<LayerBuffers>;
   readonly #xAdvance: ComputedSignal<number>;
   readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
-  readonly #coordinateBuffersChanged: ComputedSignal<LayerCoordinateBuffers>;
+  readonly #buffersChanged: ComputedSignal<LayerBuffers>;
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
   #confirmedState: GlyphState | null = null;
-  readonly #pendingEditIds = new Set<WorkspaceEditId>();
+  readonly #pendingStates = new Map<PendingEditId, GlyphState>();
 
   constructor(state: GlyphState) {
     this.#layerId = state.layerId;
     this.#structure = signal(state.structure, {
       name: "glyphLayer.structure",
     });
-    this.#coordinates = signal(LayerCoordinateBuffers.fromState(state), {
-      name: "glyphLayer.coordinateBuffers",
+    this.#buffers = signal(LayerBuffers.fromState(state), {
+      name: "glyphLayer.buffers",
     });
-    this.#xAdvance = computed(() => this.#coordinates.value.xAdvance.value, {
+    this.#xAdvance = computed(() => this.#buffers.value.xAdvance.value, {
       name: "glyphLayer.xAdvance",
     });
-    this.#sidebearings = computed(() => this.#coordinates.value.sidebearings.value, {
+    this.#sidebearings = computed(() => this.#buffers.value.sidebearings.value, {
       name: "glyphLayer.sidebearings",
     });
-    this.#coordinateBuffersChanged = computed(
+    this.#buffersChanged = computed(
       () => {
-        const buffers = this.#coordinates.value;
+        const buffers = this.#buffers.value;
         buffers.changedCell.value;
         return buffers;
       },
-      { name: "glyphLayer.coordinateBuffers.changed" },
+      { name: "glyphLayer.buffers.changed" },
     );
     this.#geometry = computed(
-      () => new GlyphGeometry(this.#structure.value, this.#coordinates.value.snapshot.value),
+      () => new GlyphGeometry(this.#structure.value, this.#buffers.value.snapshot.value),
       { name: "glyphLayer.geometry" },
     );
   }
@@ -89,18 +94,12 @@ export class GlyphLayerState {
     return this.#layerId;
   }
 
-  get coordinateBuffers(): LayerCoordinateBuffers {
-    return this.#coordinates.peek();
+  get buffers(): LayerBuffers {
+    return this.#buffers.peek();
   }
 
-  /**
-   * Returns the live coordinate-buffer container.
-   *
-   * @returns A signal that changes when the buffer container is replaced, not
-   * when individual coordinates inside that container change.
-   */
-  get coordinateBuffersCell(): Signal<LayerCoordinateBuffers> {
-    return this.#coordinates;
+  get buffersCell(): Signal<LayerBuffers> {
+    return this.#buffers;
   }
 
   get xAdvanceCell(): Signal<number> {
@@ -115,18 +114,13 @@ export class GlyphLayerState {
     return this.#sidebearings;
   }
 
-  /**
-   * Returns a lightweight dependency for any coordinate mutation.
-   *
-   * @returns A signal that invalidates when any contour, anchor, or component
-   * coordinate changes, without packing a full glyph snapshot.
-   */
-  get coordinateBuffersChangedCell(): Signal<LayerCoordinateBuffers> {
-    return this.#coordinateBuffersChanged;
+  /** Invalidates on numeric buffer changes without packing a full glyph snapshot. */
+  get buffersChangedCell(): Signal<LayerBuffers> {
+    return this.#buffersChanged;
   }
 
   get bounds(): BoundsType | null {
-    return this.#coordinates.peek().bounds.peek();
+    return this.#buffers.peek().bounds.peek();
   }
 
   get sidebearings(): GlyphSidebearings {
@@ -153,21 +147,314 @@ export class GlyphLayerState {
     return {
       layerId: this.#layerId,
       structure: this.#structure.peek(),
-      values: this.#coordinates.peek().snapshot.peek(),
+      values: this.#buffers.peek().snapshot.peek(),
     };
   }
 
   positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
-    return this.#coordinates.peek().positionsFor(targets);
+    return this.#buffers.peek().positionsFor(targets);
   }
 
   contourIdOfPoint(pointId: PointId): ContourId | null {
-    return this.#coordinates.peek().contourIdOfPoint(this.#structure.peek(), pointId);
+    return this.#buffers.peek().contourIdOfPoint(this.#structure.peek(), pointId);
+  }
+
+  addContour(editId: PendingEditId, contourId: ContourId, closed: boolean): boolean {
+    const structure = this.#structure.peek();
+    if (structure.contours.some((contour) => contour.id === contourId)) return false;
+
+    const contours = [...structure.contours, { id: contourId, points: [], closed }];
+    const contourValues = [
+      ...this.#buffers.peek().contours.map((contour) => contour.values.peek()),
+      new Float64Array(),
+    ];
+
+    this.#beginPendingEdit(editId);
+    this.#replaceStructure(
+      { ...structure, contours },
+      contourValues,
+      this.#buffers.peek().anchors.peek(),
+    );
+    return true;
+  }
+
+  addPoints(
+    editId: PendingEditId,
+    points: readonly PointSeed[],
+    contourId?: ContourId,
+    before?: PointId,
+  ): boolean {
+    const pointIds = new Set(points.map((point) => point.id));
+    if (pointIds.size !== points.length) return false;
+
+    const structure = this.#structure.peek();
+    if (
+      structure.contours.some((contour) => contour.points.some((point) => pointIds.has(point.id)))
+    ) {
+      return false;
+    }
+
+    let contourIndex = contourId
+      ? structure.contours.findIndex((contour) => contour.id === contourId)
+      : -1;
+    if (contourIndex < 0 && !contourId && before) {
+      contourIndex = structure.contours.findIndex((contour) =>
+        contour.points.some((point) => point.id === before),
+      );
+    }
+    if (contourIndex < 0) return false;
+
+    const contour = structure.contours[contourIndex];
+    const pointIndex = before
+      ? contour.points.findIndex((point) => point.id === before)
+      : contour.points.length;
+    if (pointIndex < 0) return false;
+
+    const nextContour: ContourData = {
+      ...contour,
+      points: [
+        ...contour.points.slice(0, pointIndex),
+        ...points.map((point) => ({
+          id: point.id,
+          pointType: point.pointType,
+          smooth: point.smooth,
+        })),
+        ...contour.points.slice(pointIndex),
+      ],
+    };
+    const contours = [...structure.contours];
+    contours[contourIndex] = nextContour;
+
+    const buffers = this.#buffers.peek();
+    const contourValues = buffers.contours.map((candidate) => candidate.values.peek());
+    contourValues[contourIndex] = spliceFloat64Array(
+      contourValues[contourIndex],
+      pointIndex * 2,
+      0,
+      points.flatMap((point) => [point.x, point.y]),
+    );
+
+    this.#beginPendingEdit(editId);
+    this.#replaceStructure({ ...structure, contours }, contourValues, buffers.anchors.peek());
+    return true;
+  }
+
+  setContourClosed(editId: PendingEditId, contourId: ContourId, closed: boolean): boolean {
+    const structure = this.#structure.peek();
+    const contourIndex = structure.contours.findIndex((contour) => contour.id === contourId);
+    if (contourIndex < 0) return false;
+
+    const contours = [...structure.contours];
+    contours[contourIndex] = { ...contours[contourIndex], closed };
+
+    this.#beginPendingEdit(editId);
+    this.#structure.set({ ...structure, contours });
+    return true;
+  }
+
+  movePoints(
+    editId: PendingEditId,
+    pointIds: readonly PointId[],
+    coords: readonly number[],
+  ): boolean {
+    if (coords.length !== pointIds.length * 2) return false;
+
+    const updates: GlyphPosition[] = pointIds.map((id, index) => ({
+      kind: "point",
+      id,
+      x: coords[index * 2] ?? 0,
+      y: coords[index * 2 + 1] ?? 0,
+    }));
+    if (this.positionsFor(updates).length !== updates.length) return false;
+
+    this.#beginPendingEdit(editId);
+    this.#buffers.peek().patchPositions(updates);
+    return true;
+  }
+
+  setPointSmooth(editId: PendingEditId, pointId: PointId, smooth: boolean): boolean {
+    const structure = this.#structure.peek();
+    const contourIndex = structure.contours.findIndex((contour) =>
+      contour.points.some((point) => point.id === pointId),
+    );
+    if (contourIndex < 0) return false;
+
+    const contour = structure.contours[contourIndex];
+    const pointIndex = contour.points.findIndex((point) => point.id === pointId);
+    const points = [...contour.points];
+    points[pointIndex] = { ...points[pointIndex], smooth };
+    const contours = [...structure.contours];
+    contours[contourIndex] = { ...contour, points };
+
+    this.#beginPendingEdit(editId);
+    this.#structure.set({ ...structure, contours });
+    return true;
+  }
+
+  removePoints(editId: PendingEditId, pointIds: readonly PointId[]): boolean {
+    const removed = new Set(pointIds);
+    if (removed.size !== pointIds.length) return false;
+
+    const structure = this.#structure.peek();
+    const buffers = this.#buffers.peek();
+    let found = 0;
+    const contours: ContourData[] = [];
+    const contourValues: Float64Array[] = [];
+
+    for (let contourIndex = 0; contourIndex < structure.contours.length; contourIndex++) {
+      const contour = structure.contours[contourIndex];
+      const values = buffers.contours[contourIndex]?.values.peek();
+      if (!values) return false;
+
+      const points: PointData[] = [];
+      const retainedValues: number[] = [];
+      for (let pointIndex = 0; pointIndex < contour.points.length; pointIndex++) {
+        const point = contour.points[pointIndex];
+        if (removed.has(point.id)) {
+          found += 1;
+          continue;
+        }
+
+        points.push(point);
+        retainedValues.push(values[pointIndex * 2] ?? 0, values[pointIndex * 2 + 1] ?? 0);
+      }
+
+      contours.push(points.length === contour.points.length ? contour : { ...contour, points });
+      contourValues.push(
+        points.length === contour.points.length ? values : new Float64Array(retainedValues),
+      );
+    }
+    if (found !== removed.size) return false;
+
+    this.#beginPendingEdit(editId);
+    this.#replaceStructure({ ...structure, contours }, contourValues, buffers.anchors.peek());
+    return true;
+  }
+
+  reverseContour(editId: PendingEditId, contourId: ContourId): boolean {
+    const structure = this.#structure.peek();
+    const contourIndex = structure.contours.findIndex((contour) => contour.id === contourId);
+    if (contourIndex < 0) return false;
+
+    const contour = structure.contours[contourIndex];
+    const contours = [...structure.contours];
+    contours[contourIndex] = { ...contour, points: [...contour.points].reverse() };
+
+    const buffers = this.#buffers.peek();
+    const contourValues = buffers.contours.map((candidate) => candidate.values.peek());
+    const values = contourValues[contourIndex];
+    const reversed = new Float64Array(values.length);
+    for (let pointIndex = 0; pointIndex < contour.points.length; pointIndex++) {
+      const source = (contour.points.length - pointIndex - 1) * 2;
+      reversed[pointIndex * 2] = values[source] ?? 0;
+      reversed[pointIndex * 2 + 1] = values[source + 1] ?? 0;
+    }
+    contourValues[contourIndex] = reversed;
+
+    this.#beginPendingEdit(editId);
+    this.#replaceStructure({ ...structure, contours }, contourValues, buffers.anchors.peek());
+    return true;
+  }
+
+  translatePoints(
+    editId: PendingEditId,
+    pointIds: readonly PointId[],
+    dx: number,
+    dy: number,
+  ): boolean {
+    const ids = [...new Set(pointIds)];
+    const positions = this.positionsFor(ids.map((id) => ({ kind: "point", id })));
+    if (positions.length !== ids.length) return false;
+
+    this.#beginPendingEdit(editId);
+    this.#buffers
+      .peek()
+      .patchPositions(
+        positions.map((position) => ({ ...position, x: position.x + dx, y: position.y + dy })),
+      );
+    return true;
+  }
+
+  setXAdvance(editId: PendingEditId, width: number): void {
+    this.#beginPendingEdit(editId);
+    this.#buffers.peek().xAdvance.set(width);
+  }
+
+  addAnchors(editId: PendingEditId, anchors: readonly AnchorSeed[]): boolean {
+    const anchorIds = new Set(anchors.map((anchor) => anchor.id));
+    if (anchorIds.size !== anchors.length) return false;
+
+    const structure = this.#structure.peek();
+    if (structure.anchors.some((anchor) => anchorIds.has(anchor.id))) return false;
+
+    const nextAnchors: AnchorData[] = [
+      ...structure.anchors,
+      ...anchors.map((anchor) => ({
+        id: anchor.id,
+        ...(anchor.name === undefined ? {} : { name: anchor.name }),
+      })),
+    ];
+    const buffers = this.#buffers.peek();
+    const anchorValues = spliceFloat64Array(
+      buffers.anchors.peek(),
+      buffers.anchors.peek().length,
+      0,
+      anchors.flatMap((anchor) => [anchor.x, anchor.y]),
+    );
+
+    this.#beginPendingEdit(editId);
+    this.#replaceStructure({ ...structure, anchors: nextAnchors }, undefined, anchorValues);
+    return true;
+  }
+
+  moveAnchors(
+    editId: PendingEditId,
+    anchorIds: readonly AnchorId[],
+    coords: readonly number[],
+  ): boolean {
+    if (coords.length !== anchorIds.length * 2) return false;
+
+    const updates: GlyphPosition[] = anchorIds.map((id, index) => ({
+      kind: "anchor",
+      id,
+      x: coords[index * 2] ?? 0,
+      y: coords[index * 2 + 1] ?? 0,
+    }));
+    if (this.positionsFor(updates).length !== updates.length) return false;
+
+    this.#beginPendingEdit(editId);
+    this.#buffers.peek().patchPositions(updates);
+    return true;
+  }
+
+  removeAnchors(editId: PendingEditId, anchorIds: readonly AnchorId[]): boolean {
+    const removed = new Set(anchorIds);
+    if (removed.size !== anchorIds.length) return false;
+
+    const structure = this.#structure.peek();
+    const buffers = this.#buffers.peek();
+    const anchors: AnchorData[] = [];
+    const values: number[] = [];
+    for (let index = 0; index < structure.anchors.length; index++) {
+      const anchor = structure.anchors[index];
+      if (removed.has(anchor.id)) continue;
+
+      anchors.push(anchor);
+      values.push(
+        buffers.anchors.peek()[index * 2] ?? 0,
+        buffers.anchors.peek()[index * 2 + 1] ?? 0,
+      );
+    }
+    if (anchors.length !== structure.anchors.length - removed.size) return false;
+
+    this.#beginPendingEdit(editId);
+    this.#replaceStructure({ ...structure, anchors }, undefined, new Float64Array(values));
+    return true;
   }
 
   replace(state: GlyphState): void {
     this.#confirmedState = null;
-    this.#pendingEditIds.clear();
+    this.#pendingStates.clear();
     this.#publish(state);
   }
 
@@ -179,16 +466,18 @@ export class GlyphLayerState {
     });
   }
 
-  applyPendingUpdate(editId: WorkspaceEditId, state: GlyphState | null): void {
-    if (this.#pendingEditIds.size === 0) {
-      this.#confirmedState = this.state;
-    }
-    this.#pendingEditIds.add(editId);
+  rollbackEdit(editId: PendingEditId): void {
+    const state = this.#pendingStates.get(editId);
+    if (!state) return;
 
-    if (state) this.#publish(state);
+    this.#pendingStates.delete(editId);
+    this.#publish(state);
+    if (this.#pendingStates.size === 0) {
+      this.#confirmedState = null;
+    }
   }
 
-  foldWorkspaceState(editId: WorkspaceEditId | null, replacement: LayerReplaced): void {
+  foldWorkspaceState(editId: PendingEditId | null, replacement: LayerReplaced): void {
     const confirmed = this.#confirmedState ?? this.state;
     const state = {
       layerId: this.#layerId,
@@ -198,94 +487,65 @@ export class GlyphLayerState {
     this.#confirmedState = state;
 
     if (editId !== null) {
-      this.#pendingEditIds.delete(editId);
+      this.#pendingStates.delete(editId);
     }
-    if (this.#pendingEditIds.size > 0) return;
+    if (this.#pendingStates.size > 0) return;
 
     this.#confirmedState = null;
     this.#publish(state);
   }
 
   patchPositions(updates: GlyphPositions): void {
-    this.#coordinates.peek().patchPositions(updates);
+    this.#buffers.peek().patchPositions(updates);
+  }
+
+  #beginPendingEdit(editId: PendingEditId): void {
+    if (this.#pendingStates.has(editId)) return;
+
+    const state = this.state;
+    if (this.#pendingStates.size === 0) {
+      this.#confirmedState = state;
+    }
+    this.#pendingStates.set(editId, state);
+  }
+
+  #replaceStructure(
+    structure: GlyphStructure,
+    contourValues: readonly Float64Array[] | undefined,
+    anchorValues: Float64Array,
+  ): void {
+    const buffers = this.#buffers.peek();
+    const contours = contourValues ?? buffers.contours.map((contour) => contour.values.peek());
+    const components = buffers.components.map((component) => component.values.peek());
+
+    batch(() => {
+      this.#structure.set(structure);
+      this.#buffers.set(
+        new LayerBuffers(structure, buffers.xAdvance.peek(), contours, anchorValues, components),
+      );
+    });
   }
 
   #publish(state: GlyphState): void {
-    if (GlyphLayerState.#sameState(this.state, state)) return;
-
-    if (GlyphLayerState.#sameStructure(this.#structure.peek(), state.structure)) {
-      this.#coordinates.peek().replaceValues(state.values);
+    if (this.#structure.peek() === state.structure) {
+      this.#buffers.peek().replaceValues(state.values);
       return;
     }
 
     batch(() => {
       this.#structure.set(state.structure);
-      this.#coordinates.set(LayerCoordinateBuffers.fromState(state));
+      this.#buffers.set(LayerBuffers.fromState(state));
     });
-  }
-
-  static #sameState(left: GlyphState, right: GlyphState): boolean {
-    if (left.layerId !== right.layerId) return false;
-    if (!GlyphLayerState.#sameStructure(left.structure, right.structure)) return false;
-    return LayerCoordinateBuffers.sameValues(left.values, right.values);
-  }
-
-  static #sameStructure(left: GlyphStructure, right: GlyphStructure): boolean {
-    if (left === right) return true;
-    if (left.contours.length !== right.contours.length) return false;
-    if (left.anchors.length !== right.anchors.length) return false;
-    if (left.components.length !== right.components.length) return false;
-
-    for (let contourIndex = 0; contourIndex < left.contours.length; contourIndex++) {
-      const leftContour = left.contours[contourIndex];
-      const rightContour = right.contours[contourIndex];
-      if (leftContour.id !== rightContour.id || leftContour.closed !== rightContour.closed) {
-        return false;
-      }
-      if (leftContour.points.length !== rightContour.points.length) return false;
-
-      for (let pointIndex = 0; pointIndex < leftContour.points.length; pointIndex++) {
-        const leftPoint = leftContour.points[pointIndex];
-        const rightPoint = rightContour.points[pointIndex];
-        if (
-          leftPoint.id !== rightPoint.id ||
-          leftPoint.pointType !== rightPoint.pointType ||
-          leftPoint.smooth !== rightPoint.smooth
-        ) {
-          return false;
-        }
-      }
-    }
-
-    for (let index = 0; index < left.anchors.length; index++) {
-      const leftAnchor = left.anchors[index];
-      const rightAnchor = right.anchors[index];
-      if (leftAnchor.id !== rightAnchor.id || leftAnchor.name !== rightAnchor.name) return false;
-    }
-
-    for (let index = 0; index < left.components.length; index++) {
-      const leftComponent = left.components[index];
-      const rightComponent = right.components[index];
-      if (
-        leftComponent.id !== rightComponent.id ||
-        leftComponent.baseGlyphId !== rightComponent.baseGlyphId ||
-        leftComponent.baseGlyphName !== rightComponent.baseGlyphName
-      ) {
-        return false;
-      }
-    }
-
-    return true;
   }
 }
 
 /**
- * Reactive coordinate buffers for the packed authored-source layout.
+ * Reactive numeric buffers for one authored layer.
  *
- * `snapshot` repacks the buffers into the bridge/geometry `Float64Array`
- * format, but only after one of the underlying buffers changes.
+ * `snapshot` repacks advance, contour, anchor, and component values into the
+ * bridge/geometry `Float64Array` format only after an underlying buffer changes.
  */
-export class LayerCoordinateBuffers {
+export class LayerBuffers {
   readonly xAdvance: WritableSignal<number>;
 
   readonly contours: readonly LayerContourCoordinates[];
@@ -293,52 +553,57 @@ export class LayerCoordinateBuffers {
   readonly components: readonly SourceComponentTransform[];
 
   readonly snapshot: ComputedSignal<Float64Array>;
-  readonly changedCell: ComputedSignal<LayerCoordinateBuffers>;
+  readonly changedCell: ComputedSignal<LayerBuffers>;
 
   readonly bounds: ComputedSignal<BoundsType | null>;
   readonly sidebearings: ComputedSignal<GlyphSidebearings>;
 
   readonly #lookup: SourceLookupIndex;
 
-  private constructor(
+  constructor(
+    structure: GlyphStructure,
     xAdvance: number,
-    contours: readonly LayerContourCoordinates[],
+    contours: readonly Float64Array[],
     anchors: Float64Array,
-    components: readonly SourceComponentTransform[],
-    lookup: SourceLookupIndex,
+    components: readonly Float64Array[],
   ) {
     this.xAdvance = signal(xAdvance, {
-      name: "glyphLayer.coordinates.xAdvance",
+      name: "glyphLayer.buffers.xAdvance",
     });
-    this.contours = contours;
+    this.contours = contours.map(
+      (values, contourIndex) => new LayerContourCoordinates(values, contourIndex),
+    );
     this.anchors = signal(anchors, {
       equals: () => false,
-      name: "glyphLayer.coordinates.anchors",
+      name: "glyphLayer.buffers.anchors",
     });
-    this.components = components;
-    this.#lookup = lookup;
+    this.components = components.map(
+      (values, componentIndex) => new SourceComponentTransform(values, componentIndex),
+    );
+    this.#lookup = SourceLookupIndex.fromStructure(structure);
     this.snapshot = computed(
       () =>
-        LayerCoordinateBuffers.#snapshot(
+        LayerBuffers.#snapshot(
           this.xAdvance.value,
           this.contours.map((contour) => contour.values.value),
           this.anchors.value,
           this.components.map((component) => component.values.value),
         ),
-      { name: "glyphLayer.coordinates.snapshot" },
+      { name: "glyphLayer.buffers.snapshot" },
     );
     this.changedCell = computed(
       () => {
+        this.xAdvance.value;
         for (const contour of this.contours) contour.values.value;
         this.anchors.value;
         for (const component of this.components) component.values.value;
         return this;
       },
-      { name: "glyphLayer.coordinates.changed" },
+      { name: "glyphLayer.buffers.changed" },
     );
     this.bounds = computed(
-      () => LayerCoordinateBuffers.#bounds(this.contours.map((contour) => contour.bounds.value)),
-      { name: "glyphLayer.coordinates.bounds" },
+      () => LayerBuffers.#bounds(this.contours.map((contour) => contour.bounds.value)),
+      { name: "glyphLayer.buffers.bounds" },
     );
     this.sidebearings = computed(
       () => {
@@ -346,21 +611,20 @@ export class LayerCoordinateBuffers {
         if (!bounds) return { lsb: null, rsb: null };
         return { lsb: bounds.min.x, rsb: this.xAdvance.value - bounds.max.x };
       },
-      { name: "glyphLayer.coordinates.sidebearings" },
+      { name: "glyphLayer.buffers.sidebearings" },
     );
   }
 
-  static fromState(state: GlyphState): LayerCoordinateBuffers {
+  static fromState(state: GlyphState): LayerBuffers {
     let cursor = 0;
     const xAdvance = state.values[cursor++] ?? 0;
-    const contours: LayerContourCoordinates[] = [];
-    const lookup = SourceLookupIndex.fromStructure(state.structure);
+    const contours: Float64Array[] = [];
 
     for (let contourIndex = 0; contourIndex < state.structure.contours.length; contourIndex++) {
       const contour = state.structure.contours[contourIndex];
       const length = contour.points.length * 2;
       const values = state.values.slice(cursor, cursor + length);
-      contours.push(new LayerContourCoordinates(values, contourIndex));
+      contours.push(values);
       cursor += length;
     }
 
@@ -369,13 +633,13 @@ export class LayerCoordinateBuffers {
     const anchors = state.values.slice(anchorStart, anchorStart + anchorLength);
     cursor += anchorLength;
 
-    const components = state.structure.components.map((_, componentIndex) => {
+    const components = state.structure.components.map(() => {
       const values = state.values.slice(cursor, cursor + 9);
       cursor += 9;
-      return new SourceComponentTransform(values, componentIndex);
+      return values;
     });
 
-    return new LayerCoordinateBuffers(xAdvance, contours, anchors, components, lookup);
+    return new LayerBuffers(state.structure, xAdvance, contours, anchors, components);
   }
 
   /** Publishes only packed ranges whose numeric values changed. */
@@ -402,18 +666,18 @@ export class LayerCoordinateBuffers {
       for (let index = 0; index < contours.length; index++) {
         const replacement = contours[index];
         const contour = this.contours[index];
-        if (!contour || LayerCoordinateBuffers.sameValues(contour.values.peek(), replacement)) {
+        if (!contour || LayerBuffers.sameValues(contour.values.peek(), replacement)) {
           continue;
         }
         contour.values.set(replacement);
       }
-      if (!LayerCoordinateBuffers.sameValues(this.anchors.peek(), anchors)) {
+      if (!LayerBuffers.sameValues(this.anchors.peek(), anchors)) {
         this.anchors.set(anchors);
       }
       for (let index = 0; index < components.length; index++) {
         const replacement = components[index];
         const component = this.components[index];
-        if (!component || LayerCoordinateBuffers.sameValues(component.values.peek(), replacement)) {
+        if (!component || LayerBuffers.sameValues(component.values.peek(), replacement)) {
           continue;
         }
         component.values.set(replacement);
@@ -424,7 +688,7 @@ export class LayerCoordinateBuffers {
   static sameValues(left: Float64Array, right: Float64Array): boolean {
     if (left.length !== right.length) return false;
     for (let index = 0; index < left.length; index++) {
-      if (!Object.is(left[index], right[index])) return false;
+      if (left[index] !== right[index]) return false;
     }
     return true;
   }
@@ -675,4 +939,17 @@ export class SourceComponentTransform {
       { name: `glyphLayer.component[${componentIndex}].matrix` },
     );
   }
+}
+
+function spliceFloat64Array(
+  values: Float64Array,
+  start: number,
+  deleteCount: number,
+  additions: readonly number[],
+): Float64Array {
+  const result = new Float64Array(values.length - deleteCount + additions.length);
+  result.set(values.subarray(0, start));
+  result.set(additions, start);
+  result.set(values.subarray(start + deleteCount), start + additions.length);
+  return result;
 }

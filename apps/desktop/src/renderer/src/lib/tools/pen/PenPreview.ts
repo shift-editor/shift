@@ -98,7 +98,7 @@ export class PenPreview extends CanvasItem<PenPreviewProps> {
     if (!layer) return null;
 
     track(layer.structureCell);
-    track(layer.coordinateBuffersChangedCell);
+    track(layer.buffersChangedCell);
 
     const contour = layer.contour(context.activeContourId);
     if (!contour || contour.isEmpty || contour.closed) return null;

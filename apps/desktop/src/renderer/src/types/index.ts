@@ -12,7 +12,7 @@ export type {
   GlyphCatalogSource,
   GlyphNameInputProps,
 } from "./glyphCatalog";
-export type { EditingId } from "./editing";
+export type { EditingId, PendingEditId } from "./editing";
 export type { FontOptions, FontStoreOptions } from "./font";
 export type { GlyphGeometrySelection, GlyphOptions, GlyphReader } from "./glyph";
 export type {
@@ -49,12 +49,7 @@ export type {
   ShiftRecordId,
 } from "./records";
 export type { TextRunRecord } from "./text";
-export type {
-  PendingEditApplication,
-  WorkspaceApplyStatus,
-  WorkspaceEdit,
-  WorkspaceEditId,
-} from "./workspace";
+export type { WorkspaceApplyStatus, WorkspaceEdit } from "./workspace";
 
 export interface GlyphObjectSegment {
   readonly id: SegmentId;

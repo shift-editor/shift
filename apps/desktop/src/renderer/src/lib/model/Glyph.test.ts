@@ -144,7 +144,7 @@ describe("Glyph", () => {
     const [first] = await addTriangle(editor, layer);
     const observedX: number[] = [];
     const subscription = effect(() => {
-      track(layer.coordinateBuffersChangedCell);
+      track(layer.buffersChangedCell);
       observedX.push(layer.point(first!.id)?.x ?? NaN);
     });
 
@@ -162,14 +162,22 @@ describe("Glyph", () => {
       pointCounts.push(layer.geometryCell.value.allPoints.length);
     });
 
+    const transactionReads: number[] = [];
     editor.transaction("Create line", () => {
       const contourId = layer.addContour();
+      transactionReads.push(layer.pointCount);
       layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+      transactionReads.push(layer.pointCount);
       layer.addOnCurvePoint(contourId, { x: 100, y: 0 });
+      transactionReads.push(layer.pointCount);
     });
-    await editor.settle();
 
+    expect(transactionReads).toEqual([0, 1, 2]);
     expect(pointCounts).toEqual([0, 2]);
+
+    await editor.settle();
+    expect(pointCounts.every((count) => count === 0 || count === 2)).toBe(true);
+    expect(pointCounts.at(-1)).toBe(2);
     subscription.dispose();
   });
 
@@ -214,7 +222,7 @@ describe("Glyph", () => {
     let pointX = first!.x;
 
     const subscription = effect(() => {
-      track(layer.coordinateBuffersChangedCell);
+      track(layer.buffersChangedCell);
       pointX = layer.point(first!.id)?.x ?? pointX;
     });
 
@@ -235,10 +243,11 @@ describe("anchors edit through the workspace", () => {
     layer = editor.glyphLayer!;
   });
 
-  it("addAnchor echoes a named anchor into confirmed geometry", async () => {
+  it("addAnchor is readable before confirmation and remains after its echo", async () => {
     const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
-    await editor.settle();
+    expect(layer.anchor(anchorId)).toMatchObject({ name: "top", x: 250, y: 700 });
 
+    await editor.settle();
     const anchor = layer.anchor(anchorId);
     expect(anchor?.name).toBe("top");
     expect(anchor).toMatchObject({ x: 250, y: 700 });
@@ -250,8 +259,9 @@ describe("anchors edit through the workspace", () => {
     await editor.settle();
 
     layer.applyPositionPatch([{ kind: "anchor", id: anchorId, x: 300, y: 650 }]);
-    await editor.settle();
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
 
+    await editor.settle();
     expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
   });
 
@@ -292,8 +302,9 @@ describe("anchors edit through the workspace", () => {
     await editor.settle();
 
     layer.removeAnchors([anchorId]);
-    await editor.settle();
+    expect(layer.anchor(anchorId)).toBeNull();
 
+    await editor.settle();
     expect(layer.anchors.length).toBe(0);
     expect(layer.anchor(anchorId)).toBeNull();
   });

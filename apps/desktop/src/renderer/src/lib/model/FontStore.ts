@@ -28,7 +28,7 @@ import {
   type Signal,
   type WritableSignal,
 } from "@/lib/signals/signal";
-import type { GlyphObjectIndex, GlyphObjectSegment, WorkspaceEditId } from "@/types";
+import type { GlyphObjectIndex, GlyphObjectSegment, PendingEditId } from "@/types";
 import type { FontStoreOptions } from "@/types/font";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { Glyph } from "./Glyph";
@@ -223,8 +223,15 @@ export class FontStore {
     });
   }
 
+  /** Restores every loaded layer touched by a throwing renderer transaction. */
+  rollbackEdit(editId: PendingEditId): void {
+    for (const cell of this.#layerStateCells.values()) {
+      cell.peek()?.rollbackEdit(editId);
+    }
+  }
+
   /** Confirms a renderer-tracked edit and folds its replace-grade workspace echo. */
-  confirmEdit(editId: WorkspaceEditId, applied: AppliedChange): readonly GlyphId[] {
+  confirmEdit(editId: PendingEditId, applied: AppliedChange): readonly GlyphId[] {
     return this.#foldWorkspaceChange(applied, editId);
   }
 
@@ -240,7 +247,7 @@ export class FontStore {
    * work. Axis/source topology, glyph-layer membership, and structural layer
    * replacements return only resident glyph identities that need native rebuilding.
    */
-  #foldWorkspaceChange(applied: AppliedChange, editId: WorkspaceEditId | null): readonly GlyphId[] {
+  #foldWorkspaceChange(applied: AppliedChange, editId: PendingEditId | null): readonly GlyphId[] {
     const current = this.#workspace.peek();
     if (!current) return [];
     const changedGlyphLayers = applied.next?.glyphs

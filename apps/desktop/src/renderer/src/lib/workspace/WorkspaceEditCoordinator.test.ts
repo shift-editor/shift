@@ -143,8 +143,10 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
   it("keeps separate pushes as separate undo entries", async () => {
     const { store, editCoordinator } = stack;
 
-    editCoordinator.push(createGlyph("A", 65));
-    editCoordinator.push(createGlyph("B", 66));
+    const firstEditId = editCoordinator.push(createGlyph("A", 65));
+    const secondEditId = editCoordinator.push(createGlyph("B", 66));
+    expect(secondEditId).not.toBe(firstEditId);
+
     await editCoordinator.settled();
 
     expect(store.workspaceCell.peek()?.glyphs).toHaveLength(2);
@@ -159,10 +161,12 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
   it("groups transaction pushes into one undo entry", async () => {
     const { store, editCoordinator } = stack;
 
-    editCoordinator.transaction("Create glyph pair", () => {
-      editCoordinator.push(createGlyph("A", 65));
-      editCoordinator.push(createGlyph("B", 66));
-    });
+    const editIds = editCoordinator.transaction("Create glyph pair", () => [
+      editCoordinator.push(createGlyph("A", 65)),
+      editCoordinator.push(createGlyph("B", 66)),
+    ]);
+    expect(editIds[1]).toBe(editIds[0]);
+
     await editCoordinator.settled();
 
     expect(store.workspaceCell.peek()?.glyphs).toHaveLength(2);

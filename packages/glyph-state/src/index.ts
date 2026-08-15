@@ -2,7 +2,6 @@ export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type ComponentTransform, type Matrix } from "./Component";
 export { Contour } from "./Contour";
 export { IdIndex } from "./IdIndex";
-export { LayerStateDraft } from "./LayerStateDraft";
 export { Point, type NewPoint, type PointHit, type PointWithNeighbors } from "./Point";
 export type { ContourGeometry, SegmentedContour } from "./types/contour";
 export {

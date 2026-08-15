@@ -18,12 +18,7 @@ import type {
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 import type { FontStore } from "@/lib/model/FontStore";
-import type {
-  PendingEditApplication,
-  WorkspaceApplyStatus,
-  WorkspaceEdit,
-  WorkspaceEditId,
-} from "@/types";
+import type { PendingEditId, WorkspaceApplyStatus, WorkspaceEdit } from "@/types";
 import type { FontSessionClient } from "./FontSessionClient";
 
 export type { WorkspaceApplyStatus } from "@/types";
@@ -34,10 +29,10 @@ export type { WorkspaceApplyStatus } from "@/types";
  * @remarks
  * Every editing verb pushes one operation by default. Use
  * {@link transaction} to group multiple intents into one `workspace.apply`,
- * one SQLite transaction, and one undo step. The coordinator assigns local
- * edit identities and runs local applications supplied by typed editing
- * surfaces; it never interprets intent envelopes. Undo, redo, snapshot reads,
- * and save are serialized through the same queue so none can overtake a committed edit.
+ * one SQLite transaction, and one undo step. The coordinator assigns opaque
+ * pending identities but never interprets intent envelopes or mutates layer
+ * state. Undo, redo, snapshot reads, and save are serialized through the same
+ * queue so none can overtake a committed edit.
  *
  * Save ownership lives in the utility. The renderer issues save as one more op
  * on this queue (see {@link save}); because it shares the FIFO edit lane, the
@@ -54,9 +49,9 @@ export class WorkspaceEditCoordinator {
   #busy = 0;
   #nextEditId = 1;
   #transaction: {
+    readonly id: PendingEditId;
     readonly label: string;
     readonly intents: FontIntent[];
-    readonly applications: PendingEditApplication[];
   } | null = null;
 
   constructor(session: FontSessionClient, store: FontStore) {
@@ -88,16 +83,15 @@ export class WorkspaceEditCoordinator {
     return this.#applyStatus;
   }
 
-  /** Accepts one intent and its optional local application unless a transaction is open. */
-  push(intent: FontIntent, applyLocally?: PendingEditApplication): void {
+  /** Accepts one intent and returns its renderer-local pending identity. */
+  push(intent: FontIntent): PendingEditId {
     const transaction = this.#transaction;
     if (transaction) {
       transaction.intents.push(intent);
-      if (applyLocally) transaction.applications.push(applyLocally);
-      return;
+      return transaction.id;
     }
 
-    this.#enqueueApply([intent], undefined, applyLocally ? [applyLocally] : []);
+    return this.#enqueueApply([intent]);
   }
 
   /**
@@ -119,18 +113,24 @@ export class WorkspaceEditCoordinator {
       return this.#runTransactionBody(label, body);
     }
 
-    this.#transaction = { label, intents: [], applications: [] };
+    const id = this.#mintPendingEditId();
+    this.#transaction = { id, label, intents: [] };
 
-    try {
-      const result = this.#runTransactionBody(label, body);
-      const transaction = this.#transaction;
-      this.#transaction = null;
-      this.#enqueueApply(transaction.intents, transaction.label, transaction.applications);
-      return result;
-    } catch (error) {
-      this.#transaction = null;
-      throw error;
-    }
+    return batch(() => {
+      try {
+        const result = this.#runTransactionBody(label, body);
+        const transaction = this.#transaction;
+        if (!transaction) throw new Error("workspace transaction ended without an active edit");
+
+        this.#transaction = null;
+        this.#enqueueApply(transaction.intents, transaction.label, transaction.id);
+        return result;
+      } catch (error) {
+        this.#transaction = null;
+        this.#store.rollbackEdit(id);
+        throw error;
+      }
+    });
   }
 
   #runTransactionBody<TResult>(label: string, body: () => TResult): TResult {
@@ -304,11 +304,11 @@ export class WorkspaceEditCoordinator {
   #enqueueApply(
     intents: FontIntent[],
     label?: string,
-    applications: readonly PendingEditApplication[] = [],
-  ): void {
-    if (intents.length === 0) return;
+    id: PendingEditId = this.#mintPendingEditId(),
+  ): PendingEditId {
+    if (intents.length === 0) return id;
 
-    const edit = this.#acceptEdit(intents, label, applications);
+    const edit = this.#acceptEdit(intents, label, id);
     void this.#serialize(async () => {
       try {
         await this.#sendEdit(edit);
@@ -317,28 +317,33 @@ export class WorkspaceEditCoordinator {
         await this.#resync();
       }
     });
+    return edit.id;
   }
 
   #acceptEdit(
     intents: FontIntent[],
     label?: string,
-    applications: readonly PendingEditApplication[] = [],
+    id = this.#mintPendingEditId(),
   ): WorkspaceEdit {
     const edit: WorkspaceEdit = {
-      id: this.#nextEditId as WorkspaceEditId,
+      id,
       intents: [...intents],
       ...(label === undefined ? {} : { label }),
     };
-    this.#nextEditId += 1;
 
     batch(() => {
-      for (const applyLocally of applications) applyLocally(edit.id);
       this.#settledCell.set(false);
       if (this.#applyStatus.peek() === "idle") {
         this.#applyStatus.set("queued");
       }
     });
     return edit;
+  }
+
+  #mintPendingEditId(): PendingEditId {
+    const id = this.#nextEditId as PendingEditId;
+    this.#nextEditId += 1;
+    return id;
   }
 
   async #sendEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
@@ -360,7 +365,7 @@ export class WorkspaceEditCoordinator {
     return run;
   }
 
-  async #applyChange(applied: AppliedChange, editId: WorkspaceEditId | null): Promise<void> {
+  async #applyChange(applied: AppliedChange, editId: PendingEditId | null): Promise<void> {
     const glyphIds =
       editId !== null
         ? this.#store.confirmEdit(editId, applied)

@@ -65,7 +65,6 @@ import {
   Contour,
   GlyphGeometry,
   IdIndex,
-  LayerStateDraft,
   type GeometryAnchorHit,
   type GeometryPointHit,
   type GeometrySegmentHit,
@@ -88,14 +87,13 @@ import {
   type RenderAnchor,
   type RenderContour,
 } from "./GlyphRenderModel";
-import type { PendingEditApplication } from "@/types";
 import type { GlyphRenderAnchorInput, GlyphRenderContourInput } from "@/types/glyphRender";
 import { GlyphLayerPositionList } from "./GlyphLayerPositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import {
   GlyphLayerState,
+  type LayerBuffers,
   type LayerContourCoordinates,
-  type LayerCoordinateBuffers,
 } from "./GlyphLayerState";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
@@ -117,7 +115,7 @@ interface GlyphEditState {
  * Geometry lookup surface for a Glyph render model.
  *
  * @remarks
- * Exact-source render models read sparse reactive coordinate buffers so lookup
+ * Exact-source render models read sparse reactive layer buffers so lookup
  * and hit testing avoid rebuilding full `GlyphGeometry` snapshots during pointer
  * previews. Interpolated render models currently resolve through immutable
  * geometry snapshots; callers should treat that as an implementation detail.
@@ -136,13 +134,11 @@ interface GlyphRenderGeometry {
 class GlyphEditSession {
   readonly #editCoordinator: WorkspaceEditCoordinator;
   readonly #intents: LayerIntents;
-  readonly #layerId: LayerId;
   readonly #state: GlyphEditState;
 
   constructor(editCoordinator: WorkspaceEditCoordinator, layerId: LayerId, state: GlyphEditState) {
     this.#editCoordinator = editCoordinator;
     this.#intents = new LayerIntents(editCoordinator, layerId);
-    this.#layerId = layerId;
     this.#state = state;
   }
 
@@ -163,10 +159,8 @@ class GlyphEditSession {
   }
 
   setXAdvance(width: number): void {
-    this.#intents.setXAdvance(
-      { width },
-      this.#pending((draft) => draft.setXAdvance({ layerId: this.#layerId, width })),
-    );
+    const editId = this.#intents.setXAdvance({ width });
+    this.#state.state.setXAdvance(editId, width);
   }
 
   applyPositionPatch(updates: GlyphLayerPositions): void {
@@ -189,21 +183,13 @@ class GlyphEditSession {
 
     const commit = () => {
       if (pointIds.length > 0) {
-        this.#intents.movePoints(
-          { pointIds, coords: pointCoords },
-          this.#pending((draft) =>
-            draft.movePoints({ layerId: this.#layerId, pointIds, coords: pointCoords }),
-          ),
-        );
+        const editId = this.#intents.movePoints({ pointIds, coords: pointCoords });
+        this.#state.state.movePoints(editId, pointIds, pointCoords);
       }
 
       if (anchorIds.length > 0) {
-        this.#intents.moveAnchors(
-          { anchorIds, coords: anchorCoords },
-          this.#pending((draft) =>
-            draft.moveAnchors({ layerId: this.#layerId, anchorIds, coords: anchorCoords }),
-          ),
-        );
+        const editId = this.#intents.moveAnchors({ anchorIds, coords: anchorCoords });
+        this.#state.state.moveAnchors(editId, anchorIds, anchorCoords);
       }
     };
 
@@ -216,14 +202,12 @@ class GlyphEditSession {
   }
 
   translateLayer(dx: number, dy: number): void {
-    // Affine over every confirmed point: O(ids) wire, Rust does the math.
+    // Affine over every current point: O(ids) wire, Rust does the authoritative math.
     const pointIds = this.geometry.allPoints.map((point) => point.id);
     if (pointIds.length === 0) return;
 
-    this.#intents.translatePoints(
-      { pointIds, dx, dy },
-      this.#pending((draft) => draft.translatePoints({ layerId: this.#layerId, pointIds, dx, dy })),
-    );
+    const editId = this.#intents.translatePoints({ pointIds, dx, dy });
+    this.#state.state.translatePoints(editId, pointIds, dx, dy);
   }
 
   previewPositionPatch(updates: GlyphLayerPositions): void {
@@ -238,12 +222,8 @@ class GlyphEditSession {
   addContour(): ContourId {
     const contourId = mintContourId();
 
-    this.#intents.addContour(
-      { contourId, closed: false },
-      this.#pending((draft) =>
-        draft.addContour({ layerId: this.#layerId, contourId, closed: false }),
-      ),
-    );
+    const editId = this.#intents.addContour({ contourId, closed: false });
+    this.#state.state.addContour(editId, contourId, false);
 
     return contourId;
   }
@@ -252,10 +232,8 @@ class GlyphEditSession {
     const pointId = mintPointId();
     const points = [this.#seed(pointId, edit)];
 
-    this.#intents.addPoints(
-      { contourId, points },
-      this.#pending((draft) => draft.addPoints({ layerId: this.#layerId, contourId, points })),
-    );
+    const editId = this.#intents.addPoints({ contourId, points });
+    this.#state.state.addPoints(editId, points, contourId);
 
     return pointId;
   }
@@ -266,46 +244,28 @@ class GlyphEditSession {
     // No contourId: Rust derives the contour from the anchor point — the
     // renderer never bookkeeps pending point→contour maps.
     const points = [this.#seed(pointId, edit)];
-    this.#intents.addPoints(
-      {
-        before: beforePointId,
-        points,
-      },
-      this.#pending((draft) =>
-        draft.addPoints({
-          layerId: this.#layerId,
-          before: beforePointId,
-          points,
-        }),
-      ),
-    );
+    const editId = this.#intents.addPoints({
+      before: beforePointId,
+      points,
+    });
+    this.#state.state.addPoints(editId, points, undefined, beforePointId);
 
     return pointId;
   }
 
   openContour(contourId: ContourId): void {
-    this.#intents.setContourClosed(
-      { contourId, closed: false },
-      this.#pending((draft) =>
-        draft.setContourClosed({ layerId: this.#layerId, contourId, closed: false }),
-      ),
-    );
+    const editId = this.#intents.setContourClosed({ contourId, closed: false });
+    this.#state.state.setContourClosed(editId, contourId, false);
   }
 
   closeContour(contourId: ContourId): void {
-    this.#intents.setContourClosed(
-      { contourId, closed: true },
-      this.#pending((draft) =>
-        draft.setContourClosed({ layerId: this.#layerId, contourId, closed: true }),
-      ),
-    );
+    const editId = this.#intents.setContourClosed({ contourId, closed: true });
+    this.#state.state.setContourClosed(editId, contourId, true);
   }
 
   reverseContour(contourId: ContourId): void {
-    this.#intents.reverseContour(
-      { contourId },
-      this.#pending((draft) => draft.reverseContour({ layerId: this.#layerId, contourId })),
-    );
+    const editId = this.#intents.reverseContour({ contourId });
+    this.#state.state.reverseContour(editId, contourId);
   }
 
   applyBooleanOp(
@@ -321,10 +281,8 @@ class GlyphEditSession {
     if (pointIds.length === 0) return;
 
     const ids = [...pointIds];
-    this.#intents.removePoints(
-      { pointIds: ids },
-      this.#pending((draft) => draft.removePoints({ layerId: this.#layerId, pointIds: ids })),
-    );
+    const editId = this.#intents.removePoints({ pointIds: ids });
+    this.#state.state.removePoints(editId, ids);
   }
 
   addAnchor(name: string | null, position: Point2D): AnchorId {
@@ -338,10 +296,8 @@ class GlyphEditSession {
         ...(name === null ? {} : { name }),
       },
     ];
-    this.#intents.addAnchors(
-      { anchors },
-      this.#pending((draft) => draft.addAnchors({ layerId: this.#layerId, anchors })),
-    );
+    const editId = this.#intents.addAnchors({ anchors });
+    this.#state.state.addAnchors(editId, anchors);
 
     return anchorId;
   }
@@ -350,10 +306,8 @@ class GlyphEditSession {
     if (anchorIds.length === 0) return;
 
     const ids = [...anchorIds];
-    this.#intents.removeAnchors(
-      { anchorIds: ids },
-      this.#pending((draft) => draft.removeAnchors({ layerId: this.#layerId, anchorIds: ids })),
-    );
+    const editId = this.#intents.removeAnchors({ anchorIds: ids });
+    this.#state.state.removeAnchors(editId, ids);
   }
 
   toggleSmooth(pointId: PointId): void {
@@ -363,17 +317,8 @@ class GlyphEditSession {
     }
 
     const smooth = !point.smooth;
-    this.#intents.setPointSmooth(
-      { pointId, smooth },
-      this.#pending((draft) => draft.setPointSmooth({ layerId: this.#layerId, pointId, smooth })),
-    );
-  }
-
-  #pending(apply: (draft: LayerStateDraft) => boolean): PendingEditApplication {
-    return (editId) => {
-      const draft = new LayerStateDraft(this.#state.state.state);
-      this.#state.state.applyPendingUpdate(editId, apply(draft) ? draft.state : null);
-    };
+    const editId = this.#intents.setPointSmooth({ pointId, smooth });
+    this.#state.state.setPointSmooth(editId, pointId, smooth);
   }
 
   #seed(id: PointId, edit: NewPoint): PointSeed {
@@ -391,9 +336,9 @@ class GlyphEditSession {
  * Authored glyph layer data for one source.
  *
  * A source is the authored glyph at a designspace location. `GlyphLayer`
- * exposes the reactive geometry for that source and forwards mutations to the
- * bridge with the source layer's stable ID. Preview methods update the
- * renderer-facing reactive data; commit methods also produce bridge changes.
+ * exposes the reactive geometry for that source and queues mutations with the
+ * source layer's stable ID. Preview methods update renderer state only; accepted
+ * edits also produce workspace intents.
  */
 export class GlyphLayer {
   readonly #sourceCell: WritableSignal<Source>;
@@ -443,19 +388,19 @@ export class GlyphLayer {
     return this.#edit.layerState.structureCell;
   }
 
-  /** @internal Reactive coordinate buffers used by renderer-facing projections. */
-  get coordinateBuffers(): LayerCoordinateBuffers {
-    return this.#edit.layerState.coordinateBuffers;
+  /** @internal Reactive numeric buffers used by renderer-facing projections. */
+  get buffers(): LayerBuffers {
+    return this.#edit.layerState.buffers;
   }
 
-  /** @internal Tracks replacement of the source coordinate-buffer container. */
-  get coordinateBuffersCell(): Signal<LayerCoordinateBuffers> {
-    return this.#edit.layerState.coordinateBuffersCell;
+  /** @internal Tracks replacement of the source layer-buffer container. */
+  get buffersCell(): Signal<LayerBuffers> {
+    return this.#edit.layerState.buffersCell;
   }
 
-  /** @internal Tracks any coordinate change without materializing full geometry. */
-  get coordinateBuffersChangedCell(): Signal<LayerCoordinateBuffers> {
-    return this.#edit.layerState.coordinateBuffersChangedCell;
+  /** @internal Tracks any numeric layer change without materializing full geometry. */
+  get buffersChangedCell(): Signal<LayerBuffers> {
+    return this.#edit.layerState.buffersChangedCell;
   }
 
   get state(): GlyphState {
@@ -1165,9 +1110,9 @@ export class GlyphRenderModel {
       }
 
       track(source.structureCell);
-      track(source.coordinateBuffersCell);
+      track(source.buffersCell);
       const structure = source.structureCell.peek();
-      const coordinates = source.coordinateBuffersCell.peek();
+      const coordinates = source.buffersCell.peek();
       const contours: GlyphRenderContourInput[] = [];
       for (let index = 0; index < structure.contours.length; index++) {
         const data = structure.contours[index];
@@ -1335,17 +1280,14 @@ class ViewAnchors {
     this.anchorsCell = computed<readonly RenderAnchor[]>(() => {
       const source = layer.value;
       if (source) {
-        return this.#sourceAnchors(source.structureCell.value, source.coordinateBuffersCell.value);
+        return this.#sourceAnchors(source.structureCell.value, source.buffersCell.value);
       }
 
       return geometryRenderAnchors(geometry.value);
     });
   }
 
-  #sourceAnchors(
-    structure: GlyphStructure,
-    coordinates: LayerCoordinateBuffers,
-  ): readonly RenderAnchor[] {
+  #sourceAnchors(structure: GlyphStructure, coordinates: LayerBuffers): readonly RenderAnchor[] {
     return this.#anchors.map(
       structure.anchors.map((data, index) => ({
         data,
@@ -1465,7 +1407,7 @@ class SourceGeometryCache implements GlyphRenderGeometry {
     this.#source = source;
 
     this.#sourceContours = computed(() =>
-      this.#contoursFromSource(source.structureCell.value, source.coordinateBuffersCell.value),
+      this.#contoursFromSource(source.structureCell.value, source.buffersCell.value),
     );
     this.#points = computed(() =>
       this.#sourceContours.value.flatMap((contour) => contour.pointsCell.value),
@@ -1473,10 +1415,7 @@ class SourceGeometryCache implements GlyphRenderGeometry {
     this.#pointOwners = computed(() => this.#pointOwnersFromSource(this.#sourceContours.value));
 
     const anchors = computed(() =>
-      this.#anchorsFromSource(
-        source.structureCell.value,
-        source.coordinateBuffersCell.value.anchors.value,
-      ),
+      this.#anchorsFromSource(source.structureCell.value, source.buffersCell.value.anchors.value),
     );
     this.#anchors = new IdIndex(
       () => anchors.peek(),
@@ -1570,14 +1509,14 @@ class SourceGeometryCache implements GlyphRenderGeometry {
 
   #contoursFromSource(
     structure: GlyphStructure,
-    coordinates: LayerCoordinateBuffers,
+    coordinates: LayerBuffers,
   ): readonly ContourCache[] {
     return this.#contourCache.map(this.#currentContourInputs(structure, coordinates));
   }
 
   #currentContourInputs(
     structure: GlyphStructure,
-    coordinates: LayerCoordinateBuffers,
+    coordinates: LayerBuffers,
   ): readonly ContourInput[] {
     const inputs: ContourInput[] = [];
 
