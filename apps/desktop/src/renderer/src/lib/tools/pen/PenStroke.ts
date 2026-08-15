@@ -166,7 +166,7 @@ export class PenStroke {
   commitHandles(): void {
     if (!this.#pendingHandles) return;
 
-    this.#layer.commitPositionPatch(this.#pendingHandles);
+    this.#layer.applyPositionPatch(this.#pendingHandles);
     this.#pendingHandles = null;
   }
 }

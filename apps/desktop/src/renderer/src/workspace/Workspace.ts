@@ -8,7 +8,7 @@ import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import {
   WorkspaceEditCoordinator,
-  type WorkspaceCommitState,
+  type WorkspaceApplyStatus,
 } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { Signal } from "@/lib/signals/signal";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
@@ -29,7 +29,7 @@ export class Workspace {
   readonly font: Font;
   readonly editor: Editor;
   readonly documentStateCell: Signal<WorkspaceDocumentState | null>;
-  readonly commitStateCell: Signal<WorkspaceCommitState>;
+  readonly applyStatusCell: Signal<WorkspaceApplyStatus>;
 
   constructor(options: WorkspaceOptions) {
     this.#client = options.client;
@@ -47,7 +47,7 @@ export class Workspace {
       clipboard: options.clipboard,
     });
     this.documentStateCell = this.#client.documentStateCell;
-    this.commitStateCell = this.#edits.commitStateCell;
+    this.applyStatusCell = this.#edits.applyStatusCell;
 
     registerBuiltInTools(this.editor);
     this.editor.setActiveTool("select");

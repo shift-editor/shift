@@ -4,6 +4,7 @@ import type {
   GlyphState,
   GlyphStructure,
   LayerId,
+  LayerReplaced,
   PointId,
 } from "@shift/types";
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
@@ -14,6 +15,7 @@ import {
   type GlyphPositions,
   type GlyphSidebearings,
 } from "@shift/glyph-state";
+import type { LocalLayerUpdate, WorkspaceEditId } from "@/types";
 import {
   batch,
   computed,
@@ -43,6 +45,9 @@ export class GlyphLayerState {
   readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
   readonly #coordinateBuffersChanged: ComputedSignal<LayerCoordinateBuffers>;
   readonly #geometry: ComputedSignal<GlyphGeometry>;
+
+  #confirmedState: GlyphState | null = null;
+  readonly #pendingEditIds = new Set<WorkspaceEditId>();
 
   constructor(state: GlyphState) {
     this.#layerId = state.layerId;
@@ -161,24 +166,71 @@ export class GlyphLayerState {
   }
 
   replace(state: GlyphState): void {
-    batch(() => {
-      this.#structure.set(state.structure);
-      this.#coordinates.set(LayerCoordinateBuffers.fromState(state));
-    });
+    this.#confirmedState = null;
+    this.#pendingEditIds.clear();
+    this.#publish(state);
   }
 
   replaceValues(values: Float64Array): void {
-    this.#coordinates.set(
-      LayerCoordinateBuffers.fromState({
-        layerId: this.#layerId,
-        structure: this.#structure.peek(),
-        values,
-      }),
-    );
+    this.replace({
+      layerId: this.#layerId,
+      structure: this.#structure.peek(),
+      values,
+    });
+  }
+
+  applyPendingUpdate(editId: WorkspaceEditId, update: LocalLayerUpdate | null): void {
+    if (this.#pendingEditIds.size === 0) {
+      this.#confirmedState = this.state;
+    }
+    this.#pendingEditIds.add(editId);
+
+    if (!update) return;
+
+    switch (update.kind) {
+      case "patch":
+        batch(() => {
+          this.#coordinates.peek().patchPositions(update.positions);
+          if (update.xAdvance !== null) {
+            this.#coordinates.peek().xAdvance.set(update.xAdvance);
+          }
+        });
+        return;
+      case "replace":
+        this.#publish(update.state);
+        return;
+    }
+  }
+
+  foldWorkspaceState(editId: WorkspaceEditId | null, replacement: LayerReplaced): void {
+    const confirmed = this.#confirmedState ?? this.state;
+    const state = {
+      layerId: this.#layerId,
+      structure: replacement.structure ?? confirmed.structure,
+      values: replacement.values,
+    };
+    this.#confirmedState = state;
+
+    if (editId !== null) {
+      this.#pendingEditIds.delete(editId);
+    }
+    if (this.#pendingEditIds.size > 0) return;
+
+    this.#confirmedState = null;
+    this.#publish(state);
   }
 
   patchPositions(updates: GlyphPositions): void {
     this.#coordinates.peek().patchPositions(updates);
+  }
+
+  #publish(state: GlyphState): void {
+    if (sameGlyphState(this.state, state)) return;
+
+    batch(() => {
+      this.#structure.set(state.structure);
+      this.#coordinates.set(LayerCoordinateBuffers.fromState(state));
+    });
   }
 }
 
@@ -526,4 +578,63 @@ export class SourceComponentTransform {
       { name: `glyphLayer.component[${componentIndex}].matrix` },
     );
   }
+}
+
+function sameGlyphState(left: GlyphState, right: GlyphState): boolean {
+  if (left.layerId !== right.layerId) return false;
+  if (!sameGlyphStructure(left.structure, right.structure)) return false;
+  if (left.values.length !== right.values.length) return false;
+
+  for (let index = 0; index < left.values.length; index++) {
+    if (!Object.is(left.values[index], right.values[index])) return false;
+  }
+  return true;
+}
+
+function sameGlyphStructure(left: GlyphStructure, right: GlyphStructure): boolean {
+  if (left === right) return true;
+  if (left.contours.length !== right.contours.length) return false;
+  if (left.anchors.length !== right.anchors.length) return false;
+  if (left.components.length !== right.components.length) return false;
+
+  for (let contourIndex = 0; contourIndex < left.contours.length; contourIndex++) {
+    const leftContour = left.contours[contourIndex];
+    const rightContour = right.contours[contourIndex];
+    if (leftContour.id !== rightContour.id || leftContour.closed !== rightContour.closed) {
+      return false;
+    }
+    if (leftContour.points.length !== rightContour.points.length) return false;
+
+    for (let pointIndex = 0; pointIndex < leftContour.points.length; pointIndex++) {
+      const leftPoint = leftContour.points[pointIndex];
+      const rightPoint = rightContour.points[pointIndex];
+      if (
+        leftPoint.id !== rightPoint.id ||
+        leftPoint.pointType !== rightPoint.pointType ||
+        leftPoint.smooth !== rightPoint.smooth
+      ) {
+        return false;
+      }
+    }
+  }
+
+  for (let index = 0; index < left.anchors.length; index++) {
+    const leftAnchor = left.anchors[index];
+    const rightAnchor = right.anchors[index];
+    if (leftAnchor.id !== rightAnchor.id || leftAnchor.name !== rightAnchor.name) return false;
+  }
+
+  for (let index = 0; index < left.components.length; index++) {
+    const leftComponent = left.components[index];
+    const rightComponent = right.components[index];
+    if (
+      leftComponent.id !== rightComponent.id ||
+      leftComponent.baseGlyphId !== rightComponent.baseGlyphId ||
+      leftComponent.baseGlyphName !== rightComponent.baseGlyphName
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }

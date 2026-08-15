@@ -4,7 +4,7 @@ import { effect, useSignalState } from "@/lib/signals";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
-import type { WorkspaceCommitState } from "@/lib/workspace/WorkspaceEditCoordinator";
+import type { WorkspaceApplyStatus } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 export type DocumentActivity = "clean" | "editing" | "committing" | "dirty";
 
@@ -32,17 +32,17 @@ export function useDocumentChromeState(): DocumentChromeState {
     },
     () => workspace?.documentStateCell.peek() ?? null,
   );
-  const commitState = useSyncExternalStore(
+  const applyStatus = useSyncExternalStore(
     (callback) => {
       if (!workspace) return () => {};
 
       const subscription = effect(() => {
-        workspace.commitStateCell.value;
+        workspace.applyStatusCell.value;
         callback();
       });
       return () => subscription.dispose();
     },
-    () => workspace?.commitStateCell.peek() ?? "idle",
+    () => workspace?.applyStatusCell.peek() ?? "idle",
   );
   const isEditing = useSignalState(editor.isEditingCell);
 
@@ -56,7 +56,7 @@ export function useDocumentChromeState(): DocumentChromeState {
       };
     }
 
-    const activity = activityForDocument(documentState, isEditing, commitState);
+    const activity = activityForDocument(documentState, isEditing, applyStatus);
 
     return {
       documentState,
@@ -64,17 +64,17 @@ export function useDocumentChromeState(): DocumentChromeState {
       activity,
       dirty: activity !== "clean",
     };
-  }, [workspace, metadata.styleName, documentState, isEditing, commitState]);
+  }, [workspace, metadata.styleName, documentState, isEditing, applyStatus]);
 }
 
 function activityForDocument(
   documentState: WorkspaceDocumentState | null,
   isEditing: boolean,
-  commitState: WorkspaceCommitState,
+  applyStatus: WorkspaceApplyStatus,
 ): DocumentActivity {
   if (documentState?.dirty) return "dirty";
   if (isEditing) return "editing";
-  if (commitState !== "idle") return "committing";
+  if (applyStatus !== "idle") return "committing";
   return "clean";
 }
 

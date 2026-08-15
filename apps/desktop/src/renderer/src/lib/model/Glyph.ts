@@ -163,13 +163,6 @@ class GlyphEditSession {
   }
 
   applyPositionPatch(updates: GlyphLayerPositions): void {
-    // One-shot edits persist through the same movePoints intent as drag
-    // commits; the local apply keeps reads synchronous until the echo folds.
-    this.commitPositionPatch(updates);
-    this.#applyPositionPatchLocally(updates);
-  }
-
-  commitPositionPatch(updates: GlyphLayerPositions): void {
     const patch = GlyphLayerPositionPatch.from(updates);
     if (patch.isEmpty) return;
 
@@ -302,11 +295,9 @@ class GlyphEditSession {
   }
 
   toggleSmooth(pointId: PointId): void {
-    // Reading CONFIRMED state to compute the next value is describing, not
-    // applying; an unconfirmed same-tick point cannot be toggled yet.
     const point = this.geometry.allPoints.find((candidate) => candidate.id === pointId);
     if (!point) {
-      throw new Error(`cannot toggle smooth: point ${pointId} is not in confirmed state`);
+      throw new Error(`cannot toggle smooth: point ${pointId} is not in the layer`);
     }
 
     this.#intents.setPointSmooth({ pointId, smooth: !point.smooth });
@@ -543,19 +534,6 @@ export class GlyphLayer {
    */
   applyPositionPatch(updates: GlyphLayerPositions): void {
     this.#edit.applyPositionPatch(updates);
-  }
-
-  /**
-   * Commit a sparse point/anchor position patch to Rust only.
-   *
-   * Use this after the same patch has already been applied locally with
-   * {@link previewPositionPatch}. This is the drag-end path: it updates the
-   * native glyph layer without replacing TypeScript geometry.
-   *
-   * @param updates - Final point and anchor positions to persist.
-   */
-  commitPositionPatch(updates: GlyphLayerPositions): void {
-    this.#edit.commitPositionPatch(updates);
   }
 
   /**

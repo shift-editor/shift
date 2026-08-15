@@ -404,6 +404,26 @@ describe("batch", () => {
     expect(fires).toBe(2);
   });
 
+  it("should defer effects reached through computed dependencies", () => {
+    const left = signal(1);
+    const right = signal(2);
+    const pair = computed(() => [left.value, right.value]);
+    const observed: number[][] = [];
+
+    effect(() => {
+      observed.push(pair.value);
+    });
+    batch(() => {
+      left.value = 10;
+      right.value = 20;
+    });
+
+    expect(observed).toEqual([
+      [1, 2],
+      [10, 20],
+    ]);
+  });
+
   it("should return the value from the batch function", () => {
     const result = batch(() => 42);
     expect(result).toBe(42);

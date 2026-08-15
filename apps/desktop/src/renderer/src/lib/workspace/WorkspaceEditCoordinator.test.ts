@@ -134,9 +134,9 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
 
     editCoordinator.push(createGlyph("C", 67));
 
-    expect(editCoordinator.commitStateCell.peek()).toBe("queued");
+    expect(editCoordinator.applyStatusCell.peek()).toBe("queued");
     await editCoordinator.settled();
-    expect(editCoordinator.commitStateCell.peek()).toBe("idle");
+    expect(editCoordinator.applyStatusCell.peek()).toBe("idle");
     expect(client.documentStateCell.peek()).toMatchObject({ dirty: true });
   });
 

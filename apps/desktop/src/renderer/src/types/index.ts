@@ -49,6 +49,12 @@ export type {
   ShiftRecordId,
 } from "./records";
 export type { TextRunRecord } from "./text";
+export type {
+  LocalLayerUpdate,
+  WorkspaceApplyStatus,
+  WorkspaceEdit,
+  WorkspaceEditId,
+} from "./workspace";
 
 export interface GlyphObjectSegment {
   readonly id: SegmentId;

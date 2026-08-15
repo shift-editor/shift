@@ -17,20 +17,21 @@ import type {
   WorkspaceSlugAtlasPageRequest,
 } from "@shared/workspace/protocol";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
-import type { FontStore, WorkspaceCommitState } from "@/lib/model/FontStore";
+import type { FontStore } from "@/lib/model/FontStore";
+import type { WorkspaceApplyStatus, WorkspaceEdit, WorkspaceEditId } from "@/types";
 import type { FontSessionClient } from "./FontSessionClient";
 
-export type { WorkspaceCommitState } from "@/lib/model/FontStore";
+export type { WorkspaceApplyStatus } from "@/types";
 
 /**
- * Tracks optimistic renderer edits until the utility workspace echoes them.
+ * Tracks pending renderer edits until the utility workspace confirms them.
  *
  * @remarks
  * Every editing verb pushes one operation by default. Use
  * {@link transaction} to group multiple intents into one `workspace.apply`,
- * one SQLite transaction, and one undo step. Echoes fold by substitution only
- * (replace structure, replace values); the queue contains zero
- * change-application or save semantics. Undo, redo, snapshot reads, and save
+ * one SQLite transaction, and one undo step. The coordinator assigns local
+ * edit identities and routes accepted intents to FontStore; layer reduction
+ * remains model-owned. Undo, redo, snapshot reads, and save
  * are serialized through the same queue so none can overtake a committed edit.
  *
  * Save ownership lives in the utility. The renderer issues save as one more op
@@ -42,10 +43,11 @@ export class WorkspaceEditCoordinator {
   readonly #session: FontSessionClient;
   readonly #store: FontStore;
   readonly #settledCell: WritableSignal<boolean>;
-  readonly #commitState: WritableSignal<WorkspaceCommitState>;
+  readonly #applyStatus: WritableSignal<WorkspaceApplyStatus>;
 
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
+  #nextEditId = 1;
   #transaction: {
     readonly label: string;
     readonly intents: FontIntent[];
@@ -55,8 +57,8 @@ export class WorkspaceEditCoordinator {
     this.#session = session;
     this.#store = store;
     this.#settledCell = signal(true);
-    this.#commitState = signal<WorkspaceCommitState>("idle", {
-      name: "workspace.commitState",
+    this.#applyStatus = signal<WorkspaceApplyStatus>("idle", {
+      name: "workspace.applyStatus",
     });
   }
 
@@ -69,15 +71,15 @@ export class WorkspaceEditCoordinator {
   }
 
   /**
-   * Returns the renderer commit lifecycle for locally-authored edits.
+   * Returns the workspace-apply lifecycle for locally-authored edits.
    *
    * @remarks
    * This is intentionally separate from utility-owned `documentState.dirty`.
    * It covers the short window after a tool commits an edit locally but before
    * the utility process has echoed the new dirty state.
    */
-  get commitStateCell(): Signal<WorkspaceCommitState> {
-    return this.#commitState;
+  get applyStatusCell(): Signal<WorkspaceApplyStatus> {
+    return this.#applyStatus;
   }
 
   /** Commits one intent as its own operation unless a transaction is open. */
@@ -116,7 +118,7 @@ export class WorkspaceEditCoordinator {
       const result = this.#runTransactionBody(label, body);
       const transaction = this.#transaction;
       this.#transaction = null;
-      this.#enqueueApply(transaction.intents);
+      this.#enqueueApply(transaction.intents, transaction.label);
       return result;
     } catch (error) {
       this.#transaction = null;
@@ -152,10 +154,16 @@ export class WorkspaceEditCoordinator {
    * @throws {Error} when the workspace rejects or cannot persist this edit.
    */
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
-    return this.#withFlush(async () => {
-      const applied = await this.#session.apply(intents, label);
-      await this.#applyChange(applied);
-      return applied;
+    this.#assertNoTransaction("apply workspace edits");
+    const edit = this.#acceptEdit(intents, label);
+
+    return this.#serialize(async () => {
+      try {
+        return await this.#sendEdit(edit);
+      } catch (error) {
+        await this.#resync();
+        throw error;
+      }
     });
   }
 
@@ -163,7 +171,7 @@ export class WorkspaceEditCoordinator {
   undo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#session.undo();
-      if (applied) await this.#applyChange(applied);
+      if (applied) await this.#applyChange(applied, null);
       return applied;
     });
   }
@@ -248,7 +256,7 @@ export class WorkspaceEditCoordinator {
   redo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#session.redo();
-      if (applied) await this.#applyChange(applied);
+      if (applied) await this.#applyChange(applied, null);
       return applied;
     });
   }
@@ -286,24 +294,41 @@ export class WorkspaceEditCoordinator {
     return this.#serialize(job);
   }
 
-  #enqueueApply(intents: FontIntent[]): void {
+  #enqueueApply(intents: FontIntent[], label?: string): void {
     if (intents.length === 0) return;
 
-    this.#settledCell.set(false);
-    if (this.#commitState.peek() === "idle") {
-      this.#commitState.set("queued");
-    }
-
+    const edit = this.#acceptEdit(intents, label);
     void this.#serialize(async () => {
       try {
-        this.#commitState.set("applying");
-        const applied = await this.#session.apply(intents);
-        await this.#applyChange(applied);
+        await this.#sendEdit(edit);
       } catch (error) {
         console.error("workspace apply failed; resyncing from truth", error);
         await this.#resync();
       }
     });
+  }
+
+  #acceptEdit(intents: FontIntent[], label?: string): WorkspaceEdit {
+    const edit: WorkspaceEdit = {
+      id: this.#nextEditId as WorkspaceEditId,
+      intents: [...intents],
+      ...(label === undefined ? {} : { label }),
+    };
+    this.#nextEditId += 1;
+
+    this.#store.applyPendingEdit(edit);
+    this.#settledCell.set(false);
+    if (this.#applyStatus.peek() === "idle") {
+      this.#applyStatus.set("queued");
+    }
+    return edit;
+  }
+
+  async #sendEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
+    this.#applyStatus.set("applying");
+    const applied = await this.#session.apply(edit.intents, edit.label);
+    await this.#applyChange(applied, edit.id);
+    return applied;
   }
 
   #serialize<T>(job: () => Promise<T>): Promise<T> {
@@ -318,8 +343,11 @@ export class WorkspaceEditCoordinator {
     return run;
   }
 
-  async #applyChange(applied: AppliedChange): Promise<void> {
-    const glyphIds = this.#store.applyWorkspaceChange(applied);
+  async #applyChange(applied: AppliedChange, editId: WorkspaceEditId | null): Promise<void> {
+    const glyphIds =
+      editId !== null
+        ? this.#store.confirmEdit(editId, applied)
+        : this.#store.applyWorkspaceChange(applied);
     if (glyphIds.length === 0) return;
 
     const projections = await this.#session.glyphProjections(glyphIds);
@@ -330,7 +358,7 @@ export class WorkspaceEditCoordinator {
     this.#busy -= 1;
     if (this.#busy === 0) {
       this.#settledCell.set(true);
-      this.#commitState.set("idle");
+      this.#applyStatus.set("idle");
     }
   }
 

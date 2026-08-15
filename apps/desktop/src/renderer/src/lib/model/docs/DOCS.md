@@ -15,6 +15,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** A render model shares one evaluated source-contour list per base glyph at its current location. Each component placement owns a distinct `GlyphContour` wrapper for transform and provenance; `GlyphRenderModel.contours` flattens references to those same occurrence objects rather than copying contour coordinates.
 - **Architecture Invariant:** Rust owns component order, ancestry, attachment selection, and cycle pruning through `GlyphComponents`. TypeScript only resolves current coordinates and composes matrices. Component paths preserve authored occurrence identity; numeric transforms are selected by the occurrence's parent-local `componentIndex`, because compatible exact-source layers may assign different `ComponentId` values to corresponding slots.
 - **Architecture Invariant:** Numeric authored edits flow through the existing `GlyphLayerState` signal graph. Do not add a revision signal, invalidate projections to `null`, or refetch native variation data for point, component-transform, advance, or metric value changes.
+- **Architecture Invariant:** Deterministic authored-layer intents are reduced locally when accepted. Their renderer-local `WorkspaceEditId` remains pending until its FIFO workspace echo arrives; older echoes update a hidden confirmed shadow and never replace newer pending geometry. Rust-only edits remain pending without a local update.
 - **Architecture Invariant:** `Font.committedFontCell` is an invalidation-only dependency for resources derived from the complete native font, including unloaded glyphs. It carries the stable Font value and notifies after committed echoes or workspace replacement; consumers use `track(...)`, never a revision counter.
 - **Architecture Invariant:** Structural glyph, source, or axis changes rebuild retained native projections behind the workspace FIFO and publish replacements atomically. The previous projection remains usable until its replacement arrives.
 - **Architecture Invariant:** Imported selected-glyph geometry is acquired lazily by stable glyph identity, then retained with its complete component closure until session disposal. External slider coordinates evaluate Rust-compiled `AxisMappingBasis` values synchronously before exact-source matching and projection evaluation. Raw mapping points never enter runtime evaluation; scrubbing is local basis evaluation, never a bridge, filesystem, or projection-acquisition request.
@@ -30,7 +31,8 @@ lib/model/
   FontStore.ts               -- workspace records, authored layer state, projections, canonical Glyph ownership
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
-  GlyphLayerState.ts         -- reactive authored structure and numeric buffers
+  GlyphLayerState.ts         -- reactive authored structure, numeric buffers, and pending-edit confirmation
+  reduceLayerIntents.ts      -- pure local reduction of deterministic authored-layer intents
   RenderGlyph.ts             -- source-independent live selected-glyph view
 lib/graphics/
   ContourPath.ts             -- canonical transformed commands and lazy path outputs
@@ -95,6 +97,12 @@ layer-only/background sources never participate.
 `Glyph.renderModelAt()` retains one render model per live location signal through a `WeakMap`. Changing a signal reevaluates the same model; historical location values are not retained as cache keys.
 
 Only observed render output is evaluated. Virtualized offscreen models do not subscribe to paths, and no sequence of scrubbed locations increases retained geometry. Component occurrence objects are reused by their Rust-supplied paths.
+
+## Pending authored edits
+
+Accepted layer edits move through **preview** (cancelable), **pending** (accepted and queued), and **confirmed** (workspace-echoed) vocabulary. Numeric-only edits use sparse coordinate/advance patches; structural edits publish one complete predicted `GlyphState` in a signal batch. A throwing workspace transaction publishes and sends nothing.
+
+Each loaded `GlyphLayerState` keeps a confirmed shadow only while edits are pending. Every echo advances that shadow, but visible geometry is replaced only after the layer's pending edit identities drain. Matching predictions therefore confirm without another signal publication; a workspace apply failure discards the renderer model through the existing full resync.
 
 ## Boundaries
 
