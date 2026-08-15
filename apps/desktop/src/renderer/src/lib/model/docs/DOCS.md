@@ -31,7 +31,12 @@ lib/model/
   FontStore.ts               -- workspace records, authored layer state, projections, canonical Glyph ownership
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
-  GlyphLayerState.ts         -- reactive structure, segmented layer buffers, local operations, and pending confirmation
+  GlyphLayerState.ts         -- local edit lifecycle and pending confirmation
+  LayerBuffers.ts            -- renderer-owned logical layer records and local operations
+  ContourBuffer.ts           -- contour metadata plus packed point coordinates
+  AnchorBuffer.ts            -- anchor metadata plus packed coordinates
+  ComponentBuffer.ts         -- component metadata plus packed transform values
+  PackedArray.ts             -- dynamically-sized fixed-width numeric records
   RenderGlyph.ts             -- source-independent live selected-glyph view
 lib/graphics/
   ContourPath.ts             -- canonical transformed commands and lazy path outputs
@@ -57,7 +62,8 @@ hooks/
 
 - `Glyph` -- stable, completely loaded renderer domain object containing zero or more authored layers, direct references to its loaded component dependencies, and synchronous location-specific geometry backing.
 - `GlyphLayer` -- editable geometry for one glyph/source pair.
-- `LayerBuffers` -- segmented reactive advance, contour, anchor, and component values for one exact authored layer.
+- `LayerBuffers` -- renderer-owned advance, contour, anchor, and component records for one exact authored layer. Its structure and packed wire snapshot are derived outputs.
+- `PackedArray` -- dynamically-sized storage for fixed-width numeric records. Its item width is fixed while capacity grows without imposing a font-format limit.
 - `GlyphProjection` -- generated bridge DTO retained as compact backing: fallback, compatible interpolation, incompatible exact-source shapes, and component identities.
 - `VariationBasis` -- normalized supports and numeric vectors compiled in Rust and evaluated locally without bridge traffic.
 - `InterpolationBasis` -- real source identities plus a `VariationBasis` producing source contribution weights.
@@ -102,7 +108,28 @@ Only observed render output is evaluated. Virtualized offscreen models do not su
 
 Accepted layer edits move through **preview** (cancelable), **pending** (accepted and queued), and **confirmed** (workspace-echoed) vocabulary. `GlyphEditSession` queues the wire intent through `LayerIntents`, receives a renderer-local `PendingEditId`, and immediately applies the same typed operation to `GlyphLayerState`. Transactions share one pending identity and run inside one signal batch, so canonical reads inside the synchronous body see each operation while effects observe only the complete result. A throwing transaction restores each touched layer and sends nothing.
 
-Local operations mutate the existing segmented `LayerBuffers`: advance, per-contour coordinates, anchors, and component transforms. The flat `Float64Array` is repacked lazily at geometry and wire boundaries. Renderer code does not parse `FontIntent.kind` or perform font-wide validation. Each loaded layer keeps a confirmed shadow only while edits are pending. Every echo advances that shadow, but visible geometry is replaced only after the layer's pending identities drain; workspace failure still discards renderer state through the existing full resync.
+Local operations mutate the existing segmented `LayerBuffers`: advance, contours, anchors, and components. Each logical record owns both the metadata and the `PackedArray` values needed to interpret it. `GlyphStructure` and the flat `Float64Array` are repacked lazily at geometry and wire boundaries. Renderer code does not parse `FontIntent.kind` or perform font-wide validation. Each loaded layer keeps a confirmed shadow only while edits are pending. Every echo advances that shadow, but visible geometry is replaced only after the layer's pending identities drain; workspace failure still discards renderer state through the existing full resync.
+
+`GlyphLayerState.#applyEdit()` is the one local lifecycle wrapper. It captures the pre-edit snapshot once per `PendingEditId`, batches a typed operation closure, and records only successful changes. The closure never crosses `LayerIntents` or IPC. Returning `false` means no mutation; throwing restores the entry snapshot or lets the enclosing transaction restore its shared snapshot.
+
+## Packed layout ownership
+
+The object that knows a packed layout must also own the logical metadata that interprets it. High-level editing code must not coordinate parallel structure and scalar buffers:
+
+```ts
+// Wrong: two owners can drift and callers must know the x/y stride.
+contour.points.reverse();
+reverseCoordinatePairs(values);
+```
+
+Put both changes behind the logical record instead:
+
+```ts
+// Correct: ContourBuffer owns point metadata and its itemSize=2 PackedArray.
+contour.reverse();
+```
+
+`PackedArray` exposes item indexes through `setItem()`, `splice()`, and `reverse()`. Its backing capacity is an implementation detail. Structural glyph limits come from Rust and export formats, not renderer allocation choices.
 
 ## Boundaries
 

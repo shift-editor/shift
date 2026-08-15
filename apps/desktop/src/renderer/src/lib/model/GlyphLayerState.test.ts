@@ -161,7 +161,7 @@ describe("glyph layer geometry follows coordinate patches", () => {
     const state = new GlyphLayerState(layerState());
     const observed: number[] = [];
     const subscription = effect(() => {
-      observed.push(state.buffers.contours[0]!.values.value[0] ?? NaN);
+      observed.push(state.buffers.contours[0]!.valuesCell.value[0] ?? NaN);
     });
 
     state.replaceValues(new Float64Array([650, 10, 20, 30, 40, 300, 400]));

@@ -4,7 +4,6 @@ import type {
   AxisMappingBasis,
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
-  ContourData,
   ContourId,
   GlyphComponents,
   GlyphId,
@@ -87,14 +86,11 @@ import {
   type RenderAnchor,
   type RenderContour,
 } from "./GlyphRenderModel";
-import type { GlyphRenderAnchorInput, GlyphRenderContourInput } from "@/types/glyphRender";
 import { GlyphLayerPositionList } from "./GlyphLayerPositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
-import {
-  GlyphLayerState,
-  type LayerBuffers,
-  type LayerContourCoordinates,
-} from "./GlyphLayerState";
+import { GlyphLayerState } from "./GlyphLayerState";
+import type { ContourBuffer } from "./ContourBuffer";
+import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
@@ -1095,10 +1091,10 @@ export class GlyphRenderModel {
     const existing = this.#contoursByGlyph.get(glyphId);
     if (existing) return existing;
 
-    const layerContourCache = keyedCache<GlyphRenderContourInput, string, LayerRenderContour>({
+    const layerContourCache = keyedCache<ContourBuffer, string, LayerRenderContour>({
       name: `glyph.renderModel.sourceContours.${glyphId}`,
-      key: (input) => input.data.id,
-      create: (inputCell) => new LayerRenderContour(inputCell),
+      key: (contour) => contour.data.id,
+      create: (contourCell) => new LayerRenderContour(contourCell),
     });
     const contoursCell = computed(() => {
       const location = this.#externalLocation.value;
@@ -1109,20 +1105,7 @@ export class GlyphRenderModel {
         return geometryRenderContours(this.#geometryAt(glyphId, location, sourceId));
       }
 
-      track(source.structureCell);
-      track(source.buffersCell);
-      const structure = source.structureCell.peek();
-      const coordinates = source.buffersCell.peek();
-      const contours: GlyphRenderContourInput[] = [];
-      for (let index = 0; index < structure.contours.length; index++) {
-        const data = structure.contours[index];
-        const contourCoordinates = coordinates.contours[index];
-        if (!data || !contourCoordinates) continue;
-
-        contours.push({ data, coordinates: contourCoordinates });
-      }
-
-      return layerContourCache.map(contours);
+      return layerContourCache.map(source.buffersCell.value.contoursCell.value);
     });
     this.#contoursByGlyph.set(glyphId, contoursCell);
     return contoursCell;
@@ -1270,8 +1253,8 @@ function componentPathKey(path: readonly ComponentId[]): string {
 class ViewAnchors {
   readonly #anchors = keyedCache({
     name: "glyph.renderModel.anchors",
-    key: (input: GlyphRenderAnchorInput) => input.data.id,
-    create: (input) => new LayerRenderAnchor(input),
+    key: (anchor: Anchor) => anchor.id,
+    create: (anchor) => new LayerRenderAnchor(anchor),
   });
 
   readonly anchorsCell: Signal<readonly RenderAnchor[]>;
@@ -1279,22 +1262,10 @@ class ViewAnchors {
   constructor(layer: Signal<GlyphLayer | null>, geometry: Signal<GlyphGeometry>) {
     this.anchorsCell = computed<readonly RenderAnchor[]>(() => {
       const source = layer.value;
-      if (source) {
-        return this.#sourceAnchors(source.structureCell.value, source.buffersCell.value);
-      }
+      if (source) return this.#anchors.map(source.buffersCell.value.anchors.anchorsCell.value);
 
       return geometryRenderAnchors(geometry.value);
     });
-  }
-
-  #sourceAnchors(structure: GlyphStructure, coordinates: LayerBuffers): readonly RenderAnchor[] {
-    return this.#anchors.map(
-      structure.anchors.map((data, index) => ({
-        data,
-        values: coordinates.anchors,
-        offset: index * 2,
-      })),
-    );
   }
 }
 
@@ -1388,41 +1359,38 @@ class SnapshotGeometryCache implements GlyphRenderGeometry {
 
 class SourceGeometryCache implements GlyphRenderGeometry {
   readonly #source: GlyphLayer;
-
-  readonly #contourCache = keyedCache({
-    name: "glyph.renderModel.geometry.contours",
-    key: (input: ContourInput) => input.data.id,
-    create: (input) => new ContourCache(input),
-  });
-
-  readonly #sourceContours: ComputedSignal<readonly ContourCache[]>;
+  readonly #sourceContours: ComputedSignal<readonly ContourBuffer[]>;
   readonly #points: ComputedSignal<readonly Point[]>;
-  readonly #pointOwners: ComputedSignal<ReadonlyMap<PointId, ContourCache>>;
-
+  readonly #pointOwners: ComputedSignal<ReadonlyMap<PointId, ContourBuffer>>;
   readonly #anchors: IdIndex<AnchorId, Anchor>;
-
-  readonly #segmentOwners: ComputedSignal<ReadonlyMap<SegmentId, ContourCache>>;
+  readonly #segmentOwners: ComputedSignal<ReadonlyMap<SegmentId, ContourBuffer>>;
 
   constructor(source: GlyphLayer) {
     this.#source = source;
-
-    this.#sourceContours = computed(() =>
-      this.#contoursFromSource(source.structureCell.value, source.buffersCell.value),
-    );
+    this.#sourceContours = computed(() => source.buffersCell.value.contoursCell.value);
     this.#points = computed(() =>
       this.#sourceContours.value.flatMap((contour) => contour.pointsCell.value),
     );
-    this.#pointOwners = computed(() => this.#pointOwnersFromSource(this.#sourceContours.value));
+    this.#pointOwners = computed(() => {
+      const owners = new Map<PointId, ContourBuffer>();
+      for (const contour of this.#sourceContours.value) {
+        for (const point of contour.dataCell.value.points) owners.set(point.id, contour);
+      }
+      return owners;
+    });
 
-    const anchors = computed(() =>
-      this.#anchorsFromSource(source.structureCell.value, source.buffersCell.value.anchors.value),
-    );
+    const anchors = computed(() => source.buffersCell.value.anchors.anchorsCell.value);
     this.#anchors = new IdIndex(
       () => anchors.peek(),
       (anchor) => anchor.id,
     );
-
-    this.#segmentOwners = computed(() => this.#segmentOwnersFromSource(this.#sourceContours.value));
+    this.#segmentOwners = computed(() => {
+      const owners = new Map<SegmentId, ContourBuffer>();
+      for (const contour of this.#sourceContours.value) {
+        for (const segment of contour.segmentsCell.value) owners.set(segment.id, contour);
+      }
+      return owners;
+    });
   }
 
   get allPoints(): readonly Point[] {
@@ -1446,23 +1414,15 @@ class SourceGeometryCache implements GlyphRenderGeometry {
   }
 
   segment(segmentId: SegmentId): Segment | null {
-    const owner = this.#segmentOwners.peek().get(segmentId);
-    if (!owner) return null;
-
-    const segment = owner.segment(segmentId);
-    if (!segment) return null;
-
-    return segment;
+    return this.#segmentOwners.peek().get(segmentId)?.segment(segmentId) ?? null;
   }
 
   hitPoint(pos: Point2D, radius: number): GeometryPointHit | null {
     let best: GeometryPointHit | null = null;
-    for (const contour of this.#sourceContours.peek()) {
-      for (const point of contour.pointsCell.peek()) {
-        const hit = Point.hit(point, pos, radius);
-        if (hit && (!best || hit.distance < best.distance)) {
-          best = { kind: "point", id: point.id, distance: hit.distance };
-        }
+    for (const point of this.#points.peek()) {
+      const hit = Point.hit(point, pos, radius);
+      if (hit && (!best || hit.distance < best.distance)) {
+        best = { kind: "point", id: point.id, distance: hit.distance };
       }
     }
     return best;
@@ -1487,11 +1447,9 @@ class SourceGeometryCache implements GlyphRenderGeometry {
 
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
     let best: GeometrySegmentHit | null = null;
-
     for (const contour of this.#sourceContours.peek()) {
       for (const segment of contour.segmentsCell.peek()) {
         const hit = segment.hit(pos, radius);
-
         if (hit && (!best || hit.distance < best.distance)) {
           best = {
             kind: "segment",
@@ -1503,138 +1461,7 @@ class SourceGeometryCache implements GlyphRenderGeometry {
         }
       }
     }
-
     return best;
-  }
-
-  #contoursFromSource(
-    structure: GlyphStructure,
-    coordinates: LayerBuffers,
-  ): readonly ContourCache[] {
-    return this.#contourCache.map(this.#currentContourInputs(structure, coordinates));
-  }
-
-  #currentContourInputs(
-    structure: GlyphStructure,
-    coordinates: LayerBuffers,
-  ): readonly ContourInput[] {
-    const inputs: ContourInput[] = [];
-
-    for (let index = 0; index < structure.contours.length; index++) {
-      const data = structure.contours[index];
-      const contourCoordinates = coordinates.contours[index];
-      if (data && contourCoordinates) inputs.push({ data, coordinates: contourCoordinates });
-    }
-
-    return inputs;
-  }
-
-  #pointOwnersFromSource(contours: readonly ContourCache[]): ReadonlyMap<PointId, ContourCache> {
-    const owners = new Map<PointId, ContourCache>();
-    for (const contour of contours) {
-      for (const pointId of contour.pointIds) {
-        owners.set(pointId, contour);
-      }
-    }
-    return owners;
-  }
-
-  #segmentOwnersFromSource(
-    contours: readonly ContourCache[],
-  ): ReadonlyMap<SegmentId, ContourCache> {
-    const owners = new Map<SegmentId, ContourCache>();
-    for (const contour of contours) {
-      for (const segmentId of contour.segmentIds) {
-        owners.set(segmentId, contour);
-      }
-    }
-    return owners;
-  }
-
-  #anchorsFromSource(structure: GlyphStructure, values: Float64Array): readonly Anchor[] {
-    return structure.anchors.map((anchor, index) => new Anchor(anchor, values, index * 2));
-  }
-}
-
-interface ContourInput {
-  readonly data: ContourData;
-  readonly coordinates: LayerContourCoordinates;
-}
-
-class ContourCache {
-  readonly #input: Signal<ContourInput>;
-
-  readonly #pointIds: ComputedSignal<readonly PointId[]>;
-  readonly #points: IdIndex<PointId, Point>;
-
-  readonly #segments: IdIndex<SegmentId, Segment>;
-  readonly #segmentIds: ComputedSignal<readonly SegmentId[]>;
-
-  readonly contourCell: ComputedSignal<Contour>;
-  readonly pointsCell: ComputedSignal<readonly Point[]>;
-  readonly segmentsCell: ComputedSignal<readonly Segment[]>;
-
-  constructor(input: Signal<ContourInput>) {
-    this.#input = input;
-    this.#pointIds = computed(() => this.#input.value.data.points.map((point) => point.id));
-    this.contourCell = computed(() => {
-      const { data, coordinates } = this.#input.value;
-      return new Contour(data, coordinates.values.value, 0);
-    });
-
-    this.pointsCell = computed(() => {
-      const { data, coordinates } = this.#input.value;
-      const values = coordinates.values.value;
-
-      return data.points.map(
-        (point, index) =>
-          new Point({
-            ...point,
-            x: values[index * 2] ?? 0,
-            y: values[index * 2 + 1] ?? 0,
-          }),
-      );
-    });
-
-    this.segmentsCell = computed(() => {
-      const { data, coordinates } = this.#input.value;
-      return new Contour(data, coordinates.values.value, 0).segments();
-    });
-    this.#segmentIds = computed(() => this.segmentsCell.value.map((segment) => segment.id));
-
-    this.#points = new IdIndex(
-      () => this.pointsCell.peek(),
-      (point) => point.id,
-    );
-
-    this.#segments = new IdIndex(
-      () => this.segmentsCell.peek(),
-      (segment) => segment.id,
-    );
-  }
-
-  get pointIds(): readonly PointId[] {
-    return this.#pointIds.peek();
-  }
-
-  get segmentIds(): readonly SegmentId[] {
-    return this.#segmentIds.peek();
-  }
-
-  get id(): ContourId {
-    return this.#input.peek().data.id;
-  }
-
-  point(pointId: PointId): Point | null {
-    return this.#points.get(pointId);
-  }
-
-  segment(segmentId: SegmentId): Segment | null {
-    return this.#segments.get(segmentId);
-  }
-
-  get contour(): Contour {
-    return this.contourCell.peek();
   }
 }
 

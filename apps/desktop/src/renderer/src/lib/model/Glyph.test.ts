@@ -111,6 +111,21 @@ describe("Glyph", () => {
     expect(layer.contour(contourId)?.points[0]).toMatchObject({ id: pointId, x: 10, y: 20 });
   });
 
+  it("reverses point metadata and packed coordinates as one contour", async () => {
+    const points = await addTriangle(editor, layer);
+    const contourId = layer.contours.at(-1)!.id;
+
+    layer.reverseContour(contourId);
+    expect(layer.contour(contourId)?.points.map((point) => [point.id, point.x, point.y])).toEqual(
+      [...points].reverse().map((point) => [point.id, point.x, point.y]),
+    );
+
+    await editor.settle();
+    expect(layer.contour(contourId)?.points.map((point) => point.id)).toEqual(
+      [...points].reverse().map((point) => point.id),
+    );
+  });
+
   it("publishes deletions before their workspace echo", async () => {
     const [first] = await addTriangle(editor, layer);
 

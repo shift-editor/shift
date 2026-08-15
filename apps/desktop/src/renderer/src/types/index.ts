@@ -22,12 +22,7 @@ export type {
   GlyphAtlasPageWeights,
   GlyphAtlasSource,
 } from "./glyphAtlas";
-export type {
-  GlyphRenderAnchor,
-  GlyphRenderAnchorInput,
-  GlyphRenderContour,
-  GlyphRenderContourInput,
-} from "./glyphRender";
+export type { GlyphRenderAnchor, GlyphRenderContour } from "./glyphRender";
 export { currentSelectionId, objectIsKindOf } from "./object";
 export type {
   SelectableId,

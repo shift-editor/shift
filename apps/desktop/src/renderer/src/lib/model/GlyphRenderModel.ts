@@ -1,13 +1,9 @@
 import type { AnchorId, ContourId } from "@shift/types";
-import { Point, Segment, type Anchor, type Contour } from "@shift/glyph-state";
-import type {
-  GlyphRenderAnchor,
-  GlyphRenderAnchorInput,
-  GlyphRenderContour,
-  GlyphRenderContourInput,
-} from "@/types/glyphRender";
+import { Segment, type Anchor, type Contour, type Point } from "@shift/glyph-state";
+import type { GlyphRenderAnchor, GlyphRenderContour } from "@/types/glyphRender";
+import type { ContourBuffer } from "./ContourBuffer";
 import type { GlyphGeometry } from "./Glyph";
-import { computed, track, type ComputedSignal, type Signal } from "@/lib/signals/signal";
+import { track, type Signal } from "@/lib/signals/signal";
 
 /** Builds contour readers for a resolved geometry snapshot. */
 export function geometryRenderContours(geometry: GlyphGeometry): readonly RenderContour[] {
@@ -44,26 +40,11 @@ export abstract class RenderAnchor implements GlyphRenderAnchor {
  * Render contour backed by source structure plus a mutable coordinate buffer.
  */
 export class LayerRenderContour extends RenderContour {
-  readonly #input: Signal<GlyphRenderContourInput>;
-  readonly #points: ComputedSignal<readonly Point[]>;
+  readonly #input: Signal<ContourBuffer>;
 
-  constructor(input: Signal<GlyphRenderContourInput>) {
+  constructor(input: Signal<ContourBuffer>) {
     super();
     this.#input = input;
-
-    this.#points = computed(() => {
-      const { data, coordinates } = this.#input.value;
-      const values = coordinates.values.value;
-
-      return data.points.map(
-        (point, index) =>
-          new Point({
-            ...point,
-            x: values[index * 2] ?? 0,
-            y: values[index * 2 + 1] ?? 0,
-          }),
-      );
-    });
   }
 
   get id(): ContourId {
@@ -75,12 +56,13 @@ export class LayerRenderContour extends RenderContour {
   }
 
   get points(): readonly Point[] {
-    return this.#points.peek();
+    return this.#input.peek().pointsCell.peek();
   }
 
   override trackShape(): void {
     track(this.#input);
-    track(this.#input.peek().coordinates.values);
+    track(this.#input.peek().dataCell);
+    track(this.#input.peek().valuesCell);
   }
 }
 
@@ -116,34 +98,31 @@ class GeometryRenderContour extends RenderContour {
  * Render anchor backed by source structure plus a mutable coordinate buffer.
  */
 export class LayerRenderAnchor extends RenderAnchor {
-  readonly #input: Signal<GlyphRenderAnchorInput>;
+  readonly #input: Signal<Anchor>;
 
-  constructor(input: Signal<GlyphRenderAnchorInput>) {
+  constructor(input: Signal<Anchor>) {
     super();
     this.#input = input;
   }
 
   get id(): AnchorId {
-    return this.#input.peek().data.id;
+    return this.#input.peek().id;
   }
 
   get name(): string | undefined {
-    return this.#input.peek().data.name;
+    return this.#input.peek().name;
   }
 
   get x(): number {
-    const { values, offset } = this.#input.peek();
-    return values.peek()[offset] ?? 0;
+    return this.#input.peek().x;
   }
 
   get y(): number {
-    const { values, offset } = this.#input.peek();
-    return values.peek()[offset + 1] ?? 0;
+    return this.#input.peek().y;
   }
 
   override trackShape(): void {
     track(this.#input);
-    track(this.#input.peek().values);
   }
 }
 
