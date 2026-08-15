@@ -28,10 +28,9 @@ import {
   type Signal,
   type WritableSignal,
 } from "@/lib/signals/signal";
-import type { GlyphObjectIndex, GlyphObjectSegment, WorkspaceEdit, WorkspaceEditId } from "@/types";
+import type { GlyphObjectIndex, GlyphObjectSegment, WorkspaceEditId } from "@/types";
 import type { FontStoreOptions } from "@/types/font";
 import { GlyphLayerState } from "./GlyphLayerState";
-import { layerIdForIntent, reduceLayerIntents } from "./reduceLayerIntents";
 import type { Glyph } from "./Glyph";
 
 type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
@@ -220,25 +219,6 @@ export class FontStore {
       for (const projection of interned) {
         if (!this.#glyphById.has(projection.glyphId)) continue;
         this.#projectionCell(projection.glyphId).set(projection);
-      }
-    });
-  }
-
-  /** Applies one accepted edit to every loaded target layer before workspace I/O. */
-  applyPendingEdit(edit: WorkspaceEdit): void {
-    const layerIds = new Set<LayerId>();
-    for (const intent of edit.intents) {
-      const layerId = layerIdForIntent(intent);
-      if (layerId) layerIds.add(layerId);
-    }
-
-    batch(() => {
-      for (const layerId of layerIds) {
-        const state = this.#peekLayerState(layerId);
-        if (!state) continue;
-
-        const update = reduceLayerIntents(edit.intents, () => state.state);
-        state.applyPendingUpdate(edit.id, update);
       }
     });
   }

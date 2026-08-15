@@ -50,7 +50,7 @@ export type {
 } from "./records";
 export type { TextRunRecord } from "./text";
 export type {
-  LocalLayerUpdate,
+  PendingEditApplication,
   WorkspaceApplyStatus,
   WorkspaceEdit,
   WorkspaceEditId,

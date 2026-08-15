@@ -15,7 +15,7 @@ import {
   type GlyphPositions,
   type GlyphSidebearings,
 } from "@shift/glyph-state";
-import type { LocalLayerUpdate, WorkspaceEditId } from "@/types";
+import type { WorkspaceEditId } from "@/types";
 import {
   batch,
   computed,
@@ -179,27 +179,13 @@ export class GlyphLayerState {
     });
   }
 
-  applyPendingUpdate(editId: WorkspaceEditId, update: LocalLayerUpdate | null): void {
+  applyPendingUpdate(editId: WorkspaceEditId, state: GlyphState | null): void {
     if (this.#pendingEditIds.size === 0) {
       this.#confirmedState = this.state;
     }
     this.#pendingEditIds.add(editId);
 
-    if (!update) return;
-
-    switch (update.kind) {
-      case "patch":
-        batch(() => {
-          this.#coordinates.peek().patchPositions(update.positions);
-          if (update.xAdvance !== null) {
-            this.#coordinates.peek().xAdvance.set(update.xAdvance);
-          }
-        });
-        return;
-      case "replace":
-        this.#publish(update.state);
-        return;
-    }
+    if (state) this.#publish(state);
   }
 
   foldWorkspaceState(editId: WorkspaceEditId | null, replacement: LayerReplaced): void {
@@ -225,12 +211,71 @@ export class GlyphLayerState {
   }
 
   #publish(state: GlyphState): void {
-    if (sameGlyphState(this.state, state)) return;
+    if (GlyphLayerState.#sameState(this.state, state)) return;
+
+    if (GlyphLayerState.#sameStructure(this.#structure.peek(), state.structure)) {
+      this.#coordinates.peek().replaceValues(state.values);
+      return;
+    }
 
     batch(() => {
       this.#structure.set(state.structure);
       this.#coordinates.set(LayerCoordinateBuffers.fromState(state));
     });
+  }
+
+  static #sameState(left: GlyphState, right: GlyphState): boolean {
+    if (left.layerId !== right.layerId) return false;
+    if (!GlyphLayerState.#sameStructure(left.structure, right.structure)) return false;
+    return LayerCoordinateBuffers.sameValues(left.values, right.values);
+  }
+
+  static #sameStructure(left: GlyphStructure, right: GlyphStructure): boolean {
+    if (left === right) return true;
+    if (left.contours.length !== right.contours.length) return false;
+    if (left.anchors.length !== right.anchors.length) return false;
+    if (left.components.length !== right.components.length) return false;
+
+    for (let contourIndex = 0; contourIndex < left.contours.length; contourIndex++) {
+      const leftContour = left.contours[contourIndex];
+      const rightContour = right.contours[contourIndex];
+      if (leftContour.id !== rightContour.id || leftContour.closed !== rightContour.closed) {
+        return false;
+      }
+      if (leftContour.points.length !== rightContour.points.length) return false;
+
+      for (let pointIndex = 0; pointIndex < leftContour.points.length; pointIndex++) {
+        const leftPoint = leftContour.points[pointIndex];
+        const rightPoint = rightContour.points[pointIndex];
+        if (
+          leftPoint.id !== rightPoint.id ||
+          leftPoint.pointType !== rightPoint.pointType ||
+          leftPoint.smooth !== rightPoint.smooth
+        ) {
+          return false;
+        }
+      }
+    }
+
+    for (let index = 0; index < left.anchors.length; index++) {
+      const leftAnchor = left.anchors[index];
+      const rightAnchor = right.anchors[index];
+      if (leftAnchor.id !== rightAnchor.id || leftAnchor.name !== rightAnchor.name) return false;
+    }
+
+    for (let index = 0; index < left.components.length; index++) {
+      const leftComponent = left.components[index];
+      const rightComponent = right.components[index];
+      if (
+        leftComponent.id !== rightComponent.id ||
+        leftComponent.baseGlyphId !== rightComponent.baseGlyphId ||
+        leftComponent.baseGlyphName !== rightComponent.baseGlyphName
+      ) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }
 
@@ -286,6 +331,7 @@ export class LayerCoordinateBuffers {
       () => {
         for (const contour of this.contours) contour.values.value;
         this.anchors.value;
+        for (const component of this.components) component.values.value;
         return this;
       },
       { name: "glyphLayer.coordinates.changed" },
@@ -330,6 +376,57 @@ export class LayerCoordinateBuffers {
     });
 
     return new LayerCoordinateBuffers(xAdvance, contours, anchors, components, lookup);
+  }
+
+  /** Publishes only packed ranges whose numeric values changed. */
+  replaceValues(values: Float64Array): void {
+    let cursor = 0;
+    const xAdvance = values[cursor++] ?? 0;
+    const contours = this.contours.map((contour) => {
+      const length = contour.values.peek().length;
+      const replacement = values.slice(cursor, cursor + length);
+      cursor += length;
+      return replacement;
+    });
+    const anchors = values.slice(cursor, cursor + this.anchors.peek().length);
+    cursor += anchors.length;
+    const components = this.components.map((component) => {
+      const length = component.values.peek().length;
+      const replacement = values.slice(cursor, cursor + length);
+      cursor += length;
+      return replacement;
+    });
+
+    batch(() => {
+      this.xAdvance.set(xAdvance);
+      for (let index = 0; index < contours.length; index++) {
+        const replacement = contours[index];
+        const contour = this.contours[index];
+        if (!contour || LayerCoordinateBuffers.sameValues(contour.values.peek(), replacement)) {
+          continue;
+        }
+        contour.values.set(replacement);
+      }
+      if (!LayerCoordinateBuffers.sameValues(this.anchors.peek(), anchors)) {
+        this.anchors.set(anchors);
+      }
+      for (let index = 0; index < components.length; index++) {
+        const replacement = components[index];
+        const component = this.components[index];
+        if (!component || LayerCoordinateBuffers.sameValues(component.values.peek(), replacement)) {
+          continue;
+        }
+        component.values.set(replacement);
+      }
+    });
+  }
+
+  static sameValues(left: Float64Array, right: Float64Array): boolean {
+    if (left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index++) {
+      if (!Object.is(left[index], right[index])) return false;
+    }
+    return true;
   }
 
   positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
@@ -578,63 +675,4 @@ export class SourceComponentTransform {
       { name: `glyphLayer.component[${componentIndex}].matrix` },
     );
   }
-}
-
-function sameGlyphState(left: GlyphState, right: GlyphState): boolean {
-  if (left.layerId !== right.layerId) return false;
-  if (!sameGlyphStructure(left.structure, right.structure)) return false;
-  if (left.values.length !== right.values.length) return false;
-
-  for (let index = 0; index < left.values.length; index++) {
-    if (!Object.is(left.values[index], right.values[index])) return false;
-  }
-  return true;
-}
-
-function sameGlyphStructure(left: GlyphStructure, right: GlyphStructure): boolean {
-  if (left === right) return true;
-  if (left.contours.length !== right.contours.length) return false;
-  if (left.anchors.length !== right.anchors.length) return false;
-  if (left.components.length !== right.components.length) return false;
-
-  for (let contourIndex = 0; contourIndex < left.contours.length; contourIndex++) {
-    const leftContour = left.contours[contourIndex];
-    const rightContour = right.contours[contourIndex];
-    if (leftContour.id !== rightContour.id || leftContour.closed !== rightContour.closed) {
-      return false;
-    }
-    if (leftContour.points.length !== rightContour.points.length) return false;
-
-    for (let pointIndex = 0; pointIndex < leftContour.points.length; pointIndex++) {
-      const leftPoint = leftContour.points[pointIndex];
-      const rightPoint = rightContour.points[pointIndex];
-      if (
-        leftPoint.id !== rightPoint.id ||
-        leftPoint.pointType !== rightPoint.pointType ||
-        leftPoint.smooth !== rightPoint.smooth
-      ) {
-        return false;
-      }
-    }
-  }
-
-  for (let index = 0; index < left.anchors.length; index++) {
-    const leftAnchor = left.anchors[index];
-    const rightAnchor = right.anchors[index];
-    if (leftAnchor.id !== rightAnchor.id || leftAnchor.name !== rightAnchor.name) return false;
-  }
-
-  for (let index = 0; index < left.components.length; index++) {
-    const leftComponent = left.components[index];
-    const rightComponent = right.components[index];
-    if (
-      leftComponent.id !== rightComponent.id ||
-      leftComponent.baseGlyphId !== rightComponent.baseGlyphId ||
-      leftComponent.baseGlyphName !== rightComponent.baseGlyphName
-    ) {
-      return false;
-    }
-  }
-
-  return true;
 }

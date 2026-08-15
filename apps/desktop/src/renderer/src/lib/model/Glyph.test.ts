@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { GlyphName, GlyphRecord, PointId } from "@shift/types";
 import type { Point } from "@shift/glyph-state";
-import { effect, signal } from "@/lib/signals/signal";
+import { effect, signal, track } from "@/lib/signals/signal";
 import { emptyExternalAxisLocation } from "@/lib/variation/location";
 import { TestEditor } from "@/testing/TestEditor";
 import type { GlyphLayer } from "./Glyph";
@@ -144,7 +144,7 @@ describe("Glyph", () => {
     const [first] = await addTriangle(editor, layer);
     const observedX: number[] = [];
     const subscription = effect(() => {
-      layer.coordinateBuffersChangedCell.value;
+      track(layer.coordinateBuffersChangedCell);
       observedX.push(layer.point(first!.id)?.x ?? NaN);
     });
 
@@ -173,7 +173,8 @@ describe("Glyph", () => {
     subscription.dispose();
   });
 
-  it("resyncs away a pending prediction when the workspace rejects it", async () => {
+  it("resyncs local geometry when the workspace rejects an edit", async () => {
+    const [first] = await addTriangle(editor, layer);
     await editor.addGlyph("B", 66);
     const otherRecord = editor.font.recordForName("B" as GlyphName);
     const otherGlyph = otherRecord ? editor.glyphForId(otherRecord.id) : null;
@@ -182,15 +183,18 @@ describe("Glyph", () => {
     const duplicateContourId = otherLayer.addContour();
     await editor.settle();
 
+    layer.previewPositionPatch([{ kind: "point", id: first!.id, x: 999, y: 999 }]);
     editor.font.editCoordinator.push({
       kind: "addContour",
       addContour: { layerId: layer.layerId, contourId: duplicateContourId, closed: false },
     });
-    expect(layer.contour(duplicateContourId)).not.toBeNull();
     await editor.settle();
 
     const refreshedGlyph = await editor.font.loadGlyph(record.id);
-    expect(refreshedGlyph.layerForSource(layer.source.id)?.contour(duplicateContourId)).toBeNull();
+    expect(refreshedGlyph.layerForSource(layer.source.id)?.point(first!.id)).toMatchObject({
+      x: 0,
+      y: 0,
+    });
   });
 
   it("discards every transaction intent when its body throws", async () => {
@@ -210,7 +214,7 @@ describe("Glyph", () => {
     let pointX = first!.x;
 
     const subscription = effect(() => {
-      layer.coordinateBuffersChangedCell.value;
+      track(layer.coordinateBuffersChangedCell);
       pointX = layer.point(first!.id)?.x ?? pointX;
     });
 

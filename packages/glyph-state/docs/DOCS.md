@@ -6,6 +6,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 
 - **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state.
 - **Architecture Invariant:** `GlyphGeometry` is a lazy reader over `GlyphStructure + values`. The renderer may cache an instance per reactive state update; rendering paths should not rebuild it inside inner draw loops.
+- **Architecture Invariant:** `LayerStateDraft` applies typed, locally representable layer operations to a copied `GlyphState`. It does not interpret `FontIntent` envelopes or replace Rust validation; the authoritative workspace may still reject an operation on font-wide invariants.
 - **Architecture Invariant:** The flat values layout matches `shift-wire`: xAdvance, contour point positions, anchor positions, then component transforms. Any layout change in Rust must update `GlyphGeometry`, `Contour`, `Anchor`, and `Component` together.
 - **Architecture Invariant:** Segment parsing is structural. Two on-curve points produce a line; onCurve/offCurve/onCurve produces a quad; onCurve/offCurve/offCurve/onCurve produces a cubic. Other patterns are skipped by the parser.
 
@@ -15,6 +16,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 packages/glyph-state/src/
   index.ts              -- public API barrel
   GlyphGeometry.ts      -- state reader, bounds, sidebearings, position packing
+  LayerStateDraft.ts    -- copied state for atomic local layer operations
   Contour.ts            -- contour reader, point access, neighbors, selection bounds
   Anchor.ts             -- anchor reader and anchor value offsets
   Component.ts          -- component reader and decomposed transform matrix
@@ -25,6 +27,7 @@ packages/glyph-state/src/
 ## Key Types
 
 - **`GlyphGeometry`** -- immutable reader over `GlyphStructure + Float64Array`; exposes `xAdvance`, `contours`, `anchors`, `components`, `allPoints`, `bounds`, `sidebearings`, lookup helpers, preview value updates, and packed position updates.
+- **`LayerStateDraft`** -- transient mutable copy used to apply typed local point, contour, anchor, and advance operations before publishing one complete state.
 - **`Contour`** -- reader for one contour's point records and point coordinates. Exposes endpoint/on-curve queries, wrapped `pointAt`, `withNeighbors`, `segments`, `selectionBounds`, and `canClose`.
 - **`Anchor`** -- reader for one anchor's metadata and coordinates.
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.

@@ -1,5 +1,4 @@
-import type { FontIntent, GlyphState } from "@shift/types";
-import type { GlyphPositions } from "@shift/glyph-state";
+import type { FontIntent } from "@shift/types";
 
 declare const WorkspaceEditIdBrand: unique symbol;
 
@@ -15,17 +14,7 @@ export interface WorkspaceEdit {
   readonly label?: string;
 }
 
-export type LocalLayerUpdate =
-  | {
-      /** Sparse numeric update preserving the reactive buffer container. */
-      readonly kind: "patch";
-      readonly positions: GlyphPositions;
-      readonly xAdvance: number | null;
-    }
-  | {
-      /** Complete predicted state required after a structural edit. */
-      readonly kind: "replace";
-      readonly state: GlyphState;
-    };
+/** Applies one accepted edit to renderer-local state before workspace I/O. */
+export type PendingEditApplication = (editId: WorkspaceEditId) => void;
 
 export type WorkspaceApplyStatus = "idle" | "queued" | "applying";
