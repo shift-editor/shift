@@ -58,7 +58,7 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 - Prefer `getByRole()` and `getByLabel()` for semantic controls and named application regions.
 - Use stable domain test IDs when repeated labels cannot identify one record: `source-{id}`, `instance-{id}`, and their `settings-*` variants.
 - Reuse surface and control locators from `fixtures/appLocators.ts`; do not traverse parents, select the first `canvas`/`aside`, or depend on styling classes.
-- Canvas cells have no DOM identity. Keep their locator-relative coordinate contract inside `clickFirstCatalogGlyph()` rather than scattering layout coordinates across specs.
+- Canvas cells have no DOM identity. Use `openCatalogGlyph()` to filter to one stable glyph ID before clicking; keep the remaining locator-relative coordinate contract inside `clickFirstCatalogGlyph()` rather than scattering layout coordinates across specs.
 - Use locator-relative positions for other canvas clicks.
 - For raw mouse drags, derive page coordinates from the target canvas's `boundingBox()`.
 - Keep interactions inside measured bounds; do not assume the host desktop is wider than the fixture window.

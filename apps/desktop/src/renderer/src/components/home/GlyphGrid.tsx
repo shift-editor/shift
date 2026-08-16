@@ -76,6 +76,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
   return (
     <section
       aria-label="Glyph catalog surface"
+      data-filtered-glyph-count={filteredGlyphs.length}
+      data-first-glyph-id={filteredGlyphs[0]?.id}
       className="relative h-full min-h-0 w-full overflow-hidden font-ui text-primary"
     >
       <div

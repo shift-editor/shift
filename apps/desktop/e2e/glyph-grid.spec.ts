@@ -6,6 +6,7 @@ import {
   glyphCatalogCanvas,
   glyphCatalogSurface,
   glyphCatalogViewport,
+  openCatalogGlyph,
 } from "./fixtures/appLocators";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
@@ -73,8 +74,9 @@ test.describe("Resident Glyph Grid", () => {
       )
       .toEqual(initialSize);
 
-    await clickFirstCatalogGlyph(page);
-    await page.waitForURL(/#\/editor\//);
+    const firstGlyph = await page.evaluate(() => window.shift?.font.glyphEntries()[0]);
+    if (!firstGlyph) throw new Error("Expected first catalog glyph");
+    await openCatalogGlyph(page, firstGlyph.name, firstGlyph.id);
     await expect(page.locator("#scene-canvas")).toBeVisible();
     await afterNextPaint(page);
 

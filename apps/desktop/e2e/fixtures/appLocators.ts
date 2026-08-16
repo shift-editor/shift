@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 
@@ -44,4 +44,23 @@ export async function firstAxisSlider(page: Page) {
 /** Keeps the canvas layout coordinate contract in one place. */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
+}
+
+export async function openCatalogGlyph(
+  page: Page,
+  glyphName: string,
+  glyphId: string,
+): Promise<void> {
+  await page.getByPlaceholder("Search glyphs...").fill(glyphName);
+  const surface = glyphCatalogSurface(page);
+  await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
+  await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await clickFirstCatalogGlyph(page);
+  await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
 }
