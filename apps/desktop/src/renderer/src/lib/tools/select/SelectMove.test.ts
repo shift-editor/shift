@@ -25,12 +25,11 @@ describe("Select movement preserves selected geometry", () => {
   it("moves every point when dragging one point in a multi-point selection", async () => {
     editor.selection.select([firstId, middleId, lastId]);
 
-    const drag = editor.dragScene({
+    const drag = await editor.dragScene({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 190, y: 180 },
     });
-    await editor.settle();
 
     expect(editor.pointPosition(firstId)).toEqual({ x: 100 + drag.delta.x, y: 100 + drag.delta.y });
     expect(editor.pointPosition(middleId)).toEqual({
@@ -44,12 +43,11 @@ describe("Select movement preserves selected geometry", () => {
     const anchorId = layer.addAnchor("top", { x: 300, y: 300 });
     await editor.settle();
 
-    const drag = editor.dragScene({
+    const drag = await editor.dragScene({
       down: editor.anchorPosition(anchorId),
       start: { x: 304, y: 300 },
       end: { x: 330, y: 320 },
     });
-    await editor.settle();
 
     expect(editor.selection.has(anchorId)).toBe(true);
     expect(editor.anchorPosition(anchorId)).toEqual({
@@ -63,12 +61,11 @@ describe("Select movement preserves selected geometry", () => {
     await editor.settle();
     editor.selection.select([firstId, middleId, anchorId]);
 
-    const drag = editor.dragScene({
+    const drag = await editor.dragScene({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 180, y: 170 },
     });
-    await editor.settle();
 
     expect(editor.pointPosition(firstId)).toEqual({ x: 100 + drag.delta.x, y: 100 + drag.delta.y });
     expect(editor.pointPosition(middleId)).toEqual({
@@ -86,12 +83,11 @@ describe("Select movement preserves selected geometry", () => {
     if (!contour) throw new Error("Expected contour");
     editor.selection.select([contour.id, firstId, middleId, lastId]);
 
-    const drag = editor.dragScene({
+    const drag = await editor.dragScene({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 180, y: 170 },
     });
-    await editor.settle();
 
     expect(editor.pointPosition(firstId)).toEqual({ x: 100 + drag.delta.x, y: 100 + drag.delta.y });
     expect(editor.pointPosition(middleId)).toEqual({
@@ -118,19 +114,18 @@ describe("Select movement preserves selected geometry", () => {
 
   it("commits movement as one undoable and redoable edit", async () => {
     editor.selection.select([firstId, middleId, lastId]);
-    editor.dragScene({
+    await editor.dragScene({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 190, y: 180 },
     });
-    await editor.settle();
     const moved = [
       editor.pointPosition(firstId),
       editor.pointPosition(middleId),
       editor.pointPosition(lastId),
     ];
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect([
       editor.pointPosition(firstId),
       editor.pointPosition(middleId),
@@ -141,7 +136,7 @@ describe("Select movement preserves selected geometry", () => {
       { x: 200, y: 200 },
     ]);
 
-    await editor.redoAndSettle();
+    await editor.redo();
     expect([
       editor.pointPosition(firstId),
       editor.pointPosition(middleId),
@@ -180,12 +175,11 @@ describe("Select movement preserves selected geometry", () => {
     const incomingBefore = editor.pointPosition(incoming.controlEnd.id);
     const outgoingBefore = editor.pointPosition(outgoing.controlStart.id);
 
-    const drag = editor.dragScene({
+    const drag = await editor.dragScene({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 180, y: 170 },
     });
-    await editor.settle();
 
     expect(editor.pointPosition(incoming.controlEnd.id)).toEqual({
       x: incomingBefore.x + drag.delta.x,

@@ -197,6 +197,7 @@ export class TestEditor extends Editor {
   }
 
   anchorPosition(anchorId: AnchorId): Point2D {
+    this.#assertWorkspaceSettled();
     const anchor = this.requireGlyphLayer().anchor(anchorId);
     if (!anchor) throw new Error("Expected source anchor");
 
@@ -206,8 +207,7 @@ export class TestEditor extends Editor {
   async drawOpenContour(points: readonly Point2D[]): Promise<readonly PointId[]> {
     this.selectTool("pen");
     for (const point of points) {
-      this.clickGlyphLocal(point.x, point.y);
-      await this.settle();
+      await this.clickGlyphLocal(point.x, point.y);
     }
 
     const contour = this.openContour;

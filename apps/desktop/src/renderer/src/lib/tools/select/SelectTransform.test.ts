@@ -28,12 +28,11 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const bounds = editor.selectionBounds();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: bounds.right, y: (bounds.top + bounds.bottom) / 2 },
         start: { x: bounds.right + 4, y: (bounds.top + bounds.bottom) / 2 },
         end: { x: bounds.right + 50, y: (bounds.top + bounds.bottom) / 2 },
       });
-      await editor.settle();
 
       expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
       expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 200 });
@@ -43,12 +42,11 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const bounds = editor.selectionBounds();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: (bounds.left + bounds.right) / 2, y: bounds.bottom },
         start: { x: (bounds.left + bounds.right) / 2, y: bounds.bottom + 4 },
         end: { x: (bounds.left + bounds.right) / 2, y: bounds.bottom + 50 },
       });
-      await editor.settle();
 
       expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
       expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 250 });
@@ -58,12 +56,11 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const bounds = editor.selectionBounds();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: bounds.right, y: bounds.bottom },
         start: { x: bounds.right + 4, y: bounds.bottom + 4 },
         end: { x: bounds.right + 50, y: bounds.bottom + 25 },
       });
-      await editor.settle();
 
       expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
       expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 225 });
@@ -73,13 +70,12 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const bounds = editor.selectionBounds();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: bounds.right, y: bounds.bottom },
         start: { x: bounds.right + 4, y: bounds.bottom + 4 },
         end: { x: bounds.right + 100, y: bounds.bottom + 50 },
         options: { shiftKey: true },
       });
-      await editor.settle();
 
       expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
       expect(editor.pointPosition(secondId)).toEqual({ x: 300, y: 300 });
@@ -90,12 +86,11 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       if (!bounds) throw new Error("Expected selection bounds");
       const centerY = (bounds.top + bounds.bottom) / 2;
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: bounds.right, y: centerY },
         start: { x: bounds.right + 4, y: centerY },
         end: { x: 50, y: centerY },
       });
-      await editor.settle();
 
       expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
       expect(editor.pointPosition(secondId)).toEqual({ x: 50, y: 200 });
@@ -119,28 +114,27 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     it("commits resize as one undoable and redoable edit", async () => {
       const bounds = editor.selectionBounds();
       if (!bounds) throw new Error("Expected selection bounds");
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: bounds.right, y: bounds.bottom },
         start: { x: bounds.right + 4, y: bounds.bottom + 4 },
         end: { x: bounds.right + 50, y: bounds.bottom + 50 },
       });
-      await editor.settle();
       const resized = editor.pointPosition(secondId);
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 200 });
-      await editor.redoAndSettle();
+      await editor.redo();
       expect(editor.pointPosition(secondId)).toEqual(resized);
     });
   });
 
   describe("rotation", () => {
-    function rotateAcrossBottomEdge(): void {
+    async function rotateAcrossBottomEdge(): Promise<void> {
       const bounds = editor.selectionBounds();
       if (!bounds) throw new Error("Expected selection bounds");
       const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: bounds.right + offset, y: bounds.bottom + offset },
         start: { x: bounds.right + offset + 4, y: bounds.bottom + offset + 4 },
         end: { x: bounds.left - offset, y: bounds.bottom + offset },
@@ -148,8 +142,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     }
 
     it("rotates around the center of the selection", async () => {
-      rotateAcrossBottomEdge();
-      await editor.settle();
+      await rotateAcrossBottomEdge();
 
       expect(editor.pointPosition(firstId).x).toBeCloseTo(200);
       expect(editor.pointPosition(firstId).y).toBeCloseTo(100);
@@ -162,8 +155,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       if (!node) throw new Error("Expected glyph node");
       editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
 
-      rotateAcrossBottomEdge();
-      await editor.settle();
+      await rotateAcrossBottomEdge();
 
       expect(editor.pointPosition(firstId).x).toBeCloseTo(200);
       expect(editor.pointPosition(firstId).y).toBeCloseTo(100);
@@ -197,17 +189,16 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("commits rotation as one undoable and redoable edit", async () => {
-      rotateAcrossBottomEdge();
-      await editor.settle();
+      await rotateAcrossBottomEdge();
       const rotated = [editor.pointPosition(firstId), editor.pointPosition(secondId)];
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual([
         { x: 100, y: 100 },
         { x: 200, y: 200 },
       ]);
 
-      await editor.redoAndSettle();
+      await editor.redo();
       expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual(rotated);
     });
 
@@ -216,8 +207,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       await editor.settle();
       editor.selection.select([firstId, secondId, anchorId]);
 
-      rotateAcrossBottomEdge();
-      await editor.settle();
+      await rotateAcrossBottomEdge();
       const first = editor.pointPosition(firstId);
       const second = editor.pointPosition(secondId);
 
@@ -274,22 +264,21 @@ describe("Select curve bending preserves edit lifecycle", () => {
   it("commits bending as one undoable and redoable edit", async () => {
     const oneBefore = editor.pointPosition(controlOneId);
     const twoBefore = editor.pointPosition(controlTwoId);
-    editor.dragScene({
+    await editor.dragScene({
       down: bendPoint,
       start: { x: bendPoint.x + 4, y: bendPoint.y },
       end: { x: bendPoint.x + 4, y: bendPoint.y + 40 },
       options: { metaKey: true },
     });
-    await editor.settle();
     const bent = [editor.pointPosition(controlOneId), editor.pointPosition(controlTwoId)];
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect([editor.pointPosition(controlOneId), editor.pointPosition(controlTwoId)]).toEqual([
       oneBefore,
       twoBefore,
     ]);
 
-    await editor.redoAndSettle();
+    await editor.redo();
     expect([editor.pointPosition(controlOneId), editor.pointPosition(controlTwoId)]).toEqual(bent);
   });
 });
