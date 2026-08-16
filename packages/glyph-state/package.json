@@ -2,6 +2,7 @@
   "name": "@shift/glyph-state",
   "version": "0.0.1",
   "private": true,
+  "license": "GPL-3.0-only",
   "description": "Pure readers and geometry helpers for GlyphStructure + values state",
   "type": "module",
   "main": "./src/index.ts",

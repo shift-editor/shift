@@ -26,7 +26,7 @@
       "riscv64gc-unknown-linux-gnu"
     ]
   },
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "@napi-rs/cli": "3.6.2",
     "vitest": "^4.1.10"

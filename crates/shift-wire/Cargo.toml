@@ -3,7 +3,7 @@ edition = "2021"
 name = "shift-wire"
 version = "0.0.0"
 authors = ["Kostya Farber <kostya.farber@gmail.com>"]
-license = "MIT"
+license = "GPL-3.0-only"
 
 [lib]
 crate-type = ["rlib"]

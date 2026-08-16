@@ -1,0 +1,124 @@
+name: Nightly Desktop
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly-desktop
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-15
+            platform: darwin
+            arch: arm64
+            targets: zip
+            package-dir: Shift Nightly-darwin-arm64
+          - name: macOS x64
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+            targets: zip
+            package-dir: Shift Nightly-darwin-x64
+          - name: Windows x64
+            runner: windows-latest
+            platform: win32
+            arch: x64
+            targets: squirrel
+            package-dir: Shift Nightly-win32-x64
+          - name: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            arch: x64
+            targets: "deb,rpm"
+            package-dir: Shift Nightly-linux-x64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Install Linux maker tools
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install --yes fakeroot rpm xvfb
+
+      - name: Import Developer ID certificate
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/shift-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          export CERTIFICATE_PATH
+          python3 -c 'import base64, os; open(os.environ["CERTIFICATE_PATH"], "wb").write(base64.b64decode(os.environ["APPLE_CERTIFICATE"]))'
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Set nightly version
+        id: version
+        shell: bash
+        run: |
+          VERSION="0.1.0-nightly.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          node scripts/product-version.mjs set "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build native bridge
+        run: pnpm build:native
+
+      - name: Make desktop distributables
+        env:
+          SHIFT_DISTRIBUTION: nightly
+          SIGN_MACOS: ${{ matrix.platform == 'darwin' && '1' || '0' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
+
+      - name: Smoke-test packaged application
+        run: node scripts/smoke-packaged.mjs "apps/desktop/out/${{ matrix.package-dir }}"
+
+      - name: Verify macOS signature
+        if: matrix.platform == 'darwin'
+        run: |
+          codesign --verify --deep --strict --verbose=2 "apps/desktop/out/${{ matrix.package-dir }}/Shift Nightly.app"
+          xcrun stapler validate "apps/desktop/out/${{ matrix.package-dir }}/Shift Nightly.app"
+
+      - name: Upload nightly artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Shift-Nightly-${{ steps.version.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: apps/desktop/out/make/**
+          if-no-files-found: error
+          retention-days: 14

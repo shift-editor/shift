@@ -5,7 +5,6 @@
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
     <img width="2320" height="1456" alt="image" src="https://github.com/user-attachments/assets/9a2ed77a-66c0-4881-a632-c7831d9dc420" />
 
-
   </p>
 </div>
 
@@ -88,6 +87,6 @@ Join our [Discord server](https://discord.gg/582FxBdNH7) to ask questions, repor
 
 ## License
 
-[GNU General Public License (GPL) v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html)
+[GNU General Public License v3.0 only (`GPL-3.0-only`)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
-Copyright © 2026 Kostya Farber. All rights reserved.
+Copyright © 2026 Kostya Farber.
