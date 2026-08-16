@@ -826,6 +826,30 @@ fn resume_package_workspace_can_save_unsaved_store_state() {
 }
 
 #[test]
+fn dirty_follows_saved_undo_position_across_redo_and_branching() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let save_path = temp.path().join("SavedFont.shift");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    create_glyph(&mut workspace, "A", vec![65]);
+    create_glyph(&mut workspace, "B", vec![66]);
+    workspace.save_as(&save_path).unwrap();
+
+    create_glyph(&mut workspace, "C", vec![67]);
+    assert!(workspace.is_dirty().unwrap());
+    workspace.undo().unwrap();
+    assert!(!workspace.is_dirty().unwrap());
+    workspace.redo().unwrap();
+    assert!(workspace.is_dirty().unwrap());
+
+    workspace.undo().unwrap();
+    workspace.undo().unwrap();
+    assert!(workspace.is_dirty().unwrap());
+    create_glyph(&mut workspace, "D", vec![68]);
+    assert!(workspace.is_dirty().unwrap());
+}
+
+#[test]
 fn save_rejects_missing_package_target_without_recreating_it() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

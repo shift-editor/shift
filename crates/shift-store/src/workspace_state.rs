@@ -420,16 +420,23 @@ impl ShiftStore {
 }
 
 pub(crate) fn mark_workspace_dirty_in_tx(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    mark_workspace_changed_in_tx(tx, true)
+}
+
+pub(crate) fn mark_workspace_changed_in_tx(
+    tx: &Transaction<'_>,
+    dirty: bool,
+) -> Result<(), StoreError> {
     tx.execute(
         "
         UPDATE workspace_state
         SET
-            dirty = 1,
+            dirty = ?1,
             revision = revision + 1,
-            updated_at_ms = ?1
+            updated_at_ms = ?2
         WHERE id = 1
         ",
-        params![now_ms()],
+        params![dirty, now_ms()],
     )?;
     Ok(())
 }
