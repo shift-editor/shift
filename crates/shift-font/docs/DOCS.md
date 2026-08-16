@@ -13,6 +13,7 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Fontdrasil exclusively constructs variation sample order, supports, and numeric deltas. `shift-font` exposes compiled `VariationBasis` and `AxisMappingBasis` values; TypeScript and transport layers only evaluate or translate them.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
 - **Architecture Invariant:** UPM is font-global. Metric identities and semantic roles are font-owned; positions, overshoots, and optional technical metrics are authored on master sources.
+- **Architecture Invariant:** Point removal never leaves empty contour records. Removing a contour's final point prunes the contour and its stable identity from the font-wide structure index.
 
 ## Codemap
 
