@@ -28,7 +28,7 @@ pnpm version:check
 pnpm version:set 0.1.0-alpha.1
 ```
 
-Release Please owns normal version changes. `.release-please-manifest.json` starts at `0.1.0-alpha.0`, so the first tagged release is `v0.1.0-alpha.1`. The initial changelog boundary is commit `ef7d07a84471e23b53895255b9ad967849440465`, immediately before the release foundation; older project history is not imported into the first release notes.
+Release Please owns normal version changes. `.release-please-manifest.json` starts at `0.1.0-alpha.0`, so the first tagged release is `v0.1.0-alpha.1`. The initial changelog boundary is commit `788ba986410b4d2837e9d269ff8938b1dbc5aa9a`, immediately before the release foundation; older project history is not imported into the first release notes.
 
 Use Conventional Commit prefixes on commits and pull requests. `feat`, `fix`, and `perf` entries appear in the generated public changelog. `refactor`, `docs`, `test`, `build`, `ci`, `style`, and `chore` remain valid commit types but stay hidden from public release notes. Before publishing the first Alpha, add a short curated overview and known-issues section to its Release Please pull request; generated entries alone do not describe the existing product.
 
