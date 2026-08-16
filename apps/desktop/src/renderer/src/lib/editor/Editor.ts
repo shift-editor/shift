@@ -886,13 +886,13 @@ export class Editor {
     return this.#camera;
   }
 
-  public undo() {
+  public async undo(): Promise<void> {
     // One undo authority: the workspace ledger (state-pair replay).
-    void this.font.editCoordinator.undo();
+    await this.font.editCoordinator.undo();
   }
 
-  public redo() {
-    void this.font.editCoordinator.redo();
+  public async redo(): Promise<void> {
+    await this.font.editCoordinator.redo();
   }
 
   /**
@@ -1250,11 +1250,12 @@ export class Editor {
       selection.layer.removePoints(selection.pointIds);
     });
     this.selection.clear();
+    await this.font.editCoordinator.settled();
 
     return true;
   }
 
-  public deleteSelection(): boolean {
+  public async deleteSelection(): Promise<boolean> {
     const selection = this.#pointSelectionFromIds(this.selection.ids);
     if (!selection || selection.pointIds.length === 0) return false;
 
@@ -1262,6 +1263,7 @@ export class Editor {
       selection.layer.removePoints(selection.pointIds);
     });
     this.selection.clear();
+    await this.font.editCoordinator.settled();
 
     return true;
   }
@@ -1282,6 +1284,7 @@ export class Editor {
         if (!inserted) return false;
 
         this.selection.select(inserted);
+        await this.font.editCoordinator.settled();
         return true;
       }
 

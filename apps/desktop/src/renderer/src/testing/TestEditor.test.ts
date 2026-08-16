@@ -36,6 +36,42 @@ describe("TestEditor", () => {
     });
   });
 
+  describe("settled user actions", () => {
+    it("waits for glyph-local clicks before returning", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      const point = editor.openContour?.points[0];
+      if (!point) throw new Error("Expected point");
+
+      expect(editor.pointPosition(point.id)).toEqual({ x: 100, y: 200 });
+    });
+
+    it("rejects confirmed geometry reads while a raw action is pending", async () => {
+      editor.selectTool("pen");
+      const screen = editor.projectSceneToScreen({ x: 100, y: 200 });
+      editor.pointerDown(screen.x, screen.y).pointerUp(screen.x, screen.y);
+      const point = editor.openContour?.points[0];
+      if (!point) throw new Error("Expected point");
+
+      expect(() => editor.pointPosition(point.id)).toThrow("Workspace edits are pending");
+      await editor.settle();
+      expect(editor.pointPosition(point.id)).toEqual({ x: 100, y: 200 });
+    });
+
+    it("waits for editing key presses before returning", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      const point = editor.openContour?.points[0];
+      if (!point) throw new Error("Expected point");
+      editor.selection.select([point.id]);
+      editor.selectTool("select");
+
+      await editor.pressKey("ArrowRight");
+
+      expect(editor.pointPosition(point.id)).toEqual({ x: 101, y: 200 });
+    });
+  });
+
   describe("glyph resolution", () => {
     it("distinguishes catalog records from acquired Glyphs", async () => {
       const record = editor.font.createGlyph("B" as GlyphName);
@@ -72,8 +108,7 @@ describe("TestEditor", () => {
 
     it("resolves placed glyph points", async () => {
       editor.selectTool("pen");
-      editor.clickGlyphLocal(100, 200);
-      await editor.settle();
+      await editor.clickGlyphLocal(100, 200);
 
       const layer = editor.glyphLayer;
       const node = editor.glyphNode;
@@ -103,10 +138,8 @@ describe("TestEditor", () => {
 
     it("resolves placed glyph segments and contours", async () => {
       editor.selectTool("pen");
-      editor.clickGlyphLocal(100, 200);
-      await editor.settle();
-      editor.clickGlyphLocal(180, 200);
-      await editor.settle();
+      await editor.clickGlyphLocal(100, 200);
+      await editor.clickGlyphLocal(180, 200);
 
       const layer = editor.glyphLayer;
       const node = editor.glyphNode;
