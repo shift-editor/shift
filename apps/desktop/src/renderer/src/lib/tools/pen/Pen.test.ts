@@ -109,6 +109,25 @@ describe("Pen tool", () => {
       expect(contour?.segments().length).toBe(1);
       expect(contour?.segments()[0]?.type).toBe("cubic");
     });
+
+    it("keeps the curve visible when its drag preview ends", async () => {
+      editor.click(100, 100);
+      await editor.settle();
+
+      const renderModel = editor.sceneGlyphRenderModel;
+      if (!renderModel) throw new Error("Expected glyph render model");
+
+      editor.pointerDown(300, 100);
+      editor.pointerMove(380, 140);
+      editor.pointerMove(380, 160);
+      editor.pointerMove(380, 180);
+      editor.pointerUp(380, 180);
+
+      expect(renderModel.contours[0]?.contour.segments()[0]?.type).toBe("cubic");
+
+      await editor.settle();
+      expect(renderModel.contours[0]?.contour.segments()[0]?.type).toBe("cubic");
+    });
   });
 
   describe("durability and undo through the workspace", () => {
