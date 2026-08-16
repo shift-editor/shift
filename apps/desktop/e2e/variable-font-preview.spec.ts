@@ -40,11 +40,11 @@ test.describe("variable imported font projection", () => {
     await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
     await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveCount(0);
-    const mediumSourceId = await page.evaluate(
-      () => window.shiftSession?.font.sources.find(({ name }) => name === "Medium")?.id,
+    const mediumInstanceId = await page.evaluate(
+      () => window.shiftSession?.font.namedInstances.find(({ name }) => name === "Medium")?.id,
     );
-    if (!mediumSourceId) throw new Error("Expected Medium source");
-    await page.getByTestId(`source-${mediumSourceId}`).click();
+    if (!mediumInstanceId) throw new Error("Expected Medium instance");
+    await page.getByTestId(`instance-${mediumInstanceId}`).click();
     await expect
       .poll(() =>
         page.evaluate(() => window.shiftSession?.editor.externalLocation.values().next().value),
