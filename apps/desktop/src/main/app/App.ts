@@ -23,6 +23,7 @@ import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
 import type { FontSessionHost } from "../workspace/FontSessionHost";
 import { showOpenFontDialog } from "../document/openFontDialog";
+import { shiftProductName } from "../release";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -85,6 +86,13 @@ export class App {
    * Command handlers resolve the active window from a fresh context at run time.
    */
   start(): void {
+    const applicationName = app.isPackaged ? shiftProductName : `${shiftProductName} Dev`;
+    app.setName(applicationName);
+
+    if (!app.commandLine.hasSwitch("user-data-dir")) {
+      app.setPath("userData", path.join(app.getPath("appData"), applicationName));
+    }
+
     this.#log.info("starting");
 
     if (started) {
