@@ -33,7 +33,7 @@ export class PointObject implements ShiftObjectOf<"point"> {
     if (!this.layer) return this.#geometry;
 
     track(this.layer.structureCell);
-    track(this.layer.coordinateBuffersChangedCell);
+    track(this.layer.buffersChangedCell);
     return this.layer.geometry;
   }
 

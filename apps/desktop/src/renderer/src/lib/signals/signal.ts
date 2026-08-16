@@ -510,7 +510,11 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
       // Copy subscribers to avoid issues during iteration
       const subscribers = Array.from(this.#subscribers);
       for (const subscriber of subscribers) {
-        subscriber.execute();
+        if (batchDepth > 0 && subscriber instanceof EffectImpl) {
+          pendingEffects.add(subscriber);
+        } else {
+          subscriber.execute();
+        }
       }
     }
   }

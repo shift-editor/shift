@@ -284,7 +284,7 @@ describe("variable editing across sources", () => {
     const boldSource = await loadGlyphLayer(stack, glyphId, bold);
     const point = boldSource.allPoints[1]!;
 
-    boldSource.commitPositionPatch([{ kind: "point", id: point.id, x: 250, y: 0 }]);
+    boldSource.applyPositionPatch([{ kind: "point", id: point.id, x: 250, y: 0 }]);
     await stack.editCoordinator.settled();
 
     expect(boldSource.point(point.id)).toMatchObject({ x: 250, y: 0 });

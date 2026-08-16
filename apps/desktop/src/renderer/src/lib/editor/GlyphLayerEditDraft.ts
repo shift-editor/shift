@@ -11,8 +11,8 @@ export type GlyphLayerEditSubject = GlyphLayerPositionSubject;
  * Preview-backed authored layer position edit.
  *
  * During interaction, position patches are applied to the local reactive layer
- * only. Commit writes the final sparse patch to Rust and records an undoable
- * command without round-tripping the full glyph values buffer.
+ * only. Commit accepts the final sparse patch as one pending workspace edit;
+ * applying its absolute coordinates again is intentionally idempotent.
  */
 export class GlyphLayerEditDraft {
   readonly glyphLayer: GlyphLayer;
@@ -66,8 +66,7 @@ export class GlyphLayerEditDraft {
 
     if (!this.#preview || this.#preview.positions.length === 0) return;
 
-    // The movePoints intent from commitPositionPatch IS the ledger entry.
-    this.glyphLayer.commitPositionPatch(this.#preview.positions);
+    this.glyphLayer.applyPositionPatch(this.#preview.positions);
   }
 
   discard(): void {

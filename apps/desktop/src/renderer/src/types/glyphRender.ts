@@ -1,8 +1,6 @@
 import type { Bounds } from "@shift/geo";
 import type { SegmentedContour } from "@shift/glyph-state";
-import type { AnchorData, AnchorId, ContourData, ContourId } from "@shift/types";
-import type { LayerContourCoordinates } from "@/lib/model/GlyphLayerState";
-import type { Signal } from "@/lib/signals";
+import type { AnchorId, ContourId } from "@shift/types";
 
 /** Font metrics needed by glyph guide drawing. */
 export interface GlyphGuideMetrics {
@@ -34,17 +32,4 @@ export interface GlyphRenderAnchor {
   readonly name?: string;
   readonly x: number;
   readonly y: number;
-}
-
-/** Authored contour structure paired with its live coordinate buffer. */
-export interface GlyphRenderContourInput {
-  readonly data: ContourData;
-  readonly coordinates: LayerContourCoordinates;
-}
-
-/** Authored anchor structure paired with its live coordinate buffer offset. */
-export interface GlyphRenderAnchorInput {
-  readonly data: AnchorData;
-  readonly values: Signal<Float64Array>;
-  readonly offset: number;
 }

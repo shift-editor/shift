@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { effect, track } from "@/lib/signals/signal";
 import type { AnchorId, ContourId, GlyphState, LayerId, PointId } from "@shift/types";
 import { GlyphLayerState } from "./GlyphLayerState";
 
@@ -140,5 +141,32 @@ describe("glyph layer geometry follows coordinate patches", () => {
     expect(state.xAdvance).toBe(650);
     expect(sidebearings.peek()).toEqual({ lsb: 10, rsb: 620 });
     expect(state.sidebearings).toEqual({ lsb: 10, rsb: 620 });
+  });
+
+  it("invalidates the layer-buffer dependency when advance changes", () => {
+    const state = new GlyphLayerState(layerState());
+    const observed: number[] = [];
+    const subscription = effect(() => {
+      track(state.buffersChangedCell);
+      observed.push(state.xAdvance);
+    });
+
+    state.replaceValues(new Float64Array([650, 10, 20, 30, 40, 300, 400]));
+
+    expect(observed).toEqual([500, 650]);
+    subscription.dispose();
+  });
+
+  it("does not invalidate contour coordinates when only advance changes", () => {
+    const state = new GlyphLayerState(layerState());
+    const observed: number[] = [];
+    const subscription = effect(() => {
+      observed.push(state.buffers.contours[0]!.valuesCell.value[0] ?? NaN);
+    });
+
+    state.replaceValues(new Float64Array([650, 10, 20, 30, 40, 300, 400]));
+
+    expect(observed).toEqual([10]);
+    subscription.dispose();
   });
 });

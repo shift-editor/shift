@@ -22,7 +22,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `FrameHandler` deduplicates `requestAnimationFrame` calls per canvas layer. Multiple signal changes within a single frame coalesce into one render. Canvas lifecycle changes, such as replacing a layer context after resize, are represented as renderer surface signals so redraw causes remain inspectable.
 
-**Architecture Invariant:** `GlyphLayerEditDraft` is the only way to perform continuous layer previews (drags). Call `beginGlyphLayerEditDraft()` at drag start, `preview*()` on each move, and either `commit(label)` or `discard()` at drag end. Draft internally records a single undo command from frozen base positions. Calling `commit` twice is a no-op; forgetting to call `commit`/`discard` leaks the preview state.
+**Architecture Invariant:** `GlyphLayerEditDraft` is the only way to perform continuous layer previews (drags). Call `beginGlyphLayerEditDraft()` at drag start, `preview*()` on each move, and either `commit()` or `discard()` at drag end. Commit accepts the final absolute positions as one pending workspace edit; applying those positions over the preview is intentionally idempotent. Calling `commit` twice is a no-op; forgetting to call `commit`/`discard` leaks the preview state.
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
 
@@ -127,7 +127,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()
 
 ### Draft pattern (continuous manipulation)
 
-`Editor.beginGlyphLayerEditDraft(subject)` captures base point/anchor positions from the active `GlyphLayer`. During drag, `draft.preview*()` applies positions to the reactive glyph layer only. On commit, it syncs the final sparse patch through `GlyphLayer.commitPositionPatch()` as one workspace move-points intent. On discard, it restores the frozen base positions as a preview.
+`Editor.beginGlyphLayerEditDraft(subject)` captures base point/anchor positions from the active `GlyphLayer`. During drag, `draft.preview*()` applies positions to the reactive glyph layer only. On commit, it accepts the final sparse patch through `GlyphLayer.applyPositionPatch()` as one pending workspace edit. On discard, it restores the frozen base positions as a preview.
 
 ### Hit testing
 

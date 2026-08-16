@@ -28,12 +28,10 @@ import {
   type Signal,
   type WritableSignal,
 } from "@/lib/signals/signal";
-import type { GlyphObjectIndex, GlyphObjectSegment } from "@/types";
+import type { GlyphObjectIndex, GlyphObjectSegment, PendingEditId } from "@/types";
 import type { FontStoreOptions } from "@/types/font";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { Glyph } from "./Glyph";
-
-export type WorkspaceCommitState = "idle" | "queued" | "applying";
 
 type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
 
@@ -225,18 +223,31 @@ export class FontStore {
     });
   }
 
+  /** Restores every loaded layer touched by a throwing renderer transaction. */
+  rollbackEdit(editId: PendingEditId): void {
+    for (const cell of this.#layerStateCells.values()) {
+      cell.peek()?.rollbackEdit(editId);
+    }
+  }
+
+  /** Confirms a renderer-tracked edit and folds its replace-grade workspace echo. */
+  confirmEdit(editId: PendingEditId, applied: AppliedChange): readonly GlyphId[] {
+    return this.#foldWorkspaceChange(applied, editId);
+  }
+
+  /** Folds an untracked undo, redo, snapshot, or direct workspace echo. */
+  applyWorkspaceChange(applied: AppliedChange): readonly GlyphId[] {
+    return this.#foldWorkspaceChange(applied, null);
+  }
+
   /**
    * Folds a replace-grade workspace echo and reports structural projection work.
    *
-   * @remarks
    * Numeric layer edits flow through live layer signals and return no projection
    * work. Axis/source topology, glyph-layer membership, and structural layer
    * replacements return only resident glyph identities that need native rebuilding.
-   *
-   * @param applied - Replace-grade workspace echo to fold into renderer state.
-   * @returns Resident glyph identities whose projections need replacement.
    */
-  applyWorkspaceChange(applied: AppliedChange): readonly GlyphId[] {
+  #foldWorkspaceChange(applied: AppliedChange, editId: PendingEditId | null): readonly GlyphId[] {
     const current = this.#workspace.peek();
     if (!current) return [];
     const changedGlyphLayers = applied.next?.glyphs
@@ -301,15 +312,18 @@ export class FontStore {
       for (const layer of applied.layers) {
         if (!this.#glyphByLayer.has(layer.layerId)) continue;
 
-        if (layer.structure) {
-          this.#replaceLayerState({
-            layerId: layer.layerId,
-            structure: layer.structure,
-            values: layer.values,
-          });
-        } else {
-          this.#peekLayerState(layer.layerId)?.replaceValues(layer.values);
+        const state = this.#peekLayerState(layer.layerId);
+        if (state) {
+          state.foldWorkspaceState(editId, layer);
+          continue;
         }
+        if (!layer.structure) continue;
+
+        this.#replaceLayerState({
+          layerId: layer.layerId,
+          structure: layer.structure,
+          values: layer.values,
+        });
       }
     });
 

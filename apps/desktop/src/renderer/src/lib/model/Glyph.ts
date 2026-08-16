@@ -4,7 +4,6 @@ import type {
   AxisMappingBasis,
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
-  ContourData,
   ContourId,
   GlyphComponents,
   GlyphId,
@@ -87,14 +86,11 @@ import {
   type RenderAnchor,
   type RenderContour,
 } from "./GlyphRenderModel";
-import type { GlyphRenderAnchorInput, GlyphRenderContourInput } from "@/types/glyphRender";
 import { GlyphLayerPositionList } from "./GlyphLayerPositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
-import {
-  GlyphLayerState,
-  type LayerContourCoordinates,
-  type LayerCoordinateBuffers,
-} from "./GlyphLayerState";
+import { GlyphLayerState } from "./GlyphLayerState";
+import type { ContourBuffer } from "./ContourBuffer";
+import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
@@ -115,7 +111,7 @@ interface GlyphEditState {
  * Geometry lookup surface for a Glyph render model.
  *
  * @remarks
- * Exact-source render models read sparse reactive coordinate buffers so lookup
+ * Exact-source render models read sparse reactive layer buffers so lookup
  * and hit testing avoid rebuilding full `GlyphGeometry` snapshots during pointer
  * previews. Interpolated render models currently resolve through immutable
  * geometry snapshots; callers should treat that as an implementation detail.
@@ -159,17 +155,11 @@ class GlyphEditSession {
   }
 
   setXAdvance(width: number): void {
-    this.#intents.setXAdvance({ width });
+    const editId = this.#intents.setXAdvance({ width });
+    this.#state.state.setXAdvance(editId, width);
   }
 
   applyPositionPatch(updates: GlyphLayerPositions): void {
-    // One-shot edits persist through the same movePoints intent as drag
-    // commits; the local apply keeps reads synchronous until the echo folds.
-    this.commitPositionPatch(updates);
-    this.#applyPositionPatchLocally(updates);
-  }
-
-  commitPositionPatch(updates: GlyphLayerPositions): void {
     const patch = GlyphLayerPositionPatch.from(updates);
     if (patch.isEmpty) return;
 
@@ -189,11 +179,13 @@ class GlyphEditSession {
 
     const commit = () => {
       if (pointIds.length > 0) {
-        this.#intents.movePoints({ pointIds, coords: pointCoords });
+        const editId = this.#intents.movePoints({ pointIds, coords: pointCoords });
+        this.#state.state.movePoints(editId, pointIds, pointCoords);
       }
 
       if (anchorIds.length > 0) {
-        this.#intents.moveAnchors({ anchorIds, coords: anchorCoords });
+        const editId = this.#intents.moveAnchors({ anchorIds, coords: anchorCoords });
+        this.#state.state.moveAnchors(editId, anchorIds, anchorCoords);
       }
     };
 
@@ -206,11 +198,12 @@ class GlyphEditSession {
   }
 
   translateLayer(dx: number, dy: number): void {
-    // Affine over every confirmed point: O(ids) wire, Rust does the math.
+    // Affine over every current point: O(ids) wire, Rust does the authoritative math.
     const pointIds = this.geometry.allPoints.map((point) => point.id);
     if (pointIds.length === 0) return;
 
-    this.#intents.translatePoints({ pointIds, dx, dy });
+    const editId = this.#intents.translatePoints({ pointIds, dx, dy });
+    this.#state.state.translatePoints(editId, pointIds, dx, dy);
   }
 
   previewPositionPatch(updates: GlyphLayerPositions): void {
@@ -225,15 +218,18 @@ class GlyphEditSession {
   addContour(): ContourId {
     const contourId = mintContourId();
 
-    this.#intents.addContour({ contourId, closed: false });
+    const editId = this.#intents.addContour({ contourId, closed: false });
+    this.#state.state.addContour(editId, contourId, false);
 
     return contourId;
   }
 
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
     const pointId = mintPointId();
+    const points = [this.#seed(pointId, edit)];
 
-    this.#intents.addPoints({ contourId, points: [this.#seed(pointId, edit)] });
+    const editId = this.#intents.addPoints({ contourId, points });
+    this.#state.state.addPoints(editId, points, contourId);
 
     return pointId;
   }
@@ -243,24 +239,29 @@ class GlyphEditSession {
 
     // No contourId: Rust derives the contour from the anchor point — the
     // renderer never bookkeeps pending point→contour maps.
-    this.#intents.addPoints({
+    const points = [this.#seed(pointId, edit)];
+    const editId = this.#intents.addPoints({
       before: beforePointId,
-      points: [this.#seed(pointId, edit)],
+      points,
     });
+    this.#state.state.addPoints(editId, points, undefined, beforePointId);
 
     return pointId;
   }
 
   openContour(contourId: ContourId): void {
-    this.#intents.setContourClosed({ contourId, closed: false });
+    const editId = this.#intents.setContourClosed({ contourId, closed: false });
+    this.#state.state.setContourClosed(editId, contourId, false);
   }
 
   closeContour(contourId: ContourId): void {
-    this.#intents.setContourClosed({ contourId, closed: true });
+    const editId = this.#intents.setContourClosed({ contourId, closed: true });
+    this.#state.state.setContourClosed(editId, contourId, true);
   }
 
   reverseContour(contourId: ContourId): void {
-    this.#intents.reverseContour({ contourId });
+    const editId = this.#intents.reverseContour({ contourId });
+    this.#state.state.reverseContour(editId, contourId);
   }
 
   applyBooleanOp(
@@ -275,22 +276,24 @@ class GlyphEditSession {
   removePoints(pointIds: readonly PointId[]): void {
     if (pointIds.length === 0) return;
 
-    this.#intents.removePoints({ pointIds: [...pointIds] });
+    const ids = [...pointIds];
+    const editId = this.#intents.removePoints({ pointIds: ids });
+    this.#state.state.removePoints(editId, ids);
   }
 
   addAnchor(name: string | null, position: Point2D): AnchorId {
     const anchorId = mintAnchorId();
 
-    this.#intents.addAnchors({
-      anchors: [
-        {
-          id: anchorId,
-          x: position.x,
-          y: position.y,
-          ...(name === null ? {} : { name }),
-        },
-      ],
-    });
+    const anchors = [
+      {
+        id: anchorId,
+        x: position.x,
+        y: position.y,
+        ...(name === null ? {} : { name }),
+      },
+    ];
+    const editId = this.#intents.addAnchors({ anchors });
+    this.#state.state.addAnchors(editId, anchors);
 
     return anchorId;
   }
@@ -298,18 +301,20 @@ class GlyphEditSession {
   removeAnchors(anchorIds: readonly AnchorId[]): void {
     if (anchorIds.length === 0) return;
 
-    this.#intents.removeAnchors({ anchorIds: [...anchorIds] });
+    const ids = [...anchorIds];
+    const editId = this.#intents.removeAnchors({ anchorIds: ids });
+    this.#state.state.removeAnchors(editId, ids);
   }
 
   toggleSmooth(pointId: PointId): void {
-    // Reading CONFIRMED state to compute the next value is describing, not
-    // applying; an unconfirmed same-tick point cannot be toggled yet.
     const point = this.geometry.allPoints.find((candidate) => candidate.id === pointId);
     if (!point) {
-      throw new Error(`cannot toggle smooth: point ${pointId} is not in confirmed state`);
+      throw new Error(`cannot toggle smooth: point ${pointId} is not in the layer`);
     }
 
-    this.#intents.setPointSmooth({ pointId, smooth: !point.smooth });
+    const smooth = !point.smooth;
+    const editId = this.#intents.setPointSmooth({ pointId, smooth });
+    this.#state.state.setPointSmooth(editId, pointId, smooth);
   }
 
   #seed(id: PointId, edit: NewPoint): PointSeed {
@@ -327,9 +332,9 @@ class GlyphEditSession {
  * Authored glyph layer data for one source.
  *
  * A source is the authored glyph at a designspace location. `GlyphLayer`
- * exposes the reactive geometry for that source and forwards mutations to the
- * bridge with the source layer's stable ID. Preview methods update the
- * renderer-facing reactive data; commit methods also produce bridge changes.
+ * exposes the reactive geometry for that source and queues mutations with the
+ * source layer's stable ID. Preview methods update renderer state only; accepted
+ * edits also produce workspace intents.
  */
 export class GlyphLayer {
   readonly #sourceCell: WritableSignal<Source>;
@@ -379,19 +384,19 @@ export class GlyphLayer {
     return this.#edit.layerState.structureCell;
   }
 
-  /** @internal Reactive coordinate buffers used by renderer-facing projections. */
-  get coordinateBuffers(): LayerCoordinateBuffers {
-    return this.#edit.layerState.coordinateBuffers;
+  /** @internal Reactive numeric buffers used by renderer-facing projections. */
+  get buffers(): LayerBuffers {
+    return this.#edit.layerState.buffers;
   }
 
-  /** @internal Tracks replacement of the source coordinate-buffer container. */
-  get coordinateBuffersCell(): Signal<LayerCoordinateBuffers> {
-    return this.#edit.layerState.coordinateBuffersCell;
+  /** @internal Tracks replacement of the source layer-buffer container. */
+  get buffersCell(): Signal<LayerBuffers> {
+    return this.#edit.layerState.buffersCell;
   }
 
-  /** @internal Tracks any coordinate change without materializing full geometry. */
-  get coordinateBuffersChangedCell(): Signal<LayerCoordinateBuffers> {
-    return this.#edit.layerState.coordinateBuffersChangedCell;
+  /** @internal Tracks any numeric layer change without materializing full geometry. */
+  get buffersChangedCell(): Signal<LayerBuffers> {
+    return this.#edit.layerState.buffersChangedCell;
   }
 
   get state(): GlyphState {
@@ -543,19 +548,6 @@ export class GlyphLayer {
    */
   applyPositionPatch(updates: GlyphLayerPositions): void {
     this.#edit.applyPositionPatch(updates);
-  }
-
-  /**
-   * Commit a sparse point/anchor position patch to Rust only.
-   *
-   * Use this after the same patch has already been applied locally with
-   * {@link previewPositionPatch}. This is the drag-end path: it updates the
-   * native glyph layer without replacing TypeScript geometry.
-   *
-   * @param updates - Final point and anchor positions to persist.
-   */
-  commitPositionPatch(updates: GlyphLayerPositions): void {
-    this.#edit.commitPositionPatch(updates);
   }
 
   /**
@@ -1099,10 +1091,10 @@ export class GlyphRenderModel {
     const existing = this.#contoursByGlyph.get(glyphId);
     if (existing) return existing;
 
-    const layerContourCache = keyedCache<GlyphRenderContourInput, string, LayerRenderContour>({
+    const layerContourCache = keyedCache<ContourBuffer, string, LayerRenderContour>({
       name: `glyph.renderModel.sourceContours.${glyphId}`,
-      key: (input) => input.data.id,
-      create: (inputCell) => new LayerRenderContour(inputCell),
+      key: (contour) => contour.data.id,
+      create: (contourCell) => new LayerRenderContour(contourCell),
     });
     const contoursCell = computed(() => {
       const location = this.#externalLocation.value;
@@ -1113,20 +1105,7 @@ export class GlyphRenderModel {
         return geometryRenderContours(this.#geometryAt(glyphId, location, sourceId));
       }
 
-      track(source.structureCell);
-      track(source.coordinateBuffersCell);
-      const structure = source.structureCell.peek();
-      const coordinates = source.coordinateBuffersCell.peek();
-      const contours: GlyphRenderContourInput[] = [];
-      for (let index = 0; index < structure.contours.length; index++) {
-        const data = structure.contours[index];
-        const contourCoordinates = coordinates.contours[index];
-        if (!data || !contourCoordinates) continue;
-
-        contours.push({ data, coordinates: contourCoordinates });
-      }
-
-      return layerContourCache.map(contours);
+      return layerContourCache.map(source.buffersCell.value.contoursCell.value);
     });
     this.#contoursByGlyph.set(glyphId, contoursCell);
     return contoursCell;
@@ -1274,8 +1253,8 @@ function componentPathKey(path: readonly ComponentId[]): string {
 class ViewAnchors {
   readonly #anchors = keyedCache({
     name: "glyph.renderModel.anchors",
-    key: (input: GlyphRenderAnchorInput) => input.data.id,
-    create: (input) => new LayerRenderAnchor(input),
+    key: (anchor: Anchor) => anchor.id,
+    create: (anchor) => new LayerRenderAnchor(anchor),
   });
 
   readonly anchorsCell: Signal<readonly RenderAnchor[]>;
@@ -1283,25 +1262,10 @@ class ViewAnchors {
   constructor(layer: Signal<GlyphLayer | null>, geometry: Signal<GlyphGeometry>) {
     this.anchorsCell = computed<readonly RenderAnchor[]>(() => {
       const source = layer.value;
-      if (source) {
-        return this.#sourceAnchors(source.structureCell.value, source.coordinateBuffersCell.value);
-      }
+      if (source) return this.#anchors.map(source.buffersCell.value.anchors.anchorsCell.value);
 
       return geometryRenderAnchors(geometry.value);
     });
-  }
-
-  #sourceAnchors(
-    structure: GlyphStructure,
-    coordinates: LayerCoordinateBuffers,
-  ): readonly RenderAnchor[] {
-    return this.#anchors.map(
-      structure.anchors.map((data, index) => ({
-        data,
-        values: coordinates.anchors,
-        offset: index * 2,
-      })),
-    );
   }
 }
 
@@ -1395,44 +1359,38 @@ class SnapshotGeometryCache implements GlyphRenderGeometry {
 
 class SourceGeometryCache implements GlyphRenderGeometry {
   readonly #source: GlyphLayer;
-
-  readonly #contourCache = keyedCache({
-    name: "glyph.renderModel.geometry.contours",
-    key: (input: ContourInput) => input.data.id,
-    create: (input) => new ContourCache(input),
-  });
-
-  readonly #sourceContours: ComputedSignal<readonly ContourCache[]>;
+  readonly #sourceContours: ComputedSignal<readonly ContourBuffer[]>;
   readonly #points: ComputedSignal<readonly Point[]>;
-  readonly #pointOwners: ComputedSignal<ReadonlyMap<PointId, ContourCache>>;
-
+  readonly #pointOwners: ComputedSignal<ReadonlyMap<PointId, ContourBuffer>>;
   readonly #anchors: IdIndex<AnchorId, Anchor>;
-
-  readonly #segmentOwners: ComputedSignal<ReadonlyMap<SegmentId, ContourCache>>;
+  readonly #segmentOwners: ComputedSignal<ReadonlyMap<SegmentId, ContourBuffer>>;
 
   constructor(source: GlyphLayer) {
     this.#source = source;
-
-    this.#sourceContours = computed(() =>
-      this.#contoursFromSource(source.structureCell.value, source.coordinateBuffersCell.value),
-    );
+    this.#sourceContours = computed(() => source.buffersCell.value.contoursCell.value);
     this.#points = computed(() =>
       this.#sourceContours.value.flatMap((contour) => contour.pointsCell.value),
     );
-    this.#pointOwners = computed(() => this.#pointOwnersFromSource(this.#sourceContours.value));
+    this.#pointOwners = computed(() => {
+      const owners = new Map<PointId, ContourBuffer>();
+      for (const contour of this.#sourceContours.value) {
+        for (const point of contour.dataCell.value.points) owners.set(point.id, contour);
+      }
+      return owners;
+    });
 
-    const anchors = computed(() =>
-      this.#anchorsFromSource(
-        source.structureCell.value,
-        source.coordinateBuffersCell.value.anchors.value,
-      ),
-    );
+    const anchors = computed(() => source.buffersCell.value.anchors.anchorsCell.value);
     this.#anchors = new IdIndex(
       () => anchors.peek(),
       (anchor) => anchor.id,
     );
-
-    this.#segmentOwners = computed(() => this.#segmentOwnersFromSource(this.#sourceContours.value));
+    this.#segmentOwners = computed(() => {
+      const owners = new Map<SegmentId, ContourBuffer>();
+      for (const contour of this.#sourceContours.value) {
+        for (const segment of contour.segmentsCell.value) owners.set(segment.id, contour);
+      }
+      return owners;
+    });
   }
 
   get allPoints(): readonly Point[] {
@@ -1456,23 +1414,15 @@ class SourceGeometryCache implements GlyphRenderGeometry {
   }
 
   segment(segmentId: SegmentId): Segment | null {
-    const owner = this.#segmentOwners.peek().get(segmentId);
-    if (!owner) return null;
-
-    const segment = owner.segment(segmentId);
-    if (!segment) return null;
-
-    return segment;
+    return this.#segmentOwners.peek().get(segmentId)?.segment(segmentId) ?? null;
   }
 
   hitPoint(pos: Point2D, radius: number): GeometryPointHit | null {
     let best: GeometryPointHit | null = null;
-    for (const contour of this.#sourceContours.peek()) {
-      for (const point of contour.pointsCell.peek()) {
-        const hit = Point.hit(point, pos, radius);
-        if (hit && (!best || hit.distance < best.distance)) {
-          best = { kind: "point", id: point.id, distance: hit.distance };
-        }
+    for (const point of this.#points.peek()) {
+      const hit = Point.hit(point, pos, radius);
+      if (hit && (!best || hit.distance < best.distance)) {
+        best = { kind: "point", id: point.id, distance: hit.distance };
       }
     }
     return best;
@@ -1497,11 +1447,9 @@ class SourceGeometryCache implements GlyphRenderGeometry {
 
   hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
     let best: GeometrySegmentHit | null = null;
-
     for (const contour of this.#sourceContours.peek()) {
       for (const segment of contour.segmentsCell.peek()) {
         const hit = segment.hit(pos, radius);
-
         if (hit && (!best || hit.distance < best.distance)) {
           best = {
             kind: "segment",
@@ -1513,138 +1461,7 @@ class SourceGeometryCache implements GlyphRenderGeometry {
         }
       }
     }
-
     return best;
-  }
-
-  #contoursFromSource(
-    structure: GlyphStructure,
-    coordinates: LayerCoordinateBuffers,
-  ): readonly ContourCache[] {
-    return this.#contourCache.map(this.#currentContourInputs(structure, coordinates));
-  }
-
-  #currentContourInputs(
-    structure: GlyphStructure,
-    coordinates: LayerCoordinateBuffers,
-  ): readonly ContourInput[] {
-    const inputs: ContourInput[] = [];
-
-    for (let index = 0; index < structure.contours.length; index++) {
-      const data = structure.contours[index];
-      const contourCoordinates = coordinates.contours[index];
-      if (data && contourCoordinates) inputs.push({ data, coordinates: contourCoordinates });
-    }
-
-    return inputs;
-  }
-
-  #pointOwnersFromSource(contours: readonly ContourCache[]): ReadonlyMap<PointId, ContourCache> {
-    const owners = new Map<PointId, ContourCache>();
-    for (const contour of contours) {
-      for (const pointId of contour.pointIds) {
-        owners.set(pointId, contour);
-      }
-    }
-    return owners;
-  }
-
-  #segmentOwnersFromSource(
-    contours: readonly ContourCache[],
-  ): ReadonlyMap<SegmentId, ContourCache> {
-    const owners = new Map<SegmentId, ContourCache>();
-    for (const contour of contours) {
-      for (const segmentId of contour.segmentIds) {
-        owners.set(segmentId, contour);
-      }
-    }
-    return owners;
-  }
-
-  #anchorsFromSource(structure: GlyphStructure, values: Float64Array): readonly Anchor[] {
-    return structure.anchors.map((anchor, index) => new Anchor(anchor, values, index * 2));
-  }
-}
-
-interface ContourInput {
-  readonly data: ContourData;
-  readonly coordinates: LayerContourCoordinates;
-}
-
-class ContourCache {
-  readonly #input: Signal<ContourInput>;
-
-  readonly #pointIds: ComputedSignal<readonly PointId[]>;
-  readonly #points: IdIndex<PointId, Point>;
-
-  readonly #segments: IdIndex<SegmentId, Segment>;
-  readonly #segmentIds: ComputedSignal<readonly SegmentId[]>;
-
-  readonly contourCell: ComputedSignal<Contour>;
-  readonly pointsCell: ComputedSignal<readonly Point[]>;
-  readonly segmentsCell: ComputedSignal<readonly Segment[]>;
-
-  constructor(input: Signal<ContourInput>) {
-    this.#input = input;
-    this.#pointIds = computed(() => this.#input.value.data.points.map((point) => point.id));
-    this.contourCell = computed(() => {
-      const { data, coordinates } = this.#input.value;
-      return new Contour(data, coordinates.values.value, 0);
-    });
-
-    this.pointsCell = computed(() => {
-      const { data, coordinates } = this.#input.value;
-      const values = coordinates.values.value;
-
-      return data.points.map(
-        (point, index) =>
-          new Point({
-            ...point,
-            x: values[index * 2] ?? 0,
-            y: values[index * 2 + 1] ?? 0,
-          }),
-      );
-    });
-
-    this.segmentsCell = computed(() => {
-      const { data, coordinates } = this.#input.value;
-      return new Contour(data, coordinates.values.value, 0).segments();
-    });
-    this.#segmentIds = computed(() => this.segmentsCell.value.map((segment) => segment.id));
-
-    this.#points = new IdIndex(
-      () => this.pointsCell.peek(),
-      (point) => point.id,
-    );
-
-    this.#segments = new IdIndex(
-      () => this.segmentsCell.peek(),
-      (segment) => segment.id,
-    );
-  }
-
-  get pointIds(): readonly PointId[] {
-    return this.#pointIds.peek();
-  }
-
-  get segmentIds(): readonly SegmentId[] {
-    return this.#segmentIds.peek();
-  }
-
-  get id(): ContourId {
-    return this.#input.peek().data.id;
-  }
-
-  point(pointId: PointId): Point | null {
-    return this.#points.get(pointId);
-  }
-
-  segment(segmentId: SegmentId): Segment | null {
-    return this.#segments.get(segmentId);
-  }
-
-  get contour(): Contour {
-    return this.contourCell.peek();
   }
 }
 
