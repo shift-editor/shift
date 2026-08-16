@@ -24,8 +24,7 @@ describe("Select arrow keys nudge selected points", () => {
     ["ArrowUp", { x: 100, y: 101 }],
     ["ArrowDown", { x: 100, y: 99 }],
   ] as const)("moves in the %s direction", async (key, expected) => {
-    editor.keyDown(key);
-    await editor.settle();
+    await editor.pressKey(key);
 
     expect(editor.pointPosition(firstId)).toEqual(expected);
     expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 200 });
@@ -36,8 +35,7 @@ describe("Select arrow keys nudge selected points", () => {
     ["the Shift increment", { shiftKey: true }, 10],
     ["the accelerator increment", { metaKey: true }, 100],
   ] as const)("uses %s", async (_description, modifiers, distance) => {
-    editor.keyDown("ArrowRight", modifiers);
-    await editor.settle();
+    await editor.pressKey("ArrowRight", modifiers);
 
     expect(editor.pointPosition(firstId)).toEqual({ x: 100 + distance, y: 100 });
   });
@@ -45,8 +43,7 @@ describe("Select arrow keys nudge selected points", () => {
   it("moves every selected point by the same increment", async () => {
     editor.selection.select([firstId, secondId]);
 
-    editor.keyDown("ArrowUp", { shiftKey: true });
-    await editor.settle();
+    await editor.pressKey("ArrowUp", { shiftKey: true });
 
     expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 110 });
     expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 210 });
@@ -54,17 +51,16 @@ describe("Select arrow keys nudge selected points", () => {
 
   it("commits a nudge as one undoable and redoable edit", async () => {
     editor.selection.select([firstId, secondId]);
-    editor.keyDown("ArrowRight", { shiftKey: true });
-    await editor.settle();
+    await editor.pressKey("ArrowRight", { shiftKey: true });
     const nudged = [editor.pointPosition(firstId), editor.pointPosition(secondId)];
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual([
       { x: 100, y: 100 },
       { x: 200, y: 200 },
     ]);
 
-    await editor.redoAndSettle();
+    await editor.redo();
     expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual(nudged);
   });
 });
