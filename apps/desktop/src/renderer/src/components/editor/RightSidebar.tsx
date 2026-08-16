@@ -12,9 +12,12 @@ import { BooleanOps } from "./BooleanOps";
 export const RightSidebar = () => {
   const session = useFontSession();
   const editor = useEditor();
+
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
+
   const zoom = useSignalState(editor.zoomCell);
   const selection = useSignalState(editor.selection.stateCell);
+
   const hasPointSelection = selection.ids.some(isPointId);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
 

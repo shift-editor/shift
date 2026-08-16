@@ -18,8 +18,6 @@ export class EscapeBehavior implements PenBehavior {
   }
 
   private hasActiveDrawingContour(ctx: ToolContext<PenState, Pen>): boolean {
-    const contour = PenStroke.active(ctx.tool)?.activeContour ?? null;
-    if (!contour) return false;
-    return !contour.closed && !contour.isEmpty;
+    return (PenStroke.active(ctx.tool)?.activeEndpoint ?? null) !== null;
   }
 }

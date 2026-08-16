@@ -1,5 +1,5 @@
 import { BaseTool, type ToolName } from "../core";
-import type { PenContext, PenState } from "./types";
+import type { PenContext, PenEndpoint, PenState } from "./types";
 import { PenDownBehaviour, HandleBehavior, EscapeBehavior } from "./behaviors";
 import type { CursorType } from "@/types/editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
@@ -39,15 +39,25 @@ export class Pen extends BaseTool<PenState, Pen> {
     this.#ctx.set(null);
   }
 
-  setActiveContour(contourId: ContourId | null): void {
+  setActiveContour(contourId: ContourId, endpoint: PenEndpoint): void {
     const context = this.#ctx.peek();
     if (!context) return;
 
-    this.#ctx.set({ ...context, activeContourId: contourId });
+    this.#ctx.set({ ...context, activeContourId: contourId, activeEndpoint: endpoint });
+  }
+
+  setActiveEndpoint(endpoint: PenEndpoint): void {
+    const context = this.#ctx.peek();
+    if (!context?.activeContourId) return;
+
+    this.#ctx.set({ ...context, activeEndpoint: endpoint });
   }
 
   clearActiveContour(): void {
-    this.setActiveContour(null);
+    const context = this.#ctx.peek();
+    if (!context) return;
+
+    this.#ctx.set({ ...context, activeContourId: null, activeEndpoint: null });
   }
 
   override getCursor(state: PenState): CursorType {
@@ -102,6 +112,7 @@ export class Pen extends BaseTool<PenState, Pen> {
     this.#ctx.set({
       glyphNode: node,
       activeContourId: null,
+      activeEndpoint: null,
     });
   }
 
