@@ -1,3 +1,4 @@
+import { Rect } from "@shift/geo";
 import { BaseTool, type ToolName } from "../core";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
@@ -55,6 +56,9 @@ export class Select extends BaseTool<SelectState, Select> {
     if (coords) {
       const cursor = this.boundingBox.cursor(coords);
       if (cursor) return cursor;
+
+      const rect = this.boundingBox.rect;
+      if (rect && Rect.containsPoint(rect, coords.scene)) return { type: "move" };
     }
 
     const modifiers = this.editor.input.modifiersCell.value;

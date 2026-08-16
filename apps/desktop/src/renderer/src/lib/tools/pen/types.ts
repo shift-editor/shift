@@ -4,30 +4,41 @@ import type { Behavior } from "../core/Behavior";
 import type { Pen } from "./Pen";
 import type { GlyphNode } from "@/types/node";
 
-export interface Anchor {
-  position: Point2D;
-  pointId?: PointId;
-}
+export type PenEndpoint =
+  | {
+      readonly kind: "corner";
+      readonly pointId: PointId;
+      readonly position: Point2D;
+    }
+  | {
+      readonly kind: "smooth";
+      readonly pointId: PointId;
+      readonly position: Point2D;
+      readonly outgoingHandlePosition: Point2D;
+    };
 
-export interface Handles {
-  cpIn?: PointId;
-  cpOut?: PointId;
+export interface PenCurve {
+  readonly start: PenEndpoint;
+  readonly anchorPosition: Point2D;
+  readonly handlePosition: Point2D;
 }
 
 export type PenState =
   | { type: "idle" }
   | { type: "ready" }
-  | { type: "anchored"; anchor: Anchor }
-  | {
-      type: "dragging";
-      anchor: Anchor;
-      handles: Handles;
-      mousePos: Point2D;
-    };
+  | { type: "anchored"; anchorPosition: Point2D }
+  | { type: "dragging"; curve: PenCurve };
 
 export type PenBehavior = Behavior<PenState, Pen>;
 
-export interface PenContext {
-  glyphNode: GlyphNode;
-  activeContourId: ContourId | null;
-}
+export type PenContext =
+  | {
+      readonly glyphNode: GlyphNode;
+      readonly activeContourId: null;
+      readonly activeEndpoint: null;
+    }
+  | {
+      readonly glyphNode: GlyphNode;
+      readonly activeContourId: ContourId;
+      readonly activeEndpoint: PenEndpoint;
+    };
