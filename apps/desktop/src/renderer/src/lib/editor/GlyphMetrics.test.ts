@@ -53,7 +53,10 @@ describe("sidebar glyph metrics", () => {
     await editor.settle();
     await editor.undoAndSettle();
     expect(layer.xAdvance).toBe(initialAdvance);
+    expect(layer.sidebearings.rsb).toBe(initialRightSidebearing);
+
     await editor.redoAndSettle();
+    expect(layer.xAdvance).toBe(initialAdvance + 30);
     expect(layer.sidebearings.rsb).toBe(initialRightSidebearing + 30);
   });
 
