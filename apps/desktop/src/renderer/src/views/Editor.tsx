@@ -75,8 +75,8 @@ export const Editor = () => {
 
     const toolManager = editor.toolManager;
     const keyboardRouter = new KeyboardRouter(() => ({
-      canvasActive: activeZone === "canvas" || toolManager.isDragging,
-      activeTool: editor.getActiveTool(),
+      canvasActive: activeZone === "canvas" || editor.isDragging,
+      activeTool: editor.tool?.id ?? null,
       editor,
       toolManager,
     }));

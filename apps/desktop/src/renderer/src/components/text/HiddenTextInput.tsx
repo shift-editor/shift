@@ -17,7 +17,7 @@ export function TextInput() {
 
   useEffect(() => {
     const fx = effect(() => {
-      setIsTextTool(editor.activeToolCell.value === "text");
+      setIsTextTool(editor.toolCell.value?.id === "text");
     });
     return () => fx.dispose();
   }, [editor]);
@@ -30,7 +30,7 @@ export function TextInput() {
       node.focus();
 
       const handleFocusLost = () => {
-        if (editor.getActiveTool() === "text") {
+        if (editor.toolIf("text")) {
           setTimeout(() => node.focus(), 0);
         }
       };

@@ -147,7 +147,6 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
   protected setState(next: S): void {
     this.state = next;
     this.#stateCell.set(next);
-    this.editor.setActiveToolState(next);
   }
 
   #runBehaviors(state: S, event: ToolEvent): { state: S; handled: boolean } {

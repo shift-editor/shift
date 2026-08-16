@@ -19,9 +19,8 @@ export function DebugPanel() {
   }, [editor]);
 
   const toolStateRef = useSignalText(() => {
-    const name = editor.getActiveTool();
-    const state = editor.getActiveToolState();
-    return `${name}.${state.type}`;
+    const tool = editor.toolCell.value;
+    return tool ? `${tool.id}.${tool.state.type}` : "none.idle";
   });
 
   const fpsRef = useSignalText(() => {

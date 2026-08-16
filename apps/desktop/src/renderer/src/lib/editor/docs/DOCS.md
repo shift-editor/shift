@@ -26,6 +26,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
 
+**Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state.
+
 **Architecture Invariant:** Camera and text-layout metrics resolve from the active design location through `Font.metricsAtLocation()`. Exact master locations use authored source values; intermediate locations evaluate the Rust-built source-metric interpolation model.
 
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.

@@ -13,8 +13,7 @@ describe("TestEditor", () => {
 
   describe("tool activation", () => {
     it("starts with the select tool activated", () => {
-      expect(editor.getActiveTool()).toBe("select");
-      expect(editor.toolManager.activeToolId).toBe("select");
+      expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
   });
 

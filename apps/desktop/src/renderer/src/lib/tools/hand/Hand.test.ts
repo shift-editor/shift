@@ -11,18 +11,13 @@ describe("Hand tool", () => {
     editor.selectTool("hand");
   });
 
-  it("publishes ready and idle states through activation and deactivation", () => {
-    const hand = editor.toolManager.activeTool;
-    if (!hand) throw new Error("Expected active Hand tool");
-
-    expect(hand.getState()).toEqual({ type: "ready" });
-    expect(hand.stateCell.value).toEqual({ type: "ready" });
-    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
+  it("publishes lifecycle state through the typed tool surface", () => {
+    expect(editor.toolIf("hand")?.state).toEqual({ type: "ready" });
 
     editor.selectTool("select");
 
-    expect(hand.getState()).toEqual({ type: "idle" });
-    expect(hand.stateCell.value).toEqual({ type: "idle" });
+    expect(editor.toolIf("hand")).toBeNull();
+    expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 
   it("drag pans the viewport by the screen delta", () => {
@@ -42,11 +37,12 @@ describe("Hand tool", () => {
     editor.pointerMove(50, 0); // start dragging
     editor.pointerMove(100, 0);
     const panMidDrag = editor.pan;
+    expect(editor.isDragging).toBe(true);
 
     editor.escape();
 
-    const state = editor.getActiveToolState();
-    expect(state.type).toBe("ready");
+    expect(editor.isDragging).toBe(false);
+    expect(editor.toolIf("hand")?.state.type).toBe("ready");
 
     // After cancel, further moves without a new pointerDown must not pan.
     editor.pointerMove(200, 0);

@@ -18,7 +18,7 @@ import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "@/types/variation";
 import type { Coordinates, NodePoint, ScenePoint } from "@/types/coordinates";
 import { cloneExternalAxisLocation, emptyExternalAxisLocation } from "@/lib/variation/location";
-import type { ToolName, ActiveToolState } from "../tools/core";
+import type { ActiveTool, ToolName } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
 
@@ -153,8 +153,8 @@ export class Editor {
       shortcut?: string;
     }
   >;
-  #activeTool: Signal<ToolName | null>;
-  #activeToolState: WritableSignal<ActiveToolState>;
+  #tool: Signal<ActiveTool | null>;
+  #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
   #selectionBounds: Signal<Rect2D | null>;
 
@@ -243,18 +243,24 @@ export class Editor {
     );
 
     this.#toolMetadata = new Map();
-    this.#activeToolState = signal<ActiveToolState>(
-      { type: "idle" },
-      {
-        name: "editor.tool.state",
-      },
-    );
 
     // TODO: why not make editor extend EventEmitter?
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
-    this.#activeTool = computed(() => this.#toolManager.activeToolCell.value?.id ?? null, {
-      name: "editor.tool.active",
+    this.#tool = computed<ActiveTool | null>(
+      () => {
+        const activeTool = this.#toolManager.activeToolCell.value;
+        if (!activeTool) return null;
+
+        return {
+          id: activeTool.id,
+          state: activeTool.stateCell.value,
+        };
+      },
+      { name: "editor.tool" },
+    );
+    this.#dragging = computed(() => this.gesture.cell.value.phase === "dragging", {
+      name: "editor.dragging",
     });
     this.#isEditing = computed(
       () => this.#toolManager.activeToolCell.value?.isEditingCell.value ?? false,
@@ -320,29 +326,37 @@ export class Editor {
     return out;
   }
 
-  public get activeTool(): ToolName | null {
-    return this.#activeTool.peek();
+  /** Returns the current active tool snapshot, or null before a tool is activated. */
+  public get tool(): ActiveTool | null {
+    return this.#tool.peek();
   }
 
-  public get activeToolCell(): Signal<ToolName | null> {
-    return this.#activeTool;
-  }
-
-  // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor
-  public getActiveTool(): ToolName | null {
-    return this.#activeTool.peek();
+  /** Exposes the live active tool identity and state as one reactive value. */
+  public get toolCell(): Signal<ActiveTool | null> {
+    return this.#tool;
   }
 
   /**
-   * Typed as `ActiveToolState` (which is `any`) because each tool defines its
-   * own state shape. Consumers should narrow the type based on `activeTool`.
+   * Returns the active tool narrowed to the requested identity.
+   *
+   * @param id - Tool identity whose current state the caller needs.
+   * @returns The active tool snapshot when its identity matches; otherwise null.
    */
-  public get activeToolState(): ActiveToolState {
-    return this.#activeToolState.peek();
+  public toolIf<Id extends ToolName>(id: Id): ActiveTool<Id> | null {
+    const tool = this.#tool.peek();
+    if (tool?.id !== id) return null;
+
+    return tool as ActiveTool<Id>;
   }
 
-  public get activeToolStateCell(): Signal<ActiveToolState> {
-    return this.#activeToolState;
+  /** Returns whether a pointer drag gesture is currently in flight. */
+  public get isDragging(): boolean {
+    return this.#dragging.peek();
+  }
+
+  /** Exposes the live pointer-drag phase independently of tool state names. */
+  public get draggingCell(): Signal<boolean> {
+    return this.#dragging;
   }
 
   public get isEditing(): boolean {
@@ -351,15 +365,6 @@ export class Editor {
 
   public get isEditingCell(): Signal<boolean> {
     return this.#isEditing;
-  }
-
-  // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor
-  public getActiveToolState(): ActiveToolState {
-    return this.#activeToolState.peek();
-  }
-
-  public setActiveToolState(state: ActiveToolState): void {
-    this.#activeToolState.set(state);
   }
 
   public setActiveTool(toolName: ToolName): void {

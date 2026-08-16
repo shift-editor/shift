@@ -106,7 +106,7 @@ cd apps/desktop && npm test
 
 ## Related
 
-- `Editor` -- primary consumer; holds `WritableSignal` fields for tool state, cursor, preview mode
+- `Editor` -- primary consumer; derives `toolCell` from the active tool's state cell and owns cursor/view cells
 - `Camera` -- uses `zoomCell`, pan cells, and affine transform cells
 - `Hover` -- uses `targetCell` for hovered editor state
 - `Selection` -- uses `WritableSignal` fields for selected point/anchor/segment state

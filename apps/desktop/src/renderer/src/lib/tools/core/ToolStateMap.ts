@@ -1,4 +1,4 @@
-import type { ToolState } from "./createContext";
+import type { ToolName, ToolState } from "./createContext";
 import type { HandState } from "../hand/types";
 import type { ShapeState } from "../shape/types";
 import type { SelectState } from "../select/types";
@@ -14,4 +14,13 @@ export interface ToolStateMap {
   disabled: ToolState;
 }
 
-export type ActiveToolState = ToolStateMap[keyof ToolStateMap] | ToolState;
+/** Resolves known tool IDs precisely and leaves runtime extension IDs at the base contract. */
+export type ToolStateFor<Id extends ToolName> = Id extends keyof ToolStateMap
+  ? ToolStateMap[Id]
+  : ToolState;
+
+/** Active tool identity paired with the current state published by that tool. */
+export interface ActiveTool<Id extends ToolName = ToolName> {
+  readonly id: Id;
+  readonly state: ToolStateFor<Id>;
+}

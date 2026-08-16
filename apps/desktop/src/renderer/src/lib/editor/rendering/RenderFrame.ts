@@ -44,8 +44,7 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
 
   protected props(): BackgroundLayerProps | null {
     this.#editor.camera.trackViewportTransform();
-    this.#editor.activeToolCell.value;
-    this.#editor.activeToolStateCell.value;
+    this.#editor.toolCell.value;
     this.#editor.editing.stateCell.value;
     this.#editor.scene.cell.value;
 
@@ -110,8 +109,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.camera.trackViewportTransform();
 
     // TODO: should be track(thing)
-    this.#editor.activeToolCell.value;
-    this.#editor.activeToolStateCell.value;
+    this.#editor.toolCell.value;
     this.#editor.editing.stateCell.value;
     this.#editor.selection.stateCell.value;
     this.#editor.hover.entryCell.value;
@@ -181,10 +179,11 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
 
   protected props(): OverlayLayerProps {
     this.#editor.camera.trackViewportTransform();
+    const tool = this.#editor.toolCell.value;
 
     return {
-      activeTool: this.#editor.activeToolCell.value,
-      activeToolState: this.#editor.activeToolStateCell.value,
+      activeTool: tool?.id ?? null,
+      activeToolState: tool?.state ?? null,
     };
   }
 
