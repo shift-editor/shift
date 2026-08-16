@@ -23,8 +23,8 @@ import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
 import type { FontSessionHost } from "../workspace/FontSessionHost";
 import { showOpenFontDialog } from "../document/openFontDialog";
+import { shiftProductName } from "../release";
 
-const APP_NAME = "Shift";
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== "0";
@@ -74,7 +74,7 @@ export class App {
   }
 
   get applicationName(): string {
-    return app.isPackaged ? APP_NAME : `${APP_NAME} Dev`;
+    return app.name;
   }
 
   /**
@@ -86,6 +86,13 @@ export class App {
    * Command handlers resolve the active window from a fresh context at run time.
    */
   start(): void {
+    const applicationName = app.isPackaged ? shiftProductName : `${shiftProductName} Dev`;
+    app.setName(applicationName);
+
+    if (!app.commandLine.hasSwitch("user-data-dir")) {
+      app.setPath("userData", path.join(app.getPath("appData"), applicationName));
+    }
+
     this.#log.info("starting");
 
     if (started) {
@@ -97,15 +104,10 @@ export class App {
     this.#registerCommands();
     this.#registerIpcHandlers();
     this.#lifecycle.start();
-    app.setName(this.applicationName);
 
     app.on("window-all-closed", () => {
       if (process.platform !== "darwin") app.quit();
     });
-
-    if (!app.isPackaged && !app.commandLine.hasSwitch("user-data-dir")) {
-      app.setPath("userData", path.join(app.getPath("appData"), this.applicationName));
-    }
 
     void app.whenReady().then(async () => {
       this.#log.info("running when ready callback");

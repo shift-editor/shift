@@ -38,6 +38,7 @@ async function buildMain() {
     define: {
       // Empty string is falsy — the app falls through to loadFile()
       MAIN_WINDOW_VITE_DEV_SERVER_URL: JSON.stringify(""),
+      MAIN_WINDOW_VITE_NAME: JSON.stringify("main_window"),
     },
   });
 }
@@ -86,7 +87,7 @@ async function buildRenderer() {
     // Relative base so loadFile() can resolve assets without a server.
     base: "./",
     build: {
-      outDir: path.join(appRoot, ".vite/renderer"),
+      outDir: path.join(appRoot, ".vite/renderer/main_window"),
       emptyOutDir: true,
       minify: false,
     },
