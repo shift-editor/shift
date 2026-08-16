@@ -11,19 +11,12 @@ describe("Text tool", () => {
   });
 
   it("publishes typing until Escape returns to Select", () => {
-    const text = editor.toolManager.activeTool;
-    if (!text) throw new Error("Expected active Text tool");
-
-    expect(text.getState()).toEqual({ type: "typing" });
-    expect(text.stateCell.value).toEqual({ type: "typing" });
-    expect(editor.getActiveToolState()).toEqual({ type: "typing" });
+    expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
     expect(editor.cursor).toBe("text");
 
     editor.escape();
 
-    expect(editor.toolManager.activeToolId).toBe("select");
-    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
-    expect(text.getState()).toEqual({ type: "idle" });
-    expect(text.stateCell.value).toEqual({ type: "idle" });
+    expect(editor.toolIf("text")).toBeNull();
+    expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 });

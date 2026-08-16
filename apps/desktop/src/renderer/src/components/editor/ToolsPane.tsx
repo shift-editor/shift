@@ -43,7 +43,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeT
 
 export const ToolsPane: FC = () => {
   const editor = useEditor();
-  const activeTool = useSignalState(editor.activeToolCell);
+  const activeTool = useSignalState(editor.toolCell)?.id ?? null;
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">

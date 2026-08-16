@@ -6,7 +6,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** Every tool must call `activate()` to leave `"idle"` state. `BaseTool` skips the behavior loop entirely when `state.type === "idle"`, so a tool that forgets `activate()` will silently ignore all events.
 
-- **Architecture Invariant:** Lifecycle methods mutate tool state through `BaseTool.setState()`, never by assigning `this.state`. The method publishes one coherent value to `state`, `stateCell`, and the editor's active-tool state; direct assignment leaves cursor and editing computations stale.
+- **Architecture Invariant:** Lifecycle methods mutate tool state through `BaseTool.setState()`, never by assigning `this.state`. The method publishes one coherent value to `state` and `stateCell`; `Editor.toolCell` pulls the active instance's `stateCell`. Direct assignment leaves editor tool state, cursor, and editing computations stale.
 
 - **Architecture Invariant:** Behaviors are tried in **array order**; first handler that returns `true` wins. Reordering the `behaviors` array changes tool semantics. **CRITICAL**: placing a broad handler (e.g. `Selection`) before a narrow one (e.g. `ToggleSmooth`) will shadow the narrow handler.
 
@@ -51,6 +51,7 @@ tools/
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
 - `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
 - `ToolManager` — owns the active tool, `GestureDetector`, rAF pointer coalescing, and temporary tool switching.
+- `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot. `Editor.toolIf(id)` narrows built-in state through `ToolStateMap`; runtime IDs fall back to `ToolState`.
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
 - `ToolManifest` — `{ id, create, icon, tooltip, shortcut? }`. Registration descriptor passed to `editor.registerTool`.
 - `StateDiagram` — `{ states, initial, transitions }`. Declarative spec for compliance testing.
@@ -89,7 +90,7 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 1. **Batch** all side effects inside a single reactive `batch()`.
 2. Call `onStateExit` on every behavior (receives `prev`, `next`, a pre-commit context).
-3. Commit through `setState(next)`, publishing `state`, `stateCell`, and `editor.setActiveToolState(next)` together.
+3. Commit through `setState(next)`, publishing `state` and `stateCell` together. `Editor.toolCell` invalidates through its direct dependency on the active tool's `stateCell`.
 4. Call `onStateEnter` on every behavior (receives `prev`, `next`, a post-commit context where `setState` updates `this.state`).
 5. Call `onStateChange(prev, next, event)` if defined on the tool.
 

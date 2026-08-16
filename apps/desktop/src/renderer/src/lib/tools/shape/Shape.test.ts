@@ -14,18 +14,13 @@ describe("Shape tool", () => {
 
   const contours = () => editor.glyphLayer?.geometry.contours ?? [];
 
-  it("publishes ready and idle states through activation and deactivation", () => {
-    const shape = editor.toolManager.activeTool;
-    if (!shape) throw new Error("Expected active Shape tool");
-
-    expect(shape.getState()).toEqual({ type: "ready" });
-    expect(shape.stateCell.value).toEqual({ type: "ready" });
-    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
+  it("publishes lifecycle state through the typed tool surface", () => {
+    expect(editor.toolIf("shape")?.state).toEqual({ type: "ready" });
 
     editor.selectTool("select");
 
-    expect(shape.getState()).toEqual({ type: "idle" });
-    expect(shape.stateCell.value).toEqual({ type: "idle" });
+    expect(editor.toolIf("shape")).toBeNull();
+    expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 
   it("drag then release commits a closed 4-point rectangle contour", async () => {
@@ -55,8 +50,7 @@ describe("Shape tool", () => {
     await editor.settle();
 
     expect(contours().length).toBe(contoursBefore);
-    const state = editor.getActiveToolState();
-    expect(state.type).toBe("ready");
+    expect(editor.toolIf("shape")?.state.type).toBe("ready");
   });
 
   it("drag smaller than the 3-unit minimum does not commit", async () => {

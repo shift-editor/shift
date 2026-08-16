@@ -78,7 +78,6 @@ describe("BaseTool contract", () => {
       tool.handleEvent(clickEvent);
 
       expect(tool.getState()).toEqual({ type: "clicked" });
-      expect(editor.getActiveToolState()).toEqual({ type: "clicked" });
       expect(tool.stateChanges).toEqual([
         { prev: { type: "ready" }, next: { type: "clicked" }, event: clickEvent },
       ]);

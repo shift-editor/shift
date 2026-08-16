@@ -45,7 +45,7 @@ describe("KeyboardRouter", () => {
 
     router = new KeyboardRouter(() => ({
       canvasActive,
-      activeTool: editor.getActiveTool(),
+      activeTool: editor.tool?.id ?? null,
       editor,
       toolManager: editor.toolManager,
     }));
@@ -112,7 +112,7 @@ describe("KeyboardRouter", () => {
       const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(true);
-      expect(editor.getActiveTool()).toBe("shape");
+      expect(editor.toolIf("shape")?.state).toEqual({ type: "ready" });
     });
 
     it("does not run tool shortcuts outside the canvas context", async () => {
@@ -122,7 +122,7 @@ describe("KeyboardRouter", () => {
       const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
-      expect(editor.getActiveTool()).toBe("select");
+      expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
     it("does not intercept plain typing while the text tool is active", async () => {
@@ -132,7 +132,7 @@ describe("KeyboardRouter", () => {
       const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
-      expect(editor.getActiveTool()).toBe("text");
+      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
     });
   });
 
@@ -214,13 +214,10 @@ describe("KeyboardRouter", () => {
       const up = createKeyboardEvent({ key: " ", code: "Space" });
 
       await router.handleKeyDown(down);
-      // Temporary tools are tracked as toolManager overrides; activeToolId
-      // reflects the override while primaryToolId stays on the base tool.
-      expect(editor.toolManager.activeToolId).toBe("hand");
-      expect(editor.toolManager.primaryToolId).toBe("select");
+      expect(editor.toolIf("hand")?.state).toEqual({ type: "ready" });
 
       await router.handleKeyUp(up);
-      expect(editor.toolManager.activeToolId).toBe("select");
+      expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
     it("does not activate the hand tool on space while the text tool is active", async () => {
@@ -229,7 +226,7 @@ describe("KeyboardRouter", () => {
 
       await router.handleKeyDown(e);
 
-      expect(editor.getActiveTool()).toBe("text");
+      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
     });
   });
 

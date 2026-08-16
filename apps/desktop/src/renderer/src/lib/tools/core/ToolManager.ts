@@ -64,10 +64,6 @@ export class ToolManager implements ToolSwitchHandler {
     return this.primaryTool?.id ?? null;
   }
 
-  get isDragging(): boolean {
-    return this.editor.gesture.isDragging;
-  }
-
   register(manifest: ToolManifest): void {
     if (typeof manifest.id !== "string" || manifest.id.trim() === "") {
       throw new Error("[ToolManager] Tool id must be a non-empty string");
@@ -98,7 +94,6 @@ export class ToolManager implements ToolSwitchHandler {
     this.primaryTool = nextTool;
     if (this.primaryTool.activate) this.primaryTool.activate();
 
-    this.editor.setActiveToolState(this.primaryTool.getState());
     this.#publishActiveTool();
   }
 
@@ -111,7 +106,6 @@ export class ToolManager implements ToolSwitchHandler {
     this.temporaryOptions = options ?? null;
     this.overrideTool = nextTool;
     if (this.overrideTool.activate) this.overrideTool.activate();
-    this.editor.setActiveToolState(this.overrideTool.getState());
     this.#publishActiveTool();
     if (this.temporaryOptions?.onActivate) this.temporaryOptions.onActivate();
   }
@@ -124,9 +118,6 @@ export class ToolManager implements ToolSwitchHandler {
     if (this.temporaryOptions?.onReturn) this.temporaryOptions.onReturn();
     this.temporaryOptions = null;
 
-    if (this.primaryTool) {
-      this.editor.setActiveToolState(this.primaryTool.getState());
-    }
     this.#publishActiveTool();
   }
 
@@ -307,9 +298,6 @@ export class ToolManager implements ToolSwitchHandler {
     if (this.temporaryOptions?.onReturn) this.temporaryOptions.onReturn();
     this.temporaryOptions = null;
     if (this.primaryTool?.activate) this.primaryTool.activate();
-    if (this.primaryTool) {
-      this.editor.setActiveToolState(this.primaryTool.getState());
-    }
     this.#publishActiveTool();
   }
 

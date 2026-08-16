@@ -21,6 +21,6 @@ export { BaseTool, type ToolState } from "./BaseTool";
 export { ToolManager } from "./ToolManager";
 export { type ToolName, type BuiltInToolId, BUILT_IN_TOOL_IDS } from "./createContext";
 export type { ToolFactory, ToolManifest } from "./ToolManifest";
-export type { ToolStateMap, ActiveToolState } from "./ToolStateMap";
+export type { ActiveTool, ToolStateFor, ToolStateMap } from "./ToolStateMap";
 export { defineStateDiagram, type StateDiagram, type StateTransition } from "./StateDiagram";
 export { createBehavior, type Behavior, type ToolContext } from "./Behavior";
