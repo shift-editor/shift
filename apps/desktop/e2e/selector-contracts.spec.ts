@@ -48,9 +48,11 @@ test("exposes stable semantic selectors for major application surfaces", async (
   });
   await page.getByRole("button", { name: "Axes", exact: true }).click();
   await expect(await firstAxisSlider(page)).toBeVisible();
+  await expect(page.getByLabel("Weight value", { exact: true })).toBeVisible();
 
   await navigateToEditor(page, "41");
   await expect(editorShell(page)).toBeVisible();
   await expect(variationControls(page)).toBeVisible();
   await expect(glyphProperties(page)).toBeVisible();
+  await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeVisible();
 });
