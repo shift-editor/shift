@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { GlyphName, GlyphRecord, PointId } from "@shift/types";
 import type { Point } from "@shift/glyph-state";
+import { Curve } from "@shift/geo";
 import { effect, signal, track } from "@/lib/signals/signal";
 import { emptyExternalAxisLocation } from "@/lib/variation/location";
 import { TestEditor } from "@/testing/TestEditor";
@@ -87,6 +88,28 @@ describe("Glyph", () => {
       [100, 0],
       [50, 100],
     ]);
+  });
+
+  it("adds a complete cubic segment with a corner endpoint", async () => {
+    const contourId = layer.addContour();
+    layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+    await editor.settle();
+
+    const curve = Curve.cubic(
+      { x: 0, y: 0 },
+      { x: 25, y: 100 },
+      { x: 75, y: 100 },
+      { x: 100, y: 0 },
+    );
+    const endpointId = layer.addCubic(contourId, curve);
+    await editor.settle();
+
+    expect(layer.contour(contourId)?.segments()[0]?.asCubic()).toMatchObject({
+      start: curve.p0,
+      controlStart: curve.c0,
+      controlEnd: curve.c1,
+      end: { ...curve.p1, id: endpointId, smooth: false },
+    });
   });
 
   it("updates positions synchronously and keeps them after the echo folds", async () => {
