@@ -141,15 +141,13 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   await axisInput.press("Enter");
   await expect
     .poll(() =>
-      page.evaluate(
-        (axisId) => ({
-          location: window.shiftSession?.catalog.locationCell.value.find(
-            (_, index) => window.shiftSession?.catalog.axesCell.value[index]?.id === axisId,
-          ),
+      page.evaluate((axisId) => {
+        const axisIndex = window.shift?.font.getAxes().findIndex(({ id }) => id === axisId) ?? -1;
+        return {
+          location: window.shiftSession?.catalog.locationCell.value[axisIndex],
           sourceId: window.shiftSession?.catalog.sourceIdCell.value,
-        }),
-        fixture.axisId,
-      ),
+        };
+      }, fixture.axisId),
     )
     .toEqual({ location: 650, sourceId: null });
 
