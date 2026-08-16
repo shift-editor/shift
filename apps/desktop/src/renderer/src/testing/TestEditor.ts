@@ -22,6 +22,7 @@ import {
   mintNodeId,
   type GlyphId,
   type GlyphName,
+  type AnchorId,
   type GlyphRecord,
   type PointId,
   type Unicode,
@@ -193,6 +194,26 @@ export class TestEditor extends Editor {
     if (!point) throw new Error("Expected source point");
 
     return { x: point.x, y: point.y };
+  }
+
+  anchorPosition(anchorId: AnchorId): Point2D {
+    const anchor = this.requireGlyphLayer().anchor(anchorId);
+    if (!anchor) throw new Error("Expected source anchor");
+
+    return { x: anchor.x, y: anchor.y };
+  }
+
+  async drawOpenContour(points: readonly Point2D[]): Promise<readonly PointId[]> {
+    this.selectTool("pen");
+    for (const point of points) {
+      this.clickGlyphLocal(point.x, point.y);
+      await this.settle();
+    }
+
+    const contour = this.openContour;
+    if (!contour) throw new Error("Expected open contour");
+
+    return contour.points.map((point) => point.id);
   }
 
   get glyphNode(): GlyphNode | null {
