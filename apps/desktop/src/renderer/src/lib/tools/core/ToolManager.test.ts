@@ -8,51 +8,42 @@ describe("tool selection and temporary overrides", () => {
     editor = new TestEditor();
   });
 
-  it("publishes the selected primary tool, state, and cursor", () => {
+  it("keeps Pen behavior active while Meta is pressed", () => {
     editor.selectTool("pen");
-
-    expect(editor.toolManager.primaryToolId).toBe("pen");
-    expect(editor.toolManager.activeToolId).toBe("pen");
-    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen" });
-  });
-
-  it("keeps the primary tool active when Meta is pressed", () => {
-    editor.selectTool("pen");
+    const penCursor = editor.cursor;
 
     editor.keyDown("Meta", { metaKey: true });
 
-    expect(editor.toolManager.primaryToolId).toBe("pen");
-    expect(editor.toolManager.activeToolId).toBe("pen");
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen" });
+    expect(editor.cursor).toBe(penCursor);
+    expect(editor.currentModifiers.metaKey).toBe(true);
   });
 
-  it("temporarily activates Hand and restores the primary tool", () => {
+  it("temporarily pans with Hand and then resumes Pen editing", async () => {
+    await editor.startSession();
     editor.selectTool("pen");
+    const penCursor = editor.cursor;
 
     editor.requestTemporaryTool("hand");
-
-    expect(editor.toolManager.primaryToolId).toBe("pen");
-    expect(editor.toolManager.activeToolId).toBe("hand");
-    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "grab" });
-
+    editor.pointerDown(0, 0).pointerMove(50, 30).pointerMove(120, 80).pointerUp(120, 80);
     editor.returnFromTemporaryTool();
+    editor.clickGlyphLocal(100, 100);
+    await editor.settle();
 
-    expect(editor.toolManager.activeToolId).toBe("pen");
-    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen" });
+    expect(editor.pan).toEqual({ x: 120, y: 80 });
+    expect(editor.cursor).toBe(penCursor);
+    expect(editor.pointCount).toBe(1);
   });
 
-  it("does not replace an active temporary tool", () => {
+  it("does not replace an active temporary Hand tool", () => {
     editor.selectTool("pen");
     editor.requestTemporaryTool("hand");
+    const handCursor = editor.cursor;
 
     editor.requestTemporaryTool("shape");
+    editor.pointerDown(0, 0).pointerMove(50, 0).pointerMove(100, 0).pointerUp(100, 0);
 
-    expect(editor.toolManager.primaryToolId).toBe("pen");
-    expect(editor.toolManager.activeToolId).toBe("hand");
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "grab" });
+    expect(editor.pan.x).toBe(100);
+    expect(editor.cursor).toBe(handCursor);
   });
 
   it("notifies the temporary-tool lifecycle boundary", () => {
