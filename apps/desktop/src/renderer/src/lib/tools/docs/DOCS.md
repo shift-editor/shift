@@ -8,6 +8,10 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** Lifecycle methods mutate tool state through `BaseTool.setState()`, never by assigning `this.state`. The method publishes one coherent value to `state` and `stateCell`; `Editor.toolCell` pulls the active instance's `stateCell`. Direct assignment leaves editor tool state, cursor, and editing computations stale.
 
+- **Architecture Invariant:** A temporary override masks the resident primary tool without deactivating or reactivating it. Returning from Hand must preserve tool-local editing scope such as Pen's active open contour. Replacing or removing the primary is a different, permanent transition and calls `deactivate()` followed by `dispose()`.
+
+- **Architecture Invariant:** A `ToolRegistration` exclusively owns one installed ID. Unrelated duplicate IDs are rejected; `replace()` keeps the ownership and selected ID, while `dispose()` is permanent and idempotent. Consumers must retain this handle for runtime update or removal.
+
 - **Architecture Invariant:** Behaviors are tried in **array order**; first handler that returns `true` wins. Reordering the `behaviors` array changes tool semantics. **CRITICAL**: placing a broad handler (e.g. `Selection`) before a narrow one (e.g. `ToggleSmooth`) will shadow the narrow handler.
 
 - **Architecture Invariant:** Behaviors are stateless transition rules. All mutable state lives in the tool state union `S` or on `Editor`. Behaviors must not hold state that survives across events unless that resource is cleaned up in `onStateEnter`/`onStateExit`.
@@ -30,8 +34,9 @@ tools/
     BaseTool.ts          — abstract base class; owns behavior loop and state lifecycle
     Behavior.ts          — Behavior<S> interface and createBehavior helper
     GestureDetector.ts   — pointer+timing -> ToolEvent (click, drag, doubleClick, ...)
-    ToolManager.ts       — tool orchestration, rAF coalescing, temporary tool override
+    ToolManager.ts       — tool orchestration, contribution ownership, replacement
     ToolManifest.ts      — ToolManifest registration descriptor
+    ToolRegistration.ts  — ownership handle for replace/remove lifecycle
     StateDiagram.ts      — defineStateDiagram for declarative tool state specs
     ToolStateMap.ts      — union map of all built-in tool states
     createContext.ts     — ToolName, ToolState, BUILT_IN_TOOL_IDS
@@ -45,15 +50,16 @@ tools/
 
 ## Key Types
 
-- `BaseTool<S, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `drawOverlay`, `drawScene`, `drawBackground`.
+- `BaseTool<S, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `drawOverlay`, `drawScene`, `drawBackground`. Permanent `dispose()` releases base computed signals after deactivation.
 - `Behavior<S>` — interface with optional per-event handlers (`onClick`, `onDrag`, `onDragStart`, `onDragEnd`, `onDragCancel`, `onPointerMove`, `onDoubleClick`, `onKeyDown`, `onKeyUp`) plus lifecycle hooks (`onStateExit`, `onStateEnter`). Each handler receives `(state, ctx, event)` and returns `boolean` (true = handled).
 - `ToolContext<S>` — `{ editor, getState, setState }`. Passed to behaviors during the event loop and lifecycle hooks.
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
 - `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
-- `ToolManager` — owns the active tool, `GestureDetector`, rAF pointer coalescing, and temporary tool switching.
+- `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, replacement, removal, and temporary tool switching.
 - `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot. `Editor.toolIf(id)` narrows built-in state through `ToolStateMap`; runtime IDs fall back to `ToolState`.
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
 - `ToolManifest` — `{ id, create, icon, tooltip, shortcut? }`. Registration descriptor passed to `editor.registerTool`.
+- `ToolRegistration` — exclusive ownership handle returned by `editor.registerTool`; exposes `replace(manifest)` and idempotent `dispose()`.
 - `StateDiagram` — `{ states, initial, transitions }`. Declarative spec for compliance testing.
 - `ToolName` — `string` (not a fixed union; extensible for plugins).
 - `ToolState` — `{ type: string }` base interface for all tool state unions.
@@ -100,7 +106,11 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 ### Temporary tool override
 
-`ToolManager.requestTemporary(toolId, options?)` activates an override tool (e.g. Hand via Space bar). `returnFromTemporary()` restores the primary tool. Blocked during an active drag.
+`ToolManager.requestTemporary(toolId, options?)` activates an override tool (e.g. Hand via Space bar). The primary instance remains resident and unchanged while masked. `returnFromTemporary()` disposes the override and reveals that same primary instance without another lifecycle transition. Requests are blocked during an active drag.
+
+### Runtime contribution lifecycle
+
+`editor.registerTool(manifest)` installs metadata and returns its `ToolRegistration`. `replace()` publishes new metadata immediately. Inactive tools use the new factory on their next activation; resident instances are reconstructed immediately unless they own an active drag, in which case reconstruction waits for `dragEnd` or `dragCancel`. Removing an active contribution cancels its gesture before disposal and falls back to Select when available. `Editor.destroy()` permanently disposes all resident instances and their computed signals.
 
 ### Draft pattern for drag mutations
 

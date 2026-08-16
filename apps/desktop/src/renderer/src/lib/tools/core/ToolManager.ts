@@ -12,7 +12,9 @@ import {
 import type { BaseTool } from "./BaseTool";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { ToolManifest } from "./ToolManifest";
+import { ToolRegistration } from "./ToolRegistration";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolInstance = BaseTool<any, any, any>;
 
@@ -26,11 +28,14 @@ const DEFAULT_MODIFIERS: Modifiers = {
 
 export class ToolManager implements ToolSwitchHandler {
   private registry = new Map<ToolName, ToolManifest>();
+  private owners = new Map<ToolName, symbol>();
   private primaryTool: ToolInstance | null = null;
   private overrideTool: ToolInstance | null = null;
   readonly #activeTool: WritableSignal<ToolInstance | null>;
+  readonly #manifests: WritableSignal<ReadonlyMap<ToolName, ToolManifest>>;
   private gesture = new GestureDetector();
   private editor: Editor;
+  private pendingReplacements = new Set<ToolName>();
 
   private temporaryOptions: TemporaryToolOptions | null = null;
 
@@ -45,6 +50,9 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor = editor;
     this.#activeTool = signal<ToolInstance | null>(null, {
       name: "toolManager.activeTool",
+    });
+    this.#manifests = signal<ReadonlyMap<ToolName, ToolManifest>>(new Map(), {
+      name: "toolManager.manifests",
     });
   }
 
@@ -64,32 +72,52 @@ export class ToolManager implements ToolSwitchHandler {
     return this.primaryTool?.id ?? null;
   }
 
-  register(manifest: ToolManifest): void {
-    if (typeof manifest.id !== "string" || manifest.id.trim() === "") {
-      throw new Error("[ToolManager] Tool id must be a non-empty string");
-    }
+  get manifests(): ReadonlyMap<ToolName, ToolManifest> {
+    return this.#manifests.peek();
+  }
 
+  get manifestsCell(): Signal<ReadonlyMap<ToolName, ToolManifest>> {
+    return this.#manifests;
+  }
+
+  /**
+   * Installs one tool contribution and returns its ownership handle.
+   *
+   * @param manifest - Stable identity, metadata, and factory to install.
+   * @returns A handle that can replace or permanently remove this contribution.
+   * @throws {Error} when the ID is empty or already owned.
+   */
+  register(manifest: ToolManifest): ToolRegistration {
+    this.#validateManifest(manifest);
     if (this.registry.has(manifest.id)) {
       throw new Error(`[ToolManager] Tool already registered: ${manifest.id}`);
     }
 
+    const owner = Symbol(manifest.id);
     this.registry.set(manifest.id, manifest);
+    this.owners.set(manifest.id, owner);
+    this.#publishManifests();
+
+    return new ToolRegistration(
+      manifest.id,
+      (nextManifest) => this.#replaceRegistration(owner, nextManifest),
+      () => this.#disposeRegistration(owner, manifest.id),
+    );
   }
 
   activate(id: ToolName): void {
-    if (this.overrideTool) {
-      this.releaseOverride();
-    }
-
-    if (this.primaryTool?.deactivate) this.primaryTool.deactivate();
-    this.gesture.reset();
-    this.editor.gesture.reset();
+    if (this.editor.isDragging) this.cancelPointerGesture();
+    if (this.overrideTool) this.#clearOverride();
 
     const nextTool = this.createToolInstance(id);
     if (!nextTool) {
       console.warn(`[ToolManager] Unknown tool: ${id}`);
       return;
     }
+
+    this.#disposePrimary();
+    this.gesture.reset();
+    this.editor.gesture.reset();
 
     this.primaryTool = nextTool;
     if (this.primaryTool.activate) this.primaryTool.activate();
@@ -98,7 +126,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   requestTemporary(toolId: ToolName, options?: TemporaryToolOptions): void {
-    if (this.overrideTool || this.editor.gesture.isDragging) return;
+    if (this.overrideTool || this.editor.isDragging) return;
 
     const nextTool = this.createToolInstance(toolId);
     if (!nextTool) return;
@@ -112,13 +140,9 @@ export class ToolManager implements ToolSwitchHandler {
 
   returnFromTemporary(): void {
     if (!this.overrideTool) return;
+    if (this.editor.isDragging) this.cancelPointerGesture();
 
-    if (this.overrideTool.deactivate) this.overrideTool.deactivate();
-    this.overrideTool = null;
-    if (this.temporaryOptions?.onReturn) this.temporaryOptions.onReturn();
-    this.temporaryOptions = null;
-
-    this.#publishActiveTool();
+    this.#clearOverride();
   }
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
@@ -154,12 +178,12 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   /**
-   * Drain any pending pointer-move synchronously.
+   * Drains any pending pointer move synchronously.
    *
-   * `handlePointerMove` normally coalesces calls via `requestAnimationFrame`.
-   * Tests and automation that need the full move pipeline (input state →
-   * gesture → tool event → state signal → cursor effect) to complete before
-   * the next action call this to bypass rAF.
+   * @remarks
+   * Pointer moves normally coalesce through `requestAnimationFrame`. Tests and
+   * automation use this boundary to complete input, gesture, tool-state, and
+   * cursor publication before the next action.
    */
   flushPointerMoves(): void {
     if (this.frameId !== null) {
@@ -196,6 +220,7 @@ export class ToolManager implements ToolSwitchHandler {
     const events = this.gesture.pointerUp(coords, modifiers);
     this.dispatchEvents(events);
     this.editor.gesture.reset();
+    this.#flushPendingReplacements();
   }
 
   cancelPointerGesture(): void {
@@ -205,6 +230,7 @@ export class ToolManager implements ToolSwitchHandler {
     if (wasDragging) {
       this.activeTool?.handleEvent({ type: "dragCancel" });
     }
+    this.#flushPendingReplacements();
   }
 
   handleKeyDown(e: KeyboardEvent): boolean {
@@ -217,9 +243,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.input.setModifiers(modifiers);
 
     if (e.key === "Escape" && this.gesture.isDragging) {
-      this.gesture.reset();
-      this.editor.gesture.reset();
-      this.activeTool?.handleEvent({ type: "dragCancel" });
+      this.cancelPointerGesture();
       return true;
     }
 
@@ -262,6 +286,35 @@ export class ToolManager implements ToolSwitchHandler {
     if (this.activeTool?.drawOverlay) this.activeTool.drawOverlay(canvas);
   }
 
+  /** Permanently disposes every resident instance and installed contribution. */
+  dispose(): void {
+    if (this.editor.isDragging) this.cancelPointerGesture();
+
+    this.#disposeOverride();
+    this.#disposePrimary();
+    this.registry.clear();
+    this.owners.clear();
+    this.pendingReplacements.clear();
+    this.#publishActiveTool();
+    this.#publishManifests();
+  }
+
+  /** @knipclassignore */
+  reset(): void {
+    if (this.editor.isDragging) {
+      this.cancelPointerGesture();
+    } else {
+      this.gesture.reset();
+      this.editor.gesture.reset();
+    }
+
+    if (this.overrideTool) this.#clearOverride();
+  }
+
+  notifySelectionChanged(): void {
+    this.activeTool?.handleEvent({ type: "selectionChanged" });
+  }
+
   private dispatchEvents(events: GestureEvent[]): void {
     for (const event of events) {
       this.activeTool?.handleEvent(this.withPointerTarget(event));
@@ -292,35 +345,134 @@ export class ToolManager implements ToolSwitchHandler {
     }
   }
 
-  private releaseOverride(): void {
-    if (this.overrideTool?.deactivate) this.overrideTool.deactivate();
-    this.overrideTool = null;
-    if (this.temporaryOptions?.onReturn) this.temporaryOptions.onReturn();
-    this.temporaryOptions = null;
-    if (this.primaryTool?.activate) this.primaryTool.activate();
-    this.#publishActiveTool();
-  }
-
-  /** @knipclassignore */
-  reset(): void {
-    this.gesture.reset();
-    this.editor.gesture.reset();
-    if (this.overrideTool) {
-      this.releaseOverride();
-    }
-  }
-
-  notifySelectionChanged(): void {
-    this.activeTool?.handleEvent({ type: "selectionChanged" });
-  }
-
   private createToolInstance(id: ToolName): ToolInstance | null {
     const manifest = this.registry.get(id);
     if (!manifest) return null;
     return manifest.create(this.editor);
   }
 
+  #replaceRegistration(owner: symbol, manifest: ToolManifest): void {
+    this.#assertOwner(owner, manifest.id);
+    this.#validateManifest(manifest);
+    this.registry.set(manifest.id, manifest);
+    this.#publishManifests();
+
+    if (this.activeTool?.id === manifest.id && this.editor.isDragging) {
+      this.pendingReplacements.add(manifest.id);
+      return;
+    }
+
+    this.#replaceResident(manifest.id);
+  }
+
+  #disposeRegistration(owner: symbol, id: ToolName): void {
+    this.#assertOwner(owner, id);
+    this.pendingReplacements.delete(id);
+
+    const removingActive = this.activeTool?.id === id;
+    const removingPrimary = this.primaryTool?.id === id;
+    const removingOverride = this.overrideTool?.id === id;
+
+    if (removingActive && this.editor.isDragging) this.cancelPointerGesture();
+
+    this.registry.delete(id);
+    this.owners.delete(id);
+    this.#publishManifests();
+
+    if (removingOverride) this.#clearOverride();
+    if (removingPrimary) this.#disposePrimary();
+
+    if (removingActive) {
+      const fallbackId = this.#fallbackId();
+      if (fallbackId) {
+        this.activate(fallbackId);
+      } else {
+        this.#publishActiveTool();
+      }
+      return;
+    }
+
+    if (removingPrimary && this.overrideTool) {
+      const fallbackId = this.#fallbackId();
+      this.primaryTool = fallbackId ? this.createToolInstance(fallbackId) : null;
+      if (this.primaryTool?.activate) this.primaryTool.activate();
+    }
+
+    this.#publishActiveTool();
+  }
+
+  #replaceResident(id: ToolName): void {
+    if (this.overrideTool?.id === id) {
+      this.#disposeOverride();
+      this.overrideTool = this.createToolInstance(id);
+      if (this.overrideTool?.activate) this.overrideTool.activate();
+      this.#publishActiveTool();
+      return;
+    }
+
+    if (this.primaryTool?.id !== id) return;
+
+    if (this.primaryTool.deactivate) this.primaryTool.deactivate();
+    this.primaryTool.dispose();
+    this.primaryTool = this.createToolInstance(id);
+    if (this.primaryTool?.activate) this.primaryTool.activate();
+    this.#publishActiveTool();
+  }
+
+  #flushPendingReplacements(): void {
+    if (this.pendingReplacements.size === 0) return;
+
+    const ids = [...this.pendingReplacements];
+    this.pendingReplacements.clear();
+    for (const id of ids) {
+      if (this.registry.has(id)) this.#replaceResident(id);
+    }
+  }
+
+  #clearOverride(): void {
+    this.#disposeOverride();
+    if (this.temporaryOptions?.onReturn) this.temporaryOptions.onReturn();
+    this.temporaryOptions = null;
+    this.#publishActiveTool();
+  }
+
+  #disposeOverride(): void {
+    if (!this.overrideTool) return;
+    if (this.overrideTool.deactivate) this.overrideTool.deactivate();
+    this.overrideTool.dispose();
+    this.overrideTool = null;
+  }
+
+  #disposePrimary(): void {
+    if (!this.primaryTool) return;
+    if (this.primaryTool.deactivate) this.primaryTool.deactivate();
+    this.primaryTool.dispose();
+    this.primaryTool = null;
+  }
+
+  #fallbackId(): ToolName | null {
+    if (this.registry.has("select")) return "select";
+
+    return this.registry.keys().next().value ?? null;
+  }
+
+  #assertOwner(owner: symbol, id: ToolName): void {
+    if (this.owners.get(id) !== owner) {
+      throw new Error(`[ToolManager] Tool registration is no longer current: ${id}`);
+    }
+  }
+
+  #validateManifest(manifest: ToolManifest): void {
+    if (typeof manifest.id !== "string" || manifest.id.trim() === "") {
+      throw new Error("[ToolManager] Tool id must be a non-empty string");
+    }
+  }
+
   #publishActiveTool(): void {
     this.#activeTool.set(this.overrideTool ?? this.primaryTool);
+  }
+
+  #publishManifests(): void {
+    this.#manifests.set(new Map(this.registry));
   }
 }

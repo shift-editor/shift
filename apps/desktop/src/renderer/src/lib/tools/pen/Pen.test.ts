@@ -130,6 +130,25 @@ describe("Pen tool", () => {
     });
   });
 
+  describe("temporary tool continuity", () => {
+    it("continues the active contour after temporarily panning with Hand", async () => {
+      editor.click(100, 200);
+      await editor.settle();
+      editor.click(300, 200);
+      await editor.settle();
+      const contourId = editor.openContour?.id;
+
+      editor.requestTemporaryTool("hand");
+      editor.returnFromTemporaryTool();
+      editor.click(500, 200);
+      await editor.settle();
+
+      expect(editor.glyphContours).toHaveLength(1);
+      expect(editor.openContour?.id).toBe(contourId);
+      expect(editor.openContour?.points).toHaveLength(3);
+    });
+  });
+
   describe("durability and undo through the workspace", () => {
     it("a click-placed point survives as one undoable ledger entry", async () => {
       editor.click(100, 200);

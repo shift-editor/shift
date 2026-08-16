@@ -101,6 +101,12 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
   activate?(): void;
   deactivate?(): void;
 
+  /** Permanently severs this instance's reactive dependencies; it cannot be resumed. */
+  dispose(): void {
+    this.cursorCell.dispose();
+    this.isEditingCell.dispose();
+  }
+
   /** @knipclassignore — pure transition API used by tool tests/debugging. */
   transition(state: S, event: ToolEvent): S {
     return this.#runBehaviors(state, event).state;
