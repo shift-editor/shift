@@ -106,16 +106,27 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
 
-      - name: Configure Linux sandbox for smoke test
-        if: matrix.platform == 'linux'
+      - name: Prepare packaged application for smoke test
+        id: smoke-package
         shell: bash
+        env:
+          PACKAGE_PATH: apps/desktop/out/${{ matrix.package-dir }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          SANDBOX="apps/desktop/out/${{ matrix.package-dir }}/chrome-sandbox"
-          sudo chown root:root "$SANDBOX"
-          sudo chmod 4755 "$SANDBOX"
+          set -euo pipefail
+
+          if [[ "$PLATFORM" == "linux" ]]; then
+            SMOKE_PACKAGE_PATH="apps/desktop/out/shift-nightly-linux-x64"
+            mv "$PACKAGE_PATH" "$SMOKE_PACKAGE_PATH"
+            PACKAGE_PATH="$SMOKE_PACKAGE_PATH"
+            sudo chown root:root "$PACKAGE_PATH/chrome-sandbox"
+            sudo chmod 4755 "$PACKAGE_PATH/chrome-sandbox"
+          fi
+
+          echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Smoke-test packaged application
-        run: node scripts/smoke-packaged.mjs "apps/desktop/out/${{ matrix.package-dir }}"
+        run: node scripts/smoke-packaged.mjs "${{ steps.smoke-package.outputs.path }}" nightly
 
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'
