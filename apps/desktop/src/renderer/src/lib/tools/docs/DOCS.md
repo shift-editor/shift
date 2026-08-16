@@ -6,6 +6,8 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** Every tool must call `activate()` to leave `"idle"` state. `BaseTool` skips the behavior loop entirely when `state.type === "idle"`, so a tool that forgets `activate()` will silently ignore all events.
 
+- **Architecture Invariant:** Lifecycle methods mutate tool state through `BaseTool.setState()`, never by assigning `this.state`. The method publishes one coherent value to `state`, `stateCell`, and the editor's active-tool state; direct assignment leaves cursor and editing computations stale.
+
 - **Architecture Invariant:** Behaviors are tried in **array order**; first handler that returns `true` wins. Reordering the `behaviors` array changes tool semantics. **CRITICAL**: placing a broad handler (e.g. `Selection`) before a narrow one (e.g. `ToggleSmooth`) will shadow the narrow handler.
 
 - **Architecture Invariant:** Behaviors are stateless transition rules. All mutable state lives in the tool state union `S` or on `Editor`. Behaviors must not hold state that survives across events unless that resource is cleaned up in `onStateEnter`/`onStateExit`.
@@ -87,7 +89,7 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 1. **Batch** all side effects inside a single reactive `batch()`.
 2. Call `onStateExit` on every behavior (receives `prev`, `next`, a pre-commit context).
-3. Commit: `this.state = next`, `editor.setActiveToolState(next)`.
+3. Commit through `setState(next)`, publishing `state`, `stateCell`, and `editor.setActiveToolState(next)` together.
 4. Call `onStateEnter` on every behavior (receives `prev`, `next`, a post-commit context where `setState` updates `this.state`).
 5. Call `onStateChange(prev, next, event)` if defined on the tool.
 
@@ -131,7 +133,7 @@ All three receive a `Canvas` instance.
    - Set `readonly id: ToolName = "myTool"`.
    - Declare `readonly behaviors: Behavior<MyState>[] = [...]`.
    - Implement `initialState()` returning `{ type: "idle" }`.
-   - Implement `activate()` setting `this.state = { type: "ready" }`.
+   - Implement `activate()` with `this.setState({ type: "ready" })`.
 3. Optionally add `static stateSpec = defineStateDiagram(...)` for compliance testing.
 4. Register in `registerBuiltInTools` (`tools.ts`): `editor.registerTool({ id, create, icon, tooltip, shortcut? })`.
 
