@@ -4,15 +4,20 @@ Shift ships one versioned desktop product. Internal Rust crates and JavaScript p
 
 ## Distribution states
 
-| State     | Product identity        | Bundle ID           | Data root       | Publication                        |
-| --------- | ----------------------- | ------------------- | --------------- | ---------------------------------- |
-| `release` | Shift                   | `app.shift`         | `Shift`         | Versioned GitHub prerelease        |
-| `nightly` | Shift Nightly           | `app.shift.nightly` | `Shift Nightly` | Expiring workflow artifact         |
-| `stable`  | Reserved Shift maturity | `app.shift`         | `Shift`         | Disabled until explicitly approved |
+| State     | Product identity | Bundle ID           | Data root       | Publication                   |
+| --------- | ---------------- | ------------------- | --------------- | ----------------------------- |
+| `release` | Shift            | `app.shift`         | `Shift`         | Draft, then GitHub prerelease |
+| `nightly` | Shift Nightly    | `app.shift.nightly` | `Shift Nightly` | Expiring workflow artifact    |
 
-`SHIFT_DISTRIBUTION` accepts only `release` or `nightly` during a build. A commit on `main` may produce a Nightly. Merging a Release Please pull request may create an alpha tag. Nightly artifacts never promote themselves, and the release workflow rejects stable tags until the stable transition is deliberately enabled.
+`SHIFT_DISTRIBUTION` accepts only `release` or `nightly` during a build. A commit on `main` may produce a Nightly. Merging a Release Please pull request creates an alpha tag and a draft GitHub release. Nightly artifacts never promote themselves, and the release workflow rejects stable tags until the stable transition is deliberately enabled.
 
 Development builds append ` Dev` to their product identity. An explicit Electron `--user-data-dir` switch always wins, allowing E2E and manual tests to own isolated state.
+
+## Publication and invitations
+
+An Alpha is a permanent, public Developer Preview, not a claim that the invited-tester workflow is ready. Publish Alpha snapshots early enough to exercise tagging, signing, packaging, checksums, installation, and upgrade behavior. Continue to make rapid and breaking UI, API, and document changes, but never silently corrupt or reinterpret user work; refuse unsupported documents explicitly.
+
+Invitations are a separate communication decision. Invite testers to whichever current Alpha passes the stronger product gate. The first invited build does not need to be `alpha.1`, and publishing an Alpha does not require a website announcement or waitlist message.
 
 ## Versions
 
@@ -23,9 +28,9 @@ pnpm version:check
 pnpm version:set 0.1.0-alpha.1
 ```
 
-Release Please owns normal version changes. `.release-please-manifest.json` starts at `0.1.0-alpha.0`, so the first tagged release is `v0.1.0-alpha.1`. The initial changelog boundary is commit `f1e77f1730b2203afb2b26a649c9560d6fc02966`; older roadmap history is not imported into the first release notes.
+Release Please owns normal version changes. `.release-please-manifest.json` starts at `0.1.0-alpha.0`, so the first tagged release is `v0.1.0-alpha.1`. The initial changelog boundary is commit `ef7d07a84471e23b53895255b9ad967849440465`, immediately before the release foundation; older project history is not imported into the first release notes.
 
-Use Conventional Commit prefixes on merged pull requests. `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, and `ci` entries appear in the generated changelog. Formatting-only `style` entries and chores remain hidden.
+Use Conventional Commit prefixes on commits and pull requests. `feat`, `fix`, and `perf` entries appear in the generated public changelog. `refactor`, `docs`, `test`, `build`, `ci`, `style`, and `chore` remain valid commit types but stay hidden from public release notes. Before publishing the first Alpha, add a short curated overview and known-issues section to its Release Please pull request; generated entries alone do not describe the existing product.
 
 ### Version maturity policy
 
@@ -39,12 +44,12 @@ Before 1.0, Shift uses:
 - the prerelease sequence for published iterations within that milestone; and
 - the patch number for fixes to an already-published stable version.
 
-Consequently, ordinary work within the invited Alpha 1 milestone advances `0.1.0-alpha.1` to `0.1.0-alpha.2`, not to a new minor version. A meaningfully expanded scope, deliberate document-compatibility boundary, or newly declared preview milestone starts `0.2.0-alpha.1`. Version numbers do not measure completion percentage, time elapsed, or the number of merged features.
+Consequently, ordinary work within the Alpha 1 milestone advances `0.1.0-alpha.1` to `0.1.0-alpha.2`, not to a new minor version. A meaningfully expanded scope, deliberate document-compatibility boundary, or newly declared preview milestone starts `0.2.0-alpha.1`. Version numbers do not measure completion percentage, time elapsed, or the number of merged features.
 
 The intended path toward the first stable release is:
 
 ```text
-0.1.0-alpha.N    invited Alpha 1 iterations
+0.1.0-alpha.N    Developer Preview iterations
 0.2.0-alpha.N    later preview milestone, when explicitly declared
 1.0.0-beta.N     v1 scope is feature-complete
 1.0.0-rc.N       v1 release candidates
@@ -57,11 +62,11 @@ Do not move backward in maturity for the same target version. If scope reopens s
 
 ## Workflows
 
-- `release-please.yml` maintains a draft release pull request and creates an alpha GitHub prerelease when that pull request is merged.
-- `release-desktop.yml` builds an existing alpha or beta GitHub release for macOS arm64/x64, Windows x64, and Linux x64. It builds the native bridge on each runner, smoke-tests the packaged app, and uploads checksums and desktop artifacts.
+- `release-please.yml` maintains a draft release pull request. Merging it creates an alpha tag and a draft GitHub release, then calls the desktop release workflow with that exact tag. `force-tag-creation` materializes the tag immediately because GitHub otherwise delays tags for draft releases.
+- `release-desktop.yml` is a reusable and manually dispatchable workflow that builds the draft alpha or beta release for macOS arm64/x64, Windows x64, and Linux x64. It builds the native bridge on each runner, smoke-tests the packaged app, uploads checksums and desktop artifacts, and only then publishes the GitHub prerelease. A failed build leaves the release private and draft.
 - `nightly.yml` builds the same platform matrix as Shift Nightly on a schedule or by manual dispatch. Nightly artifacts expire after 14 days and do not create tags.
 
-The Release Please workflow uses `RELEASE_PLEASE_TOKEN` rather than the default workflow token so its pull requests, tags, and GitHub releases trigger normal CI and release events.
+The Release Please workflow uses `RELEASE_PLEASE_TOKEN` rather than the default workflow token so its generated pull requests trigger normal CI. The desktop build is called directly from the successful release-creation job rather than relying on a second GitHub event.
 
 ## GitHub secrets
 
@@ -88,5 +93,6 @@ Do not put signing credentials in repository files, workflow inputs, artifacts, 
 
 - Disable a workflow from the Actions page to stop automation without deleting configuration.
 - Revert the release-preparation commit to restore the previous package and application identity behavior.
+- A failed versioned build remains a private draft release. Fix the release workflow and rerun it for the existing tag; do not publish incomplete assets.
 - Never delete or reuse a published version tag. Correct it with the next prerelease version.
 - A Nightly rollback requires no migration because Shift Nightly has a separate application identity and data root.

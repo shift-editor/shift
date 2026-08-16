@@ -1,9 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "bootstrap-sha": "f1e77f1730b2203afb2b26a649c9560d6fc02966",
+  "bootstrap-sha": "ef7d07a84471e23b53895255b9ad967849440465",
   "release-type": "node",
   "versioning": "prerelease",
   "prerelease": true,
+  "draft": true,
+  "force-tag-creation": true,
   "bump-minor-pre-major": true,
   "draft-pull-request": true,
   "include-component-in-tag": false,
@@ -24,23 +26,28 @@
     },
     {
       "type": "refactor",
-      "section": "Internal Changes"
+      "section": "Internal Changes",
+      "hidden": true
     },
     {
       "type": "docs",
-      "section": "Documentation"
+      "section": "Documentation",
+      "hidden": true
     },
     {
       "type": "test",
-      "section": "Testing"
+      "section": "Testing",
+      "hidden": true
     },
     {
       "type": "build",
-      "section": "Build System"
+      "section": "Build System",
+      "hidden": true
     },
     {
       "type": "ci",
-      "section": "Continuous Integration"
+      "section": "Continuous Integration",
+      "hidden": true
     },
     {
       "type": "style",
