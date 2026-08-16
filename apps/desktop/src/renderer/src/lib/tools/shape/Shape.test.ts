@@ -14,6 +14,20 @@ describe("Shape tool", () => {
 
   const contours = () => editor.glyphLayer?.geometry.contours ?? [];
 
+  it("publishes ready and idle states through activation and deactivation", () => {
+    const shape = editor.toolManager.activeTool;
+    if (!shape) throw new Error("Expected active Shape tool");
+
+    expect(shape.getState()).toEqual({ type: "ready" });
+    expect(shape.stateCell.value).toEqual({ type: "ready" });
+    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
+
+    editor.selectTool("select");
+
+    expect(shape.getState()).toEqual({ type: "idle" });
+    expect(shape.stateCell.value).toEqual({ type: "idle" });
+  });
+
   it("drag then release commits a closed 4-point rectangle contour", async () => {
     const contoursBefore = contours().length;
 

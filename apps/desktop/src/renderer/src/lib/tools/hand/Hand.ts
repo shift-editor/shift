@@ -24,13 +24,13 @@ export class Hand extends BaseTool<HandState> {
     this.#stashedEditingNodes = [...this.editor.editing.nodeIds];
     this.editor.editing.clear();
 
-    this.state = { type: "ready" };
+    this.setState({ type: "ready" });
   }
 
   override deactivate(): void {
     this.editor.editing.set(this.#stashedEditingNodes);
     this.#stashedEditingNodes = [];
 
-    this.state = { type: "idle" };
+    this.setState({ type: "idle" });
   }
 }
