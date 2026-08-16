@@ -274,7 +274,7 @@ function getExpandedHandleRect(
   };
 }
 
-function getHandlePositions(
+export function getHandlePositions(
   rect: Rect2D,
   handleOffset: number,
   rotationZoneOffset: number,
@@ -393,7 +393,7 @@ function drawHandle(
   canvas.ctx.restore();
 }
 
-function hitTestRotationZones(
+export function hitTestRotationZones(
   pos: Point2D,
   rotationZones: HandlePositions["rotationZones"],
   hitRadius: number,
@@ -418,7 +418,7 @@ function rectCenter(rect: Rect2D): Point2D {
   return Vec2.midpoint({ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom });
 }
 
-function hitTestResize(
+export function hitTestResize(
   rect: Rect2D,
   pos: Point2D,
   handles: HandlePositions,
