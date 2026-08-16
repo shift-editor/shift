@@ -110,6 +110,9 @@ const config: ForgeConfig = {
     }),
   ],
   hooks: {
+    // Keep the generated NAPI-RS loader external and preserve its target binary
+    // beside it. Forge cannot retain this workspace-linked package during prune,
+    // so each native runner copies its one verified platform artifact explicitly.
     packageAfterPrune: async (_forgeConfig, buildPath, _electronVersion, platform, arch) => {
       const nativeBridgeFile = nativeBridgeFiles[`${platform}-${arch}`];
       if (!nativeBridgeFile) {
