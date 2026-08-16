@@ -131,6 +131,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   page,
 }) => {
   await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(window.shift?.font.loaded))).toBe(true);
   const fixture = await createVariableNavigationFixture(page);
 
   await page.getByRole("button", { name: "Axes", exact: true }).click();
