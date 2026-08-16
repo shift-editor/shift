@@ -61,8 +61,7 @@ describe("Pen tool", () => {
     });
 
     it("publishes complete local curve topology while the drag is active", async () => {
-      editor.clickGlyphLocal(100, 100);
-      await editor.settle();
+      await editor.clickGlyphLocal(100, 100);
       const down = editor.projectSceneToScreen({ x: 300, y: 100 });
       const threshold = editor.projectSceneToScreen({ x: 340, y: 120 });
       const end = editor.projectSceneToScreen({ x: 380, y: 180 });
@@ -81,8 +80,7 @@ describe("Pen tool", () => {
     });
 
     it("restores the authored topology when an active curve is canceled", async () => {
-      editor.clickGlyphLocal(100, 100);
-      await editor.settle();
+      await editor.clickGlyphLocal(100, 100);
       const down = editor.projectSceneToScreen({ x: 300, y: 100 });
       const threshold = editor.projectSceneToScreen({ x: 340, y: 120 });
 
@@ -97,15 +95,13 @@ describe("Pen tool", () => {
     });
 
     it("places an untouched corner control one third toward the new anchor", async () => {
-      editor.clickGlyphLocal(100, 100);
-      await editor.settle();
+      await editor.clickGlyphLocal(100, 100);
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: 300, y: 100 },
         threshold: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.settle();
 
       const contour = editor.openContour;
       const controlStart = contour?.segments()[0]?.asCubic()?.controlStart;
@@ -115,15 +111,13 @@ describe("Pen tool", () => {
     });
 
     it("persists the release-position incoming handle", async () => {
-      editor.clickGlyphLocal(100, 100);
-      await editor.settle();
+      await editor.clickGlyphLocal(100, 100);
 
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: 300, y: 100 },
         threshold: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.settle();
 
       const controlEnd = editor.openContour?.segments()[0]?.asCubic()?.controlEnd;
       expect(controlEnd?.x).toBeCloseTo(220);
@@ -131,20 +125,17 @@ describe("Pen tool", () => {
     });
 
     it("preserves a dragged junction's outgoing handle in the next cubic", async () => {
-      editor.clickGlyphLocal(100, 100);
-      await editor.settle();
-      editor.dragScene({
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
         down: { x: 300, y: 100 },
         threshold: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.settle();
-      editor.dragScene({
+      await editor.dragScene({
         down: { x: 500, y: 100 },
         threshold: { x: 540, y: 120 },
         end: { x: 580, y: 180 },
       });
-      await editor.settle();
 
       const controlStart = editor.openContour?.segments()[1]?.asCubic()?.controlStart;
       expect(controlStart?.x).toBeCloseTo(380);
@@ -152,18 +143,18 @@ describe("Pen tool", () => {
     });
 
     it("preserves consecutive handles before previous workspace echoes settle", async () => {
-      editor.clickGlyphLocal(100, 100);
-      editor.dragScene({
+      const point = editor.clickGlyphLocal(100, 100);
+      const firstCurve = editor.dragScene({
         down: { x: 300, y: 100 },
         threshold: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      editor.dragScene({
+      const secondCurve = editor.dragScene({
         down: { x: 500, y: 100 },
         threshold: { x: 540, y: 120 },
         end: { x: 580, y: 180 },
       });
-      await editor.settle();
+      await Promise.all([point, firstCurve, secondCurve]);
 
       const controlStart = editor.openContour?.segments()[1]?.asCubic()?.controlStart;
       expect(controlStart?.x).toBeCloseTo(380);
@@ -171,10 +162,9 @@ describe("Pen tool", () => {
     });
 
     it("keeps an active consecutive curve visible across the previous workspace echo", async () => {
-      editor.clickGlyphLocal(100, 100);
-      await editor.settle();
+      await editor.clickGlyphLocal(100, 100);
 
-      editor.dragScene({
+      const previousCurve = editor.dragScene({
         down: { x: 300, y: 100 },
         threshold: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
@@ -187,7 +177,7 @@ describe("Pen tool", () => {
       editor.pointerMove(threshold.x, threshold.y);
       editor.pointerMove(end.x, end.y);
 
-      await editor.settle();
+      await previousCurve;
 
       expect(editor.openContour?.segments().map((segment) => segment.type)).toEqual([
         "cubic",
@@ -268,16 +258,13 @@ describe("Pen tool", () => {
 
   describe("temporary tool continuity", () => {
     it("continues the active contour after temporarily panning with Hand", async () => {
-      editor.click(100, 200);
-      await editor.settle();
-      editor.click(300, 200);
-      await editor.settle();
+      await editor.click(100, 200);
+      await editor.click(300, 200);
       const contourId = editor.openContour?.id;
 
       editor.requestTemporaryTool("hand");
       editor.returnFromTemporaryTool();
-      editor.click(500, 200);
-      await editor.settle();
+      await editor.click(500, 200);
 
       expect(editor.glyphContours).toHaveLength(1);
       expect(editor.openContour?.id).toBe(contourId);
@@ -298,16 +285,14 @@ describe("Pen tool", () => {
     });
 
     it("a curve drag appends complete topology in one undo step", async () => {
-      editor.clickGlyphLocal(100, 100);
-      await editor.settle();
-      editor.dragScene({
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
         down: { x: 300, y: 100 },
         threshold: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.settle();
 
-      await editor.undoAndSettle();
+      await editor.undo();
 
       expect(editor.openContour?.points).toHaveLength(1);
       expect(editor.openContour?.segments()).toHaveLength(0);

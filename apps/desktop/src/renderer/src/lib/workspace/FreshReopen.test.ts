@@ -57,7 +57,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
       threshold: { x: 504, y: 104 },
       end: { x: 580, y: 180 },
     });
-    original.dragScene({
+    await original.dragScene({
       down: { x: 700, y: 100 },
       threshold: { x: 704, y: 104 },
       end: { x: 780, y: 180 },
