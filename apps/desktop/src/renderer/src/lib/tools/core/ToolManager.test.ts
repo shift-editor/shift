@@ -103,8 +103,7 @@ describe("tool selection and temporary overrides", () => {
     editor.requestTemporaryTool("hand");
     editor.pointerDown(0, 0).pointerMove(50, 30).pointerMove(120, 80).pointerUp(120, 80);
     editor.returnFromTemporaryTool();
-    editor.clickGlyphLocal(100, 100);
-    await editor.settle();
+    await editor.clickGlyphLocal(100, 100);
 
     expect(editor.pan).toEqual({ x: 120, y: 80 });
     expect(editor.cursor).toBe(penCursor);
