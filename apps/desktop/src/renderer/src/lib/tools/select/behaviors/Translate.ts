@@ -83,7 +83,7 @@ export class Translate implements SelectBehavior {
 }
 
 /**
- * A resolved glyph-layer move: the subject point/anchor ids together with the
+ * A resolved glyph-layer move: the target point/anchor ids together with the
  * single authored layer that owns all of them.
  *
  * Construction is where edit scoping happens. Builders resolve identity-only

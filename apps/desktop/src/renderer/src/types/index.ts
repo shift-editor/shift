@@ -44,6 +44,17 @@ export type {
   ShiftRecordId,
 } from "./records";
 export type { TextRunRecord } from "./text";
+export type {
+  DirectionPositionGuide,
+  MetricPositionGuide,
+  PositionCondition,
+  PositionEdit,
+  PositionFeedback,
+  PositionGuide,
+  PositionSnap,
+  PositionSnapProvider,
+  PositionTargets,
+} from "./positionEdit";
 export type { WorkspaceApplyStatus, WorkspaceEdit } from "./workspace";
 
 export interface GlyphObjectSegment {

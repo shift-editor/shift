@@ -93,6 +93,7 @@ import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
+import { LayerPositions } from "./positions";
 
 export {
   GlyphGeometry,
@@ -337,6 +338,7 @@ class GlyphEditSession {
  * edits also produce workspace intents.
  */
 export class GlyphLayer {
+  readonly positions: LayerPositions;
   readonly #sourceCell: WritableSignal<Source>;
   readonly #edit: GlyphEditSession;
 
@@ -346,6 +348,7 @@ export class GlyphLayer {
       state,
       geometry: state.geometryCell,
     });
+    this.positions = new LayerPositions(this);
   }
 
   get source(): Source {

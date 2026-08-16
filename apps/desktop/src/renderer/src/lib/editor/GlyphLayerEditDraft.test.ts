@@ -54,7 +54,7 @@ describe("glyph layer edit drafts preserve committed preview bases", () => {
     expect(pointPosition(source(), point.id)).toEqual(start);
   });
 
-  it("discards rule-driven previews that include points outside the initial subject", () => {
+  it("discards rule-driven previews that include points outside the initial targets", () => {
     const [first, second] = source().allPoints;
     const firstStart = pointPosition(source(), first!.id);
     const secondStart = pointPosition(source(), second!.id);

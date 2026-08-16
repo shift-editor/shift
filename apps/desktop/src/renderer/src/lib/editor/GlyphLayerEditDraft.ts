@@ -1,11 +1,7 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphLayer, GlyphLayerPositions } from "@/lib/model/Glyph";
-import {
-  GlyphLayerPositionList,
-  type GlyphLayerPositionSubject,
-} from "@/lib/model/GlyphLayerPositionList";
-
-export type GlyphLayerEditSubject = GlyphLayerPositionSubject;
+import { GlyphLayerPositionList } from "@/lib/model/GlyphLayerPositionList";
+import type { PositionTargets } from "@/types/positionEdit";
 
 /**
  * Preview-backed authored layer position edit.
@@ -16,20 +12,20 @@ export type GlyphLayerEditSubject = GlyphLayerPositionSubject;
  */
 export class GlyphLayerEditDraft {
   readonly glyphLayer: GlyphLayer;
-  readonly subject: GlyphLayerEditSubject;
+  readonly targets: PositionTargets;
 
   #base: GlyphLayerPositionList;
   #preview: GlyphLayerPositionList | null = null;
   #closed = false;
 
-  constructor(glyphLayer: GlyphLayer, subject: GlyphLayerEditSubject) {
+  constructor(glyphLayer: GlyphLayer, targets: PositionTargets) {
     this.glyphLayer = glyphLayer;
 
-    this.subject = {
-      points: subject.points ? [...subject.points] : [],
-      anchors: subject.anchors ? [...subject.anchors] : [],
+    this.targets = {
+      points: targets.points ? [...targets.points] : [],
+      anchors: targets.anchors ? [...targets.anchors] : [],
     };
-    this.#base = GlyphLayerPositionList.fromSubject(glyphLayer, this.subject);
+    this.#base = GlyphLayerPositionList.fromTargetGroups(glyphLayer, this.targets);
   }
 
   get basePositions(): GlyphLayerPositions {
