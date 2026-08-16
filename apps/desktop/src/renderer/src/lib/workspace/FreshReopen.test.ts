@@ -54,8 +54,13 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     await original.clickGlyphLocal(300, 100);
     await original.dragScene({
       down: { x: 500, y: 100 },
-      start: { x: 504, y: 104 },
+      threshold: { x: 504, y: 104 },
       end: { x: 580, y: 180 },
+    });
+    original.dragScene({
+      down: { x: 700, y: 100 },
+      threshold: { x: 704, y: 104 },
+      end: { x: 780, y: 180 },
     });
     original.setXAdvance(700);
     await expect(original.font.editCoordinator.state()).resolves.toMatchObject({
@@ -72,7 +77,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     original.selectTool("select");
     await original.dragScene({
       down: firstPoint,
-      start: { x: firstPoint.x + 4, y: firstPoint.y },
+      threshold: { x: firstPoint.x + 4, y: firstPoint.y },
       end: { x: firstPoint.x + 40, y: firstPoint.y + 30 },
     });
     original.setXAdvance(720);
@@ -82,7 +87,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     const expectedPositions = persistedPositions(original);
     expect(expected.contours[0]).toMatchObject({
       closed: false,
-      segments: ["line", "cubic"],
+      segments: ["line", "cubic", "cubic"],
     });
     expect(expected.contours[0]?.points.some((point) => point.smooth)).toBe(true);
     await original.closeSession();
@@ -106,7 +111,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     reopened.selectTool("select");
     const drag = await reopened.dragScene({
       down: savedPosition,
-      start: { x: savedPosition.x + 4, y: savedPosition.y },
+      threshold: { x: savedPosition.x + 4, y: savedPosition.y },
       end: { x: savedPosition.x + 30, y: savedPosition.y + 20 },
     });
     const editedPosition = reopened.pointPosition(reopenedPoint.id);

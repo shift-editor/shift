@@ -244,20 +244,75 @@ describe("Select tool", () => {
       expect(editor.pointPosition(cubic.start.id)).toEqual(cornerBefore);
     });
 
-    it("shows a bounding box for one selected segment", async () => {
+    it("shows a bounding box for one selected segment with area", async () => {
       editor.selectTool("pen");
       editor.clickGlyphLocal(100, 200);
       await editor.settle();
-      editor.clickGlyphLocal(180, 200);
+      editor.clickGlyphLocal(180, 240);
       await editor.settle();
       editor.selectTool("select");
-      editor.clickGlyphLocal(140, 200);
+      editor.clickGlyphLocal(140, 220);
 
       const select = editor.toolManager.activeTool;
       if (!(select instanceof Select)) throw new Error("Expected Select tool");
 
       expect(select.boundingBox.visible).toBe(true);
     });
+
+    it("shows a bounding box when both dimensions are small but nonzero", async () => {
+      editor.selectTool("pen");
+      editor.clickGlyphLocal(100, 100);
+      await editor.settle();
+      editor.clickGlyphLocal(112, 112);
+      await editor.settle();
+      const pointIds = editor.requireGlyphLayer().allPoints.map((point) => point.id);
+      editor.selection.select(pointIds);
+      editor.selectTool("select");
+
+      const select = editor.toolManager.activeTool;
+      if (!(select instanceof Select)) throw new Error("Expected Select tool");
+      expect(select.boundingBox.visible).toBe(true);
+    });
+
+    it.each([
+      ["horizontal", { x: 100, y: 200 }, { x: 180, y: 200 }, { x: 140, y: 200 }],
+      ["vertical", { x: 100, y: 100 }, { x: 100, y: 200 }, { x: 100, y: 150 }],
+    ] as const)(
+      "hides the bounding box for an exactly %s segment",
+      async (_name, start, end, hit) => {
+        editor.selectTool("pen");
+        editor.clickGlyphLocal(start.x, start.y);
+        await editor.settle();
+        editor.clickGlyphLocal(end.x, end.y);
+        await editor.settle();
+        editor.selectTool("select");
+        editor.clickGlyphLocal(hit.x, hit.y);
+
+        const select = editor.toolManager.activeTool;
+        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        expect(select.boundingBox.visible).toBe(false);
+      },
+    );
+
+    it.each([
+      ["horizontal", { x: 100, y: 200 }, { x: 180, y: 205 }, { x: 140, y: 202.5 }],
+      ["vertical", { x: 100, y: 100 }, { x: 105, y: 200 }, { x: 102.5, y: 150 }],
+    ] as const)(
+      "shows the normal bounding box for a nearly %s segment",
+      async (_name, start, end, hit) => {
+        editor.selectTool("pen");
+        editor.clickGlyphLocal(start.x, start.y);
+        await editor.settle();
+        editor.clickGlyphLocal(end.x, end.y);
+        await editor.settle();
+        editor.selectTool("select");
+        editor.clickGlyphLocal(hit.x, hit.y);
+
+        const select = editor.toolManager.activeTool;
+        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        expect(select.boundingBox.visible).toBe(true);
+      },
+    );
 
     it("shows the move cursor inside the current bounding box", async () => {
       editor.selectTool("pen");
