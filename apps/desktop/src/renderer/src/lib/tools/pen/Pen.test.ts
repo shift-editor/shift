@@ -60,7 +60,7 @@ describe("Pen tool", () => {
       expect(editor.openContour).toBeNull();
     });
 
-    it("does not publish curve topology until the drag ends", async () => {
+    it("publishes complete local curve topology while the drag is active", async () => {
       editor.clickGlyphLocal(100, 100);
       await editor.settle();
       const down = editor.projectSceneToScreen({ x: 300, y: 100 });
@@ -70,11 +70,30 @@ describe("Pen tool", () => {
       editor.pointerDown(down.x, down.y);
       editor.pointerMove(threshold.x, threshold.y);
       await editor.settle();
-      expect(editor.openContour?.points).toHaveLength(1);
+
+      expect(editor.openContour?.points).toHaveLength(4);
+      expect(editor.openContour?.segments()[0]?.type).toBe("cubic");
+      expect(editor.openContour?.lastPoint?.isOnCurve).toBe(true);
 
       editor.pointerUp(end.x, end.y);
       await editor.settle();
       expect(editor.openContour?.segments()[0]?.type).toBe("cubic");
+    });
+
+    it("restores the authored topology when an active curve is canceled", async () => {
+      editor.clickGlyphLocal(100, 100);
+      await editor.settle();
+      const down = editor.projectSceneToScreen({ x: 300, y: 100 });
+      const threshold = editor.projectSceneToScreen({ x: 340, y: 120 });
+
+      editor.pointerDown(down.x, down.y);
+      editor.pointerMove(threshold.x, threshold.y);
+      expect(editor.openContour?.segments()[0]?.type).toBe("cubic");
+
+      editor.escape();
+
+      expect(editor.openContour?.points).toHaveLength(1);
+      expect(editor.openContour?.segments()).toHaveLength(0);
     });
 
     it("places an untouched corner control one third toward the new anchor", async () => {
@@ -151,6 +170,37 @@ describe("Pen tool", () => {
       expect(controlStart?.y).toBeCloseTo(180);
     });
 
+    it("keeps an active consecutive curve visible across the previous workspace echo", async () => {
+      editor.clickGlyphLocal(100, 100);
+      await editor.settle();
+
+      editor.dragScene({
+        down: { x: 300, y: 100 },
+        threshold: { x: 340, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+
+      const down = editor.projectSceneToScreen({ x: 500, y: 100 });
+      const threshold = editor.projectSceneToScreen({ x: 540, y: 120 });
+      const end = editor.projectSceneToScreen({ x: 580, y: 180 });
+      editor.pointerDown(down.x, down.y);
+      editor.pointerMove(threshold.x, threshold.y);
+      editor.pointerMove(end.x, end.y);
+
+      await editor.settle();
+
+      expect(editor.openContour?.segments().map((segment) => segment.type)).toEqual([
+        "cubic",
+        "cubic",
+      ]);
+
+      editor.escape();
+      editor.pointerUp(end.x, end.y);
+
+      expect(editor.openContour?.segments().map((segment) => segment.type)).toEqual(["cubic"]);
+      expect(editor.openContour?.segments()[0]?.asCubic()?.end.smooth).toBe(false);
+    });
+
     it("two consecutive curve drags create two cubic segments joined by a smooth point", async () => {
       await editor.click(100, 100);
 
@@ -165,6 +215,12 @@ describe("Pen tool", () => {
       editor.pointerMove(580, 140);
       editor.pointerMove(580, 160);
       editor.pointerMove(580, 180);
+
+      const previewContour = editor.openContour;
+      expect(previewContour?.segments().map((segment) => segment.type)).toEqual(["cubic", "cubic"]);
+      expect(previewContour?.segments()[0]?.asCubic()?.end.smooth).toBe(true);
+      expect(previewContour?.segments()[1]?.asCubic()?.end.smooth).toBe(false);
+
       editor.pointerUp(580, 180);
       await editor.settle();
 

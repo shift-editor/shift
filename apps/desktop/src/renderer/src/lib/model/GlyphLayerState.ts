@@ -47,6 +47,9 @@ export class GlyphLayerState {
   #confirmedState: GlyphState | null = null;
   readonly #pendingStates = new Map<PendingEditId, GlyphState>();
 
+  #editBaseState: GlyphState | null = null;
+  #reapplyEdit: (() => void) | null = null;
+
   constructor(state: GlyphState) {
     this.#layerId = state.layerId;
     this.#buffers = signal(LayerBuffers.fromState(state), {
@@ -226,7 +229,7 @@ export class GlyphLayerState {
   replaceValues(values: Float64Array): void {
     this.replace({
       layerId: this.#layerId,
-      structure: this.#structure.peek(),
+      structure: this.#editBaseState?.structure ?? this.#structure.peek(),
       values,
     });
   }
@@ -241,7 +244,7 @@ export class GlyphLayerState {
   }
 
   foldWorkspaceState(editId: PendingEditId | null, replacement: LayerReplaced): void {
-    const confirmed = this.#confirmedState ?? this.state;
+    const confirmed = this.#confirmedState ?? this.#editBaseState ?? this.state;
     const state = {
       layerId: this.#layerId,
       structure: replacement.structure ?? confirmed.structure,
@@ -258,6 +261,38 @@ export class GlyphLayerState {
 
   patchPositions(updates: GlyphPositions): void {
     this.#buffers.peek().patchPositions(updates);
+  }
+
+  /** Begins one reversible local edit against the current reactive layer. */
+  beginEdit(reapply: () => void): void {
+    if (this.#editBaseState) throw new Error("glyph layer already has an active edit");
+
+    this.#editBaseState = this.state;
+    this.#reapplyEdit = reapply;
+  }
+
+  /** Restores the latest accepted base, then applies the edit as pending workspace operations. */
+  finishEdit(apply: () => void): void {
+    const baseState = this.#editBaseState;
+    if (!baseState) throw new Error("glyph layer has no active edit to finish");
+
+    this.#editBaseState = null;
+    this.#reapplyEdit = null;
+
+    batch(() => {
+      this.#publish(baseState);
+      apply();
+    });
+  }
+
+  /** Cancels the active edit and restores the latest accepted layer state. */
+  cancelEdit(): void {
+    const baseState = this.#editBaseState;
+    if (!baseState) return;
+
+    this.#editBaseState = null;
+    this.#reapplyEdit = null;
+    this.#publish(baseState);
   }
 
   /**
@@ -289,12 +324,18 @@ export class GlyphLayerState {
   }
 
   #publish(state: GlyphState): void {
-    const buffers = this.#buffers.peek();
-    if (buffers.structure === state.structure) {
-      buffers.replaceValues(state.values);
-      return;
-    }
+    batch(() => {
+      const buffers = this.#buffers.peek();
+      if (buffers.structure === state.structure) {
+        buffers.replaceValues(state.values);
+      } else {
+        this.#buffers.set(LayerBuffers.fromState(state));
+      }
 
-    this.#buffers.set(LayerBuffers.fromState(state));
+      if (!this.#reapplyEdit) return;
+
+      this.#editBaseState = this.state;
+      this.#reapplyEdit();
+    });
   }
 }

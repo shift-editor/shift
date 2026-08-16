@@ -5,7 +5,7 @@ import type { CursorType } from "@/types/editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { Editor } from "@/lib/editor/Editor";
 import { PenTargets } from "./PenTargets";
-import { PenPreview } from "./PenPreview";
+import { PenOverlay } from "./PenOverlay";
 import type { ContourId } from "@shift/types";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals";
 import { PenStroke } from "./PenStroke";
@@ -16,7 +16,7 @@ export class Pen extends BaseTool<PenState, Pen> {
   readonly id: ToolName = "pen";
 
   readonly #ctx: WritableSignal<PenContext | null>;
-  #penPreview: PenPreview = new PenPreview(this);
+  #penOverlay = new PenOverlay(this);
 
   readonly behaviors = [new EscapeBehavior(), new PenDownBehaviour(), new HandleBehavior()];
 
@@ -122,6 +122,6 @@ export class Pen extends BaseTool<PenState, Pen> {
   }
 
   override drawOverlay(canvas: Canvas): void {
-    this.#penPreview.draw(canvas);
+    this.#penOverlay.draw(canvas);
   }
 }

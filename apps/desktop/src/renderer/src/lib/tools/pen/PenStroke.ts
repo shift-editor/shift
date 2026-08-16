@@ -2,6 +2,7 @@ import { Vec2, type Point2D } from "@shift/geo";
 import type { ContourId, PointId } from "@shift/types";
 import type { Contour, SegmentId } from "@shift/glyph-state";
 import type { GlyphLayer } from "@/lib/model/Glyph";
+import type { GlyphLayerEdit } from "@/lib/model/GlyphLayerEdit";
 import type { GlyphNode } from "@/types/node";
 import type { Pen } from "./Pen";
 import { penCurveGeometry } from "./PenCurve";
@@ -73,31 +74,42 @@ export class PenStroke {
     return pointId;
   }
 
-  appendCurve(curve: PenCurve): PointId {
+  beginCurve(curve: PenCurve): readonly [GlyphLayerEdit, PointId, PointId, PointId] {
     const context = this.#pen.context;
     if (!context?.activeContourId) {
-      throw new Error("cannot append curve without an active Pen contour");
-    }
-    if (context.activeEndpoint.pointId !== curve.start.pointId) {
-      throw new Error("cannot append curve from a stale Pen endpoint");
+      throw new Error("cannot begin curve without an active Pen contour");
     }
 
-    const geometry = penCurveGeometry(curve);
-    const anchorId = this.#pen.editor.transaction("Add cubic", () => {
+    if (context.activeEndpoint.pointId !== curve.start.pointId) {
+      throw new Error("cannot begin curve from a stale Pen endpoint");
+    }
+
+    const edit = this.#layer.beginEdit();
+
+    try {
       if (curve.start.kind === "smooth") {
-        this.#layer.setPointSmooth(curve.start.pointId, true);
+        edit.setPointSmooth(curve.start.pointId, true);
       }
 
-      return this.#layer.addCubic(context.activeContourId, geometry);
-    });
+      const [controlStartId, controlEndId, endpointId] = edit.addCubic(
+        context.activeContourId,
+        penCurveGeometry(curve),
+      );
+      return [edit, controlStartId, controlEndId, endpointId];
+    } catch (error) {
+      edit.cancel();
+      throw error;
+    }
+  }
 
+  finishCurve(curve: PenCurve, edit: GlyphLayerEdit, endpointId: PointId): void {
+    edit.finish("Add cubic");
     this.#pen.setActiveEndpoint({
       kind: "smooth",
-      pointId: anchorId,
+      pointId: endpointId,
       position: curve.anchorPosition,
       outgoingHandlePosition: curve.handlePosition,
     });
-    return anchorId;
   }
 
   closeActiveContour(): boolean {
