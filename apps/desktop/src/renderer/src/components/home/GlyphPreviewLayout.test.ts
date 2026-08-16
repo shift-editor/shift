@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { SourceMetrics } from "@shift/types";
+import type { CatalogMetrics } from "@shift/types";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 
-const METRICS: SourceMetrics = {
+const METRICS: CatalogMetrics = {
   unitsPerEm: 1000,
-  metricValues: [],
   ascender: 800,
   descender: -200,
-  baseline: 0,
+  lineGap: 0,
 };
 
 describe("Glyph preview layout", () => {

@@ -17,7 +17,7 @@ class CachedValue {
 
 describe("KeyedCache", () => {
   it("reuses cached values when keys are retained", () => {
-    const cache = keyedCache({
+    const cache = keyedCache<Input, string, CachedValue>({
       key: (input) => input.id,
       create: (input) => new CachedValue(input),
     });
@@ -38,7 +38,7 @@ describe("KeyedCache", () => {
   });
 
   it("updates the cached input signal instead of recreating the value", () => {
-    const cache = keyedCache({
+    const cache = keyedCache<Input, string, CachedValue>({
       key: (input) => input.id,
       create: (input) => new CachedValue(input),
     });
@@ -53,7 +53,7 @@ describe("KeyedCache", () => {
 
   it("disposes values whose keys are removed during map", () => {
     const disposed: CachedValue[] = [];
-    const cache = keyedCache({
+    const cache = keyedCache<Input, string, CachedValue>({
       key: (input) => input.id,
       create: (input) => new CachedValue(input),
       dispose: (value) => disposed.push(value),
@@ -71,7 +71,7 @@ describe("KeyedCache", () => {
 
   it("clears cached values", () => {
     const disposed: CachedValue[] = [];
-    const cache = keyedCache({
+    const cache = keyedCache<Input, string, CachedValue>({
       key: (input) => input.id,
       create: (input) => new CachedValue(input),
       dispose: (value) => disposed.push(value),

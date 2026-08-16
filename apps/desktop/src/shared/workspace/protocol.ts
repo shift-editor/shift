@@ -104,9 +104,9 @@ export type ByteStreamControl =
   | { kind: "cancel"; message: string };
 
 /** Minimal readable-stream contract shared by native and web streams. */
-export interface ByteReadableStream<T> {
-  getReader(): ByteReadableStreamReader<T>;
-}
+export type ByteReadableStream<T> =
+  | { getReader(): ByteReadableStreamReader<T> }
+  | ReadableStream<T>;
 
 export interface ByteReadableStreamReader<T> {
   read(): Promise<{ done: false; value: T } | { done: true; value: undefined }>;

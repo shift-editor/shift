@@ -54,15 +54,18 @@ describe("Editor scene bootstrap", () => {
       },
     ]);
 
-    expect(editor.scene.node(left)?.glyphId).toBe(record.id);
-    expect(editor.scene.node(right)?.glyphId).toBe(record.id);
+    const leftNode = editor.scene.node(left);
+    const rightNode = editor.scene.node(right);
+    if (leftNode?.kind !== "glyph" || rightNode?.kind !== "glyph") {
+      throw new Error("Expected two glyph nodes");
+    }
+
+    expect(leftNode.glyphId).toBe(record.id);
+    expect(rightNode.glyphId).toBe(record.id);
     expect(editor.getPointInNodeSpace({ x: 710, y: 20 }, { x: 700, y: 0 })).toEqual({
       x: 10,
       y: 20,
     });
-
-    const rightNode = editor.scene.node(right);
-    if (!rightNode) throw new Error("Expected right glyph node");
 
     editor.scene.updateNode({
       id: rightNode.id,

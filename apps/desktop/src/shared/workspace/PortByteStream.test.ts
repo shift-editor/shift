@@ -21,7 +21,9 @@ describe("bounded byte delivery over a message port", () => {
 
     const [sent, received] = await Promise.all([
       sender.send(stream([1, 2], [3, 4, 5])),
-      receiver.receive((offset, bytes) => writes.push({ offset, bytes: [...bytes] })),
+      receiver.receive((offset, bytes) => {
+        writes.push({ offset, bytes: [...bytes] });
+      }),
     ]);
 
     expect({ sent, received, writes }).toEqual({
@@ -44,7 +46,9 @@ describe("bounded byte delivery over a message port", () => {
 
     await Promise.all([
       sender.send(stream([1, 2, 3, 4, 5]), undefined, 2),
-      receiver.receive((_offset, bytes) => writes.push([...bytes])),
+      receiver.receive((_offset, bytes) => {
+        writes.push([...bytes]);
+      }),
     ]);
 
     expect(writes).toEqual([[1, 2], [3, 4], [5]]);

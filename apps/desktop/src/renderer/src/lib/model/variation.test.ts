@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import type { AxisId, GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
+import type { Axis, AxisId, GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
 import {
   mintAxisId,
   mintAxisMappingId,
@@ -171,7 +171,7 @@ async function variableFont(): Promise<{
   return { stack, glyphId, regularLayerId, boldLayerId, bold: updatedBold };
 }
 
-function continuousAxis(axisId: AxisId) {
+function continuousAxis(axisId: AxisId): Axis {
   return {
     id: axisId,
     tag: "wght",
