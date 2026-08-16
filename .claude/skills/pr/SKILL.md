@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Canonical rules for preparing, opening, and updating Shift pull requests. Use whenever the user asks to create, open, draft, update, or review a pull request. Enforces Conventional Commit titles, release-note quality, complete validation evidence, and safe pushing.
+description: Canonical rules for preparing, opening, and updating Shift pull requests. Use whenever the user asks to create, open, draft, update, or review a pull request. Enforces issue discovery and linkage, Conventional Commit titles, release-note quality, complete validation evidence, and safe pushing.
 ---
 
 # /pr — How Shift pull requests are written
@@ -52,6 +52,10 @@ Use a concise body with evidence:
 - what changed and why
 - important behavioral or architectural boundary
 
+## Issue
+
+Closes #123
+
 ## Testing
 
 - `exact command`
@@ -69,18 +73,33 @@ Testing entries must distinguish:
 
 For UI changes, include screenshots or recordings when available and useful. For release changes, state whether packaging was smoke-tested and which hosted platform/signing checks remain.
 
+### Issue linkage
+
+Every ordinary pull request includes `## Issue`. Search open and recently closed issues before opening or updating the pull request, and reference every issue materially addressed by the change.
+
+- Use `Closes #123` only when the pull request fully satisfies that issue's acceptance criteria. Merging to the default branch then closes the issue.
+- Use `Refs #123` for partial work, prerequisites, investigation, or related context. The issue remains open.
+- If substantial feature, bug, regression, or roadmap work has no adequate issue, invoke `/issue` and create one before opening the pull request.
+- For small maintenance, documentation, dependency, or mechanical work with no issue, write `No issue — <brief reason>` rather than creating a ceremonial issue.
+- Generated Release Please and dependency-bot pull requests are exempt from the issue section.
+
+Never use a closing keyword merely because an issue is related. If any accepted outcome remains, use `Refs`.
+
 ## Preparation process
 
 1. Read `git status`, staged and unstaged diffs, the branch commits, and the complete diff against `main`.
 2. Confirm the branch contains only the requested change. Do not absorb unrelated dirty files.
-3. Use `/commit` to create any required logical commits.
-4. Rebase or merge the current `main` only when needed. Do not rewrite a published branch without explicit approval.
-5. Run focused validation and the repository checks required by the affected subsystem.
-6. Re-read the final diff and summarize observable behavior, not implementation trivia.
-7. Choose a Conventional Commit title that matches the dominant change.
-8. Push the named branch without force unless explicitly approved.
-9. Create the pull request with an explicit base and head, preferably using a body file to preserve formatting.
-10. Return the pull request URL, title, commit list, and validation status.
+3. Search open and recently closed issues; decide whether the pull request closes, references, or does not require an issue.
+4. For substantial untracked work, invoke `/issue` before opening the pull request.
+5. Use `/commit` to create any required logical commits.
+6. Rebase or merge the current `main` only when needed. Do not rewrite a published branch without explicit approval.
+7. Run focused validation and the repository checks required by the affected subsystem.
+8. Re-read the final diff and summarize observable behavior, not implementation trivia.
+9. Choose a Conventional Commit title that matches the dominant change.
+10. Push the named branch without force unless explicitly approved.
+11. Create the pull request with an explicit base and head, preferably using a body file to preserve formatting.
+12. Verify the rendered issue keyword and all body formatting on GitHub.
+13. Return the pull request URL, title, issue relationship, commit list, and validation status.
 
 A request to create or update a pull request authorizes the ordinary push needed for that request. It never authorizes force-pushing, changing repository settings, merging the pull request, or publishing a release.
 
@@ -91,12 +110,14 @@ When reviewing a pull request:
 - inspect the diff and tests rather than trusting the body;
 - verify the title matches Conventional Commits and the actual dominant change;
 - identify user-visible `feat`, `fix`, and `perf` wording that would be confusing in release notes;
+- verify the issue section exists, every linked issue is relevant, and `Closes` is used only for complete resolution;
 - check that version and generated changelog edits appear only in a Release Please pull request;
 - distinguish blocking correctness issues from optional improvements;
 - verify claims against repository behavior and report exact paths and lines.
 
 ## Hard rules
 
+- Never open an ordinary pull request without searching for relevant issues and including an issue section.
 - Never open a pull request from a branch with uncommitted intended changes.
 - Never include credentials, signing material, `.env` files, or tokens.
 - Never force-push, merge, enable auto-merge, or publish a release unless the user explicitly asks.
