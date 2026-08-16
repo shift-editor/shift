@@ -7,13 +7,13 @@ use crate::{
     ShiftStore, StoreError,
     layer::{create_empty_layer_in_tx, rewrite_layer_in_tx, write_layer_in_tx},
     source::SourceKind,
-    workspace_state::mark_workspace_dirty_in_tx,
+    workspace_state::mark_workspace_changed_in_tx,
     write_mode::WriteMode,
 };
 
 impl ShiftStore {
     pub fn apply_change_set(&mut self, change_set: &font::FontChangeSet) -> Result<(), StoreError> {
-        self.apply_change_set_inner(change_set, None)
+        self.apply_change_set_inner(change_set, None, true)
     }
 
     /// Applies relational changes and takes touched layer payloads from the
@@ -23,14 +23,16 @@ impl ShiftStore {
         &mut self,
         change_set: &font::FontChangeSet,
         post_font: &font::Font,
+        dirty: bool,
     ) -> Result<(), StoreError> {
-        self.apply_change_set_inner(change_set, Some(post_font))
+        self.apply_change_set_inner(change_set, Some(post_font), dirty)
     }
 
     fn apply_change_set_inner(
         &mut self,
         change_set: &font::FontChangeSet,
         post_font: Option<&font::Font>,
+        dirty: bool,
     ) -> Result<(), StoreError> {
         let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
@@ -52,7 +54,7 @@ impl ShiftStore {
             }
         }
         if tracks_workspace {
-            mark_workspace_dirty_in_tx(&tx)?;
+            mark_workspace_changed_in_tx(&tx, dirty)?;
         }
 
         tx.commit()?;

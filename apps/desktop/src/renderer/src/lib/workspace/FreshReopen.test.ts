@@ -28,6 +28,22 @@ function persistedPositions(editor: TestEditor) {
 }
 
 describe("saved editor outcomes survive a fresh workspace stack", () => {
+  it("returns to clean when undo reaches the saved revision", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-saved-revision-"));
+    const editor = new TestEditor();
+    await editor.startSession();
+    await editor.saveAs(join(outputRoot, "SavedRevision.shift"));
+
+    editor.selectTool("pen").clickGlyphLocal(100, 100);
+    await editor.settle();
+    await expect(editor.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
+
+    await editor.undoAndSettle();
+    await expect(editor.font.editCoordinator.state()).resolves.toMatchObject({ dirty: false });
+    await editor.closeSession();
+    rmSync(outputRoot, { recursive: true, force: true });
+  });
+
   it("reopens authored geometry and continues undoable editing", async () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "shift-fresh-reopen-"));
     const savePath = join(outputRoot, "RoundTrip.shift");
