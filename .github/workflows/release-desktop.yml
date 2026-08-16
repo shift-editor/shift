@@ -1,0 +1,225 @@
+name: Release Desktop
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing draft GitHub release tag to build and publish
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft GitHub release tag to build and publish
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-desktop-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+)$ ]]; then
+            echo "Expected an alpha or beta tag, received: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-15
+            platform: darwin
+            arch: arm64
+            targets: zip
+            package-dir: Shift-darwin-arm64
+          - name: macOS x64
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+            targets: zip
+            package-dir: Shift-darwin-x64
+          - name: Windows x64
+            runner: windows-latest
+            platform: win32
+            arch: x64
+            targets: squirrel
+            package-dir: Shift-win32-x64
+          - name: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            arch: x64
+            targets: "deb,rpm"
+            package-dir: Shift-linux-x64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Install Linux maker tools
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install --yes fakeroot rpm xvfb
+
+      - name: Import Developer ID certificate
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/shift-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          export CERTIFICATE_PATH
+          python3 -c 'import base64, os; open(os.environ["CERTIFICATE_PATH"], "wb").write(base64.b64decode(os.environ["APPLE_CERTIFICATE"]))'
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Verify release version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: node scripts/product-version.mjs check "$RELEASE_VERSION"
+
+      - name: Build native bridge
+        run: pnpm build:native
+
+      - name: Make desktop distributables
+        env:
+          SHIFT_DISTRIBUTION: release
+          SIGN_MACOS: ${{ matrix.platform == 'darwin' && '1' || '0' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
+
+      - name: Smoke-test packaged application
+        run: node scripts/smoke-packaged.mjs "apps/desktop/out/${{ matrix.package-dir }}"
+
+      - name: Verify macOS signature
+        if: matrix.platform == 'darwin'
+        run: |
+          codesign --verify --deep --strict --verbose=2 "apps/desktop/out/${{ matrix.package-dir }}/Shift.app"
+          xcrun stapler validate "apps/desktop/out/${{ matrix.package-dir }}/Shift.app"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: apps/desktop/out/make/**
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Attach and publish artifacts
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Add Developer Preview notice
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh release view "$RELEASE_TAG" --json body --jq .body > generated-notes.md
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          marker = re.compile(
+              r"<!-- shift-preview-notice:start -->.*?<!-- shift-preview-notice:end -->\s*",
+              re.DOTALL,
+          )
+          generated = marker.sub("", Path("generated-notes.md").read_text()).lstrip()
+          notice = """<!-- shift-preview-notice:start -->
+          > [!WARNING]
+          > **Developer Preview:** Work on copies and keep independent backups. The macOS builds are signed and notarized. Windows builds are currently unsigned and may trigger Microsoft SmartScreen. Linux packages are unsigned.
+          <!-- shift-preview-notice:end -->
+
+          """
+          Path("release-notes.md").write_text(notice + generated)
+          PY
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md
+
+      - name: Generate checksums
+        run: |
+          DUPLICATES="$(find dist -type f -printf '%f\n' | sort | uniq --repeated)"
+          if [[ -n "$DUPLICATES" ]]; then
+            echo "Release artifacts have duplicate filenames:" >&2
+            echo "$DUPLICATES" >&2
+            exit 1
+          fi
+
+          while IFS= read -r -d '' file; do
+            CHECKSUM="$(sha256sum "$file" | cut -d ' ' -f 1)"
+            printf '%s  %s\n' "$CHECKSUM" "$(basename "$file")"
+          done < <(find dist -type f -print0 | sort -z) > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload files to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null
+          while IFS= read -r -d '' file; do
+            gh release upload "$RELEASE_TAG" "$file" --clobber
+          done < <(find dist -type f -print0)
+          gh release upload "$RELEASE_TAG" SHA256SUMS --clobber
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease

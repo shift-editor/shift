@@ -15,6 +15,9 @@ export default defineConfig(async () => {
   return {
     root: path.resolve(__dirname, "src/renderer"),
     publicDir: path.resolve(__dirname, "src/renderer/public"),
+    build: {
+      outDir: path.resolve(__dirname, ".vite/renderer/main_window"),
+    },
     plugins: [
       tailwindcss(),
       react(),

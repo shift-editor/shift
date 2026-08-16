@@ -295,7 +295,7 @@ describe("anchors edit through the workspace", () => {
     expect(layer.point(pointId)).toMatchObject({ x: 10, y: 20 });
     expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer.point(pointId)).toMatchObject({ x: 0, y: 0 });
     expect(layer.anchor(anchorId)).toMatchObject({ x: 250, y: 700 });
   });
@@ -305,10 +305,10 @@ describe("anchors edit through the workspace", () => {
     await editor.settle();
     expect(layer.anchors.length).toBe(1);
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer.anchors.length).toBe(0);
 
-    await editor.redoAndSettle();
+    await editor.redo();
     expect(layer.anchor(anchorId)).toMatchObject({ x: 100, y: 100 });
   });
 

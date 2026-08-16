@@ -4,7 +4,7 @@
  * Usage:
  *   const editor = new TestEditor();
  *   editor.selectTool("pen");
- *   editor.click(100, 200);
+ *   await editor.click(100, 200);
  *   expect(editor.pointCount).toBe(1);
  *
  * Editing sessions return when glyph mutations flow through workspace
@@ -22,6 +22,7 @@ import {
   mintNodeId,
   type GlyphId,
   type GlyphName,
+  type AnchorId,
   type GlyphRecord,
   type PointId,
   type Unicode,
@@ -162,18 +163,6 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  /** Undo through the one authority (workspace ledger), settled. */
-  async undoAndSettle(): Promise<this> {
-    await this.font.editCoordinator.undo();
-    return this;
-  }
-
-  /** Redo through the workspace ledger, settled. */
-  async redoAndSettle(): Promise<this> {
-    await this.font.editCoordinator.redo();
-    return this;
-  }
-
   get clipboardBuffer(): string {
     return this.#clipboard.buffer;
   }
@@ -200,10 +189,31 @@ export class TestEditor extends Editor {
   }
 
   pointPosition(pointId: PointId): Point2D {
+    this.#assertWorkspaceSettled();
     const point = this.requireGlyphLayer().point(pointId);
     if (!point) throw new Error("Expected source point");
 
     return { x: point.x, y: point.y };
+  }
+
+  anchorPosition(anchorId: AnchorId): Point2D {
+    this.#assertWorkspaceSettled();
+    const anchor = this.requireGlyphLayer().anchor(anchorId);
+    if (!anchor) throw new Error("Expected source anchor");
+
+    return { x: anchor.x, y: anchor.y };
+  }
+
+  async drawOpenContour(points: readonly Point2D[]): Promise<readonly PointId[]> {
+    this.selectTool("pen");
+    for (const point of points) {
+      await this.clickGlyphLocal(point.x, point.y);
+    }
+
+    const contour = this.openContour;
+    if (!contour) throw new Error("Expected open contour");
+
+    return contour.points.map((point) => point.id);
   }
 
   get glyphNode(): GlyphNode | null {
@@ -237,11 +247,12 @@ export class TestEditor extends Editor {
     return this.glyphContours.find((contour) => !contour.closed) ?? null;
   }
 
-  click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+  async click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<this> {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
     this.toolManager.handlePointerDown({ x, y }, mods);
     this.toolManager.handlePointerUp({ x, y }, mods);
-    return this;
+
+    return this.settle();
   }
 
   /**
@@ -249,7 +260,11 @@ export class TestEditor extends Editor {
    * Use when a test asserts exact point positions; plain {@link click} takes
    * screen coordinates, which the viewport y-flips.
    */
-  clickGlyphLocal(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+  async clickGlyphLocal(
+    x: number,
+    y: number,
+    options?: Partial<typeof DEFAULT_MODIFIERS>,
+  ): Promise<this> {
     const screen = this.projectSceneToScreen({ x, y });
     return this.click(screen.x, screen.y, options);
   }
@@ -262,12 +277,12 @@ export class TestEditor extends Editor {
    * @returns The scene-space drag points observed through the camera and the
    * delta from `start` to `end`.
    */
-  dragScene(input: {
+  async dragScene(input: {
     down: Point2D;
     start: Point2D;
     end: Point2D;
     options?: Partial<typeof DEFAULT_MODIFIERS>;
-  }): { down: Point2D; start: Point2D; end: Point2D; delta: Point2D } {
+  }): Promise<{ down: Point2D; start: Point2D; end: Point2D; delta: Point2D }> {
     const downScreen = this.projectSceneToScreen(input.down);
     const startScreen = this.projectSceneToScreen(input.start);
     const endScreen = this.projectSceneToScreen(input.end);
@@ -276,6 +291,8 @@ export class TestEditor extends Editor {
     this.pointerMove(startScreen.x, startScreen.y, input.options);
     this.pointerMove(endScreen.x, endScreen.y, input.options);
     this.pointerUp(endScreen.x, endScreen.y, input.options);
+
+    await this.settle();
 
     const down = this.projectScreenToScene(downScreen);
     const start = this.projectScreenToScene(startScreen);
@@ -326,6 +343,12 @@ export class TestEditor extends Editor {
     return this;
   }
 
+  async pressKey(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<this> {
+    this.keyDown(key, options);
+
+    return this.settle();
+  }
+
   escape(): this {
     return this.keyDown("Escape");
   }
@@ -333,5 +356,11 @@ export class TestEditor extends Editor {
   selectTool(name: ToolName): this {
     this.setActiveTool(name);
     return this;
+  }
+
+  #assertWorkspaceSettled(): void {
+    if (!this.font.editCoordinator.settledCell.value) {
+      throw new Error("Workspace edits are pending; await the user action before reading geometry");
+    }
   }
 }

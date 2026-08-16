@@ -18,8 +18,7 @@ describe("Pen tool", () => {
 
   describe("point creation", () => {
     it("adds a point on click", async () => {
-      editor.click(100, 200);
-      await editor.settle();
+      await editor.click(100, 200);
 
       const contour = editor.openContour;
       expect(contour?.points.length).toBe(1);
@@ -28,10 +27,8 @@ describe("Pen tool", () => {
 
   describe("creating segments", () => {
     it("adding two points creates a line segment", async () => {
-      editor.click(100, 200);
-      await editor.settle();
-      editor.click(300, 200);
-      await editor.settle();
+      await editor.click(100, 200);
+      await editor.click(300, 200);
 
       const segment = editor.openContour?.segments()[0];
 
@@ -39,12 +36,9 @@ describe("Pen tool", () => {
     });
 
     it("adding three points creates two line segments", async () => {
-      editor.click(100, 200);
-      await editor.settle();
-      editor.click(300, 200);
-      await editor.settle();
-      editor.click(500, 200);
-      await editor.settle();
+      await editor.click(100, 200);
+      await editor.click(300, 200);
+      await editor.click(500, 200);
 
       const contour = editor.openContour;
       expect(contour?.segments().length).toBe(2);
@@ -54,15 +48,11 @@ describe("Pen tool", () => {
     });
 
     it("clicking the first point closes the contour and ends the stroke", async () => {
-      editor.click(100, 200);
-      await editor.settle();
-      editor.click(300, 200);
-      await editor.settle();
-      editor.click(200, 100);
-      await editor.settle();
+      await editor.click(100, 200);
+      await editor.click(300, 200);
+      await editor.click(200, 100);
 
-      editor.click(100, 200); // back on the first point
-      await editor.settle();
+      await editor.click(100, 200); // back on the first point
 
       const contour = editor.glyphContours[0];
       expect(contour?.closed).toBe(true);
@@ -71,8 +61,7 @@ describe("Pen tool", () => {
     });
 
     it("two consecutive curve drags create two cubic segments joined by a smooth point", async () => {
-      editor.click(100, 100);
-      await editor.settle();
+      await editor.click(100, 100);
 
       editor.pointerDown(300, 100);
       editor.pointerMove(380, 140);
@@ -96,8 +85,7 @@ describe("Pen tool", () => {
     });
 
     it("adding a point and then dragging should create a cubic curve", async () => {
-      editor.click(200, -800);
-      await editor.settle();
+      await editor.click(200, -800);
       editor.pointerDown(200, -800);
       editor.pointerMove(400, 120);
       editor.pointerMove(400, 140);
@@ -111,8 +99,7 @@ describe("Pen tool", () => {
     });
 
     it("keeps the curve visible when its drag preview ends", async () => {
-      editor.click(100, 100);
-      await editor.settle();
+      await editor.click(100, 100);
 
       const renderModel = editor.sceneGlyphRenderModel;
       if (!renderModel) throw new Error("Expected glyph render model");
@@ -151,24 +138,22 @@ describe("Pen tool", () => {
 
   describe("durability and undo through the workspace", () => {
     it("a click-placed point survives as one undoable ledger entry", async () => {
-      editor.click(100, 200);
-      await editor.settle();
+      await editor.click(100, 200);
       expect(editor.pointCount).toBe(1);
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expect(editor.pointCount).toBe(0);
 
-      await editor.redoAndSettle();
+      await editor.redo();
       expect(editor.pointCount).toBe(1);
     });
 
     it("first click groups contour + point into a single undo step", async () => {
       // The first pen click creates the contour and the point as one user operation.
-      editor.click(100, 200);
-      await editor.settle();
+      await editor.click(100, 200);
       expect(editor.pointCount).toBe(1);
 
-      await editor.undoAndSettle();
+      await editor.undo();
 
       expect(editor.pointCount).toBe(0);
       expect(editor.glyphContours.length).toBe(0);
