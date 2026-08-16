@@ -17,13 +17,13 @@ export class TextTool extends BaseTool<TextState> {
   }
 
   override activate(): void {
-    this.state = { type: "typing" };
+    this.setState({ type: "typing" });
   }
 
   override deactivate(): void {
     const run = this.editor.textRun;
     run.setCursorVisible(false);
     run.interaction.resume();
-    this.state = { type: "idle" };
+    this.setState({ type: "idle" });
   }
 }

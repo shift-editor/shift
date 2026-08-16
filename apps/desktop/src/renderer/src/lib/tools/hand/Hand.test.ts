@@ -11,6 +11,20 @@ describe("Hand tool", () => {
     editor.selectTool("hand");
   });
 
+  it("publishes ready and idle states through activation and deactivation", () => {
+    const hand = editor.toolManager.activeTool;
+    if (!hand) throw new Error("Expected active Hand tool");
+
+    expect(hand.getState()).toEqual({ type: "ready" });
+    expect(hand.stateCell.value).toEqual({ type: "ready" });
+    expect(editor.getActiveToolState()).toEqual({ type: "ready" });
+
+    editor.selectTool("select");
+
+    expect(hand.getState()).toEqual({ type: "idle" });
+    expect(hand.stateCell.value).toEqual({ type: "idle" });
+  });
+
   it("drag pans the viewport by the screen delta", () => {
     const startPan = editor.pan;
 

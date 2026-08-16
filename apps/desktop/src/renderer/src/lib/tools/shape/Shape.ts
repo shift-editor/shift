@@ -44,11 +44,11 @@ export class Shape extends BaseTool<ShapeState> {
   }
 
   override activate(): void {
-    this.state = { type: "ready" };
+    this.setState({ type: "ready" });
   }
 
   override deactivate(): void {
-    this.state = { type: "idle" };
+    this.setState({ type: "idle" });
   }
 
   override drawOverlay(canvas: Canvas): void {
