@@ -34,11 +34,11 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     await editor.startSession();
     await editor.saveAs(join(outputRoot, "SavedRevision.shift"));
 
-    editor.selectTool("pen").clickGlyphLocal(100, 100);
-    await editor.settle();
+    editor.selectTool("pen");
+    await editor.clickGlyphLocal(100, 100);
     await expect(editor.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
 
-    await editor.undoAndSettle();
+    await editor.undo();
     await expect(editor.font.editCoordinator.state()).resolves.toMatchObject({ dirty: false });
     await editor.closeSession();
     rmSync(outputRoot, { recursive: true, force: true });
@@ -49,8 +49,10 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     const savePath = join(outputRoot, "RoundTrip.shift");
     const original = new TestEditor();
     await original.startSession();
-    original.selectTool("pen").clickGlyphLocal(100, 100).clickGlyphLocal(300, 100);
-    original.dragScene({
+    original.selectTool("pen");
+    await original.clickGlyphLocal(100, 100);
+    await original.clickGlyphLocal(300, 100);
+    await original.dragScene({
       down: { x: 500, y: 100 },
       start: { x: 504, y: 104 },
       end: { x: 580, y: 180 },
@@ -68,7 +70,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     const firstPoint = original.requireGlyphLayer().allPoints[0];
     if (!firstPoint) throw new Error("Expected authored point");
     original.selectTool("select");
-    original.dragScene({
+    await original.dragScene({
       down: firstPoint,
       start: { x: firstPoint.x + 4, y: firstPoint.y },
       end: { x: firstPoint.x + 40, y: firstPoint.y + 30 },
@@ -102,21 +104,20 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     if (!reopenedPoint) throw new Error("Expected reopened point");
     const savedPosition = reopened.pointPosition(reopenedPoint.id);
     reopened.selectTool("select");
-    const drag = reopened.dragScene({
+    const drag = await reopened.dragScene({
       down: savedPosition,
       start: { x: savedPosition.x + 4, y: savedPosition.y },
       end: { x: savedPosition.x + 30, y: savedPosition.y + 20 },
     });
-    await reopened.settle();
     const editedPosition = reopened.pointPosition(reopenedPoint.id);
     expect(editedPosition).toEqual({
       x: savedPosition.x + drag.delta.x,
       y: savedPosition.y + drag.delta.y,
     });
 
-    await reopened.undoAndSettle();
+    await reopened.undo();
     expect(reopened.pointPosition(reopenedPoint.id)).toEqual(savedPosition);
-    await reopened.redoAndSettle();
+    await reopened.redo();
     expect(reopened.pointPosition(reopenedPoint.id)).toEqual(editedPosition);
     await reopened.save();
     await reopened.closeSession();
