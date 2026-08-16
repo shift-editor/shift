@@ -1,0 +1,109 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { TestEditor } from "@/testing/TestEditor";
+
+function persistedGlyph(editor: TestEditor) {
+  const glyphId = editor.glyphRecord?.id;
+  const layer = editor.requireGlyphLayer();
+
+  return {
+    glyphId,
+    layerId: layer.id,
+    xAdvance: layer.xAdvance,
+    contours: layer.contours.map((contour) => ({
+      id: contour.id,
+      closed: contour.closed,
+      segments: contour.segments().map((segment) => segment.type),
+      points: contour.points.map(({ id, pointType, smooth }) => ({ id, pointType, smooth })),
+    })),
+  };
+}
+
+function persistedPositions(editor: TestEditor) {
+  return editor
+    .requireGlyphLayer()
+    .contours.flatMap((contour) => contour.points.map(({ x, y }) => ({ x, y })));
+}
+
+describe("saved editor outcomes survive a fresh workspace stack", () => {
+  it("reopens authored geometry and continues undoable editing", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-fresh-reopen-"));
+    const savePath = join(outputRoot, "RoundTrip.shift");
+    const original = new TestEditor();
+    await original.startSession();
+    original.selectTool("pen").clickGlyphLocal(100, 100).clickGlyphLocal(300, 100);
+    original.dragScene({
+      down: { x: 500, y: 100 },
+      start: { x: 504, y: 104 },
+      end: { x: 580, y: 180 },
+    });
+    original.setXAdvance(700);
+    await expect(original.font.editCoordinator.state()).resolves.toMatchObject({
+      dirty: true,
+      needsSaveAs: true,
+    });
+    await expect(original.saveAs(savePath)).resolves.toMatchObject({
+      dirty: false,
+      needsSaveAs: false,
+    });
+
+    const firstPoint = original.requireGlyphLayer().allPoints[0];
+    if (!firstPoint) throw new Error("Expected authored point");
+    original.selectTool("select");
+    original.dragScene({
+      down: firstPoint,
+      start: { x: firstPoint.x + 4, y: firstPoint.y },
+      end: { x: firstPoint.x + 40, y: firstPoint.y + 30 },
+    });
+    original.setXAdvance(720);
+    await expect(original.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
+    await expect(original.save()).resolves.toMatchObject({ dirty: false });
+    const expected = persistedGlyph(original);
+    const expectedPositions = persistedPositions(original);
+    expect(expected.contours[0]).toMatchObject({
+      closed: false,
+      segments: ["line", "cubic"],
+    });
+    expect(expected.contours[0]?.points.some((point) => point.smooth)).toBe(true);
+    await original.closeSession();
+
+    const reopened = new TestEditor();
+    await reopened.openSession(savePath, "A");
+    await expect(reopened.font.editCoordinator.state()).resolves.toMatchObject({
+      dirty: false,
+      needsSaveAs: false,
+    });
+    expect(persistedGlyph(reopened)).toEqual(expected);
+    const reopenedPositions = persistedPositions(reopened);
+    for (const [index, position] of reopenedPositions.entries()) {
+      expect(position.x).toBeCloseTo(expectedPositions[index]!.x);
+      expect(position.y).toBeCloseTo(expectedPositions[index]!.y);
+    }
+
+    const reopenedPoint = reopened.requireGlyphLayer().allPoints[0];
+    if (!reopenedPoint) throw new Error("Expected reopened point");
+    const savedPosition = reopened.pointPosition(reopenedPoint.id);
+    reopened.selectTool("select");
+    const drag = reopened.dragScene({
+      down: savedPosition,
+      start: { x: savedPosition.x + 4, y: savedPosition.y },
+      end: { x: savedPosition.x + 30, y: savedPosition.y + 20 },
+    });
+    await reopened.settle();
+    const editedPosition = reopened.pointPosition(reopenedPoint.id);
+    expect(editedPosition).toEqual({
+      x: savedPosition.x + drag.delta.x,
+      y: savedPosition.y + drag.delta.y,
+    });
+
+    await reopened.undoAndSettle();
+    expect(reopened.pointPosition(reopenedPoint.id)).toEqual(savedPosition);
+    await reopened.redoAndSettle();
+    expect(reopened.pointPosition(reopenedPoint.id)).toEqual(editedPosition);
+    await reopened.save();
+    await reopened.closeSession();
+    rmSync(outputRoot, { recursive: true, force: true });
+  });
+});

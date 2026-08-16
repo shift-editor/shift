@@ -30,6 +30,7 @@ import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type { GlyphNode } from "@/types/node";
+import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -75,6 +76,36 @@ export class TestEditor extends Editor {
     if (!record) throw new Error("created glyph did not appear in the font directory");
     this.#placeGlyph(record.id);
     return this;
+  }
+
+  /** Opens a saved package through a fresh workspace stack and places one glyph. */
+  async openSession(sourcePath: string, glyphName: string): Promise<this> {
+    await this.#stack.openWorkspace(sourcePath);
+    this.selectSource(this.font.defaultSource.id);
+
+    const record = this.font.recordForName(glyphName as GlyphName);
+    if (!record) throw new Error(`Opened package has no ${glyphName} glyph`);
+    await this.font.loadGlyph(record.id);
+    this.#placeGlyph(record.id);
+    return this;
+  }
+
+  /** Flushes pending edits, saves to a new target, and adopts it. */
+  saveAs(sourcePath: string): Promise<WorkspaceDocumentState> {
+    return this.#stack.editCoordinator.save(sourcePath);
+  }
+
+  /** Flushes pending edits and saves to the current target. */
+  save(): Promise<WorkspaceDocumentState> {
+    return this.#stack.editCoordinator.save(null);
+  }
+
+  /** Closes the clean workspace and permanently disposes this test stack. */
+  async closeSession(): Promise<void> {
+    await this.settle();
+    await this.#stack.closeWorkspace();
+    this.destroy();
+    this.#stack.dispose();
   }
 
   /** Adds another glyph to the workspace font and loads its local model. */

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker_threads";
@@ -17,6 +17,8 @@ export type WorkspaceStack = {
   font: Font;
   createWorkspace(): Promise<void>;
   openWorkspace(sourcePath: string): Promise<void>;
+  closeWorkspace(): Promise<void>;
+  dispose(): void;
 };
 
 /**
@@ -74,6 +76,14 @@ export function createWorkspaceStack(): WorkspaceStack {
       }
 
       store.replaceWorkspace(snapshot);
+    },
+    async closeWorkspace(): Promise<void> {
+      await shell.call("workspace.close", { discard: false });
+    },
+    dispose(): void {
+      client.dispose();
+      shell.dispose();
+      rmSync(documentsRoot, { recursive: true, force: true });
     },
   };
 }
