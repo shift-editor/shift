@@ -1,10 +1,11 @@
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { CanvasItem } from "@/lib/editor/rendering/CanvasItem";
 import type { Pen, PenState } from "./Pen";
-import { Vec2, type Point2D } from "@shift/geo";
+import { Vec2, type CubicCurve, type Point2D } from "@shift/geo";
+import { penCurveGeometry } from "./PenCurve";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Coordinates } from "@/types/coordinates";
-import { track } from "@/lib/signals";
+import { drawHandleLast } from "@/lib/editor/rendering/overlays";
 
 export interface PenPreviewProps {
   state: PenState;
@@ -60,52 +61,54 @@ export class PenPreview extends CanvasItem<PenPreviewProps> {
       const nodePosition = props.nodePosition;
       if (!nodePosition) return;
 
-      const { anchor, mousePos } = props.state;
-      const anchorPos = Vec2.add(nodePosition, anchor.position);
-      const effectivePos = Vec2.add(nodePosition, mousePos);
-      const mirrorPos = Vec2.add(nodePosition, Vec2.mirror(mousePos, anchor.position));
+      const geometry = penCurveGeometry(props.state.curve);
+      this.#drawCurvePreview(canvas, geometry, nodePosition);
+
+      const startPos = Vec2.add(nodePosition, geometry.p0);
+      const controlStartPos = Vec2.add(nodePosition, geometry.c0);
+      const anchorPos = Vec2.add(nodePosition, geometry.p1);
+      const effectivePos = Vec2.add(nodePosition, props.state.curve.handlePosition);
+      const mirrorPos = Vec2.add(nodePosition, geometry.c1);
 
       const { stroke, widthPx } = canvas.theme.glyph;
+      canvas.line(startPos, controlStartPos, stroke, widthPx);
       canvas.line(effectivePos, anchorPos, stroke, widthPx);
       canvas.line(anchorPos, mirrorPos, stroke, widthPx);
 
-      // Draw control handle previews
       const controlStyle = canvas.theme.handle.control.idle;
-      canvas.filledStrokeCircle(
-        effectivePos,
-        controlStyle.size,
-        controlStyle.fill,
-        controlStyle.stroke,
-        controlStyle.lineWidth,
-      );
-      canvas.filledStrokeCircle(
-        mirrorPos,
-        controlStyle.size,
-        controlStyle.fill,
-        controlStyle.stroke,
-        controlStyle.lineWidth,
-      );
+      for (const position of [controlStartPos, effectivePos, mirrorPos]) {
+        canvas.filledStrokeCircle(
+          position,
+          controlStyle.size,
+          controlStyle.fill,
+          controlStyle.stroke,
+          controlStyle.lineWidth,
+        );
+      }
+
+      drawHandleLast(canvas, anchorPos, mirrorPos, "selected");
     }
   }
 
+  #drawCurvePreview(canvas: Canvas, geometry: CubicCurve, nodePosition: Point2D): void {
+    const path = new Path2D();
+    path.moveTo(geometry.p0.x, geometry.p0.y);
+    path.bezierCurveTo(
+      geometry.c0.x,
+      geometry.c0.y,
+      geometry.c1.x,
+      geometry.c1.y,
+      geometry.p1.x,
+      geometry.p1.y,
+    );
+
+    canvas.withTranslation(nodePosition, (translatedCanvas) => {
+      const { stroke, widthPx } = translatedCanvas.theme.glyph;
+      translatedCanvas.strokePath(path, stroke, widthPx);
+    });
+  }
+
   #lastOnCurvePoint(): Point2D | null {
-    const context = this.#pen.contextCell.peek();
-    if (!context?.activeContourId) return null;
-
-    const layer = this.#editor
-      .glyphForId(context.glyphNode.glyphId)
-      ?.layerForSource(context.glyphNode.sourceId);
-    if (!layer) return null;
-
-    track(layer.structureCell);
-    track(layer.buffersChangedCell);
-
-    const contour = layer.contour(context.activeContourId);
-    if (!contour || contour.isEmpty || contour.closed) return null;
-
-    const lastOnCurve = contour.lastOnCurvePoint;
-    if (!lastOnCurve) return null;
-
-    return { x: lastOnCurve.x, y: lastOnCurve.y };
+    return this.#pen.contextCell.peek()?.activeEndpoint?.position ?? null;
   }
 }

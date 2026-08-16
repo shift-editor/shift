@@ -6,6 +6,8 @@ import type { Coordinates } from "@/types/coordinates";
 import type { CursorType } from "@/types/editor";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { Select } from "./Select";
+import { track } from "@/lib/signals";
+import { selectedGeometryEdit } from "./behaviors/selectedGeometryEdit";
 
 type YAxisDirection = "up" | "down";
 
@@ -112,8 +114,9 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const state = this.#select.stateCell.value;
     if (state.type === "brushing") return null;
 
-    const selectedCount = this.#editor.selection.stateCell.value.ids.length;
-    if (selectedCount <= 1) return null;
+    track(this.#editor.selection.stateCell);
+    const edit = selectedGeometryEdit(this.#editor);
+    if (!edit || edit.pointIds.length + edit.anchorIds.length <= 1) return null;
 
     const sceneRect = this.#editor.selectionBoundsCell.value;
     if (!sceneRect) return null;

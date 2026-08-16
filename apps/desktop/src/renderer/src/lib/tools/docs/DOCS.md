@@ -89,6 +89,13 @@ User pointer/key
 - Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`.
 - Behaviors initialize on `dragStart`, preview from `drag`, commit on `dragEnd`, and revert on `dragCancel`.
 
+### Pen curve authoring invariant
+
+- `PenContext.activeEndpoint` is the Pen tool's continuation truth, including while its latest authored point is still awaiting a workspace echo.
+- A corner endpoint has no authored outgoing tangent; extending it as a cubic seeds the untouched control one third of the way toward the new anchor. A smooth endpoint carries its outgoing handle position explicitly and never receives that default.
+- `anchored -> dragging` creates preview state only. Preview and commit resolve the same `PenCurve` geometry. `dragEnd` appends the outgoing control, incoming control, and smooth anchor as one ordered point batch; `dragCancel` appends nothing.
+- Confirmed open-contour topology always ends on an on-curve point. The latest smooth endpoint's outgoing handle remains tool-local until a following segment consumes it.
+
 ### Behavior loop (`#runBehaviors`)
 
 1. If `state.type === "idle"`, return immediately (no handling).

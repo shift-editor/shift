@@ -226,13 +226,19 @@ class GlyphEditSession {
   }
 
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
-    const pointId = mintPointId();
-    const points = [this.#seed(pointId, edit)];
-
-    const editId = this.#intents.addPoints({ contourId, points });
-    this.#state.state.addPoints(editId, points, contourId);
+    const [pointId] = this.addPoints(contourId, [edit]);
+    if (!pointId) throw new Error("addPoint requires one point");
 
     return pointId;
+  }
+
+  addPoints(contourId: ContourId, edits: readonly NewPoint[]): PointId[] {
+    if (edits.length === 0) return [];
+
+    const points = edits.map((edit) => this.#seed(mintPointId(), edit));
+    const editId = this.#intents.addPoints({ contourId, points });
+    this.#state.state.addPoints(editId, points, contourId);
+    return points.map((point) => point.id);
   }
 
   insertPointBefore(beforePointId: PointId, edit: NewPoint): PointId {
@@ -307,15 +313,18 @@ class GlyphEditSession {
     this.#state.state.removeAnchors(editId, ids);
   }
 
+  setPointSmooth(pointId: PointId, smooth: boolean): void {
+    const editId = this.#intents.setPointSmooth({ pointId, smooth });
+    this.#state.state.setPointSmooth(editId, pointId, smooth);
+  }
+
   toggleSmooth(pointId: PointId): void {
     const point = this.geometry.allPoints.find((candidate) => candidate.id === pointId);
     if (!point) {
       throw new Error(`cannot toggle smooth: point ${pointId} is not in the layer`);
     }
 
-    const smooth = !point.smooth;
-    const editId = this.#intents.setPointSmooth({ pointId, smooth });
-    this.#state.state.setPointSmooth(editId, pointId, smooth);
+    this.setPointSmooth(pointId, !point.smooth);
   }
 
   #seed(id: PointId, edit: NewPoint): PointSeed {
@@ -596,6 +605,28 @@ export class GlyphLayer {
   }
 
   /**
+   * Adds a complete cubic segment to an existing contour.
+   *
+   * The contour already owns `curve.p0`; both controls and the corner endpoint
+   * are appended as one ordered topology update.
+   *
+   * @param contourId - Contour that receives the segment.
+   * @param curve - Exact cubic geometry to append.
+   * @returns ID of the new corner endpoint.
+   */
+  addCubic(contourId: ContourId, curve: CubicCurve): PointId {
+    const pointIds = this.#edit.addPoints(contourId, [
+      Point.offCurve(curve.c0),
+      Point.offCurve(curve.c1),
+      Point.onCurve(curve.p1),
+    ]);
+    const endpointId = pointIds[2];
+    if (!endpointId) throw new Error("addCubic requires a complete cubic point sequence");
+
+    return endpointId;
+  }
+
+  /**
    * Adds a corner on-curve point to an existing contour.
    *
    * @param contourId - Contour that receives the point.
@@ -789,6 +820,16 @@ export class GlyphLayer {
    */
   removeAnchors(anchorIds: readonly AnchorId[]): void {
     this.#edit.removeAnchors(anchorIds);
+  }
+
+  /**
+   * Sets smooth/corner state for an on-curve point.
+   *
+   * @param pointId - Point whose smooth flag changes.
+   * @param smooth - Whether the point is smooth.
+   */
+  setPointSmooth(pointId: PointId, smooth: boolean): void {
+    this.#edit.setPointSmooth(pointId, smooth);
   }
 
   /**

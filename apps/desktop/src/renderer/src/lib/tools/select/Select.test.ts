@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { isPointId, type PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
+import { Select } from "./Select";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("Select tool", () => {
@@ -211,6 +212,67 @@ describe("Select tool", () => {
       expect(editor.selection.has(point.id)).toBe(true);
       expect(after.x).toBeCloseTo(before.x + drag.delta.x);
       expect(after.y).toBeCloseTo(before.y + drag.delta.y);
+    });
+
+    it("drags a Pen curve's untouched control independently from its corner", async () => {
+      editor.selectTool("pen");
+      editor.clickGlyphLocal(100, 100);
+      editor.dragScene({
+        down: { x: 300, y: 100 },
+        threshold: { x: 340, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+      await editor.settle();
+
+      const cubic = editor.openContour?.segments()[0]?.asCubic();
+      if (!cubic) throw new Error("Expected cubic segment");
+      const controlBefore = editor.pointPosition(cubic.controlStart.id);
+      const cornerBefore = editor.pointPosition(cubic.start.id);
+      editor.selectTool("select");
+
+      const drag = editor.dragScene({
+        down: controlBefore,
+        threshold: { x: controlBefore.x + 10, y: controlBefore.y },
+        end: { x: controlBefore.x + 60, y: controlBefore.y + 30 },
+      });
+      await editor.settle();
+
+      expect(editor.pointPosition(cubic.controlStart.id)).toEqual({
+        x: controlBefore.x + drag.delta.x,
+        y: controlBefore.y + drag.delta.y,
+      });
+      expect(editor.pointPosition(cubic.start.id)).toEqual(cornerBefore);
+    });
+
+    it("shows a bounding box for one selected segment", async () => {
+      editor.selectTool("pen");
+      editor.clickGlyphLocal(100, 200);
+      await editor.settle();
+      editor.clickGlyphLocal(180, 200);
+      await editor.settle();
+      editor.selectTool("select");
+      editor.clickGlyphLocal(140, 200);
+
+      const select = editor.toolManager.activeTool;
+      if (!(select instanceof Select)) throw new Error("Expected Select tool");
+
+      expect(select.boundingBox.visible).toBe(true);
+    });
+
+    it("shows the move cursor inside the current bounding box", async () => {
+      editor.selectTool("pen");
+      editor.clickGlyphLocal(100, 100);
+      await editor.settle();
+      editor.clickGlyphLocal(200, 200);
+      await editor.settle();
+      editor.selectTool("select");
+      editor.clickGlyphLocal(100, 100);
+      editor.clickGlyphLocal(200, 200, { shiftKey: true });
+
+      const inside = editor.projectSceneToScreen({ x: 120, y: 180 });
+      editor.pointerMove(inside.x, inside.y);
+
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
     });
 
     it("drags the current selection from inside its bounding box", async () => {
