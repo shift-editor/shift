@@ -20,6 +20,7 @@ const productName = isNightly ? "Shift Nightly" : "Shift";
 const packageName = isNightly ? "shift-nightly" : "shift";
 const executableName = packageName;
 const appBundleId = isNightly ? "app.shift.nightly" : "app.shift";
+const iconName = isNightly ? "nightly" : "icon";
 const packageJson = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8"));
 const productVersion = packageJson.version as string;
 const platformVersion = productVersion.split("-", 1)[0];
@@ -51,8 +52,8 @@ const config: ForgeConfig = {
     asar: {
       unpack: "**/*.node",
     },
-    icon: "../../icons/icon",
-    extraResource: ["../../icons/icon.png", "../../LICENSE"],
+    icon: `../../icons/${iconName}`,
+    extraResource: [`../../icons/${iconName}.png`, "../../LICENSE"],
     win32metadata: {
       CompanyName: "Shift",
       FileDescription: productName,
@@ -88,7 +89,7 @@ const config: ForgeConfig = {
         license: "GPL-3.0-only",
         homepage: "https://shift.graphics",
         bin: executableName,
-        icon: "../../icons/icon.png",
+        icon: `../../icons/${iconName}.png`,
         categories: ["Graphics"],
       },
     }),
@@ -104,7 +105,7 @@ const config: ForgeConfig = {
         maintainer: "Kostya Farber <kostya.farber@gmail.com>",
         homepage: "https://shift.graphics",
         bin: executableName,
-        icon: "../../icons/icon.png",
+        icon: `../../icons/${iconName}.png`,
         categories: ["Graphics"],
       },
     }),
