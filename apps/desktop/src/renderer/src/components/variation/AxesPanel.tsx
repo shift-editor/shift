@@ -95,6 +95,7 @@ const AxisSlider = ({ axis, value, onChange, onReset }: AxisSliderProps) => (
     }}
   >
     <Slider
+      aria-label={axis.name}
       min={axis.minimum}
       max={axis.maximum}
       step={0.01}

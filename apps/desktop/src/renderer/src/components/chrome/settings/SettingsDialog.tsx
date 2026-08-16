@@ -55,7 +55,10 @@ export const SettingsDialog = ({
             }}
           />
 
-          <main className="relative min-h-0 min-w-0 overflow-hidden bg-canvas">
+          <main
+            aria-label="Settings details"
+            className="relative min-h-0 min-w-0 overflow-hidden bg-canvas"
+          >
             <DialogClose
               className={cn(
                 "absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer",

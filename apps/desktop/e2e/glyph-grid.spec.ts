@@ -1,6 +1,12 @@
 import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import type { AxisId, SourceId } from "@shift/types";
 import { test, expect, navigateToEditor } from "./fixtures/perfApp";
+import {
+  clickFirstCatalogGlyph,
+  glyphCatalogCanvas,
+  glyphCatalogSurface,
+  glyphCatalogViewport,
+} from "./fixtures/appLocators";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
 
@@ -17,9 +23,9 @@ test.describe("Resident Glyph Grid", () => {
 
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
 
-    const scrollViewport = page.getByLabel("Glyph catalog");
+    const scrollViewport = glyphCatalogViewport(page);
     await scrollViewport.waitFor({ state: "visible" });
-    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
@@ -67,7 +73,7 @@ test.describe("Resident Glyph Grid", () => {
       )
       .toEqual(initialSize);
 
-    await scrollViewport.click({ position: { x: 50, y: 50 } });
+    await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
     await expect(page.locator("#scene-canvas")).toBeVisible();
     await afterNextPaint(page);
@@ -85,7 +91,7 @@ test.describe("Resident Glyph Grid", () => {
     await expect(glyphCanvas).toBeVisible();
     await expectCompleteResidency(glyphCanvas);
 
-    const catalogSurface = scrollViewport.locator("..");
+    const catalogSurface = glyphCatalogSurface(page);
     const returnedFrame = await catalogSurface.screenshot();
     const previousVisibility = await glyphCanvas.evaluate((canvas) => {
       const visibility = canvas.style.visibility;
@@ -119,9 +125,9 @@ test.describe("Resident Glyph Grid", () => {
 
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
 
-    const scrollViewport = page.getByLabel("Glyph catalog");
-    const catalogSurface = scrollViewport.locator("..");
-    const glyphCanvas = catalogSurface.locator("canvas").first();
+    const scrollViewport = glyphCatalogViewport(page);
+    const catalogSurface = glyphCatalogSurface(page);
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
 
@@ -134,7 +140,7 @@ test.describe("Resident Glyph Grid", () => {
       .toBe(true);
     await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>(
-        '[aria-label="Glyph catalog"] + canvas',
+        '[data-testid="glyph-catalog-canvas"]',
       );
       if (!canvas) throw new Error("Expected resident glyph canvas");
 
@@ -187,9 +193,9 @@ test.describe("Resident Glyph Grid", () => {
   test("restores the current viewport after a topology edit", async ({ page }) => {
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
 
-    const scrollViewport = page.getByLabel("Glyph catalog");
+    const scrollViewport = glyphCatalogViewport(page);
     await scrollViewport.waitFor({ state: "visible" });
-    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
 
     await navigateToEditor(page, "53");
@@ -230,9 +236,9 @@ test.describe("Resident Glyph Grid", () => {
   test("keeps distant glyphs resident after a topology patch", async ({ electronApp, page }) => {
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
 
-    const scrollViewport = page.getByLabel("Glyph catalog");
+    const scrollViewport = glyphCatalogViewport(page);
     await scrollViewport.waitFor({ state: "visible" });
-    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await electronApp.evaluate(async ({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0]?.setSize(760, 500);
@@ -280,7 +286,7 @@ test.describe("Resident Glyph Grid", () => {
     expect(state.readiness).toEqual([]);
     expect(state.hiddenTransitions).toBe(0);
 
-    const catalogSurface = scrollViewport.locator("..");
+    const catalogSurface = glyphCatalogSurface(page);
     const paintedFrame = await catalogSurface.screenshot();
     const visibility = await glyphCanvas.evaluate((canvas) => {
       const previous = canvas.style.visibility;
@@ -358,9 +364,9 @@ test.describe("Resident Glyph Grid", () => {
   test("fits oversized outlines without resizing cells while scrubbing an axis", async ({
     page,
   }) => {
-    const scrollViewport = page.getByLabel("Glyph catalog");
-    const catalogSurface = scrollViewport.locator("..");
-    const glyphCanvas = catalogSurface.locator("canvas").first();
+    const scrollViewport = glyphCatalogViewport(page);
+    const catalogSurface = glyphCatalogSurface(page);
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
@@ -395,19 +401,16 @@ test.describe("Resident Glyph Grid", () => {
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
-    const initialGeometry = await scrollViewport.evaluate((element) => {
-      const canvas = element.parentElement?.querySelector<HTMLCanvasElement>("canvas");
-      if (!canvas) throw new Error("Expected resident glyph canvas");
-
-      return {
-        previewHeight: Number(canvas.dataset.previewHeight),
-        scrollHeight: element.scrollHeight,
-      };
-    });
+    const initialGeometry = {
+      previewHeight: Number(await glyphCanvas.getAttribute("data-preview-height")),
+      scrollHeight: await scrollViewport.evaluate((element) => element.scrollHeight),
+    };
     const geometrySamples = await page.evaluate(async ({ axisId }) => {
       const workspace = window.shift;
       const viewport = document.querySelector<HTMLElement>('[aria-label="Glyph catalog"]');
-      const canvas = viewport?.parentElement?.querySelector<HTMLCanvasElement>("canvas");
+      const canvas = document.querySelector<HTMLCanvasElement>(
+        '[data-testid="glyph-catalog-canvas"]',
+      );
       if (!workspace || !viewport || !canvas) throw new Error("Expected Grid runtime");
 
       const samples: Array<{ previewHeight: number; scrollHeight: number }> = [];
@@ -483,8 +486,8 @@ async function prepareCompleteGrid(electronApp: ElectronApplication, page: Page)
     BrowserWindow.getAllWindows()[0]?.setSize(760, 500);
   });
 
-  const scrollViewport = page.getByLabel("Glyph catalog");
-  const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+  const scrollViewport = glyphCatalogViewport(page);
+  const glyphCanvas = glyphCatalogCanvas(page);
   await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
   });
@@ -494,7 +497,7 @@ async function prepareCompleteGrid(electronApp: ElectronApplication, page: Page)
 async function trackGridTransitions(page: Page): Promise<void> {
   await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
-      '[aria-label="Glyph catalog"] + canvas',
+      '[data-testid="glyph-catalog-canvas"]',
     );
     if (!canvas) throw new Error("Expected resident glyph canvas");
 

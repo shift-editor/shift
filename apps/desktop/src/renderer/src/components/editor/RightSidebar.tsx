@@ -19,7 +19,10 @@ export const RightSidebar = () => {
   const hasAnchorSelection = selection.ids.some(isAnchorId);
 
   return (
-    <aside className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden">
+    <aside
+      aria-label="Glyph properties"
+      className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden"
+    >
       <div className="px-3 py-2 flex items-center justify-between">
         <span className="text-ui font-medium text-primary truncate">{familyName}</span>
         <span className="text-ui font-medium text-muted">{Math.round(zoom * 100)}%</span>

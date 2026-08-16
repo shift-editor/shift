@@ -74,7 +74,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
   }, [showMeasuredWorkspace]);
 
   return (
-    <section className="relative h-full min-h-0 w-full overflow-hidden font-ui text-primary">
+    <section
+      aria-label="Glyph catalog surface"
+      className="relative h-full min-h-0 w-full overflow-hidden font-ui text-primary"
+    >
       <div
         ref={scrollContainerRef}
         className="absolute inset-0 overflow-x-hidden overflow-y-auto"

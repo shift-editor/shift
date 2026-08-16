@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { variablePreviewTest as test, expect } from "./fixtures/perfApp";
+import { firstAxisSlider, glyphCatalogCanvas, variationControls } from "./fixtures/appLocators";
 
 test.describe("variable imported font projection", () => {
   test("scrubs retained glyph geometry without source reads or projection acquisition", async ({
@@ -8,7 +9,7 @@ test.describe("variable imported font projection", () => {
   }) => {
     await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("imported");
 
-    const glyphCanvas = page.getByLabel("Glyph catalog").locator("..").locator("canvas").first();
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
@@ -27,17 +28,21 @@ test.describe("variable imported font projection", () => {
 
     const sceneCanvas = page.locator("#scene-canvas");
     await expect(sceneCanvas).toBeVisible();
-    const slider = page.getByRole("slider").first();
+    const slider = await firstAxisSlider(page);
     await expect(slider).toBeVisible();
 
-    const variationSidebar = page.locator(".shift-editor-shell aside").first();
-    const regularLabels = variationSidebar.getByText("Regular", { exact: true });
-    await expect(regularLabels).toHaveCount(2);
-    await expect(regularLabels.first()).toHaveRole("button");
-    await expect(regularLabels.first()).toBeEnabled();
+    const variationSidebar = variationControls(page);
+    await expect(variationSidebar.getByText("Regular", { exact: true })).toHaveCount(2);
+    await expect(
+      variationSidebar.getByRole("button", { name: "Regular", exact: true }),
+    ).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
     await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveCount(0);
-    await variationSidebar.getByText("Medium", { exact: true }).click();
+    const mediumSourceId = await page.evaluate(
+      () => window.shiftSession?.font.sources.find(({ name }) => name === "Medium")?.id,
+    );
+    if (!mediumSourceId) throw new Error("Expected Medium source");
+    await page.getByTestId(`source-${mediumSourceId}`).click();
     await expect
       .poll(() =>
         page.evaluate(() => window.shiftSession?.editor.externalLocation.values().next().value),
