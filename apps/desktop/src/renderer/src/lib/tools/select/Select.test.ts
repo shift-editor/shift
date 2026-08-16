@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { isPointId } from "@shift/types";
+import { isPointId, type PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
 
@@ -31,6 +31,88 @@ describe("Select tool", () => {
       await editor.click(100, 200);
       await editor.click(9999, 9999);
       expect(editor.selection.hasSelection()).toBe(false);
+    });
+
+    describe("Shift-click selection", () => {
+      let firstId: PointId;
+      let secondId: PointId;
+
+      beforeEach(async () => {
+        const pointIds = await editor.drawOpenContour([
+          { x: 100, y: 100 },
+          { x: 200, y: 200 },
+        ]);
+        if (!pointIds[0] || !pointIds[1]) throw new Error("Expected two points");
+        [firstId, secondId] = pointIds;
+        editor.selectTool("select");
+      });
+
+      it("adds an unselected point without clearing the current selection", async () => {
+        await editor.clickGlyphLocal(100, 100);
+        await editor.clickGlyphLocal(200, 200, { shiftKey: true });
+
+        expect(editor.selection.has(firstId)).toBe(true);
+        expect(editor.selection.has(secondId)).toBe(true);
+        expect(editor.selection.ids).toHaveLength(2);
+      });
+
+      it("removes a selected point while preserving the other selection", async () => {
+        editor.selection.select([firstId, secondId]);
+
+        await editor.clickGlyphLocal(100, 100, { shiftKey: true });
+
+        expect(editor.selection.has(firstId)).toBe(false);
+        expect(editor.selection.has(secondId)).toBe(true);
+        expect(editor.selection.ids).toHaveLength(1);
+      });
+
+      it("preserves the current selection when clicking empty canvas", async () => {
+        editor.selection.select([firstId, secondId]);
+
+        await editor.click(9999, 9999, { shiftKey: true });
+
+        expect(editor.selection.has(firstId)).toBe(true);
+        expect(editor.selection.has(secondId)).toBe(true);
+        expect(editor.selection.ids).toHaveLength(2);
+      });
+
+      it("adds an unselected segment", async () => {
+        const segmentId = editor.requireGlyphLayer().contours[0]?.segments()[0]?.id;
+        if (!segmentId) throw new Error("Expected segment");
+
+        await editor.clickGlyphLocal(150, 150, { shiftKey: true });
+
+        expect(editor.selection.has(segmentId)).toBe(true);
+      });
+
+      it("removes a selected segment", async () => {
+        const segmentId = editor.requireGlyphLayer().contours[0]?.segments()[0]?.id;
+        if (!segmentId) throw new Error("Expected segment");
+        editor.selection.select([segmentId]);
+
+        await editor.clickGlyphLocal(150, 150, { shiftKey: true });
+
+        expect(editor.selection.has(segmentId)).toBe(false);
+      });
+
+      it("adds an unselected anchor", async () => {
+        const anchorId = editor.requireGlyphLayer().addAnchor("top", { x: 300, y: 300 });
+        await editor.settle();
+
+        await editor.clickGlyphLocal(300, 300, { shiftKey: true });
+
+        expect(editor.selection.has(anchorId)).toBe(true);
+      });
+
+      it("removes a selected anchor", async () => {
+        const anchorId = editor.requireGlyphLayer().addAnchor("top", { x: 300, y: 300 });
+        await editor.settle();
+        editor.selection.select([anchorId]);
+
+        await editor.clickGlyphLocal(300, 300, { shiftKey: true });
+
+        expect(editor.selection.has(anchorId)).toBe(false);
+      });
     });
 
     it("drags a selected point", async () => {
