@@ -10,12 +10,12 @@ describe("angle snapping keeps interaction direction stable", () => {
     expect(snap.apply(degrees(44))).toBeCloseTo(degrees(45));
   });
 
-  it("sticks to the previous angle inside the hysteresis threshold", () => {
+  it("sticks to the previous angle across the rounding boundary", () => {
     const snap = AngleSnap.everyDegrees(45);
 
-    expect(snap.apply(degrees(2))).toBeCloseTo(0);
-    expect(snap.apply(degrees(17))).toBeCloseTo(0);
     expect(snap.apply(degrees(24))).toBeCloseTo(degrees(45));
+    expect(snap.apply(degrees(21))).toBeCloseTo(degrees(45));
+    expect(snap.apply(degrees(17))).toBeCloseTo(0);
   });
 
   it("resets hysteresis while its condition is inactive", () => {

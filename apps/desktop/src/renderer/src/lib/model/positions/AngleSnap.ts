@@ -1,6 +1,6 @@
 import type { PositionCondition } from "@/types/positionEdit";
 
-const HYSTERESIS_FACTOR = 0.4;
+const HYSTERESIS_FACTOR = 0.6;
 
 /** Quantizes scalar rotation angles while preserving the previous snap near boundaries. */
 export class AngleSnap {
