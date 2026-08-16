@@ -7,9 +7,9 @@ Shift ships one versioned desktop product. Internal Rust crates and JavaScript p
 | State     | Product identity | Bundle ID           | Data root       | Publication                   |
 | --------- | ---------------- | ------------------- | --------------- | ----------------------------- |
 | `release` | Shift            | `app.shift`         | `Shift`         | Draft, then GitHub prerelease |
-| `nightly` | Shift Nightly    | `app.shift.nightly` | `Shift Nightly` | Expiring workflow artifact    |
+| `nightly` | Shift Nightly    | `app.shift.nightly` | `Shift Nightly` | Rolling GitHub prerelease     |
 
-`SHIFT_DISTRIBUTION` accepts only `release` or `nightly` during a build. A commit on `main` may produce a Nightly. Merging a Release Please pull request creates an alpha tag and a draft GitHub release. Nightly artifacts never promote themselves, and the release workflow rejects stable tags until the stable transition is deliberately enabled.
+`SHIFT_DISTRIBUTION` accepts only `release` or `nightly` during a build. A commit on `main` may produce a Nightly. Merging a Release Please pull request creates an alpha tag and a draft GitHub release. A complete Nightly matrix advances the mutable `nightly` tag and replaces the assets on one public prerelease; a failed matrix leaves the previous Nightly untouched. Nightly builds never promote themselves into versioned releases, and the release workflow rejects stable tags until the stable transition is deliberately enabled.
 
 Development builds append ` Dev` to their product identity. An explicit Electron `--user-data-dir` switch always wins, allowing E2E and manual tests to own isolated state.
 
@@ -17,7 +17,7 @@ Development builds append ` Dev` to their product identity. An explicit Electron
 
 An Alpha is a permanent, public Developer Preview, not a claim that the invited-tester workflow is ready. Publish Alpha snapshots early enough to exercise tagging, signing, packaging, checksums, installation, and upgrade behavior. Continue to make rapid and breaking UI, API, and document changes, but never silently corrupt or reinterpret user work; refuse unsupported documents explicitly.
 
-Invitations are a separate communication decision. Invite testers to whichever current Alpha passes the stronger product gate. The first invited build does not need to be `alpha.1`, and publishing an Alpha does not require a website announcement or waitlist message.
+Invitations are a separate communication decision. Invite testers to whichever current Alpha or Nightly passes the stronger product gate. The first invited build does not need to be `alpha.1`, and publishing an Alpha or rolling Nightly does not require a website announcement or waitlist message. A public but unadvertised Nightly link is not access control; a genuinely gated update channel requires a separate design for issuing and revoking access.
 
 ## Versions
 
@@ -64,7 +64,7 @@ Do not move backward in maturity for the same target version. If scope reopens s
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates an alpha tag and a draft GitHub release, then calls the desktop release workflow with that exact tag. `force-tag-creation` materializes the tag immediately because GitHub otherwise delays tags for draft releases.
 - `release-desktop.yml` is a reusable and manually dispatchable workflow that builds the draft alpha or beta release for macOS arm64/x64, Windows x64, and Linux x64. It builds the native bridge on each runner, smoke-tests the packaged app, uploads checksums and desktop artifacts, and only then publishes the GitHub prerelease. A failed build leaves the release private and draft.
-- `nightly.yml` builds the same platform matrix as Shift Nightly on a schedule or by manual dispatch. Nightly artifacts expire after 14 days and do not create tags.
+- `nightly.yml` builds the same platform matrix as Shift Nightly on a schedule or by manual dispatch. Each platform keeps a 14-day workflow artifact for diagnostics. After every platform packages and smoke-tests successfully, a final job updates the mutable `nightly` tag and replaces the stable-name assets and checksums on the single public **Shift Nightly** prerelease. A failed matrix cannot alter the public Nightly.
 
 The Release Please workflow uses `RELEASE_PLEASE_TOKEN` rather than the default workflow token so its generated pull requests trigger normal CI. The desktop build is called directly from the successful release-creation job rather than relying on a second GitHub event.
 
@@ -95,4 +95,4 @@ Do not put signing credentials in repository files, workflow inputs, artifacts, 
 - Revert the release-preparation commit to restore the previous package and application identity behavior.
 - A failed versioned build remains a private draft release. Fix the release workflow and rerun it for the existing tag; do not publish incomplete assets.
 - Never delete or reuse a published version tag. Correct it with the next prerelease version.
-- A Nightly rollback requires no migration because Shift Nightly has a separate application identity and data root.
+- A failed Nightly build leaves the previous public Nightly in place. Roll back a bad published Nightly by republishing a known-good commit to the mutable `nightly` tag; never move or reuse a versioned release tag. Shift Nightly requires no release-channel data migration because it has a separate application identity and data root.
