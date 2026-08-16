@@ -841,8 +841,8 @@ These are allowed to jump around when energy is high, but they should not silent
 **Release Infrastructure**
 
 - [x] GitHub Actions CI/CD
-- [ ] Automated changelog
-- [ ] Version bumping workflow
+- [x] Automated changelog
+- [x] Version bumping workflow
 - [ ] Crash reporting
 
 ---
