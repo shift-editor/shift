@@ -77,12 +77,9 @@ describe("Editor scene bootstrap", () => {
 
   it("resolves authored points through the ownership index and keeps their bounds live", async () => {
     editor.selectTool("pen");
-    editor.clickGlyphLocal(0, 0);
-    await editor.settle();
-    editor.clickGlyphLocal(100, 0);
-    await editor.settle();
-    editor.clickGlyphLocal(100, 100);
-    await editor.settle();
+    await editor.clickGlyphLocal(0, 0);
+    await editor.clickGlyphLocal(100, 0);
+    await editor.clickGlyphLocal(100, 100);
 
     const layer = editor.requireGlyphLayer();
     const point = layer.allPoints[0];
@@ -107,12 +104,9 @@ describe("Editor scene bootstrap", () => {
 
   it("creates and selects a source by materializing the opened glyph", async () => {
     editor.selectTool("pen");
-    editor.clickGlyphLocal(0, 0);
-    await editor.settle();
-    editor.clickGlyphLocal(100, 0);
-    await editor.settle();
-    editor.clickGlyphLocal(100, 100);
-    await editor.settle();
+    await editor.clickGlyphLocal(0, 0);
+    await editor.clickGlyphLocal(100, 0);
+    await editor.clickGlyphLocal(100, 100);
 
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");
@@ -163,10 +157,8 @@ describe("Editor scene bootstrap", () => {
 
   it("materializes the opened glyph when selecting a sparse source", async () => {
     editor.selectTool("pen");
-    editor.clickGlyphLocal(0, 0);
-    await editor.settle();
-    editor.clickGlyphLocal(100, 0);
-    await editor.settle();
+    await editor.clickGlyphLocal(0, 0);
+    await editor.clickGlyphLocal(100, 0);
 
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");
@@ -223,12 +215,9 @@ describe("Editor renderer commands", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    editor.click(0, 0);
-    await editor.settle();
-    editor.click(100, 0);
-    await editor.settle();
-    editor.click(200, 0);
-    await editor.settle();
+    await editor.click(0, 0);
+    await editor.click(100, 0);
+    await editor.click(200, 0);
   });
 
   it("reverses the contour implied by selected points", async () => {
