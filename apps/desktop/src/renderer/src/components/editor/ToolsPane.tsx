@@ -44,12 +44,13 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeT
 export const ToolsPane: FC = () => {
   const editor = useEditor();
   const activeTool = useSignalState(editor.toolCell)?.id ?? null;
+  const toolRegistry = useSignalState(editor.toolRegistryCell);
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
       <TooltipProvider delayDuration={2000}>
         <div className="flex items-center gap-2 bg-white rounded-lg border-b border-line p-0.5">
-          {Array.from(editor.toolRegistry.entries()).map(([name, { icon, tooltip }]) => (
+          {Array.from(toolRegistry.entries()).map(([name, { icon, tooltip }]) => (
             <ToolbarIcon
               key={name}
               Icon={icon}

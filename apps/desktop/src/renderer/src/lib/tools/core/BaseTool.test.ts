@@ -4,6 +4,8 @@ import type { ToolEvent } from "./GestureDetector";
 import { makeTestCoordinates, TestEditor } from "@/testing";
 import type { ToolName } from "./createContext";
 import type { Behavior } from "./Behavior";
+import { signal, type Signal } from "@/lib/signals";
+import type { CursorType } from "@/types/editor";
 
 type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
 
@@ -28,6 +30,25 @@ const ClickBehavior: Behavior<ContractState> = {
  * tests can assert on the full lifecycle payload — what the BaseTool
  * contract promises to downstream tool implementations.
  */
+class DisposableTestTool extends BaseTool<ContractState> {
+  readonly id: ToolName = "disposable-test";
+  readonly behaviors: Behavior<ContractState>[] = [];
+  readonly #cursorSourceCell: Signal<CursorType>;
+
+  constructor(editor: TestEditor, cursorSourceCell: Signal<CursorType>) {
+    super(editor);
+    this.#cursorSourceCell = cursorSourceCell;
+  }
+
+  override getCursor(): CursorType {
+    return this.#cursorSourceCell.value;
+  }
+
+  initialState(): ContractState {
+    return { type: "idle" };
+  }
+}
+
 class ContractTestTool extends BaseTool<ContractState> {
   readonly id: ToolName = "select";
   readonly behaviors: Behavior<ContractState>[] = [ClickBehavior];
@@ -82,6 +103,17 @@ describe("BaseTool contract", () => {
         { prev: { type: "ready" }, next: { type: "clicked" }, event: clickEvent },
       ]);
     });
+  });
+
+  it("permanent disposal severs computed dependencies", () => {
+    const cursorSourceCell = signal<CursorType>({ type: "default" });
+    const disposableTool = new DisposableTestTool(editor, cursorSourceCell);
+    expect(disposableTool.cursorCell.value).toEqual({ type: "default" });
+
+    disposableTool.dispose();
+    cursorSourceCell.set({ type: "text" });
+
+    expect(disposableTool.cursorCell.value).toEqual({ type: "default" });
   });
 
   describe("when state is unchanged (same reference)", () => {
