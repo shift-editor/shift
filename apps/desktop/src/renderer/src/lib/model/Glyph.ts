@@ -88,6 +88,7 @@ import {
 } from "./GlyphRenderModel";
 import { GlyphLayerPositionList } from "./GlyphLayerPositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
+import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
@@ -236,9 +237,15 @@ class GlyphEditSession {
     if (edits.length === 0) return [];
 
     const points = edits.map((edit) => this.#seed(mintPointId(), edit));
-    const editId = this.#intents.addPoints({ contourId, points });
-    this.#state.state.addPoints(editId, points, contourId);
+    this.addPointSeeds(contourId, points);
     return points.map((point) => point.id);
+  }
+
+  addPointSeeds(contourId: ContourId, points: readonly PointSeed[]): void {
+    if (points.length === 0) return;
+
+    const editId = this.#intents.addPoints({ contourId, points: [...points] });
+    this.#state.state.addPoints(editId, points, contourId);
   }
 
   insertPointBefore(beforePointId: PointId, edit: NewPoint): PointId {
@@ -570,6 +577,21 @@ export class GlyphLayer {
    */
   translateLayer(dx: number, dy: number): void {
     this.#edit.translateLayer(dx, dy);
+  }
+
+  /** Begins a reversible edit that mutates this layer's reactive topology directly. */
+  beginEdit(): GlyphLayerEdit {
+    return new GlyphLayerEdit(this, this.#edit.layerState);
+  }
+
+  /** @internal Groups accepted edit operations into one workspace and undo transaction. */
+  transaction<TResult>(label: string, body: () => TResult): TResult {
+    return this.#edit.transaction(label, body);
+  }
+
+  /** @internal Adds prepared point identities through the accepted workspace path. */
+  addPointSeeds(contourId: ContourId, points: readonly PointSeed[]): void {
+    this.#edit.addPointSeeds(contourId, points);
   }
 
   /**

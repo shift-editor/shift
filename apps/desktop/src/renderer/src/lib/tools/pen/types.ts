@@ -3,6 +3,7 @@ import type { ContourId, PointId } from "@shift/types";
 import type { Behavior } from "../core/Behavior";
 import type { Pen } from "./Pen";
 import type { GlyphNode } from "@/types/node";
+import type { Coordinates } from "@/types/coordinates";
 
 export type PenEndpoint =
   | {
@@ -30,6 +31,13 @@ export type PenState =
   | { type: "dragging"; curve: PenCurve };
 
 export type PenBehavior = Behavior<PenState, Pen>;
+
+export interface PenOverlayProps {
+  readonly state: PenState;
+  readonly pointer: Coordinates | null;
+  readonly nodePosition: Point2D | null;
+  readonly lastOnCurvePoint: Point2D | null;
+}
 
 export type PenContext =
   | {
