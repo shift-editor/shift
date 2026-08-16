@@ -16,6 +16,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** Rust owns component order, ancestry, attachment selection, and cycle pruning through `GlyphComponents`. TypeScript only resolves current coordinates and composes matrices. Component paths preserve authored occurrence identity; numeric transforms are selected by the occurrence's parent-local `componentIndex`, because compatible exact-source layers may assign different `ComponentId` values to corresponding slots.
 - **Architecture Invariant:** Numeric authored edits flow through the existing `GlyphLayerState` signal graph. Do not add a revision signal, invalidate projections to `null`, or refetch native variation data for point, component-transform, advance, or metric value changes.
 - **Architecture Invariant:** Typed glyph-layer editing methods apply locally representable operations before workspace I/O and queue the matching `FontIntent` through `LayerIntents`. The renderer never reinterprets intent envelopes; Rust remains their sole authoritative interpreter and validator. Each renderer-local `PendingEditId` remains pending until its FIFO echo arrives, and older echoes update a hidden confirmed shadow without replacing newer pending geometry. Rust-only edits remain workspace-driven.
+- **Architecture Invariant:** `GlyphLayer.positions` creates operation-specific fluent edits. Configuration is legal only before the first preview; every preview resolves from one frozen base, writes renderer-local geometry only, and either commits one final position patch or restores the base. Tools may configure these edits but do not own their mechanics.
 - **Architecture Invariant:** `Font.committedFontCell` is an invalidation-only dependency for resources derived from the complete native font, including unloaded glyphs. It carries the stable Font value and notifies after committed echoes or workspace replacement; consumers use `track(...)`, never a revision counter.
 - **Architecture Invariant:** Structural glyph, source, or axis changes rebuild retained native projections behind the workspace FIFO and publish replacements atomically. The previous projection remains usable until its replacement arrives.
 - **Architecture Invariant:** Imported selected-glyph geometry is acquired lazily by stable glyph identity, then retained with its complete component closure until session disposal. External slider coordinates evaluate Rust-compiled `AxisMappingBasis` values synchronously before exact-source matching and projection evaluation. Raw mapping points never enter runtime evaluation; scrubbing is local basis evaluation, never a bridge, filesystem, or projection-acquisition request.
@@ -32,6 +33,7 @@ lib/model/
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
   GlyphLayerState.ts         -- local edit lifecycle and pending confirmation
+  positions/                 -- LayerPositions, MoveEdit/RotateEdit, references and modifiers
   LayerBuffers.ts            -- renderer-owned logical layer records and local operations
   ContourBuffer.ts           -- contour metadata plus packed point coordinates
   AnchorBuffer.ts            -- anchor metadata plus packed coordinates
@@ -61,7 +63,9 @@ hooks/
 ## Key Types
 
 - `Glyph` -- stable, completely loaded renderer domain object containing zero or more authored layers, direct references to its loaded component dependencies, and synchronous location-specific geometry backing.
-- `GlyphLayer` -- editable geometry for one glyph/source pair.
+- `GlyphLayer` -- editable geometry for one glyph/source pair. Its `positions` surface creates fluent movement and rotation edits without exposing sparse patches to future tool integrations.
+- `LayerPositions` -- authored-layer entry point for operation-specific `MoveEdit` and `RotateEdit` values.
+- `MoveEdit` / `RotateEdit` -- per-interaction configuration and lifecycle objects backed by frozen positions and local previews. `DirectionSnap`, `AngleSnap`, `MetricSnap`, `PositionReference`, and `PointRuleConstraint` are attached only where the operation supports them.
 - `LayerBuffers` -- renderer-owned advance, contour, anchor, and component records for one exact authored layer. Its structure and packed wire snapshot are derived outputs.
 - `PackedArray` -- dynamically-sized storage for fixed-width numeric records. Its item width is fixed while capacity grows without imposing a font-format limit.
 - `GlyphProjection` -- generated bridge DTO retained as compact backing: fallback, compatible interpolation, incompatible exact-source shapes, and component identities.

@@ -1,12 +1,8 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import { Transform } from "@/lib/transform/Transform";
+import type { PositionTargets } from "@/types/positionEdit";
 import type { GlyphLayerPosition, GlyphLayerPositions, GlyphLayerPositionTarget } from "./Glyph";
-
-export interface GlyphLayerPositionSubject {
-  readonly points?: readonly PointId[];
-  readonly anchors?: readonly AnchorId[];
-}
 
 export interface GlyphLayerPositionLookup {
   positionsFor(targets: readonly GlyphLayerPositionTarget[]): GlyphLayerPosition[];
@@ -46,13 +42,13 @@ export class GlyphLayerPositionList {
     return new GlyphLayerPositionList(positions);
   }
 
-  static fromSubject(
+  static fromTargetGroups(
     source: GlyphLayerPositionLookup,
-    subject: GlyphLayerPositionSubject,
+    targets: PositionTargets,
   ): GlyphLayerPositionList {
     return GlyphLayerPositionList.fromTargets(
       source,
-      GlyphLayerPositionList.targetsFromSubject(subject),
+      GlyphLayerPositionList.targetListFromGroups(targets),
     );
   }
 
@@ -63,13 +59,13 @@ export class GlyphLayerPositionList {
     return new GlyphLayerPositionList(source.positionsFor(targets));
   }
 
-  static targetsFromSubject(subject: GlyphLayerPositionSubject): GlyphLayerPositionTarget[] {
+  static targetListFromGroups(groups: PositionTargets): GlyphLayerPositionTarget[] {
     const targets: GlyphLayerPositionTarget[] = [];
-    if (subject.points) {
-      targets.push(...subject.points.map((id) => ({ kind: "point" as const, id })));
+    if (groups.points) {
+      targets.push(...groups.points.map((id) => ({ kind: "point" as const, id })));
     }
-    if (subject.anchors) {
-      targets.push(...subject.anchors.map((id) => ({ kind: "anchor" as const, id })));
+    if (groups.anchors) {
+      targets.push(...groups.anchors.map((id) => ({ kind: "anchor" as const, id })));
     }
 
     return targets;
