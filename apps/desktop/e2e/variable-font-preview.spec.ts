@@ -33,9 +33,11 @@ test.describe("variable imported font projection", () => {
 
     const variationSidebar = variationControls(page);
     await expect(variationSidebar.getByText("Regular", { exact: true })).toHaveCount(2);
-    await expect(
-      variationSidebar.getByRole("button", { name: "Regular", exact: true }),
-    ).toBeEnabled();
+    const regularSourceId = await page.evaluate(
+      () => window.shiftSession?.font.sources.find(({ name }) => name === "Regular")?.id,
+    );
+    if (!regularSourceId) throw new Error("Expected Regular source");
+    await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
     await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveCount(0);
     const mediumSourceId = await page.evaluate(
