@@ -135,6 +135,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
 
       <SettingsSection title="Name">
         <Input
+          aria-label="Name"
           value={draft.name}
           onChange={(event) => {
             const name = event.currentTarget.value;

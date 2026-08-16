@@ -136,6 +136,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
 
       <SettingsSection title="Name">
         <Input
+          aria-label="Name"
           value={draft.name}
           onChange={(event) => {
             const name = event.currentTarget.value;
