@@ -3,7 +3,7 @@ name = "shift-font"
 version = "0.1.0"
 edition = "2021"
 description = "Live Rust font authoring model and editing behavior"
-license = "GPL-3.0-only"
+license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["rlib"]

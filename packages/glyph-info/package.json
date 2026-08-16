@@ -2,7 +2,6 @@
   "name": "@shift/glyph-info",
   "version": "0.0.1",
   "private": true,
-  "license": "GPL-3.0-only",
   "description": "Glyph reference data for font editing — names, categories, decomposition, charsets, and FTS5 search",
   "type": "module",
   "main": "./src/index.ts",

@@ -3,7 +3,7 @@ name = "shift-backends"
 version = "0.1.0"
 edition = "2021"
 description = "Font format backends for reading and writing various font formats"
-license = "GPL-3.0-only"
+license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["rlib"]

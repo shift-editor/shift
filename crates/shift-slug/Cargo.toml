@@ -3,7 +3,7 @@ name = "shift-slug"
 version = "0.1.0"
 edition = "2021"
 description = "GPU-independent Slug curve and band preprocessing for Shift glyph grids"
-license = "GPL-3.0-only"
+license = "MIT"
 
 [lib]
 crate-type = ["rlib"]
