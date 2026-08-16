@@ -30,10 +30,8 @@ describe("glyph layer edit drafts preserve committed preview bases", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    editor.clickGlyphLocal(100, 100);
-    await editor.settle();
-    editor.clickGlyphLocal(300, 200);
-    await editor.settle();
+    await editor.clickGlyphLocal(100, 100);
+    await editor.clickGlyphLocal(300, 200);
   });
 
   const source = () => editor.glyphLayer!;
@@ -50,7 +48,7 @@ describe("glyph layer edit drafts preserve committed preview bases", () => {
     await editor.settle();
     expect(pointPosition(source(), point.id)).toEqual({ x: start.x + 25, y: start.y - 10 });
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(pointPosition(source(), point.id)).toEqual(start);
   });
 

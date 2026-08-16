@@ -8,9 +8,9 @@ export interface KeyboardEditorActions {
   copy(): Promise<boolean>;
   cut(): Promise<boolean>;
   paste(): Promise<boolean>;
-  deleteSelection(): boolean;
-  undo(): void;
-  redo(): void;
+  deleteSelection(): Promise<boolean>;
+  undo(): Promise<void>;
+  redo(): Promise<void>;
   selectAll(): void;
   setActiveTool(toolName: ToolName): void;
   getToolShortcuts(): ToolShortcutEntry[];

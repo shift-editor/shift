@@ -9,10 +9,8 @@ describe("GlyphLayer point movement", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    editor.clickGlyphLocal(10, 20);
-    await editor.settle();
-    editor.clickGlyphLocal(30, 40);
-    await editor.settle();
+    await editor.clickGlyphLocal(10, 20);
+    await editor.clickGlyphLocal(30, 40);
   });
 
   const layer = () => editor.glyphLayer!;
@@ -32,7 +30,7 @@ describe("GlyphLayer point movement", () => {
     layer().movePoints(ids, { x: 5, y: -10 });
     await editor.settle();
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer().allPoints.map(({ x, y }) => ({ x, y }))).toEqual([
       { x: 10, y: 20 },
       { x: 30, y: 40 },
@@ -57,8 +55,7 @@ describe("GlyphLayer.toggleSmooth", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    editor.click(100, 200);
-    await editor.settle();
+    await editor.click(100, 200);
   });
 
   const layer = () => editor.glyphLayer!;
@@ -79,7 +76,7 @@ describe("GlyphLayer.toggleSmooth", () => {
     await editor.settle();
     expect(layer().point(pointId)?.smooth).toBe(true);
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer().point(pointId)?.smooth).toBe(false);
   });
 });
@@ -91,12 +88,9 @@ describe("GlyphLayer.reverseContour", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    editor.click(0, 0);
-    await editor.settle();
-    editor.click(100, 0);
-    await editor.settle();
-    editor.click(200, 0);
-    await editor.settle();
+    await editor.click(0, 0);
+    await editor.click(100, 0);
+    await editor.click(200, 0);
   });
 
   const layer = () => editor.glyphLayer!;
@@ -115,7 +109,7 @@ describe("GlyphLayer.reverseContour", () => {
     layer().reverseContour(layer().contours[0]!.id);
     await editor.settle();
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer().contours[0]!.points.map(({ x }) => x)).toEqual([0, 100, 200]);
   });
 });
@@ -133,10 +127,8 @@ describe("GlyphLayer.splitSegment", () => {
 
   describe("line segment", () => {
     beforeEach(async () => {
-      editor.clickGlyphLocal(0, 0);
-      await editor.settle();
-      editor.clickGlyphLocal(100, 0);
-      await editor.settle();
+      await editor.clickGlyphLocal(0, 0);
+      await editor.clickGlyphLocal(100, 0);
     });
 
     it("inserts a single on-curve point at t=0.5", async () => {
@@ -157,16 +149,14 @@ describe("GlyphLayer.splitSegment", () => {
       await editor.settle();
       expect(layer().allPoints.length).toBe(3);
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expect(layer().allPoints.length).toBe(2);
     });
   });
 
   it("inserts the point at the parametric position for t=0.25", async () => {
-    editor.clickGlyphLocal(0, 0);
-    await editor.settle();
-    editor.clickGlyphLocal(100, 100);
-    await editor.settle();
+    await editor.clickGlyphLocal(0, 0);
+    await editor.clickGlyphLocal(100, 100);
 
     const segment = layer().contours[0]!.segments()[0]!;
     const splitId = layer().splitSegment(segment.id, 0.25);
@@ -208,7 +198,7 @@ describe("GlyphLayer.splitSegment", () => {
       await editor.settle();
       expect(layer().allPoints.length).toBe(7);
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expect(layer().allPoints.length).toBe(4);
       expect(layer().point(c1)).toMatchObject({ x: 25, y: 100 });
       expect(layer().point(c2)).toMatchObject({ x: 75, y: 100 });
@@ -223,10 +213,8 @@ describe("GlyphLayer.upgradeLineToCubic", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    editor.clickGlyphLocal(0, 0);
-    await editor.settle();
-    editor.clickGlyphLocal(90, 30);
-    await editor.settle();
+    await editor.clickGlyphLocal(0, 0);
+    await editor.clickGlyphLocal(90, 30);
   });
 
   const layer = () => editor.glyphLayer!;
@@ -253,7 +241,7 @@ describe("GlyphLayer.upgradeLineToCubic", () => {
     await editor.settle();
     expect(layer().allPoints.length).toBe(4);
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer().allPoints.length).toBe(2);
     expect(layer().contours[0]!.segments()[0]!.type).toBe("line");
   });
@@ -267,10 +255,8 @@ describe("GlyphLayer metrics", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    editor.clickGlyphLocal(100, 200);
-    await editor.settle();
-    editor.clickGlyphLocal(150, 200);
-    await editor.settle();
+    await editor.clickGlyphLocal(100, 200);
+    await editor.clickGlyphLocal(150, 200);
     initialAdvance = editor.glyphLayer!.xAdvance;
   });
 
@@ -288,7 +274,7 @@ describe("GlyphLayer metrics", () => {
       layer().setXAdvance(530);
       await editor.settle();
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expect(layer().xAdvance).toBe(initialAdvance);
     });
   });
@@ -329,7 +315,7 @@ describe("GlyphLayer metrics", () => {
       layer().setLeftSidebearing(nextLeftSidebearing);
       await editor.settle();
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expect(layer().xAdvance).toBe(initialAdvance);
       expect(layer().point(pointId)).toMatchObject({ x: point.x, y: point.y });
     });

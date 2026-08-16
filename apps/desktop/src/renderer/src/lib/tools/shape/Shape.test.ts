@@ -73,7 +73,7 @@ describe("Shape tool", () => {
     await editor.settle();
     expect(contours().length).toBe(1);
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(contours().length).toBe(0);
   });
 });
