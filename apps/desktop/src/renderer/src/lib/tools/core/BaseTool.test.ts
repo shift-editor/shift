@@ -7,6 +7,14 @@ import type { Behavior } from "./Behavior";
 
 type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
 
+const NO_MODIFIERS = {
+  shiftKey: false,
+  altKey: false,
+  metaKey: false,
+  ctrlKey: false,
+  accelKey: false,
+};
+
 const ClickBehavior: Behavior<ContractState> = {
   onClick(state, ctx) {
     if (state.type !== "ready") return false;
@@ -59,12 +67,12 @@ describe("BaseTool contract", () => {
 
   describe("when state changes", () => {
     it("advances tool state and fires onStateChange with prev/next/event", () => {
+      const coords = makeTestCoordinates({ x: 10, y: 10 });
       const clickEvent: ToolEvent = {
         type: "click",
-        point: { x: 10, y: 10 },
-        coords: makeTestCoordinates({ x: 10, y: 10 }),
-        shiftKey: false,
-        altKey: false,
+        coords,
+        target: { kind: "canvas", point: coords.scene },
+        ...NO_MODIFIERS,
       };
 
       tool.handleEvent(clickEvent);
@@ -79,10 +87,12 @@ describe("BaseTool contract", () => {
 
   describe("when state is unchanged (same reference)", () => {
     it("does not fire onStateChange when no behavior matches", () => {
+      const coords = makeTestCoordinates({ x: 10, y: 10 });
       const moveEvent: ToolEvent = {
         type: "pointerMove",
-        point: { x: 10, y: 10 },
-        coords: makeTestCoordinates({ x: 10, y: 10 }),
+        coords,
+        target: { kind: "canvas", point: coords.scene },
+        ...NO_MODIFIERS,
       };
 
       tool.handleEvent(moveEvent);
@@ -92,19 +102,21 @@ describe("BaseTool contract", () => {
     });
 
     it("does not fire onStateChange when transition returns same state after clicked", () => {
+      const clickCoords = makeTestCoordinates({ x: 0, y: 0 });
       tool.handleEvent({
         type: "click",
-        point: { x: 0, y: 0 },
-        coords: makeTestCoordinates({ x: 0, y: 0 }),
-        shiftKey: false,
-        altKey: false,
+        coords: clickCoords,
+        target: { kind: "canvas", point: clickCoords.scene },
+        ...NO_MODIFIERS,
       });
       tool.stateChanges.length = 0;
 
+      const moveCoords = makeTestCoordinates({ x: 5, y: 5 });
       tool.handleEvent({
         type: "pointerMove",
-        point: { x: 5, y: 5 },
-        coords: makeTestCoordinates({ x: 5, y: 5 }),
+        coords: moveCoords,
+        target: { kind: "canvas", point: moveCoords.scene },
+        ...NO_MODIFIERS,
       });
 
       expect(tool.stateChanges).toEqual([]);

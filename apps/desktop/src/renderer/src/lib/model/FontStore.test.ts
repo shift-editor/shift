@@ -239,7 +239,9 @@ function snapshot(documentId: string, layerId: LayerId): WorkspaceSnapshot {
   return {
     documentId,
     metadata: { familyName: "Untitled Font" },
-    metrics: { unitsPerEm: 1000, ascender: 800, descender: -200 },
+    metrics: { unitsPerEm: 1000 },
+    metricDefinitions: [],
+    sourceMetricsInterpolation: null,
     glyphs: [
       {
         id: GLYPH_ID,
@@ -254,6 +256,7 @@ function snapshot(documentId: string, layerId: LayerId): WorkspaceSnapshot {
         id: SOURCE_ID,
         name: "Regular",
         location: { values: {} },
+        metricValues: [],
       },
     ],
     axes: [],
@@ -313,7 +316,7 @@ function structure({
         closed: false,
       },
     ],
-    anchors: [{ id: anchorId, x: 50, y: 100 }],
+    anchors: [{ id: anchorId }],
     components: [],
   };
 }

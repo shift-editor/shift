@@ -5,7 +5,7 @@ describe("keyed batch requests", () => {
   it("combines same-turn requests and deduplicates keys", async () => {
     let loadCount = 0;
     let loadedKeys: readonly string[] = [];
-    const request = createBatchRequest(async (keys) => {
+    const request = createBatchRequest<string>(async (keys) => {
       loadCount += 1;
       loadedKeys = keys;
     });

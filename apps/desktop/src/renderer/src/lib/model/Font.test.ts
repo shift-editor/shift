@@ -7,6 +7,7 @@ import {
   mintGlyphId,
   mintLayerId,
   mintSourceId,
+  type Axis,
   type AxisId,
   type GlyphId,
   type GlyphName,
@@ -23,7 +24,9 @@ import { externalAxisLocationFromRecord } from "@/lib/variation/location";
 const SNAPSHOT: WorkspaceSnapshot = {
   documentId: "11111111-2222-3333-4444-555555555555",
   metadata: { familyName: "Untitled Font" },
-  metrics: { unitsPerEm: 2048, ascender: 1638, descender: -410 },
+  metrics: { unitsPerEm: 2048 },
+  metricDefinitions: [],
+  sourceMetricsInterpolation: null,
   glyphs: [
     {
       id: "glyph_A" as GlyphId,
@@ -38,6 +41,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
       id: "source-1" as SourceId,
       name: "Regular",
       location: { values: {} },
+      metricValues: [],
     },
   ],
   axes: [],
@@ -698,7 +702,7 @@ describe("font-level intents make the font variable", () => {
   });
 });
 
-function continuousAxis(axisId: AxisId) {
+function continuousAxis(axisId: AxisId): Axis {
   return {
     id: axisId,
     tag: "wght",
