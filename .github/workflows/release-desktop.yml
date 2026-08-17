@@ -135,6 +135,14 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
 
+      - name: Configure Linux sandbox for smoke test
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          SANDBOX="apps/desktop/out/${{ matrix.package-dir }}/chrome-sandbox"
+          sudo chown root:root "$SANDBOX"
+          sudo chmod 4755 "$SANDBOX"
+
       - name: Smoke-test packaged application
         run: node scripts/smoke-packaged.mjs "apps/desktop/out/${{ matrix.package-dir }}"
 
