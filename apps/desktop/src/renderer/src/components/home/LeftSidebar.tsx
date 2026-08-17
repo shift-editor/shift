@@ -5,7 +5,10 @@ import { SourcesSection } from "@/components/variation/SourcesSection";
 import { GlyphCatalogView } from "./glyph-catalog";
 
 export const LeftSidebar = () => (
-  <aside className="flex h-full w-full min-w-0 gap-1.5 flex-col bg-panel px-3 overflow-hidden border-r border-line-subtle">
+  <aside
+    aria-label="Font navigation"
+    className="flex h-full w-full min-w-0 gap-1.5 flex-col bg-panel px-3 overflow-hidden border-r border-line-subtle"
+  >
     <Separator />
     <GlyphCatalogView />
     <Separator className="-mx-3 w-auto" />

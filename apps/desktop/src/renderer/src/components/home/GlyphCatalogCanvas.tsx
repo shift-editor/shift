@@ -99,6 +99,7 @@ export function GlyphCatalogCanvas({
       <canvas
         ref={glyphCanvasRef}
         aria-hidden="true"
+        data-testid="glyph-catalog-canvas"
         className="pointer-events-none absolute left-0 top-0 z-[2] h-full w-full bg-transparent"
         style={{ visibility: ready ? "visible" : "hidden" }}
       />

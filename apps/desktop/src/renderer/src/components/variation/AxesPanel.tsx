@@ -52,6 +52,7 @@ export const AxesPanel = () => {
 
           <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_1.5rem] items-center gap-4 pl-2">
             <EditableSidebarInput
+              ariaLabel={`${axis.name} value`}
               value={axisValue(location, axis)}
               className="w-14"
               onValueChange={(value) => onAxisChange(axis, value)}
@@ -95,6 +96,7 @@ const AxisSlider = ({ axis, value, onChange, onReset }: AxisSliderProps) => (
     }}
   >
     <Slider
+      aria-label={axis.name}
       min={axis.minimum}
       max={axis.maximum}
       step={0.01}
