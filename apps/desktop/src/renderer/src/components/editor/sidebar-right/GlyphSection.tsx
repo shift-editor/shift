@@ -69,6 +69,7 @@ export const GlyphSection = () => {
         </div>
         <div className="mt-2">
           <EditableSidebarInput
+            ariaLabel="Advance width"
             className="text-center"
             value={Math.round(xAdvance.xAdvance)}
             disabled={!xAdvance.hasLayer}

@@ -122,6 +122,10 @@ describe("Editor scene bootstrap", () => {
     const axisId = editor.font.createAxis(weightAxis());
     await editor.settle();
     const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
+
+    expect(editor.activeSourceId).toBeNull();
+    expect(editor.activeSource).toBeNull();
+
     await editor.settle();
 
     expect(editor.activeSourceId).toBe(sourceId);

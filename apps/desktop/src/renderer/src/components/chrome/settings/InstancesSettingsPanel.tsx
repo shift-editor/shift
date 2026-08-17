@@ -63,6 +63,7 @@ export const InstancesSettingsPanel = ({
           {instances.map((instance) => (
             <SidebarActionRow
               key={instance.id}
+              data-testid={`settings-instance-${instance.id}`}
               isActive={instance.id === selectedInstance?.id}
               className={cn(
                 "h-8",
@@ -136,6 +137,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
 
       <SettingsSection title="Name">
         <Input
+          aria-label="Name"
           value={draft.name}
           onChange={(event) => {
             const name = event.currentTarget.value;

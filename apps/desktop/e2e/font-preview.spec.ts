@@ -1,6 +1,17 @@
 import fs from "node:fs";
 import type { GlyphId } from "@shift/types";
 import { previewTest as test, expect } from "./fixtures/perfApp";
+import {
+  clickFirstCatalogGlyph,
+  editorShell,
+  firstAxisSlider,
+  fontNavigation,
+  glyphCatalogCanvas,
+  glyphCatalogSurface,
+  glyphCatalogViewport,
+  glyphProperties,
+  settingsDetails,
+} from "./fixtures/appLocators";
 
 test.describe("retained font source Grid preview", () => {
   test("opens through home with complete source residency and no authored workspace", async ({
@@ -10,49 +21,47 @@ test.describe("retained font source Grid preview", () => {
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
     await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("imported");
 
-    const scrollViewport = page.getByLabel("Glyph catalog");
+    const scrollViewport = glyphCatalogViewport(page);
     await scrollViewport.waitFor({ state: "visible" });
-    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
     await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
 
     const state = await page.evaluate(() => {
-      const canvas = document.querySelector<HTMLCanvasElement>(
-        '[aria-label="Glyph catalog"] + canvas',
-      );
-      if (!canvas) throw new Error("Expected resident glyph canvas");
-
       const session = window.shiftSession;
       return {
         mode: session?.mode,
         workspace: session?.workspace ?? null,
         authoredGlobal: window.shift ?? null,
-        residentGlyphCount: Number(canvas.dataset.residentGlyphCount),
-        targetGlyphCount: Number(canvas.dataset.targetGlyphCount),
         loadedGlyphCount:
           session?.font
             .glyphEntries()
             .filter((entry) => session.editor.glyphForId(entry.id) !== null).length ?? -1,
       };
     });
+    const residency = await glyphCanvas.evaluate((canvas) => ({
+      residentGlyphCount: Number(canvas.dataset.residentGlyphCount),
+      targetGlyphCount: Number(canvas.dataset.targetGlyphCount),
+    }));
     expect(state.mode).toBe("imported");
     expect(state.workspace).toBeNull();
     expect(state.authoredGlobal).toBeNull();
-    expect(state.residentGlyphCount).toBeGreaterThan(0);
-    expect(state.residentGlyphCount).toBe(state.targetGlyphCount);
+    expect(residency.residentGlyphCount).toBeGreaterThan(0);
+    expect(residency.residentGlyphCount).toBe(residency.targetGlyphCount);
     expect(state.loadedGlyphCount).toBe(0);
 
     await expect(page.locator("header")).toBeVisible();
-    await expect(page.locator("aside")).toHaveCount(2);
+    await expect(fontNavigation(page)).toBeVisible();
+    await expect(glyphProperties(page)).toBeVisible();
 
-    await scrollViewport.click({ position: { x: 50, y: 50 } });
+    await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
     const sceneCanvas = page.locator("#scene-canvas");
     await expect(sceneCanvas).toBeVisible();
     await expect(page.locator("#marker-canvas")).toBeVisible();
-    const readOnlyGlyphInputs = page.locator("aside").last().locator("input:disabled");
+    const readOnlyGlyphInputs = glyphProperties(page).locator("input:disabled");
     await expect(readOnlyGlyphInputs).toHaveCount(3);
     const readOnlyGlyphValues = await readOnlyGlyphInputs.evaluateAll((inputs) =>
       inputs.map((input) => (input as HTMLInputElement).value),
@@ -120,7 +129,7 @@ test.describe("retained font source Grid preview", () => {
     expect(inspection.objectBounds).not.toBeNull();
     expect(inspection.selectionBounds).not.toBeNull();
 
-    const editorSurface = page.locator(".shift-editor-shell");
+    const editorSurface = editorShell(page);
     const editorFrame = await editorSurface.screenshot();
     await sceneCanvas.evaluate((canvas) => {
       canvas.style.visibility = "hidden";
@@ -143,8 +152,11 @@ test.describe("retained font source Grid preview", () => {
         throw new Error("resident atlas page was rebuilt");
       };
     });
-    const axisSlider = editorSurface.getByRole("slider").first();
-    if ((await axisSlider.count()) > 0) {
+    const axisCount = await page.evaluate(
+      () => window.shiftSession?.catalog.axesCell.value.length ?? 0,
+    );
+    if (axisCount > 0) {
+      const axisSlider = await firstAxisSlider(page);
       const beforeScrub = await sceneCanvas.screenshot();
       const beforeLocation = await page.evaluate(() =>
         Array.from(window.shiftSession?.editor.externalLocation.values() ?? []),
@@ -188,7 +200,7 @@ test.describe("retained font source Grid preview", () => {
         }),
     );
 
-    const catalogSurface = scrollViewport.locator("..");
+    const catalogSurface = glyphCatalogSurface(page);
     const returnedFrame = await catalogSurface.screenshot();
     const previousVisibility = await glyphCanvas.evaluate((canvas) => {
       const visibility = canvas.style.visibility;
@@ -203,7 +215,7 @@ test.describe("retained font source Grid preview", () => {
 
     // Reopening the resident root after its source was removed must reuse the
     // same projection rather than attempting another source read.
-    await scrollViewport.click({ position: { x: 50, y: 50 } });
+    await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
     await expect(page.locator("#scene-canvas")).toBeVisible();
     const reopenedGlyphId = await page.evaluate(() => {
@@ -225,7 +237,7 @@ test.describe("retained font source Grid preview", () => {
     await expect(styleNameInput).toHaveValue("Regular");
     await expect(styleNameInput).toBeDisabled();
 
-    const fontControls = settingsDialog.locator("main input, main textarea");
+    const fontControls = settingsDetails(page).locator("input, textarea");
     await expect.poll(() => fontControls.count()).toBeGreaterThan(0);
     await expect
       .poll(() =>
