@@ -279,28 +279,28 @@ export class TestEditor extends Editor {
    */
   async dragScene(input: {
     down: Point2D;
-    threshold: Point2D;
+    start: Point2D;
     end: Point2D;
     options?: Partial<typeof DEFAULT_MODIFIERS>;
-  }): Promise<{ down: Point2D; threshold: Point2D; end: Point2D; delta: Point2D }> {
+  }): Promise<{ down: Point2D; start: Point2D; end: Point2D; delta: Point2D }> {
     const downScreen = this.projectSceneToScreen(input.down);
-    const thresholdScreen = this.projectSceneToScreen(input.threshold);
+    const startScreen = this.projectSceneToScreen(input.start);
     const endScreen = this.projectSceneToScreen(input.end);
 
     this.pointerDown(downScreen.x, downScreen.y, input.options);
-    this.pointerMove(thresholdScreen.x, thresholdScreen.y, input.options);
+    this.pointerMove(startScreen.x, startScreen.y, input.options);
     this.pointerMove(endScreen.x, endScreen.y, input.options);
     this.pointerUp(endScreen.x, endScreen.y, input.options);
 
     await this.settle();
 
     const down = this.projectScreenToScene(downScreen);
-    const threshold = this.projectScreenToScene(thresholdScreen);
+    const start = this.projectScreenToScene(startScreen);
     const end = this.projectScreenToScene(endScreen);
 
     return {
       down,
-      threshold,
+      start,
       end,
       delta: {
         x: end.x - down.x,

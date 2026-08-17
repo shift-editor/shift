@@ -147,7 +147,7 @@ describe("TestEditor", () => {
 
       await editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 320, y: 120 },
+        start: { x: 320, y: 120 },
         end: { x: 380, y: 180 },
       });
 

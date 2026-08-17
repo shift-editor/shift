@@ -130,7 +130,7 @@ describe("Select tool", () => {
 
       const drag = await editor.dragScene({
         down: before,
-        threshold: { x: before.x + 4, y: before.y },
+        start: { x: before.x + 4, y: before.y },
         end: { x: before.x + 40, y: before.y + 30 },
       });
 
@@ -201,7 +201,7 @@ describe("Select tool", () => {
       const before = editor.pointPosition(point.id);
       const drag = await editor.dragScene({
         down: before,
-        threshold: { x: before.x + 80, y: before.y },
+        start: { x: before.x + 80, y: before.y },
         end: { x: before.x + 110, y: before.y + 30 },
       });
 
@@ -217,7 +217,7 @@ describe("Select tool", () => {
       await editor.clickGlyphLocal(100, 100);
       await editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 340, y: 120 },
+        start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
@@ -229,7 +229,7 @@ describe("Select tool", () => {
 
       const drag = await editor.dragScene({
         down: controlBefore,
-        threshold: { x: controlBefore.x + 10, y: controlBefore.y },
+        start: { x: controlBefore.x + 10, y: controlBefore.y },
         end: { x: controlBefore.x + 60, y: controlBefore.y + 30 },
       });
 
@@ -332,7 +332,7 @@ describe("Select tool", () => {
       const beforeSecond = editor.pointPosition(second.id);
       const drag = await editor.dragScene({
         down: { x: 120, y: 180 },
-        threshold: { x: 124, y: 180 },
+        start: { x: 124, y: 180 },
         end: { x: 150, y: 220 },
       });
 
@@ -362,7 +362,7 @@ describe("Select tool", () => {
 
       await editor.dragScene({
         down: { x: bounds.right, y: bounds.bottom },
-        threshold: { x: bounds.right + 60, y: bounds.bottom },
+        start: { x: bounds.right + 60, y: bounds.bottom },
         end: { x: bounds.right + 50, y: bounds.bottom + 50 },
       });
 
@@ -393,7 +393,7 @@ describe("Select tool", () => {
       const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
       await editor.dragScene({
         down: { x: bounds.right + offset, y: bounds.bottom + offset },
-        threshold: { x: bounds.right + offset + 40, y: bounds.bottom + offset + 40 },
+        start: { x: bounds.right + offset + 40, y: bounds.bottom + offset + 40 },
         end: { x: bounds.left - offset, y: bounds.bottom + offset },
       });
 
@@ -425,7 +425,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
       const drag = await editor.dragScene({
         down: midpoint,
-        threshold: { x: midpoint.x + 4, y: midpoint.y },
+        start: { x: midpoint.x + 4, y: midpoint.y },
         end: { x: midpoint.x + 30, y: midpoint.y + 20 },
       });
 
@@ -517,7 +517,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
       await editor.dragScene({
         down: bendPoint,
-        threshold: { x: bendPoint.x + 4, y: bendPoint.y },
+        start: { x: bendPoint.x + 4, y: bendPoint.y },
         end: { x: bendPoint.x + 4, y: bendPoint.y + 40 },
         options: { metaKey: true },
       });
@@ -580,7 +580,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
       await editor.dragScene({
         down: { x: 80, y: 180 },
-        threshold: { x: 84, y: 180 },
+        start: { x: 84, y: 180 },
         end: { x: 130, y: 230 },
       });
 

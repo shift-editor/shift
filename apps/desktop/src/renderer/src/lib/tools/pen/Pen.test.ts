@@ -99,7 +99,7 @@ describe("Pen tool", () => {
 
       await editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 340, y: 120 },
+        start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
@@ -115,7 +115,7 @@ describe("Pen tool", () => {
 
       await editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 340, y: 120 },
+        start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
@@ -128,12 +128,12 @@ describe("Pen tool", () => {
       await editor.clickGlyphLocal(100, 100);
       await editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 340, y: 120 },
+        start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
       await editor.dragScene({
         down: { x: 500, y: 100 },
-        threshold: { x: 540, y: 120 },
+        start: { x: 540, y: 120 },
         end: { x: 580, y: 180 },
       });
 
@@ -146,12 +146,12 @@ describe("Pen tool", () => {
       const point = editor.clickGlyphLocal(100, 100);
       const firstCurve = editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 340, y: 120 },
+        start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
       const secondCurve = editor.dragScene({
         down: { x: 500, y: 100 },
-        threshold: { x: 540, y: 120 },
+        start: { x: 540, y: 120 },
         end: { x: 580, y: 180 },
       });
       await Promise.all([point, firstCurve, secondCurve]);
@@ -166,7 +166,7 @@ describe("Pen tool", () => {
 
       const previousCurve = editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 340, y: 120 },
+        start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
@@ -288,7 +288,7 @@ describe("Pen tool", () => {
       await editor.clickGlyphLocal(100, 100);
       await editor.dragScene({
         down: { x: 300, y: 100 },
-        threshold: { x: 340, y: 120 },
+        start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
