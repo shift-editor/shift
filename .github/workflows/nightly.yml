@@ -106,8 +106,27 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
 
+      - name: Prepare packaged application for smoke test
+        id: smoke-package
+        shell: bash
+        env:
+          PACKAGE_PATH: apps/desktop/out/${{ matrix.package-dir }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$PLATFORM" == "linux" ]]; then
+            SMOKE_PACKAGE_PATH="apps/desktop/out/shift-nightly-linux-x64"
+            mv "$PACKAGE_PATH" "$SMOKE_PACKAGE_PATH"
+            PACKAGE_PATH="$SMOKE_PACKAGE_PATH"
+            sudo chown root:root "$PACKAGE_PATH/chrome-sandbox"
+            sudo chmod 4755 "$PACKAGE_PATH/chrome-sandbox"
+          fi
+
+          echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+
       - name: Smoke-test packaged application
-        run: node scripts/smoke-packaged.mjs "apps/desktop/out/${{ matrix.package-dir }}"
+        run: node scripts/smoke-packaged.mjs "${{ steps.smoke-package.outputs.path }}" nightly
 
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'
@@ -122,3 +141,60 @@ jobs:
           path: apps/desktop/out/make/**
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    name: Publish rolling Nightly
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: Shift-Nightly-*
+          path: dist
+          merge-multiple: true
+
+      - name: Prepare public assets
+        run: node scripts/prepare-nightly-release.mjs dist public
+
+      - name: Write Nightly release notes
+        shell: bash
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:8}"
+          cat > nightly-notes.md <<EOF
+          > [!WARNING]
+          > **Experimental Nightly:** Work on copies and keep independent backups. This build may contain bugs, crashes, data loss, or security vulnerabilities.
+
+          Built from [\`$SHORT_SHA\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) after every platform completed packaging and its packaged-app smoke test. macOS builds are signed and notarized; Windows and Linux builds are currently unsigned.
+
+          This rolling prerelease is replaced only by a later complete Nightly build.
+          EOF
+
+      - name: Publish rolling Nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release upload nightly public/* --clobber
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/nightly" \
+              -f sha="$GITHUB_SHA" \
+              -F force=true >/dev/null
+            gh release edit nightly \
+              --title "Shift Nightly" \
+              --notes-file nightly-notes.md \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          else
+            gh release create nightly public/* \
+              --title "Shift Nightly" \
+              --notes-file nightly-notes.md \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
