@@ -5,7 +5,6 @@
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
     <img width="2320" height="1456" alt="image" src="https://github.com/user-attachments/assets/9a2ed77a-66c0-4881-a632-c7831d9dc420" />
 
-
   </p>
 </div>
 
@@ -13,8 +12,8 @@
 
 Shift aims to redefine font editing by combining the power of Rust for performance-critical tasks with the flexibility of web-based UI technologies. Whether you're a type designer or a developer, Shift offers a fresh approach to creating and editing fonts with a focus on speed, precision, and extensibility.
 
-> [!IMPORTANT]
-> Shift is in a alpha state and is currently only suitable for developers interested in contributing to the project
+> [!WARNING]
+> Shift is an unstable Developer Preview. Versioned Alpha builds are for early testing, not production font work. Work on copies and retain independent backups. Installable builds are published through [GitHub Releases](https://github.com/shift-editor/shift/releases); the latest complete development snapshot is available as [Shift Nightly](https://github.com/shift-editor/shift/releases/tag/nightly).
 
 ## Architecture
 
@@ -88,6 +87,6 @@ Join our [Discord server](https://discord.gg/582FxBdNH7) to ask questions, repor
 
 ## License
 
-[GNU General Public License (GPL) v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html)
+[GNU General Public License v3.0 only (`GPL-3.0-only`)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
-Copyright © 2026 Kostya Farber. All rights reserved.
+Copyright © 2026 Kostya Farber.

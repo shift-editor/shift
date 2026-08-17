@@ -139,14 +139,10 @@ describe("KeyboardRouter", () => {
   describe("clipboard shortcuts", () => {
     beforeEach(async () => {
       editor.selectTool("pen");
-      editor.click(100, 100);
-      await editor.settle();
-      editor.click(200, 100);
-      await editor.settle();
-      editor.click(200, 200);
-      await editor.settle();
-      editor.click(100, 200);
-      await editor.settle();
+      await editor.click(100, 100);
+      await editor.click(200, 100);
+      await editor.click(200, 200);
+      await editor.click(100, 200);
       editor.selectTool("select");
       editor.selectAll();
     });
@@ -158,7 +154,6 @@ describe("KeyboardRouter", () => {
       const e = createKeyboardEvent({ key: "v", ctrlKey: true });
 
       const handled = await router.handleKeyDown(e);
-      await editor.settle();
 
       expect(handled).toBe(true);
       expect(editor.pointCount).toBeGreaterThan(pointsBefore);
@@ -171,7 +166,6 @@ describe("KeyboardRouter", () => {
       const e = createKeyboardEvent({ key: "v", metaKey: true });
 
       await router.handleKeyDown(e);
-      await editor.settle();
 
       expect(editor.pointCount).toBe(pointsBefore);
     });
@@ -190,17 +184,14 @@ describe("KeyboardRouter", () => {
   describe("delete key", () => {
     it("deletes the current canvas selection", async () => {
       editor.selectTool("pen");
-      editor.click(100, 100);
-      await editor.settle();
-      editor.click(200, 100);
-      await editor.settle();
+      await editor.click(100, 100);
+      await editor.click(200, 100);
       editor.selectTool("select");
       editor.selectAll();
 
       const handled = await router.handleKeyDown(
         createKeyboardEvent({ key: "Delete", code: "Delete" }),
       );
-      await editor.settle();
 
       expect(handled).toBe(true);
       expect(editor.pointCount).toBe(0);

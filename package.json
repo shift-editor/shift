@@ -1,6 +1,6 @@
 {
   "name": "shift-monorepo",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.0",
   "private": true,
   "description": "Shift font editor monorepo",
   "scripts": {
@@ -45,7 +45,10 @@
     "format:files": "oxfmt",
     "clean": "rm -rf apps/*/.vite apps/*/out apps/*/node_modules/.vite packages/*/node_modules/.vite node_modules .turbo && cargo clean",
     "package": "pnpm run build:native && pnpm --filter @shift/desktop package",
-    "make": "pnpm run build:native && pnpm --filter @shift/desktop make"
+    "make": "pnpm run build:native && pnpm --filter @shift/desktop make",
+    "version:check": "node scripts/product-version.mjs check",
+    "version:set": "node scripts/product-version.mjs set",
+    "test:release": "node --test scripts/*.test.mjs"
   },
   "keywords": [
     "font",
@@ -56,7 +59,7 @@
     "name": "Kostya Farber",
     "email": "kostya.farber@gmail.com"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "engines": {
     "node": ">=24.0.0 <25"
   },

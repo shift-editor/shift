@@ -1,4 +1,4 @@
 import { App } from "./app/App";
 
-const ShiftApp = new App();
-ShiftApp.start();
+const shiftApp = new App();
+shiftApp.start();

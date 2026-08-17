@@ -820,9 +820,9 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **macOS**
 
-- [ ] Signed `.app` bundle
+- [x] Signed `.app` bundle
 - [ ] `.dmg` installer
-- [ ] Notarization
+- [x] Notarization
 - [ ] Universal binary (Intel + Apple Silicon)
 - [ ] Auto-updater (Sparkle)
 
@@ -835,14 +835,14 @@ These are allowed to jump around when energy is high, but they should not silent
 **Linux**
 
 - [ ] AppImage
-- [ ] .deb package
-- [ ] .rpm package
+- [x] .deb package
+- [x] .rpm package
 
 **Release Infrastructure**
 
 - [x] GitHub Actions CI/CD
-- [ ] Automated changelog
-- [ ] Version bumping workflow
+- [x] Automated changelog
+- [x] Version bumping workflow
 - [ ] Crash reporting
 
 ---

@@ -1,6 +1,7 @@
 import { app, Menu, type MenuItemConstructorOptions } from "electron";
 import type { CommandId } from "../../shared/commands";
 import { commandMenuItem, fileMenuItems } from "./menuItems";
+import { shiftProductVersion } from "../release";
 
 const isMac = process.platform === "darwin";
 
@@ -31,8 +32,8 @@ export class ApplicationMenu {
   configureAboutPanel(): void {
     app.setAboutPanelOptions({
       applicationName: app.name,
-      applicationVersion: app.getVersion(),
-      version: app.getVersion(),
+      applicationVersion: shiftProductVersion,
+      version: shiftProductVersion,
       copyright: "Copyright © 2026 Shift",
       credits: "A font editor for drawing, spacing, and shaping type.",
       iconPath: this.#aboutIconPath,

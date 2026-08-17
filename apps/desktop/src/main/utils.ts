@@ -1,6 +1,7 @@
 import path from "path";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
+declare const MAIN_WINDOW_VITE_NAME: string;
 
 export interface RenderSource {
   type: "url" | "file";
@@ -16,6 +17,6 @@ export function getRendererSource(): RenderSource {
 
   return {
     type: "file",
-    source: path.join(__dirname, "../renderer/index.html"),
+    source: path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
   };
 }
