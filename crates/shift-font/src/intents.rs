@@ -985,13 +985,18 @@ impl Font {
                 layer_id,
                 point_ids,
             } => {
-                let change = {
+                let (change, empty_contours) = {
                     let layer = self.layer_mut_or_err(layer_id)?;
-                    layer.remove_points(point_ids)?;
-                    FontChange::layer_geometry_replaced(layer)
+                    let empty_contours = layer.remove_points(point_ids)?;
+                    (FontChange::layer_geometry_replaced(layer), empty_contours)
                 };
 
-                self.forget_point_ids(point_ids);
+                if empty_contours.is_empty() {
+                    self.forget_point_ids(point_ids);
+                } else {
+                    self.rebuild_structure_index()?;
+                }
+
                 Ok(change)
             }
             FontIntent::AddAnchors { layer_id, anchors } => {

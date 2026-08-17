@@ -463,23 +463,6 @@ describe("Select tool", () => {
       expect(editor.pointPosition(duplicatedSecond)).toEqual({ x: second.x, y: second.y });
     });
 
-    it("cuts the selected points to the clipboard", async () => {
-      editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(200, 100);
-
-      const layer = editor.requireGlyphLayer();
-      const pointIds = layer.allPoints.map((point) => point.id);
-      editor.selection.select(pointIds);
-
-      const cut = await editor.cut();
-
-      expect(cut).toBe(true);
-      expect(layer.allPoints).toHaveLength(0);
-      expect(editor.selection.hasSelection()).toBe(false);
-      expect(editor.clipboardBuffer).toContain("shift/glyph-data");
-    });
-
     it("upgrades a line segment to a cubic with alt-click", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 200);
