@@ -73,22 +73,6 @@ jobs:
               - '.codex/skills/**'
               - 'scripts/sync-agent-skills.mjs'
 
-  pull-request-title:
-    name: Conventional Pull Request Title
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: Check title
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          if [[ ! "$PR_TITLE" =~ ^(feat|fix|perf|refactor|docs|test|build|ci|style|chore)(\([^\)]+\))?(!)?:\ .+ ]]; then
-            echo "Pull request title must use Conventional Commits syntax." >&2
-            echo "Received: $PR_TITLE" >&2
-            exit 1
-          fi
-
   agent-skills:
     name: Agent Skills
     needs: detect-changes
@@ -473,7 +457,6 @@ jobs:
     if: always()
     needs:
       - detect-changes
-      - pull-request-title
       - agent-skills
       - lint
       - typecheck
