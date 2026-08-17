@@ -13,6 +13,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean documents and explicitly discarded dirty documents are closed through the utility process so package bindings and SQLite documents are pruned.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Release and Nightly builds have distinct product identities and app-data roots. `Shift` uses `app.shift` and the `Shift` data root; `Shift Nightly` uses `app.shift.nightly` and the `Shift Nightly` data root. An explicit `--user-data-dir` switch takes precedence for tests and diagnostics.
+- **Architecture Invariant:** `AppUpdater` owns application update state in main. It accepts only signed descriptors for the compiled distribution and exact platform/architecture, deduplicates Electron downloads, and cannot restart until `AppLifecycle` settles every document. Linux and unsigned Windows builds expose downloads without claiming automatic installation.
 - **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; each process validates an artifact index once and then verifies and decompresses its fixed pages independently. Staging paths use readable `run-{pid}-{id}/page-{index}-{id}.zst` names, and every retry owns a distinct file until publication. The LRU scans after an artifact is opened or published, never after every page stream. Stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
 
@@ -34,6 +35,12 @@ src/main/
     openFontDialog.ts             -- native open dialog
   menu/
     ApplicationMenu.ts            -- Electron application menu
+  update/
+    AppUpdater.ts                  -- update orchestration, scheduling, and Electron events
+    nextUpdateState.ts             -- pure legal update transitions
+    types.ts                       -- update, artifact, event, and state contracts
+    updateDialogs.ts               -- native update result and restart dialogs
+    updateFeed.ts                  -- signed channel descriptor verification
   windows/
     Window.ts                     -- BrowserWindow wrapper
     WindowManager.ts              -- live window registry
@@ -50,7 +57,9 @@ src/main/
 - `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect package, open, close, and document state.
 - `DocumentClient` -- request client for renderer-served document state/save calls.
 - `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
-- `AppLifecycle` -- coordinates Electron window close and app quit around document vetoes.
+- `AppLifecycle` -- coordinates Electron window close, app quit, and update restart around document vetoes.
+- `AppUpdater` -- main-process owner of signed feed discovery, Electron auto-update events, and native update UI.
+- `UpdateState` -- discriminated union for disabled, idle, checking, current, downloading, ready, restarting, and failed states.
 - `WorkspaceDocumentState` -- utility-owned lifecycle state mirrored into main and renderer.
 
 ## How it works
@@ -60,6 +69,16 @@ src/main/
 `main.ts` constructs `App` and calls `start()`. `App.start()` applies the compiled `SHIFT_DISTRIBUTION` identity before its first log entry or path-dependent service action, so logging, settings, caches, and recovery all resolve beneath the correct app-data root. Forge and the E2E builder both write the `main_window` renderer to `.vite/renderer/main_window`; production resolves that same directory through `MAIN_WINDOW_VITE_NAME`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development uses `Shift Dev` or `Shift Nightly Dev`; an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
 
 On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. Windows and Linux keep the conventional quit-on-last-window behavior.
+
+Eligible packaged builds start `AppUpdater` after the first window is prepared. The updater makes one delayed quiet check and then checks periodically. Development, Linux, missing-key, and unsigned Windows builds remain explicitly disabled; their manual menu command explains the boundary rather than contacting Electron's updater.
+
+### Application Updates
+
+`AppUpdater.checkForUpdates` first downloads the small signed descriptor for the compiled Release or Nightly distribution. `updateFeed.ts` verifies its Ed25519 signature, schema, increasing semantic version, distribution, and exact platform/architecture before Electron receives an immutable native feed URL. Electron then owns the native download and emits events that pass through `nextUpdateState`; stale or duplicate events are logged and ignored.
+
+Automatic current/error results stay quiet. Manual checks use native dialogs, and a completed download offers Restart or Later. Restart calls `AppLifecycle.confirmQuit("update")`, preserving the same Save / Don't Save / Cancel behavior as normal quit. Cancellation stays ready. A synchronous install failure restores ordinary close guards and returns to ready.
+
+The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Update behavior remains main-owned and does not add renderer IPC.
 
 ### Workspace Creation And Open
 
@@ -105,9 +124,12 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm --filter @shift/desktop test src/utility/workspace/WorkspaceHost.test.ts`
 - `pnpm --filter @shift/desktop test src/renderer/src/lib/workspace/WorkspaceEditCoordinator.test.ts`
 - `pnpm typecheck`
+- `pnpm test:desktop src/main/update/nextUpdateState.test.ts src/main/update/updateFeed.test.ts`
+- `pnpm test:release`
 - Electron E2E fixtures copy their startup workspace under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
 - Manual: open the same `.shift` package twice and verify the existing workspace session is reused.
 - Manual: edit a package, close the last window, and verify the save/discard prompt appears.
+- Manual packaged build: choose Check for Updates and verify current, unavailable, ready, Later, and document-canceled Restart paths.
 
 ## Related
 

@@ -87,6 +87,10 @@ export class CommandRegistry {
  * objects from this context after they finish running.
  */
 export type CommandContext = {
+  update: {
+    /** Checks the compiled application distribution for an update. */
+    checkForUpdates: () => Promise<void>;
+  };
   document: {
     /** Creates a new untitled workspace through main's document workflow. */
     create: () => Promise<void>;

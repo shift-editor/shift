@@ -34,6 +34,7 @@ export class AppLifecycle {
   readonly #log: ShiftLogger;
 
   #quitState: QuitState = "idle";
+  #quitConfirmation: Promise<boolean> | null = null;
   #confirmedWindowCloses = new Set<number>();
   #pendingWindowCloses = new Set<number>();
 
@@ -108,6 +109,37 @@ export class AppLifecycle {
       });
   }
 
+  /** Confirms every open document before an app quit or update restart. */
+  async confirmQuit(reason: CloseReason): Promise<boolean> {
+    if (this.#quitState === "confirmed") return true;
+    if (this.#quitConfirmation) return this.#quitConfirmation;
+
+    const documents = this.#documents().filter((document) => document.shouldConfirmClose());
+    this.#quitState = "confirming";
+    this.#log.info("quit guard started", { reason, documents: documents.length });
+
+    const confirmation = this.#confirmDocuments(documents, reason);
+    this.#quitConfirmation = confirmation;
+    try {
+      const confirmed = await confirmation;
+      this.#quitState = confirmed ? "confirmed" : "idle";
+      this.#log.info(confirmed ? "quit confirmed by document guard" : "quit canceled", {
+        reason,
+      });
+      return confirmed;
+    } catch (error) {
+      this.#quitState = "idle";
+      throw error;
+    } finally {
+      if (this.#quitConfirmation === confirmation) this.#quitConfirmation = null;
+    }
+  }
+
+  /** Restores ordinary close guards when a confirmed update restart fails before quitting. */
+  resetQuitConfirmation(): void {
+    if (this.#quitState === "confirmed") this.#quitState = "idle";
+  }
+
   #handleBeforeQuit(event: Event): void {
     this.#log.debug("before quit received", { quitState: this.#quitState });
     if (this.#quitState === "confirmed") {
@@ -115,8 +147,8 @@ export class AppLifecycle {
       return;
     }
 
-    const documents = this.#documents().filter((document) => document.shouldConfirmClose());
-    if (documents.length === 0) {
+    const shouldConfirm = this.#documents().some((document) => document.shouldConfirmClose());
+    if (!shouldConfirm) {
       this.#log.info("quit guard skipped");
       return;
     }
@@ -127,29 +159,21 @@ export class AppLifecycle {
       return;
     }
 
-    this.#quitState = "confirming";
-    this.#log.info("quit guard started");
-    void this.#confirmQuit(documents)
+    void this.confirmQuit("quit")
       .then((confirmed) => {
-        if (!confirmed) {
-          this.#quitState = "idle";
-          this.#log.info("quit canceled by document guard");
-          return;
-        }
-
-        this.#quitState = "confirmed";
-        this.#log.info("quit confirmed by document guard");
-        app.quit();
+        if (confirmed) app.quit();
       })
       .catch((error) => {
-        this.#quitState = "idle";
         this.#log.error("quit guard failed", error);
       });
   }
 
-  async #confirmQuit(documents: readonly CloseConfirmation[]): Promise<boolean> {
+  async #confirmDocuments(
+    documents: readonly CloseConfirmation[],
+    reason: CloseReason,
+  ): Promise<boolean> {
     for (const document of documents) {
-      if (!(await document.confirmClose("quit"))) return false;
+      if (!(await document.confirmClose(reason))) return false;
     }
 
     return true;

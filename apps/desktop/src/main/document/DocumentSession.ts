@@ -15,7 +15,7 @@ export type DocumentSessionOptions = {
   log?: ShiftLogger;
 };
 
-export type CloseReason = "window" | "quit";
+export type CloseReason = "window" | "quit" | "update";
 type DirtyDocumentChoice = "save" | "discard" | "cancel";
 
 /**

@@ -1,6 +1,14 @@
 import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
 
+const appCommands: Command[] = [
+  {
+    id: "app.checkForUpdates",
+    label: "Check for Updates…",
+    run: (ctx) => ctx.update.checkForUpdates(),
+  },
+];
+
 const windowCommands: Command[] = [
   {
     id: "window.close",
@@ -116,6 +124,7 @@ const glyphCommands: Command[] = [
  * menus, and future command-palette code read from the same source.
  */
 export const commands: Command[] = [
+  ...appCommands,
   ...windowCommands,
   ...viewCommands,
   ...fileCommands,

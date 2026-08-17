@@ -1,10 +1,12 @@
 import {
   app,
+  autoUpdater,
   BrowserWindow,
   clipboard,
   ipcMain,
   MessageChannelMain,
   screen,
+  shell,
   type Rectangle,
   type WebContents,
 } from "electron";
@@ -23,7 +25,15 @@ import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
 import type { FontSessionHost } from "../workspace/FontSessionHost";
 import { showOpenFontDialog } from "../document/openFontDialog";
-import { shiftProductName } from "../release";
+import {
+  shiftDistribution,
+  shiftProductName,
+  shiftProductVersion,
+  shiftUpdateBaseUrl,
+  shiftUpdatePublicKey,
+  shiftWindowsUpdatesEnabled,
+} from "../release";
+import { AppUpdater } from "../update/AppUpdater";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -40,6 +50,7 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 export class App {
   readonly #log: ShiftLogger;
   readonly #lifecycle: AppLifecycle;
+  readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
   #windows = new WindowManager();
@@ -70,6 +81,23 @@ export class App {
       documents: () =>
         this.#workspaces.list().flatMap((session) => (session.document ? [session.document] : [])),
       log: this.#log,
+    });
+    this.#updater = new AppUpdater({
+      autoUpdater,
+      lifecycle: this.#lifecycle,
+      activeWindow: () => this.#windows.activeWindow(),
+      applicationName: () => this.applicationName,
+      openExternal: (url) => shell.openExternal(url),
+      fetch: globalThis.fetch,
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      architecture: process.arch,
+      productVersion: shiftProductVersion,
+      distribution: shiftDistribution,
+      feedBaseUrl: shiftUpdateBaseUrl,
+      publicKey: shiftUpdatePublicKey,
+      windowsUpdatesEnabled: shiftWindowsUpdatesEnabled,
+      log: createShiftLogger("app.update"),
     });
   }
 
@@ -139,6 +167,7 @@ export class App {
         if (this.#windows.allWindows().length === 0) this.#openLauncher();
       });
 
+      this.#updater.start();
       this.#log.info("finished when ready callback");
     });
     app.on("will-quit", () => {
@@ -279,6 +308,11 @@ export class App {
 
   #commandContext(): CommandContext {
     return {
+      update: {
+        checkForUpdates: async () => {
+          await this.#updater.checkForUpdates("manual");
+        },
+      },
       document: {
         create: async () => {
           const window = this.#windows.activeWindow();
