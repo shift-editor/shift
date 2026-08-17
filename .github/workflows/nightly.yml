@@ -25,6 +25,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Validate update signing key
+        if: github.ref == 'refs/heads/main'
         env:
           SHIFT_UPDATE_PRIVATE_KEY: ${{ secrets.SHIFT_UPDATE_PRIVATE_KEY }}
           SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
