@@ -66,20 +66,26 @@ Do not move backward in maturity for the same target version. If scope reopens s
 - `release-desktop.yml` is a reusable and manually dispatchable workflow that builds the draft alpha or beta release for macOS arm64/x64, Windows x64, and Linux x64. It builds the native bridge on each runner, smoke-tests the packaged app, uploads checksums and desktop artifacts, and only then publishes the GitHub prerelease. A failed build leaves the release private and draft.
 - `nightly.yml` builds the same platform matrix as Shift Nightly on a schedule or by manual dispatch. Each platform keeps a 14-day workflow artifact for diagnostics. After every platform packages and smoke-tests successfully, a final job updates the mutable `nightly` tag and replaces the stable-name assets and checksums on the single public **Shift Nightly** prerelease. A failed matrix cannot alter the public Nightly.
 
-The Release Please workflow uses `RELEASE_PLEASE_TOKEN` rather than the default workflow token so its generated pull requests trigger normal CI. The desktop build is called directly from the successful release-creation job rather than relying on a second GitHub event.
+The Release Please workflow mints a short-lived installation token from the repository-scoped Shift Release Please GitHub App. Unlike the default workflow token, the App token lets generated pull requests trigger normal CI without depending on an expiring personal token. The desktop build is called directly from the successful release-creation job rather than relying on a second GitHub event.
+
+## GitHub Actions variable
+
+| Variable                       | Purpose                                     |
+| ------------------------------ | ------------------------------------------- |
+| `RELEASE_PLEASE_APP_CLIENT_ID` | Public client ID for the Release Please App |
 
 ## GitHub secrets
 
-| Secret                        | Purpose                                                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `RELEASE_PLEASE_TOKEN`        | Fine-grained personal access token allowed to create pull requests, tags, and releases and trigger workflows |
-| `APPLE_CERTIFICATE`           | Base64-encoded Developer ID Application `.p12`                                                               |
-| `APPLE_CERTIFICATE_PASSWORD`  | Password protecting the `.p12`                                                                               |
-| `APPLE_ID`                    | Apple Developer account login used by `notarytool`                                                           |
-| `APPLE_APP_SPECIFIC_PASSWORD` | Apple ID app-specific password, not the account password                                                     |
-| `APPLE_TEAM_ID`               | Paid Apple Developer Program team ID                                                                         |
+| Secret                           | Purpose                                                  |
+| -------------------------------- | -------------------------------------------------------- |
+| `RELEASE_PLEASE_APP_PRIVATE_KEY` | Private key used to mint installation tokens for one run |
+| `APPLE_CERTIFICATE`              | Base64-encoded Developer ID Application `.p12`           |
+| `APPLE_CERTIFICATE_PASSWORD`     | Password protecting the `.p12`                           |
+| `APPLE_ID`                       | Apple Developer account login used by `notarytool`       |
+| `APPLE_APP_SPECIFIC_PASSWORD`    | Apple ID app-specific password, not the account password |
+| `APPLE_TEAM_ID`                  | Paid Apple Developer Program team ID                     |
 
-Do not put signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail if signing credentials are absent; they never silently publish unsigned macOS builds. Windows builds remain unsigned until a certificate is acquired.
+Do not put App private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail if signing credentials are absent; they never silently publish unsigned macOS builds. Windows builds remain unsigned until a certificate is acquired.
 
 ## Signing setup
 

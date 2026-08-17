@@ -17,8 +17,8 @@ describe("fluent position edits preserve one frozen interaction base", () => {
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
-    editor.selectTool("pen").clickGlyphLocal(100, 100);
-    await editor.settle();
+    editor.selectTool("pen");
+    await editor.clickGlyphLocal(100, 100);
     pointId = editor.requireGlyphLayer().allPoints[0]!.id;
   });
 
@@ -41,7 +41,7 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     await editor.settle();
     expect(editor.pointPosition(pointId)).toEqual({ x: 125, y: 90 });
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
   });
 
