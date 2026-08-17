@@ -24,9 +24,9 @@ describe("sidebar glyph metrics", () => {
     await editor.settle();
     expect(layer.xAdvance).toBe(initialAdvance + 40);
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer.xAdvance).toBe(initialAdvance);
-    await editor.redoAndSettle();
+    await editor.redo();
     expect(layer.xAdvance).toBe(initialAdvance + 40);
   });
 
@@ -51,11 +51,11 @@ describe("sidebar glyph metrics", () => {
 
     editor.setRightSidebearing(initialRightSidebearing + 30);
     await editor.settle();
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer.xAdvance).toBe(initialAdvance);
     expect(layer.sidebearings.rsb).toBe(initialRightSidebearing);
 
-    await editor.redoAndSettle();
+    await editor.redo();
     expect(layer.xAdvance).toBe(initialAdvance + 30);
     expect(layer.sidebearings.rsb).toBe(initialRightSidebearing + 30);
   });
@@ -86,11 +86,11 @@ describe("sidebar glyph metrics", () => {
 
     editor.setLeftSidebearing(initialLeftSidebearing + 25);
     await editor.settle();
-    await editor.undoAndSettle();
+    await editor.undo();
     expect(layer.xAdvance).toBe(initialAdvance);
     expect(layer.allPoints.map(({ x, y }) => ({ x, y }))).toEqual(initialPositions);
 
-    await editor.redoAndSettle();
+    await editor.redo();
     expect(layer.xAdvance).toBe(initialAdvance + 25);
     expect(layer.sidebearings.lsb).toBe(initialLeftSidebearing + 25);
   });
