@@ -219,12 +219,11 @@ describe("saved variable-font outcomes survive a fresh workspace stack", () => {
     const savedPosition = { x: boldPoint.x, y: boldPoint.y };
     reopened.selectTool("select");
     reopened.selection.select([boldPoint.id]);
-    const drag = reopened.dragScene({
+    const drag = await reopened.dragScene({
       down: savedPosition,
       start: { x: savedPosition.x + 4, y: savedPosition.y },
       end: { x: savedPosition.x + 24, y: savedPosition.y + 30 },
     });
-    await reopened.settle();
     const editedPosition = reopened.pointPosition(boldPoint.id);
     expect(editedPosition).toEqual({
       x: savedPosition.x + drag.delta.x,
@@ -232,10 +231,10 @@ describe("saved variable-font outcomes survive a fresh workspace stack", () => {
     });
     await expect(reopened.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
 
-    await reopened.undoAndSettle();
+    await reopened.undo();
     expect(reopened.pointPosition(boldPoint.id)).toEqual(savedPosition);
     await expect(reopened.font.editCoordinator.state()).resolves.toMatchObject({ dirty: false });
-    await reopened.redoAndSettle();
+    await reopened.redo();
     expect(reopened.pointPosition(boldPoint.id)).toEqual(editedPosition);
     await reopened.save();
     await reopened.closeSession();
