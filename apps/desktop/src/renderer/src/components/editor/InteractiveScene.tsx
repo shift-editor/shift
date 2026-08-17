@@ -83,6 +83,12 @@ export const InteractiveScene = () => {
     [handlePointerUp, handlePointerCancel],
   );
 
+  const handlePointerLeave = useCallback(() => {
+    if (activePointerIdRef.current !== null) return;
+
+    editor.input.clearPointer();
+  }, [editor]);
+
   return (
     <canvas
       id="interactive-canvas"
@@ -97,6 +103,7 @@ export const InteractiveScene = () => {
       }}
       onPointerUp={handlePointerUp}
       onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
       onPointerCancel={handlePointerCancel}
       onLostPointerCapture={handleLostPointerCapture}
     />

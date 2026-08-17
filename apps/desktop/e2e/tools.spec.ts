@@ -129,6 +129,35 @@ test.describe("Canvas pointer lifecycle", () => {
     await navigateToEditor(page, "41");
   });
 
+  test("clears the idle pointer on leave but preserves it during capture", async ({ page }) => {
+    const canvas = page.locator("#interactive-canvas");
+    const bounds = await canvas.boundingBox();
+    if (!bounds) throw new Error("Expected interactive canvas bounds");
+
+    const inside = {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + 20,
+    };
+    const outside = {
+      x: inside.x,
+      y: bounds.y - 10,
+    };
+    const hasPointer = () =>
+      page.evaluate(() => (window.shift?.editor.input.pointer ?? null) !== null);
+
+    await page.mouse.move(inside.x, inside.y);
+    await expect.poll(hasPointer).toBe(true);
+
+    await page.mouse.move(outside.x, outside.y);
+    await expect.poll(hasPointer).toBe(false);
+
+    await page.mouse.move(inside.x, inside.y);
+    await page.mouse.down();
+    await page.mouse.move(outside.x, outside.y);
+    await expect.poll(hasPointer).toBe(true);
+    await page.mouse.up();
+  });
+
   test("commits a point drag when capture is lost before pointerup", async ({ page }) => {
     const point = await selectVisiblePoint(page);
 
