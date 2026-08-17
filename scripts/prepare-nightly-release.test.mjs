@@ -10,6 +10,8 @@ const script = path.resolve("scripts/prepare-nightly-release.mjs");
 const fixtures = [
   ["zip/darwin/arm64/Shift Nightly-darwin-arm64-version.zip", "mac-arm64"],
   ["zip/darwin/x64/Shift Nightly-darwin-x64-version.zip", "mac-x64"],
+  ["Shift Nightly-version-arm64.dmg", "dmg-arm64"],
+  ["Shift Nightly-version-x64.dmg", "dmg-x64"],
   ["squirrel.windows/x64/Shift Nightly-version-Setup.exe", "windows-x64"],
   ["deb/x64/shift-nightly_version_amd64.deb", "linux-deb"],
   ["rpm/x64/shift-nightly-version.x86_64.rpm", "linux-rpm"],
@@ -17,6 +19,8 @@ const fixtures = [
 const destinations = [
   "Shift-Nightly-macOS-arm64.zip",
   "Shift-Nightly-macOS-x64.zip",
+  "Shift-Nightly-macOS-arm64.dmg",
+  "Shift-Nightly-macOS-x64.dmg",
   "Shift-Nightly-Windows-x64.exe",
   "Shift-Nightly-Linux-x64.deb",
   "Shift-Nightly-Linux-x64.rpm",

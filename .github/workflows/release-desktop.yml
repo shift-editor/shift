@@ -52,13 +52,13 @@ jobs:
             runner: macos-15
             platform: darwin
             arch: arm64
-            targets: zip
+            targets: "zip,dmg"
             package-dir: Shift-darwin-arm64
           - name: macOS x64
             runner: macos-15-intel
             platform: darwin
             arch: x64
-            targets: zip
+            targets: "zip,dmg"
             package-dir: Shift-darwin-x64
           - name: Windows x64
             runner: windows-latest
