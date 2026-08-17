@@ -82,7 +82,14 @@ async function createVariableNavigationFixture(page: Page): Promise<VariableNavi
 
     const instanceId = font.createNamedInstance({
       name: "Navigation Preview",
-      location: { values: { [axisId]: 700 } },
+      location: {
+        values: Object.fromEntries(
+          font
+            .getAxes()
+            .filter((axis) => axis.role === "external")
+            .map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
+        ),
+      },
     });
     await font.editCoordinator.settled();
     return {

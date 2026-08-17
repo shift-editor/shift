@@ -1531,6 +1531,8 @@ export class Glyph {
   }
 
   layerForSource(sourceId: SourceId): GlyphLayer | null {
+    track(this.#layersCell);
+
     return this.#layersBySourceId.get(sourceId) ?? null;
   }
 
