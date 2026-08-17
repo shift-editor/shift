@@ -269,6 +269,13 @@ export class LayerBuffers {
 
     batch(() => {
       for (const [contour, ids] of contours) contour.removePoints(ids);
+
+      const emptyContours = new Set(
+        [...contours.keys()].filter((contour) => contour.pointCount === 0),
+      );
+      if (emptyContours.size > 0) {
+        this.contoursCell.set(this.contours.filter((contour) => !emptyContours.has(contour)));
+      }
     });
     return true;
   }
