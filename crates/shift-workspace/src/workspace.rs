@@ -94,12 +94,13 @@ impl FontWorkspace {
         source: WorkspaceSource,
         store: ShiftStore,
         residency: LayerResidency,
+        dirty: bool,
     ) -> Self {
         Self {
             font,
             source,
             store,
-            ledger: Ledger::default(),
+            ledger: Ledger::new(dirty),
             residency,
         }
     }
@@ -120,6 +121,7 @@ impl FontWorkspace {
             WorkspaceSource::Untitled,
             store,
             LayerResidency::default(),
+            false,
         ))
     }
 
@@ -185,7 +187,13 @@ impl FontWorkspace {
         );
         let source = source_from_workspace_state(&state)?;
 
-        Ok(Self::from_store(font, source, store, residency))
+        Ok(Self::from_store(
+            font,
+            source,
+            store,
+            residency,
+            state.dirty,
+        ))
     }
 
     pub fn resume_for_source(
@@ -282,14 +290,14 @@ impl FontWorkspace {
             }
         }
 
-        let outcome = self.commit_edit(|font| {
+        let outcome = self.commit_edit(true, |font| {
             let outcome = font.apply_intents(set)?;
             let changes = outcome.changes.clone();
             Ok((outcome, changes))
         })?;
 
         let steps = self.ledger_steps(&pre, &outcome);
-        self.ledger.push(LedgerEntry { label, steps });
+        self.ledger.push(label, steps);
         Ok(outcome)
     }
 
@@ -492,7 +500,8 @@ impl FontWorkspace {
             return Ok(None);
         };
 
-        match self.replay(&entry, ReplaySide::Pre) {
+        let dirty = self.ledger.is_dirty();
+        match self.replay(&entry, ReplaySide::Pre, dirty) {
             Ok(outcome) => {
                 self.ledger.record_undone(entry);
                 Ok(Some(outcome))
@@ -512,7 +521,8 @@ impl FontWorkspace {
             return Ok(None);
         };
 
-        match self.replay(&entry, ReplaySide::Post) {
+        let dirty = self.ledger.is_entry_dirty(&entry);
+        match self.replay(&entry, ReplaySide::Post, dirty) {
             Ok(outcome) => {
                 self.ledger.record_redone(entry);
                 Ok(Some(outcome))
@@ -528,6 +538,7 @@ impl FontWorkspace {
         &mut self,
         entry: &LedgerEntry,
         side: ReplaySide,
+        dirty: bool,
     ) -> Result<AppliedIntents, WorkspaceError> {
         self.acquire_layers(entry.layer_ids())?;
 
@@ -552,7 +563,7 @@ impl FontWorkspace {
             steps.reverse();
         }
 
-        self.commit_edit(move |font| {
+        self.commit_edit(dirty, move |font| {
             let mut changes = FontChangeSet::default();
             let mut touched: Vec<TouchedLayer> = Vec::new();
 
@@ -639,6 +650,7 @@ impl FontWorkspace {
         &mut self,
         next_font: shift_font::Font,
         change_set: FontChangeSet,
+        dirty: bool,
     ) -> Result<(), WorkspaceError> {
         if let Some(layer_id) = change_set
             .changes
@@ -650,19 +662,19 @@ impl FontWorkspace {
         }
 
         self.store
-            .apply_change_set_with_font(&change_set, &next_font)?;
+            .apply_change_set_with_font(&change_set, &next_font, dirty)?;
         self.font = next_font;
         self.residency.retain_directory_layers(&self.font);
         Ok(())
     }
 
-    fn commit_edit<R, F>(&mut self, edit: F) -> Result<R, WorkspaceError>
+    fn commit_edit<R, F>(&mut self, dirty: bool, edit: F) -> Result<R, WorkspaceError>
     where
         F: FnOnce(&mut shift_font::Font) -> Result<(R, FontChangeSet), WorkspaceError>,
     {
         let mut next_font = self.font.clone();
         let (result, change_set) = edit(&mut next_font)?;
-        self.commit_font(next_font, change_set)?;
+        self.commit_font(next_font, change_set, dirty)?;
 
         Ok(result)
     }
@@ -695,6 +707,7 @@ impl FontWorkspace {
         state.dirty = false;
         state.saved_revision = state.revision;
         self.store.set_workspace_state(state)?;
+        self.ledger.mark_saved();
         Ok(())
     }
 
@@ -736,6 +749,7 @@ impl FontWorkspace {
             },
             store,
             LayerResidency::default(),
+            false,
         ))
     }
 
@@ -784,6 +798,7 @@ impl FontWorkspace {
                     },
                     store,
                     residency,
+                    false,
                 ));
             }
             Err(shift_backends::BackendError::StreamingUnsupported { .. }) => {}
@@ -803,6 +818,7 @@ impl FontWorkspace {
             },
             store,
             LayerResidency::default(),
+            false,
         ))
     }
 

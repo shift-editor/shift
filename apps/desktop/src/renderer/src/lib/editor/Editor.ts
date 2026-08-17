@@ -22,7 +22,7 @@ import {
   cloneExternalAxisLocation,
   emptyExternalAxisLocation,
 } from "@/lib/variation/location";
-import type { ActiveTool, ToolName } from "../tools/core";
+import type { ActiveTool, ToolName, ToolRegistration } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
 
@@ -149,14 +149,7 @@ export class Editor {
   #renderer: Renderer;
 
   #toolManager: ToolManager;
-  #toolMetadata: Map<
-    ToolName,
-    {
-      icon: React.FC<React.SVGProps<SVGSVGElement>>;
-      tooltip: string;
-      shortcut?: string;
-    }
-  >;
+  #toolRegistry: Signal<ReadonlyMap<ToolName, ToolRegistryItem>>;
   #tool: Signal<ActiveTool | null>;
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
@@ -246,11 +239,20 @@ export class Editor {
       },
     );
 
-    this.#toolMetadata = new Map();
-
     // TODO: why not make editor extend EventEmitter?
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
+    this.#toolRegistry = computed(
+      () => {
+        const registry = new Map<ToolName, ToolRegistryItem>();
+        for (const [id, manifest] of this.#toolManager.manifestsCell.value) {
+          const { icon, tooltip, shortcut } = manifest;
+          registry.set(id, shortcut ? { icon, tooltip, shortcut } : { icon, tooltip });
+        }
+        return registry;
+      },
+      { name: "editor.toolRegistry" },
+    );
     this.#tool = computed<ActiveTool | null>(
       () => {
         const activeTool = this.#toolManager.activeToolCell.value;
@@ -302,32 +304,32 @@ export class Editor {
     );
   }
 
-  public registerTool(descriptor: ToolManifest): void {
-    const { id, icon, tooltip, shortcut } = descriptor;
-    this.#toolMetadata.set(id, shortcut ? { icon, tooltip, shortcut } : { icon, tooltip });
-    this.toolManager.register(descriptor);
+  /**
+   * Installs a tool contribution and returns the handle that owns it.
+   *
+   * @param manifest - Stable identity, metadata, and factory to install.
+   * @returns The handle used to replace or permanently remove the contribution.
+   */
+  public registerTool(manifest: ToolManifest): ToolRegistration {
+    return this.toolManager.register(manifest);
   }
 
   public get toolRegistry(): ReadonlyMap<ToolName, ToolRegistryItem> {
-    const result = new Map<ToolName, ToolRegistryItem>();
-    for (const [name, metadata] of this.#toolMetadata) {
-      result.set(name, {
-        icon: metadata.icon,
-        tooltip: metadata.tooltip,
-        shortcut: metadata.shortcut,
-      });
-    }
-    return result;
+    return this.#toolRegistry.peek();
+  }
+
+  public get toolRegistryCell(): Signal<ReadonlyMap<ToolName, ToolRegistryItem>> {
+    return this.#toolRegistry;
   }
 
   public getToolShortcuts(): ToolShortcutEntry[] {
-    const out: ToolShortcutEntry[] = [];
-    for (const [toolId, metadata] of this.#toolMetadata) {
-      if (metadata.shortcut != null) {
-        out.push({ toolId, shortcut: metadata.shortcut });
+    const shortcuts: ToolShortcutEntry[] = [];
+    for (const [toolId, manifest] of this.#toolManager.manifests) {
+      if (manifest.shortcut != null) {
+        shortcuts.push({ toolId, shortcut: manifest.shortcut });
       }
     }
-    return out;
+    return shortcuts;
   }
 
   /** Returns the current active tool snapshot, or null before a tool is activated. */
@@ -914,13 +916,13 @@ export class Editor {
     return this.#camera;
   }
 
-  public undo() {
+  public async undo(): Promise<void> {
     // One undo authority: the workspace ledger (state-pair replay).
-    void this.font.editCoordinator.undo();
+    await this.font.editCoordinator.undo();
   }
 
-  public redo() {
-    void this.font.editCoordinator.redo();
+  public async redo(): Promise<void> {
+    await this.font.editCoordinator.redo();
   }
 
   /**
@@ -1278,11 +1280,12 @@ export class Editor {
       selection.layer.removePoints(selection.pointIds);
     });
     this.selection.clear();
+    await this.font.editCoordinator.settled();
 
     return true;
   }
 
-  public deleteSelection(): boolean {
+  public async deleteSelection(): Promise<boolean> {
     const selection = this.#pointSelectionFromIds(this.selection.ids);
     if (!selection || selection.pointIds.length === 0) return false;
 
@@ -1290,6 +1293,7 @@ export class Editor {
       selection.layer.removePoints(selection.pointIds);
     });
     this.selection.clear();
+    await this.font.editCoordinator.settled();
 
     return true;
   }
@@ -1310,6 +1314,7 @@ export class Editor {
         if (!inserted) return false;
 
         this.selection.select(inserted);
+        await this.font.editCoordinator.settled();
         return true;
       }
 
@@ -1354,6 +1359,7 @@ export class Editor {
     this.#cursorEffect.dispose();
     this.#cameraMetricsEffect.dispose();
     this.#renderer.destroy();
+    this.#toolManager.dispose();
     this.#events.dispose();
   }
 

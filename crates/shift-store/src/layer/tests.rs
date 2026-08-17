@@ -556,7 +556,7 @@ fn post_font_change_set_rewrites_touched_layer_without_decoding_old_payload() {
     let changes = font::FontChangeSet::new(vec![font::FontChange::layer_metrics_changed(&layer)]);
 
     store
-        .apply_change_set_with_font(&changes, &post_font)
+        .apply_change_set_with_font(&changes, &post_font, true)
         .unwrap();
 
     assert_eq!(store.load_glyph_layer(&layer.id()).unwrap(), Some(layer));

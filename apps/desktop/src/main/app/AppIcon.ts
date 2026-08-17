@@ -1,7 +1,8 @@
 import { app } from "electron";
 import path from "node:path";
+import { shiftDistribution } from "../release";
 
-const iconFileName = "icon.png";
+const iconFileName = shiftDistribution === "nightly" ? "nightly.png" : "icon.png";
 
 /**
  * Resolves and applies the app icon used by runtime shell features.

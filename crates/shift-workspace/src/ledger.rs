@@ -18,6 +18,9 @@ use shift_font::{
 /// the stack being extended falls off first; a fresh apply also clears redo.
 const MAX_ENTRIES_PER_STACK: usize = 100;
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct HistoryPosition(u64);
+
 #[derive(Clone)]
 pub enum LedgerStep {
     /// Edits to existing layers; pairs replay by substitution.
@@ -96,6 +99,7 @@ pub struct LayerPair {
 
 #[derive(Clone)]
 pub struct LedgerEntry {
+    position: HistoryPosition,
     pub label: Option<String>,
     pub steps: Vec<LedgerStep>,
 }
@@ -134,17 +138,41 @@ impl LedgerEntry {
     }
 }
 
-#[derive(Default)]
 pub struct Ledger {
     undo: Vec<LedgerEntry>,
     redo: Vec<LedgerEntry>,
+    base_position: HistoryPosition,
+    saved_position: Option<HistoryPosition>,
+    next_position: u64,
+}
+
+impl Default for Ledger {
+    fn default() -> Self {
+        Self::new(false)
+    }
 }
 
 impl Ledger {
+    pub fn new(dirty: bool) -> Self {
+        Self {
+            undo: Vec::new(),
+            redo: Vec::new(),
+            base_position: HistoryPosition::default(),
+            saved_position: (!dirty).then_some(HistoryPosition::default()),
+            next_position: 1,
+        }
+    }
+
     /// Records an applied entry. A fresh apply truncates the redo stack.
-    pub fn push(&mut self, entry: LedgerEntry) {
+    pub fn push(&mut self, label: Option<String>, steps: Vec<LedgerStep>) {
         self.redo.clear();
-        push_bounded(&mut self.undo, entry);
+        let entry = LedgerEntry {
+            position: HistoryPosition(self.next_position),
+            label,
+            steps,
+        };
+        self.next_position += 1;
+        push_undo_bounded(&mut self.undo, entry, &mut self.base_position);
     }
 
     /// Pops the entry to undo; the caller replays its pre states and must
@@ -161,23 +189,52 @@ impl Ledger {
 
     /// Hands a popped undo entry back after a failed replay.
     pub fn restore_undo(&mut self, entry: LedgerEntry) {
-        push_bounded(&mut self.undo, entry);
+        push_undo_bounded(&mut self.undo, entry, &mut self.base_position);
     }
 
     /// Pops the entry to redo; hand back via [`Ledger::record_redone`] after
-    /// the replay durably succeeded, or [`Ledger::restore_redo`] when it
-    /// failed so the step stays available for retry.
+    /// the replay durably succeeded, or [`Ledger::restore_redo`] when it failed
+    /// so the step stays available for retry.
     pub fn pop_redo(&mut self) -> Option<LedgerEntry> {
         self.redo.pop()
     }
 
     pub fn record_redone(&mut self, entry: LedgerEntry) {
-        push_bounded(&mut self.undo, entry);
+        push_undo_bounded(&mut self.undo, entry, &mut self.base_position);
     }
 
     /// Hands a popped redo entry back after a failed replay.
     pub fn restore_redo(&mut self, entry: LedgerEntry) {
         push_bounded(&mut self.redo, entry);
+    }
+
+    pub fn mark_saved(&mut self) {
+        self.saved_position = Some(self.current_position());
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.saved_position != Some(self.current_position())
+    }
+
+    pub fn is_entry_dirty(&self, entry: &LedgerEntry) -> bool {
+        self.saved_position != Some(entry.position)
+    }
+
+    fn current_position(&self) -> HistoryPosition {
+        self.undo
+            .last()
+            .map_or(self.base_position, |entry| entry.position)
+    }
+}
+
+fn push_undo_bounded(
+    stack: &mut Vec<LedgerEntry>,
+    entry: LedgerEntry,
+    base_position: &mut HistoryPosition,
+) {
+    stack.push(entry);
+    if stack.len() > MAX_ENTRIES_PER_STACK {
+        *base_position = stack.remove(0).position;
     }
 }
 
@@ -196,7 +253,7 @@ mod tests {
     fn each_stack_drops_its_oldest_entry_independently() {
         let mut ledger = Ledger::default();
         for index in 0..=MAX_ENTRIES_PER_STACK {
-            ledger.push(entry(index));
+            ledger.push(Some(index.to_string()), Vec::new());
         }
         assert_eq!(ledger.undo.len(), MAX_ENTRIES_PER_STACK);
         assert_eq!(ledger.undo[0].label.as_deref(), Some("1"));
@@ -213,16 +270,43 @@ mod tests {
     #[test]
     fn fresh_apply_clears_the_bounded_redo_stack() {
         let mut ledger = Ledger::default();
-        ledger.record_undone(entry(1));
+        ledger.push(Some("1".into()), Vec::new());
+        let entry = ledger.pop_undo().unwrap();
+        ledger.record_undone(entry);
 
-        ledger.push(entry(2));
+        ledger.push(Some("2".into()), Vec::new());
 
         assert!(ledger.redo.is_empty());
         assert_eq!(ledger.undo.len(), 1);
     }
 
+    #[test]
+    fn saved_position_tracks_undo_redo_and_branches() {
+        let mut ledger = Ledger::default();
+        ledger.push(Some("first".into()), Vec::new());
+        ledger.push(Some("saved".into()), Vec::new());
+        ledger.mark_saved();
+        ledger.push(Some("after save".into()), Vec::new());
+        assert!(ledger.is_dirty());
+
+        let after_save = ledger.pop_undo().unwrap();
+        assert!(!ledger.is_dirty());
+        ledger.record_undone(after_save);
+        let after_save = ledger.pop_redo().unwrap();
+        assert!(ledger.is_entry_dirty(&after_save));
+        ledger.record_redone(after_save);
+
+        let after_save = ledger.pop_undo().unwrap();
+        ledger.record_undone(after_save);
+        let saved = ledger.pop_undo().unwrap();
+        ledger.record_undone(saved);
+        ledger.push(Some("branch".into()), Vec::new());
+        assert!(ledger.is_dirty());
+    }
+
     fn entry(index: usize) -> LedgerEntry {
         LedgerEntry {
+            position: HistoryPosition(index as u64),
             label: Some(index.to_string()),
             steps: Vec::new(),
         }

@@ -28,6 +28,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state.
 
+**Architecture Invariant:** `ToolManager` is authoritative for installed manifests. `Editor.toolRegistryCell` derives reactive toolbar metadata from that collection, and `registerTool()` returns the `ToolRegistration` that exclusively owns replacement and removal of the contributed ID.
+
 **Architecture Invariant:** Camera and text-layout metrics resolve from the active design location through `Font.metricsAtLocation()`. Exact master locations use authored source values; intermediate locations evaluate the Rust-built source-metric interpolation model.
 
 **Architecture Invariant:** A newly created source becomes the editor's active source only after its workspace echo makes that identity readable from `Font`. While creation is pending, the editor exposes the requested external location with no active source ID, so catalog and rendering consumers cannot observe a dangling source.

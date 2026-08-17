@@ -18,7 +18,7 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 - Each editable glyph layer is one independently addressable, store-private MessagePack payload identified as `shift.glyph-layer.v1`; the store independently wraps it as `none` or `zstd.v1` without changing authored semantics.
 - Component dependency rows contain only the earned query index: component ID, owner layer ID, base glyph ID, and ordinal.
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.
-- Payload replacement, directory facts, component rows, and workspace revision state commit in one transaction.
+- Payload replacement, directory facts, component rows, monotonic workspace revision, and the workspace-supplied dirty value commit in one transaction.
 
 `ShiftStore::load_font_directory` never reads payload BLOBs. `load_glyph_layer` bounds stored and decoded lengths before fetching and decompressing one payload. `load_glyph_layers` accepts a complete requested set, deduplicates it, and partitions it through the single count- and decoded-byte-aware planner. Each internal batch performs three ordered directory/payload/reference scans for at most 512 layers and 256 MiB decoded bytes, then decompresses and validates with Rayon. Every decoded payload must match its exact declared length and 32-byte BLAKE3 before strict MessagePack decoding. Full-font materialization and workspace acquisition use that same planner; no caller maintains a weaker count-only loop. All payload paths cross-check canonical bytes against relational facts.
 
