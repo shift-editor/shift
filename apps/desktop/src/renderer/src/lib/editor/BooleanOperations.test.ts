@@ -38,9 +38,9 @@ describe("editor boolean operations", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("shape");
-    editor.dragScene({ down: { x: 0, y: 0 }, start: { x: 10, y: 10 }, end: { x: 100, y: 100 } });
+    editor.dragScene({ down: { x: 10, y: 10 }, start: { x: 20, y: 20 }, end: { x: 100, y: 100 } });
     await editor.settle();
-    editor.dragScene({ down: { x: 50, y: 50 }, start: { x: 60, y: 60 }, end: { x: 150, y: 150 } });
+    editor.dragScene({ down: { x: 60, y: 60 }, start: { x: 70, y: 70 }, end: { x: 150, y: 150 } });
     await editor.settle();
     editor.selection.select(editor.requireGlyphLayer().contours.map(({ id }) => id));
   });

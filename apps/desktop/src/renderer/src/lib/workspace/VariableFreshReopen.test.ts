@@ -202,7 +202,7 @@ describe("saved variable-font outcomes survive a fresh workspace stack", () => {
     expect(expected.middle).toMatchObject({
       hasExactLayer: false,
       xAdvance: 550,
-      firstPoint: { x: 20, y: 10 },
+      firstPoint: { x: 22, y: 10 },
       ascender: 860,
       xHeight: 560,
     });

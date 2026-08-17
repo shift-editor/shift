@@ -6,9 +6,10 @@ import type { Coordinates } from "@/types/coordinates";
 import type { CursorType } from "@/types/editor";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { Select } from "./Select";
+import { track } from "@/lib/signals";
+import { selectedGeometryEdit } from "./behaviors/selectedGeometryEdit";
 
 type YAxisDirection = "up" | "down";
-
 export type CornerHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type BoundingBoxHitResult =
@@ -112,8 +113,9 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const state = this.#select.stateCell.value;
     if (state.type === "brushing") return null;
 
-    const selectedCount = this.#editor.selection.stateCell.value.ids.length;
-    if (selectedCount <= 1) return null;
+    track(this.#editor.selection.stateCell);
+    const edit = selectedGeometryEdit(this.#editor);
+    if (!edit || edit.pointIds.length + edit.anchorIds.length <= 1) return null;
 
     const sceneRect = this.#editor.selectionBoundsCell.value;
     if (!sceneRect) return null;
@@ -121,6 +123,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     this.#editor.camera.trackViewportTransform();
 
     const screenRect = this.#screenRect(sceneRect);
+    if (!hasBoundingBoxArea(sceneRect)) return null;
+
     const sceneHandles = getHandlePositions(
       sceneRect,
       this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
@@ -202,6 +206,21 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     return hit.cursor;
   }
 
+  containsTranslationPoint(coords: Coordinates): boolean {
+    const props = this.propsSnapshot();
+    if (!props) return false;
+
+    const { screenRect } = props;
+    const pos = coords.screen;
+
+    return (
+      pos.x >= screenRect.left &&
+      pos.x <= screenRect.right &&
+      pos.y >= screenRect.top &&
+      pos.y <= screenRect.bottom
+    );
+  }
+
   cursorForRotationCorner(corner: CornerHandle): CursorType {
     switch (corner) {
       case "top-left":
@@ -240,12 +259,10 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   }
 
   #drawHandles(canvas: Canvas, handles: HandlePositions): void {
-    const styles = SELECT_BOUNDING_BOX_STYLE;
-
+    const style = SELECT_BOUNDING_BOX_STYLE.handle;
     const cornerKeys = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
-    for (const key of cornerKeys) {
-      drawHandle(canvas, handles.corners[key], styles.handle);
-    }
+
+    for (const key of cornerKeys) drawHandle(canvas, handles.corners[key], style);
   }
 }
 
@@ -332,6 +349,10 @@ export function getHandlePositions(
       },
     },
   };
+}
+
+function hasBoundingBoxArea(rect: Rect2D): boolean {
+  return rect.width !== 0 && rect.height !== 0;
 }
 
 function rectFromPoints(points: readonly Point2D[]): Rect2D {

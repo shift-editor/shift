@@ -57,6 +57,11 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
       start: { x: 504, y: 104 },
       end: { x: 580, y: 180 },
     });
+    await original.dragScene({
+      down: { x: 700, y: 100 },
+      start: { x: 704, y: 104 },
+      end: { x: 780, y: 180 },
+    });
     original.setXAdvance(700);
     await expect(original.font.editCoordinator.state()).resolves.toMatchObject({
       dirty: true,
@@ -82,7 +87,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     const expectedPositions = persistedPositions(original);
     expect(expected.contours[0]).toMatchObject({
       closed: false,
-      segments: ["line", "cubic"],
+      segments: ["line", "cubic", "cubic"],
     });
     expect(expected.contours[0]?.points.some((point) => point.smooth)).toBe(true);
     await original.closeSession();

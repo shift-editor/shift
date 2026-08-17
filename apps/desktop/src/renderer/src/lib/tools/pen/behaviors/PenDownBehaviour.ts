@@ -19,7 +19,7 @@ export class PenDownBehaviour implements PenBehavior {
 
     editor.selection.clear();
 
-    const isActive = stroke.activeContour !== null;
+    const isActive = stroke.activeEndpoint !== null;
 
     switch (target.type) {
       case "terminal":
@@ -61,12 +61,11 @@ export class PenDownBehaviour implements PenBehavior {
     const target = targets.at(nodePoint, editor.hitRadius);
     if (target.type === "segment") return false;
 
-    const activeContour = stroke.activeContour;
-    if (!activeContour) return false;
+    if (!stroke.activeEndpoint) return false;
 
     ctx.setState({
       type: "anchored",
-      anchor: { position: nodePoint },
+      anchorPosition: nodePoint,
     });
     return true;
   }

@@ -214,6 +214,8 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerUp(screenPoint: Point2D, modifiers: Modifiers = DEFAULT_MODIFIERS): void {
+    this.flushPointerMoves();
+
     const coords = this.editor.fromScreen(screenPoint);
     this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);

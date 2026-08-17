@@ -1,9 +1,10 @@
-import { Rect, Vec2, type Point2D } from "@shift/geo";
+import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
+import type { Select } from "../Select";
 import type { GlyphAnchorTarget, GlyphPointTarget, GlyphSegmentTarget } from "@/types/target";
 import type { ShiftId } from "@/types";
 import { selectedGeometryEdit } from "./selectedGeometryEdit";
@@ -22,14 +23,18 @@ type TranslatingState = Extract<SelectState, { type: "translating" }>;
 export class Translate implements SelectBehavior {
   #drag: TranslateDrag | null = null;
 
-  onDragStart(state: SelectState, ctx: ToolContext<SelectState>, event: DragStartEvent): boolean {
+  onDragStart(
+    state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+    event: DragStartEvent,
+  ): boolean {
     if (state.type !== "idle" && state.type !== "ready") return false;
 
-    const operation = TranslateOperation.fromDragStart(ctx.editor, event);
+    const operation = TranslateOperation.fromDragStart(ctx.editor, ctx.tool, event);
     if (!operation) return false;
 
     operation.applySelection(ctx.editor);
-    this.#drag = new TranslateDrag(operation, event.coords.scene);
+    this.#drag = new TranslateDrag(operation, event.origin.scene);
     ctx.setState(translatingState(this.#drag.startPos));
     return true;
   }
@@ -114,7 +119,11 @@ class TranslateOperation {
     this.dragAnchor = dragAnchor;
   }
 
-  static fromDragStart(editor: Editor, event: DragStartEvent): TranslateOperation | null {
+  static fromDragStart(
+    editor: Editor,
+    select: Select,
+    event: DragStartEvent,
+  ): TranslateOperation | null {
     const target = event.target;
 
     switch (target.kind) {
@@ -126,7 +135,7 @@ class TranslateOperation {
         return TranslateOperation.fromSegmentTarget(editor, event, target);
       case "node":
       case "canvas":
-        return TranslateOperation.fromInsideSelectionBounds(editor, event);
+        return TranslateOperation.fromInsideSelectionBounds(editor, select, event);
     }
   }
 
@@ -224,12 +233,10 @@ class TranslateOperation {
 
   static fromInsideSelectionBounds(
     editor: Editor,
+    select: Select,
     event: DragStartEvent,
   ): TranslateOperation | null {
-    const bounds = editor.selectionBounds();
-    if (!bounds) return null;
-
-    if (!Rect.containsPoint(bounds, event.origin.scene)) return null;
+    if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
 
     return TranslateOperation.fromSelection(editor);
   }
@@ -248,6 +255,7 @@ class TranslateOperation {
   }
 }
 
+// TODO: this should probably not live here as a free fucntion but should be semantically significat on the ditior
 /**
  * Interpolated views hit-test against geometry whose ids come from an
  * authored layer's structure, so ownership alone would let a drag silently
