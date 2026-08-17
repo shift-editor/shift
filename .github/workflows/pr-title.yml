@@ -7,11 +7,14 @@ on:
       - edited
       - reopened
       - synchronize
+  merge_group:
+    types:
+      - checks_requested
 
 permissions: {}
 
 concurrency:
-  group: pr-title-${{ github.event.pull_request.number }}
+  group: pr-title-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,7 +24,12 @@ jobs:
     permissions:
       pull-requests: read
     steps:
+      - name: Confirm queued titles were validated
+        if: github.event_name == 'merge_group'
+        run: echo "Pull request titles passed before entering the merge queue."
+
       - name: Check current title
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
