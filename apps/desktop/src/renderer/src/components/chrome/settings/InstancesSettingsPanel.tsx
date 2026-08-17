@@ -63,6 +63,7 @@ export const InstancesSettingsPanel = ({
           {instances.map((instance) => (
             <SidebarActionRow
               key={instance.id}
+              data-testid={`settings-instance-${instance.id}`}
               isActive={instance.id === selectedInstance?.id}
               className={cn(
                 "h-8",

@@ -19,7 +19,10 @@ const categories: { id: SettingsCategory; label: string; icon: SVG }[] = [
 ];
 
 export const SettingsSidebar = ({ category, onCategoryChange }: SettingsSidebarProps) => (
-  <nav className="flex min-h-0 flex-col gap-0.5 border-r border-line-subtle bg-white p-2">
+  <nav
+    aria-label="Settings categories"
+    className="flex min-h-0 flex-col gap-0.5 border-r border-line-subtle bg-white p-2"
+  >
     {categories.map((item) => {
       const Icon = item.icon;
       const active = item.id === category;

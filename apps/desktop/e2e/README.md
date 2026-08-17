@@ -53,9 +53,13 @@ After an intentional visual change:
 
 A snapshot match alone does not prove GPU content exists. Rendering tests that can pass with a blank canvas must also compare frames with and without the relevant canvas or assert equivalent semantic output. Route-return tests must make that comparison after navigation because residency attributes do not prove Chromium retained or repainted the WebGPU presentation.
 
-## Interaction rules
+## Selector and interaction rules
 
-- Use locator-relative positions for canvas clicks.
+- Prefer `getByRole()` and `getByLabel()` for semantic controls and named application regions.
+- Use stable domain test IDs when repeated labels cannot identify one record: `source-{id}`, `instance-{id}`, and their `settings-*` variants.
+- Reuse surface and control locators from `fixtures/appLocators.ts`; do not traverse parents, select the first `canvas`/`aside`, or depend on styling classes.
+- Canvas cells have no DOM identity. Use `openCatalogGlyph()` to filter to one stable glyph ID before clicking; keep the remaining locator-relative coordinate contract inside `clickFirstCatalogGlyph()` rather than scattering layout coordinates across specs.
+- Use locator-relative positions for other canvas clicks.
 - For raw mouse drags, derive page coordinates from the target canvas's `boundingBox()`.
 - Keep interactions inside measured bounds; do not assume the host desktop is wider than the fixture window.
 - GPU fixtures must await workspace-window visibility, then apply the final owning `BrowserWindow` size and await the tested page's matching renderer content size; do not let a hidden-to-visible OS adjustment invalidate a baseline.
