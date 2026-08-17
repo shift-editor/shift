@@ -8,6 +8,7 @@ interface SidebarActionRowProps {
   onClick?: () => void;
   className?: string;
   contentClassName?: string;
+  "data-testid"?: string;
 }
 
 export const SidebarActionRow = ({
@@ -17,6 +18,7 @@ export const SidebarActionRow = ({
   onClick,
   className,
   contentClassName,
+  "data-testid": testId,
 }: SidebarActionRowProps) => (
   <div
     className={cn(
@@ -30,6 +32,7 @@ export const SidebarActionRow = ({
       <Button
         variant="ghost"
         size="sm"
+        data-testid={testId}
         onClick={onClick}
         className={cn(
           "min-w-0 flex-1 justify-start bg-transparent px-2 hover:bg-transparent data-[active]:bg-transparent",
@@ -39,7 +42,9 @@ export const SidebarActionRow = ({
         {children}
       </Button>
     ) : (
-      <div className={cn("min-w-0 flex-1 px-2", contentClassName)}>{children}</div>
+      <div data-testid={testId} className={cn("min-w-0 flex-1 px-2", contentClassName)}>
+        {children}
+      </div>
     )}
     {actions && <SidebarActionSlot>{actions}</SidebarActionSlot>}
   </div>

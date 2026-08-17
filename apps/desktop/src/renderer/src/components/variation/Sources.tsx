@@ -47,6 +47,7 @@ export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
       {sources.map((s) => (
         <SidebarActionRow
           key={s.id}
+          data-testid={`source-${s.id}`}
           isActive={s.id === activeSourceId}
           onClick={() => selectSource(s.id)}
           contentClassName="h-6 text-ui"
