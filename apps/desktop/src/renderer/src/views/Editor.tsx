@@ -125,6 +125,7 @@ const EditorLayout = ({
   children: ReactNode;
 }) => (
   <div
+    data-testid="editor-shell"
     className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
     data-gesture={gesture}
     style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
