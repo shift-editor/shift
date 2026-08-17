@@ -34,6 +34,7 @@ export const Instances = ({ canAuthor }: { canAuthor: boolean }) => {
       {instances.map((instance) => (
         <SidebarActionRow
           key={instance.id}
+          data-testid={`instance-${instance.id}`}
           onClick={() => previewInstance(instance)}
           contentClassName="h-6 text-ui"
           actions={

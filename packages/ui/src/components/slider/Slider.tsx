@@ -18,7 +18,15 @@ export interface SliderProps extends Omit<
 
 export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
   (
-    { className, trackClassName, indicatorClassName, thumbClassName, onValueChange, ...props },
+    {
+      "aria-label": ariaLabel,
+      className,
+      trackClassName,
+      indicatorClassName,
+      thumbClassName,
+      onValueChange,
+      ...props
+    },
     ref,
   ) => {
     return (
@@ -37,6 +45,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
               className={cn("absolute h-full bg-accent rounded-full", indicatorClassName)}
             />
             <BaseSlider.Thumb
+              aria-label={ariaLabel}
               className={cn(
                 "w-3.5 h-3.5 rounded-full bg-white border-2 border-black shadow-sm",
                 "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",

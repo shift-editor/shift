@@ -113,7 +113,7 @@ export const workspaceTest = test.extend<ShiftOptions>({
 
   page: async ({ page }, use) => {
     await page.waitForURL(/#\/home/, { timeout: 20_000 });
-    await page.getByLabel("Glyph catalog").waitFor({ state: "visible" });
+    await page.getByLabel("Glyph catalog", { exact: true }).waitFor({ state: "visible" });
     await use(page);
   },
 });

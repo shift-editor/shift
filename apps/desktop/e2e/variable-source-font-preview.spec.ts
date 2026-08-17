@@ -5,6 +5,7 @@ import {
   glyphsPreviewTest,
   variablePreviewTest,
 } from "./fixtures/perfApp";
+import { firstAxisSlider } from "./fixtures/appLocators";
 
 interface VariationSample {
   readonly activeSourceId: string | null;
@@ -27,7 +28,7 @@ async function openVariableGlyph(page: Page): Promise<string> {
     return entry.id;
   });
   await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
-  await expect(page.getByRole("slider").first()).toBeVisible();
+  await expect(await firstAxisSlider(page)).toBeVisible();
 
   return glyphId;
 }
@@ -47,7 +48,7 @@ async function variationSample(page: Page, glyphId: string): Promise<VariationSa
 }
 
 async function moveSliderToMiddle(page: Page): Promise<void> {
-  const slider = page.getByRole("slider").first();
+  const slider = await firstAxisSlider(page);
   const track = await slider.evaluate((input) => {
     const bounds = input.parentElement?.parentElement?.getBoundingClientRect();
     if (!bounds) throw new Error("Expected slider track");
@@ -59,7 +60,7 @@ async function moveSliderToMiddle(page: Page): Promise<void> {
 
 async function expectContinuousVariablePreview(page: Page): Promise<void> {
   const glyphId = await openVariableGlyph(page);
-  const slider = page.getByRole("slider").first();
+  const slider = await firstAxisSlider(page);
 
   await slider.press("Home");
   const minimum = await variationSample(page, glyphId);
