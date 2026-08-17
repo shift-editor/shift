@@ -51,8 +51,9 @@ export async function openCatalogGlyph(
   glyphName: string,
   glyphId: string,
 ): Promise<void> {
-  await page.getByPlaceholder("Search glyphs...").fill(glyphName);
   const surface = glyphCatalogSurface(page);
+  await expect(surface).toBeVisible();
+  await page.getByPlaceholder("Search glyphs...").fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
   await page.evaluate(

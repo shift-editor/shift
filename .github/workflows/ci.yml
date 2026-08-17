@@ -31,6 +31,7 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       typescript: ${{ steps.filter.outputs.typescript }}
+      desktop-e2e: ${{ steps.filter.outputs.desktop-e2e }}
       release: ${{ steps.filter.outputs.release }}
       skills: ${{ steps.filter.outputs.skills }}
     steps:
@@ -53,6 +54,20 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'tsconfig*.json'
               - 'turbo.json'
+            desktop-e2e:
+              - 'apps/desktop/**'
+              - 'packages/**'
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig*.json'
+              - 'turbo.json'
+              - '.github/workflows/ci.yml'
+              - 'scripts/generate-bridge-types.mjs'
             release:
               - '.github/workflows/**'
               - '.release-please-manifest.json'
@@ -382,6 +397,8 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e:
     name: E2E ${{ matrix.name }}
+    needs: detect-changes
+    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.desktop-e2e == 'true'
     strategy:
       fail-fast: false
       matrix:
