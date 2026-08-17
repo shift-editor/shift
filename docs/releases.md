@@ -28,7 +28,7 @@ pnpm version:check
 pnpm version:set 0.1.0-alpha.1
 ```
 
-Release Please owns normal version changes. `.release-please-manifest.json` starts at `0.1.0-alpha.0`, so the first tagged release is `v0.1.0-alpha.1`. Nightlies append `nightly.UTC_DATE.RUN.ATTEMPT`; the attempt component ensures a rerun gets a distinct immutable version. The initial changelog boundary is commit `788ba986410b4d2837e9d269ff8938b1dbc5aa9a`, immediately before the release foundation; older project history is not imported into the first release notes.
+Release Please owns normal version changes. `.release-please-manifest.json` starts at `0.1.0-alpha.0`, so the first tagged release is `v0.1.0-alpha.1`. Nightlies use versions such as `0.1.0-nightly20260817r0000000320a0001`: the UTC date, ten-digit workflow run, and four-digit attempt remain lexically ordered after electron-winstaller's NuGet conversion, and reruns receive distinct immutable versions. The initial changelog boundary is commit `788ba986410b4d2837e9d269ff8938b1dbc5aa9a`, immediately before the release foundation; older project history is not imported into the first release notes.
 
 Use Conventional Commit prefixes on commits and pull requests. `feat`, `fix`, and `perf` entries appear in the generated public changelog. `refactor`, `docs`, `test`, `build`, `ci`, `style`, and `chore` remain valid commit types but stay hidden from public release notes. Before publishing the first Alpha, add a short curated overview and known-issues section to its Release Please pull request; generated entries alone do not describe the existing product.
 
@@ -64,18 +64,16 @@ Do not move backward in maturity for the same target version. If scope reopens s
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates an alpha tag and a draft GitHub release, then calls the desktop release workflow with that exact tag. `force-tag-creation` materializes the tag immediately because GitHub otherwise delays tags for draft releases.
 - `release-desktop.yml` is a reusable and manually dispatchable workflow that builds the draft alpha or beta release for macOS arm64/x64, Windows x64, and Linux x64. It refuses an already-public release or an existing immutable feed version before clobbering assets, builds the native bridge on each runner, smoke-tests the packaged app, uploads checksums and desktop artifacts, and only then publishes the GitHub prerelease. A failed build leaves the release private and draft.
-- `nightly.yml` builds the same platform matrix as Shift Nightly on a schedule or by manual dispatch. Each platform keeps a 14-day workflow artifact for diagnostics. After every platform packages and smoke-tests successfully, a final job rejects commits behind the current Nightly tag and verifies that the proposed signed channel version advances before updating the mutable tag or assets. A failed matrix or stale rerun cannot alter the public Nightly.
-- Before mutating a public release, `check-update-feed-version.sh` fetches the authoritative `update-feeds` branch, fails closed on remote errors, rejects duplicate immutable versions, and verifies that the proposed signed channel version increases. After publication, `publish-update-feed.sh` rechecks the remote and updates the branch. `prepare-update-feed.mjs` recognizes electron-winstaller's NuGet-normalized prerelease filenames, writes immutable versioned Squirrel manifests, and advances the descriptor last. GitHub Pages serves the branch at `https://shift-editor.github.io/shift/updates`; a feed failure leaves the previously deployed channel descriptor usable.
+- `nightly.yml` builds the same platform matrix as Shift Nightly on a schedule or by manual dispatch. Each platform keeps a 14-day workflow artifact for diagnostics. After every platform packages and smoke-tests successfully, a final job rejects commits behind the current Nightly tag and verifies that the proposed native feed version advances before updating the mutable tag or assets. A failed matrix or stale rerun cannot alter the public Nightly.
+- Before mutating a public release, `check-update-feed-version.sh` fetches the authoritative `update-feeds` branch, fails closed on remote errors, rejects duplicate immutable versions, and verifies that the proposed native feed version increases. After publication, `publish-update-feed.sh` rechecks the remote and updates the branch. `prepare-update-feed.mjs` recognizes electron-winstaller's NuGet-normalized prerelease filenames, retains immutable versioned Squirrel manifests, and atomically replaces the fixed Release or Nightly native feed files. GitHub Pages serves the branch at `https://shift-editor.github.io/shift/updates`; a feed failure leaves the previously deployed native feeds usable.
 
 The Release Please workflow mints a short-lived installation token from the repository-scoped Shift Release Please GitHub App. Unlike the default workflow token, the App token lets generated pull requests trigger normal CI without depending on an expiring personal token. The desktop build is called directly from the successful release-creation job rather than relying on a second GitHub event.
 
 ## GitHub Actions variable
 
-| Variable                        | Purpose                                                           |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `RELEASE_PLEASE_APP_CLIENT_ID`  | Public client ID for the Release Please App                       |
-| `SHIFT_UPDATE_PUBLIC_KEY`       | Base64 SPKI DER Ed25519 public key embedded in packaged builds    |
-| `SHIFT_WINDOWS_UPDATES_ENABLED` | Reserved; keep `0` until Windows signing and native versioning land |
+| Variable                       | Purpose                                      |
+| ------------------------------ | -------------------------------------------- |
+| `RELEASE_PLEASE_APP_CLIENT_ID` | Public client ID for the Release Please App |
 
 ## GitHub secrets
 
@@ -87,9 +85,8 @@ The Release Please workflow mints a short-lived installation token from the repo
 | `APPLE_ID`                       | Apple Developer account login used by `notarytool`       |
 | `APPLE_APP_SPECIFIC_PASSWORD`    | Apple ID app-specific password, not the account password |
 | `APPLE_TEAM_ID`                  | Paid Apple Developer Program team ID                     |
-| `SHIFT_UPDATE_PRIVATE_KEY`       | Base64 PKCS8 DER Ed25519 key that signs channel metadata |
 
-Do not put App private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. The update private key signs metadata only; packaged applications contain its public key. Release workflows fail during preparation when either key is absent or the pair does not match. macOS release and Nightly jobs fail if signing credentials are absent; they never silently publish unsigned macOS builds. Windows builds remain update-disabled until a certificate is acquired, signed update tests pass, and an order-preserving Squirrel-native prerelease version is implemented. Builds currently reject `SHIFT_WINDOWS_UPDATES_ENABLED=1`.
+Do not put App private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail if signing credentials are absent; they never silently publish unsigned macOS builds. Windows Nightlies use Squirrel's native updater while unsigned for initial N → N+1 testing; acquire an Authenticode certificate before treating Windows updates as production-ready.
 
 ## Signing setup
 
@@ -101,25 +98,16 @@ Do not put App private keys or signing credentials in repository files, workflow
 
 ## Update-feed setup
 
-1. Generate a dedicated Ed25519 keypair outside the repository:
-
-   ```sh
-   openssl genpkey -algorithm Ed25519 -out shift-update.pem
-   openssl pkcs8 -topk8 -nocrypt -in shift-update.pem -outform DER | openssl base64 -A
-   openssl pkey -in shift-update.pem -pubout -outform DER | openssl base64 -A
-   ```
-
-2. Store the first base64 value as the `SHIFT_UPDATE_PRIVATE_KEY` Actions secret and the second as the `SHIFT_UPDATE_PUBLIC_KEY` Actions variable. Keep the PEM offline as release infrastructure; never commit it.
-3. Run a release workflow once to create the `update-feeds` branch.
-4. Configure GitHub Pages to deploy from the root of `update-feeds`.
-5. Confirm the public key in the signed `channel.json` verifies and a packaged macOS build reaches the expected same-distribution feed.
-6. Keep `SHIFT_WINDOWS_UPDATES_ENABLED=0` until Windows application signing, order-preserving native versions, and a real N → N+1 update test are in place.
+1. Run a release workflow once to create the `update-feeds` branch.
+2. Configure GitHub Pages to deploy from the root of `update-feeds`.
+3. Confirm packaged Release and Nightly builds reach only their matching native feed paths.
+4. Perform real N → N+1 installation tests on macOS arm64/x64 and Windows x64 before inviting testers.
 
 The compiled default feed root is `https://shift-editor.github.io/shift/updates`. Override `SHIFT_UPDATE_BASE_URL` consistently in the build and publication environments only when moving the whole feed.
 
 ## Application flow
 
-The main process owns an `UpdateState` state machine and validates a signed Release or Nightly descriptor before configuring Electron `autoUpdater`. Automatic checks are delayed and quiet; Check for Updates lives in the macOS application menu and Windows/Linux Help menu. Linux opens the matching downloads page. A downloaded update cannot restart until the existing document lifecycle completes Save / Don't Save / Cancel confirmation. Cleanup remains deferred until `before-quit-for-update` begins finalization ahead of Electron's window teardown, so an earlier installation failure can restore ordinary guards without disconnecting the user's session; a committed exit still discards drafts the user chose not to save.
+The main process owns an `UpdateState` state machine and configures Electron `autoUpdater` with the fixed native Squirrel feed for the compiled Release or Nightly distribution, platform, and architecture. Automatic checks are delayed and quiet; Check for Updates lives in the macOS application menu and Windows/Linux Help menu. Linux opens the matching downloads page. A downloaded update cannot restart until the existing document lifecycle completes Save / Don't Save / Cancel confirmation. Cleanup remains deferred until `before-quit-for-update` begins finalization ahead of Electron's window teardown, so an earlier installation failure can restore ordinary guards without disconnecting the user's session; a committed exit still discards drafts the user chose not to save.
 
 ## Rollback
 
@@ -128,5 +116,4 @@ The main process owns an `UpdateState` state machine and validates a signed Rele
 - A failed versioned build remains a private draft release. Fix the release workflow and rerun it for the existing tag; do not publish incomplete assets.
 - Never delete or reuse a published version tag. Correct it with the next prerelease version.
 - A failed Nightly build leaves the previous public Nightly in place. Roll back a bad published Nightly by republishing a known-good commit to the mutable `nightly` tag; never move or reuse a versioned release tag. Shift Nightly requires no release-channel data migration because it has a separate application identity and data root.
-- If binary publication succeeds but update-feed publication fails, clients continue using the previous signed pointer. Recover from the original retained workflow artifacts with `publish-update-feed.sh`; do not rerun or clobber the now-public versioned release. Revert a bad `update-feeds` commit rather than editing an immutable version directory in place.
-- Do not rotate the update signing key until an overlap release has first added support for trusting both old and new public keys. Replacing the sole compiled key immediately strands existing installations.
+- If binary publication succeeds but update-feed publication fails, clients continue using the previous native feed. Recover from the original retained workflow artifacts with `publish-update-feed.sh`; do not rerun or clobber the now-public versioned release. Revert a bad `update-feeds` commit rather than editing an immutable version directory in place.

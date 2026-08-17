@@ -1,21 +1,17 @@
-import { createPublicKey } from "node:crypto";
-import { assertChannelAdvances } from "./update-channel.mjs";
+import { readFile } from "node:fs/promises";
+import semver from "semver";
 
-const [channelPath, distribution, version] = process.argv.slice(2);
-if (!channelPath || !distribution || !version) {
+const [currentPath, proposedVersion] = process.argv.slice(2);
+if (!currentPath || !proposedVersion) {
+  throw new Error("Usage: check-update-channel.mjs <current-feed> <proposed-version>");
+}
+
+const currentVersion = JSON.parse(await readFile(currentPath, "utf8")).name;
+if (!semver.valid(currentVersion) || !semver.valid(proposedVersion)) {
+  throw new Error(`Invalid update version: ${String(currentVersion)} or ${proposedVersion}`);
+}
+if (!semver.gt(proposedVersion, currentVersion)) {
   throw new Error(
-    "Usage: check-update-channel.mjs <channel-file> <distribution> <proposed-version>",
+    `Update feed must advance from ${currentVersion} to a newer version, received ${proposedVersion}`,
   );
 }
-if (distribution !== "release" && distribution !== "nightly") {
-  throw new Error(`Expected release or nightly distribution, received: ${distribution}`);
-}
-
-const publicKeySource = process.env.SHIFT_UPDATE_PUBLIC_KEY;
-if (!publicKeySource) throw new Error("SHIFT_UPDATE_PUBLIC_KEY is required");
-const publicKey = createPublicKey({
-  key: Buffer.from(publicKeySource, "base64"),
-  format: "der",
-  type: "spki",
-});
-await assertChannelAdvances(channelPath, distribution, version, publicKey);

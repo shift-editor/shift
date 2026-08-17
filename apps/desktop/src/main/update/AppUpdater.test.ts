@@ -1,4 +1,3 @@
-import { generateKeyPairSync, sign } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import type { AppLifecycle } from "../app/AppLifecycle";
@@ -14,52 +13,22 @@ vi.mock("./updateDialogs", () => ({
   showUpdateUnavailable: async () => false,
 }));
 
-const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-const publicKeyBase64 = publicKey.export({ format: "der", type: "spki" }).toString("base64");
-const payload = {
-  schemaVersion: 1,
-  distribution: "release",
-  version: "0.1.0-alpha.2",
-  publishedAt: "2026-08-16T12:00:00.000Z",
-  releaseUrl: "https://github.com/shift-editor/shift/releases/tag/v0.1.0-alpha.2",
-  artifacts: [
-    {
-      platform: "darwin",
-      architecture: "arm64",
-      feedUrl:
-        "https://shift-editor.github.io/shift/updates/release/0.1.0-alpha.2/darwin/arm64/RELEASES.json",
-      url: "https://github.com/shift-editor/shift/releases/download/v0.1.0-alpha.2/Shift.zip",
-      sha256: "a".repeat(64),
-    },
-  ],
-} as const;
-
 class FakeAutoUpdater extends EventEmitter {
-  setFeedURL(): void {}
-  checkForUpdates(): void {}
+  feedUrl: string | null = null;
+  checkCount = 0;
+
+  setFeedURL(options: { url: string }): void {
+    this.feedUrl = options.url;
+  }
+
+  checkForUpdates(): void {
+    this.checkCount += 1;
+  }
+
   quitAndInstall(): void {}
 }
 
-function responseFor(url: string): Response {
-  if (url.endsWith("channel.json")) {
-    const bytes = Buffer.from(JSON.stringify(payload));
-    return Response.json({
-      payload: bytes.toString("base64"),
-      signature: sign(null, bytes, privateKey).toString("base64"),
-    });
-  }
-
-  return Response.json({
-    url: payload.artifacts[0].url,
-    name: payload.version,
-    notes: "",
-    pub_date: payload.publishedAt,
-    sha256: payload.artifacts[0].sha256,
-    size: 1024,
-  });
-}
-
-function createUpdater() {
+function createUpdater(overrides: Partial<AppUpdaterOptions> = {}) {
   const autoUpdater = new FakeAutoUpdater();
   const lifecycleState = { guardsEnabled: true };
   const lifecycle = {
@@ -84,16 +53,14 @@ function createUpdater() {
     activeWindow: () => null,
     applicationName: () => "Shift",
     openExternal: async () => undefined,
-    fetch: async (input) => responseFor(input.toString()),
     isPackaged: true,
     platform: "darwin",
     architecture: "arm64",
     productVersion: "0.1.0-alpha.1",
     distribution: "release",
     feedBaseUrl: "https://shift-editor.github.io/shift/updates",
-    publicKey: publicKeyBase64,
-    windowsUpdatesEnabled: false,
     log,
+    ...overrides,
   };
   return { updater: new AppUpdater(options), autoUpdater, lifecycleState };
 }
@@ -102,11 +69,18 @@ async function downloadUpdate(updater: AppUpdater, autoUpdater: FakeAutoUpdater)
   updater.start();
   await updater.checkForUpdates("automatic");
   autoUpdater.emit("update-available");
-  autoUpdater.emit("update-downloaded");
+  autoUpdater.emit(
+    "update-downloaded",
+    {},
+    "",
+    "0.1.0-alpha.2",
+    new Date("2026-08-16T12:00:00.000Z"),
+    "https://github.com/shift-editor/shift/releases",
+  );
   await vi.waitFor(() => expect(updater.state.type).toBe("ready"));
 }
 
-describe("AppUpdater restart safety", () => {
+describe("AppUpdater", () => {
   it("restores document guards after an asynchronous install failure", async () => {
     const { updater, autoUpdater, lifecycleState } = createUpdater();
     await downloadUpdate(updater, autoUpdater);
@@ -116,5 +90,18 @@ describe("AppUpdater restart safety", () => {
     autoUpdater.emit("error", new Error("ShipIt failed"));
     await vi.waitFor(() => expect(updater.state.type).toBe("ready"));
     expect(lifecycleState.guardsEnabled).toBe(true);
+  });
+
+  it("uses the native Windows x64 Squirrel feed", async () => {
+    const { updater, autoUpdater } = createUpdater({ platform: "win32", architecture: "x64" });
+    updater.start();
+
+    await updater.checkForUpdates("manual");
+
+    expect(updater.state.type).toBe("checking");
+    expect(autoUpdater.checkCount).toBe(1);
+    expect(autoUpdater.feedUrl).toBe(
+      "https://shift-editor.github.io/shift/updates/release/win32/x64",
+    );
   });
 });

@@ -30,8 +30,6 @@ import {
   shiftProductName,
   shiftProductVersion,
   shiftUpdateBaseUrl,
-  shiftUpdatePublicKey,
-  shiftWindowsUpdatesEnabled,
 } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 
@@ -88,15 +86,12 @@ export class App {
       activeWindow: () => this.#windows.activeWindow(),
       applicationName: () => this.applicationName,
       openExternal: (url) => shell.openExternal(url),
-      fetch: globalThis.fetch,
       isPackaged: app.isPackaged,
       platform: process.platform,
       architecture: process.arch,
       productVersion: shiftProductVersion,
       distribution: shiftDistribution,
       feedBaseUrl: shiftUpdateBaseUrl,
-      publicKey: shiftUpdatePublicKey,
-      windowsUpdatesEnabled: shiftWindowsUpdatesEnabled,
       log: createShiftLogger("app.update"),
     });
   }

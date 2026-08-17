@@ -1,9 +1,8 @@
-import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import semver from "semver";
-import { assertChannelAdvances } from "./update-channel.mjs";
 import { squirrelPackageVersion } from "./update-versions.mjs";
 
 const [artifactsArgument, siteArgument, distribution, version, releaseTag, publishedAt] =
@@ -24,28 +23,11 @@ if (
 if (distribution !== "release" && distribution !== "nightly") {
   throw new Error(`Expected release or nightly distribution, received: ${distribution}`);
 }
-if (!semver.valid(version) || semver.prerelease(version) === null) {
-  throw new Error(`Expected a prerelease semantic version, received: ${version}`);
+if (!semver.valid(version)) {
+  throw new Error(`Expected a semantic version, received: ${version}`);
 }
 if (Number.isNaN(Date.parse(publishedAt))) {
   throw new Error(`Expected an ISO publication time, received: ${publishedAt}`);
-}
-
-const privateKeySource = process.env.SHIFT_UPDATE_PRIVATE_KEY;
-const expectedPublicKey = process.env.SHIFT_UPDATE_PUBLIC_KEY;
-if (!privateKeySource || !expectedPublicKey) {
-  throw new Error("SHIFT_UPDATE_PRIVATE_KEY and SHIFT_UPDATE_PUBLIC_KEY are required");
-}
-
-const privateKey = createPrivateKey({
-  key: decodeBase64("private key", privateKeySource),
-  format: "der",
-  type: "pkcs8",
-});
-const signingPublicKey = createPublicKey(privateKey);
-const publicKey = signingPublicKey.export({ format: "der", type: "spki" }).toString("base64");
-if (publicKey !== expectedPublicKey) {
-  throw new Error("Update signing key does not match SHIFT_UPDATE_PUBLIC_KEY");
 }
 
 const artifactsRoot = path.resolve(artifactsArgument);
@@ -88,22 +70,7 @@ if (!path.basename(windowsX64).includes(windowsVersion)) {
 }
 
 const repository = process.env.GITHUB_REPOSITORY ?? "shift-editor/shift";
-const updateBaseUrl = (
-  process.env.SHIFT_UPDATE_BASE_URL ?? "https://shift-editor.github.io/shift/updates"
-).replace(/\/$/, "");
 const releaseBaseUrl = `https://github.com/${repository}/releases/download/${encodeURIComponent(releaseTag)}`;
-const versionBaseUrl = `${updateBaseUrl}/${distribution}/${encodeURIComponent(version)}`;
-
-const macArm64Artifact = await artifact(macArm64, "darwin", "arm64", releaseBaseUrl, {
-  feedUrl: `${versionBaseUrl}/darwin/arm64/RELEASES.json`,
-});
-const macX64Artifact = await artifact(macX64, "darwin", "x64", releaseBaseUrl, {
-  feedUrl: `${versionBaseUrl}/darwin/x64/RELEASES.json`,
-});
-const windowsX64Artifact = await artifact(windowsX64, "win32", "x64", releaseBaseUrl, {
-  feedUrl: `${versionBaseUrl}/win32/x64`,
-});
-
 const versionRoot = path.join(siteRoot, "updates", distribution, version);
 try {
   await stat(versionRoot);
@@ -111,69 +78,71 @@ try {
 } catch (error) {
   if (error?.code !== "ENOENT") throw error;
 }
-const channelPath = path.join(siteRoot, "updates", distribution, "channel.json");
-await assertChannelAdvances(channelPath, distribution, version, signingPublicKey);
 
+const currentMacFeed = path.join(
+  siteRoot,
+  "updates",
+  distribution,
+  "darwin",
+  "arm64",
+  "RELEASES.json",
+);
+try {
+  const current = JSON.parse(await readFile(currentMacFeed, "utf8"));
+  if (!semver.valid(current.name) || !semver.gt(version, current.name)) {
+    throw new Error(
+      `Update feed must advance from ${String(current.name)} to a newer version, received ${version}`,
+    );
+  }
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+
+const macArm64Feed = await macFeed(macArm64);
+const macX64Feed = await macFeed(macX64);
+const windowsX64Feed = await windowsFeed(windowsX64);
 await Promise.all([
-  writeJson(path.join(versionRoot, "darwin", "arm64", "RELEASES.json"), {
-    url: macArm64Artifact.url,
-    name: version,
-    notes: "",
-    pub_date: publishedAt,
-    sha256: macArm64Artifact.sha256,
-    size: (await stat(macArm64)).size,
-  }),
-  writeJson(path.join(versionRoot, "darwin", "x64", "RELEASES.json"), {
-    url: macX64Artifact.url,
-    name: version,
-    notes: "",
-    pub_date: publishedAt,
-    sha256: macX64Artifact.sha256,
-    size: (await stat(macX64)).size,
-  }),
-  writeWindowsReleases(path.join(versionRoot, "win32", "x64", "RELEASES"), windowsX64),
+  writeJson(path.join(versionRoot, "darwin", "arm64", "RELEASES.json"), macArm64Feed),
+  writeJson(path.join(versionRoot, "darwin", "x64", "RELEASES.json"), macX64Feed),
+  writeText(path.join(versionRoot, "win32", "x64", "RELEASES"), windowsX64Feed),
+  writeJson(currentMacFeed, macArm64Feed),
+  writeJson(
+    path.join(siteRoot, "updates", distribution, "darwin", "x64", "RELEASES.json"),
+    macX64Feed,
+  ),
+  writeText(
+    path.join(siteRoot, "updates", distribution, "win32", "x64", "RELEASES"),
+    windowsX64Feed,
+  ),
 ]);
 
-const payload = Buffer.from(
-  JSON.stringify({
-    schemaVersion: 1,
-    distribution,
-    version,
-    publishedAt,
-    releaseUrl: `https://github.com/${repository}/releases/tag/${encodeURIComponent(releaseTag)}`,
-    artifacts: [macArm64Artifact, macX64Artifact, windowsX64Artifact],
-  }),
-);
-const envelope = {
-  payload: payload.toString("base64"),
-  signature: sign(null, payload, privateKey).toString("base64"),
-};
-await mkdir(path.dirname(channelPath), { recursive: true });
-const temporaryChannelPath = `${channelPath}.next`;
-await writeFile(temporaryChannelPath, `${JSON.stringify(envelope, null, 2)}\n`);
-await rename(temporaryChannelPath, channelPath);
-
-async function artifact(file, platform, architecture, releaseBase, options) {
+async function macFeed(file) {
   return {
-    platform,
-    architecture,
-    feedUrl: options.feedUrl,
-    url: `${releaseBase}/${encodeURIComponent(path.basename(file))}`,
+    url: `${releaseBaseUrl}/${encodeURIComponent(path.basename(file))}`,
+    name: version,
+    notes: "",
+    pub_date: publishedAt,
     sha256: await digest(file, "sha256"),
+    size: (await stat(file)).size,
   };
 }
 
-async function writeWindowsReleases(destination, nupkg) {
-  await mkdir(path.dirname(destination), { recursive: true });
+async function windowsFeed(nupkg) {
   const sha1 = (await digest(nupkg, "sha1")).toUpperCase();
   const size = (await stat(nupkg)).size;
   const url = `${releaseBaseUrl}/${encodeURIComponent(path.basename(nupkg))}`;
-  await writeFile(destination, `${sha1} ${url} ${size}\n`);
+  return `${sha1} ${url} ${size}\n`;
 }
 
 async function writeJson(destination, value) {
+  await writeText(destination, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function writeText(destination, value) {
   await mkdir(path.dirname(destination), { recursive: true });
-  await writeFile(destination, `${JSON.stringify(value, null, 2)}\n`);
+  const temporary = `${destination}.next`;
+  await writeFile(temporary, value);
+  await rename(temporary, destination);
 }
 
 async function collectFiles(root) {
@@ -207,17 +176,6 @@ async function digest(file, algorithm) {
       .on("error", reject);
   });
   return hash.digest("hex");
-}
-
-function decodeBase64(name, value) {
-  const decoded = Buffer.from(value, "base64");
-  if (
-    decoded.length === 0 ||
-    decoded.toString("base64").replace(/=+$/, "") !== value.replace(/=+$/, "")
-  ) {
-    throw new Error(`Update ${name} is not valid base64`);
-  }
-  return decoded;
 }
 
 function escapeRegex(value) {

@@ -21,26 +21,15 @@ jobs:
       - id: version
         shell: bash
         run: |
-          VERSION="0.1.0-nightly.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Validate update signing key
-        if: github.ref == 'refs/heads/main'
-        env:
-          SHIFT_UPDATE_PRIVATE_KEY: ${{ secrets.SHIFT_UPDATE_PRIVATE_KEY }}
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
-        shell: bash
-        run: |
           set -euo pipefail
-          if [[ -z "$SHIFT_UPDATE_PRIVATE_KEY" || -z "$SHIFT_UPDATE_PUBLIC_KEY" ]]; then
-            echo "The update signing key and public key must both be configured" >&2
+          if (( GITHUB_RUN_NUMBER > 9999999999 || GITHUB_RUN_ATTEMPT > 9999 )); then
+            echo "Nightly run number exceeds the fixed-width version range" >&2
             exit 1
           fi
-          DERIVED_PUBLIC_KEY="$(printf '%s' "$SHIFT_UPDATE_PRIVATE_KEY" | base64 --decode | openssl pkey -inform DER -pubout -outform DER | base64 -w0)"
-          if [[ "$DERIVED_PUBLIC_KEY" != "$SHIFT_UPDATE_PUBLIC_KEY" ]]; then
-            echo "The update signing key does not match SHIFT_UPDATE_PUBLIC_KEY" >&2
-            exit 1
-          fi
+          printf -v RUN_NUMBER "%010d" "$GITHUB_RUN_NUMBER"
+          printf -v RUN_ATTEMPT "%04d" "$GITHUB_RUN_ATTEMPT"
+          VERSION="0.1.0-nightly$(date -u +%Y%m%d)r${RUN_NUMBER}a${RUN_ATTEMPT}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.name }}
@@ -129,8 +118,6 @@ jobs:
       - name: Make desktop distributables
         env:
           SHIFT_DISTRIBUTION: nightly
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
-          SHIFT_WINDOWS_UPDATES_ENABLED: ${{ vars.SHIFT_WINDOWS_UPDATES_ENABLED || '0' }}
           SIGN_MACOS: ${{ matrix.platform == 'darwin' && '1' || '0' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -212,7 +199,6 @@ jobs:
       - name: Protect Nightly history and channel from rollback
         env:
           NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -267,11 +253,8 @@ jobs:
               --target "$GITHUB_SHA"
           fi
 
-      - name: Publish signed Nightly update feed
+      - name: Publish native Nightly update feeds
         env:
-          SHIFT_UPDATE_PRIVATE_KEY: ${{ secrets.SHIFT_UPDATE_PRIVATE_KEY }}
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
-          SHIFT_UPDATE_BASE_URL: https://shift-editor.github.io/shift/updates
           NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
         run: |

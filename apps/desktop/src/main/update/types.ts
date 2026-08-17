@@ -5,26 +5,10 @@ import type { Window } from "../windows/Window";
 
 export type UpdateTrigger = "automatic" | "manual";
 export type UpdatePhase = "check" | "download" | "restart";
-export type UpdateDisabledReason =
-  | "development"
-  | "unsupported-platform"
-  | "missing-configuration"
-  | "unsigned-windows";
-
-export type UpdateArtifact = {
-  platform: "darwin" | "win32";
-  architecture: "arm64" | "x64";
-  feedUrl: string;
-  url: string;
-  sha256: string;
-};
+export type UpdateDisabledReason = "development" | "unsupported-platform" | "missing-configuration";
 
 export type Update = {
-  distribution: "release" | "nightly";
-  version: string;
-  publishedAt: string;
-  releaseUrl: string;
-  artifact: UpdateArtifact;
+  version: string | null;
 };
 
 export type UpdateState =
@@ -41,17 +25,15 @@ export type UpdateEvent =
   | { type: "checkRequested"; trigger: UpdateTrigger }
   | { type: "noUpdateAvailable"; checkedAt: string }
   | { type: "updateAvailable"; update: Update }
-  | { type: "updateDownloaded" }
+  | { type: "updateDownloaded"; update: Update }
   | { type: "operationFailed"; phase: "check" | "download"; message: string }
   | { type: "restartRequested" }
   | { type: "restartRejected" };
 
 export type UpdateFeedTarget = {
   distribution: "release" | "nightly";
-  version: string;
   platform: NodeJS.Platform;
   architecture: NodeJS.Architecture;
-  publicKey: string;
 };
 
 export type AppUpdaterOptions = {
@@ -60,14 +42,11 @@ export type AppUpdaterOptions = {
   activeWindow: () => Window | null;
   applicationName: () => string;
   openExternal: (url: string) => Promise<void>;
-  fetch: typeof globalThis.fetch;
   isPackaged: boolean;
   platform: NodeJS.Platform;
   architecture: NodeJS.Architecture;
   productVersion: string;
   distribution: "release" | "nightly";
   feedBaseUrl: string;
-  publicKey: string;
-  windowsUpdatesEnabled: boolean;
   log: ShiftLogger;
 };

@@ -27,7 +27,10 @@ if [[ -z "$REMOTE_REFS" ]]; then
   exit 0
 fi
 
-git fetch --no-tags origin update-feeds
+if ! git fetch --no-tags origin update-feeds; then
+  echo "Could not fetch the remote update-feeds branch" >&2
+  exit 1
+fi
 REVISION="origin/update-feeds"
 VERSION_PATH="updates/$DISTRIBUTION/$VERSION"
 if git cat-file -e "$REVISION:$VERSION_PATH" 2>/dev/null; then
@@ -35,16 +38,13 @@ if git cat-file -e "$REVISION:$VERSION_PATH" 2>/dev/null; then
   exit 1
 fi
 
-CHANNEL_PATH="updates/$DISTRIBUTION/channel.json"
-if ! git cat-file -e "$REVISION:$CHANNEL_PATH" 2>/dev/null; then
-  echo "No existing $DISTRIBUTION update channel"
+CURRENT_PATH="updates/$DISTRIBUTION/darwin/arm64/RELEASES.json"
+if ! git cat-file -e "$REVISION:$CURRENT_PATH" 2>/dev/null; then
+  echo "No existing $DISTRIBUTION update feed"
   exit 0
 fi
 
-CHANNEL_FILE="$(mktemp)"
-trap 'rm -f "$CHANNEL_FILE"' EXIT
-git show "$REVISION:$CHANNEL_PATH" > "$CHANNEL_FILE"
-node "$REPOSITORY_ROOT/scripts/check-update-channel.mjs" \
-  "$CHANNEL_FILE" \
-  "$DISTRIBUTION" \
-  "$VERSION"
+CURRENT_FILE="$(mktemp)"
+trap 'rm -f "$CURRENT_FILE"' EXIT
+git show "$REVISION:$CURRENT_PATH" > "$CURRENT_FILE"
+node "$REPOSITORY_ROOT/scripts/check-update-channel.mjs" "$CURRENT_FILE" "$VERSION"

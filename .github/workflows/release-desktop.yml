@@ -52,22 +52,6 @@ jobs:
             exit 1
           fi
 
-      - name: Validate update signing key
-        env:
-          SHIFT_UPDATE_PRIVATE_KEY: ${{ secrets.SHIFT_UPDATE_PRIVATE_KEY }}
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "$SHIFT_UPDATE_PRIVATE_KEY" || -z "$SHIFT_UPDATE_PUBLIC_KEY" ]]; then
-            echo "The update signing key and public key must both be configured" >&2
-            exit 1
-          fi
-          DERIVED_PUBLIC_KEY="$(printf '%s' "$SHIFT_UPDATE_PRIVATE_KEY" | base64 --decode | openssl pkey -inform DER -pubout -outform DER | base64 -w0)"
-          if [[ "$DERIVED_PUBLIC_KEY" != "$SHIFT_UPDATE_PUBLIC_KEY" ]]; then
-            echo "The update signing key does not match SHIFT_UPDATE_PUBLIC_KEY" >&2
-            exit 1
-          fi
 
   build:
     name: Build ${{ matrix.name }}
@@ -157,8 +141,6 @@ jobs:
       - name: Make desktop distributables
         env:
           SHIFT_DISTRIBUTION: release
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
-          SHIFT_WINDOWS_UPDATES_ENABLED: ${{ vars.SHIFT_WINDOWS_UPDATES_ENABLED || '0' }}
           SIGN_MACOS: ${{ matrix.platform == 'darwin' && '1' || '0' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -226,7 +208,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
         shell: bash
         run: |
           if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
@@ -292,12 +273,9 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: gh release edit "$RELEASE_TAG" --draft=false --prerelease
 
-      - name: Publish signed release update feed
+      - name: Publish native release update feeds
         env:
           GH_TOKEN: ${{ github.token }}
-          SHIFT_UPDATE_PRIVATE_KEY: ${{ secrets.SHIFT_UPDATE_PRIVATE_KEY }}
-          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
-          SHIFT_UPDATE_BASE_URL: https://shift-editor.github.io/shift/updates
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -8,9 +7,9 @@ import test from "node:test";
 
 const script = path.resolve("scripts/check-update-feed-version.sh");
 
-async function run(command, args, cwd, env = {}) {
+async function run(command, args, cwd) {
   return await new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, env: { ...process.env, ...env } });
+    const child = spawn(command, args, { cwd, env: process.env });
     let stderr = "";
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("close", (code) => resolve({ code, stderr }));
@@ -33,29 +32,18 @@ async function createRemote(root) {
   await git(publisher, "config", "user.name", "Test");
   await git(publisher, "config", "user.email", "test@example.com");
 
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const payload = Buffer.from(
-    JSON.stringify({ distribution: "nightly", version: "0.1.0-nightly.20260816.43.1" }),
-  );
-  const channel = {
-    payload: payload.toString("base64"),
-    signature: sign(null, payload, privateKey).toString("base64"),
-  };
-  const channelPath = path.join(publisher, "updates/nightly/channel.json");
-  await mkdir(path.dirname(channelPath), { recursive: true });
-  await writeFile(channelPath, JSON.stringify(channel));
+  const feedPath = path.join(publisher, "updates/nightly/darwin/arm64/RELEASES.json");
+  await mkdir(path.dirname(feedPath), { recursive: true });
+  await writeFile(feedPath, JSON.stringify({ name: "0.1.0-nightly20260816r0000000043a0001" }));
   await git(publisher, "add", ".");
-  await git(publisher, "commit", "-m", "channel");
+  await git(publisher, "commit", "-m", "feed");
   await git(publisher, "branch", "-M", "update-feeds");
   await git(publisher, "remote", "add", "origin", remote);
   await git(publisher, "push", "-u", "origin", "update-feeds");
   await git(work, "init");
   await git(work, "remote", "add", "origin", remote);
 
-  return {
-    work,
-    publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64"),
-  };
+  return work;
 }
 
 test("fails closed when the update-feed remote cannot be inspected", async (context) => {
@@ -64,19 +52,17 @@ test("fails closed when the update-feed remote cannot be inspected", async (cont
   await git(root, "init");
   await git(root, "remote", "add", "origin", path.join(root, "missing.git"));
 
-  const result = await run(script, ["nightly", "0.1.0-nightly.20260816.44.1"], root);
+  const result = await run(script, ["nightly", "0.1.0-nightly20260816r0000000044a0001"], root);
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /Could not inspect the remote update-feeds branch/);
 });
 
-test("rejects Nightly public mutation before a channel rollback", async (context) => {
+test("rejects Nightly public mutation before a native feed rollback", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shift-update-preflight-"));
   context.after(() => rm(root, { recursive: true, force: true }));
-  const { work, publicKey } = await createRemote(root);
+  const work = await createRemote(root);
 
-  const result = await run(script, ["nightly", "0.1.0-nightly.20260816.42.1"], work, {
-    SHIFT_UPDATE_PUBLIC_KEY: publicKey,
-  });
+  const result = await run(script, ["nightly", "0.1.0-nightly20260816r0000000042a0001"], work);
   assert.notEqual(result.code, 0);
-  assert.match(result.stderr, /must advance from 0.1.0-nightly.20260816.43.1/);
+  assert.match(result.stderr, /must advance from 0.1.0-nightly20260816r0000000043a0001/);
 });

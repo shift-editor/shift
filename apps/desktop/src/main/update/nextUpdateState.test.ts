@@ -2,20 +2,7 @@ import { describe, expect, it } from "vitest";
 import { nextUpdateState } from "./nextUpdateState";
 import type { Update, UpdateState } from "./types";
 
-const update: Update = {
-  distribution: "release",
-  version: "0.1.0-alpha.2",
-  publishedAt: "2026-08-16T12:00:00.000Z",
-  releaseUrl: "https://github.com/shift-editor/shift/releases/tag/v0.1.0-alpha.2",
-  artifact: {
-    platform: "darwin",
-    architecture: "arm64",
-    feedUrl:
-      "https://shift-editor.github.io/shift/updates/release/0.1.0-alpha.2/darwin/arm64/RELEASES.json",
-    url: "https://github.com/shift-editor/shift/releases/download/v0.1.0-alpha.2/Shift.zip",
-    sha256: "a".repeat(64),
-  },
-};
+const update: Update = { version: "0.1.0-alpha.2" };
 
 describe("application update transitions", () => {
   it("moves a manual check through download to ready", () => {
@@ -23,8 +10,11 @@ describe("application update transitions", () => {
       { type: "idle" },
       { type: "checkRequested", trigger: "manual" },
     );
-    const downloading = nextUpdateState(checking!, { type: "updateAvailable", update });
-    const ready = nextUpdateState(downloading!, { type: "updateDownloaded" });
+    const downloading = nextUpdateState(checking!, {
+      type: "updateAvailable",
+      update: { version: null },
+    });
+    const ready = nextUpdateState(downloading!, { type: "updateDownloaded", update });
 
     expect(ready).toEqual({ type: "ready", update });
   });
@@ -63,7 +53,7 @@ describe("application update transitions", () => {
   it("rejects stale events without changing state", () => {
     const state: UpdateState = { type: "ready", update };
 
-    expect(nextUpdateState(state, { type: "updateDownloaded" })).toBeNull();
+    expect(nextUpdateState(state, { type: "updateDownloaded", update })).toBeNull();
     expect(nextUpdateState(state, { type: "checkRequested", trigger: "automatic" })).toBeNull();
   });
 });

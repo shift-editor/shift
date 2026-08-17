@@ -50,14 +50,14 @@ test("sets every product version", async (context) => {
   const root = await createProduct("0.1.0-alpha.0");
   context.after(() => rm(root, { recursive: true, force: true }));
 
-  await runVersionScript(root, "set", "0.1.0-nightly.20260816.12");
+  await runVersionScript(root, "set", "0.1.0-nightly20260816r0000000012a0001");
 
   const rootPackage = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   const desktopPackage = JSON.parse(
     await readFile(path.join(root, "apps", "desktop", "package.json"), "utf8"),
   );
-  assert.equal(rootPackage.version, "0.1.0-nightly.20260816.12");
-  assert.equal(desktopPackage.version, "0.1.0-nightly.20260816.12");
+  assert.equal(rootPackage.version, "0.1.0-nightly20260816r0000000012a0001");
+  assert.equal(desktopPackage.version, "0.1.0-nightly20260816r0000000012a0001");
 });
 
 test("rejects invalid semantic versions", async (context) => {

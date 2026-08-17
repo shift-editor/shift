@@ -7,8 +7,8 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 
 const script = path.resolve("scripts/prepare-nightly-release.mjs");
-const version = "0.1.0-nightly.20260816.42.2";
-const nupkgVersion = "0.1.0-nightly20260816422";
+const version = "0.1.0-nightly20260816r0000000042a0002";
+const nupkgVersion = version;
 const fixtures = [
   [`zip/darwin/arm64/Shift Nightly-darwin-arm64-${version}.zip`, "mac-arm64"],
   [`zip/darwin/x64/Shift Nightly-darwin-x64-${version}.zip`, "mac-x64"],

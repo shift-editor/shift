@@ -20,7 +20,7 @@ export function nextUpdateState(state: UpdateState, event: UpdateEvent): UpdateS
       return { type: "downloading", trigger: state.trigger, update: event.update };
     case "updateDownloaded":
       if (state.type !== "downloading") return null;
-      return { type: "ready", update: state.update };
+      return { type: "ready", update: event.update };
     case "operationFailed":
       if (state.type === "checking" && event.phase === "check") {
         return {

@@ -28,7 +28,9 @@ export async function showUpdateDownloading(
     buttons: ["OK"],
     defaultId: 0,
     title: applicationName,
-    message: `Downloading ${applicationName} ${update.version}…`,
+    message: update.version
+      ? `Downloading ${applicationName} ${update.version}…`
+      : `Downloading an ${applicationName} update…`,
     detail: "You can keep working. Shift will let you know when the update is ready.",
   });
 }
@@ -45,7 +47,9 @@ export async function showUpdateReady(
     cancelId: 1,
     noLink: true,
     title: applicationName,
-    message: `${applicationName} ${update.version} is ready to install.`,
+    message: update.version
+      ? `${applicationName} ${update.version} is ready to install.`
+      : `${applicationName} is ready to update.`,
     detail: "Restart to finish updating. Shift will ask about any unsaved documents first.",
   });
 
@@ -116,8 +120,6 @@ function updateUnavailableMessage(reason: UpdateDisabledReason): string {
       return "Automatic updates aren't available for this Linux build.";
     case "missing-configuration":
       return "Updates aren't configured for this build.";
-    case "unsigned-windows":
-      return "Automatic updates aren't enabled for this Windows build.";
   }
 }
 
@@ -128,8 +130,6 @@ function updateUnavailableDetail(reason: UpdateDisabledReason): string {
     case "unsupported-platform":
       return "Download the latest package for your Shift distribution from GitHub Releases.";
     case "missing-configuration":
-      return "This build does not contain a trusted update-feed public key.";
-    case "unsigned-windows":
-      return "Download the latest installer manually until signed Windows updates are available.";
+      return "This build does not contain an update-feed URL.";
   }
 }

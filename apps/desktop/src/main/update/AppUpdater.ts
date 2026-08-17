@@ -1,5 +1,5 @@
 import { errorToMessage } from "../../shared/errors";
-import { loadUpdate, validateUpdateFeed } from "./updateFeed";
+import { loadUpdate } from "./updateFeed";
 import { nextUpdateState } from "./nextUpdateState";
 import {
   showUpdateCurrent,
@@ -27,7 +27,6 @@ export class AppUpdater {
   readonly #options: AppUpdaterOptions;
 
   #state: UpdateState;
-  #candidate: Update | null = null;
   #started = false;
   #readyPrompt: Promise<void> | null = null;
 
@@ -53,8 +52,8 @@ export class AppUpdater {
         this.#options.log.error("no-update handler failed", error);
       });
     });
-    this.#options.autoUpdater.on("update-downloaded", () => {
-      void this.#handleUpdateDownloaded().catch((error) => {
+    this.#options.autoUpdater.on("update-downloaded", (_event, _notes, releaseName) => {
+      void this.#handleUpdateDownloaded(releaseName).catch((error) => {
         this.#options.log.error("downloaded-update handler failed", error);
       });
     });
@@ -109,30 +108,17 @@ export class AppUpdater {
     if (!this.#transition({ type: "checkRequested", trigger })) return;
 
     try {
-      const update = await loadUpdate(
-        this.#options.feedBaseUrl,
-        {
-          distribution: this.#options.distribution,
-          version: this.#options.productVersion,
-          platform: this.#options.platform,
-          architecture: this.#options.architecture,
-          publicKey: this.#options.publicKey,
-        },
-        this.#options.fetch,
-      );
-      if (!update) {
-        await this.#completeCurrentCheck();
-        return;
-      }
-
-      await validateUpdateFeed(update, this.#options.fetch);
-      this.#candidate = update;
-      this.#options.autoUpdater.setFeedURL({ url: update.artifact.feedUrl });
+      const feedUrl = loadUpdate(this.#options.feedBaseUrl, {
+        distribution: this.#options.distribution,
+        platform: this.#options.platform,
+        architecture: this.#options.architecture,
+      });
+      this.#options.autoUpdater.setFeedURL({ url: feedUrl });
       this.#options.log.info("checking Electron update feed", {
-        distribution: update.distribution,
-        version: update.version,
-        platform: update.artifact.platform,
-        architecture: update.artifact.architecture,
+        distribution: this.#options.distribution,
+        platform: this.#options.platform,
+        architecture: this.#options.architecture,
+        feedUrl,
       });
       this.#options.autoUpdater.checkForUpdates();
     } catch (error) {
@@ -158,23 +144,15 @@ export class AppUpdater {
   }
 
   #handleUpdateAvailable(): void {
-    if (!this.#candidate) {
-      void this.#fail("check", new Error("Electron reported an update without a candidate")).catch(
-        (error) => {
-          this.#options.log.error("missing-candidate failure handler failed", error);
-        },
-      );
-      return;
-    }
-
     const trigger = this.#state.type === "checking" ? this.#state.trigger : null;
-    if (!this.#transition({ type: "updateAvailable", update: this.#candidate })) return;
+    const update: Update = { version: null };
+    if (!this.#transition({ type: "updateAvailable", update })) return;
 
     if (trigger === "manual") {
       void showUpdateDownloading(
         this.#options.activeWindow(),
         this.#options.applicationName(),
-        this.#candidate,
+        update,
       ).catch((error) => {
         this.#options.log.error("downloading dialog failed", error);
       });
@@ -187,7 +165,6 @@ export class AppUpdater {
 
   async #completeCurrentCheck(): Promise<void> {
     const trigger = this.#state.type === "checking" ? this.#state.trigger : null;
-    this.#candidate = null;
     if (!this.#transition({ type: "noUpdateAvailable", checkedAt: new Date().toISOString() }))
       return;
 
@@ -200,8 +177,9 @@ export class AppUpdater {
     }
   }
 
-  async #handleUpdateDownloaded(): Promise<void> {
-    if (!this.#transition({ type: "updateDownloaded" })) return;
+  async #handleUpdateDownloaded(version: string): Promise<void> {
+    const update: Update = { version: version || null };
+    if (!this.#transition({ type: "updateDownloaded", update })) return;
     await this.#notifyReady();
   }
 
@@ -322,9 +300,7 @@ function initialUpdateState(options: AppUpdaterOptions): UpdateState {
   if (!options.isPackaged) reason = "development";
   else if (options.platform !== "darwin" && options.platform !== "win32") {
     reason = "unsupported-platform";
-  } else if (options.platform === "win32" && !options.windowsUpdatesEnabled) {
-    reason = "unsigned-windows";
-  } else if (!options.publicKey || !options.feedBaseUrl) reason = "missing-configuration";
+  } else if (!options.feedBaseUrl) reason = "missing-configuration";
 
   return reason ? { type: "disabled", reason } : { type: "idle" };
 }

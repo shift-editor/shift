@@ -13,7 +13,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose` and closes the document through the utility process. App quit and update confirmation defer workspace cleanup until finalization. Electron's `before-quit-for-update` starts update finalization before windows close; a pre-finalization failure cancels cleanup, while a committed exit honors Don't Save and removes stale working documents.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Release and Nightly builds have distinct product identities and app-data roots. `Shift` uses `app.shift` and the `Shift` data root; `Shift Nightly` uses `app.shift.nightly` and the `Shift Nightly` data root. An explicit `--user-data-dir` switch takes precedence for tests and diagnostics.
-- **Architecture Invariant:** `AppUpdater` owns application update state in main. It accepts only signed descriptors for the compiled distribution and exact platform/architecture, deduplicates Electron downloads, and cannot restart until `AppLifecycle` settles every document. Linux and unsigned Windows builds expose downloads without claiming automatic installation.
+- **Architecture Invariant:** `AppUpdater` owns application update state in main. It selects only the fixed native Squirrel feed for the compiled distribution and exact platform/architecture, deduplicates Electron downloads, and cannot restart until `AppLifecycle` settles every document. macOS and Windows use automatic updates; Linux opens distribution-matched downloads.
 - **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; each process validates an artifact index once and then verifies and decompresses its fixed pages independently. Staging paths use readable `run-{pid}-{id}/page-{index}-{id}.zst` names, and every retry owns a distinct file until publication. The LRU scans after an artifact is opened or published, never after every page stream. Stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
 
@@ -40,7 +40,7 @@ src/main/
     nextUpdateState.ts             -- pure legal update transitions
     types.ts                       -- update, artifact, event, and state contracts
     updateDialogs.ts               -- native update result and restart dialogs
-    updateFeed.ts                  -- signed channel descriptor verification
+    updateFeed.ts                  -- native feed URL selection
   windows/
     Window.ts                     -- BrowserWindow wrapper
     WindowManager.ts              -- live window registry
@@ -58,7 +58,7 @@ src/main/
 - `DocumentClient` -- request client for renderer-served document state/save calls.
 - `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
 - `AppLifecycle` -- coordinates Electron window close, app quit, and update restart around document vetoes.
-- `AppUpdater` -- main-process owner of signed feed discovery, Electron auto-update events, and native update UI.
+- `AppUpdater` -- main-process owner of native feed selection, Electron auto-update events, and native update UI.
 - `UpdateState` -- discriminated union for disabled, idle, checking, current, downloading, ready, restarting, and failed states.
 - `WorkspaceDocumentState` -- utility-owned lifecycle state mirrored into main and renderer.
 
@@ -70,11 +70,11 @@ src/main/
 
 On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. Windows and Linux keep the conventional quit-on-last-window behavior.
 
-Eligible packaged builds start `AppUpdater` after the first window is prepared. The updater makes one delayed quiet check and then checks periodically. Development, Linux, missing-key, and unsigned Windows builds remain explicitly disabled; their manual menu command explains the boundary rather than contacting Electron's updater.
+Eligible packaged macOS and Windows builds start `AppUpdater` after the first window is prepared. The updater makes one delayed quiet check and then checks periodically. Development and Linux builds remain explicitly disabled; their manual menu command explains the boundary rather than contacting Electron's updater.
 
 ### Application Updates
 
-`AppUpdater.checkForUpdates` first downloads the small signed descriptor for the compiled Release or Nightly distribution. `updateFeed.ts` verifies its Ed25519 signature, schema, increasing semantic version, distribution, and exact platform/architecture before Electron receives an immutable native feed URL. Electron then owns the native download and emits events that pass through `nextUpdateState`; stale or duplicate events are logged and ignored.
+`AppUpdater.checkForUpdates` derives a fixed HTTPS Squirrel feed URL from the compiled Release or Nightly distribution and the exact platform/architecture. Electron owns native version selection and download, then emits events that pass through `nextUpdateState`; stale or duplicate events are logged and ignored. Release and Nightly identities never share feed paths.
 
 Automatic current/error results stay quiet. Manual checks use native dialogs, and a completed download offers Restart or Later. Restart calls `AppLifecycle.confirmQuit("update")`, preserving the same Save / Don't Save / Cancel behavior as normal quit without closing workspaces before Electron begins exiting. `before-quit` commits deferred cleanup for ordinary quit; Electron's earlier `before-quit-for-update` notification does the same before updater-driven window teardown. An earlier synchronous or asynchronous install failure cancels cleanup, restores ordinary close guards, keeps workspaces usable, and returns to ready.
 
