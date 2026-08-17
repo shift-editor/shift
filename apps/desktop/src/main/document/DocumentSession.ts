@@ -17,6 +17,7 @@ export type DocumentSessionOptions = {
 
 export type CloseReason = "window" | "quit" | "update";
 type DirtyDocumentChoice = "save" | "discard" | "cancel";
+type PendingExitDiscard = boolean | null;
 
 /**
  * Main-process owner of the native document workflow.
@@ -35,6 +36,7 @@ export class DocumentSession {
   readonly #log: ShiftLogger;
 
   #state: WorkspaceDocumentState | null = null;
+  #pendingExitDiscard: PendingExitDiscard = null;
 
   constructor(options: DocumentSessionOptions) {
     this.#document = options.document;
@@ -59,11 +61,15 @@ export class DocumentSession {
   /**
    * Confirms whether the current document may be closed.
    *
+   * Window confirmation closes the document immediately. Quit and update confirmation only
+   * settle save intent so a failed process exit leaves the workspace usable.
+   *
    * @param reason - Native transition that would discard the document.
    * @returns `true` when the transition may continue.
    * @throws {Error} when the renderer cannot provide a settled document state.
    */
   async confirmClose(reason: CloseReason): Promise<boolean> {
+    if (reason !== "window") this.#pendingExitDiscard = null;
     this.#log.info("close guard started", {
       reason,
       connected: this.#document.connected,
@@ -77,7 +83,8 @@ export class DocumentSession {
     }
 
     if (!state.dirty) {
-      await this.#closeDocument(false);
+      if (reason === "window") await this.#closeDocument(false);
+      else this.#pendingExitDiscard = false;
       this.#log.info("close guard allowed: document is clean", { reason });
       return true;
     }
@@ -96,13 +103,17 @@ export class DocumentSession {
     }
 
     if (choice === "discard") {
-      await this.#closeDocument(true);
-      this.#log.info("close guard allowed: changes discarded", { reason });
+      if (reason === "window") await this.#closeDocument(true);
+      else this.#pendingExitDiscard = true;
+      this.#log.info("close guard allowed: changes may be discarded on exit", { reason });
       return true;
     }
 
     const saved = await this.#saveDirtyDocument(state);
-    if (saved) await this.#closeDocument(false);
+    if (saved) {
+      if (reason === "window") await this.#closeDocument(false);
+      else this.#pendingExitDiscard = false;
+    }
     this.#log.info(
       saved ? "close guard allowed: document saved" : "close guard blocked: save failed",
       {
@@ -110,6 +121,20 @@ export class DocumentSession {
       },
     );
     return saved;
+  }
+
+  /** Commits deferred workspace cleanup after the application exit becomes final. */
+  async commitExit(): Promise<void> {
+    if (this.#pendingExitDiscard === null) return;
+
+    const discard = this.#pendingExitDiscard;
+    await this.#closeDocument(discard);
+    this.#pendingExitDiscard = null;
+  }
+
+  /** Cancels deferred cleanup when the application remains running. */
+  cancelExit(): void {
+    this.#pendingExitDiscard = null;
   }
 
   /**

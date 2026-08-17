@@ -41,6 +41,17 @@ jobs:
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Require an unpublished draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
+            echo "Release $RELEASE_TAG is already public and cannot be rebuilt or clobbered" >&2
+            exit 1
+          fi
+
       - name: Validate update signing key
         env:
           SHIFT_UPDATE_PRIVATE_KEY: ${{ secrets.SHIFT_UPDATE_PRIVATE_KEY }}
@@ -196,11 +207,33 @@ jobs:
           ref: ${{ needs.prepare.outputs.tag }}
           fetch-depth: 1
 
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install feed publication dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
+
       - uses: actions/download-artifact@v8
         with:
           pattern: desktop-release-*
           path: dist
           merge-multiple: true
+
+      - name: Protect immutable release and update versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
+            echo "Release $RELEASE_TAG is already public and cannot be rebuilt or clobbered" >&2
+            exit 1
+          fi
+          scripts/check-update-feed-version.sh release "$RELEASE_VERSION"
 
       - name: Add Developer Preview notice
         env:

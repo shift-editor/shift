@@ -186,6 +186,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install feed publication dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
 
       - uses: actions/download-artifact@v8
         with:
@@ -197,6 +207,26 @@ jobs:
         env:
           NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
         run: node scripts/prepare-nightly-release.mjs dist public "$NIGHTLY_VERSION"
+
+      - name: Protect Nightly history and channel from rollback
+        env:
+          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
+          SHIFT_UPDATE_PUBLIC_KEY: ${{ vars.SHIFT_UPDATE_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! NIGHTLY_REF="$(git ls-remote --refs --tags origin refs/tags/nightly)"; then
+            echo "Could not inspect the remote Nightly tag" >&2
+            exit 1
+          fi
+          if [[ -n "$NIGHTLY_REF" ]]; then
+            NIGHTLY_SHA="${NIGHTLY_REF%%[[:space:]]*}"
+            if ! git merge-base --is-ancestor "$NIGHTLY_SHA" "$GITHUB_SHA"; then
+              echo "Refusing to publish stale commit $GITHUB_SHA behind Nightly $NIGHTLY_SHA" >&2
+              exit 1
+            fi
+          fi
+          scripts/check-update-feed-version.sh nightly "$NIGHTLY_VERSION"
 
       - name: Write Nightly release notes
         shell: bash

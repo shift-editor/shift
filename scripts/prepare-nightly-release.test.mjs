@@ -7,12 +7,13 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 
 const script = path.resolve("scripts/prepare-nightly-release.mjs");
-const version = "0.1.0-nightly.20260816.42";
+const version = "0.1.0-nightly.20260816.42.2";
+const nupkgVersion = "0.1.0-nightly20260816422";
 const fixtures = [
   [`zip/darwin/arm64/Shift Nightly-darwin-arm64-${version}.zip`, "mac-arm64"],
   [`zip/darwin/x64/Shift Nightly-darwin-x64-${version}.zip`, "mac-x64"],
   [`squirrel.windows/x64/Shift Nightly-${version}-Setup.exe`, "windows-x64"],
-  [`squirrel.windows/x64/shift_nightly-${version}-full.nupkg`, "windows-update"],
+  [`squirrel.windows/x64/shift_nightly-${nupkgVersion}-full.nupkg`, "windows-update"],
   [`deb/x64/shift-nightly_${version}_amd64.deb`, "linux-deb"],
   [`rpm/x64/shift-nightly-${version}.x86_64.rpm`, "linux-rpm"],
 ];
@@ -22,7 +23,7 @@ const outputs = new Map([
   ["Shift-Nightly-macOS-x64.zip", "mac-x64"],
   [`Shift-Nightly-${version}-macOS-x64.zip`, "mac-x64"],
   ["Shift-Nightly-Windows-x64.exe", "windows-x64"],
-  [`shift_nightly-${version}-full.nupkg`, "windows-update"],
+  [`shift_nightly-${nupkgVersion}-full.nupkg`, "windows-update"],
   ["Shift-Nightly-Linux-x64.deb", "linux-deb"],
   ["Shift-Nightly-Linux-x64.rpm", "linux-rpm"],
 ]);

@@ -12,7 +12,12 @@
   "tags": ["-lintignore"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/find-refs.ts", "scripts/oxlint/shift-plugin.mjs"],
+      "entry": [
+        "scripts/check-update-channel.mjs",
+        "scripts/find-refs.ts",
+        "scripts/oxlint/shift-plugin.mjs",
+        "scripts/prepare-update-feed.mjs"
+      ],
       "project": ["scripts/**/*.{ts,mjs}"]
     },
     "apps/desktop": {

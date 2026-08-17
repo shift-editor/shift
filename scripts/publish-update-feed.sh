@@ -14,8 +14,12 @@ PUBLISHED_AT="$5"
 SITE="$6"
 
 rm -rf "$SITE"
-if git ls-remote --exit-code --heads origin update-feeds >/dev/null 2>&1; then
-  git fetch origin update-feeds
+if ! REMOTE_REFS="$(git ls-remote --heads origin update-feeds)"; then
+  echo "Could not inspect the remote update-feeds branch" >&2
+  exit 1
+fi
+if [[ -n "$REMOTE_REFS" ]]; then
+  git fetch --no-tags origin update-feeds
   git worktree add -b update-feeds "$SITE" origin/update-feeds
 else
   git worktree add --detach "$SITE" HEAD

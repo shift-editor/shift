@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { squirrelPackageVersion } from "./update-versions.mjs";
 
 const [distArgument, outputArgument, version] = process.argv.slice(2);
 if (!distArgument || !outputArgument || !version) {
@@ -61,9 +62,10 @@ for (const asset of assets) {
   }
 
   const source = matches[0];
-  if (!path.basename(source).includes(version)) {
+  const artifactVersion = source.endsWith(".nupkg") ? squirrelPackageVersion(version) : version;
+  if (!path.basename(source).includes(artifactVersion)) {
     throw new Error(
-      `Nightly artifact does not contain version ${version}: ${path.basename(source)}`,
+      `Nightly artifact does not contain version ${artifactVersion}: ${path.basename(source)}`,
     );
   }
 

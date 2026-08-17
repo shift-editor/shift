@@ -225,7 +225,12 @@ export class AppUpdater {
   }
 
   async #rejectRestart(error: unknown): Promise<void> {
-    this.#options.lifecycle.resetQuitConfirmation();
+    if (!this.#options.lifecycle.resetQuitConfirmation()) {
+      this.#options.log.warn("ignored updater error after quit finalization started", {
+        message: errorToMessage(error),
+      });
+      return;
+    }
     if (!this.#transition({ type: "restartRejected" })) return;
 
     await showUpdateFailure(

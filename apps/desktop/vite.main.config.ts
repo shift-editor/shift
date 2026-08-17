@@ -11,6 +11,11 @@ const windowsUpdates = process.env.SHIFT_WINDOWS_UPDATES_ENABLED ?? "0";
 if (windowsUpdates !== "0" && windowsUpdates !== "1") {
   throw new Error(`Invalid SHIFT_WINDOWS_UPDATES_ENABLED: ${windowsUpdates}`);
 }
+if (windowsUpdates === "1") {
+  throw new Error(
+    "Windows updates remain disabled until Squirrel uses an order-preserving native version",
+  );
+}
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
 const updateBaseUrl =
@@ -24,7 +29,7 @@ export default defineConfig({
     SHIFT_PRODUCT_VERSION: JSON.stringify(packageJson.version),
     SHIFT_UPDATE_BASE_URL: JSON.stringify(updateBaseUrl),
     SHIFT_UPDATE_PUBLIC_KEY: JSON.stringify(updatePublicKey),
-    SHIFT_WINDOWS_UPDATES_ENABLED: windowsUpdates === "1",
+    SHIFT_WINDOWS_UPDATES_ENABLED: false,
   },
   build: {
     rollupOptions: {

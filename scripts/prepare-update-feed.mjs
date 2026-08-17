@@ -1,7 +1,10 @@
 import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import semver from "semver";
+import { assertChannelAdvances } from "./update-channel.mjs";
+import { squirrelPackageVersion } from "./update-versions.mjs";
 
 const [artifactsArgument, siteArgument, distribution, version, releaseTag, publishedAt] =
   process.argv.slice(2);
@@ -21,7 +24,7 @@ if (
 if (distribution !== "release" && distribution !== "nightly") {
   throw new Error(`Expected release or nightly distribution, received: ${distribution}`);
 }
-if (!/^\d+\.\d+\.\d+-[0-9A-Za-z.-]+$/.test(version)) {
+if (!semver.valid(version) || semver.prerelease(version) === null) {
   throw new Error(`Expected a prerelease semantic version, received: ${version}`);
 }
 if (Number.isNaN(Date.parse(publishedAt))) {
@@ -39,9 +42,8 @@ const privateKey = createPrivateKey({
   format: "der",
   type: "pkcs8",
 });
-const publicKey = createPublicKey(privateKey)
-  .export({ format: "der", type: "spki" })
-  .toString("base64");
+const signingPublicKey = createPublicKey(privateKey);
+const publicKey = signingPublicKey.export({ format: "der", type: "spki" }).toString("base64");
 if (publicKey !== expectedPublicKey) {
   throw new Error("Update signing key does not match SHIFT_UPDATE_PUBLIC_KEY");
 }
@@ -73,10 +75,16 @@ const windowsX64 = findOne(
     /(^|\/)squirrel\.windows\/x64\/[^/]+-full\.nupkg$/.test(relative) ||
     /(^|\/)[^/]+-full\.nupkg$/.test(relative),
 );
-for (const file of [macArm64, macX64, windowsX64]) {
+for (const file of [macArm64, macX64]) {
   if (!path.basename(file).includes(version)) {
     throw new Error(`Update artifact does not contain version ${version}: ${path.basename(file)}`);
   }
+}
+const windowsVersion = squirrelPackageVersion(version);
+if (!path.basename(windowsX64).includes(windowsVersion)) {
+  throw new Error(
+    `Update artifact does not contain version ${windowsVersion}: ${path.basename(windowsX64)}`,
+  );
 }
 
 const repository = process.env.GITHUB_REPOSITORY ?? "shift-editor/shift";
@@ -103,6 +111,8 @@ try {
 } catch (error) {
   if (error?.code !== "ENOENT") throw error;
 }
+const channelPath = path.join(siteRoot, "updates", distribution, "channel.json");
+await assertChannelAdvances(channelPath, distribution, version, signingPublicKey);
 
 await Promise.all([
   writeJson(path.join(versionRoot, "darwin", "arm64", "RELEASES.json"), {
@@ -138,7 +148,6 @@ const envelope = {
   payload: payload.toString("base64"),
   signature: sign(null, payload, privateKey).toString("base64"),
 };
-const channelPath = path.join(siteRoot, "updates", distribution, "channel.json");
 await mkdir(path.dirname(channelPath), { recursive: true });
 const temporaryChannelPath = `${channelPath}.next`;
 await writeFile(temporaryChannelPath, `${JSON.stringify(envelope, null, 2)}\n`);

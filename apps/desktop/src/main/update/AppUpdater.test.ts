@@ -69,6 +69,7 @@ function createUpdater() {
     },
     resetQuitConfirmation: () => {
       lifecycleState.guardsEnabled = true;
+      return true;
     },
   } as unknown as AppLifecycle;
   const log = {

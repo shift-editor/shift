@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import test from "node:test";
+import { squirrelPackageVersion } from "./update-versions.mjs";
 
 const script = path.resolve("scripts/prepare-update-feed.mjs");
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -13,11 +14,12 @@ const signingEnvironment = {
   SHIFT_UPDATE_PUBLIC_KEY: publicKey.export({ format: "der", type: "spki" }).toString("base64"),
 };
 
-async function writeArtifacts(root, complete = true) {
+async function writeArtifacts(root, { version = "0.1.0-alpha.2", complete = true } = {}) {
+  const nupkgVersion = squirrelPackageVersion(version);
   const fixtures = [
-    ["zip/darwin/arm64/Shift-darwin-arm64-0.1.0-alpha.2.zip", "mac-arm64"],
-    ["zip/darwin/x64/Shift-darwin-x64-0.1.0-alpha.2.zip", "mac-x64"],
-    ["squirrel.windows/x64/shift-0.1.0-alpha.2-full.nupkg", "windows-x64"],
+    [`zip/darwin/arm64/Shift-darwin-arm64-${version}.zip`, "mac-arm64"],
+    [`zip/darwin/x64/Shift-darwin-x64-${version}.zip`, "mac-x64"],
+    [`squirrel.windows/x64/shift-${nupkgVersion}-full.nupkg`, "windows-x64"],
   ];
   for (const [relative, content] of complete ? fixtures : fixtures.slice(1)) {
     const destination = path.join(root, relative);
@@ -79,7 +81,12 @@ test("publishes signed channel metadata and native updater feeds", async (contex
     path.join(site, "updates/release/0.1.0-alpha.2/win32/x64/RELEASES"),
     "utf8",
   );
-  assert.match(releases, /shift-0\.1\.0-alpha\.2-full\.nupkg 11\n$/);
+  assert.match(releases, /shift-0\.1\.0-alpha2-full\.nupkg 11\n$/);
+});
+
+test("matches electron-winstaller's NuGet prerelease version", () => {
+  assert.equal(squirrelPackageVersion("0.1.0-alpha.2"), "0.1.0-alpha2");
+  assert.equal(squirrelPackageVersion("0.1.0-nightly.20260816.42.2"), "0.1.0-nightly20260816422");
 });
 
 test("rejects an existing immutable update version", async (context) => {
@@ -97,6 +104,23 @@ test("rejects an existing immutable update version", async (context) => {
   assert.equal(await readFile(path.join(site, "updates/release/channel.json"), "utf8"), channel);
 });
 
+test("rejects a channel pointer that moves backward", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shift-update-feed-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const newer = path.join(root, "newer");
+  const older = path.join(root, "older");
+  const site = path.join(root, "site");
+  await writeArtifacts(newer, { version: "0.1.0-alpha.3" });
+  await writeArtifacts(older, { version: "0.1.0-alpha.2" });
+  assert.equal((await runScript(newer, site, "0.1.0-alpha.3")).code, 0);
+  const channel = await readFile(path.join(site, "updates/release/channel.json"), "utf8");
+
+  const downgrade = await runScript(older, site, "0.1.0-alpha.2");
+  assert.notEqual(downgrade.code, 0);
+  assert.match(downgrade.stderr, /must advance from 0.1.0-alpha.3.*0.1.0-alpha.2/);
+  assert.equal(await readFile(path.join(site, "updates/release/channel.json"), "utf8"), channel);
+});
+
 test("an incomplete artifact set cannot advance the channel pointer", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shift-update-feed-"));
   context.after(() => rm(root, { recursive: true, force: true }));
@@ -104,7 +128,7 @@ test("an incomplete artifact set cannot advance the channel pointer", async (con
   const incomplete = path.join(root, "incomplete");
   const site = path.join(root, "site");
   await writeArtifacts(complete);
-  await writeArtifacts(incomplete, false);
+  await writeArtifacts(incomplete, { version: "0.1.0-alpha.3", complete: false });
   assert.equal((await runScript(complete, site)).code, 0);
   const channel = await readFile(path.join(site, "updates/release/channel.json"), "utf8");
 

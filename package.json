@@ -67,6 +67,7 @@
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "knip": "^5.84.1",
     "oxfmt": "^0.49.0",
+    "semver": "^7.8.5",
     "ts-morph": "^27.0.2",
     "tsx": "^4.7.0",
     "turbo": "^2.10.7",

@@ -10,7 +10,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
-- **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean documents and explicitly discarded dirty documents are closed through the utility process so package bindings and SQLite documents are pruned.
+- **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose` and closes the document through the utility process. App quit and update confirmation defer workspace cleanup until finalization. Electron's `before-quit-for-update` starts update finalization before windows close; a pre-finalization failure cancels cleanup, while a committed exit honors Don't Save and removes stale working documents.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Release and Nightly builds have distinct product identities and app-data roots. `Shift` uses `app.shift` and the `Shift` data root; `Shift Nightly` uses `app.shift.nightly` and the `Shift Nightly` data root. An explicit `--user-data-dir` switch takes precedence for tests and diagnostics.
 - **Architecture Invariant:** `AppUpdater` owns application update state in main. It accepts only signed descriptors for the compiled distribution and exact platform/architecture, deduplicates Electron downloads, and cannot restart until `AppLifecycle` settles every document. Linux and unsigned Windows builds expose downloads without claiming automatic installation.
@@ -76,7 +76,7 @@ Eligible packaged builds start `AppUpdater` after the first window is prepared. 
 
 `AppUpdater.checkForUpdates` first downloads the small signed descriptor for the compiled Release or Nightly distribution. `updateFeed.ts` verifies its Ed25519 signature, schema, increasing semantic version, distribution, and exact platform/architecture before Electron receives an immutable native feed URL. Electron then owns the native download and emits events that pass through `nextUpdateState`; stale or duplicate events are logged and ignored.
 
-Automatic current/error results stay quiet. Manual checks use native dialogs, and a completed download offers Restart or Later. Restart calls `AppLifecycle.confirmQuit("update")`, preserving the same Save / Don't Save / Cancel behavior as normal quit. Cancellation stays ready. A synchronous install failure restores ordinary close guards and returns to ready.
+Automatic current/error results stay quiet. Manual checks use native dialogs, and a completed download offers Restart or Later. Restart calls `AppLifecycle.confirmQuit("update")`, preserving the same Save / Don't Save / Cancel behavior as normal quit without closing workspaces before Electron begins exiting. `before-quit` commits deferred cleanup for ordinary quit; Electron's earlier `before-quit-for-update` notification does the same before updater-driven window teardown. An earlier synchronous or asynchronous install failure cancels cleanup, restores ordinary close guards, keeps workspaces usable, and returns to ready.
 
 The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Update behavior remains main-owned and does not add renderer IPC.
 
@@ -124,7 +124,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm --filter @shift/desktop test src/utility/workspace/WorkspaceHost.test.ts`
 - `pnpm --filter @shift/desktop test src/renderer/src/lib/workspace/WorkspaceEditCoordinator.test.ts`
 - `pnpm typecheck`
-- `pnpm test:desktop src/main/update/nextUpdateState.test.ts src/main/update/updateFeed.test.ts`
+- `pnpm test:desktop src/main/app/AppLifecycle.test.ts src/main/document/DocumentSession.test.ts src/main/update/AppUpdater.test.ts src/main/update/nextUpdateState.test.ts src/main/update/updateFeed.test.ts`
 - `pnpm test:release`
 - Electron E2E fixtures copy their startup workspace under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
 - Manual: open the same `.shift` package twice and verify the existing workspace session is reused.
