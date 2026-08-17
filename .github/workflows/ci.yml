@@ -2,6 +2,9 @@ name: CI
 
 on:
   pull_request:
+  merge_group:
+    types:
+      - checks_requested
   push:
     branches:
       - main
@@ -10,8 +13,8 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
 env:
   CARGO_INCREMENTAL: 0
@@ -31,7 +34,6 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       typescript: ${{ steps.filter.outputs.typescript }}
-      desktop-e2e: ${{ steps.filter.outputs.desktop-e2e }}
       release: ${{ steps.filter.outputs.release }}
       skills: ${{ steps.filter.outputs.skills }}
     steps:
@@ -41,6 +43,7 @@ jobs:
 
       - uses: dorny/paths-filter@v4
         id: filter
+        if: github.event_name != 'merge_group'
         with:
           filters: |
             rust:
@@ -54,20 +57,6 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'tsconfig*.json'
               - 'turbo.json'
-            desktop-e2e:
-              - 'apps/desktop/**'
-              - 'packages/**'
-              - 'crates/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig*.json'
-              - 'turbo.json'
-              - '.github/workflows/ci.yml'
-              - 'scripts/generate-bridge-types.mjs'
             release:
               - '.github/workflows/**'
               - '.release-please-manifest.json'
@@ -91,7 +80,7 @@ jobs:
   agent-skills:
     name: Agent Skills
     needs: detect-changes
-    if: needs.detect-changes.outputs.skills == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.skills == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -113,7 +102,7 @@ jobs:
   lint:
     name: Lint
     needs: detect-changes
-    if: needs.detect-changes.outputs.typescript == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -149,7 +138,7 @@ jobs:
   typecheck:
     name: Typecheck
     needs: detect-changes
-    if: needs.detect-changes.outputs.typescript == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -191,7 +180,7 @@ jobs:
   unit-test:
     name: Unit Tests
     needs: detect-changes
-    if: needs.detect-changes.outputs.typescript == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -239,7 +228,7 @@ jobs:
   deadcode:
     name: Dead Code
     needs: detect-changes
-    if: needs.detect-changes.outputs.typescript == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -273,7 +262,7 @@ jobs:
   release-config:
     name: Release Configuration
     needs: detect-changes
-    if: needs.detect-changes.outputs.release == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -304,7 +293,7 @@ jobs:
   rust-fmt:
     name: Rust Format
     needs: detect-changes
-    if: needs.detect-changes.outputs.rust == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -322,7 +311,7 @@ jobs:
   rust-check:
     name: Rust Clippy & Tests
     needs: detect-changes
-    if: needs.detect-changes.outputs.rust == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -349,7 +338,7 @@ jobs:
   integration:
     name: Integration Tests
     needs: detect-changes
-    if: needs.detect-changes.outputs.rust == 'true'
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -398,7 +387,10 @@ jobs:
   e2e:
     name: E2E ${{ matrix.name }}
     needs: detect-changes
-    if: github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.desktop-e2e == 'true'
+    if: >-
+      github.event_name == 'merge_group' ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
