@@ -54,10 +54,10 @@ describe("editor boolean operations", () => {
       await editor.settle();
       expectGeometry(editor.requireGlyphLayer(), contourCount, area, bounds);
 
-      await editor.undoAndSettle();
+      await editor.undo();
       expectGeometry(editor.requireGlyphLayer(), 2, 16_200, [10, 10, 150, 150]);
 
-      await editor.redoAndSettle();
+      await editor.redo();
       expectGeometry(editor.requireGlyphLayer(), contourCount, area, bounds);
     },
   );
@@ -74,7 +74,7 @@ describe("editor boolean operations", () => {
     expect(editor.activeSourceId).toBeNull();
     expect(geometrySummary(layer)).toEqual(before);
 
-    await editor.undoAndSettle();
+    await editor.undo();
     expectGeometry(layer, 1, 8_100, [10, 10, 100, 100]);
   });
 });
