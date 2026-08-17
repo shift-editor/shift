@@ -57,6 +57,7 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
           {axes.map((axis) => (
             <SidebarActionRow
               key={axis.id}
+              data-testid={`settings-axis-${axis.id}`}
               isActive={axis.id === selectedAxisId}
               className={cn(
                 "h-8",

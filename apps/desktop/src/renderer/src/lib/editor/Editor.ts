@@ -17,7 +17,11 @@ import {
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "@/types/variation";
 import type { Coordinates, NodePoint, ScenePoint } from "@/types/coordinates";
-import { cloneExternalAxisLocation, emptyExternalAxisLocation } from "@/lib/variation/location";
+import {
+  axisValue,
+  cloneExternalAxisLocation,
+  emptyExternalAxisLocation,
+} from "@/lib/variation/location";
 import type { ActiveTool, ToolName, ToolRegistration } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
@@ -779,21 +783,45 @@ export class Editor {
    * @remarks
    * This composes pure font source creation with editor source selection. The
    * global source, interpolated source metrics, and current glyph layer are
-   * submitted as one workspace operation so the source is immediately usable
-   * from the editor sidebar.
+   * submitted as one workspace operation. The external location changes
+   * immediately, while exact source activation waits for the workspace echo so
+   * reactive consumers never observe an unknown source identity.
    *
    * @param name - Display name for the new source.
    * @param location - External user-space location for the new source.
    * @returns The source id submitted to the workspace.
    */
   public createSource(name: string, externalLocation: ExternalAxisLocation): SourceId {
-    return this.font.editCoordinator.transaction("Create source", () => {
-      const sourceId = this.font.createSource(name, externalLocation);
-      this.#ensureCurrentGlyphLayer(sourceId, (glyph) => glyph.geometryAt(externalLocation).values);
-      this.setExternalLocation(externalLocation);
-      this.#activeSourceId.set(sourceId);
-      return sourceId;
+    const targetLocation = cloneExternalAxisLocation(externalLocation);
+    const sourceId = this.font.editCoordinator.transaction("Create source", () => {
+      const createdSourceId = this.font.createSource(name, targetLocation);
+      this.#ensureCurrentGlyphLayer(
+        createdSourceId,
+        (glyph) => glyph.geometryAt(targetLocation).values,
+      );
+      this.setExternalLocation(targetLocation);
+      return createdSourceId;
     });
+
+    void this.#activateCreatedSource(sourceId, targetLocation);
+    return sourceId;
+  }
+
+  async #activateCreatedSource(
+    sourceId: SourceId,
+    externalLocation: ExternalAxisLocation,
+  ): Promise<void> {
+    await this.font.editCoordinator.settled();
+    if (!this.font.source(sourceId) || this.#activeSourceId.peek() !== null) return;
+
+    const axes = this.font.getAxes();
+    const currentLocation = this.#externalLocation.peek();
+    const locationChanged = axes.some(
+      (axis) => axisValue(currentLocation, axis) !== axisValue(externalLocation, axis),
+    );
+    if (locationChanged) return;
+
+    this.#activeSourceId.set(sourceId);
   }
 
   #ensureCurrentGlyphLayer(sourceId: SourceId, valuesFor: (glyph: Glyph) => Float64Array): void {

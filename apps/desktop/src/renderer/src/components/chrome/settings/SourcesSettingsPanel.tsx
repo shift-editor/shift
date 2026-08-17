@@ -60,6 +60,7 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
           {sources.map((source) => (
             <SidebarActionRow
               key={source.id}
+              data-testid={`settings-source-${source.id}`}
               isActive={source.id === selectedSource?.id}
               className={cn(
                 "h-8",
@@ -135,6 +136,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
 
       <SettingsSection title="Name">
         <Input
+          aria-label="Name"
           value={draft.name}
           onChange={(event) => {
             const name = event.currentTarget.value;

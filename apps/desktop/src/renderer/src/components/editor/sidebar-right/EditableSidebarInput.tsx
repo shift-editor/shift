@@ -8,6 +8,7 @@ export interface EditableSidebarInputHandle {
 }
 
 interface EditableSidebarInputProps {
+  ariaLabel?: string;
   label?: string | React.ReactNode;
   labelPosition?: "left" | "right";
   className?: string;
@@ -32,6 +33,7 @@ export const EditableSidebarInput = forwardRef<
 >(
   (
     {
+      ariaLabel,
       label,
       labelPosition,
       className,
@@ -132,6 +134,7 @@ export const EditableSidebarInput = forwardRef<
     return (
       <Input
         ref={inputRef}
+        aria-label={ariaLabel}
         label={label}
         labelPosition={labelPosition}
         value={isEditing ? editValue : displayValue === null ? "" : `${displayValue}${suffix}`}
