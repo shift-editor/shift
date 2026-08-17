@@ -5,7 +5,6 @@ import type { ToolContext } from "../../core/Behavior";
 import type { DragEvent, KeyDownEvent } from "../../core/GestureDetector";
 import type { PenCurve, PenState, PenBehavior } from "../types";
 import type { Pen } from "../Pen";
-import { penCurveGeometry } from "../PenCurve";
 import { PenStroke } from "../PenStroke";
 
 const DRAG_THRESHOLD = 3;
@@ -106,17 +105,17 @@ export class HandleBehavior implements PenBehavior {
 
     const handlePosition = pen.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
     const curve = { ...state.curve, handlePosition };
-    this.#setCurvePositions(curve);
+    this.#setCurvePositions(pen, curve);
 
     return { ...state, curve };
   }
 
-  #setCurvePositions(curve: PenCurve): void {
+  #setCurvePositions(pen: Pen, curve: PenCurve): void {
     if (!this.#edit || !this.#controlStartId || !this.#controlEndId || !this.#endpointId) {
       throw new Error("cannot update Pen curve without an active glyph layer edit");
     }
 
-    const geometry = penCurveGeometry(curve);
+    const geometry = pen.resolveCurve(curve);
     this.#edit.setPositions([
       { kind: "point", id: this.#controlStartId, x: geometry.c0.x, y: geometry.c0.y },
       { kind: "point", id: this.#controlEndId, x: geometry.c1.x, y: geometry.c1.y },

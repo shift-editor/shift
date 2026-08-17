@@ -1,11 +1,12 @@
 import { BaseTool, type ToolName } from "../core";
-import type { PenContext, PenEndpoint, PenState } from "./types";
+import type { PenContext, PenCurve, PenEndpoint, PenState } from "./types";
 import { PenDownBehaviour, HandleBehavior, EscapeBehavior } from "./behaviors";
 import type { CursorType } from "@/types/editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { Editor } from "@/lib/editor/Editor";
 import { PenTargets } from "./PenTargets";
 import { PenOverlay } from "./PenOverlay";
+import { Curve, Vec2, type CubicCurve } from "@shift/geo";
 import type { ContourId } from "@shift/types";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals";
 import { PenStroke } from "./PenStroke";
@@ -58,6 +59,16 @@ export class Pen extends BaseTool<PenState, Pen> {
     if (!context) return;
 
     this.#ctx.set({ ...context, activeContourId: null, activeEndpoint: null });
+  }
+
+  resolveCurve(curve: PenCurve): CubicCurve {
+    const controlStart =
+      curve.start.kind === "corner"
+        ? Vec2.lerp(curve.start.position, curve.anchorPosition, 1 / 3)
+        : curve.start.outgoingHandlePosition;
+    const controlEnd = Vec2.mirror(curve.handlePosition, curve.anchorPosition);
+
+    return Curve.cubic(curve.start.position, controlStart, controlEnd, curve.anchorPosition);
   }
 
   override getCursor(state: PenState): CursorType {
