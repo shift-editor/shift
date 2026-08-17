@@ -33,8 +33,8 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
       id: "global.undo",
       preventDefault: true,
       match: (event) => matchChord(event, { key: "z", primaryModifier: true, shiftKey: false }),
-      run: (ctx) => {
-        ctx.editor.undo();
+      run: async (ctx) => {
+        await ctx.editor.undo();
         return true;
       },
     },
@@ -42,8 +42,8 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
       id: "global.redo",
       preventDefault: true,
       match: (event) => matchChord(event, { key: "z", primaryModifier: true, shiftKey: true }),
-      run: (ctx) => {
-        ctx.editor.redo();
+      run: async (ctx) => {
+        await ctx.editor.redo();
         return true;
       },
     },

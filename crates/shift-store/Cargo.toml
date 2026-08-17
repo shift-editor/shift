@@ -7,7 +7,7 @@ edition = "2024"
 shift-font = { workspace = true }
 blake3 = "1.8"
 getrandom = "0.3"
-rusqlite = { version = "0.37.0", features = ["blob", "backup", "limits"] }
+rusqlite = { version = "0.37.0", features = ["blob", "backup", "bundled-windows", "limits"] }
 rayon = "1.10"
 rmp-serde = "1.3"
 serde = "1.0"

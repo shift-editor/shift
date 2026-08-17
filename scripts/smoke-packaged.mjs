@@ -13,14 +13,23 @@ if (process.platform === "linux" && !process.env.DISPLAY) {
   process.exit(result.status ?? 1);
 }
 
-const [packagePathArgument] = process.argv.slice(2);
-if (!packagePathArgument) throw new Error("Usage: smoke-packaged.mjs <package-path>");
+const [packagePathArgument, distribution = "release"] = process.argv.slice(2);
+if (!packagePathArgument) {
+  throw new Error("Usage: smoke-packaged.mjs <package-path> [release|nightly]");
+}
 
 const packagePath = path.resolve(packagePathArgument);
-const packageName = path
-  .basename(packagePath)
-  .replace(/-(?:darwin|linux|win32)-(?:arm64|x64)$/, "");
-const executableName = packageName === "Shift Nightly" ? "shift-nightly" : "shift";
+const packageName = (() => {
+  switch (distribution) {
+    case "release":
+      return "Shift";
+    case "nightly":
+      return "Shift Nightly";
+    default:
+      throw new Error(`Unsupported distribution: ${distribution}`);
+  }
+})();
+const executableName = distribution === "nightly" ? "shift-nightly" : "shift";
 
 const executablePath = (() => {
   switch (process.platform) {

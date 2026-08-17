@@ -1,5 +1,10 @@
 import type { Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
+import {
+  clickFirstCatalogGlyph,
+  glyphCatalogCanvas,
+  glyphCatalogSurface,
+} from "./fixtures/appLocators";
 
 test.describe("Home view", () => {
   test("glyph grid matches snapshot", async ({ page }) => {
@@ -7,9 +12,8 @@ test.describe("Home view", () => {
   });
 
   test("glyph canvas contributes rendered outlines", async ({ page }) => {
-    const scrollViewport = page.getByLabel("Glyph catalog");
-    const catalogSurface = scrollViewport.locator("..");
-    const glyphCanvas = catalogSurface.locator("canvas").first();
+    const catalogSurface = glyphCatalogSurface(page);
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
 
     const renderedFrame = await catalogSurface.screenshot();
@@ -27,8 +31,7 @@ test.describe("Home view", () => {
   });
 
   test("keeps the resident grid when returning from the editor", async ({ page }) => {
-    const scrollViewport = page.getByLabel("Glyph catalog");
-    const glyphCanvas = scrollViewport.locator("..").locator("canvas").first();
+    const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
@@ -39,7 +42,7 @@ test.describe("Home view", () => {
       height: canvas.height,
     }));
 
-    await scrollViewport.click({ position: { x: 50, y: 50 } });
+    await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
     await afterNextPaint(page);
 
