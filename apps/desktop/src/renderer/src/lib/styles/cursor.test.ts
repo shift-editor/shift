@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { CursorType } from "@/types/editor";
 import { cursorToCSS } from "./cursor";
 
-const PACKAGED_RENDERER_URL = new URL(
-  "file:///Applications/Shift.app/Contents/Resources/app.asar/.vite/renderer/main_window/index.html",
+const PACKAGED_STYLESHEET_URL = new URL(
+  "file:///Applications/Shift.app/Contents/Resources/app.asar/.vite/renderer/main_window/assets/index.css",
 );
-const PACKAGED_CURSOR_DIRECTORY = new URL("./cursors/", PACKAGED_RENDERER_URL);
+const PACKAGED_CURSOR_DIRECTORY = new URL("../cursors/", PACKAGED_STYLESHEET_URL);
 const CUSTOM_CURSORS: CursorType[] = [
   { type: "default" },
   { type: "move" },
@@ -30,8 +30,8 @@ function cursorAssetUrls(cursor: CursorType): string[] {
 }
 
 describe("custom cursors in packaged renderers", () => {
-  it.each(CUSTOM_CURSORS)("resolves $type assets beside the renderer", (cursor) => {
-    const assetUrls = cursorAssetUrls(cursor).map((url) => new URL(url, PACKAGED_RENDERER_URL));
+  it.each(CUSTOM_CURSORS)("resolves $type assets from the packaged stylesheet", (cursor) => {
+    const assetUrls = cursorAssetUrls(cursor).map((url) => new URL(url, PACKAGED_STYLESHEET_URL));
 
     expect(assetUrls).toHaveLength(2);
     for (const assetUrl of assetUrls) {
