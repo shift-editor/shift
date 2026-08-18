@@ -49,6 +49,17 @@ describe("Select arrow keys nudge selected points", () => {
     expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 210 });
   });
 
+  it("moves selected points and anchors together", async () => {
+    const anchorId = editor.requireGlyphLayer().addAnchor("top", { x: 300, y: 300 });
+    await editor.settle();
+    editor.selection.select([firstId, anchorId]);
+
+    await editor.pressKey("ArrowUp", { shiftKey: true });
+
+    expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 110 });
+    expect(editor.anchorPosition(anchorId)).toEqual({ x: 300, y: 310 });
+  });
+
   it("commits a nudge as one undoable and redoable edit", async () => {
     editor.selection.select([firstId, secondId]);
     await editor.pressKey("ArrowRight", { shiftKey: true });

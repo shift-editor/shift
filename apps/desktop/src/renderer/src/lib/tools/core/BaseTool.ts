@@ -43,6 +43,7 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
   readonly isEditingCell: ComputedSignal<boolean>;
   readonly stateCell: Signal<S>;
   readonly #stateCell: WritableSignal<S>;
+  #cancelCallbacks: Map<symbol, () => void> | null = null;
   state: S;
   /** @knipclassignore */
   settings: Settings;
@@ -103,47 +104,68 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
 
   /** Permanently severs this instance's reactive dependencies; it cannot be resumed. */
   dispose(): void {
-    this.cursorCell.dispose();
-    this.isEditingCell.dispose();
+    try {
+      this.#cancelDrag();
+    } finally {
+      this.cursorCell.dispose();
+      this.isEditingCell.dispose();
+    }
   }
 
-  /** @knipclassignore — pure transition API used by tool tests/debugging. */
+  /** @knipclassignore — transition API used by tool tests/debugging. */
   transition(state: S, event: ToolEvent): S {
-    return this.#runBehaviors(state, event).state;
+    try {
+      this.#beginEvent(event);
+      const next = this.#runBehaviors(state, event).state;
+      this.#finishEvent(event);
+      return next;
+    } catch (error) {
+      this.#cancelAfterFailure(error);
+    }
   }
 
   handleEvent(event: ToolEvent): boolean {
-    const prev = this.state;
-    const result = this.#runBehaviors(prev, event);
-    const next = result.state;
+    try {
+      this.#beginEvent(event);
 
-    if (next !== prev) {
-      batch(() => {
-        const preCommitContext = this.#createContext(
-          () => prev,
-          () => {},
-        );
-        for (const behavior of this.behaviors) {
-          if (behavior.onStateExit) behavior.onStateExit(prev, next, preCommitContext, event);
-        }
+      const prev = this.state;
+      const result = this.#runBehaviors(prev, event);
+      const next = result.state;
 
-        this.setState(next);
+      this.#finishEvent(event);
 
-        const postCommitContext = this.#createContext(
-          () => this.state,
-          (nextState: S) => {
-            this.setState(nextState);
-          },
-        );
-        for (const behavior of this.behaviors) {
-          if (behavior.onStateEnter) behavior.onStateEnter(prev, next, postCommitContext, event);
-        }
+      if (next !== prev) {
+        batch(() => {
+          const preCommitContext = this.#createContext(
+            () => prev,
+            () => {},
+            event,
+          );
+          for (const behavior of this.behaviors) {
+            if (behavior.onStateExit) behavior.onStateExit(prev, next, preCommitContext, event);
+          }
 
-        if (this.onStateChange) this.onStateChange(prev, next, event);
-      });
+          this.setState(next);
+
+          const postCommitContext = this.#createContext(
+            () => this.state,
+            (nextState: S) => {
+              this.setState(nextState);
+            },
+            event,
+          );
+          for (const behavior of this.behaviors) {
+            if (behavior.onStateEnter) behavior.onStateEnter(prev, next, postCommitContext, event);
+          }
+
+          if (this.onStateChange) this.onStateChange(prev, next, event);
+        });
+      }
+
+      return result.handled;
+    } catch (error) {
+      this.#cancelAfterFailure(error);
     }
-
-    return result.handled;
   }
 
   getState(): S {
@@ -173,6 +195,7 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
       (next: S) => {
         nextState = next;
       },
+      event,
     );
 
     for (const behavior of this.behaviors) {
@@ -188,13 +211,73 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
     return { state: nextState, handled: false };
   }
 
-  #createContext(getState: () => S, setState: (next: S) => void): ToolContext<S, TTool> {
+  #createContext(
+    getState: () => S,
+    setState: (next: S) => void,
+    event: ToolEvent,
+  ): ToolContext<S, TTool> {
     return {
       editor: this.editor,
       tool: this as unknown as TTool,
       getState,
       setState,
+      onCancel: (callback) => this.#onCancel(event, callback),
     };
+  }
+
+  #beginEvent(event: ToolEvent): void {
+    if (event.type !== "dragStart") return;
+
+    this.#cancelDrag();
+    this.#cancelCallbacks = new Map();
+  }
+
+  #finishEvent(event: ToolEvent): void {
+    if (event.type !== "dragEnd" && event.type !== "dragCancel") return;
+    this.#cancelDrag();
+  }
+
+  #onCancel(event: ToolEvent, callback: () => void): () => void {
+    if (event.type !== "dragStart" && event.type !== "drag") {
+      throw new Error("ToolContext.onCancel is only available during a drag");
+    }
+    const callbacks = (this.#cancelCallbacks ??= new Map());
+    const key = Symbol("drag cancellation");
+    callbacks.set(key, callback);
+
+    return () => {
+      callbacks.delete(key);
+    };
+  }
+
+  #cancelDrag(): void {
+    const callbacks = this.#cancelCallbacks;
+    this.#cancelCallbacks = null;
+    if (!callbacks) return;
+
+    let failed = false;
+    let firstError: unknown;
+    for (const callback of [...callbacks.values()].reverse()) {
+      try {
+        callback();
+      } catch (error) {
+        if (failed) continue;
+        failed = true;
+        firstError = error;
+      }
+    }
+
+    if (failed) throw firstError;
+  }
+
+  #cancelAfterFailure(error: unknown): never {
+    try {
+      this.#cancelDrag();
+    } catch (cancelError) {
+      throw new AggregateError([error, cancelError], "Tool event and cancellation both failed");
+    }
+
+    throw error;
   }
 
   #getEventHandler(

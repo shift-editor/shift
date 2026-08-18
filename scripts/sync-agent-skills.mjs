@@ -4,7 +4,7 @@ import path from "node:path";
 import process from "node:process";
 
 const ROOT = process.cwd();
-const SOURCE = ".agent-skills";
+const SOURCE = ".agents/skills";
 const TARGETS = [".claude/skills", ".codex/skills"];
 const CHECK = process.argv.includes("--check");
 
@@ -42,12 +42,8 @@ async function digest(file) {
 async function dirsMatch(sourceDir, targetDir) {
   const sourceFiles = await filesUnder(sourceDir);
   const targetFiles = await filesUnder(targetDir);
-  const relativeSourceFiles = sourceFiles
-    .map((file) => path.relative(sourceDir, file))
-    .sort();
-  const relativeTargetFiles = targetFiles
-    .map((file) => path.relative(targetDir, file))
-    .sort();
+  const relativeSourceFiles = sourceFiles.map((file) => path.relative(sourceDir, file)).sort();
+  const relativeTargetFiles = targetFiles.map((file) => path.relative(targetDir, file)).sort();
 
   if (relativeSourceFiles.length !== relativeTargetFiles.length) return false;
 
@@ -70,9 +66,7 @@ async function syncSkill(skillName) {
 
     if (CHECK) {
       if (!(await dirsMatch(sourceDir, targetDir))) {
-        console.error(
-          `${targetRoot}/${skillName} is out of sync with ${SOURCE}/${skillName}`,
-        );
+        console.error(`${targetRoot}/${skillName} is out of sync with ${SOURCE}/${skillName}`);
         process.exitCode = 1;
       }
       continue;
@@ -87,18 +81,14 @@ async function syncSkill(skillName) {
 async function main() {
   const sourceRoot = path.join(ROOT, SOURCE);
   const entries = await readdir(sourceRoot, { withFileTypes: true });
-  const skillNames = entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+  const skillNames = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 
   for (const skillName of skillNames) {
     await syncSkill(skillName);
   }
 
   if (!CHECK) {
-    console.log(
-      `Synced ${skillNames.length} agent skill(s) to ${TARGETS.join(", ")}`,
-    );
+    console.log(`Synced ${skillNames.length} agent skill(s) to ${TARGETS.join(", ")}`);
   }
 }
 

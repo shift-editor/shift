@@ -52,6 +52,7 @@ export type {
   PositionFeedback,
   PositionGuide,
   PositionSnap,
+  PositionSelection,
   PositionSnapProvider,
   PositionTargets,
 } from "./positionEdit";

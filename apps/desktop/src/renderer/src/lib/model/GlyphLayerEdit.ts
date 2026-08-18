@@ -1,9 +1,18 @@
 import { batch } from "@/lib/signals";
-import type { CubicCurve } from "@shift/geo";
-import { Point } from "@shift/glyph-state";
-import { mintPointId, type ContourId, type PointId, type PointSeed } from "@shift/types";
-import type { GlyphLayer, GlyphLayerPosition, GlyphLayerPositions } from "@/lib/model/Glyph";
-import type { GlyphLayerState } from "@/lib/model/GlyphLayerState";
+import type { Point2D } from "@shift/geo";
+import type { NewPoint } from "@shift/glyph-state";
+import {
+  mintAnchorId,
+  mintContourId,
+  mintPointId,
+  type AnchorId,
+  type AnchorSeed,
+  type ContourId,
+  type PointId,
+  type PointSeed,
+} from "@shift/types";
+import type { GlyphLayer, GlyphLayerPosition, GlyphLayerPositions } from "./Glyph";
+import type { GlyphLayerState } from "./GlyphLayerState";
 
 /**
  * One reversible edit applied directly to the reactive glyph layer.
@@ -16,10 +25,11 @@ export class GlyphLayerEdit {
   readonly #glyphLayer: GlyphLayer;
   readonly #state: GlyphLayerState;
 
+  readonly #contours = new Map<ContourId, boolean>();
+  readonly #points = new Map<ContourId, PointSeed[]>();
+  readonly #anchors = new Map<AnchorId, AnchorSeed>();
   readonly #smoothPoints = new Map<PointId, boolean>();
   readonly #positions = new Map<string, GlyphLayerPosition>();
-  #addedContourId: ContourId | null = null;
-  #addedPoints: PointSeed[] = [];
   #closed = false;
 
   constructor(glyphLayer: GlyphLayer, state: GlyphLayerState) {
@@ -28,26 +38,47 @@ export class GlyphLayerEdit {
     this.#state.beginEdit(() => this.#reapply());
   }
 
-  addCubic(contourId: ContourId, curve: CubicCurve): readonly [PointId, PointId, PointId] {
+  addContour(closed: boolean): ContourId {
     this.#assertOpen();
-    if (this.#addedContourId) throw new Error("glyph layer edit already added cubic topology");
 
-    const controlStartId = mintPointId();
-    const controlEndId = mintPointId();
-    const endpointId = mintPointId();
-    const points = [
-      { id: controlStartId, ...Point.offCurve(curve.c0) },
-      { id: controlEndId, ...Point.offCurve(curve.c1) },
-      { id: endpointId, ...Point.onCurve(curve.p1) },
-    ];
-
-    if (!this.#state.buffers.addPoints(points, contourId)) {
-      throw new Error(`cannot add cubic to contour ${contourId}`);
+    const contourId = mintContourId();
+    if (!this.#state.buffers.addContour(contourId, closed)) {
+      throw new Error("cannot add contour to the active glyph layer edit");
     }
 
-    this.#addedContourId = contourId;
-    this.#addedPoints = points;
-    return [controlStartId, controlEndId, endpointId];
+    this.#contours.set(contourId, closed);
+    return contourId;
+  }
+
+  addPoints(contourId: ContourId, points: readonly NewPoint[]): readonly PointId[] {
+    this.#assertOpen();
+    if (points.length === 0) return [];
+
+    const seeds = points.map((point) => ({ id: mintPointId(), ...point }));
+    if (!this.#state.buffers.addPoints(seeds, contourId)) {
+      throw new Error(`cannot add points to contour ${contourId}`);
+    }
+
+    const previous = this.#points.get(contourId) ?? [];
+    this.#points.set(contourId, [...previous, ...seeds]);
+    return seeds.map((point) => point.id);
+  }
+
+  addAnchor(name: string | null, position: Point2D): AnchorId {
+    this.#assertOpen();
+
+    const anchor: AnchorSeed = {
+      id: mintAnchorId(),
+      x: position.x,
+      y: position.y,
+      ...(name === null ? {} : { name }),
+    };
+    if (!this.#state.buffers.addAnchors([anchor])) {
+      throw new Error("cannot add anchor to the active glyph layer edit");
+    }
+
+    this.#anchors.set(anchor.id, anchor);
+    return anchor.id;
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
@@ -79,9 +110,15 @@ export class GlyphLayerEdit {
 
     this.#glyphLayer.transaction(label, () => {
       this.#state.finishEdit(() => {
-        if (this.#addedContourId) {
-          this.#glyphLayer.addPointSeeds(this.#addedContourId, this.#addedPoints);
+        for (const [contourId, closed] of this.#contours) {
+          this.#glyphLayer.addContourSeed(contourId, closed);
         }
+
+        for (const [contourId, points] of this.#points) {
+          this.#glyphLayer.addPointSeeds(contourId, points);
+        }
+
+        this.#glyphLayer.addAnchorSeeds([...this.#anchors.values()]);
 
         for (const [pointId, smooth] of this.#smoothPoints) {
           this.#glyphLayer.setPointSmooth(pointId, smooth);
@@ -101,11 +138,21 @@ export class GlyphLayerEdit {
 
   #reapply(): void {
     batch(() => {
-      if (
-        this.#addedContourId &&
-        !this.#state.buffers.addPoints(this.#addedPoints, this.#addedContourId)
-      ) {
-        throw new Error(`cannot reapply cubic in contour ${this.#addedContourId}`);
+      for (const [contourId, closed] of this.#contours) {
+        if (!this.#state.buffers.addContour(contourId, closed)) {
+          throw new Error(`cannot reapply contour ${contourId}`);
+        }
+      }
+
+      for (const [contourId, points] of this.#points) {
+        if (!this.#state.buffers.addPoints(points, contourId)) {
+          throw new Error(`cannot reapply points in contour ${contourId}`);
+        }
+      }
+
+      const anchors = [...this.#anchors.values()];
+      if (anchors.length > 0 && !this.#state.buffers.addAnchors(anchors)) {
+        throw new Error("cannot reapply anchors");
       }
 
       for (const [pointId, smooth] of this.#smoothPoints) {

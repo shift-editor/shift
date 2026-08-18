@@ -70,7 +70,13 @@ import { EventEmitter } from "./lifecycle";
 import { ShiftStore } from "@/lib/store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "@/types/target";
-import type { SelectableId, ShiftEditorRecord, ShiftId, ShiftObject } from "@/types";
+import type {
+  PositionSelection,
+  SelectableId,
+  ShiftEditorRecord,
+  ShiftId,
+  ShiftObject,
+} from "@/types";
 import type { GlyphNode, NodeKind } from "@/types/node";
 import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
 import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
@@ -599,6 +605,56 @@ export class Editor {
     }
 
     return owner === null ? null : this.#layerForId(owner);
+  }
+
+  /**
+   * Normalizes editor object IDs into point and anchor targets on one editable layer.
+   *
+   * Segment and contour IDs expand to their constituent points. The selection is
+   * rejected when any ID is unresolved, unsupported, spans layers, or belongs to
+   * a layer outside the active authored source.
+   */
+  public positionSelection(ids: readonly SelectableId[]): PositionSelection | null {
+    const objects = this.objects(ids);
+    if (objects.length === 0 || objects.length !== ids.length) return null;
+
+    const points = new Set<PointId>();
+    const anchors = new Set<AnchorId>();
+
+    for (const object of objects) {
+      switch (object.kind) {
+        case "point":
+          points.add(object.pointId);
+          break;
+        case "anchor":
+          anchors.add(object.anchorId);
+          break;
+        case "segment":
+          for (const pointId of object.pointIds) points.add(pointId);
+          break;
+        case "contour": {
+          const contour = object.geometry.contour(object.contourId);
+          if (!contour) return null;
+
+          for (const point of contour.points) points.add(point.id);
+          break;
+        }
+        case "node":
+          return null;
+      }
+    }
+
+    const layer = this.layerForGeometry({ points, anchors });
+    const sourceId = this.activeSourceId;
+    if (!layer || sourceId === null || layer.sourceId !== sourceId) return null;
+
+    return {
+      layer,
+      targets: {
+        points: [...points],
+        anchors: [...anchors],
+      },
+    };
   }
 
   #layerForPoint(pointId: PointId): GlyphLayer | null {
@@ -1144,35 +1200,18 @@ export class Editor {
    * unresolved, span multiple layers, or produce no portable geometry.
    */
   public contentFrom(ids: readonly ShiftId[]): ShiftContent | null {
-    const selection = this.#pointSelectionFromIds(ids);
-    if (!selection) return null;
-
-    const content = ClipboardSelection.fromPointIds(selection.pointIds).contentFrom(
-      selection.layer,
-    );
-    if (!content || content.contours.length === 0) return null;
-
-    return content;
-  }
-
-  #pointSelectionFromIds(
-    ids: readonly ShiftId[],
-  ): { layer: GlyphLayer; pointIds: readonly PointId[] } | null {
     const objects = this.objects(ids);
     if (objects.length === 0 || objects.length !== ids.length) return null;
 
     const pointIds = new Set<PointId>();
-
     for (const object of objects) {
       switch (object.kind) {
         case "point":
           pointIds.add(object.pointId);
           break;
-
         case "segment":
           for (const pointId of object.pointIds) pointIds.add(pointId);
           break;
-
         case "contour": {
           const contour = object.geometry.contour(object.contourId);
           if (!contour) return null;
@@ -1180,7 +1219,6 @@ export class Editor {
           for (const point of contour.points) pointIds.add(point.id);
           break;
         }
-
         case "anchor":
         case "node":
           return null;
@@ -1190,7 +1228,10 @@ export class Editor {
     const layer = this.layerForGeometry({ points: pointIds });
     if (!layer) return null;
 
-    return { layer, pointIds: [...pointIds] };
+    const content = ClipboardSelection.fromPointIds([...pointIds]).contentFrom(layer);
+    if (!content || content.contours.length === 0) return null;
+
+    return content;
   }
 
   /**
@@ -1265,19 +1306,20 @@ export class Editor {
   public async cut(): Promise<boolean> {
     await this.font.editCoordinator.settled();
 
-    const selection = this.#pointSelectionFromIds(this.selection.ids);
-    if (!selection || selection.pointIds.length === 0) return false;
+    const selection = this.positionSelection(this.selection.ids);
+    const pointIds = selection?.targets.points ?? [];
+    if (!selection || pointIds.length === 0 || (selection.targets.anchors?.length ?? 0) > 0) {
+      return false;
+    }
 
-    const content = ClipboardSelection.fromPointIds(selection.pointIds).contentFrom(
-      selection.layer,
-    );
+    const content = ClipboardSelection.fromPointIds(pointIds).contentFrom(selection.layer);
     if (!content || content.contours.length === 0) return false;
 
     const written = await this.#clipboard.write(content);
     if (!written) return false;
 
     this.transaction("Cut", () => {
-      selection.layer.removePoints(selection.pointIds);
+      selection.layer.removePoints(pointIds);
     });
     this.selection.clear();
     await this.font.editCoordinator.settled();
@@ -1286,11 +1328,14 @@ export class Editor {
   }
 
   public async deleteSelection(): Promise<boolean> {
-    const selection = this.#pointSelectionFromIds(this.selection.ids);
-    if (!selection || selection.pointIds.length === 0) return false;
+    const selection = this.positionSelection(this.selection.ids);
+    const pointIds = selection?.targets.points ?? [];
+    if (!selection || pointIds.length === 0 || (selection.targets.anchors?.length ?? 0) > 0) {
+      return false;
+    }
 
     this.transaction("Delete selection", () => {
-      selection.layer.removePoints(selection.pointIds);
+      selection.layer.removePoints(pointIds);
     });
     this.selection.clear();
     await this.font.editCoordinator.settled();

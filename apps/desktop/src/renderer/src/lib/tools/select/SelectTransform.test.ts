@@ -96,6 +96,23 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       expect(editor.pointPosition(secondId)).toEqual({ x: 50, y: 200 });
     });
 
+    it("uses layer-local geometry when the scene node has a non-zero position", async () => {
+      const node = editor.glyphNode;
+      if (!node) throw new Error("Expected glyph node");
+      editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
+      const bounds = editor.selectionBounds();
+      if (!bounds) throw new Error("Expected selection bounds");
+
+      await editor.dragScene({
+        down: { x: bounds.right, y: (bounds.top + bounds.bottom) / 2 },
+        start: { x: bounds.right + 4, y: (bounds.top + bounds.bottom) / 2 },
+        end: { x: bounds.right + 50, y: (bounds.top + bounds.bottom) / 2 },
+      });
+
+      expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 200 });
+    });
+
     it("restores original positions when Escape cancels resize", () => {
       const bounds = editor.selectionBounds();
       if (!bounds) throw new Error("Expected selection bounds");

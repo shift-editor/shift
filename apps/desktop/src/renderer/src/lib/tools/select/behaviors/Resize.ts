@@ -1,16 +1,14 @@
-import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import type { BoundingRectEdge } from "../cursor";
-import { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
-import { pointInSelectedNodeSpace, selectedGeometryEdit } from "./selectedGeometryEdit";
+import { PositionList, type ScaleEdit } from "@/lib/model/positions";
 
 export class Resize implements SelectBehavior {
-  #draft: GlyphLayerEditDraft | null = null;
-  #origin: Point2D | null = null;
-  #nodePosition: Point2D | null = null;
+  #edit: ScaleEdit | null = null;
+  #done: (() => void) | null = null;
 
   onDragStart(
     _state: SelectState,
@@ -22,20 +20,24 @@ export class Resize implements SelectBehavior {
     const hit = ctx.tool.boundingBox.hit(event.origin);
     if (hit?.type !== "resize") return false;
 
-    const edit = selectedGeometryEdit(ctx.editor);
-    if (!edit) return false;
+    const selection = ctx.editor.positionSelection(ctx.editor.selection.ids);
+    if (!selection) return false;
 
-    const bounds = rectInNodeSpace(hit.rect, edit.node.position);
+    const localPositions = PositionList.fromTargetGroups(
+      selection.layer,
+      selection.targets,
+    ).positions;
+    const localBounds = Bounds.fromPoints(localPositions);
+    if (!localBounds) return false;
+
     const edge = hit.edge;
-    const startPos = pointInSelectedNodeSpace(event.origin.scene, edit);
-    const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
+    const startPos = event.origin.scene;
+    const anchorPoint = this.getAnchorPointForEdge(edge, hit.rect);
+    const localAnchorPoint = this.getAnchorPointForEdge(edge, Bounds.toRect(localBounds));
 
-    this.#draft = new GlyphLayerEditDraft(edit.layer, {
-      points: edit.pointIds,
-      anchors: edit.anchorIds,
-    });
-    this.#origin = anchorPoint;
-    this.#nodePosition = { ...edit.node.position };
+    const edit = selection.layer.positions.scale(selection.targets, localAnchorPoint);
+    this.#edit = edit;
+    this.#done = ctx.onCancel(() => edit.discard());
 
     ctx.setState({
       type: "resizing",
@@ -43,7 +45,7 @@ export class Resize implements SelectBehavior {
         edge,
         startPos,
         lastPos: startPos,
-        initialBounds: bounds,
+        initialBounds: hit.rect,
         anchorPoint,
         uniformScale: false,
       },
@@ -54,7 +56,7 @@ export class Resize implements SelectBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState, Select>, event: DragEvent): boolean {
     if (state.type !== "resizing") return false;
-    if (!this.#draft || !this.#origin || !this.#nodePosition) return false;
+    if (!this.#edit) return false;
 
     const next = this.nextResizingState(state, event);
     ctx.setState(next);
@@ -64,7 +66,8 @@ export class Resize implements SelectBehavior {
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "resizing") return false;
 
-    this.#draft?.commit();
+    this.#edit?.commit();
+    if (this.#done) this.#done();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });
@@ -74,7 +77,6 @@ export class Resize implements SelectBehavior {
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "resizing") return false;
 
-    this.#draft?.discard();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });
@@ -89,17 +91,16 @@ export class Resize implements SelectBehavior {
   }
 
   #cleanup(): void {
-    this.#draft = null;
-    this.#origin = null;
-    this.#nodePosition = null;
+    this.#edit = null;
+    this.#done = null;
   }
 
   private nextResizingState(state: SelectState, event: DragEvent): SelectState {
     if (state.type !== "resizing") return state;
-    if (!this.#nodePosition || !this.#origin) return state;
+    if (!this.#edit) return state;
 
     const uniformScale = event.shiftKey;
-    const currentPos = Vec2.sub(event.coords.scene, this.#nodePosition);
+    const currentPos = event.coords.scene;
     const { sx, sy } = this.calculateScaleFactors(
       state.resize.edge,
       currentPos,
@@ -108,7 +109,7 @@ export class Resize implements SelectBehavior {
       uniformScale,
     );
 
-    this.#draft!.previewScale(sx, sy, this.#origin);
+    this.#edit.preview({ x: sx, y: sy });
 
     return {
       type: "resizing",
@@ -200,20 +201,4 @@ export class Resize implements SelectBehavior {
 
     return { sx, sy };
   }
-}
-
-function rectInNodeSpace(rect: Rect2D, nodePosition: Point2D): Rect2D {
-  const x = rect.x - nodePosition.x;
-  const y = rect.y - nodePosition.y;
-
-  return {
-    x,
-    y,
-    width: rect.width,
-    height: rect.height,
-    left: rect.left - nodePosition.x,
-    top: rect.top - nodePosition.y,
-    right: rect.right - nodePosition.x,
-    bottom: rect.bottom - nodePosition.y,
-  };
 }
