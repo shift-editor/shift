@@ -11,14 +11,15 @@ import {
 } from "./fixtures/appLocators";
 
 test("exposes stable semantic selectors for major application surfaces", async ({ page }) => {
-  await expect(fontNavigation(page)).toBeVisible();
+  const navigation = fontNavigation(page);
+  await expect(navigation).toBeVisible();
   await expect(glyphProperties(page)).toBeVisible();
   await expect(glyphCatalogSurface(page)).toBeVisible();
   await expect(glyphCatalogCanvas(page)).toBeAttached();
 
   const defaultSourceId = await page.evaluate(() => window.shift?.font.defaultSource.id);
   if (!defaultSourceId) throw new Error("Expected default source");
-  await page.getByRole("button", { name: "Sources", exact: true }).click();
+  await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 
   await page.getByLabel(/Display and edit font information/).click();
@@ -28,6 +29,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await settings.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`settings-source-${defaultSourceId}`)).toBeVisible();
   await settings.getByLabel("Close settings").click();
+  await expect(settings).toBeHidden();
 
   await page.evaluate(async () => {
     const font = window.shift?.font;
@@ -46,7 +48,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
     });
     await font.editCoordinator.settled();
   });
-  await fontNavigation(page).getByRole("button", { name: "Axes", exact: true }).click();
+  await navigation.getByRole("button", { name: "Axes", exact: true }).click();
   await expect(await firstAxisSlider(page)).toBeVisible();
   await expect(page.getByLabel("Weight value", { exact: true })).toBeVisible();
 
