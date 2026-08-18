@@ -1,4 +1,4 @@
-import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
+import { Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { CanvasItem } from "@/lib/editor/rendering/CanvasItem";
@@ -212,14 +212,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (!props) return false;
 
     const { screenRect } = props;
-    const pos = coords.screen;
 
-    return (
-      pos.x >= screenRect.left &&
-      pos.x <= screenRect.right &&
-      pos.y >= screenRect.top &&
-      pos.y <= screenRect.bottom
-    );
+    return Rect.containsPoint(screenRect, coords.screen);
   }
 
   cursorForRotationCorner(corner: CornerHandle): CursorType {

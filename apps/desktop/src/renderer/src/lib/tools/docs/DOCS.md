@@ -42,7 +42,7 @@ tools/
     createContext.ts     — ToolName, ToolState, BUILT_IN_TOOL_IDS
   hand/                  — canvas panning (createBehavior style)
   pen/                   — bezier curve drawing (class-based behaviors)
-  select/                — point/segment selection, translate, resize, rotate, bend
+  select/                — selection, translate/resize/rotate/bend; TranslateInteraction owns movement
   shape/                 — rectangle creation (createBehavior style)
   text/                  — text run editing
   tools.ts               — registerBuiltInTools (wires all tools + shortcuts)
