@@ -137,6 +137,46 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await expect(screenshot).toMatchSnapshot("pen-cubic-curve.png");
   });
 
+  test("cubic curve preview before pointer release", async ({ page }) => {
+    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
+    await page.waitForTimeout(200);
+
+    const canvas = page.locator("#interactive-canvas");
+    await canvas.click({ position: { x: 400, y: 400 } });
+    await page.mouse.move(600, 300);
+    await page.mouse.down();
+    await page.mouse.move(700, 250, { steps: 5 });
+    await page.waitForTimeout(100);
+
+    const canvasUtil = new CanvasUtil(page);
+    const screenshot = await canvasUtil.screenshotCanvasContainer();
+    await expect(screenshot).toMatchSnapshot("pen-cubic-curve-drag-preview.png");
+
+    await page.mouse.up();
+  });
+
+  test("smooth junction preview before consecutive curve release", async ({ page }) => {
+    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
+    await page.waitForTimeout(200);
+
+    const canvas = page.locator("#interactive-canvas");
+    await canvas.click({ position: { x: 400, y: 400 } });
+    await page.mouse.move(600, 300);
+    await page.mouse.down();
+    await page.mouse.move(700, 250, { steps: 5 });
+    await page.mouse.up();
+    await page.mouse.move(800, 300);
+    await page.mouse.down();
+    await page.mouse.move(900, 250, { steps: 5 });
+    await page.waitForTimeout(100);
+
+    const canvasUtil = new CanvasUtil(page);
+    const screenshot = await canvasUtil.screenshotCanvasContainer();
+    await expect(screenshot).toMatchSnapshot("pen-smooth-junction-drag-preview.png");
+
+    await page.mouse.up();
+  });
+
   test("multiple segments — mixed straight and cubic", async ({ page }) => {
     await page.keyboard.press("p");
     await page.waitForTimeout(200);

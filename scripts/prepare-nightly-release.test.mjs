@@ -7,30 +7,33 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 
 const script = path.resolve("scripts/prepare-nightly-release.mjs");
-const version = "0.1.0-nightly20260816r0000000042a0002";
-const nupkgVersion = version;
+const version = "0.321.2";
 const fixtures = [
   [`zip/darwin/arm64/Shift Nightly-darwin-arm64-${version}.zip`, "mac-arm64"],
   [`zip/darwin/x64/Shift Nightly-darwin-x64-${version}.zip`, "mac-x64"],
+  [`Shift Nightly-${version}-arm64.dmg`, "dmg-arm64"],
+  [`Shift Nightly-${version}-x64.dmg`, "dmg-x64"],
   [`squirrel.windows/x64/Shift Nightly-${version}-Setup.exe`, "windows-x64"],
-  [`squirrel.windows/x64/shift_nightly-${nupkgVersion}-full.nupkg`, "windows-update"],
+  [`squirrel.windows/x64/shift_nightly-${version}-full.nupkg`, "windows-update"],
   [`deb/x64/shift-nightly_${version}_amd64.deb`, "linux-deb"],
   [`rpm/x64/shift-nightly-${version}.x86_64.rpm`, "linux-rpm"],
 ];
 const outputs = new Map([
   ["Shift-Nightly-macOS-arm64.zip", "mac-arm64"],
-  [`Shift-Nightly-${version}-macOS-arm64.zip`, "mac-arm64"],
+  [`Shift Nightly-darwin-arm64-${version}.zip`, "mac-arm64"],
   ["Shift-Nightly-macOS-x64.zip", "mac-x64"],
-  [`Shift-Nightly-${version}-macOS-x64.zip`, "mac-x64"],
+  [`Shift Nightly-darwin-x64-${version}.zip`, "mac-x64"],
+  ["Shift-Nightly-macOS-arm64.dmg", "dmg-arm64"],
+  ["Shift-Nightly-macOS-x64.dmg", "dmg-x64"],
   ["Shift-Nightly-Windows-x64.exe", "windows-x64"],
-  [`shift_nightly-${nupkgVersion}-full.nupkg`, "windows-update"],
+  [`shift_nightly-${version}-full.nupkg`, "windows-update"],
   ["Shift-Nightly-Linux-x64.deb", "linux-deb"],
   ["Shift-Nightly-Linux-x64.rpm", "linux-rpm"],
 ]);
 
-async function runScript(dist, output) {
+async function runScript(dist, output, candidateVersion = version) {
   return await new Promise((resolve) => {
-    const child = spawn(process.execPath, [script, dist, output, version]);
+    const child = spawn(process.execPath, [script, dist, output, candidateVersion]);
     let stderr = "";
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("close", (code) => resolve({ code, stderr }));
@@ -45,7 +48,7 @@ async function writeFixtures(root, entries = fixtures) {
   }
 }
 
-test("prepares human downloads and versioned Nightly update assets", async (context) => {
+test("prepares DMGs, human downloads, and exact versioned update assets", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const dist = path.join(root, "dist");
@@ -93,4 +96,15 @@ test("rejects ambiguous Nightly artifacts", async (context) => {
   const result = await runScript(dist, path.join(root, "public"));
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /Expected one source.*found 2/);
+});
+
+test("rejects artifacts from a different Nightly version", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const dist = path.join(root, "dist");
+  await writeFixtures(dist);
+
+  const result = await runScript(dist, path.join(root, "public"), "0.322.1");
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /does not contain version 0\.322\.1/);
 });

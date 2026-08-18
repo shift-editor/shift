@@ -17,7 +17,7 @@ export type DocumentSessionOptions = {
 
 export type CloseReason = "window" | "quit" | "update";
 type DirtyDocumentChoice = "save" | "discard" | "cancel";
-type PendingExitDiscard = boolean | null;
+type PendingCloseDiscard = boolean | null;
 
 /**
  * Main-process owner of the native document workflow.
@@ -36,7 +36,7 @@ export class DocumentSession {
   readonly #log: ShiftLogger;
 
   #state: WorkspaceDocumentState | null = null;
-  #pendingExitDiscard: PendingExitDiscard = null;
+  #pendingCloseDiscard: PendingCloseDiscard = null;
 
   constructor(options: DocumentSessionOptions) {
     this.#document = options.document;
@@ -59,82 +59,53 @@ export class DocumentSession {
   }
 
   /**
-   * Confirms whether the current document may be closed.
+   * Prompts and saves as needed, recording close intent without closing the workspace.
    *
-   * Window confirmation closes the document immediately. Quit and update confirmation only
-   * settle save intent so a failed process exit leaves the workspace usable.
-   *
-   * @param reason - Native transition that would discard the document.
-   * @returns `true` when the transition may continue.
+   * @param reason - Native transition that would close the document.
+   * @returns `true` when the transition may commit.
    * @throws {Error} when the renderer cannot provide a settled document state.
    */
-  async confirmClose(reason: CloseReason): Promise<boolean> {
-    if (reason !== "window") this.#pendingExitDiscard = null;
-    this.#log.info("close guard started", {
+  async prepareClose(reason: CloseReason): Promise<boolean> {
+    this.#pendingCloseDiscard = null;
+    this.#log.info("close preparation started", {
       reason,
       connected: this.#document.connected,
       cachedDirty: this.#state?.dirty ?? null,
     });
 
     const state = await this.#closeState();
-    if (!state) {
-      this.#log.info("close guard allowed: no document state", { reason });
-      return true;
-    }
+    if (!state) return true;
 
     if (!state.dirty) {
-      if (reason === "window") await this.#closeDocument(false);
-      else this.#pendingExitDiscard = false;
-      this.#log.info("close guard allowed: document is clean", { reason });
+      this.#pendingCloseDiscard = false;
       return true;
     }
 
     const choice = await this.#showDirtyDocumentDialog(state, reason);
-    this.#log.info("dirty document dialog completed", {
-      reason,
-      choice,
-      saveTarget: state.saveTarget,
-      needsSaveAs: state.needsSaveAs,
-    });
-
-    if (choice === "cancel") {
-      this.#log.info("close guard canceled by user", { reason });
-      return false;
-    }
+    if (choice === "cancel") return false;
 
     if (choice === "discard") {
-      if (reason === "window") await this.#closeDocument(true);
-      else this.#pendingExitDiscard = true;
-      this.#log.info("close guard allowed: changes may be discarded on exit", { reason });
+      this.#pendingCloseDiscard = true;
       return true;
     }
 
     const saved = await this.#saveDirtyDocument(state);
-    if (saved) {
-      if (reason === "window") await this.#closeDocument(false);
-      else this.#pendingExitDiscard = false;
-    }
-    this.#log.info(
-      saved ? "close guard allowed: document saved" : "close guard blocked: save failed",
-      {
-        reason,
-      },
-    );
+    if (saved) this.#pendingCloseDiscard = false;
     return saved;
   }
 
-  /** Commits deferred workspace cleanup after the application exit becomes final. */
-  async commitExit(): Promise<void> {
-    if (this.#pendingExitDiscard === null) return;
+  /** Closes the prepared workspace. Calling this method is the point of no return. */
+  async commitClose(): Promise<void> {
+    if (this.#pendingCloseDiscard === null) return;
 
-    const discard = this.#pendingExitDiscard;
+    const discard = this.#pendingCloseDiscard;
+    this.#pendingCloseDiscard = null;
     await this.#closeDocument(discard);
-    this.#pendingExitDiscard = null;
   }
 
-  /** Cancels deferred cleanup when the application remains running. */
-  cancelExit(): void {
-    this.#pendingExitDiscard = null;
+  /** Clears prepared close intent when any document vetoes the transition. */
+  cancelClose(): void {
+    this.#pendingCloseDiscard = null;
   }
 
   /**

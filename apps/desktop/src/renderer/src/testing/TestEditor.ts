@@ -270,12 +270,12 @@ export class TestEditor extends Editor {
   }
 
   /**
-   * Drags through scene coordinates while preserving drag-start semantics.
+   * Drags through scene coordinates with a distinct threshold-crossing sample.
    *
-   * @param input - Scene-space pointer-down point, threshold-crossing first
+   * @param input - Scene-space pointer-down origin, threshold-crossing first
    * move, and final pointer position.
    * @returns The scene-space drag points observed through the camera and the
-   * delta from `start` to `end`.
+   * canonical delta from `down` to `end`.
    */
   async dragScene(input: {
     down: Point2D;
@@ -303,8 +303,8 @@ export class TestEditor extends Editor {
       start,
       end,
       delta: {
-        x: end.x - start.x,
-        y: end.y - start.y,
+        x: end.x - down.x,
+        y: end.y - down.y,
       },
     };
   }

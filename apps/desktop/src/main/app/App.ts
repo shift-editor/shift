@@ -1,12 +1,10 @@
 import {
   app,
-  autoUpdater,
   BrowserWindow,
   clipboard,
   ipcMain,
   MessageChannelMain,
   screen,
-  shell,
   type Rectangle,
   type WebContents,
 } from "electron";
@@ -25,12 +23,7 @@ import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
 import type { FontSessionHost } from "../workspace/FontSessionHost";
 import { showOpenFontDialog } from "../document/openFontDialog";
-import {
-  shiftDistribution,
-  shiftProductName,
-  shiftProductVersion,
-  shiftUpdateBaseUrl,
-} from "../release";
+import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
@@ -81,17 +74,8 @@ export class App {
       log: this.#log,
     });
     this.#updater = new AppUpdater({
-      autoUpdater,
       lifecycle: this.#lifecycle,
       activeWindow: () => this.#windows.activeWindow(),
-      applicationName: () => this.applicationName,
-      openExternal: (url) => shell.openExternal(url),
-      isPackaged: app.isPackaged,
-      platform: process.platform,
-      architecture: process.arch,
-      productVersion: shiftProductVersion,
-      distribution: shiftDistribution,
-      feedBaseUrl: shiftUpdateBaseUrl,
       log: createShiftLogger("app.update"),
     });
   }

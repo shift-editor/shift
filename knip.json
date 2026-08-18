@@ -13,7 +13,6 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/check-update-channel.mjs",
         "scripts/find-refs.ts",
         "scripts/oxlint/shift-plugin.mjs",
         "scripts/prepare-update-feed.mjs"

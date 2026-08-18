@@ -55,6 +55,8 @@ export class Select extends BaseTool<SelectState, Select> {
     if (coords) {
       const cursor = this.boundingBox.cursor(coords);
       if (cursor) return cursor;
+
+      if (this.boundingBox.containsTranslationPoint(coords)) return { type: "move" };
     }
 
     const modifiers = this.editor.input.modifiersCell.value;

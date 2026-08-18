@@ -19,17 +19,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-          if (( GITHUB_RUN_NUMBER > 9999999999 || GITHUB_RUN_ATTEMPT > 9999 )); then
-            echo "Nightly run number exceeds the fixed-width version range" >&2
-            exit 1
-          fi
-          printf -v RUN_NUMBER "%010d" "$GITHUB_RUN_NUMBER"
-          printf -v RUN_ATTEMPT "%04d" "$GITHUB_RUN_ATTEMPT"
-          VERSION="0.1.0-nightly$(date -u +%Y%m%d)r${RUN_NUMBER}a${RUN_ATTEMPT}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        run: echo "version=0.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.name }}
@@ -39,16 +29,16 @@ jobs:
       matrix:
         include:
           - name: macOS arm64
-            runner: macos-15
+            runner: macos-26
             platform: darwin
             arch: arm64
-            targets: zip
+            targets: "zip,dmg"
             package-dir: Shift Nightly-darwin-arm64
           - name: macOS x64
-            runner: macos-15-intel
+            runner: macos-26-intel
             platform: darwin
             arch: x64
-            targets: zip
+            targets: "zip,dmg"
             package-dir: Shift Nightly-darwin-x64
           - name: Windows x64
             runner: windows-latest
@@ -106,8 +96,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Set nightly version
-        shell: bash
+      - name: Set shared Nightly version
         env:
           NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
         run: node scripts/product-version.mjs set "$NIGHTLY_VERSION"
@@ -152,7 +141,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "apps/desktop/out/${{ matrix.package-dir }}/Shift Nightly.app"
           xcrun stapler validate "apps/desktop/out/${{ matrix.package-dir }}/Shift Nightly.app"
 
-      - name: Upload nightly artifacts
+      - name: Upload Nightly artifacts
         uses: actions/upload-artifact@v7
         with:
           name: Shift-Nightly-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}
@@ -161,29 +150,21 @@ jobs:
           retention-days: 14
 
   publish:
-    name: Publish rolling Nightly
+    name: Publish rolling Nightly assets
     needs:
       - prepare
       - build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
-      group: desktop-update-feed
+      group: desktop-update-publication
       cancel-in-progress: false
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
-
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Install feed publication dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
+          fetch-depth: 1
 
       - uses: actions/download-artifact@v8
         with:
@@ -195,25 +176,6 @@ jobs:
         env:
           NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
         run: node scripts/prepare-nightly-release.mjs dist public "$NIGHTLY_VERSION"
-
-      - name: Protect Nightly history and channel from rollback
-        env:
-          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! NIGHTLY_REF="$(git ls-remote --refs --tags origin refs/tags/nightly)"; then
-            echo "Could not inspect the remote Nightly tag" >&2
-            exit 1
-          fi
-          if [[ -n "$NIGHTLY_REF" ]]; then
-            NIGHTLY_SHA="${NIGHTLY_REF%%[[:space:]]*}"
-            if ! git merge-base --is-ancestor "$NIGHTLY_SHA" "$GITHUB_SHA"; then
-              echo "Refusing to publish stale commit $GITHUB_SHA behind Nightly $NIGHTLY_SHA" >&2
-              exit 1
-            fi
-          fi
-          scripts/check-update-feed-version.sh nightly "$NIGHTLY_VERSION"
 
       - name: Write Nightly release notes
         shell: bash
@@ -228,7 +190,7 @@ jobs:
           This rolling prerelease is replaced only by a later complete Nightly build.
           EOF
 
-      - name: Publish rolling Nightly release
+      - name: Publish rolling Nightly prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -253,15 +215,62 @@ jobs:
               --target "$GITHUB_SHA"
           fi
 
-      - name: Publish native Nightly update feeds
+  feed:
+    name: Publish Nightly update feed
+    needs:
+      - prepare
+      - publish
+    runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-update-publication
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: Shift-Nightly-*
+          path: dist
+          merge-multiple: true
+
+      - name: Require public Nightly assets
         env:
-          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$(gh release view nightly --json isDraft --jq .isDraft)" != "false" ]]; then
+            echo "Nightly assets must be public before advancing update feeds" >&2
+            exit 1
+          fi
+
+      - name: Prepare update-feeds branch
         shell: bash
         run: |
-          scripts/publish-update-feed.sh \
-            public \
-            nightly \
-            "$NIGHTLY_VERSION" \
-            nightly \
-            "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
-            "$RUNNER_TEMP/update-site"
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin update-feeds >/dev/null 2>&1; then
+            git fetch origin update-feeds
+            git worktree add site FETCH_HEAD
+          else
+            git worktree add --detach site
+            git -C site switch --orphan update-feeds
+            git -C site rm -rf .
+          fi
+          touch site/.nojekyll
+
+      - name: Stage native Nightly feed
+        env:
+          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: node scripts/prepare-update-feed.mjs dist site nightly "$NIGHTLY_VERSION"
+
+      - name: Deploy update feeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C site config user.name "github-actions[bot]"
+          git -C site config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C site add .
+          git -C site commit -m "Publish Shift Nightly ${{ needs.prepare.outputs.version }} update feed"
+          git -C site push origin HEAD:update-feeds

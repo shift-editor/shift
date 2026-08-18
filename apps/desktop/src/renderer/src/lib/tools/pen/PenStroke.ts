@@ -1,14 +1,13 @@
 import { Vec2, type Point2D } from "@shift/geo";
-import { Validate } from "@shift/validation";
 import type { ContourId, PointId } from "@shift/types";
-import type { GlyphLayer, GlyphLayerPositions } from "@/lib/model/Glyph";
-import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
-import { Anchor, Handles } from "./types";
-import type { Pen } from "./Pen";
+import type { Contour, SegmentId } from "@shift/glyph-state";
+import type { GlyphLayer } from "@/lib/model/Glyph";
+import type { GlyphLayerEdit } from "@/lib/model/GlyphLayerEdit";
 import type { GlyphNode } from "@/types/node";
+import type { Pen } from "./Pen";
+import type { PenCurve, PenEndpoint } from "./types";
 
 export class PenStroke {
-  #pendingHandles: GlyphLayerPositions | null = null;
   readonly #pen: Pen;
   readonly #node: GlyphNode;
   readonly #layer: GlyphLayer;
@@ -46,6 +45,10 @@ export class PenStroke {
     return this.#layer.contour(contourId);
   }
 
+  get activeEndpoint(): PenEndpoint | null {
+    return this.#pen.context?.activeEndpoint ?? null;
+  }
+
   startContour(position: Point2D): PointId {
     const [contourId, pointId] = this.#pen.editor.transaction("Start contour", () => {
       const contourId = this.#layer.addContour();
@@ -53,21 +56,66 @@ export class PenStroke {
       return [contourId, pointId] as const;
     });
 
-    this.#pen.setActiveContour(contourId);
+    this.#pen.setActiveContour(contourId, {
+      kind: "corner",
+      pointId,
+      position,
+    });
     return pointId;
   }
 
   appendOnCurve(position: Point2D): PointId | null {
-    const contour = this.activeContour;
-    if (!contour) return null;
-    return this.#layer.addOnCurvePoint(contour.id, position);
+    const contourId = this.#pen.context?.activeContourId;
+    if (!contourId) return null;
+
+    const pointId = this.#layer.addOnCurvePoint(contourId, position);
+    this.#pen.setActiveEndpoint({ kind: "corner", pointId, position });
+    return pointId;
+  }
+
+  beginCurve(curve: PenCurve): readonly [GlyphLayerEdit, PointId, PointId, PointId] {
+    const context = this.#pen.context;
+    if (!context?.activeContourId) {
+      throw new Error("cannot begin curve without an active Pen contour");
+    }
+
+    if (context.activeEndpoint.pointId !== curve.start.pointId) {
+      throw new Error("cannot begin curve from a stale Pen endpoint");
+    }
+
+    const edit = this.#layer.beginEdit();
+
+    try {
+      if (curve.start.kind === "smooth") {
+        edit.setPointSmooth(curve.start.pointId, true);
+      }
+
+      const [controlStartId, controlEndId, endpointId] = edit.addCubic(
+        context.activeContourId,
+        this.#pen.resolveCurve(curve),
+      );
+      return [edit, controlStartId, controlEndId, endpointId];
+    } catch (error) {
+      edit.cancel();
+      throw error;
+    }
+  }
+
+  finishCurve(curve: PenCurve, edit: GlyphLayerEdit, endpointId: PointId): void {
+    edit.finish("Add cubic");
+    this.#pen.setActiveEndpoint({
+      kind: "smooth",
+      pointId: endpointId,
+      position: curve.anchorPosition,
+      outgoingHandlePosition: curve.handlePosition,
+    });
   }
 
   closeActiveContour(): boolean {
-    const contour = this.activeContour;
-    if (!contour) return false;
+    const contourId = this.#pen.context?.activeContourId;
+    if (!contourId) return false;
 
-    this.#layer.closeContour(contour.id);
+    this.#layer.closeContour(contourId);
     this.#pen.clearActiveContour();
     return true;
   }
@@ -78,10 +126,15 @@ export class PenStroke {
   }
 
   continueContour(contourId: ContourId, side: "start" | "end", pointId: PointId): void {
-    this.#pen.setActiveContour(contourId);
+    const contour = this.#layer.contour(contourId);
+    const endpoint = contour ? this.#endpointFor(contour, side, pointId) : null;
+    if (!endpoint) return;
+
     if (side === "start") {
       this.#layer.reverseContour(contourId);
     }
+
+    this.#pen.setActiveContour(contourId, endpoint);
     this.#pen.editor.selection.select([pointId]);
   }
 
@@ -89,84 +142,25 @@ export class PenStroke {
     return this.#layer.splitSegment(segmentId, t);
   }
 
-  commitAnchor(anchor: Anchor): PointId | null {
-    if (anchor.pointId) return anchor.pointId;
-
-    const pointId = this.appendOnCurve(anchor.position);
-    if (pointId) anchor.pointId = pointId;
-    return pointId;
+  commitAnchor(position: Point2D): PointId | null {
+    return this.appendOnCurve(position);
   }
 
-  createHandles(anchor: Anchor, handlePos: Point2D): Handles {
-    const { position } = anchor;
-    const contour = this.activeContour;
-    if (!contour) return {};
+  #endpointFor(contour: Contour, side: "start" | "end", pointId: PointId): PenEndpoint | null {
+    const anchor = side === "start" ? contour.firstPoint : contour.lastPoint;
+    if (!anchor || anchor.id !== pointId || !anchor.isOnCurve) return null;
 
-    const prevPoint = contour.lastPoint;
-    const prevOnCurve = contour.lastOnCurvePoint;
-    const isFirstPoint = contour.isEmpty;
-
-    const anchorId = this.#layer.addSmoothPoint(contour.id, position);
-    anchor.pointId = anchorId;
-
-    if (isFirstPoint) {
-      const cpOutId = this.#layer.addOffCurvePoint(contour.id, handlePos);
-      return { cpOut: cpOutId };
+    const adjacent =
+      side === "start" ? contour.points[1] : contour.points[contour.points.length - 2];
+    if (anchor.smooth && adjacent?.isOffCurve) {
+      return {
+        kind: "smooth",
+        pointId,
+        position: anchor.position,
+        outgoingHandlePosition: Vec2.mirror(adjacent, anchor),
+      };
     }
 
-    const prevIsOffCurve = prevPoint && Validate.isOffCurve(prevPoint);
-
-    if (prevIsOffCurve) {
-      const cpInPos = Vec2.mirror(handlePos, position);
-      const cpInId = this.#layer.insertPointBefore(anchorId, Point.offCurve(cpInPos));
-      const cpOutId = this.#layer.addOffCurvePoint(contour.id, handlePos);
-
-      return { cpIn: cpInId, cpOut: cpOutId };
-    }
-
-    if (prevOnCurve) {
-      const cp1Pos = Vec2.lerp(prevOnCurve, position, 1 / 3);
-
-      this.#layer.insertPointBefore(anchorId, Point.offCurve(cp1Pos));
-    }
-
-    const cpInPos = Vec2.mirror(handlePos, position);
-    const cpInId = this.#layer.insertPointBefore(anchorId, Point.offCurve(cpInPos));
-    return { cpIn: cpInId };
-  }
-
-  moveHandles(anchor: Anchor, handles: Handles, handlePos: Point2D): void {
-    const positions: GlyphLayerPositions[number][] = [];
-
-    if (handles.cpOut) {
-      positions.push({
-        kind: "point",
-        id: handles.cpOut,
-        x: handlePos.x,
-        y: handlePos.y,
-      });
-    }
-
-    if (handles.cpIn) {
-      const mirror = Vec2.mirror(handlePos, anchor.position);
-      positions.push({
-        kind: "point" as const,
-        id: handles.cpIn,
-        x: mirror.x,
-        y: mirror.y,
-      });
-    }
-
-    // Live drag: local preview only; durability happens once at gesture end.
-    this.#pendingHandles = positions;
-    this.#layer.previewPositionPatch(positions);
-  }
-
-  /** Commits the last previewed handle positions as one durable move. */
-  commitHandles(): void {
-    if (!this.#pendingHandles) return;
-
-    this.#layer.applyPositionPatch(this.#pendingHandles);
-    this.#pendingHandles = null;
+    return { kind: "corner", pointId, position: anchor.position };
   }
 }

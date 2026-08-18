@@ -1,42 +1,57 @@
 import { describe, expect, it } from "vitest";
-import { loadUpdate } from "./updateFeed";
+import { updateFeed } from "./updateFeed";
 
 const feedBaseUrl = "https://shift-editor.github.io/shift/updates";
 
 describe("native application update feeds", () => {
-  it("selects the exact Release macOS feed", () => {
+  it("configures the architecture-specific macOS JSON feed", () => {
     expect(
-      loadUpdate(feedBaseUrl, {
+      updateFeed(feedBaseUrl, {
         distribution: "release",
         platform: "darwin",
         architecture: "arm64",
       }),
-    ).toBe("https://shift-editor.github.io/shift/updates/release/darwin/arm64/RELEASES.json");
+    ).toEqual({
+      url: "https://shift-editor.github.io/shift/updates/release/darwin/arm64/RELEASES.json",
+      serverType: "json",
+    });
   });
 
   it("selects the isolated Nightly Windows feed", () => {
     expect(
-      loadUpdate(feedBaseUrl, {
+      updateFeed(feedBaseUrl, {
         distribution: "nightly",
         platform: "win32",
         architecture: "x64",
       }),
-    ).toBe("https://shift-editor.github.io/shift/updates/nightly/win32/x64");
+    ).toEqual({
+      url: "https://shift-editor.github.io/shift/updates/nightly/win32/x64",
+    });
   });
 
-  it("rejects unsupported Windows architectures", () => {
-    expect(() =>
-      loadUpdate(feedBaseUrl, {
+  it("keeps unsigned Windows Release builds on manual downloads", () => {
+    expect(
+      updateFeed(feedBaseUrl, {
         distribution: "release",
         platform: "win32",
-        architecture: "arm64",
+        architecture: "x64",
       }),
-    ).toThrow("Unsupported Windows update architecture");
+    ).toBeNull();
+  });
+
+  it("keeps Linux on manual downloads", () => {
+    expect(
+      updateFeed(feedBaseUrl, {
+        distribution: "nightly",
+        platform: "linux",
+        architecture: "x64",
+      }),
+    ).toBeNull();
   });
 
   it("requires HTTPS", () => {
     expect(() =>
-      loadUpdate("http://example.com/updates", {
+      updateFeed("http://example.com/updates", {
         distribution: "release",
         platform: "darwin",
         architecture: "x64",

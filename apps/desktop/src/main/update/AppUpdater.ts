@@ -1,64 +1,45 @@
+import { app, autoUpdater, dialog, shell, type MessageBoxOptions } from "electron";
 import { errorToMessage } from "../../shared/errors";
-import { loadUpdate } from "./updateFeed";
-import { nextUpdateState } from "./nextUpdateState";
-import {
-  showUpdateCurrent,
-  showUpdateDownloading,
-  showUpdateFailure,
-  showUpdateReady,
-  showUpdateUnavailable,
-} from "./updateDialogs";
-import type {
-  AppUpdaterOptions,
-  Update,
-  UpdateDisabledReason,
-  UpdateEvent,
-  UpdateState,
-  UpdateTrigger,
-} from "./types";
+import { shiftDistribution, shiftProductVersion, shiftUpdateBaseUrl } from "../release";
+import { updateFeed } from "./updateFeed";
+import type { AppUpdaterOptions, UpdateStatus, UpdateTrigger } from "./types";
 
 const INITIAL_CHECK_DELAY_MS = 30_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const RELEASES_URL = "https://github.com/shift-editor/shift/releases";
 const NIGHTLY_URL = "https://github.com/shift-editor/shift/releases/tag/nightly";
 
-/** Owns channel validation, Electron updater events, scheduling, and update UI. */
+/** Owns native application update checks, dialogs, and restart safety. */
 export class AppUpdater {
   readonly #options: AppUpdaterOptions;
 
-  #state: UpdateState;
+  #status: UpdateStatus = { type: "idle" };
   #started = false;
   #readyPrompt: Promise<void> | null = null;
+  #relaunching = false;
 
   constructor(options: AppUpdaterOptions) {
     this.#options = options;
-    this.#state = initialUpdateState(options);
   }
 
-  get state(): UpdateState {
-    return this.#state;
-  }
-
-  /** Installs Electron listeners and starts quiet periodic checks for eligible builds. */
+  /** Installs Electron listeners and schedules quiet checks for eligible builds. */
   start(): void {
-    if (this.#started || this.#state.type === "disabled") return;
+    if (this.#started || !app.isPackaged || !this.#feed()) return;
     this.#started = true;
 
-    this.#options.autoUpdater.on("update-available", () => {
-      this.#handleUpdateAvailable();
-    });
-    this.#options.autoUpdater.on("update-not-available", () => {
-      void this.#handleNoUpdateAvailable().catch((error) => {
-        this.#options.log.error("no-update handler failed", error);
+    autoUpdater.on("update-available", () => this.#updateAvailable());
+    autoUpdater.on("update-not-available", () => {
+      void this.#updateNotAvailable().catch((error) => {
+        this.#options.log.error("update-not-available handler failed", error);
       });
     });
-    this.#options.autoUpdater.on("update-downloaded", (_event, _notes, releaseName) => {
-      void this.#handleUpdateDownloaded(releaseName).catch((error) => {
-        this.#options.log.error("downloaded-update handler failed", error);
+    autoUpdater.on("update-downloaded", () => {
+      void this.#updateDownloaded().catch((error) => {
+        this.#options.log.error("update-downloaded handler failed", error);
       });
     });
-    this.#options.autoUpdater.on("error", (error) => {
-      void this.#handleError(error).catch((handlerError) => {
+    autoUpdater.on("error", (error) => {
+      void this.#updateFailed(error).catch((handlerError) => {
         this.#options.log.error("updater error handler failed", handlerError);
       });
     });
@@ -78,165 +59,136 @@ export class AppUpdater {
     periodicCheck.unref();
   }
 
-  /** Checks the compiled distribution feed, deduplicating in-flight and downloaded updates. */
+  /** Checks the compiled channel, deduplicating checks, downloads, and restart prompts. */
   async checkForUpdates(trigger: UpdateTrigger): Promise<void> {
-    switch (this.#state.type) {
-      case "disabled":
-        if (trigger === "manual") await this.#showUnavailable(this.#state.reason);
+    const feed = app.isPackaged ? this.#feed() : null;
+    if (!feed) {
+      if (trigger === "manual") await this.#showManualDownload();
+      return;
+    }
+
+    switch (this.#status.type) {
+      case "checking":
+      case "restarting":
+        return;
+      case "downloading":
+        if (trigger === "manual") await this.#showDownloading();
         return;
       case "ready":
         if (trigger === "manual") await this.#notifyReady();
         return;
-      case "downloading":
-        if (trigger === "manual") {
-          await showUpdateDownloading(
-            this.#options.activeWindow(),
-            this.#options.applicationName(),
-            this.#state.update,
-          );
-        }
-        return;
-      case "checking":
-      case "restarting":
-        return;
       case "idle":
-      case "current":
-      case "failed":
         break;
     }
 
-    if (!this.#transition({ type: "checkRequested", trigger })) return;
+    this.#status = { type: "checking", trigger };
+    this.#options.log.info("checking Electron update feed", {
+      distribution: shiftDistribution,
+      platform: process.platform,
+      architecture: process.arch,
+      feedUrl: feed.url,
+    });
 
     try {
-      const feedUrl = loadUpdate(this.#options.feedBaseUrl, {
-        distribution: this.#options.distribution,
-        platform: this.#options.platform,
-        architecture: this.#options.architecture,
-      });
-      this.#options.autoUpdater.setFeedURL({ url: feedUrl });
-      this.#options.log.info("checking Electron update feed", {
-        distribution: this.#options.distribution,
-        platform: this.#options.platform,
-        architecture: this.#options.architecture,
-        feedUrl,
-      });
-      this.#options.autoUpdater.checkForUpdates();
+      autoUpdater.setFeedURL(feed);
+      autoUpdater.checkForUpdates();
     } catch (error) {
-      await this.#fail("check", error);
+      this.#status = { type: "idle" };
+      this.#options.log.warn("application update check failed", error);
+      if (trigger === "manual") await this.#showFailure(error);
     }
   }
 
-  /** Settles open documents, then asks Electron to apply the downloaded update. */
+  /** Closes every document, then asks Electron to apply the downloaded update. */
   async restartToUpdate(): Promise<void> {
-    if (this.#state.type !== "ready") return;
+    if (this.#status.type !== "ready") return;
 
     try {
       if (!(await this.#options.lifecycle.confirmQuit("update"))) return;
-      if (!this.#transition({ type: "restartRequested" })) {
-        this.#options.lifecycle.resetQuitConfirmation();
-        return;
-      }
-
-      this.#options.autoUpdater.quitAndInstall();
     } catch (error) {
-      await this.#rejectRestart(error);
+      this.#options.log.warn("documents could not be prepared for update", error);
+      await this.#showMessage({
+        type: "error",
+        buttons: ["OK"],
+        title: app.name,
+        message: `${app.name} couldn't restart to update.`,
+        detail: errorToMessage(error),
+      });
+      return;
+    }
+
+    this.#status = { type: "restarting" };
+    try {
+      autoUpdater.quitAndInstall();
+    } catch (error) {
+      this.#relaunchInstalledVersion(error);
     }
   }
 
-  #handleUpdateAvailable(): void {
-    const trigger = this.#state.type === "checking" ? this.#state.trigger : null;
-    const update: Update = { version: null };
-    if (!this.#transition({ type: "updateAvailable", update })) return;
+  #feed() {
+    return updateFeed(shiftUpdateBaseUrl, {
+      distribution: shiftDistribution,
+      platform: process.platform,
+      architecture: process.arch,
+    });
+  }
 
+  #updateAvailable(): void {
+    if (this.#status.type !== "checking") return;
+
+    const trigger = this.#status.trigger;
+    this.#status = { type: "downloading", trigger };
     if (trigger === "manual") {
-      void showUpdateDownloading(
-        this.#options.activeWindow(),
-        this.#options.applicationName(),
-        update,
-      ).catch((error) => {
-        this.#options.log.error("downloading dialog failed", error);
+      void this.#showDownloading().catch((error) => {
+        this.#options.log.error("update download dialog failed", error);
       });
     }
   }
 
-  async #handleNoUpdateAvailable(): Promise<void> {
-    await this.#completeCurrentCheck();
+  async #updateNotAvailable(): Promise<void> {
+    if (this.#status.type !== "checking") return;
+
+    const trigger = this.#status.trigger;
+    this.#status = { type: "idle" };
+    if (trigger !== "manual") return;
+
+    await this.#showMessage({
+      type: "info",
+      buttons: ["OK"],
+      title: app.name,
+      message: `${app.name} is up to date.`,
+      detail: `You are running ${app.name} ${shiftProductVersion}.`,
+    });
   }
 
-  async #completeCurrentCheck(): Promise<void> {
-    const trigger = this.#state.type === "checking" ? this.#state.trigger : null;
-    if (!this.#transition({ type: "noUpdateAvailable", checkedAt: new Date().toISOString() }))
-      return;
+  async #updateDownloaded(): Promise<void> {
+    if (this.#status.type !== "downloading") return;
 
-    if (trigger === "manual") {
-      await showUpdateCurrent(
-        this.#options.activeWindow(),
-        this.#options.applicationName(),
-        this.#options.productVersion,
-      );
-    }
-  }
-
-  async #handleUpdateDownloaded(version: string): Promise<void> {
-    const update: Update = { version: version || null };
-    if (!this.#transition({ type: "updateDownloaded", update })) return;
+    this.#status = { type: "ready" };
     await this.#notifyReady();
   }
 
-  async #handleError(error: Error): Promise<void> {
-    switch (this.#state.type) {
-      case "checking":
-        await this.#fail("check", error);
-        return;
-      case "downloading":
-        await this.#fail("download", error);
-        return;
-      case "restarting":
-        await this.#rejectRestart(error);
-        return;
-      default:
-        this.#options.log.warn("ignored updater error outside active work", {
-          state: this.#state.type,
-          message: errorToMessage(error),
-        });
-    }
-  }
-
-  async #rejectRestart(error: unknown): Promise<void> {
-    if (!this.#options.lifecycle.resetQuitConfirmation()) {
-      this.#options.log.warn("ignored updater error after quit finalization started", {
-        message: errorToMessage(error),
-      });
+  async #updateFailed(error: Error): Promise<void> {
+    if (this.#status.type === "restarting") {
+      this.#relaunchInstalledVersion(error);
       return;
     }
-    if (!this.#transition({ type: "restartRejected" })) return;
+    if (this.#status.type !== "checking" && this.#status.type !== "downloading") return;
 
-    await showUpdateFailure(
-      this.#options.activeWindow(),
-      this.#options.applicationName(),
-      "restart",
-      error,
-    );
+    const trigger = this.#status.trigger;
+    this.#status = { type: "idle" };
+    this.#options.log.warn("application update failed", error);
+    if (trigger === "manual") await this.#showFailure(error);
   }
 
-  async #fail(phase: "check" | "download", error: unknown): Promise<void> {
-    const trigger =
-      this.#state.type === "checking" || this.#state.type === "downloading"
-        ? this.#state.trigger
-        : null;
-    const message = errorToMessage(error);
-    if (!this.#transition({ type: "operationFailed", phase, message })) return;
-
-    this.#options.log.warn("application update failed", { phase, trigger, message });
-    if (trigger !== "manual") return;
-
-    const retry = await showUpdateFailure(
-      this.#options.activeWindow(),
-      this.#options.applicationName(),
-      phase,
-      error,
-    );
-    if (retry) await this.checkForUpdates("manual");
+  async #showDownloading(): Promise<void> {
+    await this.#showMessage({
+      type: "info",
+      buttons: ["OK"],
+      title: app.name,
+      message: `Downloading an ${app.name} update…`,
+      detail: "You can keep working. Shift will let you know when the update is ready.",
+    });
   }
 
   async #notifyReady(): Promise<void> {
@@ -245,7 +197,7 @@ export class AppUpdater {
       return;
     }
 
-    this.#readyPrompt = this.#runReadyPrompt();
+    this.#readyPrompt = this.#showReady();
     try {
       await this.#readyPrompt;
     } finally {
@@ -253,54 +205,81 @@ export class AppUpdater {
     }
   }
 
-  async #runReadyPrompt(): Promise<void> {
-    if (this.#state.type !== "ready") return;
-    const restart = await showUpdateReady(
-      this.#options.activeWindow(),
-      this.#options.applicationName(),
-      this.#state.update,
-    );
-    if (restart) await this.restartToUpdate();
+  async #showReady(): Promise<void> {
+    if (this.#status.type !== "ready") return;
+
+    const result = await this.#showMessage({
+      type: "info",
+      buttons: ["Restart and Update", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: app.name,
+      message: `${app.name} is ready to update.`,
+      detail: "Shift will ask about unsaved documents before restarting.",
+    });
+    if (result.response === 0) await this.restartToUpdate();
   }
 
-  async #showUnavailable(reason: UpdateDisabledReason): Promise<void> {
-    const openDownloads = await showUpdateUnavailable(
-      this.#options.activeWindow(),
-      this.#options.applicationName(),
-      reason,
-    );
-    if (!openDownloads) return;
-
-    const url = this.#options.distribution === "nightly" ? NIGHTLY_URL : RELEASES_URL;
-    await this.#options.openExternal(url);
+  async #showFailure(error: unknown): Promise<void> {
+    const result = await this.#showMessage({
+      type: "error",
+      buttons: ["View Downloads", "OK"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: app.name,
+      message: `${app.name} couldn't check for updates.`,
+      detail: errorToMessage(error),
+    });
+    if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
   }
 
-  #transition(event: UpdateEvent): boolean {
-    const next = nextUpdateState(this.#state, event);
-    if (!next) {
-      this.#options.log.warn("ignored illegal application update transition", {
-        state: this.#state.type,
-        event: event.type,
+  async #showManualDownload(): Promise<void> {
+    if (!app.isPackaged) {
+      await this.#showMessage({
+        type: "info",
+        buttons: ["OK"],
+        title: app.name,
+        message: "Updates aren't available in development builds.",
+        detail: "Package the application to exercise the update flow.",
       });
-      return false;
+      return;
     }
 
-    const previous = this.#state.type;
-    this.#state = next;
-    this.#options.log.info("application update state changed", {
-      previous,
-      next: next.type,
+    const result = await this.#showMessage({
+      type: "info",
+      buttons: ["View Downloads", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: app.name,
+      message: "Automatic updates aren't available for this build.",
+      detail: "Download the matching package from GitHub Releases.",
     });
-    return true;
+    if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
   }
-}
 
-function initialUpdateState(options: AppUpdaterOptions): UpdateState {
-  let reason: UpdateDisabledReason | null = null;
-  if (!options.isPackaged) reason = "development";
-  else if (options.platform !== "darwin" && options.platform !== "win32") {
-    reason = "unsupported-platform";
-  } else if (!options.feedBaseUrl) reason = "missing-configuration";
+  #downloadsUrl(): string {
+    return shiftDistribution === "nightly" ? NIGHTLY_URL : RELEASES_URL;
+  }
 
-  return reason ? { type: "disabled", reason } : { type: "idle" };
+  #showMessage(options: MessageBoxOptions) {
+    const owner = this.#options.activeWindow();
+    return owner ? dialog.showMessageBox(owner.window, options) : dialog.showMessageBox(options);
+  }
+
+  #relaunchInstalledVersion(error: unknown): void {
+    if (this.#relaunching) return;
+    this.#relaunching = true;
+    this.#options.log.error("update installation failed after document close; relaunching", error);
+
+    try {
+      app.relaunch();
+    } catch (relaunchError) {
+      this.#options.log.error("installed application relaunch failed", relaunchError);
+    } finally {
+      app.quit();
+    }
+  }
 }

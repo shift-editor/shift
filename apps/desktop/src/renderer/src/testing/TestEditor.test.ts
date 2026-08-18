@@ -136,6 +136,26 @@ describe("TestEditor", () => {
       });
     });
 
+    it("resolves points added after ownership has already been queried", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 100);
+
+      const layer = editor.requireGlyphLayer();
+      const firstPoint = layer.allPoints[0];
+      if (!firstPoint) throw new Error("Expected initial point");
+      expect(editor.layerForGeometry({ points: [firstPoint.id] })?.id).toBe(layer.id);
+
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 320, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+
+      const pointIds = editor.openContour?.points.map((point) => point.id) ?? [];
+      expect(editor.openContour?.segments()[0]?.type).toBe("cubic");
+      expect(editor.layerForGeometry({ points: pointIds })?.id).toBe(layer.id);
+    });
+
     it("resolves placed glyph segments and contours", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 200);

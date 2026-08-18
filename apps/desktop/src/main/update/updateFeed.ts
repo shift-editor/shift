@@ -1,26 +1,29 @@
+import type { FeedURLOptions } from "electron";
 import type { UpdateFeedTarget } from "./types";
 
-/** Returns the fixed native Squirrel feed URL for one packaged Shift target. */
-export function loadUpdate(feedBaseUrl: string, target: UpdateFeedTarget): string {
+/** Returns the fixed native Squirrel feed for an automatically updated target. */
+export function updateFeed(feedBaseUrl: string, target: UpdateFeedTarget): FeedURLOptions | null {
   const baseUrl = feedBaseUrl.endsWith("/") ? feedBaseUrl : `${feedBaseUrl}/`;
-  const url = new URL(nativeFeedPath(target), baseUrl);
-  if (url.protocol !== "https:") throw new Error("Update feed must use HTTPS");
-  return url.toString();
-}
+  if (new URL(baseUrl).protocol !== "https:") throw new Error("Update feed must use HTTPS");
 
-function nativeFeedPath(target: UpdateFeedTarget): string {
   switch (target.platform) {
     case "darwin":
-      if (target.architecture !== "arm64" && target.architecture !== "x64") {
-        throw new Error(`Unsupported macOS update architecture: ${target.architecture}`);
-      }
-      return `${target.distribution}/darwin/${target.architecture}/RELEASES.json`;
+      if (target.architecture !== "arm64" && target.architecture !== "x64") return null;
+
+      return {
+        url: new URL(
+          `${target.distribution}/darwin/${target.architecture}/RELEASES.json`,
+          baseUrl,
+        ).toString(),
+        serverType: "json",
+      };
     case "win32":
-      if (target.architecture !== "x64") {
-        throw new Error(`Unsupported Windows update architecture: ${target.architecture}`);
-      }
-      return `${target.distribution}/win32/${target.architecture}`;
+      if (target.distribution !== "nightly" || target.architecture !== "x64") return null;
+
+      return {
+        url: new URL(`${target.distribution}/win32/${target.architecture}`, baseUrl).toString(),
+      };
     default:
-      throw new Error(`Unsupported automatic-update platform: ${target.platform}`);
+      return null;
   }
 }

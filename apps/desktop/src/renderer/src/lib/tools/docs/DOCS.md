@@ -82,6 +82,21 @@ User pointer/key
   -> tool.drawOverlay / drawScene / drawBackground
 ```
 
+### Drag lifecycle invariant
+
+- Crossing the screen-space threshold emits `dragStart` at the pointer-down origin, immediately followed by the first `drag` sample.
+- Every `drag.delta` is cumulative from pointer-down; the threshold classifies the gesture but does not become a new origin.
+- Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`.
+- Behaviors initialize on `dragStart`, preview from `drag`, commit on `dragEnd`, and revert on `dragCancel`.
+
+### Pen curve authoring invariant
+
+- `PenContext.activeEndpoint` is the Pen tool's continuation truth, including while its latest authored point is still awaiting a workspace echo.
+- A corner endpoint has no authored outgoing tangent; extending it as a cubic seeds the untouched control one third of the way toward the new anchor. A smooth endpoint carries its outgoing handle position explicitly and never receives that default.
+- `anchored -> dragging` begins a `GlyphLayerEdit` and immediately adds one complete cubic to the reactive authored layer. Outline, control-line, bounds, and handle rendering therefore derive from one current topology throughout the gesture.
+- `dragEnd` finishes that already-visible edit as one pending workspace transaction; it does not replace preview geometry. `dragCancel` cancels the edit and restores the latest accepted topology, including when an older workspace echo arrived during the drag.
+- Current and confirmed open-contour topology always ends on an on-curve point. The latest endpoint's outgoing handle remains Pen interaction state until a following segment consumes it; `PenOverlay` draws only that non-topological handle plus ready-state cursor chrome.
+
 ### Behavior loop (`#runBehaviors`)
 
 1. If `state.type === "idle"`, return immediately (no handling).
@@ -112,14 +127,11 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 `editor.registerTool(manifest)` installs metadata and returns its `ToolRegistration`. `replace()` publishes new metadata immediately. Inactive tools use the new factory on their next activation; resident instances are reconstructed immediately unless they own an active drag, in which case reconstruction waits for `dragEnd` or `dragCancel`. Removing an active contribution cancels its gesture before disposal and falls back to Select when available. `Editor.destroy()` permanently disposes all resident instances and their computed signals.
 
-### Draft pattern for drag mutations
+### Local edit patterns for drag mutations
 
-Behaviors that move layer geometry use `GlyphLayerEditDraft`:
+Position-only transforms use `GlyphLayerEditDraft`: construct it with a layer and targets, call `preview(...)` during the drag, then `commit()` or `discard()`.
 
-1. `editor.beginGlyphLayerEditDraft(subject)` on drag start -- captures layer positions for selected points/anchors.
-2. `draft.preview(...)` on each drag event -- applies preview positions to the reactive glyph layer.
-3. `draft.commit(label)` on drag end -- commits the final positions as an undoable command.
-4. `draft.discard()` on drag cancel -- restores the captured layer positions.
+Pen topology uses `GlyphLayer.beginEdit()`. `GlyphLayerEdit.addCubic()`, `setPointSmooth()`, and `setPositions()` mutate the ordinary reactive layer immediately. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; `cancel()` restores that base without sending an intent.
 
 ### Rendering layers
 

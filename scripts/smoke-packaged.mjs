@@ -29,7 +29,12 @@ const packageName = (() => {
       throw new Error(`Unsupported distribution: ${distribution}`);
   }
 })();
-const executableName = distribution === "nightly" ? "shift-nightly" : "shift";
+const executableName =
+  process.platform === "darwin"
+    ? packageName
+    : distribution === "nightly"
+      ? "shift-nightly"
+      : "shift";
 
 const executablePath = (() => {
   switch (process.platform) {
@@ -56,6 +61,18 @@ async function reservePort() {
     server.close((error) => (error ? reject(error) : resolve())),
   );
   return address.port;
+}
+
+async function waitForExit(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  await new Promise((resolve) => {
+    const timeout = setTimeout(resolve, 5_000);
+    child.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
 }
 
 async function waitForDebugEndpoint(url, child, output) {
@@ -128,22 +145,29 @@ try {
 
   console.log(`Packaged app rendered its landing page: ${executablePath}`);
 } finally {
-  await browser?.close();
-
-  switch (process.platform) {
-    case "win32":
-      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-      break;
-    default:
-      if (child.pid) {
-        try {
-          process.kill(-child.pid, "SIGKILL");
-        } catch (error) {
-          if (error.code !== "ESRCH") throw error;
-        }
-      }
-      break;
+  try {
+    await browser?.close();
+  } catch (error) {
+    console.warn("Packaged smoke browser cleanup failed", error);
   }
 
-  await rm(testRoot, { recursive: true, force: true });
+  try {
+    switch (process.platform) {
+      case "win32":
+        spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+        break;
+      default:
+        if (child.pid) process.kill(-child.pid, "SIGKILL");
+        break;
+    }
+  } catch (error) {
+    if (error.code !== "ESRCH") console.warn("Packaged smoke process cleanup failed", error);
+  }
+
+  await waitForExit(child);
+  try {
+    await rm(testRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+  } catch (error) {
+    console.warn(`Packaged smoke profile cleanup failed: ${testRoot}`, error);
+  }
 }

@@ -106,13 +106,20 @@ describe("GestureDetector", () => {
   });
 
   describe("drag detection", () => {
-    it("emits dragStart when movement exceeds threshold", () => {
+    it("emits dragStart at the origin followed by the threshold-crossing sample", () => {
       detector.pointerDown(c(100, 100), NO_MODIFIERS);
       const events = detector.pointerMove(c(110, 100), NO_MODIFIERS);
 
-      expect(events).toHaveLength(1);
+      expect(events).toHaveLength(2);
       expect(expectAt(events, 0)).toMatchObject({
         type: "dragStart",
+        coords: c(100, 100),
+        origin: c(100, 100),
+        delta: { screen: { x: 0, y: 0 }, scene: { x: 0, y: 0 } },
+        ...NORMALIZED_NO_MODIFIERS,
+      });
+      expect(expectAt(events, 1)).toMatchObject({
+        type: "drag",
         coords: c(110, 100),
         origin: c(100, 100),
         delta: { screen: { x: 10, y: 0 }, scene: { x: 10, y: 0 } },
@@ -144,13 +151,19 @@ describe("GestureDetector", () => {
       });
     });
 
-    it("emits dragEnd on pointer up after dragging", () => {
+    it("emits the release sample before dragEnd", () => {
       detector.pointerDown(c(100, 100), NO_MODIFIERS);
       detector.pointerMove(c(110, 100), NO_MODIFIERS);
       const events = detector.pointerUp(c(120, 110), NO_MODIFIERS);
 
-      expect(events).toHaveLength(1);
+      expect(events).toHaveLength(2);
       expect(expectAt(events, 0)).toMatchObject({
+        type: "drag",
+        coords: c(120, 110),
+        origin: c(100, 100),
+        delta: { screen: { x: 20, y: 10 }, scene: { x: 20, y: 10 } },
+      });
+      expect(expectAt(events, 1)).toMatchObject({
         type: "dragEnd",
         coords: c(120, 110),
         origin: c(100, 100),

@@ -494,17 +494,26 @@ impl GlyphLayer {
         Ok(point.is_smooth())
     }
 
-    pub fn remove_points(&mut self, point_ids: &[PointId]) -> CoreResult<()> {
+    pub fn remove_points(&mut self, point_ids: &[PointId]) -> CoreResult<Vec<ContourId>> {
         let point_contours = self.point_contours_or_err(point_ids)?;
+        let mut empty_contours = Vec::new();
 
         for (point_id, contour_id) in point_contours {
-            let contour = self.contour_mut_or_err(contour_id)?;
+            let contour = self.contour_mut_or_err(contour_id.clone())?;
             contour
                 .remove_point(point_id.clone())
                 .ok_or(CoreError::PointNotFound(point_id))?;
+
+            if contour.is_empty() && !empty_contours.contains(&contour_id) {
+                empty_contours.push(contour_id);
+            }
         }
 
-        Ok(())
+        for contour_id in &empty_contours {
+            self.remove_contour_checked(contour_id.clone())?;
+        }
+
+        Ok(empty_contours)
     }
 
     pub fn has_anchor(&self, anchor_id: AnchorId) -> bool {
@@ -781,11 +790,25 @@ mod tests {
         let p2 = add_point(&mut session, contour_id.clone(), 100.0, 100.0);
         let p3 = add_point(&mut session, contour_id.clone(), 200.0, 200.0);
 
-        session.remove_points(&[p1.clone(), p3.clone()]).unwrap();
+        let empty_contours = session.remove_points(&[p1.clone(), p3.clone()]).unwrap();
 
+        assert!(empty_contours.is_empty());
+        assert!(session.contour(contour_id).is_some());
         assert!(session.find_point_contour(p2.clone()).is_some());
         assert!(session.find_point_contour(p1.clone()).is_none());
         assert!(session.find_point_contour(p3.clone()).is_none());
+    }
+
+    #[test]
+    fn remove_points_prunes_an_emptied_contour() {
+        let (mut session, contour_id) = session_with_contour();
+        let p1 = add_point(&mut session, contour_id.clone(), 0.0, 0.0);
+        let p2 = add_point(&mut session, contour_id.clone(), 100.0, 100.0);
+
+        let empty_contours = session.remove_points(&[p1, p2]).unwrap();
+
+        assert_eq!(empty_contours, vec![contour_id.clone()]);
+        assert!(session.contour(contour_id).is_none());
     }
 
     #[test]

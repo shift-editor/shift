@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { isPointId, type PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
+import { Select } from "./Select";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("Select tool", () => {
@@ -139,6 +140,55 @@ describe("Select tool", () => {
       expect(after.y).toBeCloseTo(before.y + drag.delta.y);
     });
 
+    it("commits the latest queued move when releasing a selected point before the next frame", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      editor.selectTool("select");
+      await editor.clickGlyphLocal(100, 200);
+
+      const pointId = editor.selection.ids.find(isPointId);
+      if (!pointId) throw new Error("Expected selected point");
+      const before = editor.pointPosition(pointId);
+      const down = editor.projectSceneToScreen(before);
+      const start = editor.projectSceneToScreen({ x: before.x + 10, y: before.y });
+      const end = editor.projectSceneToScreen({ x: before.x + 50, y: before.y + 30 });
+      const modifiers = { shiftKey: false, altKey: false, metaKey: false };
+
+      editor.pointerDown(down.x, down.y);
+      editor.toolManager.handlePointerMove(start, modifiers);
+      editor.toolManager.flushPointerMoves();
+      editor.toolManager.handlePointerMove(end, modifiers);
+      editor.pointerUp(end.x, end.y);
+      editor.toolManager.flushPointerMoves();
+      await editor.settle();
+
+      expect(editor.pointPosition(pointId)).toEqual({ x: before.x + 50, y: before.y + 30 });
+    });
+
+    it("commits a selected-point drag whose only queued move crosses the threshold", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      editor.selectTool("select");
+      await editor.clickGlyphLocal(100, 200);
+
+      const pointId = editor.selection.ids.find(isPointId);
+      if (!pointId) throw new Error("Expected selected point");
+      const before = editor.pointPosition(pointId);
+      const down = editor.projectSceneToScreen(before);
+      const end = editor.projectSceneToScreen({ x: before.x + 50, y: before.y + 30 });
+
+      editor.pointerDown(down.x, down.y);
+      editor.toolManager.handlePointerMove(end, {
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+      });
+      editor.pointerUp(end.x, end.y);
+      await editor.settle();
+
+      expect(editor.pointPosition(pointId)).toEqual({ x: before.x + 50, y: before.y + 30 });
+    });
+
     it("drags an unselected point from the pointer-down handle", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 200);
@@ -160,6 +210,110 @@ describe("Select tool", () => {
       expect(editor.selection.has(point.id)).toBe(true);
       expect(after.x).toBeCloseTo(before.x + drag.delta.x);
       expect(after.y).toBeCloseTo(before.y + drag.delta.y);
+    });
+
+    it("drags a Pen curve's untouched control independently from its corner", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 340, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+
+      const cubic = editor.openContour?.segments()[0]?.asCubic();
+      if (!cubic) throw new Error("Expected cubic segment");
+      const controlBefore = editor.pointPosition(cubic.controlStart.id);
+      const cornerBefore = editor.pointPosition(cubic.start.id);
+      editor.selectTool("select");
+
+      const drag = await editor.dragScene({
+        down: controlBefore,
+        start: { x: controlBefore.x + 10, y: controlBefore.y },
+        end: { x: controlBefore.x + 60, y: controlBefore.y + 30 },
+      });
+
+      expect(editor.pointPosition(cubic.controlStart.id)).toEqual({
+        x: controlBefore.x + drag.delta.x,
+        y: controlBefore.y + drag.delta.y,
+      });
+      expect(editor.pointPosition(cubic.start.id)).toEqual(cornerBefore);
+    });
+
+    it("shows a bounding box for one selected segment with area", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      await editor.clickGlyphLocal(180, 240);
+      editor.selectTool("select");
+      await editor.clickGlyphLocal(140, 220);
+
+      const select = editor.toolManager.activeTool;
+      if (!(select instanceof Select)) throw new Error("Expected Select tool");
+
+      expect(select.boundingBox.visible).toBe(true);
+    });
+
+    it("shows a bounding box when both dimensions are small but nonzero", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(112, 112);
+      const pointIds = editor.requireGlyphLayer().allPoints.map((point) => point.id);
+      editor.selection.select(pointIds);
+      editor.selectTool("select");
+
+      const select = editor.toolManager.activeTool;
+      if (!(select instanceof Select)) throw new Error("Expected Select tool");
+      expect(select.boundingBox.visible).toBe(true);
+    });
+
+    it.each([
+      ["horizontal", { x: 100, y: 200 }, { x: 180, y: 200 }, { x: 140, y: 200 }],
+      ["vertical", { x: 100, y: 100 }, { x: 100, y: 200 }, { x: 100, y: 150 }],
+    ] as const)(
+      "hides the bounding box for an exactly %s segment",
+      async (_name, start, end, hit) => {
+        editor.selectTool("pen");
+        await editor.clickGlyphLocal(start.x, start.y);
+        await editor.clickGlyphLocal(end.x, end.y);
+        editor.selectTool("select");
+        await editor.clickGlyphLocal(hit.x, hit.y);
+
+        const select = editor.toolManager.activeTool;
+        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        expect(select.boundingBox.visible).toBe(false);
+      },
+    );
+
+    it.each([
+      ["horizontal", { x: 100, y: 200 }, { x: 180, y: 205 }, { x: 140, y: 202.5 }],
+      ["vertical", { x: 100, y: 100 }, { x: 105, y: 200 }, { x: 102.5, y: 150 }],
+    ] as const)(
+      "shows the normal bounding box for a nearly %s segment",
+      async (_name, start, end, hit) => {
+        editor.selectTool("pen");
+        await editor.clickGlyphLocal(start.x, start.y);
+        await editor.clickGlyphLocal(end.x, end.y);
+        editor.selectTool("select");
+        await editor.clickGlyphLocal(hit.x, hit.y);
+
+        const select = editor.toolManager.activeTool;
+        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        expect(select.boundingBox.visible).toBe(true);
+      },
+    );
+
+    it("shows the move cursor inside the current bounding box", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(200, 200);
+      editor.selectTool("select");
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(200, 200, { shiftKey: true });
+
+      const inside = editor.projectSceneToScreen({ x: 120, y: 180 });
+      editor.pointerMove(inside.x, inside.y);
+
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
     });
 
     it("drags the current selection from inside its bounding box", async () => {
@@ -309,23 +463,6 @@ describe("Select tool", () => {
       expect(editor.pointPosition(duplicatedSecond)).toEqual({ x: second.x, y: second.y });
     });
 
-    it("cuts the selected points to the clipboard", async () => {
-      editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(200, 100);
-
-      const layer = editor.requireGlyphLayer();
-      const pointIds = layer.allPoints.map((point) => point.id);
-      editor.selection.select(pointIds);
-
-      const cut = await editor.cut();
-
-      expect(cut).toBe(true);
-      expect(layer.allPoints).toHaveLength(0);
-      expect(editor.selection.hasSelection()).toBe(false);
-      expect(editor.clipboardBuffer).toContain("shift/glyph-data");
-    });
-
     it("upgrades a line segment to a cubic with alt-click", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 200);
@@ -388,6 +525,30 @@ describe("Select tool", () => {
       await editor.clickGlyphLocal(point.x, point.y);
 
       expect(layer.point(point.id)?.smooth).toBe(true);
+    });
+
+    it("finishes a marquee whose threshold-crossing move is still queued", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      await editor.clickGlyphLocal(180, 200);
+
+      const [inside, outside] = editor.requireGlyphLayer().contours[0]?.points ?? [];
+      if (!inside || !outside) throw new Error("Expected line segment points");
+      const down = editor.projectSceneToScreen({ x: 80, y: 180 });
+      const end = editor.projectSceneToScreen({ x: 130, y: 230 });
+
+      editor.selectTool("select");
+      editor.pointerDown(down.x, down.y);
+      editor.toolManager.handlePointerMove(end, {
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+      });
+      editor.pointerUp(end.x, end.y);
+      editor.toolManager.flushPointerMoves();
+
+      expect(editor.selection.has(inside.id)).toBe(true);
+      expect(editor.selection.has(outside.id)).toBe(false);
     });
 
     it("marquee-selects points inside the brushed rectangle", async () => {

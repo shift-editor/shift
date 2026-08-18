@@ -1,11 +1,12 @@
 import { BaseTool, type ToolName } from "../core";
-import type { PenContext, PenState } from "./types";
+import type { PenContext, PenCurve, PenEndpoint, PenState } from "./types";
 import { PenDownBehaviour, HandleBehavior, EscapeBehavior } from "./behaviors";
 import type { CursorType } from "@/types/editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { Editor } from "@/lib/editor/Editor";
 import { PenTargets } from "./PenTargets";
-import { PenPreview } from "./PenPreview";
+import { PenOverlay } from "./PenOverlay";
+import { Curve, Vec2, type CubicCurve } from "@shift/geo";
 import type { ContourId } from "@shift/types";
 import { signal, type Signal, type WritableSignal } from "@/lib/signals";
 import { PenStroke } from "./PenStroke";
@@ -16,7 +17,7 @@ export class Pen extends BaseTool<PenState, Pen> {
   readonly id: ToolName = "pen";
 
   readonly #ctx: WritableSignal<PenContext | null>;
-  #penPreview: PenPreview = new PenPreview(this);
+  #penOverlay = new PenOverlay(this);
 
   readonly behaviors = [new EscapeBehavior(), new PenDownBehaviour(), new HandleBehavior()];
 
@@ -39,15 +40,35 @@ export class Pen extends BaseTool<PenState, Pen> {
     this.#ctx.set(null);
   }
 
-  setActiveContour(contourId: ContourId | null): void {
+  setActiveContour(contourId: ContourId, endpoint: PenEndpoint): void {
     const context = this.#ctx.peek();
     if (!context) return;
 
-    this.#ctx.set({ ...context, activeContourId: contourId });
+    this.#ctx.set({ ...context, activeContourId: contourId, activeEndpoint: endpoint });
+  }
+
+  setActiveEndpoint(endpoint: PenEndpoint): void {
+    const context = this.#ctx.peek();
+    if (!context?.activeContourId) return;
+
+    this.#ctx.set({ ...context, activeEndpoint: endpoint });
   }
 
   clearActiveContour(): void {
-    this.setActiveContour(null);
+    const context = this.#ctx.peek();
+    if (!context) return;
+
+    this.#ctx.set({ ...context, activeContourId: null, activeEndpoint: null });
+  }
+
+  resolveCurve(curve: PenCurve): CubicCurve {
+    const controlStart =
+      curve.start.kind === "corner"
+        ? Vec2.lerp(curve.start.position, curve.anchorPosition, 1 / 3)
+        : curve.start.outgoingHandlePosition;
+    const controlEnd = Vec2.mirror(curve.handlePosition, curve.anchorPosition);
+
+    return Curve.cubic(curve.start.position, controlStart, controlEnd, curve.anchorPosition);
   }
 
   override getCursor(state: PenState): CursorType {
@@ -102,6 +123,7 @@ export class Pen extends BaseTool<PenState, Pen> {
     this.#ctx.set({
       glyphNode: node,
       activeContourId: null,
+      activeEndpoint: null,
     });
   }
 
@@ -111,6 +133,6 @@ export class Pen extends BaseTool<PenState, Pen> {
   }
 
   override drawOverlay(canvas: Canvas): void {
-    this.#penPreview.draw(canvas);
+    this.#penOverlay.draw(canvas);
   }
 }
