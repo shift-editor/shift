@@ -7,13 +7,13 @@
       "layers" : [
         {
           "glass" : false,
-          "image-name" : "SVG Image.svg",
-          "name" : "SVG Image",
+          "image-name" : "SVG Image 2.svg",
+          "name" : "SVG Image 2",
           "position" : {
-            "scale" : 0.85,
+            "scale" : 0.75,
             "translation-in-points" : [
-              -10.46875,
-              -11.4296875
+              -6.2,
+              10.8
             ]
           }
         }
