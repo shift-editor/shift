@@ -26,6 +26,8 @@ When completing a feature, check ROADMAP.md and check any box if we have complet
 
 Tests use `TestEditor` from `@/testing/TestEditor` (real Editor + real NAPI). Assert on state, not mock calls. See `/writing-tests` skill for canonical rules, templates, banned patterns, and the fake-test checklist — trigger it any time you add, rewrite, or review a `.test.ts` file.
 
+Never delete tests solely because their named implementation was removed or replaced. Before deleting or materially reducing tests, map every removed test to the behavioral invariant it protects and to the surviving or replacement test that protects it. Move tests to the new behavioral owner before deleting the old file. If an invariant is obsolete, identify the intentionally removed product behavior.
+
 ## Frontend
 
 ### Base UI Components

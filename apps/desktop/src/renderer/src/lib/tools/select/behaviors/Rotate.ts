@@ -9,6 +9,7 @@ import { GlyphLayerPositionList } from "@/lib/model/GlyphLayerPositionList";
 
 export class Rotate implements SelectBehavior {
   #edit: RotateEdit | null = null;
+  #done: (() => void) | null = null;
 
   onDragStart(
     _state: SelectState,
@@ -18,8 +19,10 @@ export class Rotate implements SelectBehavior {
     if (!ctx.editor.selection.hasSelection()) return false;
 
     const next = this.tryStartRotate(event, ctx.editor, ctx.tool);
-    if (!next) return false;
+    const edit = this.#edit;
+    if (!next || !edit) return false;
 
+    this.#done = ctx.onCancel(() => edit.discard());
     ctx.setState(next);
     return true;
   }
@@ -38,6 +41,7 @@ export class Rotate implements SelectBehavior {
     if (state.type !== "rotating") return false;
 
     this.#edit?.commit();
+    if (this.#done) this.#done();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });
@@ -47,7 +51,6 @@ export class Rotate implements SelectBehavior {
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "rotating") return false;
 
-    this.#edit?.discard();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });
@@ -69,6 +72,7 @@ export class Rotate implements SelectBehavior {
 
   #cleanup(): void {
     this.#edit = null;
+    this.#done = null;
   }
 
   private nextRotatingState(

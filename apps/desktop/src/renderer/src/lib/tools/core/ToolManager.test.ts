@@ -7,14 +7,16 @@ import type { ToolManifest } from "./ToolManifest";
 import type { ToolName } from "./createContext";
 
 type RuntimeToolState = { type: "idle" } | { type: "ready" } | { type: "dragging" };
+type RuntimeDragEnd = "complete" | "leave-open" | "throw";
 
 class RuntimeTool extends BaseTool<RuntimeToolState> {
   readonly id: ToolName;
   readonly behaviors: Behavior<RuntimeToolState>[];
 
-  constructor(editor: Editor, id: ToolName, version: number) {
+  constructor(editor: Editor, id: ToolName, version: number, dragEnd: RuntimeDragEnd = "complete") {
     super(editor);
     this.id = id;
+    let done: (() => void) | null = null;
     this.behaviors = [
       {
         onClick(state, ctx) {
@@ -25,6 +27,7 @@ class RuntimeTool extends BaseTool<RuntimeToolState> {
         onDragStart(state, ctx) {
           if (state.type !== "ready") return false;
           ctx.editor.setPan({ x: version, y: 0 });
+          done = ctx.onCancel(() => ctx.editor.setPan({ x: -version, y: 0 }));
           ctx.setState({ type: "dragging" });
           return true;
         },
@@ -35,12 +38,24 @@ class RuntimeTool extends BaseTool<RuntimeToolState> {
         },
         onDragEnd(state, ctx) {
           if (state.type !== "dragging") return false;
+
+          switch (dragEnd) {
+            case "complete":
+              if (done) done();
+              break;
+            case "leave-open":
+              break;
+            case "throw":
+              throw new Error("runtime drag failed");
+          }
+
+          done = null;
           ctx.setState({ type: "ready" });
           return true;
         },
         onDragCancel(state, ctx) {
           if (state.type !== "dragging") return false;
-          ctx.editor.setPan({ x: -version, y: 0 });
+          done = null;
           ctx.setState({ type: "ready" });
           return true;
         },
@@ -208,6 +223,38 @@ describe("runtime tool contributions", () => {
     expect(editor.pan.x).toBe(2);
     expect(editor.glyphNode).toBe(glyphNode);
     expect(editor.toolIf("runtime-test")?.state.type).toBe("ready");
+  });
+
+  it("keeps a completed drag result", () => {
+    editor.registerTool(runtimeManifest(1));
+    editor.selectTool("runtime-test");
+
+    editor.pointerDown(0, 0).pointerMove(20, 0).pointerUp(20, 0);
+
+    expect(editor.pan.x).toBe(1);
+  });
+
+  it("rolls back a drag that ends without completion", () => {
+    editor.registerTool({
+      ...runtimeManifest(1),
+      create: (runtimeEditor) => new RuntimeTool(runtimeEditor, "runtime-test", 1, "leave-open"),
+    });
+    editor.selectTool("runtime-test");
+
+    editor.pointerDown(0, 0).pointerMove(20, 0).pointerUp(20, 0);
+
+    expect(editor.pan.x).toBe(-1);
+  });
+
+  it("rolls back an active drag when its handler throws", () => {
+    editor.registerTool({
+      ...runtimeManifest(1),
+      create: (runtimeEditor) => new RuntimeTool(runtimeEditor, "runtime-test", 1, "throw"),
+    });
+    editor.selectTool("runtime-test").pointerDown(0, 0).pointerMove(20, 0);
+
+    expect(() => editor.pointerUp(20, 0)).toThrow("runtime drag failed");
+    expect(editor.pan.x).toBe(-1);
   });
 
   it("defers active replacement until a drag finishes", () => {

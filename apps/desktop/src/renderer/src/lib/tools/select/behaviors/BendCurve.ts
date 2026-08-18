@@ -7,6 +7,7 @@ import { objectIsKindOf } from "@/types";
 
 export class BendCurve implements SelectBehavior {
   #edit: GlyphLayerEdit | null = null;
+  #done: (() => void) | null = null;
   #hasChanges = false;
 
   onDragStart(state: SelectState, ctx: ToolContext<SelectState>, event: DragStartEvent): boolean {
@@ -25,7 +26,9 @@ export class BendCurve implements SelectBehavior {
 
     const { controlStart, controlEnd } = cubic;
 
-    this.#edit = layer.beginEdit();
+    const edit = layer.beginEdit();
+    this.#edit = edit;
+    this.#done = ctx.onCancel(() => edit.cancel());
     this.#hasChanges = false;
 
     ctx.setState({
@@ -87,11 +90,9 @@ export class BendCurve implements SelectBehavior {
 
     if (this.#hasChanges) {
       this.#edit?.finish("Bend curve");
-    } else {
-      this.#edit?.cancel();
+      if (this.#done) this.#done();
     }
-    this.#edit = null;
-    this.#hasChanges = false;
+    this.#cleanup();
 
     ctx.setState({ type: "ready" });
     return true;
@@ -99,10 +100,14 @@ export class BendCurve implements SelectBehavior {
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "bending") return false;
-    this.#edit?.cancel();
-    this.#edit = null;
-    this.#hasChanges = false;
+    this.#cleanup();
     ctx.setState({ type: "ready" });
     return true;
+  }
+
+  #cleanup(): void {
+    this.#edit = null;
+    this.#done = null;
+    this.#hasChanges = false;
   }
 }

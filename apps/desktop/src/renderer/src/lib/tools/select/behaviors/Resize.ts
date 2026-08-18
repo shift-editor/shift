@@ -9,6 +9,7 @@ import { GlyphLayerPositionList } from "@/lib/model/GlyphLayerPositionList";
 
 export class Resize implements SelectBehavior {
   #edit: ScaleEdit | null = null;
+  #done: (() => void) | null = null;
 
   onDragStart(
     _state: SelectState,
@@ -35,7 +36,9 @@ export class Resize implements SelectBehavior {
     const anchorPoint = this.getAnchorPointForEdge(edge, hit.rect);
     const localAnchorPoint = this.getAnchorPointForEdge(edge, Bounds.toRect(localBounds));
 
-    this.#edit = selection.layer.positions.scale(selection.targets, localAnchorPoint);
+    const edit = selection.layer.positions.scale(selection.targets, localAnchorPoint);
+    this.#edit = edit;
+    this.#done = ctx.onCancel(() => edit.discard());
 
     ctx.setState({
       type: "resizing",
@@ -65,6 +68,7 @@ export class Resize implements SelectBehavior {
     if (state.type !== "resizing") return false;
 
     this.#edit?.commit();
+    if (this.#done) this.#done();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });
@@ -74,7 +78,6 @@ export class Resize implements SelectBehavior {
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "resizing") return false;
 
-    this.#edit?.discard();
     this.#cleanup();
 
     ctx.setState({ type: "ready" });
@@ -90,6 +93,7 @@ export class Resize implements SelectBehavior {
 
   #cleanup(): void {
     this.#edit = null;
+    this.#done = null;
   }
 
   private nextResizingState(state: SelectState, event: DragEvent): SelectState {

@@ -13,6 +13,7 @@ type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
 export class Translate implements SelectBehavior {
   #drag: TranslateDrag | null = null;
+  #done: (() => void) | null = null;
 
   onDragStart(
     state: SelectState,
@@ -25,6 +26,7 @@ export class Translate implements SelectBehavior {
     if (!drag) return false;
 
     this.#drag = drag;
+    this.#done = ctx.onCancel(() => drag.discard());
     ctx.setState(translatingState(this.#drag.startPos));
     return true;
   }
@@ -41,15 +43,15 @@ export class Translate implements SelectBehavior {
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "translating") return false;
     this.#drag?.commit();
-    this.#drag = null;
+    if (this.#done) this.#done();
+    this.#cleanup();
     ctx.setState({ type: "ready" });
     return true;
   }
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "translating") return false;
-    this.#drag?.discard();
-    this.#drag = null;
+    this.#cleanup();
     ctx.setState({ type: "ready" });
     return true;
   }
@@ -59,6 +61,11 @@ export class Translate implements SelectBehavior {
     if (prev.type !== "translating" && next.type === "translating") {
       editor.hover.clear();
     }
+  }
+
+  #cleanup(): void {
+    this.#drag = null;
+    this.#done = null;
   }
 
   #fromDragStart(editor: Editor, select: Select, event: DragStartEvent): TranslateDrag | null {
