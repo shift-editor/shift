@@ -106,18 +106,9 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPac
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
           contentSize,
         );
-        // `document.visibilityState` becomes visible before macOS presents and constrains the window.
-        await browserWindow.evaluate(
-          (win) =>
-            new Promise<void>((resolve) => {
-              if (win.isVisible()) {
-                resolve();
-                return;
-              }
-
-              win.once("show", resolve);
-            }),
-        );
+        // Native presentation can be deferred while hidden-window GPU work completes. Fitting the
+        // display work area keeps that later presentation from changing the renderer viewport.
+        await page.waitForFunction(() => document.visibilityState === "visible");
         await browserWindow.evaluate((win, { width, height }) => {
           win.setContentSize(width, height);
           win.center();
