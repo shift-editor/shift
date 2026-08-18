@@ -32,6 +32,25 @@ Examples: do not test that a `QueryClientProvider` is mounted, that a query key 
 
 When no worthwhile automated test exists, say so explicitly in the handoff and record the focused manual verification performed. Do not create a low-value test to make the diff look complete.
 
+## Deleting or replacing tests
+
+Tests follow behavioral ownership, not implementation names. Removing or replacing a class does not make its tests obsolete when another class now owns the same behavior.
+
+Before deleting a test or materially reducing a test file, create a test migration ledger. For every removed `it()` or `test()` block, record:
+
+1. The observable truth or domain invariant it protects.
+2. The surviving or replacement test that protects that truth.
+3. If there is no replacement, the intentionally removed product behavior that made the invariant obsolete.
+
+Move replacement tests to the new behavioral owner before deleting the old file. Similar-looking coverage is not enough: verify that it exercises the same boundary, failure mode, and state transition. Report removed and replacement test counts in the handoff.
+
+Example:
+
+| Removed test                               | Protected invariant                                                                             | Replacement                                               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Draft cancel restores rule-expanded points | Cancellation restores every previewed position, including positions outside the initial targets | `GlyphLayerEdit.test.ts` multi-position cancellation test |
+| Next draft starts from committed preview   | A finished edit becomes the base of the next interaction                                        | `GlyphLayerEdit.test.ts` sequential edit test             |
+
 ## If you're stuck, research — don't invent a mock
 
 The moment you think "I'll just mock this out" is the moment to stop and look for prior art. Real Electron / font-editor / reactive-signal codebases have solved the same class of problem: VSCode, Obsidian, Signal Desktop, Bitwarden, Fontra, tldraw. Their patterns are on GitHub.

@@ -22,7 +22,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `FrameHandler` deduplicates `requestAnimationFrame` calls per canvas layer. Multiple signal changes within a single frame coalesce into one render. Canvas lifecycle changes, such as replacing a layer context after resize, are represented as renderer surface signals so redraw causes remain inspectable.
 
-**Architecture Invariant:** `GlyphLayerEditDraft` is the only way to perform continuous layer previews (drags). Call `beginGlyphLayerEditDraft()` at drag start, `preview*()` on each move, and either `commit()` or `discard()` at drag end. Commit accepts the final absolute positions as one pending workspace edit; applying those positions over the preview is intentionally idempotent. Calling `commit` twice is a no-op; forgetting to call `commit`/`discard` leaks the preview state.
+**Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active authored `GlyphLayer` plus normalized point/anchor targets. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
 
@@ -77,7 +77,7 @@ editor/
 - **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
 - **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
 - **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
-- **`GlyphLayerEditDraft`** -- Transactional interface for continuous layer manipulation: `previewPositionPatch()` / `previewTranslate()` / `previewRotate()` / `previewScale()` during drag, `commit(label)` or `discard()` at end.
+- **`PositionSelection`** -- One active authored `GlyphLayer` paired with normalized point/anchor targets. It contains edit ownership only, not scene placement or pointer coordinates.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. Only the latest callback fires.
@@ -131,9 +131,9 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()
 
 `Camera.zoomToPoint()` records UPM at cursor before zoom, applies new zoom, re-projects, and adjusts pan to compensate for drift. Because matrices are computed signals, the second projection automatically uses the updated zoom.
 
-### Draft pattern (continuous manipulation)
+### Position selection boundary
 
-`Editor.beginGlyphLayerEditDraft(subject)` captures base point/anchor positions from the active `GlyphLayer`. During drag, `draft.preview*()` applies positions to the reactive glyph layer only. On commit, it accepts the final sparse patch through `GlyphLayer.applyPositionPatch()` as one pending workspace edit. On discard, it restores the frozen base positions as a preview.
+`Editor.positionSelection(ids)` resolves points and anchors directly, expands selected segments and contours to points, and verifies that every target belongs to the active authored layer. Select-tool behaviors pass the returned targets to `GlyphLayer.positions.move`, `.rotate`, or `.scale`; scene-space gesture calculations remain in the tool layer.
 
 ### Hit testing
 
@@ -166,7 +166,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 - **Forgetting to read a signal in an effect** -- The canvas will not redraw when that state changes. Each effect must explicitly read `.value` of every signal it depends on.
 - **Caching `CameraTransform` across frames** -- `getCameraTransform()` returns a snapshot object. It is correct for one frame but stale after zoom/pan changes. Rendering code gets a fresh one via `Renderer.#getCanvas()`.
-- **Draft lifecycle** -- A `GlyphLayerEditDraft` must be committed or discarded. Calling `commit()` twice is safe (no-op), but forgetting both leaks the preview state.
+- **Position edit lifecycle** -- Every fluent position edit must be committed or discarded. Terminal calls are idempotent, but forgetting both leaves an active `GlyphLayerEdit` on the layer.
 - **Hover mutual exclusion** -- `Hover` stores one glyph-domain target at a time. Tool-specific hover state should stay with the owning tool.
 - **Marker fallback** -- `Handles.draw()` tries the accelerated marker layer first. If WebGL is unavailable, it falls back to CPU canvas drawing internally.
 - **Node-local coordinates** -- Derived after hit testing identifies the scene node being acted on. Do not add editor-global glyph-local coordinates back to tool events.

@@ -1,6 +1,6 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { ContourId, PointId } from "@shift/types";
-import type { Contour, SegmentId } from "@shift/glyph-state";
+import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { GlyphLayerEdit } from "@/lib/model/GlyphLayerEdit";
 import type { GlyphNode } from "@/types/node";
@@ -90,10 +90,16 @@ export class PenStroke {
         edit.setPointSmooth(curve.start.pointId, true);
       }
 
-      const [controlStartId, controlEndId, endpointId] = edit.addCubic(
-        context.activeContourId,
-        this.#pen.resolveCurve(curve),
-      );
+      const geometry = this.#pen.resolveCurve(curve);
+      const [controlStartId, controlEndId, endpointId] = edit.addPoints(context.activeContourId, [
+        Point.offCurve(geometry.c0),
+        Point.offCurve(geometry.c1),
+        Point.onCurve(geometry.p1),
+      ]);
+      if (!controlStartId || !controlEndId || !endpointId) {
+        throw new Error("cannot begin Pen curve without a complete cubic point sequence");
+      }
+
       return [edit, controlStartId, controlEndId, endpointId];
     } catch (error) {
       edit.cancel();

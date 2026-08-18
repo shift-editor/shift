@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Vec2 } from "@shift/geo";
+import { Point } from "@shift/glyph-state";
 import type { PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { AngleSnap } from "./AngleSnap";
@@ -8,8 +9,7 @@ import { MetricSnap } from "./MetricSnap";
 import { PointRuleConstraint } from "./PointRuleConstraint";
 import { PositionReference } from "./PositionReference";
 
-// These tests exercise the new model surface directly because Select/Translate
-// intentionally does not consume it in this foundation change.
+// These tests exercise the model surface directly; SelectMove.test.ts covers its tool integration.
 describe("fluent position edits preserve one frozen interaction base", () => {
   let editor: TestEditor;
   let pointId: PointId;
@@ -45,6 +45,37 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
   });
 
+  it("discards structural changes with movement scoped within their layer edit", () => {
+    const layer = editor.requireGlyphLayer();
+    const layerEdit = layer.beginEdit();
+    const contourId = layerEdit.addContour(false);
+    const [addedPointId] = layerEdit.addPoints(contourId, [Point.onCurve({ x: 200, y: 100 })]);
+    if (!addedPointId) throw new Error("Expected added point");
+    const move = layer.positions.within(layerEdit).move({ points: [addedPointId] });
+
+    move.preview({ x: 25, y: -10 });
+    expect(editor.pointPosition(addedPointId)).toEqual({ x: 225, y: 90 });
+    move.discard();
+    expect(layer.contour(contourId)).toBeNull();
+  });
+
+  it("commits structural changes and movement as one undoable scoped edit", async () => {
+    const layer = editor.requireGlyphLayer();
+    const layerEdit = layer.beginEdit();
+    const contourId = layerEdit.addContour(false);
+    const [addedPointId] = layerEdit.addPoints(contourId, [Point.onCurve({ x: 200, y: 100 })]);
+    if (!addedPointId) throw new Error("Expected added point");
+    const move = layer.positions.within(layerEdit).move({ points: [addedPointId] });
+
+    move.preview({ x: 25, y: -10 });
+    move.commit();
+    await editor.settle();
+    expect(editor.pointPosition(addedPointId)).toEqual({ x: 225, y: 90 });
+
+    await editor.undo();
+    expect(layer.contour(contourId)).toBeNull();
+  });
+
   it("applies direction snapping before point rules", () => {
     const layer = editor.requireGlyphLayer();
     const edit = layer.positions
@@ -76,6 +107,16 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     expect(editor.pointPosition(pointId)).toEqual({ x: 120, y: 500 });
     expect(feedback.guides).toEqual([{ kind: "metric", metric: "xHeight", y: 500 }]);
     edit.discard();
+  });
+
+  it("scales from one frozen layer-local origin and discards the preview", () => {
+    const edit = editor.requireGlyphLayer().positions.scale({ points: [pointId] }, { x: 0, y: 0 });
+
+    edit.preview({ x: 2, y: 0.5 });
+    expect(editor.pointPosition(pointId)).toEqual({ x: 200, y: 50 });
+
+    edit.discard();
+    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
   });
 
   it("quantizes rotation independently from movement modifiers", () => {

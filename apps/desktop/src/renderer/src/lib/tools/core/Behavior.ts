@@ -32,6 +32,8 @@ export interface ToolContext<S, TTool = unknown> {
   readonly tool: TTool;
   getState(): S;
   setState(next: S): void;
+  /** Registers rollback for the active drag; the returned function dismisses it after success. */
+  onCancel(callback: () => void): () => void;
 }
 
 /**

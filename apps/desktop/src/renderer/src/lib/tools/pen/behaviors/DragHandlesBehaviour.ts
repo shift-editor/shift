@@ -11,6 +11,7 @@ const DRAG_THRESHOLD = 3;
 
 export class HandleBehavior implements PenBehavior {
   #edit: GlyphLayerEdit | null = null;
+  #done: (() => void) | null = null;
   #controlStartId: PointId | null = null;
   #controlEndId: PointId | null = null;
   #endpointId: PointId | null = null;
@@ -19,7 +20,13 @@ export class HandleBehavior implements PenBehavior {
     switch (state.type) {
       case "anchored": {
         const next = this.#nextAnchoredState(state, event, ctx.tool);
-        if (next) ctx.setState(next);
+        if (next) {
+          const edit = this.#edit;
+          if (!edit) throw new Error("cannot guard Pen curve without an active edit");
+
+          this.#done = ctx.onCancel(() => edit.cancel());
+          ctx.setState(next);
+        }
         return true;
       }
       case "dragging":
@@ -55,7 +62,7 @@ export class HandleBehavior implements PenBehavior {
   onDragCancel(state: PenState, ctx: ToolContext<PenState, Pen>): boolean {
     if (state.type !== "anchored" && state.type !== "dragging") return false;
 
-    this.#cancelCurve();
+    this.#clearCurve();
     ctx.setState({ type: "ready" });
     return true;
   }
@@ -129,16 +136,19 @@ export class HandleBehavior implements PenBehavior {
     }
 
     stroke.finishCurve(curve, this.#edit, this.#endpointId);
+    if (this.#done) this.#done();
     this.#clearCurve();
   }
 
   #cancelCurve(): void {
     this.#edit?.cancel();
+    if (this.#done) this.#done();
     this.#clearCurve();
   }
 
   #clearCurve(): void {
     this.#edit = null;
+    this.#done = null;
     this.#controlStartId = null;
     this.#controlEndId = null;
     this.#endpointId = null;

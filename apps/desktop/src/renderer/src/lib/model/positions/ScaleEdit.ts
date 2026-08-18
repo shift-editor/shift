@@ -1,19 +1,17 @@
 import type { Point2D } from "@shift/geo";
+import type { PositionEdit, PositionEditPhase, PositionTargets } from "@/types/positionEdit";
 import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
 import { PositionList } from "./PositionList";
-import type { PositionEdit, PositionEditPhase, PositionTargets } from "@/types/positionEdit";
-import { AngleSnap } from "./AngleSnap";
 
-/** Preview-backed rotation configured with rotation-specific modifiers. */
-export class RotateEdit implements PositionEdit {
+/** Preview-backed scaling around one frozen layer-local origin. */
+export class ScaleEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
   readonly #base: PositionList;
   readonly #origin: Point2D;
 
   #edit: GlyphLayerEdit | null;
   #phase: PositionEditPhase = "configuring";
-  #angleSnap: AngleSnap | null = null;
 
   constructor(
     layer: GlyphLayer,
@@ -27,30 +25,21 @@ export class RotateEdit implements PositionEdit {
     this.#edit = edit;
   }
 
-  angleSnappedBy(snap: AngleSnap): this {
-    this.#assertConfiguring();
-    this.#angleSnap = snap;
-    return this;
-  }
-
-  preview(rawAngle: number): number {
+  preview(scale: Point2D): void {
     this.#beginPreview();
 
-    const angle = this.#angleSnap?.apply(rawAngle) ?? rawAngle;
-    const positions = this.#base.rotate(angle, this.#origin).positions;
-    if (positions.length > 0) {
-      this.#edit ??= this.#layer.beginEdit();
-      this.#edit.setPositions(positions);
-    }
+    const positions = this.#base.scale(scale.x, scale.y, this.#origin).positions;
+    if (positions.length === 0) return;
 
-    return angle;
+    this.#edit ??= this.#layer.beginEdit();
+    this.#edit.setPositions(positions);
   }
 
   commit(): void {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "committed";
-    this.#edit?.finish("Rotate positions");
+    this.#edit?.finish("Scale positions");
   }
 
   discard(): void {
@@ -58,11 +47,6 @@ export class RotateEdit implements PositionEdit {
 
     this.#phase = "discarded";
     this.#edit?.cancel();
-  }
-
-  #assertConfiguring(): void {
-    if (this.#phase === "configuring") return;
-    throw new Error("Position edit modifiers must be configured before the first preview");
   }
 
   #beginPreview(): void {

@@ -1,4 +1,4 @@
-import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
+import { Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { CanvasItem } from "@/lib/editor/rendering/CanvasItem";
@@ -7,7 +7,6 @@ import type { CursorType } from "@/types/editor";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { Select } from "./Select";
 import { track } from "@/lib/signals";
-import { selectedGeometryEdit } from "./behaviors/selectedGeometryEdit";
 
 type YAxisDirection = "up" | "down";
 export type CornerHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -114,8 +113,10 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (state.type === "brushing") return null;
 
     track(this.#editor.selection.stateCell);
-    const edit = selectedGeometryEdit(this.#editor);
-    if (!edit || edit.pointIds.length + edit.anchorIds.length <= 1) return null;
+    const selection = this.#editor.positionSelection(this.#editor.selection.ids);
+    const pointCount = selection?.targets.points?.length ?? 0;
+    const anchorCount = selection?.targets.anchors?.length ?? 0;
+    if (!selection || pointCount + anchorCount <= 1) return null;
 
     const sceneRect = this.#editor.selectionBoundsCell.value;
     if (!sceneRect) return null;
@@ -211,14 +212,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (!props) return false;
 
     const { screenRect } = props;
-    const pos = coords.screen;
 
-    return (
-      pos.x >= screenRect.left &&
-      pos.x <= screenRect.right &&
-      pos.y >= screenRect.top &&
-      pos.y <= screenRect.bottom
-    );
+    return Rect.containsPoint(screenRect, coords.screen);
   }
 
   cursorForRotationCorner(corner: CornerHandle): CursorType {

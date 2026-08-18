@@ -11,6 +11,13 @@
 - Avoid async IIFEs assigned into state, for example `state = (async () => { ... })().catch(...)`. Extract a named helper so the shared-state/memoization code and the async work are readable separately.
 - Do not prefix commit messages or pull request titles with `[codex]`.
 
+## Agent Skills
+
+- `.agents/skills/` is the canonical source for repository skills. Pi discovers this standard location automatically.
+- Load the matching skill before acting: `commit` for commits, `pr` for pull requests, `issue` for issues, `writing-tests` for test changes or reviews, `jsdoc` for JSDoc, and `rustdoc` for Rust documentation.
+- `.claude/skills/` and `.codex/skills/` are generated client adapters. Never edit shared skills there directly.
+- After changing a canonical skill, run `pnpm agent-skills:sync`. CI runs `pnpm agent-skills:check` to prevent adapter drift.
+
 ## Naming
 
 - **Domain types are plain nouns.** `Glyph`, `Contour`, `Point`, `Anchor` — not `Glyph`, `GlyphInfo`, `GlyphState`, `GlyphRenderData`. If you need a modifier, it should describe the _kind_ of thing (`EditableGlyph`, `RenderContour`), not append generic suffixes.
@@ -25,6 +32,8 @@ When completing a feature, check ROADMAP.md and check any box if we have complet
 ## Testing
 
 Tests use `TestEditor` from `@/testing/TestEditor` (real Editor + real NAPI). Assert on state, not mock calls. See `/writing-tests` skill for canonical rules, templates, banned patterns, and the fake-test checklist — trigger it any time you add, rewrite, or review a `.test.ts` file.
+
+Never delete tests solely because their named implementation was removed or replaced. Before deleting or materially reducing tests, map every removed test to the behavioral invariant it protects and to the surviving or replacement test that protects it. Move tests to the new behavioral owner before deleting the old file. If an invariant is obsolete, identify the intentionally removed product behavior.
 
 ## Frontend
 

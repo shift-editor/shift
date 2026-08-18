@@ -2,13 +2,13 @@ import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import { Transform } from "@/lib/transform/Transform";
 import type { PositionTargets } from "@/types/positionEdit";
-import type { GlyphLayerPosition, GlyphLayerPositions, GlyphLayerPositionTarget } from "./Glyph";
+import type { GlyphLayerPosition, GlyphLayerPositions, GlyphLayerPositionTarget } from "../Glyph";
 
-export interface GlyphLayerPositionLookup {
+export interface PositionLookup {
   positionsFor(targets: readonly GlyphLayerPositionTarget[]): GlyphLayerPosition[];
 }
 
-export class GlyphLayerPositionList {
+export class PositionList {
   readonly positions: GlyphLayerPositions;
   readonly #pointIds: ReadonlySet<PointId>;
   readonly #anchorIds: ReadonlySet<AnchorId>;
@@ -34,29 +34,23 @@ export class GlyphLayerPositionList {
   }
 
   /** @knipclassignore — convenience constructor for draft callers. */
-  static empty(): GlyphLayerPositionList {
-    return new GlyphLayerPositionList([]);
+  static empty(): PositionList {
+    return new PositionList([]);
   }
 
-  static fromPositions(positions: GlyphLayerPositions): GlyphLayerPositionList {
-    return new GlyphLayerPositionList(positions);
+  static fromPositions(positions: GlyphLayerPositions): PositionList {
+    return new PositionList(positions);
   }
 
-  static fromTargetGroups(
-    source: GlyphLayerPositionLookup,
-    targets: PositionTargets,
-  ): GlyphLayerPositionList {
-    return GlyphLayerPositionList.fromTargets(
-      source,
-      GlyphLayerPositionList.targetListFromGroups(targets),
-    );
+  static fromTargetGroups(source: PositionLookup, targets: PositionTargets): PositionList {
+    return PositionList.fromTargets(source, PositionList.targetListFromGroups(targets));
   }
 
   static fromTargets(
-    source: GlyphLayerPositionLookup,
+    source: PositionLookup,
     targets: readonly GlyphLayerPositionTarget[],
-  ): GlyphLayerPositionList {
-    return new GlyphLayerPositionList(source.positionsFor(targets));
+  ): PositionList {
+    return new PositionList(source.positionsFor(targets));
   }
 
   static targetListFromGroups(groups: PositionTargets): GlyphLayerPositionTarget[] {
@@ -83,10 +77,7 @@ export class GlyphLayerPositionList {
     });
   }
 
-  includeFrom(
-    source: GlyphLayerPositionLookup,
-    positions: GlyphLayerPositions,
-  ): GlyphLayerPositionList {
+  includeFrom(source: PositionLookup, positions: GlyphLayerPositions): PositionList {
     let missing: GlyphLayerPositionTarget[] | null = null;
 
     for (const position of positions) {
@@ -102,14 +93,14 @@ export class GlyphLayerPositionList {
 
     if (!missing) return this;
 
-    return new GlyphLayerPositionList([
+    return new PositionList([
       ...this.positions,
-      ...GlyphLayerPositionList.fromTargets(source, missing).positions,
+      ...PositionList.fromTargets(source, missing).positions,
     ]);
   }
 
-  translate(delta: Point2D): GlyphLayerPositionList {
-    return new GlyphLayerPositionList(
+  translate(delta: Point2D): PositionList {
+    return new PositionList(
       this.positions.map((position) => {
         const next = Vec2.add(position, delta);
         return { ...position, x: next.x, y: next.y };
@@ -117,11 +108,11 @@ export class GlyphLayerPositionList {
     );
   }
 
-  rotate(angle: number, origin: Point2D): GlyphLayerPositionList {
-    return new GlyphLayerPositionList(Transform.rotatePoints(this.positions, angle, origin));
+  rotate(angle: number, origin: Point2D): PositionList {
+    return new PositionList(Transform.rotatePoints(this.positions, angle, origin));
   }
 
-  scale(sx: number, sy: number, origin: Point2D): GlyphLayerPositionList {
-    return new GlyphLayerPositionList(Transform.scalePoints(this.positions, sx, sy, origin));
+  scale(sx: number, sy: number, origin: Point2D): PositionList {
+    return new PositionList(Transform.scalePoints(this.positions, sx, sy, origin));
   }
 }

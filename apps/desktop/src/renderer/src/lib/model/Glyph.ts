@@ -1,5 +1,6 @@
 import type {
   AnchorId,
+  AnchorSeed,
   Axis,
   AxisMappingBasis,
   ComponentGlyph as ComponentGlyphDefinition,
@@ -86,7 +87,7 @@ import {
   type RenderAnchor,
   type RenderContour,
 } from "./GlyphRenderModel";
-import { GlyphLayerPositionList } from "./GlyphLayerPositionList";
+import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { GlyphLayerState } from "./GlyphLayerState";
@@ -94,7 +95,7 @@ import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
-import { LayerPositions } from "./positions";
+import { PositionEdits } from "./positions";
 
 export {
   GlyphGeometry,
@@ -129,7 +130,7 @@ interface GlyphRenderGeometry {
   hitAt(pos: Point2D, radius: number): GlyphHit | null;
 }
 
-class GlyphEditSession {
+class GlyphLayerWriter {
   readonly #editCoordinator: WorkspaceEditCoordinator;
   readonly #intents: LayerIntents;
   readonly #state: GlyphEditState;
@@ -208,22 +209,15 @@ class GlyphEditSession {
     this.#state.state.translatePoints(editId, pointIds, dx, dy);
   }
 
-  previewPositionPatch(updates: GlyphLayerPositions): void {
-    if (updates.length === 0) return;
-    this.#applyPositionPatchLocally(updates);
-  }
-
-  #applyPositionPatchLocally(updates: GlyphLayerPositions): void {
-    this.#state.state.patchPositions(updates);
-  }
-
   addContour(): ContourId {
     const contourId = mintContourId();
-
-    const editId = this.#intents.addContour({ contourId, closed: false });
-    this.#state.state.addContour(editId, contourId, false);
-
+    this.addContourSeed(contourId, false);
     return contourId;
+  }
+
+  addContourSeed(contourId: ContourId, closed: boolean): void {
+    const editId = this.#intents.addContour({ contourId, closed });
+    this.#state.state.addContour(editId, contourId, closed);
   }
 
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
@@ -297,19 +291,22 @@ class GlyphEditSession {
 
   addAnchor(name: string | null, position: Point2D): AnchorId {
     const anchorId = mintAnchorId();
-
-    const anchors = [
+    this.addAnchorSeeds([
       {
         id: anchorId,
         x: position.x,
         y: position.y,
         ...(name === null ? {} : { name }),
       },
-    ];
-    const editId = this.#intents.addAnchors({ anchors });
-    this.#state.state.addAnchors(editId, anchors);
-
+    ]);
     return anchorId;
+  }
+
+  addAnchorSeeds(anchors: readonly AnchorSeed[]): void {
+    if (anchors.length === 0) return;
+
+    const editId = this.#intents.addAnchors({ anchors: [...anchors] });
+    this.#state.state.addAnchors(editId, anchors);
   }
 
   removeAnchors(anchorIds: readonly AnchorId[]): void {
@@ -354,17 +351,17 @@ class GlyphEditSession {
  * edits also produce workspace intents.
  */
 export class GlyphLayer {
-  readonly positions: LayerPositions;
+  readonly positions: PositionEdits;
   readonly #sourceCell: WritableSignal<Source>;
-  readonly #edit: GlyphEditSession;
+  readonly #writer: GlyphLayerWriter;
 
   constructor(source: Source, editCoordinator: WorkspaceEditCoordinator, state: GlyphLayerState) {
     this.#sourceCell = signal(source, { name: "glyphLayer.source" });
-    this.#edit = new GlyphEditSession(editCoordinator, state.layerId, {
+    this.#writer = new GlyphLayerWriter(editCoordinator, state.layerId, {
       state,
       geometry: state.geometryCell,
     });
-    this.positions = new LayerPositions(this);
+    this.positions = new PositionEdits(this);
   }
 
   get source(): Source {
@@ -377,7 +374,7 @@ export class GlyphLayer {
 
   /** @knipclassignore — stable edit identity for this authored glyph layer. */
   get id(): LayerId {
-    return this.#edit.layerState.state.layerId;
+    return this.#writer.layerState.state.layerId;
   }
 
   get layerId(): LayerId {
@@ -390,48 +387,48 @@ export class GlyphLayer {
   }
 
   get geometry(): GlyphGeometry {
-    return this.#edit.geometry;
+    return this.#writer.geometry;
   }
 
   /** @internal Reactive geometry used for component transform and attachment reads. */
   get geometryCell(): Signal<GlyphGeometry> {
-    return this.#edit.geometryCell;
+    return this.#writer.geometryCell;
   }
 
   /** @internal Reactive glyph structure used by renderer-facing projections. */
   get structureCell(): Signal<GlyphStructure> {
-    return this.#edit.layerState.structureCell;
+    return this.#writer.layerState.structureCell;
   }
 
   /** @internal Reactive numeric buffers used by renderer-facing projections. */
   get buffers(): LayerBuffers {
-    return this.#edit.layerState.buffers;
+    return this.#writer.layerState.buffers;
   }
 
   /** @internal Tracks replacement of the source layer-buffer container. */
   get buffersCell(): Signal<LayerBuffers> {
-    return this.#edit.layerState.buffersCell;
+    return this.#writer.layerState.buffersCell;
   }
 
   /** @internal Tracks any numeric layer change without materializing full geometry. */
   get buffersChangedCell(): Signal<LayerBuffers> {
-    return this.#edit.layerState.buffersChangedCell;
+    return this.#writer.layerState.buffersChangedCell;
   }
 
   get state(): GlyphState {
-    return this.#edit.layerState.state;
+    return this.#writer.layerState.state;
   }
 
   get xAdvanceCell(): Signal<number> {
-    return this.#edit.layerState.xAdvanceCell;
+    return this.#writer.layerState.xAdvanceCell;
   }
 
   get xAdvance(): number {
-    return this.#edit.layerState.xAdvance;
+    return this.#writer.layerState.xAdvance;
   }
 
   get pointCount(): number {
-    return this.#edit.layerState.pointCount;
+    return this.#writer.layerState.pointCount;
   }
 
   get contours(): readonly Contour[] {
@@ -453,11 +450,11 @@ export class GlyphLayer {
 
   /** @knipclassignore — public authored-source metrics API. */
   get sidebearings(): GlyphSidebearings {
-    return this.#edit.layerState.sidebearings;
+    return this.#writer.layerState.sidebearings;
   }
 
   get sidebearingsCell(): Signal<GlyphSidebearings> {
-    return this.#edit.layerState.sidebearingsCell;
+    return this.#writer.layerState.sidebearingsCell;
   }
 
   get allPoints(): Point[] {
@@ -486,7 +483,7 @@ export class GlyphLayer {
   }
 
   contourIdOfPoint(pointId: PointId): ContourId | null {
-    return this.#edit.layerState.contourIdOfPoint(pointId);
+    return this.#writer.layerState.contourIdOfPoint(pointId);
   }
 
   /**
@@ -506,7 +503,7 @@ export class GlyphLayer {
    * ```
    */
   positionsFor(targets: readonly GlyphLayerPositionTarget[]): GlyphLayerPosition[] {
-    const list = GlyphLayerPositionList.fromTargets(this.#edit.layerState, targets);
+    const list = PositionList.fromTargets(this.#writer.layerState, targets);
     return [...list.positions];
   }
 
@@ -516,7 +513,7 @@ export class GlyphLayer {
    * @param width - New advance width in UPM units.
    */
   setXAdvance(width: number): void {
-    this.#edit.setXAdvance(width);
+    this.#writer.setXAdvance(width);
   }
 
   /**
@@ -550,7 +547,7 @@ export class GlyphLayer {
     const deltaX = value - current;
     if (deltaX === 0) return;
 
-    this.#edit.transaction("Set left sidebearing", () => {
+    this.#writer.transaction("Set left sidebearing", () => {
       this.translateLayer(deltaX, 0);
       this.setXAdvance(this.xAdvance + deltaX);
     });
@@ -566,7 +563,7 @@ export class GlyphLayer {
    * @param updates - Point and anchor positions to write into the source.
    */
   applyPositionPatch(updates: GlyphLayerPositions): void {
-    this.#edit.applyPositionPatch(updates);
+    this.#writer.applyPositionPatch(updates);
   }
 
   /**
@@ -576,22 +573,32 @@ export class GlyphLayer {
    * @param dy - Vertical movement in UPM units.
    */
   translateLayer(dx: number, dy: number): void {
-    this.#edit.translateLayer(dx, dy);
+    this.#writer.translateLayer(dx, dy);
   }
 
   /** Begins a reversible edit that mutates this layer's reactive topology directly. */
   beginEdit(): GlyphLayerEdit {
-    return new GlyphLayerEdit(this, this.#edit.layerState);
+    return new GlyphLayerEdit(this, this.#writer.layerState);
   }
 
   /** @internal Groups accepted edit operations into one workspace and undo transaction. */
   transaction<TResult>(label: string, body: () => TResult): TResult {
-    return this.#edit.transaction(label, body);
+    return this.#writer.transaction(label, body);
+  }
+
+  /** @internal Adds a prepared contour identity through the accepted workspace path. */
+  addContourSeed(contourId: ContourId, closed: boolean): void {
+    this.#writer.addContourSeed(contourId, closed);
   }
 
   /** @internal Adds prepared point identities through the accepted workspace path. */
   addPointSeeds(contourId: ContourId, points: readonly PointSeed[]): void {
-    this.#edit.addPointSeeds(contourId, points);
+    this.#writer.addPointSeeds(contourId, points);
+  }
+
+  /** @internal Adds prepared anchor identities through the accepted workspace path. */
+  addAnchorSeeds(anchors: readonly AnchorSeed[]): void {
+    this.#writer.addAnchorSeeds(anchors);
   }
 
   /**
@@ -603,7 +610,8 @@ export class GlyphLayer {
    * @param updates - Point and anchor positions to show for the current interaction frame.
    */
   previewPositionPatch(updates: GlyphLayerPositions): void {
-    this.#edit.previewPositionPatch(updates);
+    if (updates.length === 0) return;
+    this.#writer.layerState.patchPositions(updates);
   }
 
   /**
@@ -612,7 +620,7 @@ export class GlyphLayer {
    * @returns ID of the created contour.
    */
   addContour(): ContourId {
-    return this.#edit.addContour();
+    return this.#writer.addContour();
   }
 
   /**
@@ -623,7 +631,7 @@ export class GlyphLayer {
    * @returns ID of the created point.
    */
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
-    return this.#edit.addPoint(contourId, edit);
+    return this.#writer.addPoint(contourId, edit);
   }
 
   /**
@@ -637,7 +645,7 @@ export class GlyphLayer {
    * @returns ID of the new corner endpoint.
    */
   addCubic(contourId: ContourId, curve: CubicCurve): PointId {
-    const pointIds = this.#edit.addPoints(contourId, [
+    const pointIds = this.#writer.addPoints(contourId, [
       Point.offCurve(curve.c0),
       Point.offCurve(curve.c1),
       Point.onCurve(curve.p1),
@@ -689,7 +697,7 @@ export class GlyphLayer {
    * @returns ID of the created point.
    */
   insertPointBefore(pointId: PointId, edit: NewPoint): PointId {
-    return this.#edit.insertPointBefore(pointId, edit);
+    return this.#writer.insertPointBefore(pointId, edit);
   }
 
   /**
@@ -698,7 +706,7 @@ export class GlyphLayer {
    * @param contourId - Contour to mark as open.
    */
   openContour(contourId: ContourId): void {
-    this.#edit.openContour(contourId);
+    this.#writer.openContour(contourId);
   }
 
   /**
@@ -707,7 +715,7 @@ export class GlyphLayer {
    * @param contourId - Contour to mark as closed.
    */
   closeContour(contourId: ContourId): void {
-    this.#edit.closeContour(contourId);
+    this.#writer.closeContour(contourId);
   }
 
   /**
@@ -716,7 +724,7 @@ export class GlyphLayer {
    * @param contourId - Contour whose winding order is reversed.
    */
   reverseContour(contourId: ContourId): void {
-    this.#edit.reverseContour(contourId);
+    this.#writer.reverseContour(contourId);
   }
 
   /**
@@ -730,7 +738,7 @@ export class GlyphLayer {
     const segment = this.geometry.segment(segmentId);
     if (!segment) return null;
 
-    return this.#edit.transaction("Split segment", () => {
+    return this.#writer.transaction("Split segment", () => {
       switch (segment.type) {
         case "line":
           return this.#splitLineSegment(segment, t);
@@ -755,7 +763,7 @@ export class GlyphLayer {
     const points = segment.asLine();
     if (!points) return false;
 
-    this.#edit.transaction("Upgrade line to cubic", () => {
+    this.#writer.transaction("Upgrade line to cubic", () => {
       const control1Pos = {
         x: points.start.x + (points.end.x - points.start.x) / 3,
         y: points.start.y + (points.end.y - points.start.y) / 3,
@@ -812,7 +820,7 @@ export class GlyphLayer {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    this.#edit.applyBooleanOp(contourIdA, contourIdB, operation);
+    this.#writer.applyBooleanOp(contourIdA, contourIdB, operation);
   }
 
   /**
@@ -821,7 +829,7 @@ export class GlyphLayer {
    * @param pointIds - Point IDs to delete; missing IDs are ignored by the source layer.
    */
   removePoints(pointIds: readonly PointId[]): void {
-    this.#edit.removePoints(pointIds);
+    this.#writer.removePoints(pointIds);
   }
 
   /**
@@ -832,7 +840,7 @@ export class GlyphLayer {
    * @returns ID of the created anchor.
    */
   addAnchor(name: string | null, position: Point2D): AnchorId {
-    return this.#edit.addAnchor(name, position);
+    return this.#writer.addAnchor(name, position);
   }
 
   /**
@@ -841,7 +849,7 @@ export class GlyphLayer {
    * @param anchorIds - Anchor IDs to delete.
    */
   removeAnchors(anchorIds: readonly AnchorId[]): void {
-    this.#edit.removeAnchors(anchorIds);
+    this.#writer.removeAnchors(anchorIds);
   }
 
   /**
@@ -851,7 +859,7 @@ export class GlyphLayer {
    * @param smooth - Whether the point is smooth.
    */
   setPointSmooth(pointId: PointId, smooth: boolean): void {
-    this.#edit.setPointSmooth(pointId, smooth);
+    this.#writer.setPointSmooth(pointId, smooth);
   }
 
   /**
@@ -860,7 +868,7 @@ export class GlyphLayer {
    * @param pointId - Point whose smooth flag changes.
    */
   toggleSmooth(pointId: PointId): void {
-    this.#edit.toggleSmooth(pointId);
+    this.#writer.toggleSmooth(pointId);
   }
 
   /**
