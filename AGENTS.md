@@ -11,6 +11,13 @@
 - Avoid async IIFEs assigned into state, for example `state = (async () => { ... })().catch(...)`. Extract a named helper so the shared-state/memoization code and the async work are readable separately.
 - Do not prefix commit messages or pull request titles with `[codex]`.
 
+## Agent Skills
+
+- `.agents/skills/` is the canonical source for repository skills. Pi discovers this standard location automatically.
+- Load the matching skill before acting: `commit` for commits, `pr` for pull requests, `issue` for issues, `writing-tests` for test changes or reviews, `jsdoc` for JSDoc, and `rustdoc` for Rust documentation.
+- `.claude/skills/` and `.codex/skills/` are generated client adapters. Never edit shared skills there directly.
+- After changing a canonical skill, run `pnpm agent-skills:sync`. CI runs `pnpm agent-skills:check` to prevent adapter drift.
+
 ## Naming
 
 - **Domain types are plain nouns.** `Glyph`, `Contour`, `Point`, `Anchor` — not `Glyph`, `GlyphInfo`, `GlyphState`, `GlyphRenderData`. If you need a modifier, it should describe the _kind_ of thing (`EditableGlyph`, `RenderContour`), not append generic suffixes.

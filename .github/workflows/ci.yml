@@ -72,7 +72,7 @@ jobs:
               - 'scripts/product-version.test.mjs'
               - 'scripts/smoke-packaged.mjs'
             skills:
-              - '.agent-skills/**'
+              - '.agents/skills/**'
               - '.claude/skills/**'
               - '.codex/skills/**'
               - 'scripts/sync-agent-skills.mjs'
