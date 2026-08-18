@@ -87,7 +87,7 @@ import {
   type RenderAnchor,
   type RenderContour,
 } from "./GlyphRenderModel";
-import { GlyphLayerPositionList } from "./GlyphLayerPositionList";
+import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { GlyphLayerState } from "./GlyphLayerState";
@@ -95,7 +95,7 @@ import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
-import { LayerPositions } from "./positions";
+import { PositionEdits } from "./positions";
 
 export {
   GlyphGeometry,
@@ -351,7 +351,7 @@ class GlyphLayerWriter {
  * edits also produce workspace intents.
  */
 export class GlyphLayer {
-  readonly positions: LayerPositions;
+  readonly positions: PositionEdits;
   readonly #sourceCell: WritableSignal<Source>;
   readonly #writer: GlyphLayerWriter;
 
@@ -361,7 +361,7 @@ export class GlyphLayer {
       state,
       geometry: state.geometryCell,
     });
-    this.positions = new LayerPositions(this);
+    this.positions = new PositionEdits(this);
   }
 
   get source(): Source {
@@ -503,7 +503,7 @@ export class GlyphLayer {
    * ```
    */
   positionsFor(targets: readonly GlyphLayerPositionTarget[]): GlyphLayerPosition[] {
-    const list = GlyphLayerPositionList.fromTargets(this.#writer.layerState, targets);
+    const list = PositionList.fromTargets(this.#writer.layerState, targets);
     return [...list.positions];
   }
 

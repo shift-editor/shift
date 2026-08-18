@@ -267,7 +267,7 @@ onDragCancel(state, ctx) {
 
 - `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph).
 - `Canvas` — rendering target passed to `drawOverlay` / `drawScene` / `drawBackground`.
-- `LayerPositions` — creates fluent move, rotate, and scale interactions over normalized position targets.
+- `PositionEdits` — creates standalone or scoped fluent move, rotate, and scale interactions over normalized position targets.
 - `GlyphLayerEdit` — active preview/finish/cancel owner used by fluent edits and arbitrary BendCurve patches.
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
 - `TextTool` — text input tool backed by the editor's active text run.

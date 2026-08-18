@@ -2,21 +2,27 @@ import type { Point2D } from "@shift/geo";
 import type { PositionEdit, PositionEditPhase, PositionTargets } from "@/types/positionEdit";
 import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
-import { GlyphLayerPositionList } from "../GlyphLayerPositionList";
+import { PositionList } from "./PositionList";
 
 /** Preview-backed scaling around one frozen layer-local origin. */
 export class ScaleEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
-  readonly #base: GlyphLayerPositionList;
+  readonly #base: PositionList;
   readonly #origin: Point2D;
 
-  #edit: GlyphLayerEdit | null = null;
+  #edit: GlyphLayerEdit | null;
   #phase: PositionEditPhase = "configuring";
 
-  constructor(layer: GlyphLayer, targets: PositionTargets, origin: Point2D) {
+  constructor(
+    layer: GlyphLayer,
+    targets: PositionTargets,
+    origin: Point2D,
+    edit: GlyphLayerEdit | null = null,
+  ) {
     this.#layer = layer;
-    this.#base = GlyphLayerPositionList.fromTargetGroups(layer, targets);
+    this.#base = PositionList.fromTargetGroups(layer, targets);
     this.#origin = { ...origin };
+    this.#edit = edit;
   }
 
   preview(scale: Point2D): void {

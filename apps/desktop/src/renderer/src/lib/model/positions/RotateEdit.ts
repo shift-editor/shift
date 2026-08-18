@@ -1,24 +1,30 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
-import { GlyphLayerPositionList } from "../GlyphLayerPositionList";
+import { PositionList } from "./PositionList";
 import type { PositionEdit, PositionEditPhase, PositionTargets } from "@/types/positionEdit";
 import { AngleSnap } from "./AngleSnap";
 
 /** Preview-backed rotation configured with rotation-specific modifiers. */
 export class RotateEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
-  readonly #base: GlyphLayerPositionList;
+  readonly #base: PositionList;
   readonly #origin: Point2D;
 
-  #edit: GlyphLayerEdit | null = null;
+  #edit: GlyphLayerEdit | null;
   #phase: PositionEditPhase = "configuring";
   #angleSnap: AngleSnap | null = null;
 
-  constructor(layer: GlyphLayer, targets: PositionTargets, origin: Point2D) {
+  constructor(
+    layer: GlyphLayer,
+    targets: PositionTargets,
+    origin: Point2D,
+    edit: GlyphLayerEdit | null = null,
+  ) {
     this.#layer = layer;
-    this.#base = GlyphLayerPositionList.fromTargetGroups(layer, targets);
+    this.#base = PositionList.fromTargetGroups(layer, targets);
     this.#origin = { ...origin };
+    this.#edit = edit;
   }
 
   angleSnappedBy(snap: AngleSnap): this {

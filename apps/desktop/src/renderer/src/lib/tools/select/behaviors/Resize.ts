@@ -4,8 +4,7 @@ import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import type { BoundingRectEdge } from "../cursor";
-import type { ScaleEdit } from "@/lib/model/positions";
-import { GlyphLayerPositionList } from "@/lib/model/GlyphLayerPositionList";
+import { PositionList, type ScaleEdit } from "@/lib/model/positions";
 
 export class Resize implements SelectBehavior {
   #edit: ScaleEdit | null = null;
@@ -24,7 +23,7 @@ export class Resize implements SelectBehavior {
     const selection = ctx.editor.positionSelection(ctx.editor.selection.ids);
     if (!selection) return false;
 
-    const localPositions = GlyphLayerPositionList.fromTargetGroups(
+    const localPositions = PositionList.fromTargetGroups(
       selection.layer,
       selection.targets,
     ).positions;

@@ -4,8 +4,7 @@ import type { Editor } from "@/lib/editor/Editor";
 import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
-import type { RotateEdit } from "@/lib/model/positions";
-import { GlyphLayerPositionList } from "@/lib/model/GlyphLayerPositionList";
+import { PositionList, type RotateEdit } from "@/lib/model/positions";
 
 export class Rotate implements SelectBehavior {
   #edit: RotateEdit | null = null;
@@ -103,7 +102,7 @@ export class Rotate implements SelectBehavior {
     const selection = editor.positionSelection(editor.selection.ids);
     if (!selection) return null;
 
-    const localPositions = GlyphLayerPositionList.fromTargetGroups(
+    const localPositions = PositionList.fromTargetGroups(
       selection.layer,
       selection.targets,
     ).positions;

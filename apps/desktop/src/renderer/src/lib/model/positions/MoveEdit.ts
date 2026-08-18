@@ -2,7 +2,7 @@ import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId } from "@shift/types";
 import type { GlyphLayer, GlyphLayerPositions } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
-import { GlyphLayerPositionList } from "../GlyphLayerPositionList";
+import { PositionList } from "./PositionList";
 import type {
   PositionEdit,
   PositionEditPhase,
@@ -20,8 +20,8 @@ export class MoveEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
   readonly #anchorIds: readonly AnchorId[];
 
-  #base: GlyphLayerPositionList;
-  #edit: GlyphLayerEdit | null = null;
+  #base: PositionList;
+  #edit: GlyphLayerEdit | null;
 
   #phase: PositionEditPhase = "configuring";
   #reference: Point2D | null = null;
@@ -29,10 +29,11 @@ export class MoveEdit implements PositionEdit {
   #snapProvider: PositionSnapProvider | null = null;
   #pointRules: PointRuleConstraint | null = null;
 
-  constructor(layer: GlyphLayer, targets: PositionTargets) {
+  constructor(layer: GlyphLayer, targets: PositionTargets, edit: GlyphLayerEdit | null = null) {
     this.#layer = layer;
-    this.#base = GlyphLayerPositionList.fromTargetGroups(layer, targets);
+    this.#base = PositionList.fromTargetGroups(layer, targets);
     this.#anchorIds = [...(targets.anchors ?? [])];
+    this.#edit = edit;
   }
 
   from(reference: PositionReference): this {
