@@ -1,5 +1,7 @@
 # shift-backends
 
+<!-- reviewed: 2026-08-09 review-every: 90d -->
+
 Font format backends that convert between on-disk font files and the `Font` IR used throughout the editor.
 
 ## Architecture Invariants

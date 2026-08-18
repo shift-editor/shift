@@ -1,12 +1,14 @@
 # @shift/types
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge DTOs generated from `shift-bridge`.
 
 ## Architecture Invariants
 
 - **Architecture Invariant: CRITICAL:** `src/bridge/generated.ts` is generated from `crates/shift-bridge/index.d.ts` by `scripts/generate-bridge-types.mjs`. Never edit it manually.
 - **Architecture Invariant: CRITICAL:** `@shift/types` is the canonical TypeScript DTO facade for the native bridge. It strips `Napi*` prefixes and exports type-only DTOs.
-- **Architecture Invariant:** Editor/domain snapshot types do not live here.
+- **Architecture Invariant:** Editor-owned state types (selection, tools, camera, command history, renderer snapshots) do not live here. `src/domain.ts` holds only small derived domain shapes built from bridge DTOs: `AxisDefinition` and `NamedInstanceDefinition` (definitions before the editor assigns stable identity) and resolved `SourceMetrics`.
 - **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, `AxisLabelId`, `AxisMappingId`, `NamedInstanceId`, and point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types. Compiled variation contributions never fabricate entity IDs.
 - **Architecture Invariant:** This package ships raw `.ts` source. `package.json` points `main` and `types` directly at `src/index.ts`.
 
@@ -16,6 +18,7 @@ Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge 
 packages/types/src/
   index.ts               -- root barrel: IDs and bridge DTOs
   ids.ts                 -- branded IDs + cast helpers
+  domain.ts              -- derived domain shapes built from bridge DTOs
   bridge/
     index.ts             -- stable bridge DTO barrel
     generated.ts         -- generated from shift-bridge/index.d.ts
@@ -61,6 +64,7 @@ task:
 
 inputs:
   crates/shift-bridge/index.d.ts
+  crates/shift-bridge/dts-header.d.ts
   scripts/generate-bridge-types.mjs
 
 output:
@@ -94,7 +98,7 @@ pnpm generate:bridge-types
 ## Gotchas
 
 - **Stale bridge DTOs:** Run `pnpm generate:bridge-types` after rebuilding `shift-bridge/index.d.ts`. Turbo caches this based on the declaration input and generator script.
-- **No editor/domain types:** If renderer code needs editor-owned shapes, define them in the app or the relevant editor package. Do not add snapshot-era types back here.
+- **No editor-owned types:** If renderer code needs editor-owned shapes, define them in the app or the relevant editor package. Do not add snapshot-era types back here.
 - **No build step:** This package has no compilation. If you add non-TS files or try to emit `.d.ts`, the current setup will not support it.
 
 ## Verification

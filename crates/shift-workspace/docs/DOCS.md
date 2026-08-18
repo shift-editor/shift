@@ -1,5 +1,7 @@
 # shift-workspace
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Backend runtime object for an open Shift font workspace.
 
 ## Architecture Invariants
@@ -41,12 +43,12 @@ crates/shift-workspace/examples/
 - `NewWorkspace` -- options used when creating a new source package and working store.
 - `PackageIdentity` -- package id, canonical path, and fingerprint for one `.shift` source.
 - `PackageDraft` -- package ownership and dirty/base fingerprint state read from a working store.
-- `WorkspaceSource` -- explicit source state: saved `.shift` package or imported external file.
+- `WorkspaceSource` -- explicit source state: untitled (no source file yet), saved `.shift` package, or imported external file.
 - `WorkspaceError` -- source-package and store failures.
 
 ## How it works
 
-`FontWorkspace::create(source_path, store_path, options)` creates a placeholder `.shift` package, opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font`.
+`FontWorkspace::create_untitled(store_path, NewWorkspace)` opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font` and no source package. `FontWorkspace::create_package(source_path, store_path, NewWorkspace)` does the same and then saves a fresh `.shift` package at `source_path`, making it the save target.
 
 `FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, Designspace, Glyphs, and Glyphs package paths use a metadata/directory-first backend cursor, convert batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable sibling staging database. The legal import transitions are **Staging** (foreign source remains authoritative), **Durable** (stream committed, indexes restored, workspace state written, database synced), then **Published** (closed staging file atomically installed and parent directory synced). Failure before Published removes staging and leaves the previous destination untouched. The returned workspace contains directory placeholders and zero loaded layer payloads. Glyphs source syntax is parsed once into the upstream normalized model before its cursor publishes the header and directory; subsequent Shift conversion and persistence remain bounded. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues requires the separate app import-session boundary. Other supported foreign formats retain the eager compatibility path until they gain a bounded reader.
 
@@ -66,6 +68,7 @@ crates/shift-workspace/examples/
 
 ```bash
 cargo build --release -p shift-workspace --example profile_streaming_import
+# GNU/Linux: /usr/bin/time -v; macOS: /usr/bin/time -l
 /usr/bin/time -v target/release/examples/profile_streaming_import \
   /path/to/font-or-project /tmp/import.sqlite
 ```
@@ -109,7 +112,7 @@ RSS remain profiler observations rather than CI assertions.
 - A failed undo/redo replay pushes the entry back onto its stack instead of half-applying, so a replay error is retryable — but code that pops the ledger around `replay` must preserve that restore-on-error contract.
 - The undo and redo stacks each cap at 100 entries and drop the oldest silently. Tests that build long histories and then unwind them fully will pass at small sizes and lie at scale.
 - Dirty is a ledger-position comparison, not a revision comparison. After `resume`, a workspace that was dirty at shutdown has no reachable saved position: no amount of undo makes it report clean.
-- `evict_glyphs` replaces only committed layers. Evicting immediately after an edit but before commit completes is not a supported shortcut for memory pressure — `LayerResidency` will keep uncommitted work resident.
+- `evict_glyphs` performs no committed-state check — it drops any loaded layer back to a directory placeholder. Eviction is still safe because `apply`, undo, and redo persist every authored edit before swapping the live font, so an uncommitted loaded layer cannot exist. Code that mutates the live font without persisting first would break that guarantee and make eviction lose work.
 - A failed import removes its sibling staging database and leaves the destination untouched. Never treat a leftover staging file as resumable state; only the Published database is real.
 
 ## Verification

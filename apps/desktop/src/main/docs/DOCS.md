@@ -1,5 +1,7 @@
 # Main
 
+<!-- reviewed: 2026-08-18 -->
+
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
 ## Architecture Invariants
@@ -39,7 +41,8 @@ src/main/
     Window.ts                     -- BrowserWindow wrapper
     WindowManager.ts              -- live window registry
   workspace/
-    WorkspaceManager.ts           -- live workspace session registry and package-session dedupe
+    WorkspaceManager.ts           -- live workspace session registry
+    PackageSessionIndex.ts        -- (packageId, canonicalPath) -> live session dedupe index
     WorkspaceProcess.ts           -- utility-process shell-lane controller
     FontSessionHost.ts            -- process/mode/optional-document/window grouping for one font session
 ```

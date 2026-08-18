@@ -1,5 +1,7 @@
 # shift-font
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 First-class Rust font object model for Shift.
 
 ## Architecture Invariants
@@ -21,10 +23,10 @@ First-class Rust font object model for Shift.
 crates/shift-font/src/
   ir/              -- font entities, IDs, axes, mappings, instances, glyph data
     collection.rs  -- semantic ordered identity collections
+    variation.rs   -- external-to-design mapping evaluation
   intents.rs       -- atomic authoring intents and semantic application
   changes.rs       -- replace-grade semantic change records
   layer_edit.rs    -- glyph-layer geometry mutations
-  variation.rs     -- external-to-design mapping evaluation
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
   composite.rs     -- component occurrences, attachment semantics, and flattening
@@ -127,7 +129,7 @@ Transport and workspace layers should pass stable identity to find the model obj
 2. Implement the branch in `Font::apply_intents`, delegating the actual edit to a method on the owning model object (`GlyphLayer`, `Font`, `Source`).
 3. Emit a replace-grade `FontChange` record via a constructor in `changes.rs` (e.g. `FontChange::layer_geometry_replaced`). Records carry post-mutation snapshots, not deltas — the workspace persists and replays them.
 4. If the renderer needs identity synchronously, accept caller-minted IDs through a seed struct such as `PointSeed` rather than returning Rust-minted IDs after the fact.
-5. Wire the downstream layers separately: ledger mapping in `shift-workspace`, then the `#[napi]` method in `shift-bridge`.
+5. Wire the downstream layers separately: ledger mapping in `shift-workspace`, then in `shift-bridge` a new `NapiFontIntent` payload field plus a `map_intent` branch — intents do not get per-intent `#[napi]` methods; they all flow through the single `apply` entry point.
 6. Verify: `cargo test -p shift-font`, and `cargo test -p shift-workspace` when ledger semantics are affected.
 
 ### Adding a glyph-layer geometry mutation

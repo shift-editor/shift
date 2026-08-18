@@ -1,5 +1,7 @@
 # Preload
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Electron preload script that exposes the typed Shift host API and relays session ports to the renderer.
 
 ## Architecture Invariants

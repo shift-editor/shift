@@ -1,5 +1,7 @@
 # @shift/rules
 
+<!-- reviewed: 2026-08-07 review-every: 90d -->
+
 Point editing rules engine that enforces geometric constraints (tangency, collinearity, handle co-movement) during drag operations by pattern-matching the point neighborhood around each selected point.
 
 ## Architecture Invariants

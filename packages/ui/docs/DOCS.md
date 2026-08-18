@@ -1,5 +1,7 @@
 # Shared UI (`@shift/ui`)
 
+<!-- reviewed: 2026-08-16 review-every: 90d -->
+
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
 ## Architecture Invariants

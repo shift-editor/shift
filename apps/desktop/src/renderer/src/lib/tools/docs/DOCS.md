@@ -1,5 +1,7 @@
 # Tools
 
+<!-- reviewed: 2026-08-18 -->
+
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
 ## Architecture Invariants
@@ -32,7 +34,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 tools/
   core/
     BaseTool.ts          — abstract base class; owns behavior loop and state lifecycle
-    Behavior.ts          — Behavior<S> interface and createBehavior helper
+    Behavior.ts          — Behavior<S, TTool> interface and createBehavior helper
     GestureDetector.ts   — pointer+timing -> ToolEvent (click, drag, doubleClick, ...)
     ToolManager.ts       — tool orchestration, contribution ownership, replacement
     ToolManifest.ts      — ToolManifest registration descriptor
@@ -51,8 +53,8 @@ tools/
 ## Key Types
 
 - `BaseTool<S, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `drawOverlay`, `drawScene`, `drawBackground`. Permanent `dispose()` releases base computed signals after deactivation.
-- `Behavior<S>` — interface with optional per-event handlers (`onClick`, `onDrag`, `onDragStart`, `onDragEnd`, `onDragCancel`, `onPointerMove`, `onDoubleClick`, `onKeyDown`, `onKeyUp`) plus lifecycle hooks (`onStateExit`, `onStateEnter`). Each handler receives `(state, ctx, event)` and returns `boolean` (true = handled).
-- `ToolContext<S>` — `{ editor, tool, getState, setState, onCancel }`. `onCancel(callback)` registers rollback for the active drag and returns a function that dismisses it after successful completion.
+- `Behavior<S, TTool>` — interface with optional per-event handlers (`onClick`, `onDrag`, `onDragStart`, `onDragEnd`, `onDragCancel`, `onPointerMove`, `onDoubleClick`, `onKeyDown`, `onKeyUp`) plus lifecycle hooks (`onStateExit`, `onStateEnter`). Each handler receives `(state, ctx, event)` and returns `boolean` (true = handled).
+- `ToolContext<S, TTool>` — `{ editor, tool, getState, setState, onCancel }`. `tool: TTool` gives class-style behaviors access to their owning tool instance (e.g. `PenStroke.active(ctx.tool)`). `onCancel(callback)` registers rollback for the active drag and returns a function that dismisses it after successful completion.
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
 - `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
 - `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, replacement, removal, and temporary tool switching.
@@ -166,7 +168,7 @@ All three receive a `Canvas` instance.
 
 For simple tools (Hand, Shape):
 
-```typescript
+```typescript illustrative
 export const MyReadyBehavior = createBehavior<MyState>({
   onDragStart(state, ctx, event) {
     if (state.type !== "ready") return false;
@@ -180,7 +182,7 @@ export const MyReadyBehavior = createBehavior<MyState>({
 
 For complex tools (Select, Pen) where behaviors need private helper methods or hold resources:
 
-```typescript
+```typescript illustrative
 export class MyBehavior implements Behavior<MyState> {
   onDragStart(state: MyState, ctx: ToolContext<MyState>, event: DragStartEvent): boolean {
     if (state.type !== "ready") return false;
@@ -203,7 +205,7 @@ export class MyBehavior implements Behavior<MyState> {
 
 ### Using a fluent position edit for drag mutations
 
-```typescript
+```typescript illustrative
 onDragStart(state, ctx) {
   if (state.type !== "ready") return false;
   const selection = ctx.editor.positionSelection(ctx.editor.selection.ids);
@@ -258,11 +260,10 @@ onDragCancel(state, ctx) {
 
 ## Verification
 
-- `pnpm vitest run apps/desktop/src/renderer/src/lib/tools/` — unit and compliance tests.
-- `StateDiagram.compliance.test.ts` — verifies every `transition()` result is a valid state in the tool's `stateSpec` and that state changes match declared transitions.
+- `pnpm vitest run apps/desktop/src/renderer/src/lib/tools/` — unit tests.
 - `GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
 - `ToolManager.test.ts` — tool activation, temporary override, rAF coalescing, modifier forwarding.
-- Per-tool tests: `Hand.outcome.test.ts`, `Shape.outcome.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`.
+- Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`.
 
 ## Related
 

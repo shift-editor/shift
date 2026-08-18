@@ -1,5 +1,7 @@
 # shift-source
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Source-package crate for Shift's user-authored `.shift` format.
 
 ## Architecture Invariants
@@ -42,6 +44,11 @@ Family.shift
     <glyphId>.json
   modules/
     shift.libData.json            # optional Shift-owned compatibility module for IR lib data
+    shift.fontInfo.json           # optional Shift-owned module for preserved fontinfo remainder fields
+  data/
+    <path>                        # optional verbatim binary data files
+  images/
+    <path>                        # optional verbatim image files
 ```
 
 `glyphs/<glyphId>.json` must contain the same `id`; a mismatch is a load error.
@@ -93,7 +100,7 @@ byte-stable.
 
 ## How it works
 
-`font_to_tree(font)` converts the live `Font` projection into deterministic JSON entries. `tree_to_font(tree)` validates the manifest and rebuilds a `Font` through public `shift-font` constructors and mutators.
+`font_to_tree(package_id, font)` converts the live `Font` projection into deterministic JSON entries. `tree_to_font(tree)` validates the manifest and rebuilds a `Font` through public `shift-font` constructors and mutators.
 
 Locations become typed at the conversion boundary: named-instance locations are rebuilt as `ExternalLocation` values and source locations as `DesignLocation` values, so the external/design distinction is enforced from load rather than trusted downstream.
 

@@ -1,5 +1,7 @@
 # Validation
 
+<!-- reviewed: 2026-07-05 review-every: 90d -->
+
 Point sequence and clipboard payload validation for the Shift font editor.
 
 ## Architecture Invariants

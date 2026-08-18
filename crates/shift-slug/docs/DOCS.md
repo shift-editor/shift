@@ -1,8 +1,10 @@
 # shift-slug
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 GPU-independent preprocessing for the experimental Slug home/catalog glyph grid.
 
-## Architecture invariants
+## Architecture Invariants
 
 - **Derived only.** Slug curves, bands, bounds, packing, and GPU pages are rebuildable acceleration data. They never replace canonical `shift.glyph-layer.v1` authored layers.
 - **Grid only.** This crate supports catalog previews. It does not replace the editor scene renderer, tools, hit testing, or REGL handles.
@@ -45,7 +47,24 @@ tests/
   atlas.rs     conversion, band, range, shader-layout, and packing invariants
 ```
 
-## Static atlas layout
+## Key Types
+
+- `OutlineCommand` -- the Slug-owned drawing-command input type; there is no standalone packed-outline storage format.
+- `Curve` / `Bounds` -- quadratic curve primitives produced by deterministic topology conversion (lines become quadratics, cubics subdivide via Kurbo's error bound).
+- `Atlas` / `AtlasBuilder` / `Band` / `Glyph` -- one resolved static atlas: per-glyph bounds, curve ranges, and horizontal/vertical band ranges with checked `u32` offsets and counts.
+- `PackedAtlas` / `Layout` / `Section` / `CurveIndexEncoding` -- aligned little-endian GPU upload layout shared byte-for-byte by native `wgpu` and Electron WebGPU.
+- `VariableAtlasBuilder` / `PackedVariableAtlas` -- multi-source resident model: one base quadratic array plus base-relative `f32` source deltas with indexed shared weights.
+- `AuthoredCurveTopology` -- stable shift-font point/segment topology that every compatible source applies its ordered numeric values to, preserving curve correspondence.
+- `AuthoredAtlasBuilder` / `AuthoredGlyph` / `AuthoredAtlasPage` -- the complete-authored-font compiler path behind `build_authored_atlas` and its per-page variant.
+- `PageCompiler` / `PageInput` / `RetainedAtlasPage` -- the single page-compilation boundary for projected and directly streamed source geometry.
+- `RetainedAtlasDescriptor` -- retained per-page descriptor whose `weights` / `design_weights` methods form the coordinate-space boundary for location updates.
+- `SlugError` -- strict conversion and size failures; nothing saturates or wraps silently.
+
+## How it works
+
+The crate is a CPU-only compiler pipeline: drawing commands (`OutlineCommand`) are converted to quadratic curves with deterministic topology, curves are grouped per glyph and banded horizontally and vertically for fragment-shader ray tests, and the result is packed into an aligned little-endian byte layout that both native `wgpu` benchmarks and Electron WebGPU upload unchanged. Three compilation paths share that core: the static path bands one resolved shape, the variable path keeps one base curve array plus per-source deltas so weight updates cost bytes instead of geometry uploads, and the retained/authored path compiles shift-font projections into product grid pages. The subsections below describe each stage and record the measured baselines that justify the design choices.
+
+### Static atlas layout
 
 The packed upload contains four independently aligned sections:
 
@@ -60,7 +79,7 @@ Each glyph owns `band_count` horizontal ranges followed by `band_count` vertical
 
 `CurveIndexEncoding::GlobalU32` stores the checked CPU indexes directly. `GlyphLocalU16` subtracts each glyph's `curve_start` and packs two indexes per shader word; it rejects glyphs with more than 65,536 curves. Source Han's maximum is 561. The benchmark uses wide indexes by default and exposes compact indexes through `--compact-indices`.
 
-## Retained source page compilation
+### Retained source page compilation
 
 `retained::compile_page(PageInput, band_count)` compiles materialized source-neutral glyph values. `PageCompiler` exposes the equivalent streaming path through `new`, `add_glyph`, `add_exact_variant`, and `finish`; OpenType uses it to convert raw curves without first materializing projection descriptors. Both paths produce the same `RetainedAtlasPage`, including root mappings, exact-source variants, location weights, complement weights, preview extents, and disposable atlas geometry. A parity test keeps `PageCompiler` output equal to `compile_page` output.
 
@@ -68,13 +87,13 @@ The backend boundary intentionally ends at acquisition: projected UFO, Designspa
 
 `RetainedAtlasDescriptor::weights` accepts external coordinates and applies its source-format mapping before normalization. `design_weights` accepts coordinates already mapped by the Rust-owned variation model and skips that external mapping. Callers must select the method at the coordinate-space boundary; passing a mapped location to `weights` applies nonlinear mappings twice.
 
-## Resident variable execution
+### Resident variable execution
 
 `build_authored_atlas()` remains the complete-font compiler and profiling boundary. The product Grid uses `build_authored_atlas_page()` for every deterministic fixed directory page and presents only after the complete page set is resident, so bounded startup work, atomic affected-page replacement, local edits, and disposable per-page caching share one compiler and packed layout. Each compilation creates one `GlyphProjectionSet` for its ordered roots and transitive component closure. Weight collection, root addition, component preparation, exact-source discovery, and fallback resolution all read that same immutable set instead of rebuilding projections or variation models. Fallback and exact-source resolved glyphs are retained only within the current root, bounding temporary memory; the complete set is dropped after atlas construction and never survives authored edits. A patch preserves explicit `GlyphId` mapping and excludes unrelated roots. Layerless root records receive zero-curve/zero-advance descriptors so one incomplete draft cannot disable the rest of the grid. Complete page sets and patches are location-independent; axis movement changes only their shared weight vectors and visible instances, and scrolling performs no atlas work.
 
 `build_authored_atlas_profiled()` and its page counterpart return nested phase durations from the same compiler path. The bridge uses these functions for `prepareSlugAtlas`; setting `SHIFT_PROFILE_SLUG_ATLAS=1` prints acquisition, projection preparation, weight-set collection, component preparation, fallback bounds, exact-source preparation, atlas addition, layout, and total native time without changing the NAPI endpoint.
 
-### Fraunces projection-reuse baseline — 2026-08-01
+#### Fraunces projection-reuse baseline — 2026-08-01
 
 A same-machine release comparison on a 6-core/12-thread Ryzen 5 5500U exercised the Fraunces `.shift` corpus through `Bridge.prepareSlugAtlas(256)`. Both revisions produced 699 roots, 1,290 atlas glyphs, 12,713 curves, 998 components, and 2,190,648 bytes.
 
@@ -117,7 +136,7 @@ The `9c0b6510` run includes the component fast path and exact visible-bound redu
 
 The `28bfe2ab` general-component model was measured in three separate 120-frame runs on macOS 26.3.1. Three-run medians were 2.326 ms build, 6.137 ms GPU submit/readback, and 1.794 / 2.149 / 3.902 / 4.033 ms serialized p50/p95/p99/max. Against `9c0b6510`, those medians are +69.4% build, +6.3% submit/readback, +79.2% p50, -15.9% p95, -18.0% p99, and -18.5% max; treat them as run-to-run observations rather than isolated attribution. Every run retained the 481,444-byte Host atlas, 298,784 scratch bytes, zero curve/advance error, exact bands, zero geometry uploads, 960 weight bytes, and checksum `c1cd8eb7631a65db`. The component-specific Metal correctness test also passed. The p95 retains 6.151 ms below the preferred 8.3 ms gate and p99 retains 12.798 ms below the 16.7 ms hard gate. That measured revision used eighteen storage bindings. The current byte-addressed resident-atlas shader uses seven in its largest entry point; its Electron presentation timing remains to be measured.
 
-## Reference implementation
+### Reference implementation
 
 The design is informed by Gabriel Dubé's MIT implementation:
 
@@ -128,7 +147,7 @@ The article's 9.5 ms result shapes roughly 49,000 characters while lazily produc
 
 See `THIRD_PARTY.md` for attribution.
 
-## Initial Source Han CPU baseline — 2026-07-26
+### Initial Source Han CPU baseline — 2026-07-26
 
 `analyze_font` processed all 65,535 glyph IDs from `SourceHanSans-VF.ttf` at `wght=900` without a GPU:
 
@@ -155,7 +174,7 @@ Band-count tradeoff at `wght=900`:
 
 Eight bands remain the initial static-render candidate. The 5.49 million curves alone occupy 125.6 MiB at three `vec2<f32>` values each. Variable residency therefore needs base-plus-sparse-delta measurement; duplicating complete curve arrays per source is not acceptable by default. Per-glyph curve counts fit `u16` in this corpus, so packing two glyph-local curve indexes per `u32` is a promising derived optimization to measure without weakening checked CPU ranges.
 
-## Native offscreen baseline
+### Native offscreen baseline
 
 The native harness uses `SLUG_WGSL` and the exact `PackedAtlas` bytes exposed for Electron. It renders a uniformly sampled visible grid to `Rgba8Unorm`, reads pixels back, emits a checksum, and measures render-pass boundaries when timestamp queries are available. Its default 960×640 workload contains 150 visible 64-pixel cells.
 
@@ -185,6 +204,28 @@ llvmpipe is CPU rasterization and is not production performance evidence. It pro
 
 The target MacBook Air native-wgpu probe reports Apple M4/Metal, timestamp-query support, a 4 GiB maximum buffer and storage binding, 29 storage buffers per stage, and 32-byte storage-offset alignment. Electron 40.1.0 / Chromium 144 exposes ten storage buffers through Dawn on the same machine, including when adapter-limit tiering is disabled. Native limits therefore are not product-authoritative. The shared shader uses eight storage bindings in its largest entry point and partitions resident bytes when necessary so each physical binding fits the adapter limit. Packaged Electron/Dawn presentation remains the product acceptance environment.
 
+## Workflow recipes
+
+### Changing the packed GPU layout
+
+1. Update `Layout`/`Section` construction in `pack.rs` (or the variable packing in `variable.rs`) and the matching typed WGSL decoders in `shaders/slug.wgsl` and `shaders/slug-variable.wgsl` in the same change — the byte layout and the shader decode are one contract.
+2. Run `cargo test -p shift-slug --all-features`; `tests/atlas.rs` holds the shader-layout and packing invariants that pin section alignment and offsets.
+3. Validate on a real adapter, not just llvmpipe: `cargo run --release -p shift-slug --features wgpu-benchmark --example benchmark_wgpu -- /path/to/font.ttf --iterations 120 wght=900` and confirm the pixel checksum is unchanged when the change is not meant to alter rendering.
+
+### Extending the authored compilation path
+
+1. Extend `AuthoredCurveTopology` / `AuthoredAtlasBuilder` (or the component records in `authored/component.rs`) rather than pairing per-source pen callbacks — correspondence must come from stable authored topology.
+2. Add a fixture that exercises the new behavior across sources; keep atlas insertion transactional across the compatible default and all exact variants.
+3. Run `cargo run --release -p shift-slug --example analyze_authored` against a real designspace to check source coverage and random-location error, then `cargo test -p shift-slug --all-features` and `cargo clippy -p shift-slug --all-targets --all-features -- -D warnings`.
+
+## Gotchas
+
+- `RetainedAtlasDescriptor.weights` applies the source-format axis mapping; `design_weights` expects already-mapped coordinates. Passing a mapped location to `weights` applies nonlinear mappings twice and produces subtly wrong interpolation, not an error.
+- `VariableAtlasBuilder::add_glyph` is a compatible-fixture convenience only. Pairing independently resolved pen callbacks across locations silently associates unrelated curves — Source Han glyph 1663 emits different resolved command kinds at `wght=100` and `wght=900`.
+- Keep wide and compact curve-index decoding as separate static shader entry points with inline decoding. A branch or helper call inside the dynamic curve loop caused llvmpipe's first submission to never complete.
+- Empty and layerless glyphs still get zero-curve descriptors on purpose — dense atlas indexing is what lets the grid address glyphs without a shaper. Filtering them out during a patch shifts every later index.
+- llvmpipe timings are CPU rasterization and prove only validation/correctness. Adapter limits from the native probe are not product-authoritative either: Electron/Dawn exposes ten storage buffers where native Metal reports 29, so the largest entry point must stay within the Electron budget and partition resident bytes when needed.
+
 ## Verification
 
 ```bash
@@ -204,3 +245,9 @@ cargo run --release -p shift-slug --features wgpu-benchmark \
 ```
 
 With no font argument, `benchmark_wgpu` only prints adapter capabilities. `--comparison-output` writes a three-row PNG containing the original cubic-capable CPU raster, the Slug quadratic raster, and their red alpha difference, and prints soft intersection-over-union and normalized alpha error. The analyzer remains CPU-only. The native benchmark is a correctness and diagnostic harness; packaged Electron/Dawn remains the product acceptance environment.
+
+## Related
+
+- [`shift-font`](../../shift-font/docs/DOCS.md) -- owns authored layers, `GlyphComponents` order/ancestry/attachment, and the projections and variation model the authored path compiles
+- [`shift-bridge`](../../shift-bridge/docs/DOCS.md) -- NAPI boundary that acquires source geometry, chooses the acquisition path, and delivers packed Slug pages to Electron
+- [`Renderer font model`](../../../apps/desktop/src/renderer/src/lib/model/docs/DOCS.md) -- `GlyphCatalog` grid surface that consumes resident atlas pages for catalog previews

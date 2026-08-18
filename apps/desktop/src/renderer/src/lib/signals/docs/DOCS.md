@@ -1,5 +1,7 @@
 # Reactive
 
+<!-- reviewed: 2026-08-16 review-every: 90d -->
+
 Fine-grained reactivity system providing automatic dependency tracking and efficient updates for the Shift editor.
 
 ## Architecture Invariants
