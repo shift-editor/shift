@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@electron/packager': 18.4.4
   '@electron/node-gyp>tar': 7.5.22
   '@electron/rebuild@3>tar': 7.5.22
   cacache@16>tar: 7.5.22
@@ -628,8 +629,8 @@ packages:
     engines: {node: '>=12.0.0'}
     hasBin: true
 
-  '@electron/packager@18.3.6':
-    resolution: {integrity: sha512-1eXHB5t+SQKvUiDpWGpvr90ZSSbXj+isrh3YbjCTjKT4bE4SQrKSBfukEAaBvp67+GXHFtCHjQgN9qSTFIge+Q==}
+  '@electron/packager@18.4.4':
+    resolution: {integrity: sha512-fTUCmgL25WXTcFpM1M72VmFP8w3E4d+KNzWxmTDRpvwkfn/S206MAtM2cy0GF78KS9AwASMOUmlOIzCHeNxcGQ==}
     engines: {node: '>= 16.13.0'}
     hasBin: true
 
@@ -2604,6 +2605,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -4143,6 +4145,11 @@ packages:
     engines: {node: '>=14.0.0'}
     hasBin: true
 
+  prettier@3.9.6:
+    resolution: {integrity: sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==}
+    engines: {node: '>=14'}
+    hasBin: true
+
   pretty-format@27.5.1:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
     engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
@@ -5227,7 +5234,7 @@ snapshots:
       '@electron-forge/template-webpack-typescript': 7.11.2(bluebird@3.7.2)(esbuild@0.27.2)(lightningcss@1.30.1)(postcss@8.5.25)(supports-color@8.1.1)
       '@electron-forge/tracer': 7.11.2
       '@electron/get': 3.1.0(supports-color@8.1.1)
-      '@electron/packager': 18.3.6(supports-color@8.1.1)
+      '@electron/packager': 18.4.4(supports-color@8.1.1)
       '@electron/rebuild': 3.7.2(bluebird@3.7.2)(supports-color@8.1.1)
       '@malept/cross-spawn-promise': 2.0.0
       '@vscode/sudo-prompt': 9.3.2
@@ -5356,7 +5363,7 @@ snapshots:
   '@electron-forge/shared-types@7.11.2(bluebird@3.7.2)(supports-color@8.1.1)':
     dependencies:
       '@electron-forge/tracer': 7.11.2
-      '@electron/packager': 18.3.6(supports-color@8.1.1)
+      '@electron/packager': 18.4.4(supports-color@8.1.1)
       '@electron/rebuild': 3.7.2(bluebird@3.7.2)(supports-color@8.1.1)
       listr2: 7.0.2
     transitivePeerDependencies:
@@ -5511,7 +5518,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron/packager@18.3.6(supports-color@8.1.1)':
+  '@electron/packager@18.4.4(supports-color@8.1.1)':
     dependencies:
       '@electron/asar': 3.4.1
       '@electron/get': 3.1.0(supports-color@8.1.1)
@@ -5519,6 +5526,7 @@ snapshots:
       '@electron/osx-sign': 1.3.3(supports-color@8.1.1)
       '@electron/universal': 2.0.3(supports-color@8.1.1)
       '@electron/windows-sign': 1.2.2(supports-color@8.1.1)
+      '@malept/cross-spawn-promise': 2.0.0
       debug: 4.4.1(supports-color@8.1.1)
       extract-zip: 2.0.1(supports-color@8.1.1)
       filenamify: 4.3.0
@@ -5528,6 +5536,7 @@ snapshots:
       junk: 3.1.0
       parse-author: 2.0.0
       plist: 3.1.0
+      prettier: 3.9.6
       resedit: 2.0.3
       resolve: 1.22.10
       semver: 7.7.4
@@ -8730,6 +8739,8 @@ snapshots:
   postject@1.0.0-alpha.6:
     dependencies:
       commander: 9.5.0
+
+  prettier@3.9.6: {}
 
   pretty-format@27.5.1:
     dependencies:

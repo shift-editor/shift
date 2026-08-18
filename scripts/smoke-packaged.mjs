@@ -29,7 +29,12 @@ const packageName = (() => {
       throw new Error(`Unsupported distribution: ${distribution}`);
   }
 })();
-const executableName = distribution === "nightly" ? "shift-nightly" : "shift";
+const executableName =
+  process.platform === "darwin"
+    ? packageName
+    : distribution === "nightly"
+      ? "shift-nightly"
+      : "shift";
 
 const executablePath = (() => {
   switch (process.platform) {
