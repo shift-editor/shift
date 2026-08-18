@@ -5,7 +5,6 @@ import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { GlyphLayerEdit } from "@/lib/model/GlyphLayerEdit";
 import type { GlyphNode } from "@/types/node";
 import type { Pen } from "./Pen";
-import { penCurveGeometry } from "./PenCurve";
 import type { PenCurve, PenEndpoint } from "./types";
 
 export class PenStroke {
@@ -93,7 +92,7 @@ export class PenStroke {
 
       const [controlStartId, controlEndId, endpointId] = edit.addCubic(
         context.activeContourId,
-        penCurveGeometry(curve),
+        this.#pen.resolveCurve(curve),
       );
       return [edit, controlStartId, controlEndId, endpointId];
     } catch (error) {
