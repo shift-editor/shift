@@ -13,10 +13,10 @@
           "name" : "SVG Image 4",
           "opacity" : 1,
           "position" : {
-            "scale" : 0.75,
+            "scale" : 0.9,
             "translation-in-points" : [
-              -6.207075000000032,
-              10.787512500000048
+              -12,
+              12
             ]
           }
         }
