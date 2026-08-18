@@ -18,7 +18,7 @@ if (distribution !== "release" && distribution !== "nightly") {
 const isNightly = distribution === "nightly";
 const productName = isNightly ? "Shift Nightly" : "Shift";
 const packageName = isNightly ? "shift-nightly" : "shift";
-const executableName = packageName;
+const executableName = process.platform === "darwin" ? productName : packageName;
 const appBundleId = isNightly ? "app.shift.nightly" : "app.shift";
 const iconName = isNightly ? "nightly" : "icon";
 const packagerIcon =
