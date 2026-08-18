@@ -132,7 +132,7 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 Position transforms call `editor.positionSelection(ids)` once at interaction start, then create `selection.layer.positions.move(selection.targets)`, `.rotate(...)`, or `.scale(...)`. The behavior immediately registers `edit.discard()` with `ctx.onCancel()`. Preview methods always resolve from the operation's frozen position base; after `commit()` finishes the active `GlyphLayerEdit`, the behavior calls the returned function to dismiss rollback.
 
-Pen topology and non-affine position patches use `GlyphLayer.beginEdit()` directly and register `edit.cancel()` through the same drag scope. `GlyphLayerEdit.addCubic()`, `setPointSmooth()`, and `setPositions()` mutate the ordinary reactive layer immediately. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; after finishing, the behavior dismisses rollback. An undismissed rollback restores the base without sending an intent.
+Pen topology and non-affine position patches use `GlyphLayer.beginEdit()` directly and register `edit.cancel()` through the same drag scope. Pen constructs cubic point sequences with the generic `GlyphLayerEdit.addPoints()` primitive; `setPointSmooth()` and `setPositions()` mutate the ordinary reactive layer immediately. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; after finishing, the behavior dismisses rollback. An undismissed rollback restores the base without sending an intent.
 
 ### Rendering layers
 

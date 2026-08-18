@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { Point } from "@shift/glyph-state";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("glyph layer edits preserve committed preview bases", () => {
@@ -10,6 +11,64 @@ describe("glyph layer edits preserve committed preview bases", () => {
     editor.selectTool("pen");
     await editor.clickGlyphLocal(100, 100);
     await editor.clickGlyphLocal(300, 200);
+  });
+
+  it("adds contours, points, and anchors locally and cancels them together", () => {
+    const layer = editor.requireGlyphLayer();
+    const edit = layer.beginEdit();
+    const contourId = edit.addContour(true);
+    const [pointId] = edit.addPoints(contourId, [Point.onCurve({ x: 400, y: 300 })]);
+    const anchorId = edit.addAnchor("top", { x: 400, y: 700 });
+
+    expect(layer.contour(contourId)?.closed).toBe(true);
+    expect(layer.point(pointId!)).toMatchObject({ x: 400, y: 300 });
+    expect(layer.anchor(anchorId)).toMatchObject({ name: "top", x: 400, y: 700 });
+
+    edit.cancel();
+    expect(layer.contour(contourId)).toBeNull();
+    expect(layer.point(pointId!)).toBeNull();
+    expect(layer.anchor(anchorId)).toBeNull();
+  });
+
+  it("finishes structural additions as one undoable edit", async () => {
+    const layer = editor.requireGlyphLayer();
+    const edit = layer.beginEdit();
+    const contourId = edit.addContour(true);
+    const [pointId] = edit.addPoints(contourId, [
+      Point.onCurve({ x: 400, y: 300 }),
+      Point.onCurve({ x: 500, y: 300 }),
+    ]);
+    const anchorId = edit.addAnchor("top", { x: 400, y: 700 });
+    edit.finish("Add contour and anchor");
+    await editor.settle();
+    expect(layer.contour(contourId)?.closed).toBe(true);
+    expect(layer.point(pointId!)).toMatchObject({ x: 400, y: 300 });
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 400, y: 700 });
+
+    await editor.undo();
+    expect(layer.point(pointId!)).toBeNull();
+    expect(layer.anchor(anchorId)).toBeNull();
+
+    await editor.redo();
+    expect(layer.contour(contourId)?.closed).toBe(true);
+    expect(layer.point(pointId!)).toMatchObject({ x: 400, y: 300 });
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 400, y: 700 });
+  });
+
+  it("reapplies structural additions over an older workspace echo", async () => {
+    const layer = editor.requireGlyphLayer();
+    const acceptedContourId = layer.addContour();
+    const edit = layer.beginEdit();
+    const previewContourId = edit.addContour(false);
+    const [previewPointId] = edit.addPoints(previewContourId, [Point.onCurve({ x: 400, y: 300 })]);
+
+    await editor.settle();
+    expect(layer.contour(acceptedContourId)).not.toBeNull();
+    expect(layer.point(previewPointId!)).toMatchObject({ x: 400, y: 300 });
+
+    edit.cancel();
+    expect(layer.contour(acceptedContourId)).not.toBeNull();
+    expect(layer.contour(previewContourId)).toBeNull();
   });
 
   it("previews, finishes, and undoes through the workspace ledger", async () => {
