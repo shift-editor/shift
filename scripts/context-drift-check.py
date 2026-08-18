@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-# Usage: python3 scripts/context-drift-check.py [--json]
+# Usage: python3 scripts/context-drift-check.py [--json | --codemap <doc>]
 """
 context-drift-check.py — validate documentation freshness, structure, and link integrity.
 
 Run from repo root:
-    python3 scripts/context-drift-check.py          # human-readable output
-    python3 scripts/context-drift-check.py --json    # structured JSON output
+    python3 scripts/context-drift-check.py                   # human-readable output
+    python3 scripts/context-drift-check.py --json            # structured JSON output
+    python3 scripts/context-drift-check.py --codemap <doc>   # print a module's real
+                                                             # tree for codemap curation
+
+DOCS.md files are auto-discovered; each needs a reviewed attestation near the top:
+    <!-- reviewed: 2026-08-18 review-every: 90d -->
+Bumping that date (after actually re-reading the doc against source) is the only
+way to clear staleness — doc commits alone no longer reset the clock.
 
 Exit code 0 = clean, 1 = issues found.
 """
@@ -17,6 +24,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -25,29 +33,29 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Configuration
 # ---------------------------------------------------------------------------
 
-# All known DOCS.md locations (must match routing index)
-EXPECTED_DOCS = [
-    "crates/shift-backends/docs/DOCS.md",
-    "crates/shift-font/docs/DOCS.md",
-    "crates/shift-source/docs/DOCS.md",
-    "crates/shift-workspace/docs/DOCS.md",
-    "crates/shift-bridge/docs/DOCS.md",
-    "apps/desktop/src/main/docs/DOCS.md",
-    "apps/desktop/src/preload/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/lib/editor/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/lib/tools/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md",
-    "apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md",
-    "packages/types/docs/DOCS.md",
-    "packages/geo/docs/DOCS.md",
-    "packages/glyph-state/docs/DOCS.md",
-    "packages/ui/docs/DOCS.md",
-    "packages/validation/docs/DOCS.md",
-    "packages/rules/docs/DOCS.md",
-]
+# DOCS.md files are discovered from the tree (tracked + untracked), never
+# listed by hand: a hardcoded list silently exempts new modules.
+def discover_docs() -> list[str]:
+    result = subprocess.run(
+        [
+            "git", "ls-files", "--cached", "--others", "--exclude-standard",
+            "*docs/DOCS.md",
+        ],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    return sorted(line for line in result.stdout.splitlines() if line.strip())
+
 
 ROUTING_INDEX = "docs/architecture/index.md"
+
+# Review attestation frontmatter, e.g.:
+#   <!-- reviewed: 2026-08-18 review-every: 90d -->
+# The reviewed date is an explicit human/agent attestation that the doc was
+# checked against source; bumping it is the only way to clear staleness.
+REVIEWED_RE = re.compile(
+    r"<!--\s*reviewed:\s*(\d{4}-\d{2}-\d{2})(?:\s+review-every:\s*(\d+)d)?\s*-->"
+)
+DEFAULT_REVIEW_DAYS = 90
 
 # Required H2 sections in every DOCS.md (order-independent)
 REQUIRED_SECTIONS = {
@@ -291,12 +299,21 @@ def extract_fenced_blocks(tokens: list) -> list[tuple[str, str]]:
 # Checks
 # ---------------------------------------------------------------------------
 
-def check_missing_docs() -> list[Issue]:
-    """Check that all expected DOCS.md files exist."""
+def check_routing_inventory(docs: list[str], index_tokens: list) -> list[Issue]:
+    """Every discovered DOCS.md must be reachable from the routing index."""
     issues = []
-    for doc in EXPECTED_DOCS:
-        if not (REPO_ROOT / doc).exists():
-            issues.append(Issue("missing", "error", doc, f"{doc} does not exist"))
+    index_dir = (REPO_ROOT / ROUTING_INDEX).parent
+    routed: set[Path] = set()
+    for _text, href in extract_links(index_tokens):
+        target = href.split("#")[0]
+        if target:
+            routed.add((index_dir / target).resolve())
+    for doc in docs:
+        if (REPO_ROOT / doc).resolve() not in routed:
+            issues.append(Issue(
+                "missing", "error", ROUTING_INDEX,
+                f"{doc} is not routed from the index",
+            ))
     return issues
 
 
@@ -318,30 +335,60 @@ def check_broken_links(doc_path: str, tokens: list) -> list[Issue]:
 
 
 def check_freshness(doc_path: str) -> list[Issue]:
-    """Flag docs that are stale relative to their source code."""
+    """Flag docs that are stale relative to their source code or overdue for review.
+
+    A `<!-- reviewed: YYYY-MM-DD review-every: Nd -->` attestation is the
+    authoritative freshness signal: staleness compares source activity against
+    the reviewed date, and reviews expire after their window. Docs without an
+    attestation fall back to git-date comparison and are asked to add one.
+    """
     issues = []
+    reviewed, review_days = _parse_reviewed(doc_path)
+
+    if reviewed:
+        overdue = (date.today() - reviewed).days - review_days
+        if overdue > 0:
+            issues.append(Issue(
+                "stale", "warning", doc_path,
+                f"review overdue by {overdue}d (reviewed {reviewed}, window {review_days}d)",
+            ))
+        src_date = _last_commit_date(_source_dir_for_doc(doc_path))
+        if src_date and src_date[:10] > reviewed.isoformat():
+            issues.append(Issue(
+                "stale", "warning", doc_path,
+                f"source touched {src_date[:10]}, after last review {reviewed}",
+            ))
+        return issues
+
+    issues.append(Issue(
+        "stale", "warning", doc_path,
+        "missing `<!-- reviewed: YYYY-MM-DD -->` attestation",
+    ))
     if _has_worktree_changes(doc_path):
         return issues
 
     doc_date = _last_commit_date(doc_path)
     if not doc_date:
-        issues.append(Issue(
-            "stale", "warning", doc_path,
-            f"{doc_path} has no git history",
-        ))
         return issues
 
-    src_dir = _source_dir_for_doc(doc_path)
-    src_date = _last_commit_date(src_dir)
-    if not src_date:
-        return issues
-
-    if doc_date < src_date:
+    src_date = _last_commit_date(_source_dir_for_doc(doc_path))
+    if src_date and doc_date < src_date:
         issues.append(Issue(
             "stale", "warning", doc_path,
             f"doc last touched {doc_date[:10]}, source last touched {src_date[:10]}",
         ))
     return issues
+
+
+def _parse_reviewed(doc_path: str) -> tuple[date | None, int]:
+    """Extract the reviewed attestation from the top of a doc."""
+    head = "\n".join((REPO_ROOT / doc_path).read_text().splitlines()[:5])
+    m = REVIEWED_RE.search(head)
+    if not m:
+        return None, DEFAULT_REVIEW_DAYS
+    reviewed = date.fromisoformat(m.group(1))
+    days = int(m.group(2)) if m.group(2) else DEFAULT_REVIEW_DAYS
+    return reviewed, days
 
 
 def check_symbols(doc_path: str, tokens: list, symbol_index: dict[str, bool]) -> list[Issue]:
@@ -389,20 +436,29 @@ def check_structure(doc_path: str, tokens: list) -> list[Issue]:
     issues = []
     headings = extract_headings(tokens)
     h2_names = {name for level, name in headings if level == 2}
+    h2_by_fold = {name.casefold(): name for name in h2_names}
+
+    def missing(section: str, severity: str) -> None:
+        found = h2_by_fold.get(section.casefold())
+        if found is not None:
+            issues.append(Issue(
+                "structure", severity, doc_path,
+                f"section '## {found}' is miscapitalized (expected '## {section}')",
+            ))
+        else:
+            article = "required" if severity == "error" else "recommended"
+            issues.append(Issue(
+                "structure", severity, doc_path,
+                f"missing {article} section: ## {section}",
+            ))
 
     for section in REQUIRED_SECTIONS:
         if section not in h2_names:
-            issues.append(Issue(
-                "structure", "error", doc_path,
-                f"missing required section: ## {section}",
-            ))
+            missing(section, "error")
 
     for section in RECOMMENDED_SECTIONS:
         if section not in h2_names:
-            issues.append(Issue(
-                "structure", "warning", doc_path,
-                f"missing recommended section: ## {section}",
-            ))
+            missing(section, "warning")
 
     # Check that there is exactly one H1
     h1s = [name for level, name in headings if level == 1]
@@ -412,6 +468,91 @@ def check_structure(doc_path: str, tokens: list) -> list[Issue]:
         issues.append(Issue("structure", "error", doc_path, f"multiple H1 headings: {h1s}"))
 
     return issues
+
+
+def check_codemap(doc_path: str, tokens: list) -> list[Issue]:
+    """Verify every path in the Codemap tree exists on disk.
+
+    Codemaps are curated (key files only), so this checks presence of what is
+    listed, never completeness. Indentation defines nesting; the root line
+    resolves against the module directory or the repo root, whichever matches.
+    """
+    issues = []
+    block = _codemap_block(tokens)
+    if block is None:
+        return issues
+
+    module_dir = _module_dir_for_doc(doc_path)
+    stack: list[tuple[int, Path]] = []  # (indent, resolved dir)
+
+    for raw in block.splitlines():
+        if not raw.strip() or raw.strip().startswith(("…", "...")):
+            continue
+        line = re.sub(r"[│├└─┬]+", " ", raw)
+        name = line.strip().split()[0]
+        if not re.match(r"^[\w.@/-]+$", name):
+            continue
+        indent = len(line) - len(line.lstrip())
+
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+
+        if not stack:
+            root = _resolve_codemap_root(name, module_dir)
+            if root is None:
+                issues.append(Issue(
+                    "codemap", "error", doc_path,
+                    f"codemap root `{name}` does not resolve to a directory",
+                ))
+                return issues
+            stack.append((indent, root))
+            continue
+
+        path = stack[-1][1] / name.rstrip("/")
+        if name.endswith("/"):
+            if not path.is_dir():
+                issues.append(Issue(
+                    "codemap", "error", doc_path,
+                    f"codemap directory `{name}` does not exist",
+                ))
+            stack.append((indent, path))
+        elif not path.is_file():
+            issues.append(Issue(
+                "codemap", "error", doc_path,
+                f"codemap entry `{path.relative_to(REPO_ROOT)}` does not exist",
+            ))
+    return issues
+
+
+def _codemap_block(tokens: list) -> str | None:
+    """Return the first fenced block inside the Codemap section, if any."""
+    in_codemap = False
+    for i, token in enumerate(tokens):
+        if token.type == "heading_open" and token.tag == "h2":
+            name = tokens[i + 1].content if i + 1 < len(tokens) else ""
+            in_codemap = name.casefold() == "codemap"
+        elif token.type == "fence" and in_codemap:
+            return token.content
+    return None
+
+
+def _resolve_codemap_root(name: str, module_dir: Path) -> Path | None:
+    """Map a codemap root line to a real directory."""
+    rel = name.rstrip("/")
+    candidates = []
+    if str(module_dir.relative_to(REPO_ROOT)).endswith(rel):
+        candidates.append(module_dir)
+    candidates += [REPO_ROOT / rel, module_dir / rel]
+    # Codemaps may root a tree at a sibling module (cross-module context);
+    # resolve against each ancestor up to the repo root.
+    ancestor = module_dir
+    while ancestor != REPO_ROOT:
+        ancestor = ancestor.parent
+        candidates.append(ancestor / rel)
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return None
 
 
 def check_commands(doc_path: str, tokens: list, valid_commands: dict) -> list[Issue]:
@@ -441,9 +582,22 @@ def check_commands(doc_path: str, tokens: list, valid_commands: dict) -> list[Is
 
 
 def _check_single_command(line: str, valid_commands: dict, doc_path: str) -> Issue | None:
-    """Check a single command line for invalid pnpm/cargo references."""
+    """Check a single command line for invalid pnpm/cargo/vitest references."""
     pnpm_scripts: dict[str, set[str]] = valid_commands["pnpm"]
     cargo_packages: set[str] = valid_commands["cargo"]
+
+    # vitest invocations (npx vitest / pnpm vitest / bare vitest): validate
+    # long flags against the installed CLI so Jest-isms don't linger in docs.
+    if re.match(r"(?:npx\s+|pnpm\s+(?:exec\s+)?)?vitest\b", line):
+        known_flags = valid_commands["vitest_flags"]
+        if known_flags:
+            for flag in re.findall(r"--[A-Za-z][\w-]*", line):
+                if flag not in known_flags:
+                    return Issue(
+                        "command", "error", doc_path,
+                        f"vitest does not accept `{flag}`",
+                    )
+        return None
 
     # pnpm --filter <pkg> <script>
     m = re.match(r"pnpm\s+--filter\s+['\"]?([^'\"!\s]+)['\"]?\s+(\S+)", line)
@@ -468,10 +622,6 @@ def _check_single_command(line: str, valid_commands: dict, doc_path: str) -> Iss
             return Issue("command", "warning", doc_path, f"no root script `{script}` in package.json")
         return None
 
-    # pnpm vitest run <path> — always valid (vitest handles its own paths)
-    if line.startswith("pnpm vitest"):
-        return None
-
     # cargo test -p <package>
     m = re.match(r"cargo\s+\w+.*?(?:-p|--package)\s+(\S+)", line)
     if m:
@@ -487,11 +637,16 @@ def _check_single_command(line: str, valid_commands: dict, doc_path: str) -> Iss
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _source_dir_for_doc(doc_path: str) -> str:
-    """Map a DOCS.md path to its source directory."""
+def _module_dir_for_doc(doc_path: str) -> Path:
+    """Absolute directory of the module a DOCS.md documents."""
     parts = Path(doc_path).parts
     docs_idx = parts.index("docs")
-    module_dir = Path(*parts[:docs_idx])
+    return REPO_ROOT / Path(*parts[:docs_idx])
+
+
+def _source_dir_for_doc(doc_path: str) -> str:
+    """Map a DOCS.md path to its source directory."""
+    module_dir = _module_dir_for_doc(doc_path).relative_to(REPO_ROOT)
     src_dir = module_dir / "src"
     if (REPO_ROOT / src_dir).exists():
         return str(src_dir)
@@ -575,53 +730,90 @@ def _load_valid_commands() -> dict:
         if m:
             cargo_packages.add(m.group(1))
 
-    return {"pnpm": pnpm, "cargo": cargo_packages}
+    return {"pnpm": pnpm, "cargo": cargo_packages, "vitest_flags": _load_vitest_flags()}
+
+
+def _load_vitest_flags() -> set[str]:
+    """Long flags accepted by the installed vitest CLI (empty when unavailable)."""
+    vitest = REPO_ROOT / "node_modules" / ".bin" / "vitest"
+    if not vitest.exists():
+        return set()
+    result = subprocess.run(
+        [str(vitest), "--help"], capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    if result.returncode != 0:
+        return set()
+    return set(re.findall(r"(--[A-Za-z][\w-]*)", result.stdout))
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+def print_codemap_tree(doc_path: str) -> None:
+    """Print the module's real source tree as ground truth for codemap curation."""
+    module_dir = _module_dir_for_doc(doc_path)
+    skip_dirs = {"docs", "node_modules", "target", "dist", "__snapshots__", "fixtures"}
+
+    def walk(directory: Path, prefix: str) -> None:
+        entries = sorted(
+            [e for e in directory.iterdir() if not e.name.startswith(".")],
+            key=lambda e: (e.is_file(), e.name),
+        )
+        for entry in entries:
+            if entry.is_dir():
+                if entry.name in skip_dirs:
+                    continue
+                print(f"{prefix}{entry.name}/")
+                walk(entry, prefix + "  ")
+            else:
+                print(f"{prefix}{entry.name}")
+
+    print(f"{module_dir.relative_to(REPO_ROOT)}/  (actual tree — curate, don't paste)")
+    walk(module_dir, "  ")
+
+
 def main():
+    if "--codemap" in sys.argv:
+        print_codemap_tree(sys.argv[sys.argv.index("--codemap") + 1])
+        return
+
     json_output = "--json" in sys.argv
     all_issues: list[Issue] = []
     symbol_index: dict[str, bool] = {}
     valid_commands = _load_valid_commands()
+    docs = discover_docs()
 
     if not json_output:
         print("Loading command index...")
         pnpm_count = sum(len(v) for v in valid_commands["pnpm"].values())
         print(f"  {pnpm_count} pnpm scripts across {len(valid_commands['pnpm'])} packages")
         print(f"  {len(valid_commands['cargo'])} cargo packages")
+        print(f"  {len(valid_commands['vitest_flags'])} vitest flags")
+        print(f"  {len(docs)} DOCS.md files discovered")
         print()
 
-    # Phase 1: missing docs
-    if not json_output:
-        print("Checking for missing docs...")
-    all_issues.extend(check_missing_docs())
-
-    # Phase 2: per-doc checks
-    for doc in EXPECTED_DOCS:
-        full_path = REPO_ROOT / doc
-        if not full_path.exists():
-            continue
+    # Phase 1: per-doc checks
+    for doc in docs:
         if not json_output:
             print(f"  Checking {doc}...")
 
-        tokens = parse_doc(full_path)
+        tokens = parse_doc(REPO_ROOT / doc)
         all_issues.extend(check_broken_links(doc, tokens))
         all_issues.extend(check_freshness(doc))
         all_issues.extend(check_symbols(doc, tokens, symbol_index))
         all_issues.extend(check_structure(doc, tokens))
+        all_issues.extend(check_codemap(doc, tokens))
         all_issues.extend(check_commands(doc, tokens, valid_commands))
 
-    # Phase 3: routing index
+    # Phase 2: routing index — links resolve, and every doc is routed
     if not json_output:
         print(f"Checking routing index ({ROUTING_INDEX})...")
     index_path = REPO_ROOT / ROUTING_INDEX
     if index_path.exists():
         tokens = parse_doc(index_path)
         all_issues.extend(check_broken_links(ROUTING_INDEX, tokens))
+        all_issues.extend(check_routing_inventory(docs, tokens))
     else:
         all_issues.append(Issue("missing", "error", ROUTING_INDEX, f"{ROUTING_INDEX} does not exist"))
 
@@ -654,7 +846,9 @@ def main():
                 print(f"\nFound {len(warnings)} warning(s):\n")
                 for issue in warnings:
                     print(f"  - {issue}")
-            sys.exit(1)
+            # --ci gates only on mechanically certain problems; freshness
+            # warnings are advisory so unrelated PRs never block on them.
+            sys.exit(1 if errors or "--ci" not in sys.argv else 0)
         else:
             print("All docs clean.")
             sys.exit(0)
