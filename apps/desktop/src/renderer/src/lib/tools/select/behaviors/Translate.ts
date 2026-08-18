@@ -9,14 +9,8 @@ import type { GlyphAnchorTarget, GlyphPointTarget, GlyphSegmentTarget } from "@/
 import type { ShiftId } from "@/types";
 import { selectedGeometryEdit } from "./selectedGeometryEdit";
 
-import {
-  constrainPreparedDrag,
-  prepareConstrainedDrag,
-  type ConstrainDragGlyph,
-  type PreparedConstrainDrag,
-} from "@shift/rules";
-import type { GlyphLayer, GlyphLayerPositionTarget, GlyphLayerPositions } from "@/lib/model/Glyph";
-import { GlyphLayerEditDraft } from "@/lib/editor/GlyphLayerEditDraft";
+import type { GlyphLayer, GlyphLayerPositionTarget } from "@/lib/model/Glyph";
+import { type MoveEdit, PointRuleConstraint, PositionReference } from "@/lib/model/positions";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
@@ -73,8 +67,8 @@ export class Translate implements SelectBehavior {
 
   #nextTranslatingState(state: TranslatingState, event: DragEvent): TranslatingState {
     const currentPos = this.#drag!.positionForPointer(event.coords.scene);
-    const totalDelta = Vec2.sub(currentPos, state.translate.startPos);
-    this.#drag!.preview(totalDelta);
+    const rawDelta = Vec2.sub(currentPos, state.translate.startPos);
+    const totalDelta = this.#drag!.preview(rawDelta);
 
     return {
       type: "translating",
@@ -279,24 +273,32 @@ function translatingState(startPos: Point2D): TranslatingState {
 }
 
 class TranslateDrag {
-  readonly #operation: TranslateOperation;
-  readonly #draft: GlyphLayerEditDraft;
-  readonly #constraint: ConstrainedTranslate | null;
+  readonly #edit: MoveEdit;
   readonly #pointerOffset: Point2D;
   readonly startPos: Point2D;
 
   constructor(operation: TranslateOperation, pointerStart: Point2D) {
-    this.#operation = operation;
-
-    this.#draft = new GlyphLayerEditDraft(operation.layer, {
+    this.#edit = operation.layer.positions.move({
       points: operation.pointIds,
       anchors: operation.anchorIds,
     });
 
-    this.#constraint = ConstrainedTranslate.fromGeometry(
-      operation.layer.geometry,
-      operation.pointIds,
-    );
+    if (operation.dragAnchor) {
+      switch (operation.dragAnchor.kind) {
+        case "point":
+          this.#edit.from(PositionReference.point(operation.dragAnchor.id));
+          break;
+        case "anchor":
+          this.#edit.from(PositionReference.anchor(operation.dragAnchor.id));
+          break;
+      }
+    }
+
+    if (operation.pointIds.length > 0) {
+      this.#edit.constrainedBy(
+        PointRuleConstraint.forSelection(operation.layer.geometry, operation.pointIds),
+      );
+    }
 
     this.startPos = pointerStart;
     this.#pointerOffset = Vec2.sub(pointerStart, this.startPos);
@@ -306,64 +308,15 @@ class TranslateDrag {
     return Vec2.sub(pointer, this.#pointerOffset);
   }
 
-  preview(delta: Point2D): void {
-    if (!this.#constraint) {
-      this.#draft.previewTranslate(delta);
-      return;
-    }
-
-    this.#draft.previewPositionPatch(
-      this.#constraint.positionsFor(this.#draft.basePositions, this.#operation.anchorIds, delta),
-    );
+  preview(delta: Point2D): Point2D {
+    return this.#edit.preview(delta).delta;
   }
 
   commit(): void {
-    this.#draft.commit();
+    this.#edit.commit();
   }
 
   discard(): void {
-    this.#draft.discard();
-  }
-}
-
-class ConstrainedTranslate {
-  readonly #rules: PreparedConstrainDrag;
-
-  private constructor(rules: PreparedConstrainDrag) {
-    this.#rules = rules;
-  }
-
-  static fromGeometry(
-    geometry: ConstrainDragGlyph,
-    pointIds: readonly PointId[],
-  ): ConstrainedTranslate | null {
-    if (pointIds.length === 0) return null;
-
-    const rules = prepareConstrainedDrag(geometry, new Set(pointIds));
-    return new ConstrainedTranslate(rules);
-  }
-
-  positionsFor(
-    base: GlyphLayerPositions,
-    anchorIds: readonly AnchorId[],
-    delta: Point2D,
-  ): GlyphLayerPositions {
-    const updates: GlyphLayerPositions[number][] = [];
-    const patch = constrainPreparedDrag(this.#rules, delta, {
-      includeMatchedRules: false,
-    });
-
-    for (const update of patch.pointUpdates) {
-      updates.push({ kind: "point", id: update.id, x: update.x, y: update.y });
-    }
-
-    const anchors = new Set(anchorIds);
-    for (const position of base) {
-      if (position.kind !== "anchor" || !anchors.has(position.id)) continue;
-      const next = Vec2.add(position, delta);
-      updates.push({ ...position, x: next.x, y: next.y });
-    }
-
-    return updates;
+    this.#edit.discard();
   }
 }

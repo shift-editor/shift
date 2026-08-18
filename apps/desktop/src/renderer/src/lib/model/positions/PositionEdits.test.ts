@@ -8,8 +8,7 @@ import { MetricSnap } from "./MetricSnap";
 import { PointRuleConstraint } from "./PointRuleConstraint";
 import { PositionReference } from "./PositionReference";
 
-// These tests exercise the new model surface directly because Select/Translate
-// intentionally does not consume it in this foundation change.
+// These tests exercise the model surface directly; SelectMove.test.ts covers its tool integration.
 describe("fluent position edits preserve one frozen interaction base", () => {
   let editor: TestEditor;
   let pointId: PointId;
