@@ -352,7 +352,7 @@ def check_freshness(doc_path: str) -> list[Issue]:
                 "stale", "warning", doc_path,
                 f"review overdue by {overdue}d (reviewed {reviewed}, window {review_days}d)",
             ))
-        src_date = _last_commit_date(_source_dir_for_doc(doc_path))
+        src_date = _last_source_commit_date(doc_path)
         if src_date and src_date[:10] > reviewed.isoformat():
             issues.append(Issue(
                 "stale", "warning", doc_path,
@@ -371,7 +371,7 @@ def check_freshness(doc_path: str) -> list[Issue]:
     if not doc_date:
         return issues
 
-    src_date = _last_commit_date(_source_dir_for_doc(doc_path))
+    src_date = _last_source_commit_date(doc_path)
     if src_date and doc_date < src_date:
         issues.append(Issue(
             "stale", "warning", doc_path,
@@ -657,6 +657,21 @@ def _last_commit_date(path: str) -> str | None:
     """Return ISO date of most recent commit touching path, or None."""
     result = subprocess.run(
         ["git", "log", "-1", "--format=%aI", "--", path],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    return result.stdout.strip() or None
+
+
+def _last_source_commit_date(doc_path: str) -> str | None:
+    """Most recent commit touching the module's source, excluding its docs.
+
+    For modules without a src/ split the docs directory sits inside the
+    source path, and a doc commit must not count as source activity.
+    """
+    src_dir = _source_dir_for_doc(doc_path)
+    docs_dir = str(Path(doc_path).parent)
+    result = subprocess.run(
+        ["git", "log", "-1", "--format=%aI", "--", src_dir, f":(exclude){docs_dir}"],
         capture_output=True, text=True, cwd=REPO_ROOT,
     )
     return result.stdout.strip() or None
