@@ -97,8 +97,8 @@ cd packages/rules && npx tsc --noEmit
 
 ## Related
 
-- `Translate` -- select-tool behavior that prepares constrained drag rules and applies each frame's patch
-- `GlyphLayerEditDraft` -- draft lifecycle that feeds drag patches into local preview and sparse commit paths
+- `Translate` -- select-tool behavior that attaches `PointRuleConstraint` to a fluent `MoveEdit`
+- `MoveEdit` -- active layer-edit lifecycle that feeds constrained drag patches into preview and commit paths
 - `dumpSelectionPatternsToConsole` -- dev-tool that calls `diagnoseSelectionPatterns` for debugging
 - `Contours.at` -- wrapping point accessor used by the matcher for closed/open contour handling
 - `ConstrainDragGlyph` -- minimal source-neutral contour/point contract consumed by rule matching

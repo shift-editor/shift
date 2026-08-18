@@ -22,7 +22,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** `ToolContext.setState` inside a behavior's event handler updates a local `nextState` variable, not `this.state` on the tool. `BaseTool` commits the new state and fires lifecycle hooks (`onStateExit`, `onStateEnter`, `onStateChange`) only after the behavior loop returns. Calling `setState` multiple times within one handler is legal; only the final value is committed.
 
-- **Architecture Invariant:** For drag operations that mutate the glyph (translate, resize, rotate, bend), use the glyph layer edit draft pattern: `editor.beginGlyphLayerEditDraft(subject)` on drag start, `draft.previewPositionPatch()` or another `draft.preview*()` method on each drag event, `draft.commit(label)` on drag end, `draft.discard()` on cancel. **CRITICAL**: forgetting `commit` or `discard` leaks the draft and leaves the glyph in preview state.
+- **Architecture Invariant:** Continuous position transforms use operation-specific fluent edits from `GlyphLayer.positions`: `move`, `rotate`, or `scale`. Arbitrary position patches such as BendCurve use `GlyphLayer.beginEdit()` directly. Every started edit must reach `commit`/`discard` or `finish`/`cancel`; otherwise the layer retains an active preview interaction.
 
 - **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`). Use `event.coords.scene` for scene-space hit-testing and resolve node-local coordinates from the hit target when a tool needs them.
 
@@ -129,9 +129,9 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 ### Local edit patterns for drag mutations
 
-Position-only transforms use `GlyphLayerEditDraft`: construct it with a layer and targets, call `preview(...)` during the drag, then `commit()` or `discard()`.
+Position transforms call `editor.positionSelection(ids)` once at interaction start, then create `selection.layer.positions.move(selection.targets)`, `.rotate(...)`, or `.scale(...)`. Preview methods always resolve from the operation's frozen position base; `commit()` finishes one active `GlyphLayerEdit`, while `discard()` cancels to the latest accepted base.
 
-Pen topology uses `GlyphLayer.beginEdit()`. `GlyphLayerEdit.addCubic()`, `setPointSmooth()`, and `setPositions()` mutate the ordinary reactive layer immediately. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; `cancel()` restores that base without sending an intent.
+Pen topology and non-affine position patches use `GlyphLayer.beginEdit()` directly. `GlyphLayerEdit.addCubic()`, `setPointSmooth()`, and `setPositions()` mutate the ordinary reactive layer immediately. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; `cancel()` restores that base without sending an intent.
 
 ### Rendering layers
 
@@ -199,42 +199,39 @@ export class MyBehavior implements Behavior<MyState> {
 3. Create a behavior (or extend an existing one) with handlers that guard on `state.type === "newState"`.
 4. Insert the behavior at the right position in the tool's `behaviors` array.
 
-### Using the draft pattern for drag mutations
+### Using a fluent position edit for drag mutations
 
 ```typescript
-onDragStart(state, ctx, event) {
-  if (state.type !== "selected") return false;
-  const edit = resolveSelectedGlyphEdit(ctx.editor);
-  if (!edit) return false;
+onDragStart(state, ctx) {
+  if (state.type !== "ready") return false;
+  const selection = ctx.editor.positionSelection(ctx.editor.selection.ids);
+  if (!selection) return false;
 
-  this.#draft = new GlyphLayerEditDraft(edit.layer, {
-    points: edit.pointIds,
-    anchors: edit.anchorIds,
-  });
-  ctx.setState({ type: "translating", startPos: event.point, totalDelta: { x: 0, y: 0 } });
+  this.#edit = selection.layer.positions.move(selection.targets);
+  ctx.setState({ type: "translating", totalDelta: { x: 0, y: 0 } });
   return true;
 }
 
 onDrag(state, ctx, event) {
-  if (state.type !== "translating") return false;
-  this.#draft!.previewPositionPatch(buildUpdates(this.#draft!.basePositions, event.delta));
-  ctx.setState({ ...state, totalDelta: event.delta });
+  if (state.type !== "translating" || !this.#edit) return false;
+  const feedback = this.#edit.preview(event.delta.scene);
+  ctx.setState({ ...state, totalDelta: feedback.delta });
   return true;
 }
 
 onDragEnd(state, ctx) {
   if (state.type !== "translating") return false;
-  this.#draft!.commit("Move Points");
-  this.#draft = null;
-  ctx.setState({ type: "selected" });
+  this.#edit?.commit();
+  this.#edit = null;
+  ctx.setState({ type: "ready" });
   return true;
 }
 
 onDragCancel(state, ctx) {
   if (state.type !== "translating") return false;
-  this.#draft!.discard();
-  this.#draft = null;
-  ctx.setState({ type: "selected" });
+  this.#edit?.discard();
+  this.#edit = null;
+  ctx.setState({ type: "ready" });
   return true;
 }
 ```
@@ -263,7 +260,8 @@ onDragCancel(state, ctx) {
 
 - `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph).
 - `Canvas` — rendering target passed to `drawOverlay` / `drawScene` / `drawBackground`.
-- `GlyphLayerEditDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
+- `LayerPositions` — creates fluent move, rotate, and scale interactions over normalized position targets.
+- `GlyphLayerEdit` — active preview/finish/cancel owner used by fluent edits and arbitrary BendCurve patches.
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
 - `TextTool` — text input tool backed by the editor's active text run.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

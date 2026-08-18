@@ -77,6 +77,16 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     edit.discard();
   });
 
+  it("scales from one frozen layer-local origin and discards the preview", () => {
+    const edit = editor.requireGlyphLayer().positions.scale({ points: [pointId] }, { x: 0, y: 0 });
+
+    edit.preview({ x: 2, y: 0.5 });
+    expect(editor.pointPosition(pointId)).toEqual({ x: 200, y: 50 });
+
+    edit.discard();
+    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+  });
+
   it("quantizes rotation independently from movement modifiers", () => {
     const edit = editor
       .requireGlyphLayer()

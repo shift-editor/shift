@@ -3,6 +3,7 @@ import type { GlyphLayer } from "../Glyph";
 import type { PositionTargets } from "@/types/positionEdit";
 import { MoveEdit } from "./MoveEdit";
 import { RotateEdit } from "./RotateEdit";
+import { ScaleEdit } from "./ScaleEdit";
 
 /** Operation-specific fluent position edits for one authored glyph layer. */
 export class LayerPositions {
@@ -18,5 +19,9 @@ export class LayerPositions {
 
   rotate(targets: PositionTargets, origin: Point2D): RotateEdit {
     return new RotateEdit(this.#layer, targets, origin);
+  }
+
+  scale(targets: PositionTargets, origin: Point2D): ScaleEdit {
+    return new ScaleEdit(this.#layer, targets, origin);
   }
 }

@@ -1,7 +1,8 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId } from "@shift/types";
-import type { GlyphLayer } from "../Glyph";
-import { PositionEditDraft } from "./PositionEditDraft";
+import type { GlyphLayer, GlyphLayerPositions } from "../Glyph";
+import type { GlyphLayerEdit } from "../GlyphLayerEdit";
+import { GlyphLayerPositionList } from "../GlyphLayerPositionList";
 import type {
   PositionEdit,
   PositionEditPhase,
@@ -17,8 +18,10 @@ import { PositionReference } from "./PositionReference";
 /** Preview-backed movement configured with operation-specific fluent modifiers. */
 export class MoveEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
-  readonly #draft: PositionEditDraft;
   readonly #anchorIds: readonly AnchorId[];
+
+  #base: GlyphLayerPositionList;
+  #edit: GlyphLayerEdit | null = null;
 
   #phase: PositionEditPhase = "configuring";
   #reference: Point2D | null = null;
@@ -28,7 +31,7 @@ export class MoveEdit implements PositionEdit {
 
   constructor(layer: GlyphLayer, targets: PositionTargets) {
     this.#layer = layer;
-    this.#draft = new PositionEditDraft(layer, targets);
+    this.#base = GlyphLayerPositionList.fromTargetGroups(layer, targets);
     this.#anchorIds = [...(targets.anchors ?? [])];
   }
 
@@ -91,11 +94,11 @@ export class MoveEdit implements PositionEdit {
     }
 
     if (this.#pointRules) {
-      this.#draft.previewPositionPatch(
-        this.#pointRules.positionsFor(this.#draft.basePositions, this.#anchorIds, delta),
+      this.#previewPositionPatch(
+        this.#pointRules.positionsFor(this.#base.positions, this.#anchorIds, delta),
       );
     } else {
-      this.#draft.previewTranslate(delta);
+      this.#previewPositionPatch(this.#base.translate(delta).positions);
     }
 
     return { delta, guides };
@@ -105,14 +108,22 @@ export class MoveEdit implements PositionEdit {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "committed";
-    this.#draft.commit();
+    this.#edit?.finish("Move positions");
   }
 
   discard(): void {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "discarded";
-    this.#draft.discard();
+    this.#edit?.cancel();
+  }
+
+  #previewPositionPatch(positions: GlyphLayerPositions): void {
+    if (positions.length === 0) return;
+
+    this.#base = this.#base.includeFrom(this.#layer, positions);
+    this.#edit ??= this.#layer.beginEdit();
+    this.#edit.setPositions(positions);
   }
 
   #assertConfiguring(): void {

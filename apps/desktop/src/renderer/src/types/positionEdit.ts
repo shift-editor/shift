@@ -1,10 +1,17 @@
 import type { Point2D } from "@shift/geo";
 import type { AnchorId, MetricKind, PointId } from "@shift/types";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 
 /** Point and anchor identities transformed together by one position edit. */
 export interface PositionTargets {
   readonly points?: readonly PointId[];
   readonly anchors?: readonly AnchorId[];
+}
+
+/** Normalized editable position targets that share one authored layer. */
+export interface PositionSelection {
+  readonly layer: GlyphLayer;
+  readonly targets: PositionTargets;
 }
 
 /** Shared terminal operations exposed by every fluent position edit. */

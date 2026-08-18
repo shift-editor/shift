@@ -1,15 +1,12 @@
 import { Vec2, type Point2D } from "@shift/geo";
-import type { AnchorId, PointId } from "@shift/types";
+
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
-import type { GlyphAnchorTarget, GlyphPointTarget, GlyphSegmentTarget } from "@/types/target";
-import type { ShiftId } from "@/types";
-import { selectedGeometryEdit } from "./selectedGeometryEdit";
-
-import type { GlyphLayer, GlyphLayerPositionTarget } from "@/lib/model/Glyph";
+import type { PositionSelection } from "@/types";
+import type { GlyphLayerPositionTarget } from "@/lib/model/Glyph";
 import { type MoveEdit, PointRuleConstraint, PositionReference } from "@/lib/model/positions";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
@@ -24,11 +21,10 @@ export class Translate implements SelectBehavior {
   ): boolean {
     if (state.type !== "idle" && state.type !== "ready") return false;
 
-    const operation = TranslateOperation.fromDragStart(ctx.editor, ctx.tool, event);
-    if (!operation) return false;
+    const drag = this.#fromDragStart(ctx.editor, ctx.tool, event);
+    if (!drag) return false;
 
-    operation.applySelection(ctx.editor);
-    this.#drag = new TranslateDrag(operation, event.origin.scene);
+    this.#drag = drag;
     ctx.setState(translatingState(this.#drag.startPos));
     return true;
   }
@@ -65,6 +61,100 @@ export class Translate implements SelectBehavior {
     }
   }
 
+  #fromDragStart(editor: Editor, select: Select, event: DragStartEvent): TranslateDrag | null {
+    switch (event.target.kind) {
+      case "point":
+        return this.#fromPointTarget(editor, event);
+      case "anchor":
+        return this.#fromAnchorTarget(editor, event);
+      case "segment":
+        return this.#fromSegmentTarget(editor, event);
+      case "node":
+      case "canvas":
+        return this.#fromInsideSelectionBounds(editor, select, event);
+    }
+  }
+
+  #fromPointTarget(editor: Editor, event: DragStartEvent): TranslateDrag | null {
+    if (event.target.kind !== "point") return null;
+    if (event.altKey) return this.#fromDuplicatedSelection(editor, event.origin.scene);
+
+    const reference = { kind: "point" as const, id: event.target.id };
+    if (editor.selection.isSelected(event.target.id)) {
+      return this.#fromSelection(editor, event.origin.scene, reference);
+    }
+
+    const selection = editor.positionSelection([event.target.id]);
+    if (!selection) return null;
+
+    editor.selection.select([event.target.id]);
+    return new TranslateDrag(selection, reference, event.origin.scene);
+  }
+
+  #fromAnchorTarget(editor: Editor, event: DragStartEvent): TranslateDrag | null {
+    if (event.target.kind !== "anchor") return null;
+
+    const reference = { kind: "anchor" as const, id: event.target.id };
+    if (editor.selection.isSelected(event.target.id)) {
+      return this.#fromSelection(editor, event.origin.scene, reference);
+    }
+
+    const selection = editor.positionSelection([event.target.id]);
+    if (!selection) return null;
+
+    editor.selection.select([event.target.id]);
+    return new TranslateDrag(selection, reference, event.origin.scene);
+  }
+
+  #fromSegmentTarget(editor: Editor, event: DragStartEvent): TranslateDrag | null {
+    if (event.target.kind !== "segment" || event.target.pointIds.length === 0) return null;
+    if (event.altKey) return this.#fromDuplicatedSelection(editor, event.origin.scene);
+
+    if (editor.selection.isSelected(event.target.id)) {
+      return this.#fromSelection(editor, event.origin.scene);
+    }
+
+    const selection = editor.positionSelection([event.target.id]);
+    const referenceId = event.target.pointIds[0];
+    if (!selection || !referenceId) return null;
+
+    editor.selection.select([event.target.id, ...event.target.pointIds]);
+    return new TranslateDrag(selection, { kind: "point", id: referenceId }, event.origin.scene);
+  }
+
+  #fromDuplicatedSelection(editor: Editor, pointerStart: Point2D): TranslateDrag | null {
+    const pointIds = editor.duplicateSelection();
+    const referenceId = pointIds[0];
+    if (!referenceId) return null;
+
+    const selection = editor.positionSelection(pointIds);
+    if (!selection) return null;
+
+    editor.selection.select(pointIds);
+    return new TranslateDrag(selection, { kind: "point", id: referenceId }, pointerStart);
+  }
+
+  #fromSelection(
+    editor: Editor,
+    pointerStart: Point2D,
+    reference: GlyphLayerPositionTarget | null = null,
+  ): TranslateDrag | null {
+    const selection = editor.positionSelection(editor.selection.ids);
+    if (!selection) return null;
+
+    return new TranslateDrag(selection, reference, pointerStart);
+  }
+
+  #fromInsideSelectionBounds(
+    editor: Editor,
+    select: Select,
+    event: DragStartEvent,
+  ): TranslateDrag | null {
+    if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
+
+    return this.#fromSelection(editor, event.origin.scene);
+  }
+
   #nextTranslatingState(state: TranslatingState, event: DragEvent): TranslatingState {
     const currentPos = this.#drag!.positionForPointer(event.coords.scene);
     const rawDelta = Vec2.sub(currentPos, state.translate.startPos);
@@ -81,186 +171,6 @@ export class Translate implements SelectBehavior {
   }
 }
 
-/**
- * A resolved glyph-layer move: the target point/anchor ids together with the
- * single authored layer that owns all of them.
- *
- * Construction is where edit scoping happens. Builders resolve identity-only
- * hit and selection ids through font ownership queries and refuse to produce
- * an operation when the ids span layers, are absent from current layer state,
- * or the resolved layer is not the one displayed at the current external location. Node
- * translation is a separate future operation kind; node targets never
- * produce one of these.
- */
-class TranslateOperation {
-  readonly layer: GlyphLayer;
-  readonly pointIds: readonly PointId[];
-  readonly anchorIds: readonly AnchorId[];
-  readonly selection: readonly ShiftId[] | null;
-  readonly dragAnchor: GlyphLayerPositionTarget | null;
-
-  private constructor(
-    layer: GlyphLayer,
-    pointIds: readonly PointId[],
-    anchorIds: readonly AnchorId[],
-    selection: readonly ShiftId[] | null,
-    dragAnchor: GlyphLayerPositionTarget | null,
-  ) {
-    this.layer = layer;
-    this.pointIds = [...pointIds];
-    this.anchorIds = [...anchorIds];
-    this.selection = selection ? [...selection] : null;
-    this.dragAnchor = dragAnchor;
-  }
-
-  static fromDragStart(
-    editor: Editor,
-    select: Select,
-    event: DragStartEvent,
-  ): TranslateOperation | null {
-    const target = event.target;
-
-    switch (target.kind) {
-      case "point":
-        return TranslateOperation.fromPointTarget(editor, event, target);
-      case "anchor":
-        return TranslateOperation.fromAnchorTarget(editor, target);
-      case "segment":
-        return TranslateOperation.fromSegmentTarget(editor, event, target);
-      case "node":
-      case "canvas":
-        return TranslateOperation.fromInsideSelectionBounds(editor, select, event);
-    }
-  }
-
-  applySelection(editor: Editor): void {
-    if (!this.selection) return;
-    editor.selection.select(this.selection);
-  }
-
-  static fromPointTarget(
-    editor: Editor,
-    event: DragStartEvent,
-    target: GlyphPointTarget,
-  ): TranslateOperation | null {
-    if (event.altKey) {
-      return TranslateOperation.fromDuplicatedSelection(editor);
-    }
-
-    const selected = editor.selection.isSelected(target.id);
-
-    if (selected) {
-      return TranslateOperation.fromSelection(editor, {
-        kind: "point",
-        id: target.id,
-      });
-    }
-
-    return TranslateOperation.#resolve(editor, [target.id], [], [target.id], {
-      kind: "point",
-      id: target.id,
-    });
-  }
-
-  static fromAnchorTarget(editor: Editor, target: GlyphAnchorTarget): TranslateOperation | null {
-    const selected = editor.selection.isSelected(target.id);
-
-    if (selected) {
-      return TranslateOperation.fromSelection(editor, {
-        kind: "anchor",
-        id: target.id,
-      });
-    }
-
-    return TranslateOperation.#resolve(editor, [], [target.id], [target.id], {
-      kind: "anchor",
-      id: target.id,
-    });
-  }
-
-  static fromSegmentTarget(
-    editor: Editor,
-    event: DragStartEvent,
-    target: GlyphSegmentTarget,
-  ): TranslateOperation | null {
-    const segmentPointIds = target.pointIds;
-    if (segmentPointIds.length === 0) return null;
-
-    if (event.altKey) {
-      return TranslateOperation.fromDuplicatedSelection(editor);
-    }
-
-    const selected = editor.selection.isSelected(target.id);
-
-    if (selected) {
-      return TranslateOperation.fromSelection(editor);
-    }
-
-    return TranslateOperation.#resolve(
-      editor,
-      segmentPointIds,
-      [],
-      [target.id, ...segmentPointIds],
-      { kind: "point", id: segmentPointIds[0]! },
-    );
-  }
-
-  static fromDuplicatedSelection(editor: Editor): TranslateOperation | null {
-    const pointIds = editor.duplicateSelection();
-    if (pointIds.length === 0) return null;
-
-    return TranslateOperation.#resolve(editor, pointIds, [], pointIds, {
-      kind: "point",
-      id: pointIds[0]!,
-    });
-  }
-
-  static fromSelection(
-    editor: Editor,
-    dragAnchor: GlyphLayerPositionTarget | null = null,
-  ): TranslateOperation | null {
-    const edit = selectedGeometryEdit(editor);
-    if (!edit || !isDisplayedLayer(editor, edit.layer)) return null;
-
-    return new TranslateOperation(edit.layer, edit.pointIds, edit.anchorIds, null, dragAnchor);
-  }
-
-  static fromInsideSelectionBounds(
-    editor: Editor,
-    select: Select,
-    event: DragStartEvent,
-  ): TranslateOperation | null {
-    if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
-
-    return TranslateOperation.fromSelection(editor);
-  }
-
-  static #resolve(
-    editor: Editor,
-    pointIds: readonly PointId[],
-    anchorIds: readonly AnchorId[],
-    selection: readonly ShiftId[],
-    dragAnchor: GlyphLayerPositionTarget | null,
-  ): TranslateOperation | null {
-    const layer = editor.layerForGeometry({ points: pointIds, anchors: anchorIds });
-    if (!layer || !isDisplayedLayer(editor, layer)) return null;
-
-    return new TranslateOperation(layer, pointIds, anchorIds, selection, dragAnchor);
-  }
-}
-
-// TODO: this should probably not live here as a free fucntion but should be semantically significat on the ditior
-/**
- * Interpolated views hit-test against geometry whose ids come from an
- * authored layer's structure, so ownership alone would let a drag silently
- * edit that layer while the user looks at an interpolation. A move may only
- * start when the resolved layer is authored at the active source.
- */
-function isDisplayedLayer(editor: Editor, layer: GlyphLayer): boolean {
-  const sourceId = editor.activeSourceId;
-  return sourceId !== null && layer.sourceId === sourceId;
-}
-
 function translatingState(startPos: Point2D): TranslatingState {
   return {
     type: "translating",
@@ -274,38 +184,38 @@ function translatingState(startPos: Point2D): TranslatingState {
 
 class TranslateDrag {
   readonly #edit: MoveEdit;
-  readonly #pointerOffset: Point2D;
   readonly startPos: Point2D;
 
-  constructor(operation: TranslateOperation, pointerStart: Point2D) {
-    this.#edit = operation.layer.positions.move({
-      points: operation.pointIds,
-      anchors: operation.anchorIds,
-    });
+  constructor(
+    selection: PositionSelection,
+    reference: GlyphLayerPositionTarget | null,
+    pointerStart: Point2D,
+  ) {
+    this.#edit = selection.layer.positions.move(selection.targets);
 
-    if (operation.dragAnchor) {
-      switch (operation.dragAnchor.kind) {
+    if (reference) {
+      switch (reference.kind) {
         case "point":
-          this.#edit.from(PositionReference.point(operation.dragAnchor.id));
+          this.#edit.from(PositionReference.point(reference.id));
           break;
         case "anchor":
-          this.#edit.from(PositionReference.anchor(operation.dragAnchor.id));
+          this.#edit.from(PositionReference.anchor(reference.id));
           break;
       }
     }
 
-    if (operation.pointIds.length > 0) {
+    const pointIds = selection.targets.points ?? [];
+    if (pointIds.length > 0) {
       this.#edit.constrainedBy(
-        PointRuleConstraint.forSelection(operation.layer.geometry, operation.pointIds),
+        PointRuleConstraint.forSelection(selection.layer.geometry, pointIds),
       );
     }
 
     this.startPos = pointerStart;
-    this.#pointerOffset = Vec2.sub(pointerStart, this.startPos);
   }
 
   positionForPointer(pointer: Point2D): Point2D {
-    return Vec2.sub(pointer, this.#pointerOffset);
+    return pointer;
   }
 
   preview(delta: Point2D): Point2D {

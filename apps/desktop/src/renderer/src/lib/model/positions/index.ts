@@ -6,3 +6,4 @@ export { MoveEdit } from "./MoveEdit";
 export { PointRuleConstraint } from "./PointRuleConstraint";
 export { PositionReference } from "./PositionReference";
 export { RotateEdit } from "./RotateEdit";
+export { ScaleEdit } from "./ScaleEdit";
