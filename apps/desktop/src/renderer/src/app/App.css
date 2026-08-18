@@ -1,5 +1,6 @@
 body {
   background-color: var(--color-bg-canvas);
+  font-family: var(--font-ui);
   overflow: hidden;
 }
 
@@ -12,13 +13,6 @@ body {
 .shift-editor-shell[data-gesture="pressed"] *,
 .shift-editor-shell[data-gesture="dragging"] * {
   cursor: var(--shift-cursor) !important;
-}
-
-@font-face {
-  font-family: "Inter";
-  src: url("/assets/fonts/Inter-VariableFont.ttf") format("truetype");
-  font-weight: normal;
-  font-style: normal;
 }
 
 /* Custom pen cursor with retina support */

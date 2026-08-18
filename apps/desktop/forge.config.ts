@@ -19,9 +19,13 @@ if (distribution !== "release" && distribution !== "nightly") {
 const isNightly = distribution === "nightly";
 const productName = isNightly ? "Shift Nightly" : "Shift";
 const packageName = isNightly ? "shift-nightly" : "shift";
-const executableName = packageName;
+const executableName = process.platform === "darwin" ? productName : packageName;
 const appBundleId = isNightly ? "app.shift.nightly" : "app.shift";
 const iconName = isNightly ? "nightly" : "icon";
+const packagerIcon =
+  process.platform === "darwin"
+    ? [`../../icons/${iconName}.icns`, `../../icons/${iconName}.icon`]
+    : `../../icons/${iconName}`;
 const packageJson = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8"));
 const productVersion = packageJson.version as string;
 const platformVersion = productVersion.split("-", 1)[0];
@@ -53,7 +57,7 @@ const config: ForgeConfig = {
     asar: {
       unpack: "**/*.node",
     },
-    icon: `../../icons/${iconName}`,
+    icon: packagerIcon,
     extraResource: [`../../icons/${iconName}.png`, "../../LICENSE"],
     win32metadata: {
       CompanyName: "Shift",

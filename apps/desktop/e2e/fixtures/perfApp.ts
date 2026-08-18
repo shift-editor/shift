@@ -37,9 +37,9 @@ const GLYPHS_PREVIEW_FONT_PATH =
   process.env.SHIFT_E2E_GLYPHS_PREVIEW_FONT_PATH ??
   path.resolve(APP_ROOT, "../../fixtures/fonts/MutatorSansVariable.glyphs");
 
-/** Fixed CSS content size; canvas backing dimensions continue to follow the host DPR. */
-const CONTENT_WIDTH = 1280;
-const CONTENT_HEIGHT = 800;
+/** Fixed CSS content size that fits the hosted macOS runner's available work area. */
+const CONTENT_WIDTH = 1200;
+const CONTENT_HEIGHT = 650;
 
 export type PerfFixtures = {
   electronApp: ElectronApplication;
