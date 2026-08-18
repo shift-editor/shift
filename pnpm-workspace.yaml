@@ -18,6 +18,8 @@ minimumReleaseAgeExclude:
   - brace-expansion@5.0.9
 
 overrides:
+  # Forge's current range resolves below the version that supports macOS Icon Composer assets.
+  '@electron/packager': 18.4.4
   # Targeted major updates for upstream ranges with no patched release.
   '@electron/node-gyp>tar': 7.5.22
   '@electron/rebuild@3>tar': 7.5.22

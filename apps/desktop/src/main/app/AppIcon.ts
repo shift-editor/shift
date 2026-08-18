@@ -14,13 +14,13 @@ const iconFileName = shiftDistribution === "nightly" ? "nightly.png" : "icon.png
  */
 export class AppIcon {
   /**
-   * Applies the runtime icon to macOS Dock when available.
+   * Applies the development icon to macOS Dock when available.
    *
-   * Electron's Dock API is macOS-only; other platforms get their taskbar/window
-   * icon from packaging and BrowserWindow configuration instead.
+   * Packaged applications use their Icon Composer asset on macOS 26 and
+   * their ICNS icon on earlier macOS releases.
    */
   install(): void {
-    if (process.platform !== "darwin") return;
+    if (process.platform !== "darwin" || app.isPackaged) return;
 
     app.dock?.setIcon(this.path());
   }
