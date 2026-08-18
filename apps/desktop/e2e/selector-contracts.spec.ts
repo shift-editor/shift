@@ -46,7 +46,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
     });
     await font.editCoordinator.settled();
   });
-  await page.getByRole("button", { name: "Axes", exact: true }).click();
+  await fontNavigation(page).getByRole("button", { name: "Axes", exact: true }).click();
   await expect(await firstAxisSlider(page)).toBeVisible();
   await expect(page.getByLabel("Weight value", { exact: true })).toBeVisible();
 
