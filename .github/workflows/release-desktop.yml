@@ -49,13 +49,13 @@ jobs:
       matrix:
         include:
           - name: macOS arm64
-            runner: macos-15
+            runner: macos-26
             platform: darwin
             arch: arm64
             targets: zip
             package-dir: Shift-darwin-arm64
           - name: macOS x64
-            runner: macos-15-intel
+            runner: macos-26-intel
             platform: darwin
             arch: x64
             targets: zip
