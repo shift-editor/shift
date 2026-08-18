@@ -29,6 +29,23 @@ The preload runs once before the renderer loads:
 2. Exposes that object as `window.shiftHost` through `contextBridge`.
 3. Relays session and document `MessagePort`s into the page. Because packaged `file://` pages have opaque origins, receivers authenticate these relays with `event.source === window` plus the expected message type rather than comparing origin strings.
 
+## Workflow recipes
+
+### Add a `shiftHost` method backed by a new IPC channel
+
+1. Declare the channel and payload types in `RendererToMain` (requests) or `MainToRenderer` (broadcasts) in `shared/ipc/contract.ts`.
+2. Add the renderer-facing method to the `ShiftHost` interface in `shared/host/ShiftHost.ts`, documenting failure modes.
+3. Wire it in `preload.ts` with the typed helpers: `invoke(ipcRenderer, "<channel>")` for requests, `listen(ipcRenderer, "<channel>")` for broadcasts. Channel names are checked against the contract, so a typo fails typecheck.
+4. Register the main-side handler in `App` (`#registerIpcHandlers`) using the typed `handle` wrapper from `shared/ipc/main`.
+5. Verify: `pnpm --filter @shift/desktop typecheck && pnpm --filter @shift/desktop lint`.
+
+### Add a new MessagePort relay lane
+
+1. In the main-side handler, create a `MessageChannelMain` and transfer one half with `event.sender.postMessage("<name>.port", null, [port])` — ports cannot travel through `invoke` responses.
+2. In `preload.ts`, relay it into the page: `ipcRenderer.on("<name>.port", ...)` forwarding via `window.postMessage({ type: "<name>.port" }, "*", event.ports)`, mirroring the existing `session.port` and `document.port` relays.
+3. In the renderer listener, accept the port only after checking `event.source === window` and the expected message type.
+4. Verify: `pnpm --filter @shift/desktop typecheck`, then run the app and confirm the lane connects.
+
 ## Gotchas
 
 - `contextBridge` values must remain plain data and functions.

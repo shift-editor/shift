@@ -85,6 +85,33 @@ cargo test -p shift-workspace configured_large_corpus_streams_resumes_and_acquir
 Set both expectations for the selected, checksum-pinned local corpus. Timing and
 RSS remain profiler observations rather than CI assertions.
 
+## Workflow recipes
+
+### Making a new intent undoable
+
+1. Layer-scoped intents need no ledger wiring: `FontWorkspace::apply` acquires the intent's `required_layer_ids`, snapshots pre states, and derives `LayerPair` steps from the touched layers in the returned `AppliedIntents` automatically.
+2. Font-level intents must capture their pre state in `capture_font_level_pre_state` and be mapped to a `LedgerStep` variant in `ledger_steps` (both in `workspace.rs`).
+3. Add a matching `replay_*` helper (like `replay_named_instances`) and dispatch it from `replay`; `ReplaySide::Pre` (undo) and `ReplaySide::Post` (redo) share the same path, so one helper covers both directions.
+4. Respect replay ordering: axis topology before named instances, metric definitions before complete source snapshots.
+5. Verify: `cargo test -p shift-workspace` with a test that applies, undoes, and redoes the intent, asserting both font state and store persistence.
+
+### Adding a read that touches layer payloads
+
+1. Route it through `acquire_glyphs(ids, AcquireScope::Glyphs)` — or `AcquireScope::ComponentClosure` when component geometry matters — before reading `font()`. Synchronous `font()` must never initiate I/O.
+2. Keep acquisition batched: pass the complete request in one call so the store's count/decoded-byte planner can bound each internal batch, rather than looping per glyph.
+3. If the read produces a complete snapshot (save, export), acquire all layers first like `save()`/`export()` do; a directory placeholder in the snapshot is a bug.
+4. Verify: `cargo test -p shift-workspace`.
+
+## Gotchas
+
+- `font()` reflects only what has been acquired. A glyph present in the directory but never acquired shows placeholder layers with no error — forgetting acquisition produces silently empty geometry, not a crash.
+- One `apply` call = one SQLite transaction = one undo step, even for multi-intent sets. Batching intents into a single `FontIntentSet` is the only way to get one undo step; there is no separate ledger grouping API.
+- A failed undo/redo replay pushes the entry back onto its stack instead of half-applying, so a replay error is retryable — but code that pops the ledger around `replay` must preserve that restore-on-error contract.
+- The undo and redo stacks each cap at 100 entries and drop the oldest silently. Tests that build long histories and then unwind them fully will pass at small sizes and lie at scale.
+- Dirty is a ledger-position comparison, not a revision comparison. After `resume`, a workspace that was dirty at shutdown has no reachable saved position: no amount of undo makes it report clean.
+- `evict_glyphs` replaces only committed layers. Evicting immediately after an edit but before commit completes is not a supported shortcut for memory pressure — `LayerResidency` will keep uncommitted work resident.
+- A failed import removes its sibling staging database and leaves the destination untouched. Never treat a leftover staging file as resumable state; only the Published database is real.
+
 ## Verification
 
 - `cargo test -p shift-workspace`

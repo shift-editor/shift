@@ -173,7 +173,8 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ## Verification
 
-- `npx vitest run apps/desktop/src/renderer/src/lib/editor/` -- unit tests for managers, hit testing, sidebearings, lifecycle, drafts.
+- `npx vitest run apps/desktop/src/renderer/src/lib/editor/` -- unit tests for managers, hit testing, sidebearings, lifecycle, drafts, plus editor-outcome suites for boolean operations, clipboard copy/paste, and glyph metrics that drive `TestEditor` through real tool gestures and assert resulting contours, selection, and history.
+- Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
 - `npx vitest run --testPathPattern="draft"` -- draft-specific tests.
 - `pnpm test:desktop src/renderer/src/lib/editor/managers/Camera.test.ts` -- camera manager tests.
 - Manual: open a font, zoom/pan, select points, drag, toggle preview mode, verify GPU/CPU handle rendering toggle.

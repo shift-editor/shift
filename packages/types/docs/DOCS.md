@@ -30,6 +30,7 @@ Import from `@shift/types`.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
+- `ComponentGlyph` -- component reference resolved for editing: parent/base glyph IDs, component paths, and `componentIndex`, the structural slot used to match a component's transform in each source's geometry (transforms are matched by slot, not by ID).
 - `VariationBasis` / `VariationDelta` -- Rust/Fontdrasil-compiled normalized supports and numeric contribution vectors.
 - `InterpolationBasis` -- ordered real source identities plus a `VariationBasis` that produces source weights; contains no glyph-specific values.
 - `AxisMappingBasis` -- mapping identity and ordered input/output axes plus a compiled normalized-adjustment basis.
@@ -74,7 +75,7 @@ pnpm generate:bridge-types
 
 `turbo run typecheck` depends on `generate:bridge-types`, so stale bridge declarations are refreshed before typecheck when inputs change.
 
-## Workflow Recipes
+## Workflow recipes
 
 ### Regenerate bridge types after Rust bridge changes
 

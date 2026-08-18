@@ -62,7 +62,7 @@ editor/rendering/markers/
 
 - `GlyphCatalogSource` -- immutable session catalog boundary for glyphs, axes, dense location, metrics, invalidation, and atlas acquisition.
 
-- `GlyphAtlasSource` -- backend-neutral page preparation, bounded streaming, discard, and resolved-weight boundary implemented by authored and retained-source adapters.
+- `GlyphAtlasSource` -- backend-neutral page preparation, bounded streaming, discard, and resolved-weight boundary implemented by authored and retained-source adapters. Authored pages snapshot the live `Axis` list and its `AxisMappingBasis` list so per-location weights map external axis coordinates into design space before interpolation; imported pages carry no axes and ship pre-resolved weights instead.
 
 - `ResidentGlyphLayer` -- algorithm-neutral surface used by the catalog controller. It retains one device/context and prepares, streams, and atomically installs complete sets of independently replaceable Slug root pages.
 
