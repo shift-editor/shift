@@ -11,6 +11,14 @@ description: Adversarially fact-check DOCS.md files against the actual source co
 
 Given no arguments, audit the DOCS.md files whose `reviewed:` date is oldest or overdue (the checker's stale warnings list them). Given a module or doc path, audit that doc. A full-repo audit fans out one subagent per doc (they are independent — run them in parallel).
 
+On a scheduled run, guard first — before installing dependencies or reading any docs:
+
+```bash
+git log --oneline --since='8 days ago' -- crates packages apps '**/docs/DOCS.md' docs/architecture
+```
+
+No output (or only commits whose changes are all outside those paths — CI config, lockfiles, release chores) means nothing meaningful changed: report "no source or docs commits since <date>; audit skipped" and stop. When there are meaningful commits, prioritize the docs whose modules those commits touched.
+
 ## Procedure per doc
 
 1. Run the mechanical checkers first — don't spend audit effort on what they already catch:
