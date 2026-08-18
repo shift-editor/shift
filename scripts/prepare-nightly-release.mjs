@@ -13,6 +13,14 @@ const assets = [
     pattern: /(^|\/)zip\/darwin\/x64\/[^/]+\.zip$/,
   },
   {
+    destination: "Shift-Nightly-macOS-arm64.dmg",
+    pattern: /(^|\/)[^/]+-arm64\.dmg$/,
+  },
+  {
+    destination: "Shift-Nightly-macOS-x64.dmg",
+    pattern: /(^|\/)[^/]+-x64\.dmg$/,
+  },
+  {
     destination: "Shift-Nightly-Windows-x64.exe",
     pattern: /(^|\/)squirrel\.windows\/x64\/[^/]+Setup\.exe$/,
   },

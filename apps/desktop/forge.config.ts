@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { ForgeConfig } from "@electron-forge/shared-types";
+import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { MakerDeb } from "@electron-forge/maker-deb";
@@ -80,6 +81,7 @@ const config: ForgeConfig = {
       noMsi: true,
     }),
     new MakerZIP({}, ["darwin"]),
+    new MakerDMG({}, ["darwin"]),
     new MakerRpm({
       options: {
         name: packageName,
