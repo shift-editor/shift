@@ -27,19 +27,23 @@ async function expectRenderedGrid(page: Page): Promise<void> {
   expect(counts.resident).toBe(counts.target);
 
   const surface = glyphCatalogSurface(page);
-  const rendered = await surface.screenshot();
-  const visibility = await canvas.evaluate((element) => element.style.visibility);
-  try {
-    await canvas.evaluate((element) => {
-      element.style.visibility = "hidden";
-    });
-    const withoutGlyphs = await surface.screenshot();
-    expect(rendered.equals(withoutGlyphs)).toBe(false);
-  } finally {
-    await canvas.evaluate((element, value) => {
-      element.style.visibility = value;
-    }, visibility);
-  }
+  await expect
+    .poll(async () => {
+      const rendered = await surface.screenshot();
+      const visibility = await canvas.evaluate((element) => element.style.visibility);
+      try {
+        await canvas.evaluate((element) => {
+          element.style.visibility = "hidden";
+        });
+        const withoutGlyphs = await surface.screenshot();
+        return rendered.equals(withoutGlyphs);
+      } finally {
+        await canvas.evaluate((element, value) => {
+          element.style.visibility = value;
+        }, visibility);
+      }
+    })
+    .toBe(false);
 }
 
 ufoPreviewTest("UFO sources render a complete resident Grid", async ({ page }) => {

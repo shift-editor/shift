@@ -37,7 +37,7 @@ const GLYPHS_PREVIEW_FONT_PATH =
   process.env.SHIFT_E2E_GLYPHS_PREVIEW_FONT_PATH ??
   path.resolve(APP_ROOT, "../../fixtures/fonts/MutatorSansVariable.glyphs");
 
-/** Fixed CSS content size; canvas backing dimensions continue to follow the host DPR. */
+/** Preferred CSS content size; the fixture clamps it to the host display's work area. */
 const CONTENT_WIDTH = 1280;
 const CONTENT_HEIGHT = 800;
 
@@ -78,10 +78,27 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPac
           throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
         }
 
-        const contentSize = { width: CONTENT_WIDTH, height: CONTENT_HEIGHT };
         const browserWindow = await app.browserWindow(page);
+        await browserWindow.evaluate((win) => win.unmaximize());
+        const windowGeometry = await browserWindow.evaluate((win) => ({
+          bounds: win.getBounds(),
+          contentBounds: win.getContentBounds(),
+        }));
+        const workArea = await app.evaluate(
+          ({ screen }, bounds) => screen.getDisplayMatching(bounds).workArea,
+          windowGeometry.bounds,
+        );
+        const contentSize = {
+          width: Math.min(
+            CONTENT_WIDTH,
+            workArea.width - (windowGeometry.bounds.width - windowGeometry.contentBounds.width),
+          ),
+          height: Math.min(
+            CONTENT_HEIGHT,
+            workArea.height - (windowGeometry.bounds.height - windowGeometry.contentBounds.height),
+          ),
+        };
         await browserWindow.evaluate((win, { width, height }) => {
-          win.unmaximize();
           win.setContentSize(width, height);
           win.center();
         }, contentSize);
@@ -89,7 +106,18 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredPac
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
           contentSize,
         );
-        await page.waitForFunction(() => document.visibilityState === "visible");
+        // `document.visibilityState` becomes visible before macOS presents and constrains the window.
+        await browserWindow.evaluate(
+          (win) =>
+            new Promise<void>((resolve) => {
+              if (win.isVisible()) {
+                resolve();
+                return;
+              }
+
+              win.once("show", resolve);
+            }),
+        );
         await browserWindow.evaluate((win, { width, height }) => {
           win.setContentSize(width, height);
           win.center();
