@@ -50,9 +50,9 @@ crates/shift-workspace/examples/
 
 `FontWorkspace::create_untitled(store_path, NewWorkspace)` opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font` and no source package. `FontWorkspace::create_package(source_path, store_path, NewWorkspace)` does the same and then saves a fresh `.shift` package at `source_path`, making it the save target.
 
-`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, Designspace, Glyphs, and Glyphs package paths use a metadata/directory-first backend cursor, convert batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable sibling staging database. The legal import transitions are **Staging** (foreign source remains authoritative), **Durable** (stream committed, indexes restored, workspace state written, database synced), then **Published** (closed staging file atomically installed and parent directory synced). Failure before Published removes staging and leaves the previous destination untouched. The returned workspace contains directory placeholders and zero loaded layer payloads. Glyphs source syntax is parsed once into the upstream normalized model before its cursor publishes the header and directory; subsequent Shift conversion and persistence remain bounded. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues requires the separate app import-session boundary. Other supported foreign formats retain the eager compatibility path until they gain a bounded reader.
+`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, Designspace, Glyphs, and Glyphs package paths use a metadata/directory-first backend cursor, convert batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable sibling staging database. The legal import transitions are **Staging** (foreign source remains authoritative), **Durable** (stream committed, indexes restored, workspace state written, database synced), then **Published** (closed staging file atomically installed and parent directory synced). Failure before Published removes staging and leaves the previous destination untouched. The returned workspace contains directory placeholders and zero loaded layer payloads. Glyphs source syntax is parsed once into the upstream normalized model before its cursor publishes the header and directory; subsequent Shift conversion and persistence remain bounded. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues happens in the app's session layer (`FontSessionHost` in the main process, `FontSourceSession` in the utility process), not here. Every supported foreign format (UFO, Glyphs and Glyphs package, Designspace, TTF/OTF) streams through this bounded pipeline; the eager `read_font` compatibility fallback runs only when a backend reports streaming as unsupported, which no supported format does today.
 
-`FontWorkspace::save()` succeeds for saved `.shift` workspaces and returns `NeedsSaveAs` for imported workspaces. `save_as(path)` creates a `.shift` package and makes it the save target.
+`FontWorkspace::save()` succeeds for saved `.shift` workspaces and returns `NeedsSaveAs` for both imported and untitled workspaces. `save_as(path)` creates a `.shift` package and makes it the save target.
 
 `FontWorkspace::inspect_package(path)` reads a `.shift` package without opening it as the live workspace. It returns the stable package id, canonical path, and fingerprint used by the utility process to address a package instance.
 
@@ -85,8 +85,9 @@ cargo test -p shift-workspace configured_large_corpus_streams_resumes_and_acquir
   -- --ignored --nocapture
 ```
 
-Set both expectations for the selected, checksum-pinned local corpus. Timing and
-RSS remain profiler observations rather than CI assertions.
+Set both expectations to match the selected local corpus; the gate asserts only
+these minimum glyph and layer counts. Timing and RSS remain profiler
+observations rather than CI assertions.
 
 ## Workflow recipes
 

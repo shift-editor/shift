@@ -56,11 +56,11 @@ position patch through the workspace ledger.
 
 ### Selection bounds
 
-Segment-aware selection bounds are not part of this module. They live in `@shift/glyph-state` as `Contour.selectionBounds`, and the editor exposes the current selection's rectangle through `Editor.selectionBoundsCell` (consumed by the `useSelectionBounds` hook). Transform callers that need a pivot compute it from those bounds via `Bounds.center`.
+Segment-aware selection bounds are not part of this module. `Contour.selectionBounds` in `@shift/glyph-state` computes them (complete selected segments contribute curve bounds), but it currently has no production call sites — only its own test exercises it. The on-screen selection rectangle instead comes from `Editor.selectionBounds()`, which unions each selected object's full bounds; it is exposed reactively as `Editor.selectionBoundsCell` and consumed through the `useSelectionBounds` hook.
 
 ### Anchor mapping
 
-`anchorToPoint` converts a 9-position `AnchorPosition` into a `Point2D` on a `Bounds` rectangle. The sidebar `TransformGrid` and `ScaleSection` components use this to let users pick the transform origin.
+`anchorToPoint` converts a 9-position `AnchorPosition` into a `Point2D` on a `Bounds` rectangle. The sidebar `TransformSection` and `ScaleSection` components call it to resolve the transform origin from the selection bounds; `TransformGrid` only renders the 9-dot picker that selects the `AnchorPosition`.
 
 ### Zoom from wheel
 
@@ -72,14 +72,14 @@ Segment-aware selection bounds are not part of this module. They live in `@shift
 
 1. Add a pure function to `Transform` in `Transform.ts` that builds a matrix and calls `applyMatrix`.
 2. Add or update the corresponding `GlyphLayer` method if this transform should mutate glyph geometry.
-3. Add pure tests in `Transform.test.ts` and layer behavior tests in `GlyphLayerGeometry.test.ts`.
+3. Add pure tests in `Transform.test.ts`; add layer behavior tests alongside the existing suites in `GlyphLayerGeometry.test.ts` (it currently covers structural and metric edits, not transforms).
 
 ### Add a new alignment mode
 
 1. Add the new literal to `AlignmentType` in `@/types/transform`.
 2. Add a `case` branch in `Alignment.alignPoints`.
 3. Update `GlyphLayer.align` if it needs special bounds logic.
-4. Add tests in `Alignment.test.ts` and `GlyphLayerGeometry.test.ts`.
+4. Add tests in `Alignment.test.ts`; layer-level tests go alongside the existing suites in `GlyphLayerGeometry.test.ts`.
 
 ### Use a custom compound transform
 
@@ -99,9 +99,9 @@ const result = Transform.applyMatrix(points, matrix, origin);
 ## Gotchas
 
 - `reflectPoints("horizontal")` flips Y (mirrors across the X axis), not X. The naming follows "flip across the horizontal center line" convention, which inverts the vertical coordinate.
-- `applyMatrix` defaults origin to `{ x: 0, y: 0 }`, not the selection center. Callers must compute the center themselves (typically via `Bounds.center(Bounds.fromPoints(points))`).
+- `applyMatrix` defaults origin to `{ x: 0, y: 0 }`, not the selection center. Callers must supply the pivot themselves — the sidebar sections resolve it with `anchorToPoint` over the selection bounds, and the select tool's `BoundingBox` uses the scene rect's center (its local `rectCenter` helper).
 - `distributePoints` with fewer than 3 points is a no-op -- no error is thrown, the input is returned unchanged.
-- There is no `SelectionBounds.ts` here anymore. Segment-aware bounds moved to `Contour.selectionBounds` in `@shift/glyph-state`; only fully selected segments contribute curve bounds there, so a single unselected control point can produce a visibly smaller box.
+- There is no `SelectionBounds.ts` here anymore. Segment-aware bounds moved to `Contour.selectionBounds` in `@shift/glyph-state` (only fully selected segments contribute curve bounds there), but nothing in production calls it — the visible selection box is `Editor.selectionBounds()`, which unions full per-object bounds.
 
 ## Verification
 
@@ -117,6 +117,6 @@ pnpm --filter @shift/desktop test -- src/renderer/src/lib/model/GlyphLayerGeomet
 
 - `GlyphLayer` -- mutating transform API over authored glyph geometry
 - `Mat`, `MatModel`, `Bounds` -- matrix and bounds math from `@shift/geo`
-- `Contour.selectionBounds` (`@shift/glyph-state`) -- segment-aware selection bounding boxes, formerly this module's `SelectionBounds.ts`
-- `TransformGrid`, `TransformSection`, `ScaleSection` -- sidebar UI components that drive transforms through `GlyphLayer`
-- `EditorView` -- consumes `zoomMultiplierFromWheel` for viewport zoom
+- `Contour.selectionBounds` (`@shift/glyph-state`) -- segment-aware selection bounding boxes, formerly this module's `SelectionBounds.ts`; currently unused in production, `Editor.selectionBounds()` supplies the visible selection rectangle
+- `TransformSection`, `ScaleSection` -- sidebar UI components that resolve origins via `anchorToPoint` and drive transforms through `GlyphLayer`; `TransformGrid` renders the anchor picker they share
+- `Canvas` (`components/editor/Canvas.tsx`) -- consumes `zoomMultiplierFromWheel` for viewport zoom

@@ -1,12 +1,12 @@
 # Validation
 
-<!-- reviewed: 2026-07-05 review-every: 90d -->
+<!-- reviewed: 2026-08-18 review-every: 90d -->
 
 Point sequence and clipboard payload validation for the Shift font editor.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Every validator returns a `ValidationResult<T>` discriminated union -- callers branch on `valid` and access either `.value` (parsed payload) or `.errors` (structured `ValidationError[]`). Never throw from validators.
+- **Architecture Invariant:** Validators never throw. Detailed validators (`sequence`, `canFormSegments`, `hasAnchor`) return a `ValidationResult` discriminated union -- callers branch on `valid` and read `.errors` (structured `ValidationError[]`) on failure. In practice every use is `ValidationResult<void>`: these are check-only validators, no parsed payload is returned. The `Validate` predicates/shortcuts and both `ValidateClipboard` validators return plain `boolean`.
 - **Architecture Invariant:** Point sequences must start and end with `onCurve` points. At most 2 consecutive `offCurve` points are allowed (cubic bezier). 3+ consecutive off-curve points are always invalid.
 - **Architecture Invariant:** `Validate` methods come in pairs: a `ValidationResult`-returning variant for detailed errors (e.g. `canFormSegments`) and a boolean shortcut for hot paths (e.g. `canFormValidSegments`). The boolean variants must enforce identical rules without allocating error objects.
 - **Architecture Invariant:** Clipboard validation checks serialized boundary payloads only. Editor/runtime glyph state validation belongs with the source-aware glyph model, not snapshot-era DTOs.
@@ -28,7 +28,7 @@ validation/src/
 - `ValidationErrorCode` -- union of all failure codes: `EMPTY_SEQUENCE`, `MUST_START_WITH_ON_CURVE`, `MUST_END_WITH_ON_CURVE`, `TOO_MANY_CONSECUTIVE_OFF_CURVE`, `ORPHAN_OFF_CURVE`, `INCOMPLETE_SEGMENT`, `INVALID_CLIPBOARD_CONTENT`.
 - `PointLike` -- minimal `{ pointType: PointType }` interface accepted by all point-sequence validators. Full `Point` objects, snapshots, and test stubs all satisfy it.
 - `Validate` -- namespace object with point predicates (`isOnCurve`, `isOffCurve`), pattern matchers (`matchesLinePattern`, `matchesQuadPattern`, `matchesCubicPattern`), sequence validators (`sequence`, `canFormSegments`), boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`), and result constructors (`ok`, `fail`, `error`).
-- `ValidateClipboard` -- namespace object with `isShiftContent` (validates portable contour content) and `isClipboardPayload` (validates full `shift/glyph-data` envelope with format, version, metadata, content).
+- `ValidateClipboard` -- namespace object with `isShiftContent` (validates portable contour content; the one validator the app calls) and `isClipboardPayload` (validates the full `shift/glyph-data` envelope with format, version, metadata, content; currently has no callers outside this package).
 
 ## How it works
 
@@ -42,7 +42,7 @@ Boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`) 
 
 ### Clipboard validation
 
-`ValidateClipboard.isShiftContent` validates the contour/point structure of portable Shift content. `isClipboardPayload` checks the full envelope (format string `"shift/glyph-data"`, version number, metadata with timestamp). Used by `Clipboard` when parsing pasted content.
+`ValidateClipboard.isShiftContent` validates the contour/point structure of portable Shift content; `Clipboard` calls it when parsing pasted content. `isClipboardPayload` checks the full envelope (format string `"shift/glyph-data"`, version number, metadata with timestamp) but currently has no callers outside this package -- `Clipboard.tryDeserialize` checks format and version inline with laxer semantics and calls only `isShiftContent`.
 
 ## Workflow recipes
 
@@ -70,6 +70,7 @@ cd packages/validation && npx tsc --noEmit
 
 ## Related
 
-- `Clipboard` -- uses `Validate.hasValidAnchor` for copy eligibility and `ValidateClipboard.isShiftContent` for paste parsing
-- `Segments` / `Segment` -- uses `Validate.isOnCurve` / `Validate.isOffCurve` for segment decomposition
+- `ClipboardSelection` -- uses `Validate.hasValidAnchor` for copy eligibility and `Validate.isOnCurve`/`isOffCurve` for selection expansion
+- `Clipboard` -- uses `ValidateClipboard.isShiftContent` for paste parsing (imports nothing else from this package)
+- `Segment` (in `@shift/glyph-state`) -- segment decomposition uses glyph-state's own `Point.isOnCurve`/`Point.isOffCurve`, not this package; other `Validate` predicate callers are `ToggleSmooth`, `FontStore`, and `ControlLines`
 - `PointType` from `@shift/types` -- the underlying union (`"onCurve" | "offCurve"`) that `PointLike` wraps

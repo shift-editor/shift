@@ -53,7 +53,7 @@ lib/interpolation/
 types/
   glyph.ts                   -- GlyphReader and model construction contracts
   glyphRender.ts             -- renderer contour/anchor contracts plus passive RenderGlyph
-src/workspace/
+apps/desktop/src/renderer/src/workspace/
   FontSession.ts             -- immutable mode/catalog/optional-workspace composition
   FontSessionProvider.tsx    -- one renderer bootstrap and context boundary
 lib/catalog/
@@ -165,7 +165,7 @@ contour.reverse();
 
 1. Acquire the glyph once with `await font.loadGlyph(glyphId)` (or `Font.loadGlyphs` for a batch). Never poll `Editor.glyphForId()` hoping a load happens — it only reads.
 2. Build the render surface with `glyph.renderModelAt(externalLocationCell, activeSourceIdCell)`, passing the editor's _stable_ location signals, not freshly created ones.
-3. Read `contours`, `bounds`, or `xAdvance` from the returned `GlyphRenderModel` inside a `computed`/`effect` so location scrubbing re-evaluates the same model.
+3. Consume geometry through the model's reactive signals — `contoursCell`, `boundsCell`, `xAdvanceCell` (or `trackShape()` when you need per-contour coordinate dependencies) — inside a `computed`/`effect`. The bare `contours`/`bounds`/`xAdvance` getters `peek()` and register no dependency, so reading only them leaves the view stale when the location scrubs; alternatively track the location cell explicitly, the way `TextRun`'s layout computed does.
 4. Verify: `pnpm typecheck && pnpm test:desktop src/renderer/src/lib/model/Glyph.test.ts`
 
 ### Adding a typed glyph-layer editing operation
@@ -186,7 +186,7 @@ contour.reverse();
 - `Editor.glyphForId()` returns `null` both for glyphs that don't exist and for glyphs that simply haven't been acquired yet. Use `Font.recordForId()` to tell the cases apart before concluding a glyph is missing.
 - `renderModelAt()` caches per _location-signal identity_ (a `WeakMap` keyed by the signal object). Creating a new signal per call defeats reuse and re-derives geometry every time; pass the editor's long-lived cells.
 - A glyph can be visible at a location where `Glyph.layerAt()` returns `null` (interpolation or fallback rendering). Editing affordances must gate on layer presence, not on whether geometry renders.
-- `Font.committedFontCell` fires on every committed change (`equals: () => false`) and is invalidation-only. Subscribe with `track(...)`; reading data from it instead of the Font surface is a smell.
+- `Font.committedFontCell` fires on every committed change and is invalidation-only — the underlying `FontStore` committed-font signal is declared with `equals: () => false`, and `committedFontCell` is a computed wrapper that propagates each notification. Subscribe with `track(...)`; reading data from it instead of the Font surface is a smell.
 - Removing the last point of a contour deletes the contour record immediately, before the workspace echo confirms it. Code holding a `ContourId` across an edit must tolerate the id disappearing.
 - `GlyphLayerEdit.addCubic` may be called at most once per edit; a second call throws. A throw inside `finish()`'s transaction restores every touched layer and sends nothing to the workspace.
 

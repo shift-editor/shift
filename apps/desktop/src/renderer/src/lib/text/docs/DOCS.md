@@ -57,7 +57,7 @@ Persistence stores `TextBuffer` snapshots per glyph key, skipping the default ke
 
 ### Adding a keyboard navigation command
 
-1. Add the movement method to `TextRun` (see `moveCursorByWord` for the shape): peek `#layout`, compute a target cluster, then `buffer.placeCaret` or `buffer.extendSelection` depending on `extend`.
+1. Add the movement method to `TextRun` (see `moveCursorToLineStart`/`moveCursorToLineEnd` or `placeCaretAtPoint` for the shape): peek `#layout`, compute a target cluster, then `buffer.placeCaret` or `buffer.extendSelection` depending on `extend`. (`moveCursorByWord` is the layout-free variant — it walks `buffer.items` directly.)
 2. Reset `#goalX` for horizontal moves; thread it through `Caret.nextLine`/`Caret.previousLine` for vertical ones.
 3. Wire the keystroke in the hidden text input component that drives text editing.
 4. Verify: `pnpm test:desktop src/renderer/src/lib/text` and `pnpm typecheck`

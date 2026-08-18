@@ -61,7 +61,7 @@ Offsets are relative to the matched/center point:
 - `0`: the matched point itself
 - `+1`: next point in contour order
 
-Resolution uses `Contours.at(contour, centerIndex + offset, contour.closed)`.
+Resolution uses the matcher's internal `getPointAtOffset(contour, centerIndex, offset)` helper.
 For closed contours this wraps around; for open contours missing neighbors are skipped.
 
 Each rule entry encodes semantic references as `{ role, offset }`, where:

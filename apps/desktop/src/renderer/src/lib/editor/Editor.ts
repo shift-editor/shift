@@ -148,9 +148,9 @@ export class Editor {
   /**
    * Rendering and camera infrastructure.
    *
-   * The drawer instances are stateless-ish rendering helpers. They currently
-   * live directly on `Editor`, but the render passes below would be easier to
-   * reason about if these moved behind a small `EditorRenderer` facade.
+   * Drawer instances live on `GlyphNodeDefinition` (and on owning tools),
+   * not here; `Editor` holds only the `Renderer` that orchestrates the
+   * background/scene/overlay passes.
    */
   #renderer: Renderer;
 

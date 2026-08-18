@@ -1,6 +1,6 @@
 # shift-backends
 
-<!-- reviewed: 2026-08-09 review-every: 90d -->
+<!-- reviewed: 2026-08-18 review-every: 90d -->
 
 Font format backends that convert between on-disk font files and the `Font` IR used throughout the editor.
 
@@ -47,11 +47,16 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 ```
 src/
   lib.rs             -- public backend and retained-source boundary
+  traits.rs          -- FontReader/FontWriter/FontBackend traits and the FontView read abstraction
+  font_loader.rs     -- extension-based format dispatch into readers, writers, and retained sources
+  errors.rs          -- BackendError/FormatBackendError thiserror hierarchy and result aliases
+  atomic.rs          -- crash-safe write, fsync, and swap helpers shared by the writers
   format.rs          -- source format vocabulary
   import.rs          -- glyph-free source header and bounded conversion cursor
   import_report.rs   -- source-to-Shift fidelity losses
   font_source/
     mod.rs            -- FontSource/FontImporter split and OpenedFont dispatch
+    error.rs          -- FontReadError classification for retained-source reads
     types.rs          -- source-local indexes, directories, shapes, deltas, and projections
     projection.rs     -- shared master-model compilation and exact-source handling
     geometry.rs       -- source contour normalization for projections
@@ -88,8 +93,9 @@ src/
 - `ImportReport` / `ImportLoss` -- source concepts converted, approximated, or omitted because Shift cannot represent identical semantics; never malformed-data diagnostics
 - `GlyphDirectoryEntry` -- cheap source glyph ID and name used before geometry batches are parsed
 - `ImportBatchLimit` -- simultaneous glyph and authored-layer limits; multi-source projects cannot turn a glyph-count bound into an unbounded layer batch
-- `FontReader` -- trait with `load(&self, path) -> Result<Font, String>` plus default methods for extracting glyphs, kerning, features from a loaded `Font`
-- `FontWriter` -- trait with `save(&self, font, path) -> Result<(), String>`
+- `FontReader` -- trait with `load(&self, path) -> FormatBackendResult<Font>` plus default methods for extracting glyphs, kerning, features from a loaded `Font`
+- `FontWriter` -- trait with `save(&self, font, path) -> FormatBackendResult<()>`
+- `FormatBackendResult` -- alias for `Result<T, FormatBackendError>`; format backends return structured `thiserror` variants, never bare strings
 - `FontBackend` -- auto-implemented marker trait for types implementing both `FontReader` + `FontWriter`
 - `UfoReader` -- loads `.ufo` bundles via `norad`
 - `UfoWriter` -- atomically writes `.ufo` bundles via `norad`
@@ -131,7 +137,7 @@ src/
 2. Implement the appropriate authored `FontReader` and/or retained `FontSource` capability.
 3. Export the format from `src/formats/mod.rs` and the public boundary from `lib.rs`.
 4. Register dispatch in `src/font_loader.rs`.
-5. Add extension mapping in `src/format.rs`.
+5. Add a `FontFormat` variant in `src/format.rs` and its extension mapping in `format_from_extension` (`src/font_loader.rs`).
 
 ### Add write support to an existing backend
 

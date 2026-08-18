@@ -4,9 +4,9 @@ type FrameHandlerCallback = (...args: unknown[]) => void;
  * Deduplicates `requestAnimationFrame` calls for a single render target.
  *
  * Multiple redraw requests between frames are coalesced into one callback.
- * Only the most recently supplied callback is invoked; earlier ones are
- * silently dropped. This prevents redundant work when editor state changes
- * several times within a single frame.
+ * Only the first supplied callback is invoked; requests made while a frame
+ * is pending are silently dropped. This prevents redundant work when editor
+ * state changes several times within a single frame.
  */
 export class FrameHandler {
   #id: number | null = null;

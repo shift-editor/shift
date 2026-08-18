@@ -79,7 +79,7 @@ editor/
 - **`PositionSelection`** -- One active authored `GlyphLayer` paired with normalized point/anchor targets. It contains edit ownership only, not scene placement or pointer coordinates.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
-- **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. Only the latest callback fires.
+- **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
 - **`EventEmitter`** -- Typed emitter for `LifecycleEventMap` (currently only `destroying`).
 - **`Theme`** -- Shared visual config for editor-rendered elements. Tool-owned controls keep their own local style constants.
 
@@ -112,19 +112,15 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 | handles    | WebGL (regl) | GPU-rendered point handles                                  | `#sceneEffect` (via scene render) |
 | overlay    | Canvas 2D    | Bounding box handles, tool overlays                         | `#overlayEffect`                  |
 
-Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()` applies the affine transform). Tool-owned controls convert pixel-sized handles and strokes at draw time.
+Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()` applies the affine transform). Tool-owned controls convert pixel-sized handles and strokes at draw time.
 
 ### Rendering pipeline
 
-`Renderer.#renderScene()` draws `SceneLayer`, which:
+`Renderer.#renderScene()` draws `SceneLayer`, which runs three passes over the scene nodes:
 
-1. Draws glyph outline (and fill in preview mode)
-2. Draws hovered/selected segments
-3. Draws debug overlays if enabled
-4. Delegates to `ToolManager.drawScene()`
-5. Draws control lines with frustum culling via `Camera.visibleSceneBounds()`
-6. Attempts GPU marker rendering; falls back to CPU if unavailable
-7. Draws anchors
+1. Content pass -- `GlyphNodeDefinition` draws a stroked outline plus debug overlays (if enabled) while the glyph is being edited; a non-editing glyph takes the display path and draws a filled outline instead.
+2. Delegates to `ToolManager.drawScene()` inside each glyph node's transform.
+3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Camera.visibleSceneBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
 
 ### Zoom-to-cursor
 
@@ -150,7 +146,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 ### Add a new rendering indicator
 
 1. Create a class under `rendering/overlays/` with a `draw(canvas: Canvas, ...)` method.
-2. Instantiate it as a field on `Editor` (e.g. `#myIndicator = new MyIndicator()`).
+2. Instantiate it as a private field on `GlyphNodeDefinition` alongside the existing drawers (e.g. `#myIndicator = new MyIndicator()`), or on the owning tool if it is tool-specific.
 3. Call `#myIndicator.draw(canvas, ...)` from the appropriate canvas item layer or tool draw hook.
 4. If it depends on new state, read that state in the appropriate effect.
 
@@ -187,5 +183,5 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 - `Font` -- Font model access; `Editor.font` for metrics, glyph names, composites.
 - `Selection` -- `Editor.selection` (public). Point/anchor/segment selection with computed contour queries.
 - `Mat` (from `@shift/geo`) -- 2D affine matrix used by `Camera` for coordinate transforms.
-- `Segment` (from `@shift/glyph-state`) -- Segment iteration and hit testing used by `Editor.getSegmentAt()`.
+- `Segment` (from `@shift/glyph-state`) -- Segment iteration and hit testing backing glyph geometry's `hitAt()` (`lib/model/Glyph.ts`), surfaced to the pointer pipeline through `GlyphNodeDefinition.hit()`.
 - `MarkerLayer` (from `graphics/backends`) -- WebGL context for GPU marker rendering.
