@@ -36,6 +36,7 @@ jobs:
       typescript: ${{ steps.filter.outputs.typescript }}
       release: ${{ steps.filter.outputs.release }}
       skills: ${{ steps.filter.outputs.skills }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -73,6 +74,12 @@ jobs:
               - 'scripts/smoke-packaged.mjs'
             skills:
               - '.agents/skills/**'
+            docs:
+              - '**/docs/DOCS.md'
+              - 'docs/architecture/**'
+              - 'scripts/context-drift-check.py'
+              - 'scripts/check-docs-fences.mjs'
+              - 'scripts/check-invariants.py'
               - '.claude/skills/**'
               - '.codex/skills/**'
               - 'scripts/sync-agent-skills.mjs'
@@ -95,6 +102,51 @@ jobs:
 
       - name: Check synchronized skills
         run: node scripts/sync-agent-skills.mjs --check
+
+  # ---------------------------------------------------------------------------
+  # Documentation drift: DOCS.md structure/link/symbol/command integrity,
+  # ts-fence compilation, and architecture invariants. Errors gate; freshness
+  # warnings are advisory (--ci).
+  # ---------------------------------------------------------------------------
+  docs-drift:
+    name: Docs Drift
+    needs: detect-changes
+    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.docs == 'true' || needs.detect-changes.outputs.typescript == 'true' || needs.detect-changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Cache node_modules
+        id: modules-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Context drift check
+        run: python3 scripts/context-drift-check.py --ci
+
+      - name: Docs fence typecheck
+        run: node scripts/check-docs-fences.mjs
+
+      - name: Architecture invariants
+        run: python3 scripts/check-invariants.py
 
   # ---------------------------------------------------------------------------
   # TypeScript jobs (no submodules needed)
